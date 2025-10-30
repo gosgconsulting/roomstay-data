@@ -306,11 +306,20 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
               <span className="font-medium">{row.name}</span>
             </div>
           </td>
-          {dimensions.filter(d => visibleColumns.has(d.id)).map((dimension) => (
-            <td key={dimension.id} className="py-3 px-4 text-right">
-              {row.data[dimension.name] ?? "-"}
-            </td>
-          ))}
+          {dimensions
+            .filter(d => {
+              // Only show metric/value columns (same filter as Column Visibility)
+              return (d.type === 'number' || 
+                      d.type === 'currency' || 
+                      d.type === 'percentage' ||
+                      d.formula !== null) && 
+                     visibleColumns.has(d.id);
+            })
+            .map((dimension) => (
+              <td key={dimension.id} className="py-3 px-4 text-right">
+                {row.data[dimension.name] ?? "-"}
+              </td>
+            ))}
         </tr>
         {isExpanded &&
           row.children?.map((child) => renderRow(child))}
@@ -450,15 +459,24 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
                     >
                       {groupByDimensions[0] || "Name"}
                     </th>
-                    {dimensions.filter(d => visibleColumns.has(d.id)).map((dimension) => (
-                      <th
-                        key={dimension.id}
-                        className="py-3 px-4 text-right font-medium text-sm"
-                        onContextMenu={(e) => handleContextMenu(e, dimension.name)}
-                      >
-                        {dimension.name}
-                      </th>
-                    ))}
+                    {dimensions
+                      .filter(d => {
+                        // Only show metric/value columns (same filter as Column Visibility)
+                        return (d.type === 'number' || 
+                                d.type === 'currency' || 
+                                d.type === 'percentage' ||
+                                d.formula !== null) && 
+                               visibleColumns.has(d.id);
+                      })
+                      .map((dimension) => (
+                        <th
+                          key={dimension.id}
+                          className="py-3 px-4 text-right font-medium text-sm"
+                          onContextMenu={(e) => handleContextMenu(e, dimension.name)}
+                        >
+                          {dimension.name}
+                        </th>
+                      ))}
                   </tr>
                 </thead>
                 <tbody>{tableData.map((row) => renderRow(row))}</tbody>
