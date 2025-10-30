@@ -202,9 +202,15 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
           return true;
         });
 
-        const chartDataByKPI: Record<string, Record<string, number>> = {};
+        const chartDataByKPI: Record<string, Array<{ date: Date; formattedDate: string; value: number }>> = {};
         kpis.forEach(kpi => {
-          chartDataByKPI[kpi.title] = {};
+          chartDataByKPI[kpi.title] = [];
+        });
+
+        // Group by actual date objects for proper sorting
+        const dateGroups: Record<string, Record<string, number>> = {};
+        kpis.forEach(kpi => {
+          dateGroups[kpi.title] = {};
         });
 
         periodData.forEach((row) => {
@@ -213,14 +219,8 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
           
           if (!dateValue) return;
 
-          // Parse and format date
-          let formattedDate: string;
-          try {
-            const date = new Date(dateValue);
-            formattedDate = format(date, 'MMM dd');
-          } catch {
-            formattedDate = String(dateValue);
-          }
+          const date = new Date(dateValue);
+          const dateKey = date.toISOString().split('T')[0]; // Use ISO date as key
 
           // Aggregate each KPI
           kpis.forEach(kpi => {
@@ -230,12 +230,23 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
             const value = dimensionValues[dimension.id];
             if (value !== null && value !== undefined) {
               const numValue = parseFloat(value) || 0;
-              if (!chartDataByKPI[kpi.title][formattedDate]) {
-                chartDataByKPI[kpi.title][formattedDate] = 0;
+              if (!dateGroups[kpi.title][dateKey]) {
+                dateGroups[kpi.title][dateKey] = 0;
               }
-              chartDataByKPI[kpi.title][formattedDate] += numValue;
+              dateGroups[kpi.title][dateKey] += numValue;
             }
           });
+        });
+
+        // Convert to array and sort by date
+        kpis.forEach(kpi => {
+          chartDataByKPI[kpi.title] = Object.entries(dateGroups[kpi.title])
+            .map(([dateKey, value]) => ({
+              date: new Date(dateKey),
+              formattedDate: format(new Date(dateKey), 'MMM dd'),
+              value
+            }))
+            .sort((a, b) => a.date.getTime() - b.date.getTime());
         });
 
         return chartDataByKPI;
@@ -245,24 +256,22 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
       const currentData = groupByDate(filters.dateRange?.from, filters.dateRange?.to);
 
       // Get comparison period data if enabled
-      let compareData: Record<string, Record<string, number>> | null = null;
+      let compareData: Record<string, Array<{ date: Date; formattedDate: string; value: number }>> | null = null;
       if (filters.compareEnabled && filters.compareDateRange?.from && filters.compareDateRange?.to) {
         compareData = groupByDate(filters.compareDateRange.from, filters.compareDateRange.to);
       }
 
-      // Convert to array format for charts and merge comparison data
+      // Merge current and comparison data by aligning by position (day 1, day 2, etc.)
       const finalChartData: Record<string, ChartData[]> = {};
       kpis.forEach(kpi => {
-        const currentDates = Object.keys(currentData[kpi.title]);
-        const chartPoints: ChartData[] = [];
+        const currentPoints = currentData[kpi.title] || [];
+        const comparePoints = compareData ? (compareData[kpi.title] || []) : [];
         
-        currentDates.sort((a, b) => a.localeCompare(b)).forEach(date => {
-          chartPoints.push({
-            date,
-            value: currentData[kpi.title][date] || 0,
-            compareValue: compareData ? (compareData[kpi.title][date] || 0) : undefined,
-          });
-        });
+        const chartPoints: ChartData[] = currentPoints.map((point, index) => ({
+          date: point.formattedDate,
+          value: point.value,
+          compareValue: comparePoints[index]?.value, // Align by index position
+        }));
         
         finalChartData[kpi.title] = chartPoints;
       });
