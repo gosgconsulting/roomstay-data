@@ -159,6 +159,9 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Find first text dimension to use as default grouping
+      const defaultGroupDimension = dimensions.find(d => d.type === 'text');
+
       const { data: newView, error } = await supabase
         .from("report_views")
         .insert({
@@ -166,7 +169,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
           user_id: user.id,
           name: "Table 1",
           is_default: true,
-          group_by_dimensions: [],
+          group_by_dimensions: defaultGroupDimension ? [defaultGroupDimension.id] : [],
           breakdown_by_dimensions: [],
           then_by_dimensions: [],
           visible_columns: [],
@@ -181,6 +184,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       if (newView) {
         setTableViews([newView]);
         setActiveViewId(newView.id);
+        loadViewSettings(newView.id);
       }
     } catch (error) {
       console.error("Error creating default view:", error);
@@ -545,8 +549,10 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       for (const dimName of sortedNames) {
         if (expression.includes(dimName)) {
           const value = data[dimName] || 0;
-          // Use word boundaries to ensure exact match
-          expression = expression.replace(new RegExp(`\\b${dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), String(value));
+          // Escape special regex characters and replace all occurrences
+          // Don't use word boundaries as they don't work with spaces in dimension names
+          const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          expression = expression.split(dimName).join(`(${value})`);
         }
       }
       
