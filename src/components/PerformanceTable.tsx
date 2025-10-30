@@ -94,7 +94,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
     if (reportId && dimensions.length > 0) {
       saveViewSettings();
     }
-  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, dateOrder, reportId]);
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, dateGranularity, dateOrder, reportId]);
 
   const loadViewSettings = async () => {
     if (!reportId) return;
@@ -121,6 +121,11 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
         
         if (data.visible_columns && data.visible_columns.length > 0) {
           setVisibleColumns(new Set(data.visible_columns));
+        }
+        
+        // Load date granularity if available (default to none)
+        if (data.date_granularity) {
+          setDateGranularity(data.date_granularity as 'none' | 'day' | 'week' | 'month' | 'year');
         }
         
         // Load date order if available (default to desc)
@@ -158,6 +163,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
         breakdown_by_dimensions: breakdownByDimensions,
         then_by_dimensions: thenByDimensions,
         visible_columns: Array.from(visibleColumns),
+        date_granularity: dateGranularity,
         date_order: dateOrder,
       };
 
