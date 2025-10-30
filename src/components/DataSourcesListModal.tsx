@@ -19,6 +19,7 @@ import { Database, Plus, Eye, Trash2, FileSpreadsheet, Edit } from "lucide-react
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { EditMappingModal } from "./EditMappingModal";
+import { ViewDataModal } from "./ViewDataModal";
 
 interface DataSource {
   id: string;
@@ -46,7 +47,9 @@ export const DataSourcesListModal = ({
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingDataSource, setEditingDataSource] = useState<DataSource | null>(null);
+  const [viewingDataSource, setViewingDataSource] = useState<DataSource | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
   useEffect(() => {
     if (open && reportId) {
@@ -104,7 +107,8 @@ export const DataSourcesListModal = ({
   };
 
   const handleView = (dataSource: DataSource) => {
-    window.open(dataSource.google_sheets_url, '_blank');
+    setViewingDataSource(dataSource);
+    setIsViewModalOpen(true);
   };
 
   const handleEdit = (dataSource: DataSource) => {
@@ -212,6 +216,12 @@ export const DataSourcesListModal = ({
         onOpenChange={setIsEditModalOpen}
         dataSource={editingDataSource}
         onSuccess={handleEditSuccess}
+      />
+
+      <ViewDataModal
+        open={isViewModalOpen}
+        onOpenChange={setIsViewModalOpen}
+        dataSource={viewingDataSource}
       />
     </Dialog>
   );
