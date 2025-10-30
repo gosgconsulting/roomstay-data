@@ -18,6 +18,8 @@ const Index = () => {
     dimensionFilters: {},
     dateRange: undefined,
     datePreset: "this_month",
+    compareEnabled: false,
+    compareType: "previous_period",
   });
 
   useEffect(() => {

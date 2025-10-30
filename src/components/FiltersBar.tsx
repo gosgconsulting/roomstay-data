@@ -14,8 +14,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subDays, subMonths, startOfYear, endOfYear } from "date-fns";
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subDays, subMonths, startOfYear, endOfYear, differenceInDays, subYears } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
@@ -24,6 +26,9 @@ export interface FilterState {
   dimensionFilters: Record<string, string>;
   dateRange: DateRange | undefined;
   datePreset: string;
+  compareEnabled: boolean;
+  compareType: string;
+  compareDateRange?: DateRange;
 }
 
 interface FiltersBarProps {
@@ -46,6 +51,9 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
   const [datePreset, setDatePreset] = useState<string>("this_month");
   const [showDimensionSelector, setShowDimensionSelector] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [compareEnabled, setCompareEnabled] = useState(false);
+  const [compareType, setCompareType] = useState<string>("previous_period");
+  const [compareDateRange, setCompareDateRange] = useState<DateRange | undefined>();
 
   useEffect(() => {
     if (reportId) {
@@ -74,6 +82,13 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
     }
   }, [activeDimensions, selectedFilters, dateRange, datePreset, reportId]);
 
+  // Update comparison date range when date range or compare type changes
+  useEffect(() => {
+    if (compareEnabled && dateRange?.from && dateRange?.to) {
+      calculateCompareDateRange();
+    }
+  }, [compareEnabled, compareType, dateRange]);
+
   // Notify parent of filter changes
   useEffect(() => {
     if (onFiltersChange) {
@@ -81,9 +96,12 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
         dimensionFilters: selectedFilters,
         dateRange,
         datePreset,
+        compareEnabled,
+        compareType,
+        compareDateRange: compareEnabled ? compareDateRange : undefined,
       });
     }
-  }, [selectedFilters, dateRange, datePreset]);
+  }, [selectedFilters, dateRange, datePreset, compareEnabled, compareType, compareDateRange]);
 
   const loadFilterSettings = async () => {
     if (!reportId) return;
@@ -161,6 +179,36 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
     } catch (error) {
       console.error("Error saving filter settings:", error);
     }
+  };
+
+  const calculateCompareDateRange = () => {
+    if (!dateRange?.from || !dateRange?.to) return;
+
+    const from = dateRange.from;
+    const to = dateRange.to;
+    const daysDiff = differenceInDays(to, from);
+
+    let compareFrom: Date;
+    let compareTo: Date;
+
+    switch (compareType) {
+      case "previous_period":
+        compareTo = subDays(from, 1);
+        compareFrom = subDays(compareTo, daysDiff);
+        break;
+      case "previous_year":
+        compareFrom = subYears(from, 1);
+        compareTo = subYears(to, 1);
+        break;
+      case "custom":
+        // For custom, we'll let users select manually
+        return;
+      default:
+        compareTo = subDays(from, 1);
+        compareFrom = subDays(compareTo, daysDiff);
+    }
+
+    setCompareDateRange({ from: compareFrom, to: compareTo });
   };
 
   const applyDatePreset = (preset: string) => {
@@ -448,6 +496,66 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
                         All Time
                       </Button>
                     </div>
+                    
+                    {compareEnabled && (
+                      <div className="p-3 border-b space-y-2">
+                        <Label className="text-xs font-medium">Compare to:</Label>
+                        <div className="space-y-1">
+                          <div 
+                            className={cn(
+                              "flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-accent",
+                              compareType === "previous_period" && "bg-accent"
+                            )}
+                            onClick={() => setCompareType("previous_period")}
+                          >
+                            <div className={cn(
+                              "w-4 h-4 rounded-full border-2 flex items-center justify-center",
+                              compareType === "previous_period" ? "border-primary" : "border-muted-foreground"
+                            )}>
+                              {compareType === "previous_period" && (
+                                <div className="w-2 h-2 rounded-full bg-primary" />
+                              )}
+                            </div>
+                            <span className="text-sm">Previous period</span>
+                          </div>
+                          <div 
+                            className={cn(
+                              "flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-accent",
+                              compareType === "previous_year" && "bg-accent"
+                            )}
+                            onClick={() => setCompareType("previous_year")}
+                          >
+                            <div className={cn(
+                              "w-4 h-4 rounded-full border-2 flex items-center justify-center",
+                              compareType === "previous_year" ? "border-primary" : "border-muted-foreground"
+                            )}>
+                              {compareType === "previous_year" && (
+                                <div className="w-2 h-2 rounded-full bg-primary" />
+                              )}
+                            </div>
+                            <span className="text-sm">Previous year</span>
+                          </div>
+                          <div 
+                            className={cn(
+                              "flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-accent",
+                              compareType === "custom" && "bg-accent"
+                            )}
+                            onClick={() => setCompareType("custom")}
+                          >
+                            <div className={cn(
+                              "w-4 h-4 rounded-full border-2 flex items-center justify-center",
+                              compareType === "custom" ? "border-primary" : "border-muted-foreground"
+                            )}>
+                              {compareType === "custom" && (
+                                <div className="w-2 h-2 rounded-full bg-primary" />
+                              )}
+                            </div>
+                            <span className="text-sm">Custom</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
                     <CalendarComponent
                       mode="range"
                       selected={dateRange}
@@ -458,6 +566,17 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
                       numberOfMonths={2}
                       className={cn("p-3 pointer-events-auto")}
                     />
+                    
+                    <div className="p-3 border-t flex items-center justify-end gap-2">
+                      <Label htmlFor="compare-toggle" className="text-sm cursor-pointer">
+                        Compare:
+                      </Label>
+                      <Switch
+                        id="compare-toggle"
+                        checked={compareEnabled}
+                        onCheckedChange={setCompareEnabled}
+                      />
+                    </div>
                   </PopoverContent>
                 </Popover>
               </div>
