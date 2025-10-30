@@ -42,16 +42,15 @@ export const DashboardHeader = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Check if user already has dimensions
+      // Get existing dimensions
       const { data: existingDimensions } = await supabase
         .from('dimensions')
-        .select('id')
-        .eq('user_id', user.id)
-        .limit(1);
+        .select('name, id')
+        .eq('user_id', user.id);
 
-      if (existingDimensions && existingDimensions.length > 0) return;
+      const existingNames = new Set(existingDimensions?.map(d => d.name) || []);
 
-      // Create default metrics
+      // Define all default dimensions
       const defaultMetrics = [
         { name: 'Impressions', type: 'number' },
         { name: 'Clicks', type: 'number' },
@@ -61,8 +60,8 @@ export const DashboardHeader = () => {
         { name: 'Leads', type: 'number' },
       ];
 
-      // Create formula KPIs
       const formulaKPIs = [
+        { name: 'CTR', type: 'percentage', formula: 'Clicks / Impressions * 100' },
         { name: 'ROAS', type: 'number', formula: 'Revenue / Cost' },
         { name: 'Cost of sale', type: 'percentage', formula: 'Cost / Revenue * 100' },
         { name: 'Conversion Rate', type: 'percentage', formula: 'Conversions / Clicks * 100' },
@@ -71,12 +70,16 @@ export const DashboardHeader = () => {
         { name: 'Impression Share', type: 'percentage', formula: 'Impressions / Total Impressions * 100' },
       ];
 
-      const allDimensions = [
-        ...defaultMetrics.map(m => ({ ...m, user_id: user.id, formula: null })),
-        ...formulaKPIs.map(k => ({ ...k, user_id: user.id }))
+      // Filter out dimensions that already exist
+      const missingDimensions = [
+        ...defaultMetrics.filter(m => !existingNames.has(m.name)).map(m => ({ ...m, user_id: user.id, formula: null })),
+        ...formulaKPIs.filter(k => !existingNames.has(k.name)).map(k => ({ ...k, user_id: user.id }))
       ];
 
-      await supabase.from('dimensions').insert(allDimensions);
+      // Only insert if there are missing dimensions
+      if (missingDimensions.length > 0) {
+        await supabase.from('dimensions').insert(missingDimensions);
+      }
     } catch (error) {
       console.error("Error creating default dimensions:", error);
     }
