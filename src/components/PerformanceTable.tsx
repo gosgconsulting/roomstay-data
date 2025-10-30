@@ -124,6 +124,49 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
     }
   };
 
+  // Helper to format values based on dimension type
+  const formatValue = (value: any, dimension: Dimension): string => {
+    if (value === null || value === undefined || value === "") return "-";
+    
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) return value;
+    
+    // Format based on dimension name and type
+    const dimName = dimension.name.toLowerCase();
+    
+    // CPC: 2 decimals with $ prefix
+    if (dimName === 'cpc') {
+      return `$${numValue.toFixed(2)}`;
+    }
+    
+    // Cost and Revenue: 0 decimals with $ prefix and comma separators
+    if (dimName === 'cost' || dimName === 'revenue') {
+      return `$${Math.round(numValue).toLocaleString('en-US')}`;
+    }
+    
+    // Currency type: 2 decimals with $ prefix
+    if (dimension.type === 'currency') {
+      return `$${numValue.toFixed(2)}`;
+    }
+    
+    // Percentage type: show as percentage
+    if (dimension.type === 'percentage') {
+      return `${numValue.toFixed(2)}%`;
+    }
+    
+    // Regular numbers: add comma separators
+    if (dimension.type === 'number' || dimension.formula) {
+      // If it's a whole number, show as integer with commas
+      if (Number.isInteger(numValue)) {
+        return numValue.toLocaleString('en-US');
+      }
+      // If it has decimals, show 2 decimal places with commas
+      return numValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    
+    return value;
+  };
+
   // Helper to get value from row data, trying both mapped dimension name and original column name
   const getValueFromRow = (rowData: Record<string, any>, dimensionName: string, dataSourceId: string, dataSources: any[]): any => {
     // First try dimension name (mapped)
@@ -340,7 +383,7 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
             })
             .map((dimension) => (
               <td key={dimension.id} className="py-3 px-4 text-right">
-                {row.data[dimension.name] ?? "-"}
+                {formatValue(row.data[dimension.name], dimension)}
               </td>
             ))}
         </tr>
