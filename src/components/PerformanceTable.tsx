@@ -776,7 +776,9 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
                         className="py-3 px-4 text-left font-medium text-sm"
                         onContextMenu={(e) => handleContextMenu(e, "name")}
                       >
-                        {groupByDimensions[0] || "Name"}
+                        {groupByDimensions[0] 
+                          ? dimensions.find(d => d.id === groupByDimensions[0])?.name || "Name"
+                          : "Name"}
                       </th>
                       {dateGranularity !== 'none' && (
                         <th className="py-3 px-4 text-left font-medium text-sm">
