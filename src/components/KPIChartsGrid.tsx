@@ -1,6 +1,7 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
 import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO } from "date-fns";
 import { FilterState } from "./FiltersBar";
@@ -168,8 +169,11 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
                 <CardTitle className="text-sm font-medium">{kpi.title}</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-[150px] flex items-center justify-center text-muted-foreground text-sm">
-                  Loading...
+                <div className="h-[150px] space-y-3 pt-2">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-5/6" />
+                  <Skeleton className="h-4 w-2/3" />
                 </div>
               </CardContent>
             </Card>

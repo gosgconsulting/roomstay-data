@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { FilterState } from "./FiltersBar";
 import { 
@@ -237,12 +238,21 @@ export const KPIMetricsCards = ({ reportId, filters }: KPIMetricsCardsProps) => 
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {[...Array(8)].map((_, i) => (
-          <Card key={i} className="p-4 animate-pulse">
-            <div className="h-16 bg-muted rounded" />
-          </Card>
-        ))}
+      <div>
+        <h2 className="text-lg font-semibold mb-4">Analytics & Insights</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {[...Array(8)].map((_, i) => (
+            <Card key={i} className="p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-8 w-24" />
+                </div>
+                <Skeleton className="h-11 w-11 rounded-full" />
+              </div>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }

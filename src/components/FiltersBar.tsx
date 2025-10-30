@@ -51,6 +51,7 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
   const [datePreset, setDatePreset] = useState<string>("this_month");
   const [showDimensionSelector, setShowDimensionSelector] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingFilters, setIsLoadingFilters] = useState(false);
   const [compareEnabled, setCompareEnabled] = useState(false);
   const [compareType, setCompareType] = useState<string>("previous_period");
   const [compareDateRange, setCompareDateRange] = useState<DateRange | undefined>();
@@ -282,13 +283,17 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
   };
 
   const loadDimensionValues = async () => {
-    if (!reportId) return;
+    if (!reportId || activeDimensions.length === 0) return;
 
+    setIsLoadingFilters(true);
     try {
+      // Load distinct values for each dimension using a more efficient query
+      // Limit to 10,000 rows for faster processing
       const { data, error } = await supabase
         .from("dimension_data")
         .select("dimension_values")
-        .eq("report_id", reportId);
+        .eq("report_id", reportId)
+        .limit(10000); // Limit for performance
 
       if (error) throw error;
 
@@ -308,7 +313,7 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
         });
       });
 
-      // Convert sets to arrays
+      // Convert sets to arrays and sort
       const valuesArray: Record<string, string[]> = {};
       Object.keys(valuesMap).forEach((dimId) => {
         valuesArray[dimId] = Array.from(valuesMap[dimId]).sort();
@@ -317,6 +322,8 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
       setDimensionValues(valuesArray);
     } catch (error) {
       console.error("Error loading dimension values:", error);
+    } finally {
+      setIsLoadingFilters(false);
     }
   };
 
@@ -370,11 +377,16 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
                       {dimension.name}
                     </label>
                     <Select
+                      disabled={isLoadingFilters}
                       value={selectedFilters[dimId] || "all"}
                       onValueChange={(value) => handleFilterChange(dimId, value)}
                     >
                       <SelectTrigger className="w-[200px] bg-background">
-                        <SelectValue placeholder={`Search or select ${dimension.name.toLowerCase()}...`} />
+                        {isLoadingFilters ? (
+                          <span className="text-muted-foreground">Loading...</span>
+                        ) : (
+                          <SelectValue placeholder={`Search or select ${dimension.name.toLowerCase()}...`} />
+                        )}
                       </SelectTrigger>
                       <SelectContent className="bg-background z-50">
                         <SelectItem value="all">All {dimension.name}</SelectItem>
