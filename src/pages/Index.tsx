@@ -25,25 +25,55 @@ const Index = () => {
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setIsLoading(false);
+    let isMounted = true;
+
+    const initializeAuth = async () => {
+      try {
+        // Set up auth state listener
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+          (event, session) => {
+            if (isMounted) {
+              setSession(session);
+              setIsLoading(false);
+            }
+          }
+        );
+
+        // Check for existing session
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error("Error getting session:", error);
+        }
+
+        if (isMounted) {
+          setSession(session);
+          setIsLoading(false);
+          
+          // Load reports if authenticated
+          if (session) {
+            loadFirstReport();
+          }
+        }
+
+        return () => {
+          isMounted = false;
+          subscription.unsubscribe();
+        };
+      } catch (error) {
+        console.error("Error initializing auth:", error);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
-    );
+    };
 
-    // THEN check for existing session and load reports
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setIsLoading(false);
-      
-      // Always load reports, even without authentication
-      loadFirstReport();
-    });
+    initializeAuth();
 
-    return () => subscription.unsubscribe();
-  }, [navigate]);
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const loadFirstReport = async () => {
     try {
