@@ -97,9 +97,14 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   useEffect(() => {
     if (reportId) {
       loadDimensions();
-      loadAllViews();
     }
   }, [reportId]);
+
+  useEffect(() => {
+    if (reportId && dimensions.length > 0) {
+      loadAllViews();
+    }
+  }, [reportId, dimensions.length]);
 
   useEffect(() => {
     if (reportId) {
@@ -121,11 +126,19 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, dateGranularity, dateOrder, reportId, activeViewId]);
 
   const loadAllViews = async () => {
-    if (!reportId) return;
+    if (!reportId) {
+      console.error("Cannot load views: No reportId");
+      return;
+    }
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.error("Cannot load views: No user");
+        return;
+      }
+
+      console.log('Loading views for report:', reportId);
 
       // Load all views for this report
       const { data: views, error } = await supabase
@@ -135,7 +148,12 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching views:", error);
+        throw error;
+      }
+
+      console.log('Found views:', views?.length || 0);
 
       if (views && views.length > 0) {
         setTableViews(views);
@@ -145,6 +163,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
         loadViewSettings(defaultView.id);
       } else {
         // Create a default view if none exists
+        console.log('No views found, creating default view');
         await createDefaultView();
       }
     } catch (error) {
@@ -153,14 +172,22 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   };
 
   const createDefaultView = async () => {
-    if (!reportId) return;
+    if (!reportId) {
+      console.error("Cannot create default view: No reportId");
+      return;
+    }
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.error("Cannot create default view: No user");
+        return;
+      }
 
       // Find first text dimension to use as default grouping
       const defaultGroupDimension = dimensions.find(d => d.type === 'text');
+      
+      console.log('Creating default view for report:', reportId, 'with dimension:', defaultGroupDimension?.name);
 
       const { data: newView, error } = await supabase
         .from("report_views")
@@ -179,9 +206,13 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error creating default view:", error);
+        throw error;
+      }
 
       if (newView) {
+        console.log('Default view created successfully:', newView.id);
         setTableViews([newView]);
         setActiveViewId(newView.id);
         loadViewSettings(newView.id);
@@ -192,41 +223,51 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   };
 
   const loadViewSettings = async (viewId: string) => {
-    if (!reportId || !viewId) return;
+    if (!reportId || !viewId) {
+      console.error("Cannot load view settings: Missing reportId or viewId");
+      return;
+    }
     
     try {
       const view = tableViews.find(v => v.id === viewId);
       
-      if (view) {
-        // Load saved settings
-        setGroupByDimensions(view.group_by_dimensions || []);
-        setBreakdownByDimensions(view.breakdown_by_dimensions || []);
-        setThenByDimensions(view.then_by_dimensions || []);
-        
-        if (view.visible_columns && view.visible_columns.length > 0) {
-          setVisibleColumns(new Set(view.visible_columns));
-        } else if (dimensions.length > 0) {
-          // Set default visibility if not set
-          const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
-          const defaultVisible = new Set<string>(
-            dimensions
-              .filter(d => !hiddenColumns.includes(d.name) && 
-                          (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula))
-              .map(d => d.id)
-          );
-          setVisibleColumns(defaultVisible);
-        }
-        
-        // Load date granularity if available (default to none)
-        if (view.date_granularity) {
-          setDateGranularity(view.date_granularity as 'none' | 'day' | 'week' | 'month' | 'year');
-        }
-        
-        // Load date order if available (default to desc)
-        if (view.date_order) {
-          setDateOrder(view.date_order as 'asc' | 'desc');
-        }
+      if (!view) {
+        console.error("View not found:", viewId);
+        return;
       }
+
+      console.log('Loading view settings for:', view.name);
+      
+      // Load saved settings
+      setGroupByDimensions(view.group_by_dimensions || []);
+      setBreakdownByDimensions(view.breakdown_by_dimensions || []);
+      setThenByDimensions(view.then_by_dimensions || []);
+      
+      if (view.visible_columns && view.visible_columns.length > 0) {
+        setVisibleColumns(new Set(view.visible_columns));
+      } else if (dimensions.length > 0) {
+        // Set default visibility if not set
+        const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
+        const defaultVisible = new Set<string>(
+          dimensions
+            .filter(d => !hiddenColumns.includes(d.name) && 
+                        (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula))
+            .map(d => d.id)
+        );
+        setVisibleColumns(defaultVisible);
+      }
+      
+      // Load date granularity if available (default to none)
+      if (view.date_granularity) {
+        setDateGranularity(view.date_granularity as 'none' | 'day' | 'week' | 'month' | 'year');
+      }
+      
+      // Load date order if available (default to desc)
+      if (view.date_order) {
+        setDateOrder(view.date_order as 'asc' | 'desc');
+      }
+      
+      console.log('View settings loaded. Group by:', view.group_by_dimensions);
     } catch (error) {
       console.error("Error loading view settings:", error);
     }
