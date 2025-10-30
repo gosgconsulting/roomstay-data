@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
+import { FiltersBar } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import { KPIChartsGrid } from "@/components/KPIChartsGrid";
 import { PerformanceTable } from "@/components/PerformanceTable";
@@ -105,6 +106,7 @@ const Index = () => {
         </div>
       </div>
       <DashboardHeader reportId={reportId} onReportChange={setReportId} />
+      <FiltersBar reportId={reportId} />
       <main className="container mx-auto px-6 py-6 space-y-6">
         <KPIMetricsCards reportId={reportId} />
         <KPIChartsGrid reportId={reportId} />
