@@ -50,7 +50,7 @@ interface PerformanceTableProps {
 }
 
 export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set(["2"]));
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
   const [dimensionSelectorOpen, setDimensionSelectorOpen] = useState(false);
   const [selectedKPI, setSelectedKPI] = useState("");
@@ -341,6 +341,83 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
     }
   };
 
+  const buildHierarchicalData = (
+    data: any[],
+    groupDimId: string,
+    breakdownDimId: string | null,
+    thenByDimId: string | null,
+    level: number = 0
+  ): TableRow[] => {
+    const grouped = new Map<string, any>();
+
+    data.forEach((row) => {
+      const dimensionValues = row.dimension_values as Record<string, any>;
+      const groupKey = dimensionValues[groupDimId] || "Unknown";
+
+      if (!grouped.has(groupKey)) {
+        grouped.set(groupKey, {
+          id: `${level}-${String(groupKey).toLowerCase().replace(/\s+/g, '-')}`,
+          name: groupKey,
+          level,
+          data: {},
+          children: [],
+          rawRows: [],
+        });
+      }
+
+      const groupItem = grouped.get(groupKey);
+      groupItem.rawRows.push(row);
+
+      // Aggregate only base metrics (no formulas)
+      dimensions.forEach((dimension) => {
+        if (dimension.formula) return;
+        
+        const value = dimensionValues[dimension.id];
+        if (value !== undefined && value !== null) {
+          if (dimension.type === 'number' || dimension.type === 'currency') {
+            const numValue = parseFloat(value) || 0;
+            groupItem.data[dimension.name] = (groupItem.data[dimension.name] || 0) + numValue;
+          } else if (dimension.type === 'date') {
+            if (!groupItem.data[dimension.name]) {
+              groupItem.data[dimension.name] = value;
+            }
+          } else {
+            groupItem.data[dimension.name] = value;
+          }
+        }
+      });
+    });
+
+    // Convert to array and process children
+    const groupedArray = Array.from(grouped.values());
+    
+    groupedArray.forEach((group) => {
+      // Calculate formula fields after aggregation
+      dimensions.forEach((dimension) => {
+        if (dimension.formula) {
+          const calculatedValue = calculateFormula(dimension.formula, group.data);
+          group.data[dimension.name] = calculatedValue;
+        }
+      });
+
+      // Build children if there's a breakdown dimension
+      if (breakdownDimId && group.rawRows.length > 0) {
+        group.children = buildHierarchicalData(
+          group.rawRows,
+          breakdownDimId,
+          thenByDimId,
+          null,
+          level + 1
+        );
+      }
+
+      // Clean up temporary rawRows
+      delete group.rawRows;
+    });
+
+    return groupedArray;
+  };
+
   const loadTableData = async () => {
     if (!reportId) return;
     
@@ -366,66 +443,19 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
         return;
       }
 
-      // Group data by the first grouping dimension
       const groupDimensionId = groupByDimensions[0];
-      const groupDimension = dimensions.find(d => d.id === groupDimensionId);
-      
-      if (!groupDimension) {
-        setTableData([]);
-        return;
-      }
+      const breakdownDimensionId = breakdownByDimensions[0] || null;
+      const thenByDimensionId = thenByDimensions[0] || null;
 
-      const grouped = new Map<string, any>();
+      const hierarchicalData = buildHierarchicalData(
+        dimensionData,
+        groupDimensionId,
+        breakdownDimensionId,
+        thenByDimensionId,
+        0
+      );
 
-      dimensionData.forEach((row) => {
-        const dimensionValues = row.dimension_values as Record<string, any>;
-        const groupKey = dimensionValues[groupDimensionId] || "Unknown";
-
-        if (!grouped.has(groupKey)) {
-          grouped.set(groupKey, {
-            id: String(groupKey).toLowerCase().replace(/\s+/g, '-'),
-            name: groupKey,
-            level: 0,
-            data: {},
-            children: [],
-          });
-        }
-
-        // Aggregate only base metrics (no formulas)
-        const groupItem = grouped.get(groupKey);
-        dimensions.forEach((dimension) => {
-          // Skip dimensions with formulas - we'll calculate them after aggregation
-          if (dimension.formula) return;
-          
-          const value = dimensionValues[dimension.id];
-          if (value !== undefined && value !== null) {
-            if (dimension.type === 'number' || dimension.type === 'currency') {
-              const numValue = parseFloat(value) || 0;
-              groupItem.data[dimension.name] = (groupItem.data[dimension.name] || 0) + numValue;
-            } else if (dimension.type === 'date') {
-              // For date fields, keep the first date encountered
-              if (!groupItem.data[dimension.name]) {
-                groupItem.data[dimension.name] = value;
-              }
-            } else {
-              groupItem.data[dimension.name] = value;
-            }
-          }
-        });
-      });
-
-      // Calculate formula fields for each group after aggregation
-      const groupedArray = Array.from(grouped.values());
-      groupedArray.forEach((group) => {
-        dimensions.forEach((dimension) => {
-          if (dimension.formula) {
-            const calculatedValue = calculateFormula(dimension.formula, group.data);
-            group.data[dimension.name] = calculatedValue;
-          }
-        });
-      });
-
-      setTableData(groupedArray);
+      setTableData(hierarchicalData);
     } catch (error) {
       console.error("Error loading table data:", error);
     } finally {
@@ -556,26 +586,28 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
         <tr
           key={row.id}
           className={cn(
-            "border-b hover:bg-muted/50 transition-colors",
-            row.level === 1 && "bg-muted/30"
+            "border-b hover:bg-muted/50 transition-colors cursor-pointer",
+            row.level === 1 && "bg-muted/20",
+            row.level === 2 && "bg-muted/10"
           )}
+          onClick={() => hasChildren && toggleRow(row.id)}
         >
           <td className="py-3 px-4" style={{ paddingLeft: `${row.level * 2 + 1}rem` }}>
             <div className="flex items-center gap-2">
-              {hasChildren && (
-                <button
-                  onClick={() => toggleRow(row.id)}
-                  className="text-muted-foreground hover:text-foreground"
-                >
+              {hasChildren ? (
+                <div className="text-muted-foreground">
                   {isExpanded ? (
                     <ChevronDown className="h-4 w-4" />
                   ) : (
                     <ChevronRight className="h-4 w-4" />
                   )}
-                </button>
+                </div>
+              ) : (
+                <div className="w-4" />
               )}
-              {!hasChildren && <div className="w-4" />}
-              <span className="font-medium">{row.name}</span>
+              <span className={cn("font-medium", row.level > 0 && "font-normal")}>
+                {row.name}
+              </span>
             </div>
           </td>
           {dateGranularity !== 'none' && (
