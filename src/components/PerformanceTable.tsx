@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { MappingModal } from "./MappingModal";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { supabase } from "@/integrations/supabase/client";
+import { format, startOfWeek, startOfMonth, startOfYear } from "date-fns";
 
 interface Dimension {
   id: string;
@@ -127,6 +128,33 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
       console.error("Error loading dimensions:", error);
     } finally {
       setIsLoadingDimensions(false);
+    }
+  };
+
+  // Helper to format date based on granularity
+  const formatDate = (dateValue: any, granularity: 'day' | 'week' | 'month' | 'year'): string => {
+    if (!dateValue) return "-";
+    
+    try {
+      const date = new Date(dateValue);
+      if (isNaN(date.getTime())) return "-";
+      
+      switch (granularity) {
+        case 'day':
+          return format(date, 'MMM d, yyyy'); // Oct 31, 2025
+        case 'week':
+          const weekStart = startOfWeek(date);
+          return format(weekStart, 'MMM d, yyyy'); // Week starting date
+        case 'month':
+          return format(date, 'MMMM yyyy'); // October 2025
+        case 'year':
+          return format(date, 'yyyy'); // 2025
+        default:
+          return "-";
+      }
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return "-";
     }
   };
 
@@ -301,6 +329,11 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
             if (dimension.type === 'number' || dimension.type === 'currency') {
               const numValue = parseFloat(value) || 0;
               groupItem.data[dimension.name] = (groupItem.data[dimension.name] || 0) + numValue;
+            } else if (dimension.type === 'date') {
+              // For date fields, keep the first date encountered (or could be latest)
+              if (!groupItem.data[dimension.name]) {
+                groupItem.data[dimension.name] = value;
+              }
             } else {
               groupItem.data[dimension.name] = value;
             }
@@ -431,7 +464,7 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
           </td>
           {dateGranularity !== 'none' && (
             <td className="py-3 px-4 text-left">
-              -
+              {formatDate(row.data['Date'], dateGranularity)}
             </td>
           )}
           {dimensions
