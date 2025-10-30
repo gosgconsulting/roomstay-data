@@ -169,7 +169,7 @@ const Index = () => {
           <main className="container mx-auto px-6 py-6 space-y-6">
             <KPIMetricsCards reportId={reportId} filters={filters} key={`metrics-${dataRefreshKey}`} />
             <KPIChartsGrid reportId={reportId} filters={filters} key={`charts-${dataRefreshKey}`} />
-            <PerformanceTable reportId={reportId} filters={filters} key={`table-${dataRefreshKey}`} />
+            <PerformanceTable reportId={reportId} filters={filters} isEditMode={isEditMode} key={`table-${dataRefreshKey}`} />
           </main>
         </>
       ) : (
