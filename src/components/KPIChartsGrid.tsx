@@ -36,13 +36,38 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
   const loadChartData = async () => {
     setIsLoading(true);
     try {
-      // Fetch dimensions for this report (public access)
-      const { data: dimensions, error: dimError } = await supabase
+      // First, try to fetch dimensions by report_id
+      let { data: dimensions, error: dimError } = await supabase
         .from("dimensions")
         .select("*")
         .eq("report_id", reportId);
 
       if (dimError) throw dimError;
+
+      // If no dimensions found by report_id, get dimension IDs from dimension_data
+      if (!dimensions || dimensions.length === 0) {
+        const { data: dimensionData, error: dimDataError } = await supabase
+          .from("dimension_data")
+          .select("dimension_values")
+          .eq("report_id", reportId)
+          .limit(1);
+
+        if (dimDataError) throw dimDataError;
+
+        if (dimensionData && dimensionData.length > 0) {
+          const dimensionIds = Object.keys(dimensionData[0].dimension_values as Record<string, any>);
+          
+          if (dimensionIds.length > 0) {
+            const { data: dimensionsById, error: dimError2 } = await supabase
+              .from("dimensions")
+              .select("*")
+              .in("id", dimensionIds);
+
+            if (dimError2) throw dimError2;
+            dimensions = dimensionsById;
+          }
+        }
+      }
 
       // Fetch all dimension_data for this report
       const { data: dimensionData, error: dataError } = await supabase
