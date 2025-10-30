@@ -15,16 +15,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useState, useEffect } from "react";
-import { Database, Plus, Eye, Trash2, FileSpreadsheet } from "lucide-react";
+import { Database, Plus, Eye, Trash2, FileSpreadsheet, Edit } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { EditMappingModal } from "./EditMappingModal";
 
 interface DataSource {
   id: string;
   name: string;
   google_sheets_url: string;
+  spreadsheet_id: string;
   tab_name: string;
   header_row: number;
+  column_mappings: any[] | null;
 }
 
 interface DataSourcesListModalProps {
@@ -42,6 +45,8 @@ export const DataSourcesListModal = ({
 }: DataSourcesListModalProps) => {
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [editingDataSource, setEditingDataSource] = useState<DataSource | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
     if (open && reportId) {
@@ -60,7 +65,7 @@ export const DataSourcesListModal = ({
 
       if (error) throw error;
 
-      setDataSources(data || []);
+      setDataSources((data || []) as DataSource[]);
     } catch (error) {
       console.error("Error loading data sources:", error);
       toast({
@@ -100,6 +105,15 @@ export const DataSourcesListModal = ({
 
   const handleView = (dataSource: DataSource) => {
     window.open(dataSource.google_sheets_url, '_blank');
+  };
+
+  const handleEdit = (dataSource: DataSource) => {
+    setEditingDataSource(dataSource);
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditSuccess = () => {
+    loadDataSources();
   };
 
   return (
@@ -157,6 +171,14 @@ export const DataSourcesListModal = ({
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => handleEdit(dataSource)}
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             className="text-destructive hover:text-destructive"
                             onClick={() => handleDelete(dataSource)}
                           >
@@ -184,6 +206,13 @@ export const DataSourcesListModal = ({
           </Button>
         </div>
       </DialogContent>
+
+      <EditMappingModal
+        open={isEditModalOpen}
+        onOpenChange={setIsEditModalOpen}
+        dataSource={editingDataSource}
+        onSuccess={handleEditSuccess}
+      />
     </Dialog>
   );
 };

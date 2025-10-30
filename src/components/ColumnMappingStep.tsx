@@ -35,6 +35,7 @@ interface ColumnMappingStepProps {
   onSave: (mappings: ColumnMapping[]) => void;
   onBack: () => void;
   isLoading: boolean;
+  existingMappings?: ColumnMapping[];
 }
 
 export const ColumnMappingStep = ({
@@ -42,6 +43,7 @@ export const ColumnMappingStep = ({
   onSave,
   onBack,
   isLoading,
+  existingMappings,
 }: ColumnMappingStepProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
@@ -55,7 +57,7 @@ export const ColumnMappingStep = ({
     if (dimensions.length > 0 && headers.length > 0) {
       initializeMappings();
     }
-  }, [dimensions, headers]);
+  }, [dimensions, headers, existingMappings]);
 
   const loadDimensions = async () => {
     try {
@@ -81,15 +83,35 @@ export const ColumnMappingStep = ({
   };
 
   const initializeMappings = () => {
-    const initialMappings: ColumnMapping[] = headers.map((header) => {
-      const matchedDimension = findBestMatch(header, dimensions);
-      return {
-        column: header,
-        dimensionId: matchedDimension?.id || "none",
-        visible: true,
-      };
-    });
-    setMappings(initialMappings);
+    // If we have existing mappings, use them
+    if (existingMappings && existingMappings.length > 0) {
+      // Match existing mappings with current headers
+      const updatedMappings: ColumnMapping[] = headers.map((header) => {
+        const existingMapping = existingMappings.find(m => m.column === header);
+        if (existingMapping) {
+          return existingMapping;
+        }
+        // For new columns not in existing mappings, try smart matching
+        const matchedDimension = findBestMatch(header, dimensions);
+        return {
+          column: header,
+          dimensionId: matchedDimension?.id || "none",
+          visible: true,
+        };
+      });
+      setMappings(updatedMappings);
+    } else {
+      // No existing mappings, use smart matching
+      const initialMappings: ColumnMapping[] = headers.map((header) => {
+        const matchedDimension = findBestMatch(header, dimensions);
+        return {
+          column: header,
+          dimensionId: matchedDimension?.id || "none",
+          visible: true,
+        };
+      });
+      setMappings(initialMappings);
+    }
   };
 
   // Smart matching function to find the best dimension match for a column

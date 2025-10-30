@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       data_sources: {
         Row: {
+          column_mappings: Json | null
           created_at: string
           google_sheets_url: string
           header_row: number
@@ -27,6 +28,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          column_mappings?: Json | null
           created_at?: string
           google_sheets_url: string
           header_row?: number
@@ -38,6 +40,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          column_mappings?: Json | null
           created_at?: string
           google_sheets_url?: string
           header_row?: number

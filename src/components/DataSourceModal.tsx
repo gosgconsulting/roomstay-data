@@ -198,6 +198,7 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
           spreadsheet_id: spreadsheetId,
           tab_name: selectedTab,
           header_row: parseInt(headerRow),
+          column_mappings: mappings,
         })
         .select()
         .single();
