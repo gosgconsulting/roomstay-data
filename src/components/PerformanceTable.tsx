@@ -35,145 +35,9 @@ interface TableRow {
   name: string;
   level: number;
   parentId?: string;
-  impressions: number;
-  impressionStatus: string;
-  clicks: number;
-  ctr: string;
-  cost: number;
-  bookings: number;
-  conversionRate: string;
-  revenue: number;
-  roas: number;
-  costOfSale: string;
+  data: Record<string, any>;
   children?: TableRow[];
 }
-
-const mockData: TableRow[] = [
-  {
-    id: "1",
-    name: "Grand Plaza Hotel",
-    level: 0,
-    impressions: 175000,
-    impressionStatus: "68.5%",
-    clicks: 2520,
-    ctr: "2%",
-    cost: 54695,
-    bookings: 945,
-    conversionRate: "8.8%",
-    revenue: 46600,
-    roas: 10.5,
-    costOfSale: "9.5%",
-  },
-  {
-    id: "2",
-    name: "Google Hotel Ads",
-    level: 0,
-    impressions: 45000,
-    impressionStatus: "77%",
-    clicks: 900,
-    ctr: "2%",
-    cost: 51665,
-    bookings: 89,
-    conversionRate: "9.9%",
-    revenue: 57677,
-    roas: 10.6,
-    costOfSale: "9.4%",
-    children: [
-      {
-        id: "2-1",
-        name: "Desktop",
-        level: 1,
-        parentId: "2",
-        impressions: 27000,
-        impressionStatus: "77%",
-        clicks: 540,
-        ctr: "2%",
-        cost: 5999,
-        bookings: 54,
-        conversionRate: "10%",
-        revenue: 31573,
-        roas: 10.6,
-        costOfSale: "9.4%",
-      },
-      {
-        id: "2-2",
-        name: "Mobile",
-        level: 1,
-        parentId: "2",
-        impressions: 18000,
-        impressionStatus: "71%",
-        clicks: 360,
-        ctr: "2%",
-        cost: 5866,
-        bookings: 35,
-        conversionRate: "9.7%",
-        revenue: 37049,
-        roas: 10.6,
-        costOfSale: "9.4%",
-      },
-    ],
-  },
-  {
-    id: "3",
-    name: "Booking.com",
-    level: 0,
-    impressions: 45000,
-    impressionStatus: "68%",
-    clicks: 820,
-    ctr: "2%",
-    cost: 51480,
-    bookings: 78,
-    conversionRate: "8.8%",
-    revenue: 19444,
-    roas: 10.4,
-    costOfSale: "9.6%",
-  },
-  {
-    id: "4",
-    name: "Expedia",
-    level: 0,
-    impressions: 25000,
-    impressionStatus: "65%",
-    clicks: 520,
-    ctr: "2%",
-    cost: 5925,
-    bookings: 52,
-    conversionRate: "10.4%",
-    revenue: 10296,
-    roas: 11.1,
-    costOfSale: "9%",
-  },
-  {
-    id: "5",
-    name: "Direct",
-    level: 0,
-    impressions: 15000,
-    impressionStatus: "70%",
-    clicks: 300,
-    ctr: "2%",
-    cost: 5155,
-    bookings: 76,
-    conversionRate: "8.7%",
-    revenue: 15148,
-    roas: 9.5,
-    costOfSale: "10.6%",
-  },
-  {
-    id: "6",
-    name: "Sunset Beach Resort",
-    level: 0,
-    impressions: 195000,
-    impressionStatus: "71.5%",
-    clicks: 3170,
-    ctr: "2%",
-    cost: 55772,
-    bookings: 317,
-    conversionRate: "10%",
-    revenue: 162400,
-    roas: 10.8,
-    costOfSale: "9.3%",
-  },
-];
 
 export const PerformanceTable = () => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set(["2"]));
@@ -184,6 +48,8 @@ export const PerformanceTable = () => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set());
   const [isLoadingDimensions, setIsLoadingDimensions] = useState(true);
+  const [tableData, setTableData] = useState<TableRow[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
   
   // State for dimension selections
   const [groupByDimensions, setGroupByDimensions] = useState<string[]>(["Hotel"]);
@@ -192,6 +58,7 @@ export const PerformanceTable = () => {
 
   useEffect(() => {
     loadDimensions();
+    loadTableData();
   }, []);
 
   const loadDimensions = async () => {
@@ -250,6 +117,19 @@ export const PerformanceTable = () => {
       console.error("Error loading dimensions:", error);
     } finally {
       setIsLoadingDimensions(false);
+    }
+  };
+
+  const loadTableData = async () => {
+    setIsLoadingData(true);
+    try {
+      // TODO: Load real data from sheet_data table based on grouping dimensions
+      // For now, set empty data
+      setTableData([]);
+    } catch (error) {
+      console.error("Error loading table data:", error);
+    } finally {
+      setIsLoadingData(false);
     }
   };
 
@@ -357,18 +237,7 @@ export const PerformanceTable = () => {
           </td>
           {dimensions.filter(d => visibleColumns.has(d.id)).map((dimension) => (
             <td key={dimension.id} className="py-3 px-4 text-right">
-              {/* Mock data - will be replaced with actual data */}
-              {dimension.name === "Impressions" && row.impressions.toLocaleString()}
-              {dimension.name === "Clicks" && row.clicks.toLocaleString()}
-              {dimension.name === "Cost" && `$${row.cost.toLocaleString()}`}
-              {dimension.name === "Revenue" && `$${row.revenue.toLocaleString()}`}
-              {dimension.name === "Conversions" && row.bookings}
-              {dimension.name === "ROAS" && row.roas}
-              {dimension.name === "Conversion Rate" && row.conversionRate}
-              {dimension.name === "Cost of sale" && row.costOfSale}
-              {dimension.name === "CTR" && row.ctr}
-              {dimension.name === "Impression Share" && row.impressionStatus}
-              {!["Impressions", "Clicks", "Cost", "Revenue", "Conversions", "ROAS", "Conversion Rate", "Cost of sale", "CTR", "Impression Share"].includes(dimension.name) && "-"}
+              {row.data[dimension.name] ?? "-"}
             </td>
           ))}
         </tr>
@@ -498,30 +367,40 @@ export const PerformanceTable = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="border-b bg-muted/30">
-                <tr>
-                  <th
-                    className="py-3 px-4 text-left font-medium text-sm"
-                    onContextMenu={(e) => handleContextMenu(e, "hotel-name")}
-                  >
-                    Hotel Name
-                  </th>
-                  {dimensions.filter(d => visibleColumns.has(d.id)).map((dimension) => (
+          {isLoadingData ? (
+            <div className="py-8 text-center text-muted-foreground">
+              Loading data...
+            </div>
+          ) : tableData.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">
+              No data available. Connect a data source to view the table.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="border-b bg-muted/30">
+                  <tr>
                     <th
-                      key={dimension.id}
-                      className="py-3 px-4 text-right font-medium text-sm"
-                      onContextMenu={(e) => handleContextMenu(e, dimension.name)}
+                      className="py-3 px-4 text-left font-medium text-sm"
+                      onContextMenu={(e) => handleContextMenu(e, "name")}
                     >
-                      {dimension.name}
+                      {groupByDimensions[0] || "Name"}
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>{mockData.map((row) => renderRow(row))}</tbody>
-            </table>
-          </div>
+                    {dimensions.filter(d => visibleColumns.has(d.id)).map((dimension) => (
+                      <th
+                        key={dimension.id}
+                        className="py-3 px-4 text-right font-medium text-sm"
+                        onContextMenu={(e) => handleContextMenu(e, dimension.name)}
+                      >
+                        {dimension.name}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>{tableData.map((row) => renderRow(row))}</tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
 

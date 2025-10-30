@@ -123,6 +123,56 @@ export type Database = {
         }
         Relationships: []
       }
+      report_views: {
+        Row: {
+          breakdown_by_dimensions: string[] | null
+          created_at: string
+          group_by_dimensions: string[] | null
+          id: string
+          is_default: boolean | null
+          name: string
+          report_id: string
+          then_by_dimensions: string[] | null
+          updated_at: string
+          user_id: string
+          visible_columns: string[] | null
+        }
+        Insert: {
+          breakdown_by_dimensions?: string[] | null
+          created_at?: string
+          group_by_dimensions?: string[] | null
+          id?: string
+          is_default?: boolean | null
+          name?: string
+          report_id: string
+          then_by_dimensions?: string[] | null
+          updated_at?: string
+          user_id: string
+          visible_columns?: string[] | null
+        }
+        Update: {
+          breakdown_by_dimensions?: string[] | null
+          created_at?: string
+          group_by_dimensions?: string[] | null
+          id?: string
+          is_default?: boolean | null
+          name?: string
+          report_id?: string
+          then_by_dimensions?: string[] | null
+          updated_at?: string
+          user_id?: string
+          visible_columns?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_views_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reports: {
         Row: {
           created_at: string

@@ -106,13 +106,9 @@ export const DimensionSelectorModal = ({
           ) : (
             <>
               {/* Selected dimensions list */}
-              <div className="space-y-2">
-                {selectedDimensions.length === 0 ? (
-                  <div className="text-center py-4 text-muted-foreground text-sm">
-                    No dimensions selected
-                  </div>
-                ) : (
-                  selectedDimensions.map((dimensionName) => (
+              {selectedDimensions.length > 0 && (
+                <div className="space-y-2 mb-3">
+                  {selectedDimensions.map((dimensionName) => (
                     <div
                       key={dimensionName}
                       className="flex items-center justify-between py-2 px-3 bg-muted rounded-md"
@@ -127,9 +123,9 @@ export const DimensionSelectorModal = ({
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
 
               {/* Add dimension section */}
               <div className="border-t pt-3">
