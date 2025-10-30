@@ -9,6 +9,7 @@ import {
 import { Calendar, ChevronDown, Database, Share2, Plus, Trash2, Pencil } from "lucide-react";
 import { useState, useEffect } from "react";
 import { DataSourceModal } from "./DataSourceModal";
+import { DataSourcesListModal } from "./DataSourcesListModal";
 import { ReportModal } from "./ReportModal";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -20,6 +21,7 @@ interface Report {
 
 export const DashboardHeader = () => {
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
+  const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
@@ -234,7 +236,7 @@ export const DashboardHeader = () => {
           <Button
             variant="outline"
             className="gap-2"
-            onClick={() => setShowDataSourceModal(true)}
+            onClick={() => setShowDataSourcesListModal(true)}
             disabled={!currentReport}
           >
             <Database className="h-4 w-4" />
@@ -255,11 +257,29 @@ export const DashboardHeader = () => {
       </header>
 
       {currentReport && (
-        <DataSourceModal
-          open={showDataSourceModal}
-          onOpenChange={setShowDataSourceModal}
-          reportId={currentReport.id}
-        />
+        <>
+          <DataSourcesListModal
+            open={showDataSourcesListModal}
+            onOpenChange={setShowDataSourcesListModal}
+            reportId={currentReport.id}
+            onAddNew={() => {
+              setShowDataSourcesListModal(false);
+              setShowDataSourceModal(true);
+            }}
+          />
+          
+          <DataSourceModal
+            open={showDataSourceModal}
+            onOpenChange={(open) => {
+              setShowDataSourceModal(open);
+              if (!open) {
+                // Reopen the list modal when closing the add modal
+                setShowDataSourcesListModal(true);
+              }
+            }}
+            reportId={currentReport.id}
+          />
+        </>
       )}
 
       <ReportModal
