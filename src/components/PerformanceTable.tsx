@@ -63,6 +63,7 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
   useEffect(() => {
     if (reportId) {
       loadDimensions();
+      loadViewSettings();
     }
   }, [reportId]);
 
@@ -71,6 +72,93 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
       loadTableData();
     }
   }, [groupByDimensions, breakdownByDimensions, thenByDimensions, reportId, dimensions]);
+
+  // Save view settings whenever they change
+  useEffect(() => {
+    if (reportId && dimensions.length > 0) {
+      saveViewSettings();
+    }
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, reportId]);
+
+  const loadViewSettings = async () => {
+    if (!reportId) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("report_views")
+        .select("*")
+        .eq("report_id", reportId)
+        .eq("user_id", user.id)
+        .eq("is_default", true)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        // Load saved settings
+        setGroupByDimensions(data.group_by_dimensions || []);
+        setBreakdownByDimensions(data.breakdown_by_dimensions || []);
+        setThenByDimensions(data.then_by_dimensions || []);
+        
+        if (data.visible_columns && data.visible_columns.length > 0) {
+          setVisibleColumns(new Set(data.visible_columns));
+        }
+      }
+    } catch (error) {
+      console.error("Error loading view settings:", error);
+    }
+  };
+
+  const saveViewSettings = async () => {
+    if (!reportId) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Check if a default view already exists
+      const { data: existingView } = await supabase
+        .from("report_views")
+        .select("id")
+        .eq("report_id", reportId)
+        .eq("user_id", user.id)
+        .eq("is_default", true)
+        .maybeSingle();
+
+      const viewData = {
+        report_id: reportId,
+        user_id: user.id,
+        name: "Default View",
+        is_default: true,
+        group_by_dimensions: groupByDimensions,
+        breakdown_by_dimensions: breakdownByDimensions,
+        then_by_dimensions: thenByDimensions,
+        visible_columns: Array.from(visibleColumns),
+      };
+
+      if (existingView) {
+        // Update existing view
+        const { error } = await supabase
+          .from("report_views")
+          .update(viewData)
+          .eq("id", existingView.id);
+
+        if (error) throw error;
+      } else {
+        // Create new view
+        const { error } = await supabase
+          .from("report_views")
+          .insert(viewData);
+
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error("Error saving view settings:", error);
+    }
+  };
 
   const loadDimensions = async () => {
     try {
@@ -116,7 +204,8 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
 
       setDimensions(sortedDimensions);
       
-      // Set default visibility - hide Impression Share, CPM, and Leads
+      // Set default visibility only if no saved view exists
+      // This will be overridden by loadViewSettings if a saved view exists
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
       const defaultVisible = new Set(
         sortedDimensions
