@@ -12,6 +12,15 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { ChevronDown, ChevronRight, Columns3 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -59,6 +68,10 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
   
   // State for date granularity - default to 'none'
   const [dateGranularity, setDateGranularity] = useState<'none' | 'day' | 'week' | 'month' | 'year'>('none');
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     if (reportId) {
@@ -481,15 +494,58 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
     switch (currentSelector) {
       case "group":
         setGroupByDimensions(dimensions);
+        setCurrentPage(1); // Reset to first page when grouping changes
         break;
       case "breakdown":
         setBreakdownByDimensions(dimensions);
+        setCurrentPage(1);
         break;
       case "then":
         setThenByDimensions(dimensions);
+        setCurrentPage(1);
         break;
     }
   };
+
+  // Calculate total row
+  const calculateTotals = (): Record<string, any> => {
+    const totals: Record<string, any> = {};
+    
+    dimensions.forEach((dimension) => {
+      if (dimension.formula) {
+        // Skip for now, will calculate after base totals
+        return;
+      }
+      
+      if (dimension.type === 'number' || dimension.type === 'currency') {
+        let sum = 0;
+        tableData.forEach((row) => {
+          const value = parseFloat(row.data[dimension.name]) || 0;
+          sum += value;
+        });
+        totals[dimension.name] = sum;
+      }
+    });
+    
+    // Calculate formula dimensions using totals
+    dimensions.forEach((dimension) => {
+      if (dimension.formula) {
+        const calculatedValue = calculateFormula(dimension.formula, totals);
+        totals[dimension.name] = calculatedValue;
+      }
+    });
+    
+    return totals;
+  };
+
+  // Paginate data
+  const paginatedData = tableData.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+  
+  const totalPages = Math.ceil(tableData.length / itemsPerPage);
+  const totals = calculateTotals();
 
   const renderRow = (row: TableRow) => {
     const isExpanded = expandedRows.has(row.id);
@@ -711,44 +767,135 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
               No data available. Connect a data source to view the table.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="border-b bg-muted/30">
-                  <tr>
-                    <th
-                      className="py-3 px-4 text-left font-medium text-sm"
-                      onContextMenu={(e) => handleContextMenu(e, "name")}
-                    >
-                      {groupByDimensions[0] || "Name"}
-                    </th>
-                    {dateGranularity !== 'none' && (
-                      <th className="py-3 px-4 text-left font-medium text-sm">
-                        Date
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="border-b bg-muted/30">
+                    <tr>
+                      <th
+                        className="py-3 px-4 text-left font-medium text-sm"
+                        onContextMenu={(e) => handleContextMenu(e, "name")}
+                      >
+                        {groupByDimensions[0] || "Name"}
                       </th>
-                    )}
-                    {dimensions
-                      .filter(d => {
-                        // Only show metric/value columns (same filter as Column Visibility)
-                        return (d.type === 'number' || 
-                                d.type === 'currency' || 
-                                d.type === 'percentage' ||
-                                d.formula !== null) && 
-                               visibleColumns.has(d.id);
-                      })
-                      .map((dimension) => (
-                        <th
-                          key={dimension.id}
-                          className="py-3 px-4 text-right font-medium text-sm"
-                          onContextMenu={(e) => handleContextMenu(e, dimension.name)}
-                        >
-                          {dimension.name}
+                      {dateGranularity !== 'none' && (
+                        <th className="py-3 px-4 text-left font-medium text-sm">
+                          Date
                         </th>
-                      ))}
-                  </tr>
-                </thead>
-                <tbody>{tableData.map((row) => renderRow(row))}</tbody>
-              </table>
-            </div>
+                      )}
+                      {dimensions
+                        .filter(d => {
+                          // Only show metric/value columns (same filter as Column Visibility)
+                          return (d.type === 'number' || 
+                                  d.type === 'currency' || 
+                                  d.type === 'percentage' ||
+                                  d.formula !== null) && 
+                                 visibleColumns.has(d.id);
+                        })
+                        .map((dimension) => (
+                          <th
+                            key={dimension.id}
+                            className="py-3 px-4 text-right font-medium text-sm"
+                            onContextMenu={(e) => handleContextMenu(e, dimension.name)}
+                          >
+                            {dimension.name}
+                          </th>
+                        ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedData.map((row) => renderRow(row))}
+                    {/* Total row */}
+                    <tr className="border-t-2 border-primary/20 bg-muted/50 font-semibold">
+                      <td className="py-3 px-4">Total</td>
+                      {dateGranularity !== 'none' && (
+                        <td className="py-3 px-4"></td>
+                      )}
+                      {dimensions
+                        .filter(d => {
+                          return (d.type === 'number' || 
+                                  d.type === 'currency' || 
+                                  d.type === 'percentage' ||
+                                  d.formula !== null) && 
+                                 visibleColumns.has(d.id);
+                        })
+                        .map((dimension) => (
+                          <td key={dimension.id} className="py-3 px-4 text-right">
+                            {formatValue(totals[dimension.name], dimension)}
+                          </td>
+                        ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
+                    {Math.min(currentPage * itemsPerPage, tableData.length)} of{" "}
+                    {tableData.length} rows
+                  </div>
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                          className={cn(
+                            currentPage === 1 && "pointer-events-none opacity-50",
+                            "cursor-pointer"
+                          )}
+                        />
+                      </PaginationItem>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1)
+                        .filter((page) => {
+                          // Show first page, last page, current page, and pages around current
+                          return (
+                            page === 1 ||
+                            page === totalPages ||
+                            Math.abs(page - currentPage) <= 1
+                          );
+                        })
+                        .map((page, index, array) => {
+                          // Add ellipsis if there's a gap
+                          const prevPage = array[index - 1];
+                          const showEllipsis = prevPage && page - prevPage > 1;
+                          
+                          return (
+                            <>
+                              {showEllipsis && (
+                                <PaginationItem key={`ellipsis-${page}`}>
+                                  <PaginationEllipsis />
+                                </PaginationItem>
+                              )}
+                              <PaginationItem key={page}>
+                                <PaginationLink
+                                  onClick={() => setCurrentPage(page)}
+                                  isActive={currentPage === page}
+                                  className="cursor-pointer"
+                                >
+                                  {page}
+                                </PaginationLink>
+                              </PaginationItem>
+                            </>
+                          );
+                        })}
+                      <PaginationItem>
+                        <PaginationNext
+                          onClick={() =>
+                            setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                          }
+                          className={cn(
+                            currentPage === totalPages && "pointer-events-none opacity-50",
+                            "cursor-pointer"
+                          )}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
