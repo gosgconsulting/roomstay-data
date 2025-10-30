@@ -444,7 +444,8 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
       const defaultVisible = new Set<string>(
         sortedDimensions
-          .filter(d => !hiddenColumns.includes(d.name))
+          .filter(d => !hiddenColumns.includes(d.name) && 
+                      (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula))
           .map(d => d.id)
       );
       setVisibleColumns(defaultVisible);
