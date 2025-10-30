@@ -46,10 +46,14 @@ const Index = () => {
 
   const loadFirstReport = async () => {
     try {
-      // Get the first available report (public access)
+      // Only load reports if user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
       const { data: reports, error: fetchError } = await supabase
         .from("reports")
         .select("*")
+        .eq("user_id", session.user.id)
         .limit(1);
 
       if (fetchError) throw fetchError;
@@ -106,12 +110,22 @@ const Index = () => {
         onReportChange={setReportId} 
         onDataSync={handleDataSync}
       />
-      <FiltersBar reportId={reportId} onFiltersChange={setFilters} />
-      <main className="container mx-auto px-6 py-6 space-y-6">
-        <KPIMetricsCards reportId={reportId} filters={filters} key={`metrics-${dataRefreshKey}`} />
-        <KPIChartsGrid reportId={reportId} filters={filters} key={`charts-${dataRefreshKey}`} />
-        <PerformanceTable reportId={reportId} filters={filters} key={`table-${dataRefreshKey}`} />
-      </main>
+      {reportId ? (
+        <>
+          <FiltersBar reportId={reportId} onFiltersChange={setFilters} />
+          <main className="container mx-auto px-6 py-6 space-y-6">
+            <KPIMetricsCards reportId={reportId} filters={filters} key={`metrics-${dataRefreshKey}`} />
+            <KPIChartsGrid reportId={reportId} filters={filters} key={`charts-${dataRefreshKey}`} />
+            <PerformanceTable reportId={reportId} filters={filters} key={`table-${dataRefreshKey}`} />
+          </main>
+        </>
+      ) : (
+        <main className="container mx-auto px-6 py-6">
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">Create a report to get started</p>
+          </div>
+        </main>
+      )}
     </div>
   );
 };
