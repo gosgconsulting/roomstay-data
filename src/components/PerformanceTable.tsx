@@ -196,6 +196,8 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   };
 
   const loadDimensions = async () => {
+    if (!reportId) return;
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -203,7 +205,8 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       const { data, error } = await supabase
         .from("dimensions")
         .select("*")
-        .eq("user_id", user.id);
+        .eq("user_id", user.id)
+        .eq("report_id", reportId);
 
       if (error) throw error;
 
