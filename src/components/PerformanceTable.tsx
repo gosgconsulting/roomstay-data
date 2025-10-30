@@ -194,14 +194,50 @@ export const PerformanceTable = () => {
       const { data, error } = await supabase
         .from("dimensions")
         .select("*")
-        .eq("user_id", user.id)
-        .order("name", { ascending: true });
+        .eq("user_id", user.id);
 
       if (error) throw error;
 
-      setDimensions(data || []);
-      // Set all dimensions as visible by default
-      setVisibleColumns(new Set(data?.map(d => d.id) || []));
+      // Define the desired column order
+      const columnOrder = [
+        'Impressions',
+        'Impression Share',
+        'Clicks',
+        'CTR',
+        'Conversions',
+        'Conversion Rate',
+        'CPC',
+        'CPM',
+        'Cost',
+        'Revenue',
+        'Leads',
+        'ROAS',
+        'Cost of sale'
+      ];
+
+      // Sort dimensions according to the defined order
+      const sortedDimensions = (data || []).sort((a, b) => {
+        const indexA = columnOrder.indexOf(a.name);
+        const indexB = columnOrder.indexOf(b.name);
+        
+        // If not in the order list, put at the end
+        if (indexA === -1 && indexB === -1) return 0;
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        
+        return indexA - indexB;
+      });
+
+      setDimensions(sortedDimensions);
+      
+      // Set default visibility - hide Impression Share, CPM, and Leads
+      const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
+      const defaultVisible = new Set(
+        sortedDimensions
+          .filter(d => !hiddenColumns.includes(d.name))
+          .map(d => d.id)
+      );
+      setVisibleColumns(defaultVisible);
     } catch (error) {
       console.error("Error loading dimensions:", error);
     } finally {
