@@ -16,6 +16,9 @@ interface PerformanceDataRequest {
   visibleDimensionIds?: string[];
   limit?: number;
   offset?: number;
+  compareEnabled?: boolean;
+  compareDateFrom?: string;
+  compareDateTo?: string;
 }
 
 Deno.serve(async (req) => {
@@ -39,6 +42,9 @@ Deno.serve(async (req) => {
       visibleDimensionIds = [],
       limit = 1000,
       offset = 0,
+      compareEnabled = false,
+      compareDateFrom,
+      compareDateTo,
     }: PerformanceDataRequest = await req.json();
 
     console.log('get-performance-data: Starting request', {
@@ -46,6 +52,7 @@ Deno.serve(async (req) => {
       groupByDims,
       limit,
       offset,
+      compareEnabled,
     });
 
     // Fetch all dimensions (they are user-level, not report-level)

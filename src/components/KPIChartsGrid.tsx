@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
+import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO } from "date-fns";
 import { FilterState } from "./FiltersBar";
@@ -9,6 +9,7 @@ import { FilterState } from "./FiltersBar";
 interface ChartData {
   date: string;
   value: number;
+  compareValue?: number;
 }
 
 interface KPIChartsGridProps {
@@ -173,52 +174,97 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
         return true;
       });
 
-      // Group data by date for each KPI
-      const chartDataByKPI: Record<string, Record<string, number>> = {};
-      kpis.forEach(kpi => {
-        chartDataByKPI[kpi.title] = {};
-      });
-
-      filteredData.forEach((row) => {
-        const dimensionValues = row.dimension_values as Record<string, any>;
-        const dateValue = dimensionValues[dateDimension.id];
-        
-        if (!dateValue) return;
-
-        // Parse and format date
-        let formattedDate: string;
-        try {
-          const date = new Date(dateValue);
-          formattedDate = format(date, 'MMM dd');
-        } catch {
-          formattedDate = String(dateValue);
-        }
-
-        // Aggregate each KPI
-        kpis.forEach(kpi => {
-          const dimension = dimensions.find(d => d.name === kpi.title);
-          if (!dimension) {
-            console.warn(`Dimension not found for KPI: ${kpi.title}`);
-            return;
-          }
-
-          const value = dimensionValues[dimension.id];
-          if (value !== null && value !== undefined) {
-            const numValue = parseFloat(value) || 0;
-            if (!chartDataByKPI[kpi.title][formattedDate]) {
-              chartDataByKPI[kpi.title][formattedDate] = 0;
+      // Helper to group data by date for a period
+      const groupByDate = (fromDate?: Date, toDate?: Date) => {
+        const periodData = allDimensionData.filter((row) => {
+          const dimensionValues = row.dimension_values as Record<string, any>;
+          
+          // Apply dimension filters
+          for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters)) {
+            if (dimensionValues[dimId] !== filterValue) {
+              return false;
             }
-            chartDataByKPI[kpi.title][formattedDate] += numValue;
           }
+          
+          // Apply date range filter
+          if (fromDate || toDate) {
+            if (dateDimension && dimensionValues[dateDimension.id]) {
+              const rowDate = new Date(dimensionValues[dateDimension.id]);
+              if (fromDate && rowDate < fromDate) {
+                return false;
+              }
+              if (toDate && rowDate > toDate) {
+                return false;
+              }
+            }
+          }
+          
+          return true;
         });
-      });
 
-      // Convert to array format for charts
+        const chartDataByKPI: Record<string, Record<string, number>> = {};
+        kpis.forEach(kpi => {
+          chartDataByKPI[kpi.title] = {};
+        });
+
+        periodData.forEach((row) => {
+          const dimensionValues = row.dimension_values as Record<string, any>;
+          const dateValue = dimensionValues[dateDimension.id];
+          
+          if (!dateValue) return;
+
+          // Parse and format date
+          let formattedDate: string;
+          try {
+            const date = new Date(dateValue);
+            formattedDate = format(date, 'MMM dd');
+          } catch {
+            formattedDate = String(dateValue);
+          }
+
+          // Aggregate each KPI
+          kpis.forEach(kpi => {
+            const dimension = dimensions.find(d => d.name === kpi.title);
+            if (!dimension) return;
+
+            const value = dimensionValues[dimension.id];
+            if (value !== null && value !== undefined) {
+              const numValue = parseFloat(value) || 0;
+              if (!chartDataByKPI[kpi.title][formattedDate]) {
+                chartDataByKPI[kpi.title][formattedDate] = 0;
+              }
+              chartDataByKPI[kpi.title][formattedDate] += numValue;
+            }
+          });
+        });
+
+        return chartDataByKPI;
+      };
+
+      // Get current period data
+      const currentData = groupByDate(filters.dateRange?.from, filters.dateRange?.to);
+
+      // Get comparison period data if enabled
+      let compareData: Record<string, Record<string, number>> | null = null;
+      if (filters.compareEnabled && filters.compareDateRange?.from && filters.compareDateRange?.to) {
+        compareData = groupByDate(filters.compareDateRange.from, filters.compareDateRange.to);
+      }
+
+      // Convert to array format for charts and merge comparison data
       const finalChartData: Record<string, ChartData[]> = {};
       kpis.forEach(kpi => {
-        finalChartData[kpi.title] = Object.entries(chartDataByKPI[kpi.title])
-          .map(([date, value]) => ({ date, value }))
-          .sort((a, b) => a.date.localeCompare(b.date));
+        const currentDates = Object.keys(currentData[kpi.title]);
+        const chartPoints: ChartData[] = [];
+        
+        currentDates.sort((a, b) => a.localeCompare(b)).forEach(date => {
+          chartPoints.push({
+            date,
+            value: currentData[kpi.title][date] || 0,
+            compareValue: compareData ? (compareData[kpi.title][date] || 0) : undefined,
+          });
+        });
+        
+        finalChartData[kpi.title] = chartPoints;
       });
 
       setChartData(finalChartData);
@@ -285,6 +331,10 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
                           <stop offset="0%" stopColor={kpi.color} stopOpacity={0.4} />
                           <stop offset="100%" stopColor={kpi.color} stopOpacity={0.1} />
                         </linearGradient>
+                        <linearGradient id={`gradient-compare-${kpi.title}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.3} />
+                          <stop offset="100%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.05} />
+                        </linearGradient>
                       </defs>
                       <XAxis
                         dataKey="date"
@@ -306,9 +356,27 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
                           borderRadius: "6px",
                         }}
                       />
+                      {data[0]?.compareValue !== undefined && (
+                        <>
+                          <Legend 
+                            wrapperStyle={{ fontSize: '12px' }}
+                            iconType="line"
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="compareValue"
+                            name="Previous"
+                            stroke="hsl(var(--muted-foreground))"
+                            strokeWidth={1.5}
+                            strokeDasharray="5 5"
+                            fill={`url(#gradient-compare-${kpi.title})`}
+                          />
+                        </>
+                      )}
                       <Area
                         type="monotone"
                         dataKey="value"
+                        name="Current"
                         stroke={kpi.color}
                         strokeWidth={2}
                         fill={`url(#gradient-${kpi.title})`}

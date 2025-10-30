@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { FilterState } from "./FiltersBar";
+import { cn } from "@/lib/utils";
 import { 
   Eye, 
   MousePointerClick, 
@@ -19,6 +20,8 @@ interface KPIMetric {
   value: string;
   icon: any;
   color: string;
+  change?: number;
+  compareValue?: string;
 }
 
 interface KPIMetricsCardsProps {
@@ -110,63 +113,76 @@ export const KPIMetricsCards = ({ reportId, filters }: KPIMetricsCardsProps) => 
         return;
       }
 
-      // Filter data based on applied filters
-      const filteredData = allDimensionData.filter((row) => {
-        const dimensionValues = row.dimension_values as Record<string, any>;
-        
-        // Apply dimension filters
-        for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters)) {
-          if (dimensionValues[dimId] !== filterValue) {
-            return false;
-          }
-        }
-        
-        // Apply date range filter if there's a Date dimension
-        if (filters.dateRange?.from || filters.dateRange?.to) {
-          const dateDimension = dimensions.find(d => d.type === 'date');
-          if (dateDimension && dimensionValues[dateDimension.id]) {
-            const rowDate = new Date(dimensionValues[dateDimension.id]);
-            if (filters.dateRange.from && rowDate < filters.dateRange.from) {
-              return false;
-            }
-            if (filters.dateRange.to && rowDate > filters.dateRange.to) {
-              return false;
-            }
-          }
-        }
-        
-        return true;
-      });
-
-      // Calculate aggregated values for each dimension
-      const aggregatedValues: Record<string, number> = {};
-
-      filteredData.forEach((row) => {
-        const dimensionValues = row.dimension_values as Record<string, any>;
-        
-        dimensions.forEach((dimension) => {
-          // Skip formula dimensions for now
-          if (dimension.formula) return;
+      // Helper to filter and aggregate data for a date range
+      const aggregateForPeriod = (fromDate?: Date, toDate?: Date) => {
+        const filteredData = allDimensionData.filter((row) => {
+          const dimensionValues = row.dimension_values as Record<string, any>;
           
-          const value = dimensionValues[dimension.id];
-          if (value !== null && value !== undefined) {
-            if (dimension.type === 'number' || dimension.type === 'currency') {
-              const numValue = parseFloat(value) || 0;
-              aggregatedValues[dimension.name] = (aggregatedValues[dimension.name] || 0) + numValue;
+          // Apply dimension filters
+          for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters)) {
+            if (dimensionValues[dimId] !== filterValue) {
+              return false;
+            }
+          }
+          
+          // Apply date range filter if there's a Date dimension
+          if (fromDate || toDate) {
+            const dateDimension = dimensions.find(d => d.type === 'date');
+            if (dateDimension && dimensionValues[dateDimension.id]) {
+              const rowDate = new Date(dimensionValues[dateDimension.id]);
+              if (fromDate && rowDate < fromDate) {
+                return false;
+              }
+              if (toDate && rowDate > toDate) {
+                return false;
+              }
+            }
+          }
+          
+          return true;
+        });
+
+        // Calculate aggregated values for each dimension
+        const aggregatedValues: Record<string, number> = {};
+
+        filteredData.forEach((row) => {
+          const dimensionValues = row.dimension_values as Record<string, any>;
+          
+          dimensions.forEach((dimension) => {
+            // Skip formula dimensions for now
+            if (dimension.formula) return;
+            
+            const value = dimensionValues[dimension.id];
+            if (value !== null && value !== undefined) {
+              if (dimension.type === 'number' || dimension.type === 'currency') {
+                const numValue = parseFloat(value) || 0;
+                aggregatedValues[dimension.name] = (aggregatedValues[dimension.name] || 0) + numValue;
+              }
+            }
+          });
+        });
+
+        // Calculate formula dimensions
+        dimensions.forEach((dimension) => {
+          if (dimension.formula) {
+            const calculatedValue = calculateFormula(dimension.formula, aggregatedValues, dimensions);
+            if (calculatedValue !== null) {
+              aggregatedValues[dimension.name] = calculatedValue;
             }
           }
         });
-      });
 
-      // Calculate formula dimensions
-      dimensions.forEach((dimension) => {
-        if (dimension.formula) {
-          const calculatedValue = calculateFormula(dimension.formula, aggregatedValues, dimensions);
-          if (calculatedValue !== null) {
-            aggregatedValues[dimension.name] = calculatedValue;
-          }
-        }
-      });
+        return aggregatedValues;
+      };
+
+      // Get current period data
+      const aggregatedValues = aggregateForPeriod(filters.dateRange?.from, filters.dateRange?.to);
+
+      // Get comparison period data if comparison is enabled
+      let compareValues: Record<string, number> | null = null;
+      if (filters.compareEnabled && filters.compareDateRange?.from && filters.compareDateRange?.to) {
+        compareValues = aggregateForPeriod(filters.compareDateRange.from, filters.compareDateRange.to);
+      }
 
       // Map to display metrics with icons and colors
       const displayMetrics: KPIMetric[] = [];
@@ -197,11 +213,30 @@ export const KPIMetricsCards = ({ reportId, filters }: KPIMetricsCardsProps) => 
           const dimension = dimensions.find(d => d.name === metricName);
           if (dimension) {
             const config = metricConfigs[metricName];
+            const currentValue = aggregatedValues[metricName];
+            
+            let change: number | undefined;
+            let compareValue: string | undefined;
+            
+            if (compareValues && compareValues[metricName] !== undefined) {
+              const prevValue = compareValues[metricName];
+              compareValue = formatValue(prevValue, dimension);
+              
+              // Calculate percentage change
+              if (prevValue !== 0) {
+                change = ((currentValue - prevValue) / prevValue) * 100;
+              } else if (currentValue !== 0) {
+                change = 100; // If previous was 0 and current is not, it's 100% increase
+              }
+            }
+            
             displayMetrics.push({
               label: metricName,
-              value: formatValue(aggregatedValues[metricName], dimension),
+              value: formatValue(currentValue, dimension),
               icon: config?.icon || DollarSign,
               color: config?.color || 'bg-gray-500',
+              change,
+              compareValue,
             });
           }
         }
@@ -317,12 +352,35 @@ export const KPIMetricsCards = ({ reportId, filters }: KPIMetricsCardsProps) => 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {metrics.map((metric, index) => {
           const IconComponent = metric.icon;
+          const hasComparison = metric.change !== undefined;
+          const isPositive = metric.change && metric.change > 0;
+          const isNegative = metric.change && metric.change < 0;
+          
           return (
             <Card key={index} className="p-4 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <p className="text-xs text-muted-foreground mb-1">{metric.label}</p>
                   <p className="text-2xl font-bold">{metric.value}</p>
+                  {hasComparison && (
+                    <div className="mt-2 space-y-1">
+                      <div className={cn(
+                        "flex items-center gap-1 text-xs font-medium",
+                        isPositive && "text-emerald-600 dark:text-emerald-400",
+                        isNegative && "text-red-600 dark:text-red-400",
+                        !isPositive && !isNegative && "text-muted-foreground"
+                      )}>
+                        {isPositive && <span>↑</span>}
+                        {isNegative && <span>↓</span>}
+                        <span>
+                          {Math.abs(metric.change || 0).toFixed(1)}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        vs {metric.compareValue}
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className={`${metric.color} rounded-full p-2.5 flex items-center justify-center`}>
                   <IconComponent className="h-5 w-5 text-white" />
