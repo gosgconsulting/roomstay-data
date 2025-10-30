@@ -28,7 +28,6 @@ interface Dimension {
 interface DimensionsListModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  reportId: string;
   onAddNew: () => void;
 }
 
@@ -43,7 +42,6 @@ const typeLabels: Record<string, string> = {
 export const DimensionsListModal = ({
   open,
   onOpenChange,
-  reportId,
   onAddNew,
 }: DimensionsListModalProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
@@ -53,15 +51,19 @@ export const DimensionsListModal = ({
     if (open) {
       loadDimensions();
     }
-  }, [open, reportId]);
+  }, [open]);
 
   const loadDimensions = async () => {
     try {
       setIsLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) throw new Error("User not authenticated");
+
       const { data, error } = await supabase
         .from("dimensions")
         .select("*")
-        .eq("report_id", reportId)
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;

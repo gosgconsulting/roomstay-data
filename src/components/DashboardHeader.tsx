@@ -34,7 +34,53 @@ export const DashboardHeader = () => {
 
   useEffect(() => {
     loadReports();
+    createDefaultDimensions();
   }, []);
+
+  const createDefaultDimensions = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Check if user already has dimensions
+      const { data: existingDimensions } = await supabase
+        .from('dimensions')
+        .select('id')
+        .eq('user_id', user.id)
+        .limit(1);
+
+      if (existingDimensions && existingDimensions.length > 0) return;
+
+      // Create default metrics
+      const defaultMetrics = [
+        { name: 'Impressions', type: 'Number' },
+        { name: 'Clicks', type: 'Number' },
+        { name: 'Revenue', type: 'Currency' },
+        { name: 'Cost', type: 'Currency' },
+        { name: 'Conversions', type: 'Number' },
+        { name: 'Leads', type: 'Number' },
+      ];
+
+      // Create formula KPIs
+      const formulaKPIs = [
+        { name: 'ROAS', type: 'Number', formula: 'Revenue / Cost' },
+        { name: 'Cost of sale', type: 'Percentage', formula: 'Cost / Revenue * 100' },
+        { name: 'Conversion Rate', type: 'Percentage', formula: 'Conversions / Clicks * 100' },
+        { name: 'CPM', type: 'Currency', formula: 'Cost / Impressions * 1000' },
+        { name: 'CPC', type: 'Currency', formula: 'Cost / Clicks' },
+        { name: 'Impression Share', type: 'Percentage', formula: 'Impressions / Total Impressions * 100' },
+      ];
+
+      const allDimensions = [
+        ...defaultMetrics.map(m => ({ ...m, user_id: user.id, formula: null })),
+        ...formulaKPIs.map(k => ({ ...k, user_id: user.id }))
+      ];
+
+      await supabase.from('dimensions').insert(allDimensions);
+    } catch (error) {
+      console.error("Error creating default dimensions:", error);
+    }
+  };
 
   const loadReports = async () => {
     try {
@@ -79,39 +125,6 @@ export const DashboardHeader = () => {
         .single();
 
       if (error) throw error;
-
-      // Create default metrics
-      const defaultMetrics = [
-        { name: 'Impressions', type: 'Number' },
-        { name: 'Clicks', type: 'Number' },
-        { name: 'Revenue', type: 'Currency' },
-        { name: 'Cost', type: 'Currency' },
-        { name: 'Conversions', type: 'Number' },
-        { name: 'Leads', type: 'Number' },
-      ];
-
-      // Create formula KPIs
-      const formulaKPIs = [
-        { name: 'ROAS', type: 'Number', formula: 'Revenue / Cost' },
-        { name: 'Cost of sale', type: 'Percentage', formula: 'Cost / Revenue * 100' },
-        { name: 'Conversion Rate', type: 'Percentage', formula: 'Conversions / Clicks * 100' },
-        { name: 'CPM', type: 'Currency', formula: 'Cost / Impressions * 1000' },
-        { name: 'CPC', type: 'Currency', formula: 'Cost / Clicks' },
-        { name: 'Impression Share', type: 'Percentage', formula: 'Impressions / Total Impressions * 100' },
-      ];
-
-      const allDimensions = [
-        ...defaultMetrics.map(m => ({ ...m, report_id: data.id, formula: null })),
-        ...formulaKPIs.map(k => ({ ...k, report_id: data.id }))
-      ];
-
-      const { error: dimensionsError } = await supabase
-        .from('dimensions')
-        .insert(allDimensions);
-
-      if (dimensionsError) {
-        console.error("Error creating default dimensions:", dimensionsError);
-      }
 
       setReports([data, ...reports]);
       setCurrentReport(data);
@@ -284,7 +297,6 @@ export const DashboardHeader = () => {
             variant="outline"
             className="gap-2"
             onClick={() => setShowDimensionsListModal(true)}
-            disabled={!currentReport}
           >
             <Grid3x3 className="h-4 w-4" />
             Dimensions
@@ -326,30 +338,28 @@ export const DashboardHeader = () => {
             }}
             reportId={currentReport.id}
           />
-
-          <DimensionsListModal
-            open={showDimensionsListModal}
-            onOpenChange={setShowDimensionsListModal}
-            reportId={currentReport.id}
-            onAddNew={() => {
-              setShowDimensionsListModal(false);
-              setShowDimensionModal(true);
-            }}
-          />
-          
-          <DimensionModal
-            open={showDimensionModal}
-            onOpenChange={(open) => {
-              setShowDimensionModal(open);
-              if (!open) {
-                // Reopen the list modal when closing the add modal
-                setShowDimensionsListModal(true);
-              }
-            }}
-            reportId={currentReport.id}
-          />
         </>
       )}
+
+      <DimensionsListModal
+        open={showDimensionsListModal}
+        onOpenChange={setShowDimensionsListModal}
+        onAddNew={() => {
+          setShowDimensionsListModal(false);
+          setShowDimensionModal(true);
+        }}
+      />
+      
+      <DimensionModal
+        open={showDimensionModal}
+        onOpenChange={(open) => {
+          setShowDimensionModal(open);
+          if (!open) {
+            // Reopen the list modal when closing the add modal
+            setShowDimensionsListModal(true);
+          }
+        }}
+      />
 
       <ReportModal
         open={showReportModal}

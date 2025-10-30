@@ -64,27 +64,30 @@ export type Database = {
           formula: string | null
           id: string
           name: string
-          report_id: string
+          report_id: string | null
           type: string
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
           formula?: string | null
           id?: string
           name: string
-          report_id: string
+          report_id?: string | null
           type: string
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
           formula?: string | null
           id?: string
           name?: string
-          report_id?: string
+          report_id?: string | null
           type?: string
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: [
           {

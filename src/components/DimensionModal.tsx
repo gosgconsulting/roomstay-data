@@ -23,13 +23,11 @@ import { toast } from "@/hooks/use-toast";
 interface DimensionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  reportId: string;
 }
 
 export const DimensionModal = ({
   open,
   onOpenChange,
-  reportId,
 }: DimensionModalProps) => {
   const [name, setName] = useState("");
   const [type, setType] = useState("number");
@@ -48,10 +46,14 @@ export const DimensionModal = ({
 
     try {
       setIsLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) throw new Error("User not authenticated");
+
       const { error } = await supabase
         .from("dimensions")
         .insert({
-          report_id: reportId,
+          user_id: user.id,
           name: name.trim(),
           type,
           formula: formula.trim() || null,
