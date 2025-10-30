@@ -14,7 +14,74 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      data_sources: {
+        Row: {
+          created_at: string
+          google_sheets_url: string
+          header_row: number
+          id: string
+          name: string
+          report_id: string
+          spreadsheet_id: string
+          tab_name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          google_sheets_url: string
+          header_row?: number
+          id?: string
+          name: string
+          report_id: string
+          spreadsheet_id: string
+          tab_name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          google_sheets_url?: string
+          header_row?: number
+          id?: string
+          name?: string
+          report_id?: string
+          spreadsheet_id?: string
+          tab_name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_sources_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reports: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
