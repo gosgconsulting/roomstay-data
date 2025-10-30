@@ -8,6 +8,9 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronRight, Columns3 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -52,6 +55,9 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
   const [groupByDimensions, setGroupByDimensions] = useState<string[]>([]);
   const [breakdownByDimensions, setBreakdownByDimensions] = useState<string[]>([]);
   const [thenByDimensions, setThenByDimensions] = useState<string[]>([]);
+  
+  // State for date granularity - default to 'none'
+  const [dateGranularity, setDateGranularity] = useState<'none' | 'day' | 'week' | 'month' | 'year'>('none');
 
   useEffect(() => {
     if (reportId) {
@@ -354,6 +360,11 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
             row.level === 1 && "bg-muted/30"
           )}
         >
+          {dateGranularity !== 'none' && (
+            <td className="py-3 px-4 text-left">
+              -
+            </td>
+          )}
           <td className="py-3 px-4" style={{ paddingLeft: `${row.level * 2 + 1}rem` }}>
             <div className="flex items-center gap-2">
               {hasChildren && (
@@ -459,42 +470,77 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
                       Select which metrics to display in the table
                     </SheetDescription>
                   </SheetHeader>
-                  <div className="mt-6 space-y-4">
-                    {isLoadingDimensions ? (
-                      <div className="text-sm text-muted-foreground">Loading dimensions...</div>
-                    ) : dimensions.length === 0 ? (
-                      <div className="text-sm text-muted-foreground">No dimensions found</div>
-                    ) : (
-                      dimensions
-                        .filter(dimension => {
-                          // Only show metric/value fields (number, currency, percentage, formula)
-                          // Exclude attribute fields that are used for grouping
-                          return dimension.type === 'number' || 
-                                 dimension.type === 'currency' || 
-                                 dimension.type === 'percentage' ||
-                                 dimension.formula !== null;
-                        })
-                        .map((dimension) => (
-                          <div key={dimension.id} className="flex items-center space-x-3">
-                            <Checkbox
-                              id={dimension.id}
-                              checked={visibleColumns.has(dimension.id)}
-                              onCheckedChange={() => toggleColumn(dimension.id)}
-                            />
-                            <label
-                              htmlFor={dimension.id}
-                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
-                            >
-                              {dimension.name}
-                              {dimension.formula && (
-                                <span className="ml-2 text-xs text-muted-foreground">
-                                  (formula)
-                                </span>
-                              )}
-                            </label>
-                          </div>
-                        ))
-                    )}
+                  <div className="mt-6 space-y-6">
+                    {/* Date Section */}
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold">Date</h3>
+                      <RadioGroup value={dateGranularity} onValueChange={(value) => setDateGranularity(value as any)}>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="none" id="date-none" />
+                          <Label htmlFor="date-none" className="cursor-pointer font-normal">None</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="day" id="date-day" />
+                          <Label htmlFor="date-day" className="cursor-pointer font-normal">Day</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="week" id="date-week" />
+                          <Label htmlFor="date-week" className="cursor-pointer font-normal">Week</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="month" id="date-month" />
+                          <Label htmlFor="date-month" className="cursor-pointer font-normal">Month</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="year" id="date-year" />
+                          <Label htmlFor="date-year" className="cursor-pointer font-normal">Year</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+
+                    <Separator />
+
+                    {/* Metrics Section */}
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold">Metrics</h3>
+                      {isLoadingDimensions ? (
+                        <div className="text-sm text-muted-foreground">Loading dimensions...</div>
+                      ) : dimensions.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">No dimensions found</div>
+                      ) : (
+                        <div className="space-y-3">
+                          {dimensions
+                            .filter(dimension => {
+                              // Only show metric/value fields (number, currency, percentage, formula)
+                              // Exclude attribute fields that are used for grouping
+                              return dimension.type === 'number' || 
+                                     dimension.type === 'currency' || 
+                                     dimension.type === 'percentage' ||
+                                     dimension.formula !== null;
+                            })
+                            .map((dimension) => (
+                              <div key={dimension.id} className="flex items-center space-x-3">
+                                <Checkbox
+                                  id={dimension.id}
+                                  checked={visibleColumns.has(dimension.id)}
+                                  onCheckedChange={() => toggleColumn(dimension.id)}
+                                />
+                                <label
+                                  htmlFor={dimension.id}
+                                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                                >
+                                  {dimension.name}
+                                  {dimension.formula && (
+                                    <span className="ml-2 text-xs text-muted-foreground">
+                                      (formula)
+                                    </span>
+                                  )}
+                                </label>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </SheetContent>
               </Sheet>
@@ -519,6 +565,11 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
               <table className="w-full">
                 <thead className="border-b bg-muted/30">
                   <tr>
+                    {dateGranularity !== 'none' && (
+                      <th className="py-3 px-4 text-left font-medium text-sm">
+                        Date
+                      </th>
+                    )}
                     <th
                       className="py-3 px-4 text-left font-medium text-sm"
                       onContextMenu={(e) => handleContextMenu(e, "name")}
