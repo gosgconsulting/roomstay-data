@@ -206,6 +206,16 @@ Deno.serve(async (req) => {
 
     const groupedArray = Array.from(grouped.values());
 
+    // Sort by group key - if grouping by date, sort descending (most recent first)
+    const groupDimension = dimensions?.find(d => d.id === groupDimId);
+    if (groupDimension?.type === 'date') {
+      groupedArray.sort((a, b) => {
+        const dateA = new Date(a.name);
+        const dateB = new Date(b.name);
+        return dateB.getTime() - dateA.getTime(); // Descending order
+      });
+    }
+
     for (const group of groupedArray) {
       // Calculate formula fields
       for (const dim of dimensions || []) {
