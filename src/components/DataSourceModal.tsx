@@ -109,12 +109,12 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
     setIsLoading(true);
     
     try {
-      // First, validate the connection by fetching headers
+      // Fetch all data from the sheet (up to 10,000 rows)
       const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
         body: {
           spreadsheetId,
           tabName: selectedTab,
-          range: `${headerRow}:${headerRow}`,
+          range: `${headerRow}:10000`,
         },
       });
 
@@ -124,8 +124,11 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
         throw new Error("No data found in the specified range");
       }
 
-      // Save to database
-      const { error: dbError } = await supabase
+      const headers = sheetsData.values[0];
+      const dataRows = sheetsData.values.slice(1); // Skip header row
+
+      // Save data source metadata to database
+      const { data: dataSource, error: dbError } = await supabase
         .from('data_sources')
         .insert({
           report_id: reportId,
@@ -134,13 +137,41 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
           spreadsheet_id: spreadsheetId,
           tab_name: selectedTab,
           header_row: parseInt(headerRow),
-        });
+        })
+        .select()
+        .single();
 
       if (dbError) throw dbError;
 
+      // Save all data rows to sheet_data table
+      const rowsToInsert = dataRows.map((row, index) => {
+        // Convert array to object with headers as keys
+        const rowData: Record<string, any> = {};
+        headers.forEach((header: string, colIndex: number) => {
+          rowData[header] = row[colIndex] || null;
+        });
+        
+        return {
+          data_source_id: dataSource.id,
+          row_number: index + 1,
+          row_data: rowData,
+        };
+      });
+
+      // Insert in batches to avoid payload size limits
+      const batchSize = 500;
+      for (let i = 0; i < rowsToInsert.length; i += batchSize) {
+        const batch = rowsToInsert.slice(i, i + batchSize);
+        const { error: insertError } = await supabase
+          .from('sheet_data')
+          .insert(batch);
+
+        if (insertError) throw insertError;
+      }
+
       toast({
         title: "Data source saved",
-        description: `Successfully connected to ${dataName} with ${sheetsData.values[0].length} columns`,
+        description: `Successfully connected to ${dataName} with ${headers.length} columns and ${dataRows.length} rows`,
       });
       
       onOpenChange(false);

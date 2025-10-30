@@ -103,6 +103,41 @@ export type Database = {
         }
         Relationships: []
       }
+      sheet_data: {
+        Row: {
+          created_at: string
+          data_source_id: string
+          id: string
+          row_data: Json
+          row_number: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data_source_id: string
+          id?: string
+          row_data: Json
+          row_number: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data_source_id?: string
+          id?: string
+          row_data?: Json
+          row_number?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sheet_data_data_source_id_fkey"
+            columns: ["data_source_id"]
+            isOneToOne: false
+            referencedRelation: "data_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
