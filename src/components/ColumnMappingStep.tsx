@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -28,6 +29,8 @@ interface ColumnMapping {
   column: string;
   dimensionId: string | null;
   visible: boolean;
+  newDimensionName?: string;
+  newDimensionType?: string;
 }
 
 interface ColumnMappingStepProps {
@@ -166,6 +169,13 @@ export const ColumnMappingStep = ({
   const updateMapping = (index: number, dimensionId: string | null) => {
     const newMappings = [...mappings];
     newMappings[index].dimensionId = dimensionId;
+    
+    // If "create_new" is selected, auto-populate new dimension name
+    if (dimensionId === 'create_new') {
+      newMappings[index].newDimensionName = mappings[index].column;
+      newMappings[index].newDimensionType = 'text';
+    }
+    
     setMappings(newMappings);
   };
 
@@ -207,22 +217,59 @@ export const ColumnMappingStep = ({
               <TableRow key={index}>
                 <TableCell className="font-medium">{mapping.column}</TableCell>
                 <TableCell>
-                  <Select
-                    value={mapping.dimensionId || "none"}
-                    onValueChange={(value) => updateMapping(index, value === "none" ? null : value)}
-                  >
-                    <SelectTrigger className="bg-background">
-                      <SelectValue placeholder="Select dimension..." />
-                    </SelectTrigger>
-                    <SelectContent className="bg-background z-50">
-                      <SelectItem value="none">No mapping</SelectItem>
-                      {dimensions.map((dimension) => (
-                        <SelectItem key={dimension.id} value={dimension.id}>
-                          {dimension.name}
+                  <div className="space-y-2">
+                    <Select
+                      value={mapping.dimensionId || "none"}
+                      onValueChange={(value) => updateMapping(index, value === "none" ? null : value)}
+                    >
+                      <SelectTrigger className="bg-background">
+                        <SelectValue placeholder="Select dimension..." />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background z-50">
+                        <SelectItem value="none">No mapping</SelectItem>
+                        <SelectItem value="create_new" className="text-primary font-medium">
+                          + Create new dimension
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        {dimensions.map((dimension) => (
+                          <SelectItem key={dimension.id} value={dimension.id}>
+                            {dimension.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {mapping.dimensionId === 'create_new' && (
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Dimension name"
+                          value={mapping.newDimensionName || ''}
+                          onChange={(e) => {
+                            const newMappings = [...mappings];
+                            newMappings[index].newDimensionName = e.target.value;
+                            setMappings(newMappings);
+                          }}
+                          className="flex-1"
+                        />
+                        <Select
+                          value={mapping.newDimensionType || 'text'}
+                          onValueChange={(value) => {
+                            const newMappings = [...mappings];
+                            newMappings[index].newDimensionType = value;
+                            setMappings(newMappings);
+                          }}
+                        >
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="text">Text</SelectItem>
+                            <SelectItem value="number">Number</SelectItem>
+                            <SelectItem value="currency">Currency</SelectItem>
+                            <SelectItem value="date">Date</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="text-center">
                   <Button

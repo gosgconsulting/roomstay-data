@@ -201,28 +201,6 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
     return value;
   };
 
-  // Helper to get value from row data, trying both mapped dimension name and original column name
-  const getValueFromRow = (rowData: Record<string, any>, dimensionName: string, dataSourceId: string, dataSources: any[]): any => {
-    // First try dimension name (mapped)
-    if (rowData[dimensionName] !== undefined && rowData[dimensionName] !== null) {
-      return rowData[dimensionName];
-    }
-    
-    // Fallback: find original column name from mapping
-    const dataSource = dataSources.find(ds => ds.id === dataSourceId);
-    if (dataSource?.column_mappings) {
-      const mapping = dataSource.column_mappings.find((m: any) => {
-        const dim = dimensions.find(d => d.id === m.dimensionId);
-        return dim?.name === dimensionName;
-      });
-      
-      if (mapping && rowData[mapping.column] !== undefined) {
-        return rowData[mapping.column];
-      }
-    }
-    
-    return null;
-  };
 
   // Helper to calculate formula based on aggregated data
   const calculateFormula = (formula: string, data: Record<string, any>): number | null => {
@@ -273,44 +251,37 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
     
     setIsLoadingData(true);
     try {
-      // Fetch data sources for this report with their mappings
-      const { data: dataSources, error: dsError } = await supabase
-        .from('data_sources')
-        .select('id, column_mappings')
+      // Fetch all dimension_data for this report
+      const { data: dimensionData, error: dataError } = await supabase
+        .from('dimension_data')
+        .select('*')
         .eq('report_id', reportId);
 
-      if (dsError) throw dsError;
+      if (dataError) throw dataError;
 
-      if (!dataSources || dataSources.length === 0) {
-        setTableData([]);
-        return;
-      }
-
-      // Fetch all sheet data for these data sources
-      const dataSourceIds = dataSources.map(ds => ds.id);
-      const { data: sheetData, error: sheetError } = await supabase
-        .from('sheet_data')
-        .select('*')
-        .in('data_source_id', dataSourceIds);
-
-      if (sheetError) throw sheetError;
-
-      if (!sheetData || sheetData.length === 0) {
+      if (!dimensionData || dimensionData.length === 0) {
         setTableData([]);
         return;
       }
 
       // Group data by the first grouping dimension
-      const groupDimension = groupByDimensions[0];
+      const groupDimensionId = groupByDimensions[0];
+      const groupDimension = dimensions.find(d => d.id === groupDimensionId);
+      
+      if (!groupDimension) {
+        setTableData([]);
+        return;
+      }
+
       const grouped = new Map<string, any>();
 
-      sheetData.forEach((row) => {
-        const rowData = row.row_data as Record<string, any>;
-        const groupKey = getValueFromRow(rowData, groupDimension, row.data_source_id, dataSources) || "Unknown";
+      dimensionData.forEach((row) => {
+        const dimensionValues = row.dimension_values as Record<string, any>;
+        const groupKey = dimensionValues[groupDimensionId] || "Unknown";
 
         if (!grouped.has(groupKey)) {
           grouped.set(groupKey, {
-            id: groupKey.toLowerCase().replace(/\s+/g, '-'),
+            id: String(groupKey).toLowerCase().replace(/\s+/g, '-'),
             name: groupKey,
             level: 0,
             data: {},
@@ -324,13 +295,13 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
           // Skip dimensions with formulas - we'll calculate them after aggregation
           if (dimension.formula) return;
           
-          const value = getValueFromRow(rowData, dimension.name, row.data_source_id, dataSources);
+          const value = dimensionValues[dimension.id];
           if (value !== undefined && value !== null) {
             if (dimension.type === 'number' || dimension.type === 'currency') {
               const numValue = parseFloat(value) || 0;
               groupItem.data[dimension.name] = (groupItem.data[dimension.name] || 0) + numValue;
             } else if (dimension.type === 'date') {
-              // For date fields, keep the first date encountered (or could be latest)
+              // For date fields, keep the first date encountered
               if (!groupItem.data[dimension.name]) {
                 groupItem.data[dimension.name] = value;
               }

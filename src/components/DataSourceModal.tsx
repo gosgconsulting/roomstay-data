@@ -188,6 +188,10 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
       const sheetHeaders = sheetsData.values[0];
       const dataRows = sheetsData.values.slice(1); // Skip header row
 
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
       // Save data source metadata to database
       const { data: dataSource, error: dbError } = await supabase
         .from('data_sources')
@@ -205,55 +209,59 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
 
       if (dbError) throw dbError;
 
-      // Filter only visible columns based on mappings
+      // Auto-create dimensions and build dimension ID map
+      const dimensionIdMap: Record<string, string> = {};
       const visibleMappings = mappings.filter(m => m.visible);
       
-      // Fetch dimensions to get mapped dimension names
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("User not authenticated");
+      for (const mapping of visibleMappings) {
+        if (mapping.dimensionId === 'create_new' && mapping.newDimensionName) {
+          // Create new dimension
+          const { data: newDim, error: dimError } = await supabase
+            .from('dimensions')
+            .insert({
+              user_id: user.id,
+              report_id: reportId,
+              data_source_id: dataSource.id,
+              name: mapping.newDimensionName,
+              type: mapping.newDimensionType || 'text',
+            })
+            .select()
+            .single();
+          
+          if (dimError) throw dimError;
+          dimensionIdMap[mapping.column] = newDim.id;
+        } else if (mapping.dimensionId && mapping.dimensionId !== 'none') {
+          // Use existing dimension
+          dimensionIdMap[mapping.column] = mapping.dimensionId;
+        }
+      }
 
-      const { data: dimensionsData, error: dimError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("user_id", user.id);
-
-      if (dimError) throw dimError;
-      
-      // Save all data rows to sheet_data table with both original and mapped names
+      // Transform data rows to dimension_data format
       const rowsToInsert = dataRows.map((row, index) => {
-        // Convert array to object with both original column name AND mapped dimension name
-        const rowData: Record<string, any> = {};
+        const dimensionValues: Record<string, any> = {};
+        
         visibleMappings.forEach((mapping) => {
           const colIndex = sheetHeaders.indexOf(mapping.column);
-          if (colIndex !== -1) {
+          if (colIndex !== -1 && dimensionIdMap[mapping.column]) {
             const value = row[colIndex] || null;
-            
-            // Store with original column name
-            rowData[mapping.column] = value;
-            
-            // Also store with mapped dimension name if mapped
-            if (mapping.dimensionId && mapping.dimensionId !== 'none') {
-              const dimension = dimensionsData?.find(d => d.id === mapping.dimensionId);
-              if (dimension) {
-                rowData[dimension.name] = value;
-              }
-            }
+            dimensionValues[dimensionIdMap[mapping.column]] = value;
           }
         });
         
         return {
+          report_id: reportId,
           data_source_id: dataSource.id,
           row_number: index + 1,
-          row_data: rowData,
+          dimension_values: dimensionValues,
         };
       });
 
-      // Insert in batches to avoid payload size limits
+      // Insert data in batches to dimension_data
       const batchSize = 500;
       for (let i = 0; i < rowsToInsert.length; i += batchSize) {
         const batch = rowsToInsert.slice(i, i + batchSize);
         const { error: insertError } = await supabase
-          .from('sheet_data')
+          .from('dimension_data')
           .insert(batch);
 
         if (insertError) throw insertError;

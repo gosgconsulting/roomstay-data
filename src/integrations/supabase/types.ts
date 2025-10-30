@@ -61,9 +61,55 @@ export type Database = {
           },
         ]
       }
+      dimension_data: {
+        Row: {
+          created_at: string
+          data_source_id: string
+          dimension_values: Json
+          id: string
+          report_id: string
+          row_number: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data_source_id: string
+          dimension_values?: Json
+          id?: string
+          report_id: string
+          row_number: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data_source_id?: string
+          dimension_values?: Json
+          id?: string
+          report_id?: string
+          row_number?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dimension_data_data_source_id_fkey"
+            columns: ["data_source_id"]
+            isOneToOne: false
+            referencedRelation: "data_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dimension_data_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dimensions: {
         Row: {
           created_at: string
+          data_source_id: string | null
           formula: string | null
           id: string
           name: string
@@ -74,6 +120,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          data_source_id?: string | null
           formula?: string | null
           id?: string
           name: string
@@ -84,6 +131,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          data_source_id?: string | null
           formula?: string | null
           id?: string
           name?: string
@@ -93,6 +141,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "dimensions_data_source_id_fkey"
+            columns: ["data_source_id"]
+            isOneToOne: false
+            referencedRelation: "data_sources"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "dimensions_report_id_fkey"
             columns: ["report_id"]

@@ -103,6 +103,10 @@ export const EditMappingModal = ({
       const sheetHeaders = sheetsData.values[0];
       const dataRows = sheetsData.values.slice(1);
 
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
       // Update data source with new mappings
       const { error: updateError } = await supabase
         .from('data_sources')
@@ -113,40 +117,76 @@ export const EditMappingModal = ({
 
       if (updateError) throw updateError;
 
-      // Delete existing sheet data
+      // Delete existing dimension_data for this data source
       const { error: deleteError } = await supabase
-        .from('sheet_data')
+        .from('dimension_data')
         .delete()
         .eq('data_source_id', dataSource.id);
 
       if (deleteError) throw deleteError;
 
-      // Filter only visible columns based on new mappings
+      // Auto-create new dimensions and build dimension ID map
+      const dimensionIdMap: Record<string, string> = {};
       const visibleMappings = mappings.filter(m => m.visible);
       
-      // Re-insert all data rows with new mappings
+      // Fetch report_id from data_source
+      const { data: dsData } = await supabase
+        .from('data_sources')
+        .select('report_id')
+        .eq('id', dataSource.id)
+        .single();
+      
+      const reportId = dsData?.report_id;
+      
+      for (const mapping of visibleMappings) {
+        if (mapping.dimensionId === 'create_new' && mapping.newDimensionName) {
+          // Create new dimension
+          const { data: newDim, error: dimError } = await supabase
+            .from('dimensions')
+            .insert({
+              user_id: user.id,
+              report_id: reportId,
+              data_source_id: dataSource.id,
+              name: mapping.newDimensionName,
+              type: mapping.newDimensionType || 'text',
+            })
+            .select()
+            .single();
+          
+          if (dimError) throw dimError;
+          dimensionIdMap[mapping.column] = newDim.id;
+        } else if (mapping.dimensionId && mapping.dimensionId !== 'none') {
+          // Use existing dimension
+          dimensionIdMap[mapping.column] = mapping.dimensionId;
+        }
+      }
+
+      // Transform and re-insert data with new mappings
       const rowsToInsert = dataRows.map((row, index) => {
-        const rowData: Record<string, any> = {};
+        const dimensionValues: Record<string, any> = {};
+        
         visibleMappings.forEach((mapping) => {
           const colIndex = sheetHeaders.indexOf(mapping.column);
-          if (colIndex !== -1) {
-            rowData[mapping.column] = row[colIndex] || null;
+          if (colIndex !== -1 && dimensionIdMap[mapping.column]) {
+            const value = row[colIndex] || null;
+            dimensionValues[dimensionIdMap[mapping.column]] = value;
           }
         });
         
         return {
+          report_id: reportId,
           data_source_id: dataSource.id,
           row_number: index + 1,
-          row_data: rowData,
+          dimension_values: dimensionValues,
         };
       });
 
-      // Insert in batches
+      // Insert in batches to dimension_data
       const batchSize = 500;
       for (let i = 0; i < rowsToInsert.length; i += batchSize) {
         const batch = rowsToInsert.slice(i, i + batchSize);
         const { error: insertError } = await supabase
-          .from('sheet_data')
+          .from('dimension_data')
           .insert(batch);
 
         if (insertError) throw insertError;
