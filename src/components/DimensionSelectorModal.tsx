@@ -55,11 +55,12 @@ export const DimensionSelectorModal = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Load all dimensions - both metrics and attributes
+      // In the future, we should add an 'attribute' type for grouping dimensions
       const { data, error } = await supabase
         .from("dimensions")
         .select("*")
         .eq("user_id", user.id)
-        .eq("type", "attribute")
         .order("name", { ascending: true });
 
       if (error) throw error;
