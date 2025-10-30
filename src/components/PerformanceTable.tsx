@@ -169,7 +169,8 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
         // Set the first view as active (default view)
         const defaultView = views.find(v => v.is_default) || views[0];
         setActiveViewId(defaultView.id);
-        loadViewSettings(defaultView.id);
+        // Load settings directly from the view data instead of searching state
+        loadViewSettingsFromData(defaultView);
       } else {
         // Create a default view if none exists
         console.log('No views found, creating default view');
@@ -224,11 +225,65 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
         console.log('Default view created successfully:', newView.id);
         setTableViews([newView]);
         setActiveViewId(newView.id);
-        loadViewSettings(newView.id);
+        // Load settings directly from the created view
+        loadViewSettingsFromData(newView);
       }
     } catch (error) {
       console.error("Error creating default view:", error);
     }
+  };
+
+  // Helper to load view settings from view data directly
+  const loadViewSettingsFromData = (view: any) => {
+    if (!view) {
+      console.error("No view data provided");
+      return;
+    }
+
+    console.log('Loading view settings for:', view.name, view);
+    
+    // Load saved settings
+    let groupDimensions = view.group_by_dimensions || [];
+    
+    // If no grouping dimension is set and dimensions are available, set a default
+    if (groupDimensions.length === 0 && dimensions.length > 0) {
+      // Find a suitable text dimension for grouping (like Hotel, Channel, etc.)
+      const textDimension = dimensions.find(d => d.type === 'text');
+      if (textDimension) {
+        groupDimensions = [textDimension.id];
+        console.log('Auto-selected grouping dimension:', textDimension.name);
+      }
+    }
+    
+    setGroupByDimensions(groupDimensions);
+    setBreakdownByDimensions(view.breakdown_by_dimensions || []);
+    setThenByDimensions(view.then_by_dimensions || []);
+    
+    if (view.visible_columns && view.visible_columns.length > 0) {
+      setVisibleColumns(new Set(view.visible_columns));
+    } else if (dimensions.length > 0) {
+      // Set default visibility if not set
+      const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
+      const defaultVisible = new Set<string>(
+        dimensions
+          .filter(d => !hiddenColumns.includes(d.name) && 
+                      (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula))
+          .map(d => d.id)
+      );
+      setVisibleColumns(defaultVisible);
+    }
+    
+    // Load date granularity if available (default to none)
+    if (view.date_granularity) {
+      setDateGranularity(view.date_granularity as 'none' | 'day' | 'week' | 'month' | 'year');
+    }
+    
+    // Load date order if available (default to desc)
+    if (view.date_order) {
+      setDateOrder(view.date_order as 'asc' | 'desc');
+    }
+    
+    console.log('View settings loaded. Group by:', groupDimensions);
   };
 
   const loadViewSettings = async (viewId: string) => {
@@ -245,60 +300,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
         return;
       }
 
-      console.log('Loading view settings for:', view.name);
-      
-      // Load saved settings
-      let groupDimensions = view.group_by_dimensions || [];
-      
-      // If no grouping dimension is set and dimensions are available, set a default
-      if (groupDimensions.length === 0 && dimensions.length > 0) {
-        // Find a suitable text dimension for grouping (like Hotel, Channel, etc.)
-        const textDimension = dimensions.find(d => d.type === 'text');
-        if (textDimension) {
-          groupDimensions = [textDimension.id];
-          console.log('Auto-selected grouping dimension:', textDimension.name);
-          
-          // Update the view in the database with the default grouping
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            await supabase
-              .from("report_views")
-              .update({ group_by_dimensions: groupDimensions })
-              .eq("id", viewId)
-              .eq("user_id", user.id);
-          }
-        }
-      }
-      
-      setGroupByDimensions(groupDimensions);
-      setBreakdownByDimensions(view.breakdown_by_dimensions || []);
-      setThenByDimensions(view.then_by_dimensions || []);
-      
-      if (view.visible_columns && view.visible_columns.length > 0) {
-        setVisibleColumns(new Set(view.visible_columns));
-      } else if (dimensions.length > 0) {
-        // Set default visibility if not set
-        const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
-        const defaultVisible = new Set<string>(
-          dimensions
-            .filter(d => !hiddenColumns.includes(d.name) && 
-                        (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula))
-            .map(d => d.id)
-        );
-        setVisibleColumns(defaultVisible);
-      }
-      
-      // Load date granularity if available (default to none)
-      if (view.date_granularity) {
-        setDateGranularity(view.date_granularity as 'none' | 'day' | 'week' | 'month' | 'year');
-      }
-      
-      // Load date order if available (default to desc)
-      if (view.date_order) {
-        setDateOrder(view.date_order as 'asc' | 'desc');
-      }
-      
-      console.log('View settings loaded. Group by:', view.group_by_dimensions);
+      loadViewSettingsFromData(view);
     } catch (error) {
       console.error("Error loading view settings:", error);
     }
@@ -380,7 +382,8 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       if (newView) {
         setTableViews(prev => [...prev, newView]);
         setActiveViewId(newView.id);
-        loadViewSettings(newView.id);
+        // Load settings directly from the created view
+        loadViewSettingsFromData(newView);
         
         toast({
           title: "Table duplicated",
@@ -415,8 +418,10 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       if (activeViewId === viewId) {
         const remainingViews = tableViews.filter(v => v.id !== viewId);
         if (remainingViews.length > 0) {
-          setActiveViewId(remainingViews[0].id);
-          loadViewSettings(remainingViews[0].id);
+          const nextView = remainingViews[0];
+          setActiveViewId(nextView.id);
+          // Load settings directly from the next view
+          loadViewSettingsFromData(nextView);
         }
       }
 
