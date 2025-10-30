@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { FileSpreadsheet } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DataSourceModalProps {
   open: boolean;
@@ -22,8 +23,14 @@ export const DataSourceModal = ({ open, onOpenChange }: DataSourceModalProps) =>
   const [url, setUrl] = useState("");
   const [tabName, setTabName] = useState("");
   const [headerRow, setHeaderRow] = useState("1");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleAdd = () => {
+  const extractSpreadsheetId = (url: string) => {
+    const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    return match ? match[1] : null;
+  };
+
+  const handleAdd = async () => {
     if (!dataName || !url) {
       toast({
         title: "Missing fields",
@@ -33,16 +40,54 @@ export const DataSourceModal = ({ open, onOpenChange }: DataSourceModalProps) =>
       return;
     }
 
-    toast({
-      title: "Data source added",
-      description: `Successfully connected to ${dataName}`,
-    });
+    const spreadsheetId = extractSpreadsheetId(url);
+    if (!spreadsheetId) {
+      toast({
+        title: "Invalid URL",
+        description: "Please provide a valid Google Sheets URL",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    onOpenChange(false);
-    setDataName("");
-    setUrl("");
-    setTabName("");
-    setHeaderRow("1");
+    setIsLoading(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-google-sheets', {
+        body: {
+          spreadsheetId,
+          tabName: tabName || undefined,
+          range: `${headerRow}:${headerRow}`,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.values && data.values.length > 0) {
+        toast({
+          title: "Data source connected",
+          description: `Successfully connected to ${dataName} with ${data.values[0].length} columns`,
+        });
+        
+        onOpenChange(false);
+        setDataName("");
+        setUrl("");
+        setTabName("");
+        setHeaderRow("1");
+      } else {
+        throw new Error("No data found in the specified range");
+      }
+    } catch (error) {
+      console.error("Error connecting to Google Sheets:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to connect to Google Sheets";
+      toast({
+        title: "Connection failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -104,10 +149,12 @@ export const DataSourceModal = ({ open, onOpenChange }: DataSourceModalProps) =>
         </div>
 
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
             Cancel
           </Button>
-          <Button onClick={handleAdd}>Add Data Source</Button>
+          <Button onClick={handleAdd} disabled={isLoading}>
+            {isLoading ? "Connecting..." : "Add Data Source"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
