@@ -4,10 +4,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Calendar, ChevronDown, Database, Share2, Plus, Trash2 } from "lucide-react";
+import { Calendar, ChevronDown, Database, Share2, Plus, Trash2, Pencil } from "lucide-react";
 import { useState, useEffect } from "react";
 import { DataSourceModal } from "./DataSourceModal";
+import { ReportModal } from "./ReportModal";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -18,6 +20,8 @@ interface Report {
 
 export const DashboardHeader = () => {
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [currentReport, setCurrentReport] = useState<Report | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,12 +39,9 @@ export const DashboardHeader = () => {
 
       if (error) throw error;
 
+      setReports(data || []);
       if (data && data.length > 0) {
-        setReports(data);
         setCurrentReport(data[0]);
-      } else {
-        // Create a default report if none exists
-        await createDefaultReport();
       }
     } catch (error) {
       console.error("Error loading reports:", error);
@@ -54,7 +55,7 @@ export const DashboardHeader = () => {
     }
   };
 
-  const createDefaultReport = async () => {
+  const handleCreateReport = async (name: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -65,7 +66,7 @@ export const DashboardHeader = () => {
       const { data, error } = await supabase
         .from('reports')
         .insert({ 
-          name: 'My First Report',
+          name,
           user_id: user.id 
         })
         .select()
@@ -73,44 +74,9 @@ export const DashboardHeader = () => {
 
       if (error) throw error;
 
-      setReports([data]);
+      setReports([data, ...reports]);
       setCurrentReport(data);
-      
-      toast({
-        title: "Welcome!",
-        description: "Created your first report",
-      });
-    } catch (error) {
-      console.error("Error creating default report:", error);
-      toast({
-        title: "Error",
-        description: "Failed to create default report",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleCreateReport = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        throw new Error("User not authenticated");
-      }
-
-      const { data, error } = await supabase
-        .from('reports')
-        .insert({ 
-          name: `Report ${reports.length + 1}`,
-          user_id: user.id 
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setReports([...reports, data]);
-      setCurrentReport(data);
+      setShowReportModal(false);
       
       toast({
         title: "Report created",
@@ -126,33 +92,62 @@ export const DashboardHeader = () => {
     }
   };
 
-  const handleDeleteReport = async () => {
-    if (!currentReport) return;
-
-    if (reports.length === 1) {
-      toast({
-        title: "Cannot delete",
-        description: "You must have at least one report",
-        variant: "destructive",
-      });
-      return;
-    }
+  const handleEditReport = async (name: string) => {
+    if (!editingReport) return;
 
     try {
       const { error } = await supabase
         .from('reports')
-        .delete()
-        .eq('id', currentReport.id);
+        .update({ name })
+        .eq('id', editingReport.id);
 
       if (error) throw error;
 
-      const updatedReports = reports.filter(r => r.id !== currentReport.id);
+      const updatedReports = reports.map(r => 
+        r.id === editingReport.id ? { ...r, name } : r
+      );
       setReports(updatedReports);
-      setCurrentReport(updatedReports[0]);
+      
+      if (currentReport?.id === editingReport.id) {
+        setCurrentReport({ ...currentReport, name });
+      }
+
+      setShowReportModal(false);
+      setEditingReport(null);
+      
+      toast({
+        title: "Report updated",
+        description: `Renamed to "${name}"`,
+      });
+    } catch (error) {
+      console.error("Error updating report:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update report",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteReport = async (report: Report) => {
+    try {
+      const { error } = await supabase
+        .from('reports')
+        .delete()
+        .eq('id', report.id);
+
+      if (error) throw error;
+
+      const updatedReports = reports.filter(r => r.id !== report.id);
+      setReports(updatedReports);
+      
+      if (currentReport?.id === report.id) {
+        setCurrentReport(updatedReports[0] || null);
+      }
       
       toast({
         title: "Report deleted",
-        description: `Deleted "${currentReport.name}"`,
+        description: `Deleted "${report.name}"`,
       });
     } catch (error) {
       console.error("Error deleting report:", error);
@@ -182,22 +177,56 @@ export const DashboardHeader = () => {
                 {currentReport?.name || "Select Report"} <ChevronDown className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuContent align="start" className="w-56 bg-background z-50">
               {reports.map((report) => (
                 <DropdownMenuItem 
                   key={report.id}
-                  onClick={() => setCurrentReport(report)}
+                  className="justify-between group"
+                  onSelect={(e) => e.preventDefault()}
                 >
-                  {report.name}
+                  <span 
+                    className="flex-1 cursor-pointer"
+                    onClick={() => setCurrentReport(report)}
+                  >
+                    {report.name}
+                  </span>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingReport(report);
+                        setShowReportModal(true);
+                      }}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteReport(report);
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </DropdownMenuItem>
               ))}
-              <DropdownMenuItem className="text-primary" onClick={handleCreateReport}>
+              {reports.length > 0 && <DropdownMenuSeparator />}
+              <DropdownMenuItem 
+                className="text-primary" 
+                onClick={() => {
+                  setEditingReport(null);
+                  setShowReportModal(true);
+                }}
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Add new
-              </DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive" onClick={handleDeleteReport}>
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -232,6 +261,18 @@ export const DashboardHeader = () => {
           reportId={currentReport.id}
         />
       )}
+
+      <ReportModal
+        open={showReportModal}
+        onOpenChange={(open) => {
+          setShowReportModal(open);
+          if (!open) setEditingReport(null);
+        }}
+        onSave={editingReport ? handleEditReport : handleCreateReport}
+        initialName={editingReport?.name}
+        title={editingReport ? "Edit Report" : "Create New Report"}
+        description={editingReport ? "Update the report name" : "Enter a name for your new report"}
+      />
     </>
   );
 };
