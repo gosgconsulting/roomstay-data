@@ -196,6 +196,43 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
     return null;
   };
 
+  // Helper to calculate formula based on aggregated data
+  const calculateFormula = (formula: string, data: Record<string, any>): number | null => {
+    if (!formula) return null;
+    
+    try {
+      // Replace dimension names with actual values
+      let expression = formula;
+      
+      // Extract all dimension names from the formula
+      const dimensionNames = dimensions.map(d => d.name);
+      
+      // Sort by length (descending) to replace longer names first
+      // This prevents "Cost" from being replaced when we want "Cost of sale"
+      const sortedNames = [...dimensionNames].sort((a, b) => b.length - a.length);
+      
+      for (const dimName of sortedNames) {
+        if (expression.includes(dimName)) {
+          const value = data[dimName] || 0;
+          // Use word boundaries to ensure exact match
+          expression = expression.replace(new RegExp(`\\b${dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), String(value));
+        }
+      }
+      
+      // Evaluate the expression
+      // eslint-disable-next-line no-eval
+      const result = eval(expression);
+      
+      // Return null if result is Infinity, NaN, or undefined
+      if (!isFinite(result)) return null;
+      
+      return result;
+    } catch (error) {
+      console.error(`Error calculating formula "${formula}":`, error);
+      return null;
+    }
+  };
+
   const loadTableData = async () => {
     if (!reportId) return;
     
@@ -253,9 +290,12 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
           });
         }
 
-        // Aggregate numeric values
+        // Aggregate only base metrics (no formulas)
         const groupItem = grouped.get(groupKey);
         dimensions.forEach((dimension) => {
+          // Skip dimensions with formulas - we'll calculate them after aggregation
+          if (dimension.formula) return;
+          
           const value = getValueFromRow(rowData, dimension.name, row.data_source_id, dataSources);
           if (value !== undefined && value !== null) {
             if (dimension.type === 'number' || dimension.type === 'currency') {
@@ -268,7 +308,18 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
         });
       });
 
-      setTableData(Array.from(grouped.values()));
+      // Calculate formula fields for each group after aggregation
+      const groupedArray = Array.from(grouped.values());
+      groupedArray.forEach((group) => {
+        dimensions.forEach((dimension) => {
+          if (dimension.formula) {
+            const calculatedValue = calculateFormula(dimension.formula, group.data);
+            group.data[dimension.name] = calculatedValue;
+          }
+        });
+      });
+
+      setTableData(groupedArray);
     } catch (error) {
       console.error("Error loading table data:", error);
     } finally {
