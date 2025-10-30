@@ -48,18 +48,17 @@ Deno.serve(async (req) => {
       offset,
     });
 
-    // Fetch all dimensions for this report to build formulas
+    // Fetch all dimensions (they are user-level, not report-level)
     const { data: dimensions, error: dimError } = await supabase
       .from('dimensions')
-      .select('id, name, type, formula')
-      .eq('report_id', reportId);
+      .select('id, name, type, formula');
 
     if (dimError) {
       console.error('Error fetching dimensions:', dimError);
       throw dimError;
     }
 
-    console.log(`Loaded ${dimensions?.length || 0} dimensions`);
+    console.log(`Loaded ${dimensions?.length || 0} dimensions for aggregation`);
 
     // Build filter for the main query
     let query = supabase
