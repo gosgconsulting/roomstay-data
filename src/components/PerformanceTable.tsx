@@ -39,7 +39,11 @@ interface TableRow {
   children?: TableRow[];
 }
 
-export const PerformanceTable = () => {
+interface PerformanceTableProps {
+  reportId: string | null;
+}
+
+export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set(["2"]));
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
   const [dimensionSelectorOpen, setDimensionSelectorOpen] = useState(false);
@@ -57,9 +61,16 @@ export const PerformanceTable = () => {
   const [thenByDimensions, setThenByDimensions] = useState<string[]>(["Device"]);
 
   useEffect(() => {
-    loadDimensions();
-    loadTableData();
-  }, []);
+    if (reportId) {
+      loadDimensions();
+    }
+  }, [reportId]);
+
+  useEffect(() => {
+    if (reportId && dimensions.length > 0) {
+      loadTableData();
+    }
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, reportId, dimensions]);
 
   const loadDimensions = async () => {
     try {
@@ -121,11 +132,71 @@ export const PerformanceTable = () => {
   };
 
   const loadTableData = async () => {
+    if (!reportId) return;
+    
     setIsLoadingData(true);
     try {
-      // TODO: Load real data from sheet_data table based on grouping dimensions
-      // For now, set empty data
-      setTableData([]);
+      // Fetch data sources for this report with their mappings
+      const { data: dataSources, error: dsError } = await supabase
+        .from('data_sources')
+        .select('id, column_mappings')
+        .eq('report_id', reportId);
+
+      if (dsError) throw dsError;
+
+      if (!dataSources || dataSources.length === 0) {
+        setTableData([]);
+        return;
+      }
+
+      // Fetch all sheet data for these data sources
+      const dataSourceIds = dataSources.map(ds => ds.id);
+      const { data: sheetData, error: sheetError } = await supabase
+        .from('sheet_data')
+        .select('*')
+        .in('data_source_id', dataSourceIds);
+
+      if (sheetError) throw sheetError;
+
+      if (!sheetData || sheetData.length === 0) {
+        setTableData([]);
+        return;
+      }
+
+      // Group data by the first grouping dimension
+      const groupDimension = groupByDimensions[0] || "Hotel";
+      const grouped = new Map<string, any>();
+
+      sheetData.forEach((row) => {
+        const rowData = row.row_data as Record<string, any>;
+        const groupKey = rowData[groupDimension] || "Unknown";
+
+        if (!grouped.has(groupKey)) {
+          grouped.set(groupKey, {
+            id: groupKey.toLowerCase().replace(/\s+/g, '-'),
+            name: groupKey,
+            level: 0,
+            data: {},
+            children: [],
+          });
+        }
+
+        // Aggregate numeric values
+        const groupItem = grouped.get(groupKey);
+        dimensions.forEach((dimension) => {
+          const value = rowData[dimension.name];
+          if (value !== undefined && value !== null) {
+            if (dimension.type === 'number' || dimension.type === 'currency') {
+              const numValue = parseFloat(value) || 0;
+              groupItem.data[dimension.name] = (groupItem.data[dimension.name] || 0) + numValue;
+            } else {
+              groupItem.data[dimension.name] = value;
+            }
+          }
+        });
+      });
+
+      setTableData(Array.from(grouped.values()));
     } catch (error) {
       console.error("Error loading table data:", error);
     } finally {

@@ -21,7 +21,11 @@ interface Report {
   name: string;
 }
 
-export const DashboardHeader = () => {
+interface DashboardHeaderProps {
+  reportId: string | null;
+}
+
+export const DashboardHeader = ({ reportId }: DashboardHeaderProps) => {
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
@@ -33,9 +37,11 @@ export const DashboardHeader = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadReports();
-    createDefaultDimensions();
-  }, []);
+    if (reportId) {
+      loadReports();
+      createDefaultDimensions();
+    }
+  }, [reportId]);
 
   const createDefaultDimensions = async () => {
     try {

@@ -8,6 +8,10 @@ interface ChartData {
   value: number;
 }
 
+interface KPIChartsGridProps {
+  reportId: string | null;
+}
+
 const kpis = [
   { title: "Clicks", color: "hsl(var(--primary))" },
   { title: "Cost", color: "hsl(var(--primary))" },
@@ -15,13 +19,15 @@ const kpis = [
   { title: "Revenue", color: "hsl(var(--primary))" },
 ];
 
-export const KPIChartsGrid = () => {
+export const KPIChartsGrid = ({ reportId }: KPIChartsGridProps) => {
   const [chartData, setChartData] = useState<Record<string, ChartData[]>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadChartData();
-  }, []);
+    if (reportId) {
+      loadChartData();
+    }
+  }, [reportId]);
 
   const loadChartData = async () => {
     setIsLoading(true);
