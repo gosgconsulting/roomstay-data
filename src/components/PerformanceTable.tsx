@@ -28,6 +28,7 @@ import { MappingModal } from "./MappingModal";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfWeek, startOfMonth, startOfYear } from "date-fns";
+import { FilterState } from "./FiltersBar";
 
 interface Dimension {
   id: string;
@@ -47,9 +48,10 @@ interface TableRow {
 
 interface PerformanceTableProps {
   reportId: string | null;
+  filters: FilterState;
 }
 
-export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
+export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
   const [dimensionSelectorOpen, setDimensionSelectorOpen] = useState(false);
@@ -85,7 +87,7 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
     if (reportId && dimensions.length > 0) {
       loadTableData();
     }
-  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, reportId, dimensions, dateOrder]);
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, reportId, dimensions, dateOrder, filters]);
 
   // Save view settings whenever they change
   useEffect(() => {
@@ -468,8 +470,36 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
       const breakdownDimensionId = breakdownByDimensions[0] || null;
       const thenByDimensionId = thenByDimensions[0] || null;
 
+      // Filter data based on applied filters
+      const filteredData = dimensionData.filter((row) => {
+        const dimensionValues = row.dimension_values as Record<string, any>;
+        
+        // Apply dimension filters
+        for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters)) {
+          if (dimensionValues[dimId] !== filterValue) {
+            return false;
+          }
+        }
+        
+        // Apply date range filter if there's a Date dimension
+        if (filters.dateRange?.from || filters.dateRange?.to) {
+          const dateDimension = dimensions.find(d => d.type === 'date');
+          if (dateDimension && dimensionValues[dateDimension.id]) {
+            const rowDate = new Date(dimensionValues[dateDimension.id]);
+            if (filters.dateRange.from && rowDate < filters.dateRange.from) {
+              return false;
+            }
+            if (filters.dateRange.to && rowDate > filters.dateRange.to) {
+              return false;
+            }
+          }
+        }
+        
+        return true;
+      });
+
       const hierarchicalData = buildHierarchicalData(
-        dimensionData,
+        filteredData,
         groupDimensionId,
         breakdownDimensionId,
         thenByDimensionId,

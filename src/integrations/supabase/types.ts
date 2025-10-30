@@ -183,6 +183,11 @@ export type Database = {
           breakdown_by_dimensions: string[] | null
           created_at: string
           date_order: string | null
+          date_range_end: string | null
+          date_range_preset: string | null
+          date_range_start: string | null
+          filter_dimensions: string[] | null
+          filter_values: Json | null
           group_by_dimensions: string[] | null
           id: string
           is_default: boolean | null
@@ -197,6 +202,11 @@ export type Database = {
           breakdown_by_dimensions?: string[] | null
           created_at?: string
           date_order?: string | null
+          date_range_end?: string | null
+          date_range_preset?: string | null
+          date_range_start?: string | null
+          filter_dimensions?: string[] | null
+          filter_values?: Json | null
           group_by_dimensions?: string[] | null
           id?: string
           is_default?: boolean | null
@@ -211,6 +221,11 @@ export type Database = {
           breakdown_by_dimensions?: string[] | null
           created_at?: string
           date_order?: string | null
+          date_range_end?: string | null
+          date_range_preset?: string | null
+          date_range_start?: string | null
+          filter_dimensions?: string[] | null
+          filter_values?: Json | null
           group_by_dimensions?: string[] | null
           id?: string
           is_default?: boolean | null

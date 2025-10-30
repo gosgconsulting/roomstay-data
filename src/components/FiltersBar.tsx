@@ -15,14 +15,20 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subDays, subMonths, startOfYear, endOfYear } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
 
+export interface FilterState {
+  dimensionFilters: Record<string, string>;
+  dateRange: DateRange | undefined;
+  datePreset: string;
+}
+
 interface FiltersBarProps {
   reportId: string | null;
-  onFiltersChange?: (filters: Record<string, string>) => void;
+  onFiltersChange?: (filters: FilterState) => void;
 }
 
 interface Dimension {
@@ -37,12 +43,14 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string>>({});
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [datePreset, setDatePreset] = useState<string>("this_month");
   const [showDimensionSelector, setShowDimensionSelector] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (reportId) {
       loadDimensions();
+      loadFilterSettings();
     }
   }, [reportId]);
 
@@ -51,6 +59,156 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
       loadDimensionValues();
     }
   }, [activeDimensions, reportId]);
+
+  // Apply default date range on mount
+  useEffect(() => {
+    if (!dateRange) {
+      applyDatePreset("this_month");
+    }
+  }, []);
+
+  // Save filter settings whenever they change
+  useEffect(() => {
+    if (reportId && !isLoading) {
+      saveFilterSettings();
+    }
+  }, [activeDimensions, selectedFilters, dateRange, datePreset, reportId]);
+
+  // Notify parent of filter changes
+  useEffect(() => {
+    if (onFiltersChange) {
+      onFiltersChange({
+        dimensionFilters: selectedFilters,
+        dateRange,
+        datePreset,
+      });
+    }
+  }, [selectedFilters, dateRange, datePreset]);
+
+  const loadFilterSettings = async () => {
+    if (!reportId) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("report_views")
+        .select("*")
+        .eq("report_id", reportId)
+        .eq("user_id", user.id)
+        .eq("is_default", true)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        // Load saved filter settings
+        if (data.filter_dimensions) {
+          setActiveDimensions(data.filter_dimensions);
+        }
+        if (data.filter_values) {
+          setSelectedFilters(data.filter_values as Record<string, string>);
+        }
+        if (data.date_range_preset) {
+          setDatePreset(data.date_range_preset);
+          applyDatePreset(data.date_range_preset);
+        } else if (data.date_range_start && data.date_range_end) {
+          setDateRange({
+            from: new Date(data.date_range_start),
+            to: new Date(data.date_range_end),
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error loading filter settings:", error);
+    }
+  };
+
+  const saveFilterSettings = async () => {
+    if (!reportId) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Check if a default view already exists
+      const { data: existingView } = await supabase
+        .from("report_views")
+        .select("id")
+        .eq("report_id", reportId)
+        .eq("user_id", user.id)
+        .eq("is_default", true)
+        .maybeSingle();
+
+      const viewData = {
+        filter_dimensions: activeDimensions,
+        filter_values: selectedFilters,
+        date_range_start: dateRange?.from?.toISOString().split('T')[0] || null,
+        date_range_end: dateRange?.to?.toISOString().split('T')[0] || null,
+        date_range_preset: datePreset,
+      };
+
+      if (existingView) {
+        // Update existing view
+        const { error } = await supabase
+          .from("report_views")
+          .update(viewData)
+          .eq("id", existingView.id);
+
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error("Error saving filter settings:", error);
+    }
+  };
+
+  const applyDatePreset = (preset: string) => {
+    const now = new Date();
+    let from: Date;
+    let to: Date = now;
+
+    switch (preset) {
+      case "today":
+        from = now;
+        break;
+      case "yesterday":
+        from = subDays(now, 1);
+        to = subDays(now, 1);
+        break;
+      case "this_week":
+        from = startOfWeek(now);
+        break;
+      case "last_7_days":
+        from = subDays(now, 7);
+        break;
+      case "this_month":
+        from = startOfMonth(now);
+        to = endOfMonth(now);
+        break;
+      case "last_30_days":
+        from = subDays(now, 30);
+        break;
+      case "last_month":
+        from = startOfMonth(subMonths(now, 1));
+        to = endOfMonth(subMonths(now, 1));
+        break;
+      case "this_year":
+        from = startOfYear(now);
+        to = endOfYear(now);
+        break;
+      case "all_time":
+        setDateRange(undefined);
+        setDatePreset(preset);
+        return;
+      default:
+        from = startOfMonth(now);
+        to = endOfMonth(now);
+    }
+
+    setDateRange({ from, to });
+    setDatePreset(preset);
+  };
 
   const loadDimensions = async () => {
     try {
@@ -123,7 +281,6 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
       newFilters[dimensionId] = value;
     }
     setSelectedFilters(newFilters);
-    onFiltersChange?.(newFilters);
   };
 
   const handleDimensionsChange = (dimensionIds: string[]) => {
@@ -136,7 +293,6 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
       }
     });
     setSelectedFilters(newFilters);
-    onFiltersChange?.(newFilters);
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -195,11 +351,13 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
                       variant="outline"
                       className={cn(
                         "w-[200px] justify-start text-left font-normal bg-background",
-                        !dateRange?.from && "text-muted-foreground"
+                        !dateRange?.from && datePreset !== "all_time" && "text-muted-foreground"
                       )}
                     >
                       <Calendar className="mr-2 h-4 w-4" />
-                      {dateRange?.from ? (
+                      {datePreset === "all_time" ? (
+                        "All Time"
+                      ) : dateRange?.from ? (
                         dateRange.to ? (
                           <>
                             {format(dateRange.from, "MMM d")} -{" "}
@@ -209,15 +367,94 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
                           format(dateRange.from, "MMM d, yyyy")
                         )
                       ) : (
-                        <span>Pick a date range</span>
+                        <span>This Month</span>
                       )}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0 bg-background z-50" align="start">
+                    <div className="p-3 border-b space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant={datePreset === "today" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => applyDatePreset("today")}
+                          className="text-xs"
+                        >
+                          Today
+                        </Button>
+                        <Button
+                          variant={datePreset === "yesterday" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => applyDatePreset("yesterday")}
+                          className="text-xs"
+                        >
+                          Yesterday
+                        </Button>
+                        <Button
+                          variant={datePreset === "this_week" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => applyDatePreset("this_week")}
+                          className="text-xs"
+                        >
+                          This Week
+                        </Button>
+                        <Button
+                          variant={datePreset === "last_7_days" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => applyDatePreset("last_7_days")}
+                          className="text-xs"
+                        >
+                          Last 7 Days
+                        </Button>
+                        <Button
+                          variant={datePreset === "this_month" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => applyDatePreset("this_month")}
+                          className="text-xs"
+                        >
+                          This Month
+                        </Button>
+                        <Button
+                          variant={datePreset === "last_30_days" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => applyDatePreset("last_30_days")}
+                          className="text-xs"
+                        >
+                          Last 30 Days
+                        </Button>
+                        <Button
+                          variant={datePreset === "last_month" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => applyDatePreset("last_month")}
+                          className="text-xs"
+                        >
+                          Last Month
+                        </Button>
+                        <Button
+                          variant={datePreset === "this_year" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => applyDatePreset("this_year")}
+                          className="text-xs"
+                        >
+                          This Year
+                        </Button>
+                      </div>
+                      <Button
+                        variant={datePreset === "all_time" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => applyDatePreset("all_time")}
+                        className="text-xs w-full"
+                      >
+                        All Time
+                      </Button>
+                    </div>
                     <CalendarComponent
                       mode="range"
                       selected={dateRange}
-                      onSelect={setDateRange}
+                      onSelect={(range) => {
+                        setDateRange(range);
+                        setDatePreset("custom");
+                      }}
                       numberOfMonths={2}
                       className={cn("p-3 pointer-events-auto")}
                     />

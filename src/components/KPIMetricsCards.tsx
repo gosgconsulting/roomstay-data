@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import { FilterState } from "./FiltersBar";
 import { 
   Eye, 
   MousePointerClick, 
@@ -21,9 +22,10 @@ interface KPIMetric {
 
 interface KPIMetricsCardsProps {
   reportId: string | null;
+  filters: FilterState;
 }
 
-export const KPIMetricsCards = ({ reportId }: KPIMetricsCardsProps) => {
+export const KPIMetricsCards = ({ reportId, filters }: KPIMetricsCardsProps) => {
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -31,7 +33,7 @@ export const KPIMetricsCards = ({ reportId }: KPIMetricsCardsProps) => {
     if (reportId) {
       loadMetrics();
     }
-  }, [reportId]);
+  }, [reportId, filters]);
 
   const loadMetrics = async () => {
     setIsLoading(true);
@@ -60,10 +62,38 @@ export const KPIMetricsCards = ({ reportId }: KPIMetricsCardsProps) => {
         return;
       }
 
+      // Filter data based on applied filters
+      const filteredData = dimensionData.filter((row) => {
+        const dimensionValues = row.dimension_values as Record<string, any>;
+        
+        // Apply dimension filters
+        for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters)) {
+          if (dimensionValues[dimId] !== filterValue) {
+            return false;
+          }
+        }
+        
+        // Apply date range filter if there's a Date dimension
+        if (filters.dateRange?.from || filters.dateRange?.to) {
+          const dateDimension = dimensions.find(d => d.type === 'date');
+          if (dateDimension && dimensionValues[dateDimension.id]) {
+            const rowDate = new Date(dimensionValues[dateDimension.id]);
+            if (filters.dateRange.from && rowDate < filters.dateRange.from) {
+              return false;
+            }
+            if (filters.dateRange.to && rowDate > filters.dateRange.to) {
+              return false;
+            }
+          }
+        }
+        
+        return true;
+      });
+
       // Calculate aggregated values for each dimension
       const aggregatedValues: Record<string, number> = {};
 
-      dimensionData.forEach((row) => {
+      filteredData.forEach((row) => {
         const dimensionValues = row.dimension_values as Record<string, any>;
         
         dimensions.forEach((dimension) => {

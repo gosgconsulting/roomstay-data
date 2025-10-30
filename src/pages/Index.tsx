@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
-import { FiltersBar } from "@/components/FiltersBar";
+import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import { KPIChartsGrid } from "@/components/KPIChartsGrid";
 import { PerformanceTable } from "@/components/PerformanceTable";
@@ -14,6 +14,11 @@ const Index = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reportId, setReportId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<FilterState>({
+    dimensionFilters: {},
+    dateRange: undefined,
+    datePreset: "this_month",
+  });
 
   useEffect(() => {
     // Set up auth state listener FIRST
@@ -106,11 +111,11 @@ const Index = () => {
         </div>
       </div>
       <DashboardHeader reportId={reportId} onReportChange={setReportId} />
-      <FiltersBar reportId={reportId} />
+      <FiltersBar reportId={reportId} onFiltersChange={setFilters} />
       <main className="container mx-auto px-6 py-6 space-y-6">
-        <KPIMetricsCards reportId={reportId} />
-        <KPIChartsGrid reportId={reportId} />
-        <PerformanceTable reportId={reportId} />
+        <KPIMetricsCards reportId={reportId} filters={filters} />
+        <KPIChartsGrid reportId={reportId} filters={filters} />
+        <PerformanceTable reportId={reportId} filters={filters} />
       </main>
     </div>
   );

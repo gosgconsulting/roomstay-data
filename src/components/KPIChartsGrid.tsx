@@ -3,6 +3,7 @@ import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "rec
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO } from "date-fns";
+import { FilterState } from "./FiltersBar";
 
 interface ChartData {
   date: string;
@@ -11,6 +12,7 @@ interface ChartData {
 
 interface KPIChartsGridProps {
   reportId: string | null;
+  filters: FilterState;
 }
 
 const kpis = [
@@ -20,7 +22,7 @@ const kpis = [
   { title: "Revenue", color: "hsl(var(--primary))" },
 ];
 
-export const KPIChartsGrid = ({ reportId }: KPIChartsGridProps) => {
+export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
   const [chartData, setChartData] = useState<Record<string, ChartData[]>>({});
   const [isLoading, setIsLoading] = useState(true);
 
@@ -28,7 +30,7 @@ export const KPIChartsGrid = ({ reportId }: KPIChartsGridProps) => {
     if (reportId) {
       loadChartData();
     }
-  }, [reportId]);
+  }, [reportId, filters]);
 
   const loadChartData = async () => {
     setIsLoading(true);
@@ -73,13 +75,40 @@ export const KPIChartsGrid = ({ reportId }: KPIChartsGridProps) => {
         return;
       }
 
+      // Filter data based on applied filters
+      const filteredData = dimensionData.filter((row) => {
+        const dimensionValues = row.dimension_values as Record<string, any>;
+        
+        // Apply dimension filters
+        for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters)) {
+          if (dimensionValues[dimId] !== filterValue) {
+            return false;
+          }
+        }
+        
+        // Apply date range filter
+        if (filters.dateRange?.from || filters.dateRange?.to) {
+          if (dateDimension && dimensionValues[dateDimension.id]) {
+            const rowDate = new Date(dimensionValues[dateDimension.id]);
+            if (filters.dateRange.from && rowDate < filters.dateRange.from) {
+              return false;
+            }
+            if (filters.dateRange.to && rowDate > filters.dateRange.to) {
+              return false;
+            }
+          }
+        }
+        
+        return true;
+      });
+
       // Group data by date for each KPI
       const chartDataByKPI: Record<string, Record<string, number>> = {};
       kpis.forEach(kpi => {
         chartDataByKPI[kpi.title] = {};
       });
 
-      dimensionData.forEach((row) => {
+      filteredData.forEach((row) => {
         const dimensionValues = row.dimension_values as Record<string, any>;
         const dateValue = dimensionValues[dateDimension.id];
         
