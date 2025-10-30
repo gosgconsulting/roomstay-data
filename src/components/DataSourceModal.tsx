@@ -19,6 +19,7 @@ import { useState } from "react";
 import { FileSpreadsheet, ChevronLeft } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { ColumnMappingStep } from "./ColumnMappingStep";
 
 interface DataSourceModalProps {
   open: boolean;
@@ -33,6 +34,7 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
   const [availableTabs, setAvailableTabs] = useState<string[]>([]);
   const [selectedTab, setSelectedTab] = useState("");
   const [headerRow, setHeaderRow] = useState("1");
+  const [headers, setHeaders] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const extractSpreadsheetId = (url: string) => {
@@ -109,6 +111,65 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
     setIsLoading(true);
     
     try {
+      // Fetch headers from the sheet
+      const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
+        body: {
+          spreadsheetId,
+          tabName: selectedTab,
+          range: `${headerRow}:${parseInt(headerRow) + 100}`, // Fetch header + 100 rows for preview
+        },
+      });
+
+      if (sheetsError) throw sheetsError;
+
+      if (!sheetsData?.values || sheetsData.values.length === 0) {
+        throw new Error("No data found in the specified range");
+      }
+
+      const fetchedHeaders = sheetsData.values[0];
+      setHeaders(fetchedHeaders);
+      setStep(3); // Move to mapping step
+    } catch (error) {
+      console.error("Error fetching sheet data:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to fetch sheet data";
+      toast({
+        title: "Fetch failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resetForm = () => {
+    setStep(1);
+    setDataName("");
+    setUrl("");
+    setAvailableTabs([]);
+    setSelectedTab("");
+    setHeaderRow("1");
+    setHeaders([]);
+  };
+
+  const handleBack = () => {
+    if (step === 3) {
+      setStep(2);
+      setHeaders([]);
+    } else {
+      setStep(1);
+      setAvailableTabs([]);
+      setSelectedTab("");
+    }
+  };
+
+  const handleSaveMappings = async (mappings: any[]) => {
+    const spreadsheetId = extractSpreadsheetId(url);
+    if (!spreadsheetId) return;
+
+    setIsLoading(true);
+    
+    try {
       // Fetch all data from the sheet (up to 10,000 rows)
       const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
         body: {
@@ -124,7 +185,7 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
         throw new Error("No data found in the specified range");
       }
 
-      const headers = sheetsData.values[0];
+      const sheetHeaders = sheetsData.values[0];
       const dataRows = sheetsData.values.slice(1); // Skip header row
 
       // Save data source metadata to database
@@ -143,12 +204,18 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
 
       if (dbError) throw dbError;
 
-      // Save all data rows to sheet_data table
+      // Filter only visible columns based on mappings
+      const visibleMappings = mappings.filter(m => m.visible);
+      
+      // Save all data rows to sheet_data table with only visible columns
       const rowsToInsert = dataRows.map((row, index) => {
-        // Convert array to object with headers as keys
+        // Convert array to object with only visible columns
         const rowData: Record<string, any> = {};
-        headers.forEach((header: string, colIndex: number) => {
-          rowData[header] = row[colIndex] || null;
+        visibleMappings.forEach((mapping) => {
+          const colIndex = sheetHeaders.indexOf(mapping.column);
+          if (colIndex !== -1) {
+            rowData[mapping.column] = row[colIndex] || null;
+          }
         });
         
         return {
@@ -171,7 +238,7 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
 
       toast({
         title: "Data source saved",
-        description: `Successfully connected to ${dataName} with ${headers.length} columns and ${dataRows.length} rows`,
+        description: `Successfully connected to ${dataName} with ${visibleMappings.length} columns and ${dataRows.length} rows`,
       });
       
       onOpenChange(false);
@@ -189,35 +256,21 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
     }
   };
 
-  const resetForm = () => {
-    setStep(1);
-    setDataName("");
-    setUrl("");
-    setAvailableTabs([]);
-    setSelectedTab("");
-    setHeaderRow("1");
-  };
-
-  const handleBack = () => {
-    setStep(1);
-    setAvailableTabs([]);
-    setSelectedTab("");
-  };
-
   return (
     <Dialog open={open} onOpenChange={(open) => {
       onOpenChange(open);
       if (!open) resetForm();
     }}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[900px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {step === 2 && (
+            {(step === 2 || step === 3) && (
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-5 w-5 -ml-2"
                 onClick={handleBack}
+                disabled={isLoading}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -228,7 +281,9 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
           <DialogDescription>
             {step === 1 
               ? "Enter your Google Sheets URL and data name"
-              : "Select the tab and specify the header row"
+              : step === 2
+              ? "Select the tab and specify the header row"
+              : "Map your columns to dimensions"
             }
           </DialogDescription>
         </DialogHeader>
@@ -256,15 +311,15 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
                 />
               </div>
             </>
-          ) : (
+          ) : step === 2 ? (
             <>
               <div className="space-y-2">
                 <Label htmlFor="tabName">Select Tab *</Label>
                 <Select value={selectedTab} onValueChange={setSelectedTab}>
-                  <SelectTrigger id="tabName">
+                  <SelectTrigger id="tabName" className="bg-background">
                     <SelectValue placeholder="Select a tab" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-background z-50">
                     {availableTabs.map((tab) => (
                       <SelectItem key={tab} value={tab}>
                         {tab}
@@ -285,30 +340,39 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
                 />
               </div>
             </>
+          ) : (
+            <ColumnMappingStep
+              headers={headers}
+              onSave={handleSaveMappings}
+              onBack={handleBack}
+              isLoading={isLoading}
+            />
           )}
         </div>
 
-        <div className="flex justify-end gap-3">
-          <Button 
-            variant="outline" 
-            onClick={() => {
-              onOpenChange(false);
-              resetForm();
-            }} 
-            disabled={isLoading}
-          >
-            Cancel
-          </Button>
-          {step === 1 ? (
-            <Button onClick={handleNext} disabled={isLoading}>
-              {isLoading ? "Fetching..." : "Next"}
+        {step !== 3 && (
+          <div className="flex justify-end gap-3">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                onOpenChange(false);
+                resetForm();
+              }} 
+              disabled={isLoading}
+            >
+              Cancel
             </Button>
-          ) : (
-            <Button onClick={handleAdd} disabled={isLoading}>
-              {isLoading ? "Connecting..." : "Add Data Source"}
-            </Button>
-          )}
-        </div>
+            {step === 1 ? (
+              <Button onClick={handleNext} disabled={isLoading}>
+                {isLoading ? "Fetching..." : "Next"}
+              </Button>
+            ) : (
+              <Button onClick={handleAdd} disabled={isLoading}>
+                {isLoading ? "Fetching..." : "Next"}
+              </Button>
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

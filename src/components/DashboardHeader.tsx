@@ -53,22 +53,22 @@ export const DashboardHeader = () => {
 
       // Create default metrics
       const defaultMetrics = [
-        { name: 'Impressions', type: 'Number' },
-        { name: 'Clicks', type: 'Number' },
-        { name: 'Revenue', type: 'Currency' },
-        { name: 'Cost', type: 'Currency' },
-        { name: 'Conversions', type: 'Number' },
-        { name: 'Leads', type: 'Number' },
+        { name: 'Impressions', type: 'number' },
+        { name: 'Clicks', type: 'number' },
+        { name: 'Revenue', type: 'currency' },
+        { name: 'Cost', type: 'currency' },
+        { name: 'Conversions', type: 'number' },
+        { name: 'Leads', type: 'number' },
       ];
 
       // Create formula KPIs
       const formulaKPIs = [
-        { name: 'ROAS', type: 'Number', formula: 'Revenue / Cost' },
-        { name: 'Cost of sale', type: 'Percentage', formula: 'Cost / Revenue * 100' },
-        { name: 'Conversion Rate', type: 'Percentage', formula: 'Conversions / Clicks * 100' },
-        { name: 'CPM', type: 'Currency', formula: 'Cost / Impressions * 1000' },
-        { name: 'CPC', type: 'Currency', formula: 'Cost / Clicks' },
-        { name: 'Impression Share', type: 'Percentage', formula: 'Impressions / Total Impressions * 100' },
+        { name: 'ROAS', type: 'number', formula: 'Revenue / Cost' },
+        { name: 'Cost of sale', type: 'percentage', formula: 'Cost / Revenue * 100' },
+        { name: 'Conversion Rate', type: 'percentage', formula: 'Conversions / Clicks * 100' },
+        { name: 'CPM', type: 'currency', formula: 'Cost / Impressions * 1000' },
+        { name: 'CPC', type: 'currency', formula: 'Cost / Clicks' },
+        { name: 'Impression Share', type: 'percentage', formula: 'Impressions / Total Impressions * 100' },
       ];
 
       const allDimensions = [
