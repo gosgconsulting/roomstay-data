@@ -262,13 +262,38 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
     if (!reportId) return;
     
     try {
-      // Fetch dimensions for this report (public access)
-      const { data, error } = await supabase
+      // First, try to fetch dimensions by report_id
+      let { data, error } = await supabase
         .from("dimensions")
         .select("*")
         .eq("report_id", reportId);
 
       if (error) throw error;
+
+      // If no dimensions found by report_id, get dimension IDs from dimension_data
+      if (!data || data.length === 0) {
+        const { data: dimensionData, error: dimDataError } = await supabase
+          .from("dimension_data")
+          .select("dimension_values")
+          .eq("report_id", reportId)
+          .limit(1);
+
+        if (dimDataError) throw dimDataError;
+
+        if (dimensionData && dimensionData.length > 0) {
+          const dimensionIds = Object.keys(dimensionData[0].dimension_values as Record<string, any>);
+          
+          if (dimensionIds.length > 0) {
+            const { data: dimensionsById, error: dimError } = await supabase
+              .from("dimensions")
+              .select("*")
+              .in("id", dimensionIds);
+
+            if (dimError) throw dimError;
+            data = dimensionsById;
+          }
+        }
+      }
 
       // Filter only attribute dimensions (text type) that can be used for filtering
       const filterableDimensions = (data || []).filter(
