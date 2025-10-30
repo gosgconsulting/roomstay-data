@@ -41,24 +41,51 @@ export const ViewDataModal = ({
   onOpenChange, 
   dataSource 
 }: ViewDataModalProps) => {
-  const [sheetData, setSheetData] = useState<any[]>([]);
-  const [columns, setColumns] = useState<string[]>([]);
+  const [dimensionData, setDimensionData] = useState<any[]>([]);
+  const [dimensions, setDimensions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (open && dataSource) {
-      fetchSheetData();
+      fetchData();
     }
   }, [open, dataSource]);
 
-  const fetchSheetData = async () => {
+  const fetchData = async () => {
     if (!dataSource) return;
     
     setIsLoading(true);
     
     try {
+      // Get user dimensions
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      // Fetch dimensions mapped to this data source
+      const mappings = dataSource.column_mappings || [];
+      const dimensionIds = mappings
+        .filter((m: any) => m.visible && m.dimensionId && m.dimensionId !== 'none')
+        .map((m: any) => m.dimensionId);
+
+      if (dimensionIds.length === 0) {
+        setDimensions([]);
+        setDimensionData([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Fetch dimension details
+      const { data: dimensionsData, error: dimError } = await supabase
+        .from('dimensions')
+        .select('*')
+        .in('id', dimensionIds)
+        .eq('user_id', user.id);
+
+      if (dimError) throw dimError;
+
+      // Fetch dimension_data for this data source
       const { data, error } = await supabase
-        .from('sheet_data')
+        .from('dimension_data')
         .select('*')
         .eq('data_source_id', dataSource.id)
         .order('row_number', { ascending: true })
@@ -66,21 +93,10 @@ export const ViewDataModal = ({
 
       if (error) throw error;
 
-      if (data && data.length > 0) {
-        // Extract unique columns from all rows
-        const allColumns = new Set<string>();
-        data.forEach((row) => {
-          Object.keys(row.row_data).forEach((key) => allColumns.add(key));
-        });
-        
-        setColumns(Array.from(allColumns));
-        setSheetData(data);
-      } else {
-        setColumns([]);
-        setSheetData([]);
-      }
+      setDimensions(dimensionsData || []);
+      setDimensionData(data || []);
     } catch (error) {
-      console.error("Error fetching sheet data:", error);
+      console.error("Error fetching data:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to fetch data";
       toast({
         title: "Fetch failed",
@@ -101,8 +117,8 @@ export const ViewDataModal = ({
             {dataSource?.name}
           </DialogTitle>
           <DialogDescription>
-            Viewing imported data from {dataSource?.tab_name}
-            {sheetData.length > 0 && ` (${sheetData.length} rows)`}
+            Viewing imported data from {dataSource?.name}
+            {dimensionData.length > 0 && ` (${dimensionData.length} rows)`}
           </DialogDescription>
         </DialogHeader>
 
@@ -111,7 +127,7 @@ export const ViewDataModal = ({
             <div className="text-center py-8 text-muted-foreground">
               Loading data...
             </div>
-          ) : sheetData.length === 0 ? (
+          ) : dimensionData.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No data found for this source
             </div>
@@ -121,26 +137,29 @@ export const ViewDataModal = ({
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
                     <TableHead className="w-16">#</TableHead>
-                    {columns.map((column) => (
-                      <TableHead key={column} className="min-w-[120px]">
-                        {column}
+                    {dimensions.map((dimension) => (
+                      <TableHead key={dimension.id} className="min-w-[120px]">
+                        {dimension.name}
                       </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sheetData.map((row, index) => (
-                    <TableRow key={row.id}>
-                      <TableCell className="font-medium text-muted-foreground">
-                        {row.row_number}
-                      </TableCell>
-                      {columns.map((column) => (
-                        <TableCell key={column}>
-                          {row.row_data[column] ?? '-'}
+                  {dimensionData.map((row) => {
+                    const dimensionValues = row.dimension_values as Record<string, any>;
+                    return (
+                      <TableRow key={row.id}>
+                        <TableCell className="font-medium text-muted-foreground">
+                          {row.row_number}
                         </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
+                        {dimensions.map((dimension) => (
+                          <TableCell key={dimension.id}>
+                            {dimensionValues[dimension.id] ?? '-'}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </ScrollArea>
@@ -149,7 +168,7 @@ export const ViewDataModal = ({
 
         <div className="flex justify-between items-center border-t pt-4">
           <div className="text-sm text-muted-foreground">
-            {sheetData.length >= 1000 && "Showing first 1,000 rows"}
+            {dimensionData.length >= 1000 && "Showing first 1,000 rows"}
           </div>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
