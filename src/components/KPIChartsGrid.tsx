@@ -11,7 +11,7 @@ const generateData = () => {
 const charts = [
   { title: "Clicks", data: generateData(), color: "hsl(var(--primary))" },
   { title: "Cost", data: generateData(), color: "hsl(var(--primary))" },
-  { title: "Bookings", data: generateData(), color: "hsl(var(--primary))" },
+  { title: "Conversions", data: generateData(), color: "hsl(var(--primary))" },
   { title: "Revenue", data: generateData(), color: "hsl(var(--primary))" },
 ];
 
