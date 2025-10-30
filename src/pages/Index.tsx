@@ -23,7 +23,7 @@ const Index = () => {
     compareType: "previous_period",
   });
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
-  const [isEditMode, setIsEditMode] = useState(false);
+  
 
   // Reset filters when report changes
   useEffect(() => {
@@ -160,16 +160,14 @@ const Index = () => {
         reportId={reportId} 
         onReportChange={setReportId} 
         onDataSync={handleDataSync}
-        isEditMode={isEditMode}
-        onToggleEditMode={() => setIsEditMode(!isEditMode)}
       />
       {reportId ? (
         <>
-          {isEditMode && <FiltersBar reportId={reportId} onFiltersChange={setFilters} />}
+          <FiltersBar reportId={reportId} onFiltersChange={setFilters} />
           <main className="container mx-auto px-6 py-6 space-y-6">
             <KPIMetricsCards reportId={reportId} filters={filters} key={`metrics-${dataRefreshKey}`} />
             <KPIChartsGrid reportId={reportId} filters={filters} key={`charts-${dataRefreshKey}`} />
-            <PerformanceTable reportId={reportId} filters={filters} isEditMode={isEditMode} key={`table-${dataRefreshKey}`} />
+            <PerformanceTable reportId={reportId} filters={filters}  key={`table-${dataRefreshKey}`} />
           </main>
         </>
       ) : (

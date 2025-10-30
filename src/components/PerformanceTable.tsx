@@ -59,10 +59,9 @@ interface TableRow {
 interface PerformanceTableProps {
   reportId: string | null;
   filters: FilterState;
-  isEditMode?: boolean;
 }
 
-export const PerformanceTable = ({ reportId, filters, isEditMode = false }: PerformanceTableProps) => {
+export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
   const [dimensionSelectorOpen, setDimensionSelectorOpen] = useState(false);
@@ -831,8 +830,7 @@ export const PerformanceTable = ({ reportId, filters, isEditMode = false }: Perf
           
           <CardTitle className="mb-4">Performance Table</CardTitle>
           
-          {isEditMode && (
-            <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">Group by:</span>
@@ -1072,7 +1070,6 @@ export const PerformanceTable = ({ reportId, filters, isEditMode = false }: Perf
               </Sheet>
             </div>
           </div>
-          )}
         </CardHeader>
         <CardContent>
           {groupByDimensions.length === 0 ? (

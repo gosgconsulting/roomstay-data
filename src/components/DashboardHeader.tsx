@@ -25,11 +25,9 @@ interface DashboardHeaderProps {
   reportId: string | null;
   onReportChange: (reportId: string) => void;
   onDataSync?: () => void;
-  isEditMode: boolean;
-  onToggleEditMode: () => void;
 }
 
-export const DashboardHeader = ({ reportId, onReportChange, onDataSync, isEditMode, onToggleEditMode }: DashboardHeaderProps) => {
+export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: DashboardHeaderProps) => {
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
@@ -335,14 +333,6 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, isEditMo
         </div>
 
         <div className="flex items-center gap-3">
-          <Button 
-            variant={isEditMode ? "default" : "outline"} 
-            className="gap-2"
-            onClick={onToggleEditMode}
-          >
-            <Pencil className="h-4 w-4" />
-            {isEditMode ? "View" : "Edit"}
-          </Button>
           <Button variant="outline" className="gap-2">
             <Share2 className="h-4 w-4" />
             Share
