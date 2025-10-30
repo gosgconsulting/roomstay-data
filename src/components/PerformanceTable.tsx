@@ -360,11 +360,6 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
             row.level === 1 && "bg-muted/30"
           )}
         >
-          {dateGranularity !== 'none' && (
-            <td className="py-3 px-4 text-left">
-              -
-            </td>
-          )}
           <td className="py-3 px-4" style={{ paddingLeft: `${row.level * 2 + 1}rem` }}>
             <div className="flex items-center gap-2">
               {hasChildren && (
@@ -383,6 +378,11 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
               <span className="font-medium">{row.name}</span>
             </div>
           </td>
+          {dateGranularity !== 'none' && (
+            <td className="py-3 px-4 text-left">
+              -
+            </td>
+          )}
           {dimensions
             .filter(d => {
               // Only show metric/value columns (same filter as Column Visibility)
@@ -565,17 +565,17 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
               <table className="w-full">
                 <thead className="border-b bg-muted/30">
                   <tr>
-                    {dateGranularity !== 'none' && (
-                      <th className="py-3 px-4 text-left font-medium text-sm">
-                        Date
-                      </th>
-                    )}
                     <th
                       className="py-3 px-4 text-left font-medium text-sm"
                       onContextMenu={(e) => handleContextMenu(e, "name")}
                     >
                       {groupByDimensions[0] || "Name"}
                     </th>
+                    {dateGranularity !== 'none' && (
+                      <th className="py-3 px-4 text-left font-medium text-sm">
+                        Date
+                      </th>
+                    )}
                     {dimensions
                       .filter(d => {
                         // Only show metric/value columns (same filter as Column Visibility)
