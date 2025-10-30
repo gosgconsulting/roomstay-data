@@ -69,6 +69,11 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   const [isLoadingDimensions, setIsLoadingDimensions] = useState(true);
   const [tableData, setTableData] = useState<TableRow[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [allDimensionData, setAllDimensionData] = useState<any[]>([]);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [currentOffset, setCurrentOffset] = useState(0);
+  const CHUNK_SIZE = 5000;
   
   // State for dimension selections - start empty
   const [groupByDimensions, setGroupByDimensions] = useState<string[]>([]);
@@ -91,10 +96,16 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   }, [reportId]);
 
   useEffect(() => {
-    if (reportId && dimensions.length > 0) {
-      loadTableData();
+    if (reportId) {
+      loadInitialData();
     }
-  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, reportId, dimensions, dateOrder, filters]);
+  }, [reportId]);
+
+  useEffect(() => {
+    if (reportId && dimensions.length > 0 && allDimensionData.length > 0) {
+      processTableData();
+    }
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, reportId, dimensions, dateOrder, filters, allDimensionData]);
 
   // Save view settings whenever they change
   useEffect(() => {
@@ -504,77 +515,110 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
     return groupedArray;
   };
 
-  const loadTableData = async () => {
+  const loadInitialData = async () => {
+    if (!reportId) return;
+    
+    setIsLoadingData(true);
+    setCurrentOffset(0);
+    setHasMore(true);
+    
+    try {
+      // Load first chunk
+      const { data: firstChunk, error } = await supabase
+        .from('dimension_data')
+        .select('*')
+        .eq('report_id', reportId)
+        .order('row_number', { ascending: true })
+        .range(0, CHUNK_SIZE - 1);
+
+      if (error) throw error;
+
+      setAllDimensionData(firstChunk || []);
+      setHasMore(firstChunk && firstChunk.length === CHUNK_SIZE);
+      setCurrentOffset(CHUNK_SIZE);
+    } catch (error) {
+      console.error("Error loading initial data:", error);
+      setAllDimensionData([]);
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  const loadMoreData = async () => {
+    if (!reportId || !hasMore || isLoadingMore) return;
+    
+    setIsLoadingMore(true);
+    
+    try {
+      const { data: nextChunk, error } = await supabase
+        .from('dimension_data')
+        .select('*')
+        .eq('report_id', reportId)
+        .order('row_number', { ascending: true })
+        .range(currentOffset, currentOffset + CHUNK_SIZE - 1);
+
+      if (error) throw error;
+
+      setAllDimensionData(prev => [...prev, ...(nextChunk || [])]);
+      setHasMore(nextChunk && nextChunk.length === CHUNK_SIZE);
+      setCurrentOffset(prev => prev + CHUNK_SIZE);
+    } catch (error) {
+      console.error("Error loading more data:", error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const processTableData = () => {
     if (!reportId) return;
     
     // Don't load if no grouping dimension is selected
     if (groupByDimensions.length === 0) {
       setTableData([]);
-      setIsLoadingData(false);
       return;
     }
-    
-    setIsLoadingData(true);
-    try {
-      // Fetch all dimension_data for this report
-      const { data: dimensionData, error: dataError } = await supabase
-        .from('dimension_data')
-        .select('*')
-        .eq('report_id', reportId);
 
-      if (dataError) throw dataError;
+    const groupDimensionId = groupByDimensions[0];
+    const breakdownDimensionId = breakdownByDimensions[0] || null;
+    const thenByDimensionId = thenByDimensions[0] || null;
 
-      if (!dimensionData || dimensionData.length === 0) {
-        setTableData([]);
-        return;
+    // Filter data based on applied filters
+    const filteredData = allDimensionData.filter((row) => {
+      const dimensionValues = row.dimension_values as Record<string, any>;
+      
+      // Apply dimension filters
+      for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters)) {
+        if (dimensionValues[dimId] !== filterValue) {
+          return false;
+        }
       }
-
-      const groupDimensionId = groupByDimensions[0];
-      const breakdownDimensionId = breakdownByDimensions[0] || null;
-      const thenByDimensionId = thenByDimensions[0] || null;
-
-      // Filter data based on applied filters
-      const filteredData = dimensionData.filter((row) => {
-        const dimensionValues = row.dimension_values as Record<string, any>;
-        
-        // Apply dimension filters
-        for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters)) {
-          if (dimensionValues[dimId] !== filterValue) {
+      
+      // Apply date range filter if there's a Date dimension
+      if (filters.dateRange?.from || filters.dateRange?.to) {
+        const dateDimension = dimensions.find(d => d.type === 'date');
+        if (dateDimension && dimensionValues[dateDimension.id]) {
+          const rowDate = new Date(dimensionValues[dateDimension.id]);
+          if (filters.dateRange.from && rowDate < filters.dateRange.from) {
+            return false;
+          }
+          if (filters.dateRange.to && rowDate > filters.dateRange.to) {
             return false;
           }
         }
-        
-        // Apply date range filter if there's a Date dimension
-        if (filters.dateRange?.from || filters.dateRange?.to) {
-          const dateDimension = dimensions.find(d => d.type === 'date');
-          if (dateDimension && dimensionValues[dateDimension.id]) {
-            const rowDate = new Date(dimensionValues[dateDimension.id]);
-            if (filters.dateRange.from && rowDate < filters.dateRange.from) {
-              return false;
-            }
-            if (filters.dateRange.to && rowDate > filters.dateRange.to) {
-              return false;
-            }
-          }
-        }
-        
-        return true;
-      });
+      }
+      
+      return true;
+    });
 
-      const hierarchicalData = buildHierarchicalData(
-        filteredData,
-        groupDimensionId,
-        breakdownDimensionId,
-        thenByDimensionId,
-        0
-      );
+    const hierarchicalData = buildHierarchicalData(
+      filteredData,
+      groupDimensionId,
+      breakdownDimensionId,
+      thenByDimensionId,
+      0
+    );
 
-      setTableData(hierarchicalData);
-    } catch (error) {
-      console.error("Error loading table data:", error);
-    } finally {
-      setIsLoadingData(false);
-    }
+    setTableData(hierarchicalData);
   };
 
   const toggleColumn = (dimensionId: string) => {
@@ -1061,6 +1105,18 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
                   </tbody>
                 </table>
               </div>
+              {/* Load More Button */}
+              {hasMore && !isLoadingData && (
+                <div className="mt-4 flex justify-center border-t pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={loadMoreData}
+                    disabled={isLoadingMore}
+                  >
+                    {isLoadingMore ? "Loading..." : `Load More Data (${allDimensionData.length} rows loaded)`}
+                  </Button>
+                </div>
+              )}
               {/* Pagination */}
               {totalPages > 1 && (
                 <div className="mt-4 flex items-center justify-between">

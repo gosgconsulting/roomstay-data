@@ -60,12 +60,13 @@ export const KPIMetricsCards = ({ reportId, filters }: KPIMetricsCardsProps) => 
         const { data: dimensionData, error: dimDataError } = await supabase
           .from("dimension_data")
           .select("dimension_values")
-          .limit(1);
+          .limit(1)
+          .maybeSingle();
 
         if (dimDataError) throw dimDataError;
 
-        if (dimensionData && dimensionData.length > 0) {
-          const dimensionIds = Object.keys(dimensionData[0].dimension_values as Record<string, any>);
+        if (dimensionData?.dimension_values) {
+          const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, any>);
           
           if (dimensionIds.length > 0) {
             const { data: dimensionsById, error: dimError2 } = await supabase
@@ -79,21 +80,38 @@ export const KPIMetricsCards = ({ reportId, filters }: KPIMetricsCardsProps) => 
         }
       }
 
-      // Fetch all dimension_data for this report
-      const { data: dimensionData, error: dataError } = await supabase
-        .from("dimension_data")
-        .select("*")
-        .eq("report_id", reportId);
+      // Fetch dimension_data in chunks (5000 rows at a time)
+      const CHUNK_SIZE = 5000;
+      let allDimensionData: any[] = [];
+      let offset = 0;
+      let hasMore = true;
 
-      if (dataError) throw dataError;
+      while (hasMore) {
+        const { data: chunkData, error } = await supabase
+          .from("dimension_data")
+          .select("*")
+          .eq("report_id", reportId)
+          .order('row_number', { ascending: true })
+          .range(offset, offset + CHUNK_SIZE - 1);
 
-      if (!dimensions || !dimensionData) {
+        if (error) throw error;
+
+        if (chunkData && chunkData.length > 0) {
+          allDimensionData = [...allDimensionData, ...chunkData];
+          offset += CHUNK_SIZE;
+          hasMore = chunkData.length === CHUNK_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      if (!dimensions || !allDimensionData) {
         setMetrics([]);
         return;
       }
 
       // Filter data based on applied filters
-      const filteredData = dimensionData.filter((row) => {
+      const filteredData = allDimensionData.filter((row) => {
         const dimensionValues = row.dimension_values as Record<string, any>;
         
         // Apply dimension filters
