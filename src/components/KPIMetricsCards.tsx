@@ -204,8 +204,8 @@ export const KPIMetricsCards = ({ reportId, filters }: KPIMetricsCardsProps) => 
       // Build metrics in specific order
       const orderedMetrics = [
         'Impressions', 'Clicks', 'CTR', 'Conversions',
-        'Conversion rate', 'CPC', 'ROAS', 'Cost of sale',
-        'Cost', 'Revenue'
+        'Conversion rate', 'CPC', 'Cost', 'Revenue',
+        'ROAS', 'Cost of sale'
       ];
 
       orderedMetrics.forEach((metricName) => {
