@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.create-admin-user]
 verify_jwt = false
+
+[functions.migrate-sheet-data]
+verify_jwt = false

@@ -124,6 +124,29 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
     }
   };
 
+  // Helper to get value from row data, trying both mapped dimension name and original column name
+  const getValueFromRow = (rowData: Record<string, any>, dimensionName: string, dataSourceId: string, dataSources: any[]): any => {
+    // First try dimension name (mapped)
+    if (rowData[dimensionName] !== undefined && rowData[dimensionName] !== null) {
+      return rowData[dimensionName];
+    }
+    
+    // Fallback: find original column name from mapping
+    const dataSource = dataSources.find(ds => ds.id === dataSourceId);
+    if (dataSource?.column_mappings) {
+      const mapping = dataSource.column_mappings.find((m: any) => {
+        const dim = dimensions.find(d => d.id === m.dimensionId);
+        return dim?.name === dimensionName;
+      });
+      
+      if (mapping && rowData[mapping.column] !== undefined) {
+        return rowData[mapping.column];
+      }
+    }
+    
+    return null;
+  };
+
   const loadTableData = async () => {
     if (!reportId) return;
     
@@ -169,7 +192,7 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
 
       sheetData.forEach((row) => {
         const rowData = row.row_data as Record<string, any>;
-        const groupKey = rowData[groupDimension] || "Unknown";
+        const groupKey = getValueFromRow(rowData, groupDimension, row.data_source_id, dataSources) || "Unknown";
 
         if (!grouped.has(groupKey)) {
           grouped.set(groupKey, {
@@ -184,7 +207,7 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
         // Aggregate numeric values
         const groupItem = grouped.get(groupKey);
         dimensions.forEach((dimension) => {
-          const value = rowData[dimension.name];
+          const value = getValueFromRow(rowData, dimension.name, row.data_source_id, dataSources);
           if (value !== undefined && value !== null) {
             if (dimension.type === 'number' || dimension.type === 'currency') {
               const numValue = parseFloat(value) || 0;

@@ -208,14 +208,36 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
       // Filter only visible columns based on mappings
       const visibleMappings = mappings.filter(m => m.visible);
       
-      // Save all data rows to sheet_data table with only visible columns
+      // Fetch dimensions to get mapped dimension names
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      const { data: dimensionsData, error: dimError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("user_id", user.id);
+
+      if (dimError) throw dimError;
+      
+      // Save all data rows to sheet_data table with both original and mapped names
       const rowsToInsert = dataRows.map((row, index) => {
-        // Convert array to object with only visible columns
+        // Convert array to object with both original column name AND mapped dimension name
         const rowData: Record<string, any> = {};
         visibleMappings.forEach((mapping) => {
           const colIndex = sheetHeaders.indexOf(mapping.column);
           if (colIndex !== -1) {
-            rowData[mapping.column] = row[colIndex] || null;
+            const value = row[colIndex] || null;
+            
+            // Store with original column name
+            rowData[mapping.column] = value;
+            
+            // Also store with mapped dimension name if mapped
+            if (mapping.dimensionId && mapping.dimensionId !== 'none') {
+              const dimension = dimensionsData?.find(d => d.id === mapping.dimensionId);
+              if (dimension) {
+                rowData[dimension.name] = value;
+              }
+            }
           }
         });
         
