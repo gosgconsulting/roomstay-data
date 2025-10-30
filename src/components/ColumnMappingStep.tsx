@@ -49,8 +49,13 @@ export const ColumnMappingStep = ({
 
   useEffect(() => {
     loadDimensions();
-    initializeMappings();
-  }, [headers]);
+  }, []);
+
+  useEffect(() => {
+    if (dimensions.length > 0 && headers.length > 0) {
+      initializeMappings();
+    }
+  }, [dimensions, headers]);
 
   const loadDimensions = async () => {
     try {
@@ -76,12 +81,64 @@ export const ColumnMappingStep = ({
   };
 
   const initializeMappings = () => {
-    const initialMappings: ColumnMapping[] = headers.map((header) => ({
-      column: header,
-      dimensionId: "none",
-      visible: true,
-    }));
+    const initialMappings: ColumnMapping[] = headers.map((header) => {
+      const matchedDimension = findBestMatch(header, dimensions);
+      return {
+        column: header,
+        dimensionId: matchedDimension?.id || "none",
+        visible: true,
+      };
+    });
     setMappings(initialMappings);
+  };
+
+  // Smart matching function to find the best dimension match for a column
+  const findBestMatch = (columnName: string, dimensions: Dimension[]): Dimension | null => {
+    const normalizedColumn = normalizeString(columnName);
+    
+    // Define common synonyms/mappings
+    const synonyms: Record<string, string[]> = {
+      'impressions': ['impression', 'impr', 'imp'],
+      'clicks': ['click', 'clk'],
+      'conversions': ['conversion', 'booking', 'bookings', 'conv', 'cvr'],
+      'cost': ['spend', 'cost', 'cpc_local'],
+      'revenue': ['rev', 'income', 'sales'],
+      'ctr': ['click_through_rate', 'clickrate'],
+      'cpc': ['cost_per_click', 'cpc_local'],
+      'cpm': ['cost_per_mille', 'cost_per_thousand'],
+      'roas': ['return_on_ad_spend'],
+      'leads': ['lead', 'prospects'],
+    };
+
+    // First try exact match (case-insensitive)
+    let exactMatch = dimensions.find(
+      d => normalizeString(d.name) === normalizedColumn
+    );
+    if (exactMatch) return exactMatch;
+
+    // Try synonym matching
+    for (const [dimensionKey, synonymList] of Object.entries(synonyms)) {
+      if (synonymList.some(syn => normalizedColumn.includes(syn) || syn.includes(normalizedColumn))) {
+        const match = dimensions.find(d => normalizeString(d.name).includes(dimensionKey));
+        if (match) return match;
+      }
+    }
+
+    // Try partial match (column name contains dimension name or vice versa)
+    const partialMatch = dimensions.find(d => {
+      const normalizedDim = normalizeString(d.name);
+      return normalizedColumn.includes(normalizedDim) || normalizedDim.includes(normalizedColumn);
+    });
+    
+    return partialMatch || null;
+  };
+
+  // Normalize string for comparison (lowercase, remove spaces and special chars)
+  const normalizeString = (str: string): string => {
+    return str
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+      .trim();
   };
 
   const updateMapping = (index: number, dimensionId: string | null) => {
