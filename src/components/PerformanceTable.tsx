@@ -372,14 +372,33 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   ): TableRow[] => {
     const grouped = new Map<string, any>();
 
+    // Helper to format dimension value for display
+    const formatDimensionValue = (value: any, dimId: string): string => {
+      if (!value) return "Unknown";
+      
+      const dimension = dimensions.find(d => d.id === dimId);
+      if (dimension?.type === 'date') {
+        try {
+          const date = new Date(value);
+          if (!isNaN(date.getTime())) {
+            return format(date, 'MMM d, yyyy'); // Jan 18, 2025
+          }
+        } catch (error) {
+          console.error('Error formatting date value:', error);
+        }
+      }
+      return String(value);
+    };
+
     data.forEach((row) => {
       const dimensionValues = row.dimension_values as Record<string, any>;
       const groupKey = dimensionValues[groupDimId] || "Unknown";
+      const formattedName = formatDimensionValue(groupKey, groupDimId);
 
       if (!grouped.has(groupKey)) {
         grouped.set(groupKey, {
           id: `${level}-${String(groupKey).toLowerCase().replace(/\s+/g, '-')}`,
-          name: groupKey,
+          name: formattedName,
           level,
           data: {},
           children: [],
