@@ -239,7 +239,29 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       console.log('Loading view settings for:', view.name);
       
       // Load saved settings
-      setGroupByDimensions(view.group_by_dimensions || []);
+      let groupDimensions = view.group_by_dimensions || [];
+      
+      // If no grouping dimension is set and dimensions are available, set a default
+      if (groupDimensions.length === 0 && dimensions.length > 0) {
+        // Find a suitable text dimension for grouping (like Hotel, Channel, etc.)
+        const textDimension = dimensions.find(d => d.type === 'text');
+        if (textDimension) {
+          groupDimensions = [textDimension.id];
+          console.log('Auto-selected grouping dimension:', textDimension.name);
+          
+          // Update the view in the database with the default grouping
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase
+              .from("report_views")
+              .update({ group_by_dimensions: groupDimensions })
+              .eq("id", viewId)
+              .eq("user_id", user.id);
+          }
+        }
+      }
+      
+      setGroupByDimensions(groupDimensions);
       setBreakdownByDimensions(view.breakdown_by_dimensions || []);
       setThenByDimensions(view.then_by_dimensions || []);
       
