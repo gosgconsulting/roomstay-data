@@ -100,6 +100,23 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
     }
   }, [reportId]);
 
+  // Reset table state when report changes
+  useEffect(() => {
+    if (reportId) {
+      // Clear previous report's state
+      setTableViews([]);
+      setActiveViewId(null);
+      setGroupByDimensions([]);
+      setBreakdownByDimensions([]);
+      setThenByDimensions([]);
+      setVisibleColumns(new Set());
+      setTableData([]);
+      setAllDimensionData([]);
+      setCurrentOffset(0);
+      setHasMore(true);
+    }
+  }, [reportId]);
+
   useEffect(() => {
     if (reportId && dimensions.length > 0) {
       loadAllViews();

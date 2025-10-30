@@ -24,6 +24,17 @@ const Index = () => {
   });
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
 
+  // Reset filters when report changes
+  useEffect(() => {
+    setFilters({
+      dimensionFilters: {},
+      dateRange: undefined,
+      datePreset: "this_month",
+      compareEnabled: false,
+      compareType: "previous_period",
+    });
+  }, [reportId]);
+
   useEffect(() => {
     let isMounted = true;
 
