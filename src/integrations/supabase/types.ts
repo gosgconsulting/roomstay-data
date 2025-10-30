@@ -313,7 +313,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_aggregated_performance_data: {
+        Args: {
+          p_breakdown_dims?: string[]
+          p_date_from?: string
+          p_date_to?: string
+          p_dimension_filters?: Json
+          p_group_by_dims?: string[]
+          p_limit?: number
+          p_offset?: number
+          p_report_id: string
+          p_then_by_dims?: string[]
+          p_visible_dimension_ids?: string[]
+        }
+        Returns: {
+          dimension_values: Json
+          group_key: string
+          row_count: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

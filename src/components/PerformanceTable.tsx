@@ -31,13 +31,14 @@ import {
 import { ChevronDown, ChevronRight, Columns3, Copy, Trash2, Plus } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { MappingModal } from "./MappingModal";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfWeek, startOfMonth, startOfYear } from "date-fns";
 import { FilterState } from "./FiltersBar";
+import { TableVirtuoso } from "react-virtuoso";
 
 interface Dimension {
   id: string;
@@ -71,12 +72,8 @@ export const PerformanceTable = ({ reportId, filters, isEditMode = false }: Perf
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set());
   const [isLoadingDimensions, setIsLoadingDimensions] = useState(true);
   const [tableData, setTableData] = useState<TableRow[]>([]);
+  const [totalData, setTotalData] = useState<Record<string, any>>({});
   const [isLoadingData, setIsLoadingData] = useState(true);
-  const [allDimensionData, setAllDimensionData] = useState<any[]>([]);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [currentOffset, setCurrentOffset] = useState(0);
-  const CHUNK_SIZE = 5000;
   
   // Multiple table views state
   const [tableViews, setTableViews] = useState<any[]>([]);
@@ -112,9 +109,7 @@ export const PerformanceTable = ({ reportId, filters, isEditMode = false }: Perf
       setThenByDimensions([]);
       setVisibleColumns(new Set());
       setTableData([]);
-      setAllDimensionData([]);
-      setCurrentOffset(0);
-      setHasMore(true);
+      setTotalData({});
     }
   }, [reportId]);
 
@@ -124,17 +119,14 @@ export const PerformanceTable = ({ reportId, filters, isEditMode = false }: Perf
     }
   }, [reportId, dimensions.length]);
 
-  useEffect(() => {
-    if (reportId) {
-      loadInitialData();
-    }
-  }, [reportId]);
+  // Debounced filter change to reduce API calls
+  const debouncedFilters = useMemo(() => filters, [JSON.stringify(filters)]);
 
   useEffect(() => {
-    if (reportId && dimensions.length > 0 && allDimensionData.length > 0) {
-      processTableData();
+    if (reportId && groupByDimensions.length > 0 && dimensions.length > 0) {
+      loadPerformanceData();
     }
-  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, reportId, dimensions, dateOrder, filters, allDimensionData]);
+  }, [reportId, groupByDimensions, breakdownByDimensions, thenByDimensions, dimensions.length, dateOrder, debouncedFilters]);
 
   // Save view settings whenever they change
   useEffect(() => {
@@ -611,291 +603,50 @@ export const PerformanceTable = ({ reportId, filters, isEditMode = false }: Perf
     return value;
   };
 
-
-  // Helper to calculate formula based on aggregated data
-  const calculateFormula = (formula: string, data: Record<string, any>): number | null => {
-    if (!formula) return null;
-    
-    try {
-      // Replace dimension names with actual values
-      let expression = formula;
-      
-      // Extract all dimension names from the formula
-      const dimensionNames = dimensions.map(d => d.name);
-      
-      // Sort by length (descending) to replace longer names first
-      // This prevents "Cost" from being replaced when we want "Cost of sale"
-      const sortedNames = [...dimensionNames].sort((a, b) => b.length - a.length);
-      
-      // Create a map to track what we're replacing for debugging
-      const replacements: Record<string, any> = {};
-      
-      for (const dimName of sortedNames) {
-        if (expression.includes(dimName)) {
-          const value = data[dimName];
-          
-          // If value is null, undefined, or not a number, use 0
-          const numValue = (value !== null && value !== undefined) ? Number(value) || 0 : 0;
-          
-          replacements[dimName] = numValue;
-          
-          // Use a regex with global flag to replace all occurrences
-          // Escape special regex characters
-          const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const regex = new RegExp(escapedName, 'g');
-          expression = expression.replace(regex, `(${numValue})`);
-        }
-      }
-      
-      // Log the expression before evaluation for debugging
-      const finalExpression = expression;
-      
-      // Evaluate the expression
-      // eslint-disable-next-line no-eval
-      const result = eval(expression);
-      
-      // Return null if result is Infinity, NaN, or undefined
-      if (!isFinite(result)) return null;
-      
-      return result;
-    } catch (error) {
-      console.error(`Error calculating formula "${formula}":`, error);
-      console.error('Available data keys:', Object.keys(data));
-      return null;
-    }
-  };
-
-  const buildHierarchicalData = (
-    data: any[],
-    groupDimId: string,
-    breakdownDimId: string | null,
-    thenByDimId: string | null,
-    level: number = 0
-  ): TableRow[] => {
-    const grouped = new Map<string, any>();
-
-    // Helper to format dimension value for display
-    const formatDimensionValue = (value: any, dimId: string): string => {
-      if (!value) return "Unknown";
-      
-      const dimension = dimensions.find(d => d.id === dimId);
-      if (dimension?.type === 'date') {
-        try {
-          const date = new Date(value);
-          if (!isNaN(date.getTime())) {
-            return format(date, 'MMM d, yyyy'); // Jan 18, 2025
-          }
-        } catch (error) {
-          console.error('Error formatting date value:', error);
-        }
-      }
-      return String(value);
-    };
-
-    data.forEach((row) => {
-      const dimensionValues = row.dimension_values as Record<string, any>;
-      const groupKey = dimensionValues[groupDimId] || "Unknown";
-      const formattedName = formatDimensionValue(groupKey, groupDimId);
-
-      if (!grouped.has(groupKey)) {
-        grouped.set(groupKey, {
-          id: `${level}-${String(groupKey).toLowerCase().replace(/\s+/g, '-')}`,
-          name: formattedName,
-          level,
-          data: {},
-          children: [],
-          rawRows: [],
-        });
-      }
-
-      const groupItem = grouped.get(groupKey);
-      groupItem.rawRows.push(row);
-
-      // Aggregate only base metrics (no formulas)
-      dimensions.forEach((dimension) => {
-        if (dimension.formula) return;
-        
-        const value = dimensionValues[dimension.id];
-        if (value !== undefined && value !== null) {
-          if (dimension.type === 'number' || dimension.type === 'currency') {
-            const numValue = parseFloat(value) || 0;
-            groupItem.data[dimension.name] = (groupItem.data[dimension.name] || 0) + numValue;
-          } else if (dimension.type === 'date') {
-            if (!groupItem.data[dimension.name]) {
-              groupItem.data[dimension.name] = value;
-            }
-          } else {
-            groupItem.data[dimension.name] = value;
-          }
-        }
-      });
-    });
-
-    // Convert to array and process children
-    const groupedArray = Array.from(grouped.values());
-    
-    groupedArray.forEach((group) => {
-      // Calculate formula fields after aggregation
-      dimensions.forEach((dimension) => {
-        if (dimension.formula) {
-          const calculatedValue = calculateFormula(dimension.formula, group.data);
-          group.data[dimension.name] = calculatedValue;
-        }
-      });
-
-      // Build children if there's a breakdown dimension
-      if (breakdownDimId && group.rawRows.length > 0) {
-        group.children = buildHierarchicalData(
-          group.rawRows,
-          breakdownDimId,
-          thenByDimId,
-          null,
-          level + 1
-        );
-      }
-
-      // Clean up temporary rawRows
-      delete group.rawRows;
-    });
-
-    // Sort by date if date granularity is not 'none' and we have date data
-    if (dateGranularity !== 'none') {
-      groupedArray.sort((a, b) => {
-        const dateA = a.data['Date'] ? new Date(a.data['Date']).getTime() : 0;
-        const dateB = b.data['Date'] ? new Date(b.data['Date']).getTime() : 0;
-        
-        if (dateOrder === 'desc') {
-          return dateB - dateA; // Latest first
-        } else {
-          return dateA - dateB; // Earliest first
-        }
-      });
-    }
-
-    return groupedArray;
-  };
-
-  const loadInitialData = async () => {
-    if (!reportId) {
-      console.error("loadInitialData: No reportId");
+  // Load performance data using the new edge function
+  const loadPerformanceData = async () => {
+    if (!reportId || groupByDimensions.length === 0) {
+      setTableData([]);
+      setTotalData({});
       return;
     }
-    
-    console.log("loadInitialData: Starting data load for report:", reportId);
+
     setIsLoadingData(true);
-    setCurrentOffset(0);
-    setHasMore(true);
-    
+
     try {
-      // Load first chunk
-      const { data: firstChunk, error } = await supabase
-        .from('dimension_data')
-        .select('*')
-        .eq('report_id', reportId)
-        .order('row_number', { ascending: true })
-        .range(0, CHUNK_SIZE - 1);
+      const { data, error } = await supabase.functions.invoke('get-performance-data', {
+        body: {
+          reportId,
+          groupByDims: groupByDimensions,
+          breakdownDims: breakdownByDimensions,
+          thenByDims: thenByDimensions,
+          dimensionFilters: filters.dimensionFilters,
+          dateFrom: filters.dateRange?.from?.toISOString(),
+          dateTo: filters.dateRange?.to?.toISOString(),
+          visibleDimensionIds: Array.from(visibleColumns),
+          limit: 100000, // Load a lot of data for now
+          offset: 0,
+        },
+      });
 
       if (error) {
-        console.error("loadInitialData: Error fetching data:", error);
-        throw error;
+        console.error('Error loading performance data:', error);
+        toast({
+          title: "Error loading data",
+          description: "Failed to load performance table data.",
+          variant: "destructive",
+        });
+        return;
       }
 
-      console.log("loadInitialData: Loaded", firstChunk?.length || 0, "rows");
-      setAllDimensionData(firstChunk || []);
-      setHasMore(firstChunk && firstChunk.length === CHUNK_SIZE);
-      setCurrentOffset(CHUNK_SIZE);
+      console.log('Loaded performance data:', data);
+      setTableData(data.rows || []);
+      setTotalData(data.totalData || {});
     } catch (error) {
-      console.error("Error loading initial data:", error);
-      setAllDimensionData([]);
+      console.error('Error loading performance data:', error);
     } finally {
       setIsLoadingData(false);
     }
-  };
-
-  const loadMoreData = async () => {
-    if (!reportId || !hasMore || isLoadingMore) return;
-    
-    setIsLoadingMore(true);
-    
-    try {
-      const { data: nextChunk, error } = await supabase
-        .from('dimension_data')
-        .select('*')
-        .eq('report_id', reportId)
-        .order('row_number', { ascending: true })
-        .range(currentOffset, currentOffset + CHUNK_SIZE - 1);
-
-      if (error) throw error;
-
-      setAllDimensionData(prev => [...prev, ...(nextChunk || [])]);
-      setHasMore(nextChunk && nextChunk.length === CHUNK_SIZE);
-      setCurrentOffset(prev => prev + CHUNK_SIZE);
-    } catch (error) {
-      console.error("Error loading more data:", error);
-    } finally {
-      setIsLoadingMore(false);
-    }
-  };
-
-  const processTableData = () => {
-    if (!reportId) {
-      console.log("processTableData: No reportId");
-      return;
-    }
-    
-    // Don't load if no grouping dimension is selected
-    if (groupByDimensions.length === 0) {
-      console.log("processTableData: No grouping dimension selected");
-      setTableData([]);
-      return;
-    }
-
-    console.log("processTableData: Processing with", allDimensionData.length, "rows, grouping by:", groupByDimensions[0]);
-
-    const groupDimensionId = groupByDimensions[0];
-    const breakdownDimensionId = breakdownByDimensions[0] || null;
-    const thenByDimensionId = thenByDimensions[0] || null;
-
-    // Filter data based on applied filters
-    const filteredData = allDimensionData.filter((row) => {
-      const dimensionValues = row.dimension_values as Record<string, any>;
-      
-      // Apply dimension filters
-      for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters)) {
-        if (dimensionValues[dimId] !== filterValue) {
-          return false;
-        }
-      }
-      
-      // Apply date range filter if there's a Date dimension
-      if (filters.dateRange?.from || filters.dateRange?.to) {
-        const dateDimension = dimensions.find(d => d.type === 'date');
-        if (dateDimension && dimensionValues[dateDimension.id]) {
-          const rowDate = new Date(dimensionValues[dateDimension.id]);
-          if (filters.dateRange.from && rowDate < filters.dateRange.from) {
-            return false;
-          }
-          if (filters.dateRange.to && rowDate > filters.dateRange.to) {
-            return false;
-          }
-        }
-      }
-      
-      return true;
-    });
-
-    console.log("processTableData: After filtering:", filteredData.length, "rows");
-
-    const hierarchicalData = buildHierarchicalData(
-      filteredData,
-      groupDimensionId,
-      breakdownDimensionId,
-      thenByDimensionId,
-      0
-    );
-
-    console.log("processTableData: Built", hierarchicalData.length, "rows of table data");
-    setTableData(hierarchicalData);
   };
 
   const toggleColumn = (dimensionId: string) => {
@@ -985,35 +736,10 @@ export const PerformanceTable = ({ reportId, filters, isEditMode = false }: Perf
     }
   };
 
-  // Calculate total row
+  // Calculate totals from server-side data
   const calculateTotals = (): Record<string, any> => {
-    const totals: Record<string, any> = {};
-    
-    dimensions.forEach((dimension) => {
-      if (dimension.formula) {
-        // Skip for now, will calculate after base totals
-        return;
-      }
-      
-      if (dimension.type === 'number' || dimension.type === 'currency') {
-        let sum = 0;
-        tableData.forEach((row) => {
-          const value = parseFloat(row.data[dimension.name]) || 0;
-          sum += value;
-        });
-        totals[dimension.name] = sum;
-      }
-    });
-    
-    // Calculate formula dimensions using totals
-    dimensions.forEach((dimension) => {
-      if (dimension.formula) {
-        const calculatedValue = calculateFormula(dimension.formula, totals);
-        totals[dimension.name] = calculatedValue;
-      }
-    });
-    
-    return totals;
+    // Use server-side totals directly
+    return totalData;
   };
 
   // Paginate data
@@ -1425,18 +1151,6 @@ export const PerformanceTable = ({ reportId, filters, isEditMode = false }: Perf
                   </tbody>
                 </table>
               </div>
-              {/* Load More Button */}
-              {hasMore && !isLoadingData && (
-                <div className="mt-4 flex justify-center border-t pt-4">
-                  <Button
-                    variant="outline"
-                    onClick={loadMoreData}
-                    disabled={isLoadingMore}
-                  >
-                    {isLoadingMore ? "Loading..." : `Load More Data (${allDimensionData.length} rows loaded)`}
-                  </Button>
-                </div>
-              )}
               {/* Pagination */}
               {totalPages > 1 && (
                 <div className="mt-4 flex items-center justify-between">
