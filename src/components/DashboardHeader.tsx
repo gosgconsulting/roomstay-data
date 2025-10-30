@@ -23,9 +23,10 @@ interface Report {
 
 interface DashboardHeaderProps {
   reportId: string | null;
+  onReportChange: (reportId: string) => void;
 }
 
-export const DashboardHeader = ({ reportId }: DashboardHeaderProps) => {
+export const DashboardHeader = ({ reportId, onReportChange }: DashboardHeaderProps) => {
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
@@ -42,6 +43,16 @@ export const DashboardHeader = ({ reportId }: DashboardHeaderProps) => {
       createDefaultDimensions();
     }
   }, [reportId]);
+
+  // Update currentReport when reportId changes
+  useEffect(() => {
+    if (reportId && reports.length > 0) {
+      const report = reports.find(r => r.id === reportId);
+      if (report) {
+        setCurrentReport(report);
+      }
+    }
+  }, [reportId, reports]);
 
   const createDefaultDimensions = async () => {
     try {
@@ -137,6 +148,7 @@ export const DashboardHeader = ({ reportId }: DashboardHeaderProps) => {
 
       setReports([data, ...reports]);
       setCurrentReport(data);
+      onReportChange(data.id); // Notify parent
       setShowReportModal(false);
       
       toast({
@@ -203,7 +215,11 @@ export const DashboardHeader = ({ reportId }: DashboardHeaderProps) => {
       setReports(updatedReports);
       
       if (currentReport?.id === report.id) {
-        setCurrentReport(updatedReports[0] || null);
+        const nextReport = updatedReports[0] || null;
+        setCurrentReport(nextReport);
+        if (nextReport) {
+          onReportChange(nextReport.id); // Notify parent
+        }
       }
       
       toast({
@@ -247,7 +263,10 @@ export const DashboardHeader = ({ reportId }: DashboardHeaderProps) => {
                 >
                   <span 
                     className="flex-1 cursor-pointer"
-                    onClick={() => setCurrentReport(report)}
+                    onClick={() => {
+                      setCurrentReport(report);
+                      onReportChange(report.id); // Notify parent
+                    }}
                   >
                     {report.name}
                   </span>

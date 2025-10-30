@@ -104,7 +104,7 @@ const Index = () => {
           </Button>
         </div>
       </div>
-      <DashboardHeader reportId={reportId} />
+      <DashboardHeader reportId={reportId} onReportChange={setReportId} />
       <main className="container mx-auto px-6 py-6 space-y-6">
         <KPIMetricsCards reportId={reportId} />
         <KPIChartsGrid reportId={reportId} />
