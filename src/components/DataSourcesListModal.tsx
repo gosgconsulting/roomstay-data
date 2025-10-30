@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useState, useEffect } from "react";
-import { Database, Plus, Eye, Trash2, FileSpreadsheet, Edit } from "lucide-react";
+import { Database, Plus, Eye, Trash2, FileSpreadsheet, Edit, RefreshCw } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { EditMappingModal } from "./EditMappingModal";
@@ -46,6 +46,7 @@ export const DataSourcesListModal = ({
 }: DataSourcesListModalProps) => {
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
   const [editingDataSource, setEditingDataSource] = useState<DataSource | null>(null);
   const [viewingDataSource, setViewingDataSource] = useState<DataSource | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -120,6 +121,105 @@ export const DataSourcesListModal = ({
     loadDataSources();
   };
 
+  const handleSync = async (dataSource: DataSource) => {
+    setSyncingIds(prev => new Set(prev).add(dataSource.id));
+    
+    try {
+      // Fetch fresh data from Google Sheets
+      const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
+        body: {
+          spreadsheetId: dataSource.spreadsheet_id,
+          tabName: dataSource.tab_name,
+          range: `${dataSource.header_row}:10000`,
+        },
+      });
+
+      if (sheetsError) throw sheetsError;
+
+      if (!sheetsData?.values || sheetsData.values.length === 0) {
+        throw new Error("No data found in the sheet");
+      }
+
+      const sheetHeaders = sheetsData.values[0];
+      const dataRows = sheetsData.values.slice(1);
+
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      // Delete existing dimension_data for this data source
+      const { error: deleteError } = await supabase
+        .from('dimension_data')
+        .delete()
+        .eq('data_source_id', dataSource.id);
+
+      if (deleteError) throw deleteError;
+
+      // Build dimension ID map from current mappings
+      const dimensionIdMap: Record<string, string> = {};
+      const visibleMappings = (dataSource.column_mappings || []).filter((m: any) => m.visible);
+      
+      visibleMappings.forEach((mapping: any) => {
+        if (mapping.dimensionId && mapping.dimensionId !== 'none') {
+          dimensionIdMap[mapping.column] = mapping.dimensionId;
+        }
+      });
+
+      // Transform and insert data with existing mappings
+      const rowsToInsert = dataRows.map((row, index) => {
+        const dimensionValues: Record<string, any> = {};
+        
+        visibleMappings.forEach((mapping: any) => {
+          const colIndex = sheetHeaders.indexOf(mapping.column);
+          if (colIndex !== -1 && dimensionIdMap[mapping.column]) {
+            const value = row[colIndex] || null;
+            dimensionValues[dimensionIdMap[mapping.column]] = value;
+          }
+        });
+        
+        return {
+          report_id: reportId,
+          data_source_id: dataSource.id,
+          row_number: index + 1,
+          dimension_values: dimensionValues,
+        };
+      });
+
+      // Insert in batches
+      const batchSize = 500;
+      for (let i = 0; i < rowsToInsert.length; i += batchSize) {
+        const batch = rowsToInsert.slice(i, i + batchSize);
+        const { error: insertError } = await supabase
+          .from('dimension_data')
+          .insert(batch);
+
+        if (insertError) throw insertError;
+      }
+
+      toast({
+        title: "Data synced successfully",
+        description: `Synced ${dataRows.length} rows from ${dataSource.name}`,
+      });
+      
+      // Reload the page to refresh all components
+      window.location.reload();
+    } catch (error) {
+      console.error("Error syncing data:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to sync data";
+      toast({
+        title: "Sync failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setSyncingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(dataSource.id);
+        return newSet;
+      });
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[700px]">
@@ -168,6 +268,7 @@ export const DataSourcesListModal = ({
                             variant="ghost"
                             size="sm"
                             onClick={() => handleView(dataSource)}
+                            disabled={syncingIds.has(dataSource.id)}
                           >
                             <Eye className="h-4 w-4 mr-1" />
                             View
@@ -175,7 +276,17 @@ export const DataSourcesListModal = ({
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => handleSync(dataSource)}
+                            disabled={syncingIds.has(dataSource.id)}
+                          >
+                            <RefreshCw className={`h-4 w-4 mr-1 ${syncingIds.has(dataSource.id) ? 'animate-spin' : ''}`} />
+                            Sync
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleEdit(dataSource)}
+                            disabled={syncingIds.has(dataSource.id)}
                           >
                             <Edit className="h-4 w-4 mr-1" />
                             Edit
@@ -185,6 +296,7 @@ export const DataSourcesListModal = ({
                             size="sm"
                             className="text-destructive hover:text-destructive"
                             onClick={() => handleDelete(dataSource)}
+                            disabled={syncingIds.has(dataSource.id)}
                           >
                             <Trash2 className="h-4 w-4 mr-1" />
                             Delete
