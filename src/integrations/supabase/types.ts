@@ -58,6 +58,44 @@ export type Database = {
           },
         ]
       }
+      dimensions: {
+        Row: {
+          created_at: string
+          formula: string | null
+          id: string
+          name: string
+          report_id: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          formula?: string | null
+          id?: string
+          name: string
+          report_id: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          formula?: string | null
+          id?: string
+          name?: string
+          report_id?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dimensions_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string

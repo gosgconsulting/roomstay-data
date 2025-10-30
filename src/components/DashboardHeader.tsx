@@ -6,10 +6,12 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Calendar, ChevronDown, Database, Share2, Plus, Trash2, Pencil } from "lucide-react";
+import { Calendar, ChevronDown, Database, Share2, Plus, Trash2, Pencil, Grid3x3 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { DataSourceModal } from "./DataSourceModal";
 import { DataSourcesListModal } from "./DataSourcesListModal";
+import { DimensionsListModal } from "./DimensionsListModal";
+import { DimensionModal } from "./DimensionModal";
 import { ReportModal } from "./ReportModal";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -22,6 +24,8 @@ interface Report {
 export const DashboardHeader = () => {
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
+  const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
+  const [showDimensionModal, setShowDimensionModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
@@ -242,6 +246,16 @@ export const DashboardHeader = () => {
             <Database className="h-4 w-4" />
             Data sources
           </Button>
+
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setShowDimensionsListModal(true)}
+            disabled={!currentReport}
+          >
+            <Grid3x3 className="h-4 w-4" />
+            Dimensions
+          </Button>
         </div>
 
         <div className="flex items-center gap-3">
@@ -275,6 +289,28 @@ export const DashboardHeader = () => {
               if (!open) {
                 // Reopen the list modal when closing the add modal
                 setShowDataSourcesListModal(true);
+              }
+            }}
+            reportId={currentReport.id}
+          />
+
+          <DimensionsListModal
+            open={showDimensionsListModal}
+            onOpenChange={setShowDimensionsListModal}
+            reportId={currentReport.id}
+            onAddNew={() => {
+              setShowDimensionsListModal(false);
+              setShowDimensionModal(true);
+            }}
+          />
+          
+          <DimensionModal
+            open={showDimensionModal}
+            onOpenChange={(open) => {
+              setShowDimensionModal(open);
+              if (!open) {
+                // Reopen the list modal when closing the add modal
+                setShowDimensionsListModal(true);
               }
             }}
             reportId={currentReport.id}
