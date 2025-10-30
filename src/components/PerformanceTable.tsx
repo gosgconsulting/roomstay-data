@@ -390,26 +390,35 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
                     ) : dimensions.length === 0 ? (
                       <div className="text-sm text-muted-foreground">No dimensions found</div>
                     ) : (
-                      dimensions.map((dimension) => (
-                        <div key={dimension.id} className="flex items-center space-x-3">
-                          <Checkbox
-                            id={dimension.id}
-                            checked={visibleColumns.has(dimension.id)}
-                            onCheckedChange={() => toggleColumn(dimension.id)}
-                          />
-                          <label
-                            htmlFor={dimension.id}
-                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
-                          >
-                            {dimension.name}
-                            {dimension.formula && (
-                              <span className="ml-2 text-xs text-muted-foreground">
-                                (formula)
-                              </span>
-                            )}
-                          </label>
-                        </div>
-                      ))
+                      dimensions
+                        .filter(dimension => {
+                          // Only show metric/value fields (number, currency, percentage, formula)
+                          // Exclude attribute fields that are used for grouping
+                          return dimension.type === 'number' || 
+                                 dimension.type === 'currency' || 
+                                 dimension.type === 'percentage' ||
+                                 dimension.formula !== null;
+                        })
+                        .map((dimension) => (
+                          <div key={dimension.id} className="flex items-center space-x-3">
+                            <Checkbox
+                              id={dimension.id}
+                              checked={visibleColumns.has(dimension.id)}
+                              onCheckedChange={() => toggleColumn(dimension.id)}
+                            />
+                            <label
+                              htmlFor={dimension.id}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                            >
+                              {dimension.name}
+                              {dimension.formula && (
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                  (formula)
+                                </span>
+                              )}
+                            </label>
+                          </div>
+                        ))
                     )}
                   </div>
                 </SheetContent>
