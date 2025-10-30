@@ -178,14 +178,28 @@ Deno.serve(async (req) => {
     const calculateFormula = (formula: string, data: Record<string, any>): number => {
       try {
         let expression = formula;
-        for (const [key, value] of Object.entries(data)) {
-          const numValue = typeof value === 'number' ? value : parseFloat(value) || 0;
-          expression = expression.replace(new RegExp(`\\{${key}\\}`, 'g'), numValue.toString());
+        
+        // Get dimension names and sort by length (descending) to replace longer names first
+        // This prevents "Cost" from being replaced when we want "Cost of sale"
+        const dimensionNames = (dimensions || []).map(d => d.name).sort((a, b) => b.length - a.length);
+        
+        for (const dimName of dimensionNames) {
+          if (expression.includes(dimName)) {
+            const value = data[dimName];
+            const numValue = (value !== null && value !== undefined) ? (typeof value === 'number' ? value : parseFloat(value) || 0) : 0;
+            
+            // Escape special regex characters and replace all occurrences
+            const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(escapedName, 'g');
+            expression = expression.replace(regex, `(${numValue})`);
+          }
         }
+        
+        // Evaluate the expression
         const result = eval(expression);
-        return typeof result === 'number' && !isNaN(result) ? result : 0;
+        return typeof result === 'number' && !isNaN(result) && isFinite(result) ? result : 0;
       } catch (error) {
-        console.error('Error calculating formula:', error);
+        console.error('Error calculating formula:', error, 'Formula:', formula);
         return 0;
       }
     };
