@@ -587,15 +587,28 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       // This prevents "Cost" from being replaced when we want "Cost of sale"
       const sortedNames = [...dimensionNames].sort((a, b) => b.length - a.length);
       
+      // Create a map to track what we're replacing for debugging
+      const replacements: Record<string, any> = {};
+      
       for (const dimName of sortedNames) {
         if (expression.includes(dimName)) {
-          const value = data[dimName] || 0;
-          // Escape special regex characters and replace all occurrences
-          // Don't use word boundaries as they don't work with spaces in dimension names
+          const value = data[dimName];
+          
+          // If value is null, undefined, or not a number, use 0
+          const numValue = (value !== null && value !== undefined) ? Number(value) || 0 : 0;
+          
+          replacements[dimName] = numValue;
+          
+          // Use a regex with global flag to replace all occurrences
+          // Escape special regex characters
           const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          expression = expression.split(dimName).join(`(${value})`);
+          const regex = new RegExp(escapedName, 'g');
+          expression = expression.replace(regex, `(${numValue})`);
         }
       }
+      
+      // Log the expression before evaluation for debugging
+      const finalExpression = expression;
       
       // Evaluate the expression
       // eslint-disable-next-line no-eval
@@ -607,6 +620,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       return result;
     } catch (error) {
       console.error(`Error calculating formula "${formula}":`, error);
+      console.error('Available data keys:', Object.keys(data));
       return null;
     }
   };
@@ -722,8 +736,12 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   };
 
   const loadInitialData = async () => {
-    if (!reportId) return;
+    if (!reportId) {
+      console.error("loadInitialData: No reportId");
+      return;
+    }
     
+    console.log("loadInitialData: Starting data load for report:", reportId);
     setIsLoadingData(true);
     setCurrentOffset(0);
     setHasMore(true);
@@ -737,8 +755,12 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
         .order('row_number', { ascending: true })
         .range(0, CHUNK_SIZE - 1);
 
-      if (error) throw error;
+      if (error) {
+        console.error("loadInitialData: Error fetching data:", error);
+        throw error;
+      }
 
+      console.log("loadInitialData: Loaded", firstChunk?.length || 0, "rows");
       setAllDimensionData(firstChunk || []);
       setHasMore(firstChunk && firstChunk.length === CHUNK_SIZE);
       setCurrentOffset(CHUNK_SIZE);
@@ -776,13 +798,19 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   };
 
   const processTableData = () => {
-    if (!reportId) return;
+    if (!reportId) {
+      console.log("processTableData: No reportId");
+      return;
+    }
     
     // Don't load if no grouping dimension is selected
     if (groupByDimensions.length === 0) {
+      console.log("processTableData: No grouping dimension selected");
       setTableData([]);
       return;
     }
+
+    console.log("processTableData: Processing with", allDimensionData.length, "rows, grouping by:", groupByDimensions[0]);
 
     const groupDimensionId = groupByDimensions[0];
     const breakdownDimensionId = breakdownByDimensions[0] || null;
@@ -816,6 +844,8 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       return true;
     });
 
+    console.log("processTableData: After filtering:", filteredData.length, "rows");
+
     const hierarchicalData = buildHierarchicalData(
       filteredData,
       groupDimensionId,
@@ -824,6 +854,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       0
     );
 
+    console.log("processTableData: Built", hierarchicalData.length, "rows of table data");
     setTableData(hierarchicalData);
   };
 
