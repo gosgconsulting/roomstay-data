@@ -6,10 +6,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronDown, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { ChevronDown, ChevronRight, Columns3 } from "lucide-react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { MappingModal } from "./MappingModal";
+import { supabase } from "@/integrations/supabase/client";
+
+interface Dimension {
+  id: string;
+  name: string;
+  type: string;
+  formula: string | null;
+}
 
 interface TableRow {
   id: string;
@@ -160,6 +178,46 @@ export const PerformanceTable = () => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set(["2"]));
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
   const [selectedKPI, setSelectedKPI] = useState("");
+  const [dimensions, setDimensions] = useState<Dimension[]>([]);
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set());
+  const [isLoadingDimensions, setIsLoadingDimensions] = useState(true);
+
+  useEffect(() => {
+    loadDimensions();
+  }, []);
+
+  const loadDimensions = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+
+      setDimensions(data || []);
+      // Set all dimensions as visible by default
+      setVisibleColumns(new Set(data?.map(d => d.id) || []));
+    } catch (error) {
+      console.error("Error loading dimensions:", error);
+    } finally {
+      setIsLoadingDimensions(false);
+    }
+  };
+
+  const toggleColumn = (dimensionId: string) => {
+    const newVisible = new Set(visibleColumns);
+    if (newVisible.has(dimensionId)) {
+      newVisible.delete(dimensionId);
+    } else {
+      newVisible.add(dimensionId);
+    }
+    setVisibleColumns(newVisible);
+  };
 
   const toggleRow = (id: string) => {
     const newExpanded = new Set(expandedRows);
@@ -208,18 +266,22 @@ export const PerformanceTable = () => {
               <span className="font-medium">{row.name}</span>
             </div>
           </td>
-          <td className="py-3 px-4 text-right">{row.impressions.toLocaleString()}</td>
-          <td className="py-3 px-4 text-right text-primary font-medium">
-            {row.impressionStatus}
-          </td>
-          <td className="py-3 px-4 text-right">{row.clicks.toLocaleString()}</td>
-          <td className="py-3 px-4 text-right">{row.ctr}</td>
-          <td className="py-3 px-4 text-right">${row.cost.toLocaleString()}</td>
-          <td className="py-3 px-4 text-right text-primary font-medium">{row.bookings}</td>
-          <td className="py-3 px-4 text-right">{row.conversionRate}</td>
-          <td className="py-3 px-4 text-right">${row.revenue.toLocaleString()}</td>
-          <td className="py-3 px-4 text-right">{row.roas}</td>
-          <td className="py-3 px-4 text-right">{row.costOfSale}</td>
+          {dimensions.filter(d => visibleColumns.has(d.id)).map((dimension) => (
+            <td key={dimension.id} className="py-3 px-4 text-right">
+              {/* Mock data - will be replaced with actual data */}
+              {dimension.name === "Impressions" && row.impressions.toLocaleString()}
+              {dimension.name === "Clicks" && row.clicks.toLocaleString()}
+              {dimension.name === "Cost" && `$${row.cost.toLocaleString()}`}
+              {dimension.name === "Revenue" && `$${row.revenue.toLocaleString()}`}
+              {dimension.name === "Conversions" && row.bookings}
+              {dimension.name === "ROAS" && row.roas}
+              {dimension.name === "Conversion Rate" && row.conversionRate}
+              {dimension.name === "Cost of sale" && row.costOfSale}
+              {dimension.name === "CTR" && row.ctr}
+              {dimension.name === "Impression Share" && row.impressionStatus}
+              {!["Impressions", "Clicks", "Cost", "Revenue", "Conversions", "ROAS", "Conversion Rate", "Cost of sale", "CTR", "Impression Share"].includes(dimension.name) && "-"}
+            </td>
+          ))}
         </tr>
         {isExpanded &&
           row.children?.map((child) => renderRow(child))}
@@ -291,13 +353,57 @@ export const PerformanceTable = () => {
                   >
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-background z-50">
                     <SelectItem value="device">Device</SelectItem>
                     <SelectItem value="channel">Channel</SelectItem>
                     <SelectItem value="none">None</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-9 w-9">
+                    <Columns3 className="h-4 w-4" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
+                  <SheetHeader>
+                    <SheetTitle>Column Visibility</SheetTitle>
+                    <SheetDescription>
+                      Select which metrics to display in the table
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div className="mt-6 space-y-4">
+                    {isLoadingDimensions ? (
+                      <div className="text-sm text-muted-foreground">Loading dimensions...</div>
+                    ) : dimensions.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">No dimensions found</div>
+                    ) : (
+                      dimensions.map((dimension) => (
+                        <div key={dimension.id} className="flex items-center space-x-3">
+                          <Checkbox
+                            id={dimension.id}
+                            checked={visibleColumns.has(dimension.id)}
+                            onCheckedChange={() => toggleColumn(dimension.id)}
+                          />
+                          <label
+                            htmlFor={dimension.id}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                          >
+                            {dimension.name}
+                            {dimension.formula && (
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                (formula)
+                              </span>
+                            )}
+                          </label>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </SheetContent>
+              </Sheet>
             </div>
           </div>
         </CardHeader>
@@ -312,66 +418,15 @@ export const PerformanceTable = () => {
                   >
                     Hotel Name
                   </th>
-                  <th
-                    className="py-3 px-4 text-right font-medium text-sm"
-                    onContextMenu={(e) => handleContextMenu(e, "impressions")}
-                  >
-                    Impressions
-                  </th>
-                  <th
-                    className="py-3 px-4 text-right font-medium text-sm"
-                    onContextMenu={(e) => handleContextMenu(e, "impression-status")}
-                  >
-                    Impression Status
-                  </th>
-                  <th
-                    className="py-3 px-4 text-right font-medium text-sm"
-                    onContextMenu={(e) => handleContextMenu(e, "clicks")}
-                  >
-                    Clicks
-                  </th>
-                  <th
-                    className="py-3 px-4 text-right font-medium text-sm"
-                    onContextMenu={(e) => handleContextMenu(e, "ctr")}
-                  >
-                    CTR
-                  </th>
-                  <th
-                    className="py-3 px-4 text-right font-medium text-sm"
-                    onContextMenu={(e) => handleContextMenu(e, "cost")}
-                  >
-                    Cost
-                  </th>
-                  <th
-                    className="py-3 px-4 text-right font-medium text-sm"
-                    onContextMenu={(e) => handleContextMenu(e, "bookings")}
-                  >
-                    Bookings
-                  </th>
-                  <th
-                    className="py-3 px-4 text-right font-medium text-sm"
-                    onContextMenu={(e) => handleContextMenu(e, "conversion-rate")}
-                  >
-                    Conversion Rate
-                  </th>
-                  <th
-                    className="py-3 px-4 text-right font-medium text-sm"
-                    onContextMenu={(e) => handleContextMenu(e, "revenue")}
-                  >
-                    Revenue
-                  </th>
-                  <th
-                    className="py-3 px-4 text-right font-medium text-sm"
-                    onContextMenu={(e) => handleContextMenu(e, "roas")}
-                  >
-                    ROAS
-                  </th>
-                  <th
-                    className="py-3 px-4 text-right font-medium text-sm"
-                    onContextMenu={(e) => handleContextMenu(e, "cost-of-sale")}
-                  >
-                    Cost of Sale
-                  </th>
+                  {dimensions.filter(d => visibleColumns.has(d.id)).map((dimension) => (
+                    <th
+                      key={dimension.id}
+                      className="py-3 px-4 text-right font-medium text-sm"
+                      onContextMenu={(e) => handleContextMenu(e, dimension.name)}
+                    >
+                      {dimension.name}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>{mockData.map((row) => renderRow(row))}</tbody>
