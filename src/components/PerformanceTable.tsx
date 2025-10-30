@@ -68,6 +68,7 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
   
   // State for date granularity - default to 'none'
   const [dateGranularity, setDateGranularity] = useState<'none' | 'day' | 'week' | 'month' | 'year'>('none');
+  const [dateOrder, setDateOrder] = useState<'asc' | 'desc'>('desc');
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -84,14 +85,14 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
     if (reportId && dimensions.length > 0) {
       loadTableData();
     }
-  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, reportId, dimensions]);
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, reportId, dimensions, dateOrder]);
 
   // Save view settings whenever they change
   useEffect(() => {
     if (reportId && dimensions.length > 0) {
       saveViewSettings();
     }
-  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, reportId]);
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, dateOrder, reportId]);
 
   const loadViewSettings = async () => {
     if (!reportId) return;
@@ -118,6 +119,11 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
         
         if (data.visible_columns && data.visible_columns.length > 0) {
           setVisibleColumns(new Set(data.visible_columns));
+        }
+        
+        // Load date order if available (default to desc)
+        if (data.date_order) {
+          setDateOrder(data.date_order as 'asc' | 'desc');
         }
       }
     } catch (error) {
@@ -150,6 +156,7 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
         breakdown_by_dimensions: breakdownByDimensions,
         then_by_dimensions: thenByDimensions,
         visible_columns: Array.from(visibleColumns),
+        date_order: dateOrder,
       };
 
       if (existingView) {
@@ -414,6 +421,20 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
       // Clean up temporary rawRows
       delete group.rawRows;
     });
+
+    // Sort by date if date granularity is not 'none' and we have date data
+    if (dateGranularity !== 'none') {
+      groupedArray.sort((a, b) => {
+        const dateA = a.data['Date'] ? new Date(a.data['Date']).getTime() : 0;
+        const dateB = b.data['Date'] ? new Date(b.data['Date']).getTime() : 0;
+        
+        if (dateOrder === 'desc') {
+          return dateB - dateA; // Latest first
+        } else {
+          return dateA - dateB; // Earliest first
+        }
+      });
+    }
 
     return groupedArray;
   };
@@ -734,6 +755,28 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
                           <Label htmlFor="date-year" className="cursor-pointer font-normal">Year</Label>
                         </div>
                       </RadioGroup>
+                      
+                      {dateGranularity !== 'none' && (
+                        <>
+                          <div className="mt-4 pt-3 border-t">
+                            <h4 className="text-sm font-medium mb-2">Order by</h4>
+                            <RadioGroup value={dateOrder} onValueChange={(value) => setDateOrder(value as 'asc' | 'desc')}>
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="desc" id="date-order-desc" />
+                                <Label htmlFor="date-order-desc" className="cursor-pointer font-normal">
+                                  Descending (Latest first)
+                                </Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="asc" id="date-order-asc" />
+                                <Label htmlFor="date-order-asc" className="cursor-pointer font-normal">
+                                  Ascending (Earliest first)
+                                </Label>
+                              </div>
+                            </RadioGroup>
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     <Separator />

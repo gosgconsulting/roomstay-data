@@ -182,6 +182,7 @@ export type Database = {
         Row: {
           breakdown_by_dimensions: string[] | null
           created_at: string
+          date_order: string | null
           group_by_dimensions: string[] | null
           id: string
           is_default: boolean | null
@@ -195,6 +196,7 @@ export type Database = {
         Insert: {
           breakdown_by_dimensions?: string[] | null
           created_at?: string
+          date_order?: string | null
           group_by_dimensions?: string[] | null
           id?: string
           is_default?: boolean | null
@@ -208,6 +210,7 @@ export type Database = {
         Update: {
           breakdown_by_dimensions?: string[] | null
           created_at?: string
+          date_order?: string | null
           group_by_dimensions?: string[] | null
           id?: string
           is_default?: boolean | null
