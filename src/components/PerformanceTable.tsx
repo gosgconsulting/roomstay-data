@@ -20,6 +20,7 @@ import { ChevronDown, ChevronRight, Columns3 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { MappingModal } from "./MappingModal";
+import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { supabase } from "@/integrations/supabase/client";
 
 interface Dimension {
@@ -177,10 +178,17 @@ const mockData: TableRow[] = [
 export const PerformanceTable = () => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set(["2"]));
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
+  const [dimensionSelectorOpen, setDimensionSelectorOpen] = useState(false);
   const [selectedKPI, setSelectedKPI] = useState("");
+  const [currentSelector, setCurrentSelector] = useState<"group" | "breakdown" | "then">("group");
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set());
   const [isLoadingDimensions, setIsLoadingDimensions] = useState(true);
+  
+  // State for dimension selections
+  const [groupByDimensions, setGroupByDimensions] = useState<string[]>(["Hotel"]);
+  const [breakdownByDimensions, setBreakdownByDimensions] = useState<string[]>(["Channel"]);
+  const [thenByDimensions, setThenByDimensions] = useState<string[]>(["Device"]);
 
   useEffect(() => {
     loadDimensions();
@@ -271,6 +279,51 @@ export const PerformanceTable = () => {
     setMappingModalOpen(true);
   };
 
+  const handleDimensionSelectorOpen = (
+    e: React.MouseEvent,
+    selector: "group" | "breakdown" | "then"
+  ) => {
+    e.preventDefault();
+    setCurrentSelector(selector);
+    setDimensionSelectorOpen(true);
+  };
+
+  const getSelectorTitle = () => {
+    switch (currentSelector) {
+      case "group":
+        return "Group by dimensions";
+      case "breakdown":
+        return "Breakdown by dimensions";
+      case "then":
+        return "Then by dimensions";
+    }
+  };
+
+  const getCurrentDimensions = () => {
+    switch (currentSelector) {
+      case "group":
+        return groupByDimensions;
+      case "breakdown":
+        return breakdownByDimensions;
+      case "then":
+        return thenByDimensions;
+    }
+  };
+
+  const handleDimensionsChange = (dimensions: string[]) => {
+    switch (currentSelector) {
+      case "group":
+        setGroupByDimensions(dimensions);
+        break;
+      case "breakdown":
+        setBreakdownByDimensions(dimensions);
+        break;
+      case "then":
+        setThenByDimensions(dimensions);
+        break;
+    }
+  };
+
   const renderRow = (row: TableRow) => {
     const isExpanded = expandedRows.has(row.id);
     const hasChildren = row.children && row.children.length > 0;
@@ -334,40 +387,43 @@ export const PerformanceTable = () => {
             <div className="flex items-center gap-3 text-sm">
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Group by:</span>
-                <Select defaultValue="hotel">
-                  <SelectTrigger className="w-32">
+                <Select 
+                  value={groupByDimensions[0] || "hotel"}
+                  onValueChange={(value) => setGroupByDimensions([value])}
+                >
+                  <SelectTrigger 
+                    className="w-32"
+                    onContextMenu={(e) => handleDimensionSelectorOpen(e, "group")}
+                  >
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="hotel">Hotel</SelectItem>
-                    <SelectItem value="channel">Channel</SelectItem>
-                    <SelectItem value="device">Device</SelectItem>
+                  <SelectContent className="bg-background z-50">
+                    {groupByDimensions.map((dim) => (
+                      <SelectItem key={dim} value={dim.toLowerCase()}>
+                        {dim}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Breakdown by:</span>
                 <Select
-                  defaultValue="channel"
-                  onOpenChange={(open) => {
-                    if (!open) return;
-                  }}
-                  onValueChange={(value) => {
-                    if (value === "mapping") {
-                      setSelectedKPI("breakdown");
-                      setMappingModalOpen(true);
-                    }
-                  }}
+                  value={breakdownByDimensions[0] || "channel"}
+                  onValueChange={(value) => setBreakdownByDimensions([value])}
                 >
                   <SelectTrigger
                     className="w-32"
-                    onContextMenu={(e) => handleContextMenu(e, "breakdown")}
+                    onContextMenu={(e) => handleDimensionSelectorOpen(e, "breakdown")}
                   >
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="channel">Channel</SelectItem>
-                    <SelectItem value="device">Device</SelectItem>
+                  <SelectContent className="bg-background z-50">
+                    {breakdownByDimensions.map((dim) => (
+                      <SelectItem key={dim} value={dim.toLowerCase()}>
+                        {dim}
+                      </SelectItem>
+                    ))}
                     <SelectItem value="none">None</SelectItem>
                   </SelectContent>
                 </Select>
@@ -375,23 +431,21 @@ export const PerformanceTable = () => {
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Then by:</span>
                 <Select
-                  defaultValue="device"
-                  onValueChange={(value) => {
-                    if (value === "mapping") {
-                      setSelectedKPI("then-by");
-                      setMappingModalOpen(true);
-                    }
-                  }}
+                  value={thenByDimensions[0] || "device"}
+                  onValueChange={(value) => setThenByDimensions([value])}
                 >
                   <SelectTrigger
                     className="w-32"
-                    onContextMenu={(e) => handleContextMenu(e, "then-by")}
+                    onContextMenu={(e) => handleDimensionSelectorOpen(e, "then")}
                   >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-background z-50">
-                    <SelectItem value="device">Device</SelectItem>
-                    <SelectItem value="channel">Channel</SelectItem>
+                    {thenByDimensions.map((dim) => (
+                      <SelectItem key={dim} value={dim.toLowerCase()}>
+                        {dim}
+                      </SelectItem>
+                    ))}
                     <SelectItem value="none">None</SelectItem>
                   </SelectContent>
                 </Select>
@@ -475,6 +529,14 @@ export const PerformanceTable = () => {
         open={mappingModalOpen}
         onOpenChange={setMappingModalOpen}
         kpiName={selectedKPI}
+      />
+
+      <DimensionSelectorModal
+        open={dimensionSelectorOpen}
+        onOpenChange={setDimensionSelectorOpen}
+        title={getSelectorTitle()}
+        selectedDimensions={getCurrentDimensions()}
+        onDimensionsChange={handleDimensionsChange}
       />
     </>
   );
