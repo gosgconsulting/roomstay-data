@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Filter, Calendar } from "lucide-react";
+import { Filter, Calendar, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -473,6 +473,18 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
                 </Button>
               )}
             </div>
+
+            {activeDimensions.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowDimensionSelector(true)}
+                className="ml-auto"
+                title="Edit filter dimensions"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
       </div>
