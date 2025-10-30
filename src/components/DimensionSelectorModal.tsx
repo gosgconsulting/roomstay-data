@@ -72,8 +72,8 @@ export const DimensionSelectorModal = ({
     }
   };
 
-  const handleRemoveDimension = (dimensionName: string) => {
-    const updated = selectedDimensions.filter((d) => d !== dimensionName);
+  const handleRemoveDimension = (dimensionId: string) => {
+    const updated = selectedDimensions.filter((d) => d !== dimensionId);
     onDimensionsChange(updated);
   };
 
@@ -86,7 +86,7 @@ export const DimensionSelectorModal = ({
   };
 
   const availableDimensions = dimensions.filter(
-    (d) => !selectedDimensions.includes(d.name)
+    (d) => !selectedDimensions.includes(d.id)
   );
 
   return (
@@ -109,22 +109,25 @@ export const DimensionSelectorModal = ({
               {/* Selected dimensions list */}
               {selectedDimensions.length > 0 && (
                 <div className="space-y-2 mb-3">
-                  {selectedDimensions.map((dimensionName) => (
-                    <div
-                      key={dimensionName}
-                      className="flex items-center justify-between py-2 px-3 bg-muted rounded-md"
-                    >
-                      <span className="font-medium">{dimensionName}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-destructive hover:text-destructive"
-                        onClick={() => handleRemoveDimension(dimensionName)}
+                  {selectedDimensions.map((dimensionId) => {
+                    const dimension = dimensions.find(d => d.id === dimensionId);
+                    return (
+                      <div
+                        key={dimensionId}
+                        className="flex items-center justify-between py-2 px-3 bg-muted rounded-md"
                       >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
+                        <span className="font-medium">{dimension?.name || dimensionId}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-destructive hover:text-destructive"
+                          onClick={() => handleRemoveDimension(dimensionId)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -146,7 +149,7 @@ export const DimensionSelectorModal = ({
                           </div>
                         ) : (
                           availableDimensions.map((dimension) => (
-                            <SelectItem key={dimension.id} value={dimension.name}>
+                            <SelectItem key={dimension.id} value={dimension.id}>
                               {dimension.name}
                             </SelectItem>
                           ))

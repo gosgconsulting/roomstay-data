@@ -475,7 +475,9 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
                   onClick={(e) => handleDimensionSelectorOpen(e as any, "group")}
                 >
                   {groupByDimensions.length > 0 ? (
-                    <span className="truncate">{groupByDimensions.join(", ")}</span>
+                    <span className="truncate">
+                      {groupByDimensions.map(id => dimensions.find(d => d.id === id)?.name || id).join(", ")}
+                    </span>
                   ) : (
                     <span className="text-muted-foreground">Right-click to select</span>
                   )}
@@ -490,7 +492,9 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
                   onClick={(e) => handleDimensionSelectorOpen(e as any, "breakdown")}
                 >
                   {breakdownByDimensions.length > 0 ? (
-                    <span className="truncate">{breakdownByDimensions.join(", ")}</span>
+                    <span className="truncate">
+                      {breakdownByDimensions.map(id => dimensions.find(d => d.id === id)?.name || id).join(", ")}
+                    </span>
                   ) : (
                     <span className="text-muted-foreground">Right-click to select</span>
                   )}
@@ -505,7 +509,9 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
                   onClick={(e) => handleDimensionSelectorOpen(e as any, "then")}
                 >
                   {thenByDimensions.length > 0 ? (
-                    <span className="truncate">{thenByDimensions.join(", ")}</span>
+                    <span className="truncate">
+                      {thenByDimensions.map(id => dimensions.find(d => d.id === id)?.name || id).join(", ")}
+                    </span>
                   ) : (
                     <span className="text-muted-foreground">Right-click to select</span>
                   )}
