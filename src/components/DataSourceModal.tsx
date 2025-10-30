@@ -23,9 +23,10 @@ import { supabase } from "@/integrations/supabase/client";
 interface DataSourceModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  reportId: string;
 }
 
-export const DataSourceModal = ({ open, onOpenChange }: DataSourceModalProps) => {
+export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModalProps) => {
   const [step, setStep] = useState(1);
   const [dataName, setDataName] = useState("");
   const [url, setUrl] = useState("");
@@ -108,7 +109,8 @@ export const DataSourceModal = ({ open, onOpenChange }: DataSourceModalProps) =>
     setIsLoading(true);
     
     try {
-      const { data, error } = await supabase.functions.invoke('fetch-google-sheets', {
+      // First, validate the connection by fetching headers
+      const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
         body: {
           spreadsheetId,
           tabName: selectedTab,
@@ -116,24 +118,38 @@ export const DataSourceModal = ({ open, onOpenChange }: DataSourceModalProps) =>
         },
       });
 
-      if (error) throw error;
+      if (sheetsError) throw sheetsError;
 
-      if (data?.values && data.values.length > 0) {
-        toast({
-          title: "Data source connected",
-          description: `Successfully connected to ${dataName} with ${data.values[0].length} columns`,
-        });
-        
-        onOpenChange(false);
-        resetForm();
-      } else {
+      if (!sheetsData?.values || sheetsData.values.length === 0) {
         throw new Error("No data found in the specified range");
       }
-    } catch (error) {
-      console.error("Error connecting to Google Sheets:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to connect to Google Sheets";
+
+      // Save to database
+      const { error: dbError } = await supabase
+        .from('data_sources')
+        .insert({
+          report_id: reportId,
+          name: dataName,
+          google_sheets_url: url,
+          spreadsheet_id: spreadsheetId,
+          tab_name: selectedTab,
+          header_row: parseInt(headerRow),
+        });
+
+      if (dbError) throw dbError;
+
       toast({
-        title: "Connection failed",
+        title: "Data source saved",
+        description: `Successfully connected to ${dataName} with ${sheetsData.values[0].length} columns`,
+      });
+      
+      onOpenChange(false);
+      resetForm();
+    } catch (error) {
+      console.error("Error saving data source:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to save data source";
+      toast({
+        title: "Save failed",
         description: errorMessage,
         variant: "destructive",
       });
