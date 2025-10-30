@@ -78,7 +78,7 @@ export const ColumnMappingStep = ({
   const initializeMappings = () => {
     const initialMappings: ColumnMapping[] = headers.map((header) => ({
       column: header,
-      dimensionId: null,
+      dimensionId: "none",
       visible: true,
     }));
     setMappings(initialMappings);
@@ -129,14 +129,14 @@ export const ColumnMappingStep = ({
                 <TableCell className="font-medium">{mapping.column}</TableCell>
                 <TableCell>
                   <Select
-                    value={mapping.dimensionId || ""}
-                    onValueChange={(value) => updateMapping(index, value || null)}
+                    value={mapping.dimensionId || "none"}
+                    onValueChange={(value) => updateMapping(index, value === "none" ? null : value)}
                   >
                     <SelectTrigger className="bg-background">
                       <SelectValue placeholder="Select dimension..." />
                     </SelectTrigger>
                     <SelectContent className="bg-background z-50">
-                      <SelectItem value="">No mapping</SelectItem>
+                      <SelectItem value="none">No mapping</SelectItem>
                       {dimensions.map((dimension) => (
                         <SelectItem key={dimension.id} value={dimension.id}>
                           {dimension.name}
