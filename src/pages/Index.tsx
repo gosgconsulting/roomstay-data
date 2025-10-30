@@ -8,6 +8,7 @@ import { PerformanceTable } from "@/components/PerformanceTable";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Session } from "@supabase/supabase-js";
+import { toast } from "@/hooks/use-toast";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -72,8 +73,16 @@ const Index = () => {
   };
 
   const handleDataSync = () => {
-    // Trigger refresh by updating the key
+    // Trigger refresh by updating the key - this will cause all components to reload their data
     setDataRefreshKey(prev => prev + 1);
+    
+    // Show feedback to user
+    toast({
+      title: "Refreshing data",
+      description: "All components are reloading their data...",
+    });
+    
+    console.log('Data refresh triggered. Components will reload with key:', dataRefreshKey + 1);
   };
 
   if (isLoading) {

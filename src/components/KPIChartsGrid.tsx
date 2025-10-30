@@ -115,11 +115,34 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
       const dateDimension = dimensions.find(d => d.type === 'date');
       
       if (!dateDimension) {
-        const emptyData: Record<string, ChartData[]> = {};
-        kpis.forEach(kpi => {
-          emptyData[kpi.title] = [];
+        console.warn('No date dimension found for charts');
+        // If no date dimension, show aggregated totals instead of time series
+        const aggregatedData: Record<string, number> = {};
+        
+        allDimensionData.forEach((row) => {
+          const dimensionValues = row.dimension_values as Record<string, any>;
+          
+          kpis.forEach(kpi => {
+            const dimension = dimensions.find(d => d.name === kpi.title);
+            if (dimension) {
+              const value = dimensionValues[dimension.id];
+              if (value !== null && value !== undefined) {
+                const numValue = parseFloat(value) || 0;
+                aggregatedData[kpi.title] = (aggregatedData[kpi.title] || 0) + numValue;
+              }
+            }
+          });
         });
-        setChartData(emptyData);
+        
+        // Create single data point for each KPI
+        const finalChartData: Record<string, ChartData[]> = {};
+        kpis.forEach(kpi => {
+          finalChartData[kpi.title] = aggregatedData[kpi.title] 
+            ? [{ date: 'Total', value: aggregatedData[kpi.title] }] 
+            : [];
+        });
+        
+        setChartData(finalChartData);
         return;
       }
 
@@ -174,7 +197,10 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
         // Aggregate each KPI
         kpis.forEach(kpi => {
           const dimension = dimensions.find(d => d.name === kpi.title);
-          if (!dimension) return;
+          if (!dimension) {
+            console.warn(`Dimension not found for KPI: ${kpi.title}`);
+            return;
+          }
 
           const value = dimensionValues[dimension.id];
           if (value !== null && value !== undefined) {
