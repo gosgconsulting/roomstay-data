@@ -1,12 +1,15 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { DashboardHeader } from "@/components/DashboardHeader";
+import { KPIChartsGrid } from "@/components/KPIChartsGrid";
+import { PerformanceTable } from "@/components/PerformanceTable";
 
 const Index = () => {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen bg-background">
+      <DashboardHeader />
+      <main className="container mx-auto px-6 py-6 space-y-6">
+        <KPIChartsGrid />
+        <PerformanceTable />
+      </main>
     </div>
   );
 };
