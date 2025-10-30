@@ -85,12 +85,12 @@ export const EditMappingModal = ({
     setIsLoading(true);
     
     try {
-      // Fetch all data from the sheet
+      // Fetch all data from the sheet (up to 300,000 rows)
       const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
         body: {
           spreadsheetId: dataSource.spreadsheet_id,
           tabName: dataSource.tab_name,
-          range: `${dataSource.header_row}:10000`,
+          range: `${dataSource.header_row}:300000`,
         },
       });
 

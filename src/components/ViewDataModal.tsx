@@ -89,7 +89,7 @@ export const ViewDataModal = ({
         .select('*')
         .eq('data_source_id', dataSource.id)
         .order('row_number', { ascending: true })
-        .limit(1000); // Limit to first 1000 rows for performance
+        .limit(10000); // Limit to first 10,000 rows for display performance
 
       if (error) throw error;
 

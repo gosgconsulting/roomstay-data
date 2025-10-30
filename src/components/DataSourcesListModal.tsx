@@ -125,12 +125,12 @@ export const DataSourcesListModal = ({
     setSyncingIds(prev => new Set(prev).add(dataSource.id));
     
     try {
-      // Fetch fresh data from Google Sheets
+      // Fetch fresh data from Google Sheets (up to 300,000 rows)
       const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
         body: {
           spreadsheetId: dataSource.spreadsheet_id,
           tabName: dataSource.tab_name,
-          range: `${dataSource.header_row}:10000`,
+          range: `${dataSource.header_row}:300000`,
         },
       });
 

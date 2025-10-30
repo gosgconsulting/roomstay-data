@@ -170,12 +170,12 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
     setIsLoading(true);
     
     try {
-      // Fetch all data from the sheet (up to 10,000 rows)
+      // Fetch all data from the sheet (up to 300,000 rows)
       const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
         body: {
           spreadsheetId,
           tabName: selectedTab,
-          range: `${headerRow}:10000`,
+          range: `${headerRow}:300000`,
         },
       });
 
