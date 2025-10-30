@@ -24,9 +24,10 @@ interface Report {
 interface DashboardHeaderProps {
   reportId: string | null;
   onReportChange: (reportId: string) => void;
+  onDataSync?: () => void;
 }
 
-export const DashboardHeader = ({ reportId, onReportChange }: DashboardHeaderProps) => {
+export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: DashboardHeaderProps) => {
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
@@ -349,6 +350,7 @@ export const DashboardHeader = ({ reportId, onReportChange }: DashboardHeaderPro
               setShowDataSourcesListModal(false);
               setShowDataSourceModal(true);
             }}
+            onDataSync={onDataSync}
           />
           
           <DataSourceModal

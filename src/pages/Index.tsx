@@ -21,6 +21,7 @@ const Index = () => {
     compareEnabled: false,
     compareType: "previous_period",
   });
+  const [dataRefreshKey, setDataRefreshKey] = useState(0);
 
   useEffect(() => {
     // Set up auth state listener FIRST
@@ -87,6 +88,11 @@ const Index = () => {
     navigate("/auth");
   };
 
+  const handleDataSync = () => {
+    // Trigger refresh by updating the key
+    setDataRefreshKey(prev => prev + 1);
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -112,12 +118,16 @@ const Index = () => {
           </Button>
         </div>
       </div>
-      <DashboardHeader reportId={reportId} onReportChange={setReportId} />
+      <DashboardHeader 
+        reportId={reportId} 
+        onReportChange={setReportId} 
+        onDataSync={handleDataSync}
+      />
       <FiltersBar reportId={reportId} onFiltersChange={setFilters} />
       <main className="container mx-auto px-6 py-6 space-y-6">
-        <KPIMetricsCards reportId={reportId} filters={filters} />
-        <KPIChartsGrid reportId={reportId} filters={filters} />
-        <PerformanceTable reportId={reportId} filters={filters} />
+        <KPIMetricsCards reportId={reportId} filters={filters} key={`metrics-${dataRefreshKey}`} />
+        <KPIChartsGrid reportId={reportId} filters={filters} key={`charts-${dataRefreshKey}`} />
+        <PerformanceTable reportId={reportId} filters={filters} key={`table-${dataRefreshKey}`} />
       </main>
     </div>
   );

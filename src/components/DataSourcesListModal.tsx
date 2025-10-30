@@ -36,13 +36,15 @@ interface DataSourcesListModalProps {
   onOpenChange: (open: boolean) => void;
   reportId: string;
   onAddNew: () => void;
+  onDataSync?: () => void;
 }
 
 export const DataSourcesListModal = ({ 
   open, 
   onOpenChange, 
   reportId,
-  onAddNew 
+  onAddNew,
+  onDataSync
 }: DataSourcesListModalProps) => {
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -201,8 +203,11 @@ export const DataSourcesListModal = ({
         description: `Synced ${dataRows.length} rows from ${dataSource.name}`,
       });
       
-      // Reload the page to refresh all components
-      window.location.reload();
+      // Close modal and trigger refresh
+      onOpenChange(false);
+      if (onDataSync) {
+        onDataSync();
+      }
     } catch (error) {
       console.error("Error syncing data:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to sync data";
