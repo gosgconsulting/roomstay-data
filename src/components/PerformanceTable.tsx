@@ -28,7 +28,9 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { ChevronDown, ChevronRight, Columns3 } from "lucide-react";
+import { ChevronDown, ChevronRight, Columns3, Copy, Trash2, Plus } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { toast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { MappingModal } from "./MappingModal";
@@ -75,6 +77,10 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   const [currentOffset, setCurrentOffset] = useState(0);
   const CHUNK_SIZE = 5000;
   
+  // Multiple table views state
+  const [tableViews, setTableViews] = useState<any[]>([]);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  
   // State for dimension selections - start empty
   const [groupByDimensions, setGroupByDimensions] = useState<string[]>([]);
   const [breakdownByDimensions, setBreakdownByDimensions] = useState<string[]>([]);
@@ -91,7 +97,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   useEffect(() => {
     if (reportId) {
       loadDimensions();
-      loadViewSettings();
+      loadAllViews();
     }
   }, [reportId]);
 
@@ -109,43 +115,112 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
 
   // Save view settings whenever they change
   useEffect(() => {
-    if (reportId && dimensions.length > 0) {
+    if (reportId && dimensions.length > 0 && activeViewId) {
       saveViewSettings();
     }
-  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, dateGranularity, dateOrder, reportId]);
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, dateGranularity, dateOrder, reportId, activeViewId]);
 
-  const loadViewSettings = async () => {
+  const loadAllViews = async () => {
     if (!reportId) return;
     
     try {
-      // Try to load saved view (public access - first available)
-      const { data, error } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Load all views for this report
+      const { data: views, error } = await supabase
         .from("report_views")
         .select("*")
         .eq("report_id", reportId)
-        .eq("is_default", true)
-        .maybeSingle();
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
 
       if (error) throw error;
 
-      if (data) {
+      if (views && views.length > 0) {
+        setTableViews(views);
+        // Set the first view as active (default view)
+        const defaultView = views.find(v => v.is_default) || views[0];
+        setActiveViewId(defaultView.id);
+        loadViewSettings(defaultView.id);
+      } else {
+        // Create a default view if none exists
+        await createDefaultView();
+      }
+    } catch (error) {
+      console.error("Error loading views:", error);
+    }
+  };
+
+  const createDefaultView = async () => {
+    if (!reportId) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: newView, error } = await supabase
+        .from("report_views")
+        .insert({
+          report_id: reportId,
+          user_id: user.id,
+          name: "Table 1",
+          is_default: true,
+          group_by_dimensions: [],
+          breakdown_by_dimensions: [],
+          then_by_dimensions: [],
+          visible_columns: [],
+          date_granularity: 'none',
+          date_order: 'desc',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (newView) {
+        setTableViews([newView]);
+        setActiveViewId(newView.id);
+      }
+    } catch (error) {
+      console.error("Error creating default view:", error);
+    }
+  };
+
+  const loadViewSettings = async (viewId: string) => {
+    if (!reportId || !viewId) return;
+    
+    try {
+      const view = tableViews.find(v => v.id === viewId);
+      
+      if (view) {
         // Load saved settings
-        setGroupByDimensions(data.group_by_dimensions || []);
-        setBreakdownByDimensions(data.breakdown_by_dimensions || []);
-        setThenByDimensions(data.then_by_dimensions || []);
+        setGroupByDimensions(view.group_by_dimensions || []);
+        setBreakdownByDimensions(view.breakdown_by_dimensions || []);
+        setThenByDimensions(view.then_by_dimensions || []);
         
-        if (data.visible_columns && data.visible_columns.length > 0) {
-          setVisibleColumns(new Set(data.visible_columns));
+        if (view.visible_columns && view.visible_columns.length > 0) {
+          setVisibleColumns(new Set(view.visible_columns));
+        } else if (dimensions.length > 0) {
+          // Set default visibility if not set
+          const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
+          const defaultVisible = new Set<string>(
+            dimensions
+              .filter(d => !hiddenColumns.includes(d.name) && 
+                          (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula))
+              .map(d => d.id)
+          );
+          setVisibleColumns(defaultVisible);
         }
         
         // Load date granularity if available (default to none)
-        if (data.date_granularity) {
-          setDateGranularity(data.date_granularity as 'none' | 'day' | 'week' | 'month' | 'year');
+        if (view.date_granularity) {
+          setDateGranularity(view.date_granularity as 'none' | 'day' | 'week' | 'month' | 'year');
         }
         
         // Load date order if available (default to desc)
-        if (data.date_order) {
-          setDateOrder(data.date_order as 'asc' | 'desc');
+        if (view.date_order) {
+          setDateOrder(view.date_order as 'asc' | 'desc');
         }
       }
     } catch (error) {
@@ -154,7 +229,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   };
 
   const saveViewSettings = async () => {
-    if (!reportId) return;
+    if (!reportId || !activeViewId) return;
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -162,20 +237,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       // Only save if user is logged in
       if (!user) return;
 
-      // Check if a default view already exists
-      const { data: existingView } = await supabase
-        .from("report_views")
-        .select("id")
-        .eq("report_id", reportId)
-        .eq("user_id", user.id)
-        .eq("is_default", true)
-        .maybeSingle();
-
       const viewData = {
-        report_id: reportId,
-        user_id: user.id,
-        name: "Default View",
-        is_default: true,
         group_by_dimensions: groupByDimensions,
         breakdown_by_dimensions: breakdownByDimensions,
         then_by_dimensions: thenByDimensions,
@@ -184,25 +246,121 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
         date_order: dateOrder,
       };
 
-      if (existingView) {
-        // Update existing view
-        const { error } = await supabase
-          .from("report_views")
-          .update(viewData)
-          .eq("id", existingView.id);
+      const { error } = await supabase
+        .from("report_views")
+        .update(viewData)
+        .eq("id", activeViewId);
 
-        if (error) throw error;
-      } else {
-        // Create new view
-        const { error } = await supabase
-          .from("report_views")
-          .insert(viewData);
+      if (error) throw error;
 
-        if (error) throw error;
-      }
+      // Update local state
+      setTableViews(prev => prev.map(v => 
+        v.id === activeViewId ? { ...v, ...viewData } : v
+      ));
     } catch (error) {
       console.error("Error saving view settings:", error);
     }
+  };
+
+  const handleDuplicateView = async () => {
+    if (!reportId || !activeViewId) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const activeView = tableViews.find(v => v.id === activeViewId);
+      if (!activeView) return;
+
+      // Find next available number for naming
+      const tableNumbers = tableViews
+        .map(v => {
+          const match = v.name.match(/^Table (\d+)$/);
+          return match ? parseInt(match[1]) : 0;
+        })
+        .filter(n => n > 0);
+      
+      const nextNumber = tableNumbers.length > 0 ? Math.max(...tableNumbers) + 1 : tableViews.length + 1;
+
+      const { data: newView, error } = await supabase
+        .from("report_views")
+        .insert({
+          report_id: reportId,
+          user_id: user.id,
+          name: `Table ${nextNumber}`,
+          is_default: false,
+          group_by_dimensions: activeView.group_by_dimensions || [],
+          breakdown_by_dimensions: activeView.breakdown_by_dimensions || [],
+          then_by_dimensions: activeView.then_by_dimensions || [],
+          visible_columns: activeView.visible_columns || [],
+          date_granularity: activeView.date_granularity || 'none',
+          date_order: activeView.date_order || 'desc',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (newView) {
+        setTableViews(prev => [...prev, newView]);
+        setActiveViewId(newView.id);
+        loadViewSettings(newView.id);
+        
+        toast({
+          title: "Table duplicated",
+          description: `Created ${newView.name}`,
+        });
+      }
+    } catch (error) {
+      console.error("Error duplicating view:", error);
+      toast({
+        title: "Error",
+        description: "Failed to duplicate table",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteView = async (viewId: string) => {
+    if (!reportId || tableViews.length <= 1) return;
+    
+    try {
+      const { error } = await supabase
+        .from("report_views")
+        .delete()
+        .eq("id", viewId);
+
+      if (error) throw error;
+
+      const deletedView = tableViews.find(v => v.id === viewId);
+      setTableViews(prev => prev.filter(v => v.id !== viewId));
+
+      // Switch to another view if the active view was deleted
+      if (activeViewId === viewId) {
+        const remainingViews = tableViews.filter(v => v.id !== viewId);
+        if (remainingViews.length > 0) {
+          setActiveViewId(remainingViews[0].id);
+          loadViewSettings(remainingViews[0].id);
+        }
+      }
+
+      toast({
+        title: "Table deleted",
+        description: `Deleted ${deletedView?.name}`,
+      });
+    } catch (error) {
+      console.error("Error deleting view:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete table",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleViewChange = (viewId: string) => {
+    setActiveViewId(viewId);
+    loadViewSettings(viewId);
   };
 
   const loadDimensions = async () => {
@@ -810,7 +968,24 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   return (
     <>
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
+          {/* Table View Tabs */}
+          {tableViews.length > 0 && (
+            <Tabs value={activeViewId || undefined} onValueChange={handleViewChange} className="mb-4">
+              <div className="flex items-center gap-2">
+                <TabsList>
+                  {tableViews.map((view) => (
+                    <TabsTrigger key={view.id} value={view.id}>
+                      {view.name}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+            </Tabs>
+          )}
+          
+          <CardTitle className="mb-4">Performance Table</CardTitle>
+          
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 text-sm">
               <div className="flex items-center gap-2">
@@ -917,13 +1092,36 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
               </div>
             </div>
             
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="outline" size="icon" className="h-9 w-9">
-                  <Columns3 className="h-4 w-4" />
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-9 w-9"
+                onClick={handleDuplicateView}
+                title="Duplicate table"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+              
+              {tableViews.length > 1 && (
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="h-9 w-9 text-destructive hover:text-destructive"
+                  onClick={() => activeViewId && handleDeleteView(activeViewId)}
+                  title="Delete table"
+                >
+                  <Trash2 className="h-4 w-4" />
                 </Button>
-              </SheetTrigger>
-              <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
+              )}
+              
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-9 w-9">
+                    <Columns3 className="h-4 w-4" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
                 <SheetHeader>
                   <SheetTitle>Column Visibility</SheetTitle>
                   <SheetDescription>
@@ -1027,6 +1225,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
               </SheetContent>
             </Sheet>
           </div>
+        </div>
         </CardHeader>
         <CardContent>
           {groupByDimensions.length === 0 ? (
