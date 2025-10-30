@@ -1,12 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -55,10 +48,10 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
   const [tableData, setTableData] = useState<TableRow[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   
-  // State for dimension selections
-  const [groupByDimensions, setGroupByDimensions] = useState<string[]>(["Hotel"]);
-  const [breakdownByDimensions, setBreakdownByDimensions] = useState<string[]>(["Channel"]);
-  const [thenByDimensions, setThenByDimensions] = useState<string[]>(["Device"]);
+  // State for dimension selections - start empty
+  const [groupByDimensions, setGroupByDimensions] = useState<string[]>([]);
+  const [breakdownByDimensions, setBreakdownByDimensions] = useState<string[]>([]);
+  const [thenByDimensions, setThenByDimensions] = useState<string[]>([]);
 
   useEffect(() => {
     if (reportId) {
@@ -134,6 +127,13 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
   const loadTableData = async () => {
     if (!reportId) return;
     
+    // Don't load if no grouping dimension is selected
+    if (groupByDimensions.length === 0) {
+      setTableData([]);
+      setIsLoadingData(false);
+      return;
+    }
+    
     setIsLoadingData(true);
     try {
       // Fetch data sources for this report with their mappings
@@ -164,7 +164,7 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
       }
 
       // Group data by the first grouping dimension
-      const groupDimension = groupByDimensions[0] || "Hotel";
+      const groupDimension = groupByDimensions[0];
       const grouped = new Map<string, any>();
 
       sheetData.forEach((row) => {
@@ -327,68 +327,48 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
             <div className="flex items-center gap-3 text-sm">
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Group by:</span>
-                <Select 
-                  value={groupByDimensions[0] || "hotel"}
-                  onValueChange={(value) => setGroupByDimensions([value])}
+                <Button
+                  variant="outline"
+                  className="w-40 justify-start"
+                  onContextMenu={(e) => handleDimensionSelectorOpen(e, "group")}
+                  onClick={(e) => handleDimensionSelectorOpen(e as any, "group")}
                 >
-                  <SelectTrigger 
-                    className="w-32"
-                    onContextMenu={(e) => handleDimensionSelectorOpen(e, "group")}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-background z-50">
-                    {groupByDimensions.map((dim) => (
-                      <SelectItem key={dim} value={dim.toLowerCase()}>
-                        {dim}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  {groupByDimensions.length > 0 ? (
+                    <span className="truncate">{groupByDimensions.join(", ")}</span>
+                  ) : (
+                    <span className="text-muted-foreground">Right-click to select</span>
+                  )}
+                </Button>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Breakdown by:</span>
-                <Select
-                  value={breakdownByDimensions[0] || "channel"}
-                  onValueChange={(value) => setBreakdownByDimensions([value])}
+                <Button
+                  variant="outline"
+                  className="w-40 justify-start"
+                  onContextMenu={(e) => handleDimensionSelectorOpen(e, "breakdown")}
+                  onClick={(e) => handleDimensionSelectorOpen(e as any, "breakdown")}
                 >
-                  <SelectTrigger
-                    className="w-32"
-                    onContextMenu={(e) => handleDimensionSelectorOpen(e, "breakdown")}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-background z-50">
-                    {breakdownByDimensions.map((dim) => (
-                      <SelectItem key={dim} value={dim.toLowerCase()}>
-                        {dim}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="none">None</SelectItem>
-                  </SelectContent>
-                </Select>
+                  {breakdownByDimensions.length > 0 ? (
+                    <span className="truncate">{breakdownByDimensions.join(", ")}</span>
+                  ) : (
+                    <span className="text-muted-foreground">Right-click to select</span>
+                  )}
+                </Button>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Then by:</span>
-                <Select
-                  value={thenByDimensions[0] || "device"}
-                  onValueChange={(value) => setThenByDimensions([value])}
+                <Button
+                  variant="outline"
+                  className="w-40 justify-start"
+                  onContextMenu={(e) => handleDimensionSelectorOpen(e, "then")}
+                  onClick={(e) => handleDimensionSelectorOpen(e as any, "then")}
                 >
-                  <SelectTrigger
-                    className="w-32"
-                    onContextMenu={(e) => handleDimensionSelectorOpen(e, "then")}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-background z-50">
-                    {thenByDimensions.map((dim) => (
-                      <SelectItem key={dim} value={dim.toLowerCase()}>
-                        {dim}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="none">None</SelectItem>
-                  </SelectContent>
-                </Select>
+                  {thenByDimensions.length > 0 ? (
+                    <span className="truncate">{thenByDimensions.join(", ")}</span>
+                  ) : (
+                    <span className="text-muted-foreground">Right-click to select</span>
+                  )}
+                </Button>
               </div>
               
               <Sheet>
@@ -438,7 +418,11 @@ export const PerformanceTable = ({ reportId }: PerformanceTableProps) => {
           </div>
         </CardHeader>
         <CardContent>
-          {isLoadingData ? (
+          {groupByDimensions.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">
+              Right-click on "Group by" to select dimensions
+            </div>
+          ) : isLoadingData ? (
             <div className="py-8 text-center text-muted-foreground">
               Loading data...
             </div>
