@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { spreadsheetId, range, tabName } = await req.json();
+    const { spreadsheetId, range, tabName, action } = await req.json();
     const apiKey = Deno.env.get('GOOGLE_SHEETS_API_KEY');
 
     if (!apiKey) {
@@ -20,6 +20,36 @@ serve(async (req) => {
 
     if (!spreadsheetId) {
       throw new Error('Spreadsheet ID is required');
+    }
+
+    // If action is 'metadata', return spreadsheet metadata including available tabs
+    if (action === 'metadata') {
+      console.log(`Fetching spreadsheet metadata: ${spreadsheetId}`);
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?key=${apiKey}`;
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Google Sheets API error:', error);
+        throw new Error(error.error?.message || 'Failed to fetch spreadsheet metadata');
+      }
+
+      const data = await response.json();
+      const sheets = data.sheets?.map((sheet: any) => ({
+        title: sheet.properties.title,
+        sheetId: sheet.properties.sheetId,
+      })) || [];
+      
+      console.log(`Successfully fetched metadata with ${sheets.length} sheets`);
+
+      return new Response(
+        JSON.stringify({ sheets }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200 
+        }
+      );
     }
 
     // Construct the range with tab name if provided
