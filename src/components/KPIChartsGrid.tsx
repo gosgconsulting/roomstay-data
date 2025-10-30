@@ -35,14 +35,10 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
   const loadChartData = async () => {
     setIsLoading(true);
     try {
-      // Fetch dimensions for this report
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
+      // Fetch dimensions for this report (public access)
       const { data: dimensions, error: dimError } = await supabase
         .from("dimensions")
         .select("*")
-        .eq("user_id", user.id)
         .eq("report_id", reportId);
 
       if (dimError) throw dimError;

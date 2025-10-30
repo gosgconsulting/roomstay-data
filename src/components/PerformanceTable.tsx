@@ -107,14 +107,11 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
     if (!reportId) return;
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
+      // Try to load saved view (public access - first available)
       const { data, error } = await supabase
         .from("report_views")
         .select("*")
         .eq("report_id", reportId)
-        .eq("user_id", user.id)
         .eq("is_default", true)
         .maybeSingle();
 
@@ -150,6 +147,8 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      
+      // Only save if user is logged in
       if (!user) return;
 
       // Check if a default view already exists
@@ -199,13 +198,10 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
     if (!reportId) return;
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
+      // Fetch dimensions for this report (public access)
       const { data, error } = await supabase
         .from("dimensions")
         .select("*")
-        .eq("user_id", user.id)
         .eq("report_id", reportId);
 
       if (error) throw error;

@@ -29,57 +29,36 @@ const Index = () => {
       (event, session) => {
         setSession(session);
         setIsLoading(false);
-        
-        if (!session) {
-          navigate("/auth");
-        }
       }
     );
 
-    // THEN check for existing session
+    // THEN check for existing session and load reports
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsLoading(false);
       
-      if (!session) {
-        navigate("/auth");
-      } else {
-        loadOrCreateReport(session.user.id);
-      }
+      // Always load reports, even without authentication
+      loadFirstReport();
     });
 
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const loadOrCreateReport = async (userId: string) => {
+  const loadFirstReport = async () => {
     try {
-      // Try to get existing report
+      // Get the first available report (public access)
       const { data: reports, error: fetchError } = await supabase
         .from("reports")
         .select("*")
-        .eq("user_id", userId)
         .limit(1);
 
       if (fetchError) throw fetchError;
 
       if (reports && reports.length > 0) {
         setReportId(reports[0].id);
-      } else {
-        // Create a default report
-        const { data: newReport, error: createError } = await supabase
-          .from("reports")
-          .insert({
-            user_id: userId,
-            name: "Hotel Performance Report",
-          })
-          .select()
-          .single();
-
-        if (createError) throw createError;
-        setReportId(newReport.id);
       }
     } catch (error) {
-      console.error("Error loading/creating report:", error);
+      console.error("Error loading report:", error);
     }
   };
 
@@ -101,21 +80,25 @@ const Index = () => {
     );
   }
 
-  if (!session) {
-    return null;
-  }
-
   return (
     <div className="min-h-screen bg-background">
       <div className="border-b">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-semibold">Data Dashboard</h1>
-            <span className="text-sm text-muted-foreground">{session.user.email}</span>
+            {session?.user && (
+              <span className="text-sm text-muted-foreground">{session.user.email}</span>
+            )}
           </div>
-          <Button variant="outline" onClick={handleSignOut}>
-            Sign Out
-          </Button>
+          {session ? (
+            <Button variant="outline" onClick={handleSignOut}>
+              Sign Out
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={() => navigate("/auth")}>
+              Sign In
+            </Button>
+          )}
         </div>
       </div>
       <DashboardHeader 
