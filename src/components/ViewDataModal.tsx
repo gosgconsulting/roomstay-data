@@ -93,8 +93,34 @@ export const ViewDataModal = ({
 
       if (error) throw error;
 
+      // Calculate formula dimensions for each row
+      const processedData = data?.map(row => {
+        const dimensionValues = { ...(row.dimension_values as Record<string, any>) };
+        
+        // Build a map of dimension names to values for formula calculation
+        const valuesByName: Record<string, any> = {};
+        dimensionsData?.forEach(dim => {
+          if (!dim.formula && dimensionValues[dim.id] !== undefined) {
+            valuesByName[dim.name] = dimensionValues[dim.id];
+          }
+        });
+
+        // Calculate formula dimensions
+        dimensionsData?.forEach(dim => {
+          if (dim.formula) {
+            const calculatedValue = calculateFormula(dim.formula, valuesByName, dimensionsData || []);
+            dimensionValues[dim.id] = calculatedValue;
+          }
+        });
+
+        return {
+          ...row,
+          dimension_values: dimensionValues
+        };
+      }) || [];
+
       setDimensions(dimensionsData || []);
-      setDimensionData(data || []);
+      setDimensionData(processedData);
     } catch (error) {
       console.error("Error fetching data:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to fetch data";
@@ -105,6 +131,39 @@ export const ViewDataModal = ({
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const calculateFormula = (
+    formula: string,
+    data: Record<string, any>,
+    dimensions: any[]
+  ): number | null => {
+    if (!formula) return null;
+    
+    try {
+      let expression = formula;
+      const dimensionNames = dimensions.map(d => d.name);
+      const sortedNames = [...dimensionNames].sort((a, b) => b.length - a.length);
+      
+      for (const dimName of sortedNames) {
+        if (expression.includes(dimName)) {
+          const value = data[dimName] || 0;
+          expression = expression.replace(
+            new RegExp(`\\b${dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'),
+            String(value)
+          );
+        }
+      }
+      
+      // eslint-disable-next-line no-eval
+      const result = eval(expression);
+      
+      if (!isFinite(result)) return null;
+      
+      return result;
+    } catch (error) {
+      return null;
     }
   };
 
@@ -152,11 +211,30 @@ export const ViewDataModal = ({
                         <TableCell className="font-medium text-muted-foreground">
                           {row.row_number}
                         </TableCell>
-                        {dimensions.map((dimension) => (
-                          <TableCell key={dimension.id}>
-                            {dimensionValues[dimension.id] ?? '-'}
-                          </TableCell>
-                        ))}
+                        {dimensions.map((dimension) => {
+                          const value = dimensionValues[dimension.id];
+                          // Format the value based on dimension type
+                          let displayValue = value ?? '-';
+                          
+                          if (value !== null && value !== undefined) {
+                            if (dimension.type === 'percentage') {
+                              displayValue = `${parseFloat(value).toFixed(2)}%`;
+                            } else if (dimension.type === 'currency') {
+                              displayValue = `$${parseFloat(value).toFixed(2)}`;
+                            } else if (dimension.type === 'number') {
+                              displayValue = parseFloat(value).toLocaleString('en-US', {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 2
+                              });
+                            }
+                          }
+                          
+                          return (
+                            <TableCell key={dimension.id}>
+                              {displayValue}
+                            </TableCell>
+                          );
+                        })}
                       </TableRow>
                     );
                   })}
