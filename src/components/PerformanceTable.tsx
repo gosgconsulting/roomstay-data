@@ -7,6 +7,13 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -555,6 +562,19 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
     setDimensionSelectorOpen(true);
   };
 
+  const handleDimensionChange = (
+    value: string,
+    selector: "group" | "breakdown" | "then"
+  ) => {
+    if (selector === "group") {
+      setGroupByDimensions([value]);
+    } else if (selector === "breakdown") {
+      setBreakdownByDimensions([value]);
+    } else {
+      setThenByDimensions([value]);
+    }
+  };
+
   const getSelectorTitle = () => {
     switch (currentSelector) {
       case "group":
@@ -702,54 +722,105 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
             <div className="flex items-center gap-3 text-sm">
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Group by:</span>
-                <Button
-                  variant="outline"
-                  className="w-40 justify-start"
-                  onContextMenu={(e) => handleDimensionSelectorOpen(e, "group")}
-                  onClick={(e) => handleDimensionSelectorOpen(e as any, "group")}
-                >
-                  {groupByDimensions.length > 0 ? (
-                    <span className="truncate">
-                      {groupByDimensions.map(id => dimensions.find(d => d.id === id)?.name || id).join(", ")}
-                    </span>
-                  ) : (
+                {groupByDimensions.length > 0 ? (
+                  <Select
+                    value={groupByDimensions[0] || ""}
+                    onValueChange={(value) => handleDimensionChange(value, "group")}
+                  >
+                    <SelectTrigger 
+                      className="w-40 bg-background"
+                      onContextMenu={(e) => handleDimensionSelectorOpen(e as any, "group")}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background z-50">
+                      {dimensions
+                        .filter(d => d.type === "text" || d.type === "date")
+                        .map((dim) => (
+                          <SelectItem key={dim.id} value={dim.id}>
+                            {dim.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="w-40 justify-start"
+                    onContextMenu={(e) => handleDimensionSelectorOpen(e, "group")}
+                    onClick={(e) => handleDimensionSelectorOpen(e as any, "group")}
+                  >
                     <span className="text-muted-foreground">Right-click to select</span>
-                  )}
-                </Button>
+                  </Button>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Breakdown by:</span>
-                <Button
-                  variant="outline"
-                  className="w-40 justify-start"
-                  onContextMenu={(e) => handleDimensionSelectorOpen(e, "breakdown")}
-                  onClick={(e) => handleDimensionSelectorOpen(e as any, "breakdown")}
-                >
-                  {breakdownByDimensions.length > 0 ? (
-                    <span className="truncate">
-                      {breakdownByDimensions.map(id => dimensions.find(d => d.id === id)?.name || id).join(", ")}
-                    </span>
-                  ) : (
+                {breakdownByDimensions.length > 0 ? (
+                  <Select
+                    value={breakdownByDimensions[0] || ""}
+                    onValueChange={(value) => handleDimensionChange(value, "breakdown")}
+                  >
+                    <SelectTrigger 
+                      className="w-40 bg-background"
+                      onContextMenu={(e) => handleDimensionSelectorOpen(e as any, "breakdown")}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background z-50">
+                      {dimensions
+                        .filter(d => d.type === "text" || d.type === "date")
+                        .map((dim) => (
+                          <SelectItem key={dim.id} value={dim.id}>
+                            {dim.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="w-40 justify-start"
+                    onContextMenu={(e) => handleDimensionSelectorOpen(e, "breakdown")}
+                    onClick={(e) => handleDimensionSelectorOpen(e as any, "breakdown")}
+                  >
                     <span className="text-muted-foreground">Right-click to select</span>
-                  )}
-                </Button>
+                  </Button>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Then by:</span>
-                <Button
-                  variant="outline"
-                  className="w-40 justify-start"
-                  onContextMenu={(e) => handleDimensionSelectorOpen(e, "then")}
-                  onClick={(e) => handleDimensionSelectorOpen(e as any, "then")}
-                >
-                  {thenByDimensions.length > 0 ? (
-                    <span className="truncate">
-                      {thenByDimensions.map(id => dimensions.find(d => d.id === id)?.name || id).join(", ")}
-                    </span>
-                  ) : (
+                {thenByDimensions.length > 0 ? (
+                  <Select
+                    value={thenByDimensions[0] || ""}
+                    onValueChange={(value) => handleDimensionChange(value, "then")}
+                  >
+                    <SelectTrigger 
+                      className="w-40 bg-background"
+                      onContextMenu={(e) => handleDimensionSelectorOpen(e as any, "then")}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background z-50">
+                      {dimensions
+                        .filter(d => d.type === "text" || d.type === "date")
+                        .map((dim) => (
+                          <SelectItem key={dim.id} value={dim.id}>
+                            {dim.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="w-40 justify-start"
+                    onContextMenu={(e) => handleDimensionSelectorOpen(e, "then")}
+                    onClick={(e) => handleDimensionSelectorOpen(e as any, "then")}
+                  >
                     <span className="text-muted-foreground">Right-click to select</span>
-                  )}
-                </Button>
+                  </Button>
+                )}
               </div>
               
               <Sheet>
