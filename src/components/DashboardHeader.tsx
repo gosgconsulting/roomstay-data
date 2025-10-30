@@ -38,9 +38,14 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
   const [currentReport, setCurrentReport] = useState<Report | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Load reports on mount
+  useEffect(() => {
+    loadReports();
+  }, []);
+
+  // Create default dimensions when reportId changes
   useEffect(() => {
     if (reportId) {
-      loadReports();
       createDefaultDimensions();
     }
   }, [reportId]);
