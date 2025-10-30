@@ -39,13 +39,45 @@ export const KPIMetricsCards = ({ reportId, filters }: KPIMetricsCardsProps) => 
   const loadMetrics = async () => {
     setIsLoading(true);
     try {
-      // Fetch dimensions for this report (public access)
-      const { data: dimensions, error: dimError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("report_id", reportId);
+      // Get the current user to load all their dimensions
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      let dimensions = null;
+      
+      // First, try to fetch dimensions by user_id (all user's dimensions across all reports)
+      if (user) {
+        const { data: userDimensions, error: userError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("user_id", user.id);
 
-      if (dimError) throw dimError;
+        if (userError) throw userError;
+        dimensions = userDimensions;
+      }
+      
+      // If no user or no dimensions found by user_id, fall back to loading from any dimension_data
+      if (!dimensions || dimensions.length === 0) {
+        const { data: dimensionData, error: dimDataError } = await supabase
+          .from("dimension_data")
+          .select("dimension_values")
+          .limit(1);
+
+        if (dimDataError) throw dimDataError;
+
+        if (dimensionData && dimensionData.length > 0) {
+          const dimensionIds = Object.keys(dimensionData[0].dimension_values as Record<string, any>);
+          
+          if (dimensionIds.length > 0) {
+            const { data: dimensionsById, error: dimError2 } = await supabase
+              .from("dimensions")
+              .select("*")
+              .in("id", dimensionIds);
+
+            if (dimError2) throw dimError2;
+            dimensions = dimensionsById;
+          }
+        }
+      }
 
       // Fetch all dimension_data for this report
       const { data: dimensionData, error: dataError } = await supabase

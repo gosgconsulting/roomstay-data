@@ -262,20 +262,27 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
     if (!reportId) return;
     
     try {
-      // First, try to fetch dimensions by report_id
-      let { data, error } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("report_id", reportId);
+      // Get the current user to load all their dimensions
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      let data = null;
+      
+      // First, try to fetch dimensions by user_id (all user's dimensions across all reports)
+      if (user) {
+        const { data: userDimensions, error: userError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("user_id", user.id);
 
-      if (error) throw error;
-
-      // If no dimensions found by report_id, get dimension IDs from dimension_data
+        if (userError) throw userError;
+        data = userDimensions;
+      }
+      
+      // If no user or no dimensions found by user_id, fall back to loading from any dimension_data
       if (!data || data.length === 0) {
         const { data: dimensionData, error: dimDataError } = await supabase
           .from("dimension_data")
           .select("dimension_values")
-          .eq("report_id", reportId)
           .limit(1);
 
         if (dimDataError) throw dimDataError;
