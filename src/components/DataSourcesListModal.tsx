@@ -167,6 +167,23 @@ export const DataSourcesListModal = ({
         }
       });
 
+      // Helper function to parse values based on dimension type
+      const parseValue = (value: any, dimensionType: string): any => {
+        if (value === null || value === undefined || value === '') return null;
+        
+        // For numeric types, clean and parse the value
+        if (dimensionType === 'number' || dimensionType === 'currency' || dimensionType === 'percentage') {
+          const stringValue = String(value);
+          // Remove currency symbols ($, €, £, etc.), commas, and spaces
+          const cleanedValue = stringValue.replace(/[$€£¥,\s]/g, '');
+          const numValue = parseFloat(cleanedValue);
+          return isNaN(numValue) ? null : numValue;
+        }
+        
+        // For other types, return as-is
+        return value;
+      };
+
       // Transform and insert data with existing mappings
       const rowsToInsert = dataRows.map((row, index) => {
         const dimensionValues: Record<string, any> = {};
@@ -174,7 +191,9 @@ export const DataSourcesListModal = ({
         visibleMappings.forEach((mapping: any) => {
           const colIndex = sheetHeaders.indexOf(mapping.column);
           if (colIndex !== -1 && dimensionIdMap[mapping.column]) {
-            const value = row[colIndex] || null;
+            const rawValue = row[colIndex];
+            const dimensionType = mapping.newDimensionType || mapping.dimensionType || 'text';
+            const value = parseValue(rawValue, dimensionType);
             dimensionValues[dimensionIdMap[mapping.column]] = value;
           }
         });
