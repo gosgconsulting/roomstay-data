@@ -10,7 +10,7 @@ interface PerformanceDataRequest {
   groupByDims: string[];
   breakdownDims?: string[];
   thenByDims?: string[];
-  dimensionFilters?: Record<string, string>;
+  dimensionFilters?: Record<string, string | string[]>;
   dateFrom?: string;
   dateTo?: string;
   visibleDimensionIds?: string[];
@@ -148,8 +148,19 @@ Deno.serve(async (req) => {
       filteredData = filteredData.filter((row) => {
         const dimValues = row.dimension_values as Record<string, any>;
         for (const [dimId, filterValue] of Object.entries(dimensionFilters)) {
-          if (dimValues[dimId] !== filterValue) {
-            return false;
+          const rowValue = dimValues[dimId];
+          
+          // Handle both single values and arrays
+          if (Array.isArray(filterValue)) {
+            // For array filters, check if row value is in the array
+            if (!filterValue.includes(rowValue)) {
+              return false;
+            }
+          } else {
+            // For single value filters, check exact match
+            if (rowValue !== filterValue) {
+              return false;
+            }
           }
         }
         return true;

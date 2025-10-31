@@ -1,13 +1,6 @@
 import { useState, useEffect } from "react";
-import { Filter, Calendar, Settings } from "lucide-react";
+import { Filter, Calendar, Settings, Check, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import {
   Popover,
@@ -16,14 +9,17 @@ import {
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subDays, subMonths, startOfYear, endOfYear, differenceInDays, subYears } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export interface FilterState {
-  dimensionFilters: Record<string, string>;
+  dimensionFilters: Record<string, string[]>;
   dateRange: DateRange | undefined;
   datePreset: string;
   compareEnabled: boolean;
@@ -47,7 +43,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [activeDimensions, setActiveDimensions] = useState<string[]>([]);
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
-  const [selectedFilters, setSelectedFilters] = useState<Record<string, string>>({});
+  const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [datePreset, setDatePreset] = useState<string>("this_month");
   const [showDimensionSelector, setShowDimensionSelector] = useState(false);
@@ -56,6 +52,8 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
   const [compareEnabled, setCompareEnabled] = useState(false);
   const [compareType, setCompareType] = useState<string>("previous_period");
   const [compareDateRange, setCompareDateRange] = useState<DateRange | undefined>();
+  const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
+  const [openPopovers, setOpenPopovers] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (reportId) {
@@ -136,7 +134,13 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
           setActiveDimensions(data.filter_dimensions);
         }
         if (data.filter_values && Object.keys(data.filter_values).length > 0) {
-          setSelectedFilters(data.filter_values as Record<string, string>);
+          // Convert old single-value filters to array format if needed
+          const filterValues = data.filter_values as Record<string, string | string[]>;
+          const normalizedFilters: Record<string, string[]> = {};
+          Object.entries(filterValues).forEach(([key, value]) => {
+            normalizedFilters[key] = Array.isArray(value) ? value : [value];
+          });
+          setSelectedFilters(normalizedFilters);
         }
         // Always apply date preset if saved, or default to "this_month"
         const preset = data.date_range_preset || "this_month";
@@ -370,12 +374,44 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
 
   const handleFilterChange = (dimensionId: string, value: string) => {
     const newFilters = { ...selectedFilters };
-    if (value === "all") {
-      delete newFilters[dimensionId];
+    const currentValues = newFilters[dimensionId] || [];
+    
+    if (currentValues.includes(value)) {
+      // Remove value
+      const updated = currentValues.filter(v => v !== value);
+      if (updated.length === 0) {
+        delete newFilters[dimensionId];
+      } else {
+        newFilters[dimensionId] = updated;
+      }
     } else {
-      newFilters[dimensionId] = value;
+      // Add value
+      newFilters[dimensionId] = [...currentValues, value];
     }
+    
     setSelectedFilters(newFilters);
+  };
+
+  const handleSelectAll = (dimensionId: string) => {
+    const values = dimensionValues[dimensionId] || [];
+    const newFilters = { ...selectedFilters };
+    newFilters[dimensionId] = [...values];
+    setSelectedFilters(newFilters);
+  };
+
+  const handleDeselectAll = (dimensionId: string) => {
+    const newFilters = { ...selectedFilters };
+    delete newFilters[dimensionId];
+    setSelectedFilters(newFilters);
+  };
+
+  const getFilteredValues = (dimensionId: string) => {
+    const values = dimensionValues[dimensionId] || [];
+    const searchTerm = searchTerms[dimensionId] || "";
+    if (!searchTerm) return values;
+    return values.filter(value => 
+      value.toLowerCase().includes(searchTerm.toLowerCase())
+    );
   };
 
   const handleDimensionsChange = (dimensionIds: string[]) => {
@@ -411,33 +447,115 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
                 if (!dimension) return null;
 
                 const values = dimensionValues[dimId] || [];
+                const filteredValues = getFilteredValues(dimId);
+                const selectedValues = selectedFilters[dimId] || [];
+                const selectedCount = selectedValues.length;
 
                 return (
                   <div key={dimId} className="flex flex-col gap-1">
                     <label className="text-xs text-muted-foreground">
                       {dimension.name}
                     </label>
-                    <Select
-                      disabled={isLoadingFilters}
-                      value={selectedFilters[dimId] || "all"}
-                      onValueChange={(value) => handleFilterChange(dimId, value)}
+                    <Popover 
+                      open={openPopovers[dimId]} 
+                      onOpenChange={(open) => {
+                        setOpenPopovers({ ...openPopovers, [dimId]: open });
+                        if (!open) {
+                          setSearchTerms({ ...searchTerms, [dimId]: "" });
+                        }
+                      }}
                     >
-                      <SelectTrigger className="w-[200px] bg-background">
-                        {isLoadingFilters ? (
-                          <span className="text-muted-foreground">Loading...</span>
-                        ) : (
-                          <SelectValue placeholder={`Search or select ${dimension.name.toLowerCase()}...`} />
-                        )}
-                      </SelectTrigger>
-                      <SelectContent className="bg-background z-50">
-                        <SelectItem value="all">All {dimension.name}</SelectItem>
-                        {values.map((value) => (
-                          <SelectItem key={value} value={value}>
-                            {value}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          disabled={isLoadingFilters}
+                          className="w-[200px] justify-between bg-background"
+                        >
+                          {isLoadingFilters ? (
+                            <span className="text-muted-foreground">Loading...</span>
+                          ) : selectedCount === 0 ? (
+                            <span>All {dimension.name}</span>
+                          ) : (
+                            <span>
+                              {selectedCount === 1 
+                                ? selectedValues[0]
+                                : `${selectedCount} selected`}
+                            </span>
+                          )}
+                          <Settings className="ml-2 h-4 w-4 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[250px] p-0 bg-background z-50" align="start">
+                        <div className="flex flex-col">
+                          {/* Search input */}
+                          <div className="p-2 border-b">
+                            <div className="relative">
+                              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                placeholder={`Search ${dimension.name.toLowerCase()}...`}
+                                value={searchTerms[dimId] || ""}
+                                onChange={(e) => setSearchTerms({ ...searchTerms, [dimId]: e.target.value })}
+                                className="pl-8"
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Select All / Deselect All */}
+                          <div className="flex gap-1 p-2 border-b">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="flex-1 h-8 text-xs"
+                              onClick={() => handleSelectAll(dimId)}
+                            >
+                              Select All
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="flex-1 h-8 text-xs"
+                              onClick={() => handleDeselectAll(dimId)}
+                            >
+                              Deselect All
+                            </Button>
+                          </div>
+                          
+                          {/* Values list */}
+                          <ScrollArea className="h-[300px]">
+                            <div className="p-2">
+                              {filteredValues.length === 0 ? (
+                                <div className="text-sm text-muted-foreground text-center py-4">
+                                  No results found
+                                </div>
+                              ) : (
+                                filteredValues.map((value) => {
+                                  const isSelected = selectedValues.includes(value);
+                                  return (
+                                    <div
+                                      key={value}
+                                      className="flex items-center space-x-2 rounded-sm px-2 py-1.5 hover:bg-accent cursor-pointer"
+                                      onClick={() => handleFilterChange(dimId, value)}
+                                    >
+                                      <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={() => handleFilterChange(dimId, value)}
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                      <label className="text-sm flex-1 cursor-pointer">
+                                        {value}
+                                      </label>
+                                      {isSelected && (
+                                        <Check className="h-4 w-4 text-primary" />
+                                      )}
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </ScrollArea>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 );
               })}
