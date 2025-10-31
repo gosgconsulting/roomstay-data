@@ -127,51 +127,88 @@ export const DataSourcesListModal = ({
     setSyncingIds(prev => new Set(prev).add(dataSource.id));
     
     try {
-      // Fetch fresh data from Google Sheets (up to 300,000 rows)
+      // First, fetch just the header to validate the sheet
+      const { data: headerData, error: headerError } = await supabase.functions.invoke('fetch-google-sheets', {
+        body: {
+          spreadsheetId: dataSource.spreadsheet_id,
+          tabName: dataSource.tab_name,
+          range: `${dataSource.header_row}:${dataSource.header_row}`,
+        },
+      });
+
+      if (headerError) throw headerError;
+      if (!headerData?.values || headerData.values.length === 0) {
+        throw new Error("Could not read sheet headers");
+      }
+
+      const sheetHeaders = headerData.values[0];
+
+      // Now fetch all data rows (up to 300,000 rows)
+      toast({
+        title: "Syncing...",
+        description: "Fetching data from Google Sheets...",
+      });
+
       const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
         body: {
           spreadsheetId: dataSource.spreadsheet_id,
           tabName: dataSource.tab_name,
-          range: `${dataSource.header_row}:300000`,
+          range: `${dataSource.header_row + 1}:300000`,
         },
       });
 
       if (sheetsError) throw sheetsError;
 
       if (!sheetsData?.values || sheetsData.values.length === 0) {
-        throw new Error("No data found in the sheet");
+        throw new Error("No data rows found in the sheet");
       }
 
-      const sheetHeaders = sheetsData.values[0];
-      const dataRows = sheetsData.values.slice(1);
+      const dataRows = sheetsData.values;
 
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
-      // Delete existing dimension_data in smaller chunks to avoid timeout
+      // Delete ALL existing dimension_data for this source efficiently
       toast({
         title: "Syncing...",
         description: "Clearing old data...",
       });
       
-      // Delete in batches using RPC or smaller chunks
-      const deleteLimit = 10000;
-      let deletedCount = 0;
-      let hasMore = true;
+      // Keep deleting until no more rows are found
+      let totalDeleted = 0;
+      let continueDeleting = true;
       
-      while (hasMore) {
-        const { data: deletedData, error: deleteError } = await supabase
+      while (continueDeleting) {
+        // Delete in chunks of 5000 to avoid timeouts
+        const { error: deleteError, count } = await supabase
           .from('dimension_data')
-          .delete()
+          .delete({ count: 'exact' })
           .eq('data_source_id', dataSource.id)
-          .limit(deleteLimit);
+          .limit(5000);
 
-        if (deleteError) throw deleteError;
+        if (deleteError) {
+          console.error('Delete error:', deleteError);
+          throw new Error(`Failed to clear old data: ${deleteError.message}`);
+        }
         
-        // If we deleted less than the limit, we're done
-        hasMore = false; // Supabase delete doesn't return count, so we do one pass
-        break;
+        // If count is returned and is less than limit, we're done
+        if (count !== null && count !== undefined) {
+          totalDeleted += count;
+          if (count < 5000) {
+            continueDeleting = false;
+          }
+        } else {
+          // If count not available, do one more check
+          const { data: checkData, error: checkError } = await supabase
+            .from('dimension_data')
+            .select('id', { count: 'exact', head: true })
+            .eq('data_source_id', dataSource.id)
+            .limit(1);
+          
+          if (checkError) throw checkError;
+          continueDeleting = checkData && checkData.length > 0;
+        }
       }
 
       // Build dimension ID map from current mappings

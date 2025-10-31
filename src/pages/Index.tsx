@@ -56,16 +56,16 @@ export default function Index() {
   
   const loadSharedReport = async (token: string) => {
     try {
-      // Verify the shared link token
+      // Verify the shared link token from share_links table
       const { data, error } = await supabase
-        .from('shared_links')
-        .select('report_id, expires_at')
-        .eq('token', token)
+        .from('share_links')
+        .select('report_ids, slug')
+        .eq('slug', token)
         .single();
       
       if (error) throw error;
       
-      if (!data) {
+      if (!data || !data.report_ids || data.report_ids.length === 0) {
         toast({
           title: "Invalid Link",
           description: "This shared link is invalid or has been deleted.",
@@ -75,19 +75,8 @@ export default function Index() {
         return;
       }
       
-      // Check if link has expired
-      if (data.expires_at && new Date(data.expires_at) < new Date()) {
-        toast({
-          title: "Link Expired",
-          description: "This shared link has expired.",
-          variant: "destructive",
-        });
-        navigate('/');
-        return;
-      }
-      
-      // Set the report ID from the shared link
-      setReportId(data.report_id);
+      // Set the first report ID from the shared link
+      setReportId(data.report_ids[0]);
       setIsLoading(false);
       
     } catch (error) {
