@@ -926,11 +926,6 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
               </span>
             </div>
           </td>
-          {dateGranularity !== 'none' && (
-            <td className="py-3 px-4 text-left">
-              {formatDate(row.data['Date'], dateGranularity)}
-            </td>
-          )}
           {dimensions
             .filter(d => {
               // Only show metric/value columns (same filter as Column Visibility)
@@ -1202,15 +1197,10 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                         className="py-3 px-4 text-left font-medium text-sm"
                         onContextMenu={(e) => handleContextMenu(e, "name")}
                       >
-                        {groupByDimensions[0] 
-                          ? dimensions.find(d => d.id === groupByDimensions[0])?.name || "Name"
-                          : "Name"}
-                      </th>
-                      {dateGranularity !== 'none' && (
-                        <th className="py-3 px-4 text-left font-medium text-sm">
-                          Date
-                        </th>
-                      )}
+                      {groupByDimensions[0] 
+                        ? dimensions.find(d => d.id === groupByDimensions[0])?.name || "Name"
+                        : "Name"}
+                    </th>
                       {dimensions
                         .filter(d => {
                           // Only show metric/value columns (same filter as Column Visibility)
@@ -1236,9 +1226,6 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                     {/* Total row */}
                     <tr className="border-t-2 border-primary/20 bg-muted/50 font-semibold">
                       <td className="py-3 px-4">Total</td>
-                      {dateGranularity !== 'none' && (
-                        <td className="py-3 px-4"></td>
-                      )}
                       {dimensions
                         .filter(d => {
                           return (d.type === 'number' || 
