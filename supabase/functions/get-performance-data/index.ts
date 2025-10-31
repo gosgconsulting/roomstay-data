@@ -228,6 +228,49 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Helper function to format date based on granularity
+    const formatDateByGranularity = (dateStr: string, granularity: string): { key: string; display: string } => {
+      try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) {
+          return { key: dateStr, display: dateStr };
+        }
+
+        const year = date.getFullYear();
+        const month = date.getMonth(); // 0-11
+
+        switch (granularity) {
+          case 'year':
+            return {
+              key: `${year}`,
+              display: `${year}`
+            };
+          case 'month':
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                               'July', 'August', 'September', 'October', 'November', 'December'];
+            return {
+              key: `${year}-${String(month + 1).padStart(2, '0')}`,
+              display: `${monthNames[month]}, ${year}`
+            };
+          case 'week':
+            // Calculate week number
+            const firstDayOfYear = new Date(year, 0, 1);
+            const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
+            const weekNum = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+            return {
+              key: `${year}-W${String(weekNum).padStart(2, '0')}`,
+              display: `Week ${weekNum}, ${year}`
+            };
+          case 'day':
+          case 'none':
+          default:
+            return { key: dateStr, display: dateStr };
+        }
+      } catch (e) {
+        return { key: dateStr, display: dateStr };
+      }
+    };
+
     // Group data by the first group dimension
     const groupDimId = groupByDims[0];
     if (!groupDimId) {
@@ -242,18 +285,30 @@ Deno.serve(async (req) => {
     }
 
     const grouped = new Map<string, any>();
+    const groupDimension = dimensions?.find(d => d.id === groupDimId);
+    const isDateGrouping = groupDimension?.type === 'date' && dateGranularity !== 'none';
 
     for (const row of filteredData) {
       const dimValues = row.dimension_values as Record<string, any>;
-      const groupKey = dimValues[groupDimId] || 'Unknown';
+      let rawGroupKey = dimValues[groupDimId] || 'Unknown';
+      let groupKey = rawGroupKey;
+      let displayName = rawGroupKey;
+
+      // If grouping by date with granularity, transform the date
+      if (isDateGrouping && rawGroupKey !== 'Unknown') {
+        const formatted = formatDateByGranularity(rawGroupKey, dateGranularity);
+        groupKey = formatted.key;
+        displayName = formatted.display;
+      }
 
       if (!grouped.has(groupKey)) {
         grouped.set(groupKey, {
           id: `${groupKey}`.toLowerCase().replace(/\s+/g, '-'),
-          name: groupKey,
+          name: displayName,
           level: 0,
           data: {},
           rawRows: [],
+          sortKey: groupKey, // Store the key for sorting
         });
       }
 
@@ -326,18 +381,25 @@ Deno.serve(async (req) => {
     const groupedArray = Array.from(grouped.values());
 
     // Sort by date if first dimension is a date type
-    const firstDimension = dimensions?.find(d => d.id === groupDimId);
-    if (firstDimension?.type === 'date' && dateGranularity !== 'none') {
+    if (isDateGrouping) {
       groupedArray.sort((a, b) => {
-        const dateA = new Date(a.name);
-        const dateB = new Date(b.name);
+        // Use sortKey for proper ordering
+        const keyA = a.sortKey || a.name;
+        const keyB = b.sortKey || b.name;
+        
+        // For year and month, we can compare keys directly
+        if (dateGranularity === 'year' || dateGranularity === 'month' || dateGranularity === 'week') {
+          return dateOrder === 'desc' ? keyB.localeCompare(keyA) : keyA.localeCompare(keyB);
+        }
+        
+        // For day granularity or fallback
+        const dateA = new Date(keyA);
+        const dateB = new Date(keyB);
         
         if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
-          // If dates are invalid, keep original order
           return 0;
         }
         
-        // Sort based on dateOrder (desc = newest first, asc = oldest first)
         return dateOrder === 'desc' ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
       });
     }
@@ -347,7 +409,14 @@ Deno.serve(async (req) => {
     if (compareFilteredData.length > 0 && dimensions) {
       for (const row of compareFilteredData) {
         const dimValues = row.dimension_values as Record<string, any>;
-        const groupKey = dimValues[groupDimId] || 'Unknown';
+        let rawGroupKey = dimValues[groupDimId] || 'Unknown';
+        let groupKey = rawGroupKey;
+
+        // If grouping by date with granularity, transform the date
+        if (isDateGrouping && rawGroupKey !== 'Unknown') {
+          const formatted = formatDateByGranularity(rawGroupKey, dateGranularity);
+          groupKey = formatted.key;
+        }
 
         if (!compareGrouped.has(groupKey)) {
           compareGrouped.set(groupKey, {
@@ -380,16 +449,6 @@ Deno.serve(async (req) => {
           }
         }
       }
-    }
-
-    // Sort by group key - if grouping by date, sort descending (most recent first)
-    const groupDimension = dimensions?.find(d => d.id === groupDimId);
-    if (groupDimension?.type === 'date') {
-      groupedArray.sort((a, b) => {
-        const dateA = new Date(a.name);
-        const dateB = new Date(b.name);
-        return dateB.getTime() - dateA.getTime(); // Descending order
-      });
     }
 
     for (const group of groupedArray) {
@@ -433,19 +492,31 @@ Deno.serve(async (req) => {
       // Build children if breakdown dimension exists (use index 1, not 0)
       if (breakdownDims.length > 1 && breakdownDims[1] && group.rawRows.length > 0) {
         const breakdownDimId = breakdownDims[1]; // Use second dimension for breakdown
+        const breakdownDimension = dimensions?.find(d => d.id === breakdownDimId);
+        const isBreakdownDateGrouping = breakdownDimension?.type === 'date' && dateGranularity !== 'none';
         const breakdownGrouped = new Map<string, any>();
 
         for (const row of group.rawRows) {
           const dimValues = row.dimension_values as Record<string, any>;
-          const breakdownKey = dimValues[breakdownDimId] || 'Unknown';
+          let rawBreakdownKey = dimValues[breakdownDimId] || 'Unknown';
+          let breakdownKey = rawBreakdownKey;
+          let breakdownDisplayName = rawBreakdownKey;
+
+          // If breakdown dimension is date with granularity, transform it
+          if (isBreakdownDateGrouping && rawBreakdownKey !== 'Unknown') {
+            const formatted = formatDateByGranularity(rawBreakdownKey, dateGranularity);
+            breakdownKey = formatted.key;
+            breakdownDisplayName = formatted.display;
+          }
 
           if (!breakdownGrouped.has(breakdownKey)) {
             breakdownGrouped.set(breakdownKey, {
               id: `${group.id}-${breakdownKey}`.toLowerCase().replace(/\s+/g, '-'),
-              name: breakdownKey,
+              name: breakdownDisplayName,
               level: 1,
               data: {},
               rawRows: [], // Store raw rows for third level
+              sortKey: breakdownKey,
             });
           }
 
@@ -471,11 +542,17 @@ Deno.serve(async (req) => {
         const breakdownArray = Array.from(breakdownGrouped.values());
 
         // Sort breakdown by date if second dimension is a date type
-        const breakdownDimension = dimensions?.find(d => d.id === breakdownDimId);
-        if (breakdownDimension?.type === 'date' && dateGranularity !== 'none') {
+        if (isBreakdownDateGrouping) {
           breakdownArray.sort((a, b) => {
-            const dateA = new Date(a.name);
-            const dateB = new Date(b.name);
+            const keyA = a.sortKey || a.name;
+            const keyB = b.sortKey || b.name;
+            
+            if (dateGranularity === 'year' || dateGranularity === 'month' || dateGranularity === 'week') {
+              return dateOrder === 'desc' ? keyB.localeCompare(keyA) : keyA.localeCompare(keyB);
+            }
+            
+            const dateA = new Date(keyA);
+            const dateB = new Date(keyB);
             
             if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
               return 0;
@@ -497,18 +574,30 @@ Deno.serve(async (req) => {
           // Build third level if "then by" dimension exists (use index 2)
           if (thenByDims.length > 2 && thenByDims[2] && breakdownItem.rawRows.length > 0) {
             const thenByDimId = thenByDims[2]; // Use third dimension for "then by"
+            const thenByDimension = dimensions?.find(d => d.id === thenByDimId);
+            const isThenByDateGrouping = thenByDimension?.type === 'date' && dateGranularity !== 'none';
             const thenByGrouped = new Map<string, any>();
 
             for (const row of breakdownItem.rawRows) {
               const dimValues = row.dimension_values as Record<string, any>;
-              const thenByKey = dimValues[thenByDimId] || 'Unknown';
+              let rawThenByKey = dimValues[thenByDimId] || 'Unknown';
+              let thenByKey = rawThenByKey;
+              let thenByDisplayName = rawThenByKey;
+
+              // If then by dimension is date with granularity, transform it
+              if (isThenByDateGrouping && rawThenByKey !== 'Unknown') {
+                const formatted = formatDateByGranularity(rawThenByKey, dateGranularity);
+                thenByKey = formatted.key;
+                thenByDisplayName = formatted.display;
+              }
 
               if (!thenByGrouped.has(thenByKey)) {
                 thenByGrouped.set(thenByKey, {
                   id: `${breakdownItem.id}-${thenByKey}`.toLowerCase().replace(/\s+/g, '-'),
-                  name: thenByKey,
+                  name: thenByDisplayName,
                   level: 2,
                   data: {},
+                  sortKey: thenByKey,
                 });
               }
 
@@ -533,11 +622,17 @@ Deno.serve(async (req) => {
             const thenByArray = Array.from(thenByGrouped.values());
 
             // Sort thenBy by date if third dimension is a date type
-            const thenByDimension = dimensions?.find(d => d.id === thenByDimId);
-            if (thenByDimension?.type === 'date' && dateGranularity !== 'none') {
+            if (isThenByDateGrouping) {
               thenByArray.sort((a, b) => {
-                const dateA = new Date(a.name);
-                const dateB = new Date(b.name);
+                const keyA = a.sortKey || a.name;
+                const keyB = b.sortKey || b.name;
+                
+                if (dateGranularity === 'year' || dateGranularity === 'month' || dateGranularity === 'week') {
+                  return dateOrder === 'desc' ? keyB.localeCompare(keyA) : keyA.localeCompare(keyB);
+                }
+                
+                const dateA = new Date(keyA);
+                const dateB = new Date(keyB);
                 
                 if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
                   return 0;

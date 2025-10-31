@@ -668,8 +668,15 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
     
     const dimension = dimensions.find(d => d.id === dimId);
     
-    // If it's a date dimension, format it
+    // If it's a date dimension, check if it's already formatted by the backend
     if (dimension?.type === 'date') {
+      // If dateGranularity is not 'none', the backend has already formatted it
+      if (dateGranularity !== 'none' && dateGranularity !== 'day') {
+        // Already formatted by backend (e.g., "October, 2025" or "2025")
+        return name;
+      }
+      
+      // For 'day' or 'none', format the date
       try {
         const date = new Date(name);
         if (!isNaN(date.getTime())) {
