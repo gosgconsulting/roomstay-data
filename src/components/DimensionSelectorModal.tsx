@@ -30,9 +30,7 @@ interface DimensionSelectorModalProps {
   selectedDimensions: string[];
   onDimensionsChange: (dimensions: string[]) => void;
   onDateGranularityChange?: (granularity: string) => void;
-  onDateSortOrderChange?: (sortOrder: string) => void;
   currentDateGranularity?: string;
-  currentDateSortOrder?: string;
 }
 
 export const DimensionSelectorModal = ({
@@ -42,16 +40,13 @@ export const DimensionSelectorModal = ({
   selectedDimensions,
   onDimensionsChange,
   onDateGranularityChange,
-  onDateSortOrderChange,
   currentDateGranularity = 'day',
-  currentDateSortOrder = 'desc',
 }: DimensionSelectorModalProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddSelector, setShowAddSelector] = useState(false);
   const [selectedToAdd, setSelectedToAdd] = useState<string>("");
   const [dimensionGranularities, setDimensionGranularities] = useState<Record<string, string>>({});
-  const [dimensionSortOrders, setDimensionSortOrders] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (open) {
@@ -95,33 +90,23 @@ export const DimensionSelectorModal = ({
   const handleRemoveDimension = (dimensionId: string) => {
     const updated = selectedDimensions.filter((d) => d !== dimensionId);
     const newGranularities = { ...dimensionGranularities };
-    const newSortOrders = { ...dimensionSortOrders };
     delete newGranularities[dimensionId];
-    delete newSortOrders[dimensionId];
     setDimensionGranularities(newGranularities);
-    setDimensionSortOrders(newSortOrders);
     onDimensionsChange(updated);
   };
 
   const handleAddDimension = () => {
     if (selectedToAdd && !selectedDimensions.includes(selectedToAdd)) {
       const dimension = dimensions.find(d => d.id === selectedToAdd);
-      // For date dimensions, default to "Day" granularity and "Desc" sort order
+      // For date dimensions, default to "Day" granularity
       if (dimension?.type === 'date') {
         setDimensionGranularities({
           ...dimensionGranularities,
           [selectedToAdd]: 'Day'
         });
-        setDimensionSortOrders({
-          ...dimensionSortOrders,
-          [selectedToAdd]: 'Desc'
-        });
         // Notify parent component of defaults
         if (onDateGranularityChange) {
           onDateGranularityChange('day');
-        }
-        if (onDateSortOrderChange) {
-          onDateSortOrderChange('desc');
         }
       }
       onDimensionsChange([...selectedDimensions, selectedToAdd]);
@@ -142,35 +127,19 @@ export const DimensionSelectorModal = ({
     }
   };
 
-  const handleSortOrderChange = (dimensionId: string, sortOrder: string) => {
-    setDimensionSortOrders({
-      ...dimensionSortOrders,
-      [dimensionId]: sortOrder
-    });
-    // Notify parent component if this is a date dimension
-    const dimension = dimensions.find(d => d.id === dimensionId);
-    if (dimension?.type === 'date' && onDateSortOrderChange) {
-      onDateSortOrderChange(sortOrder.toLowerCase());
-    }
-  };
-
-  // Parse existing dimensions to extract granularities and sort orders
+  // Parse existing dimensions to extract granularities
   useEffect(() => {
     const granularities: Record<string, string> = {};
-    const sortOrders: Record<string, string> = {};
     selectedDimensions.forEach(dim => {
       const dimension = dimensions.find(d => d.id === dim);
       if (dimension?.type === 'date') {
-        // Use current values from parent or default to Day/Desc
+        // Use current value from parent or default to Day
         const capitalizedGranularity = currentDateGranularity.charAt(0).toUpperCase() + currentDateGranularity.slice(1);
-        const capitalizedSortOrder = currentDateSortOrder.charAt(0).toUpperCase() + currentDateSortOrder.slice(1);
         granularities[dim] = capitalizedGranularity;
-        sortOrders[dim] = capitalizedSortOrder;
       }
     });
     setDimensionGranularities(granularities);
-    setDimensionSortOrders(sortOrders);
-  }, [selectedDimensions, dimensions, currentDateGranularity, currentDateSortOrder]);
+  }, [selectedDimensions, dimensions, currentDateGranularity]);
 
   const availableDimensions = dimensions.filter(
     (d) => !selectedDimensions.includes(d.id)
@@ -216,7 +185,7 @@ export const DimensionSelectorModal = ({
                           </Button>
                         </div>
                         {isDateDimension && (
-                          <div className="pl-3 pr-3 space-y-2">
+                          <div className="pl-3 pr-3">
                             <Select
                               value={dimensionGranularities[dimensionId] || 'Day'}
                               onValueChange={(value) => handleGranularityChange(dimensionId, value)}
@@ -229,18 +198,6 @@ export const DimensionSelectorModal = ({
                                 <SelectItem value="Week">Week</SelectItem>
                                 <SelectItem value="Month">Month</SelectItem>
                                 <SelectItem value="Year">Year</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Select
-                              value={dimensionSortOrders[dimensionId] || 'Asc'}
-                              onValueChange={(value) => handleSortOrderChange(dimensionId, value)}
-                            >
-                              <SelectTrigger className="h-9 bg-background">
-                                <SelectValue placeholder="Select sort order..." />
-                              </SelectTrigger>
-                              <SelectContent className="bg-background z-50">
-                                <SelectItem value="Asc">Asc</SelectItem>
-                                <SelectItem value="Desc">Desc</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>

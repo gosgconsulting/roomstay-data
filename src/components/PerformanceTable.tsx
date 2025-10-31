@@ -1405,9 +1405,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
         selectedDimensions={getCurrentDimensions()}
         onDimensionsChange={handleDimensionsChange}
         onDateGranularityChange={(granularity) => setDateGranularity(granularity as any)}
-        onDateSortOrderChange={(sortOrder) => setDateOrder(sortOrder as any)}
         currentDateGranularity={dateGranularity}
-        currentDateSortOrder={dateOrder}
       />
     </>
   );
