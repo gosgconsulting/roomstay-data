@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
-import { KPIChartsGrid } from "@/components/KPIChartsGrid";
+import { KPIChart } from "@/components/KPIChart";
 import { PerformanceTable } from "@/components/PerformanceTable";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -258,7 +258,7 @@ const Index = () => {
           <FiltersBar reportId={reportId} onFiltersChange={setFilters} isSharedView={isSharedView} />
           <main className="container mx-auto px-6 py-6 space-y-6">
             <KPIMetricsCards reportId={reportId} filters={filters} key={`metrics-${dataRefreshKey}`} />
-            <KPIChartsGrid reportId={reportId} filters={filters} key={`charts-${dataRefreshKey}`} />
+            <KPIChart reportId={reportId} filters={filters} key={`charts-${dataRefreshKey}`} />
             <PerformanceTable reportId={reportId} filters={filters} isSharedView={isSharedView} key={`table-${dataRefreshKey}`} />
           </main>
         </>
