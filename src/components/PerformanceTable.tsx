@@ -1123,33 +1123,100 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                         <Columns3 className="h-4 w-4" />
                       </Button>
                     </SheetTrigger>
-                    <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
-                      <SheetHeader>
-                        <SheetTitle>Column Visibility</SheetTitle>
-                        <SheetDescription>
-                          Show or hide columns in the table
-                        </SheetDescription>
-                      </SheetHeader>
-                      <div className="mt-6 space-y-4">
-                        {dimensions
-                          .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula !== null)
-                          .map((dimension) => (
-                            <div key={dimension.id} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`col-${dimension.id}`}
-                                checked={visibleColumns.has(dimension.id)}
-                                onCheckedChange={() => toggleColumn(dimension.id)}
-                              />
-                              <Label
-                                htmlFor={`col-${dimension.id}`}
-                                className="text-sm font-normal cursor-pointer"
-                              >
-                                {dimension.name}
-                              </Label>
-                            </div>
-                          ))}
-                      </div>
-                    </SheetContent>
+                      <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
+                       <SheetHeader>
+                         <SheetTitle>Column Visibility</SheetTitle>
+                         <SheetDescription>
+                           Show or hide columns in the table
+                         </SheetDescription>
+                       </SheetHeader>
+                       
+                       <div className="mt-6 space-y-6">
+                         {/* Date Granularity Section */}
+                         <div className="space-y-3">
+                           <h3 className="text-sm font-semibold">Date Granularity</h3>
+                           <RadioGroup value={dateGranularity} onValueChange={(value: any) => setDateGranularity(value)}>
+                             <div className="flex items-center space-x-2">
+                               <RadioGroupItem value="none" id="date-none" />
+                               <Label htmlFor="date-none" className="text-sm font-normal cursor-pointer">
+                                 None
+                               </Label>
+                             </div>
+                             <div className="flex items-center space-x-2">
+                               <RadioGroupItem value="day" id="date-day" />
+                               <Label htmlFor="date-day" className="text-sm font-normal cursor-pointer">
+                                 Day
+                               </Label>
+                             </div>
+                             <div className="flex items-center space-x-2">
+                               <RadioGroupItem value="week" id="date-week" />
+                               <Label htmlFor="date-week" className="text-sm font-normal cursor-pointer">
+                                 Week
+                               </Label>
+                             </div>
+                             <div className="flex items-center space-x-2">
+                               <RadioGroupItem value="month" id="date-month" />
+                               <Label htmlFor="date-month" className="text-sm font-normal cursor-pointer">
+                                 Month
+                               </Label>
+                             </div>
+                             <div className="flex items-center space-x-2">
+                               <RadioGroupItem value="year" id="date-year" />
+                               <Label htmlFor="date-year" className="text-sm font-normal cursor-pointer">
+                                 Year
+                               </Label>
+                             </div>
+                           </RadioGroup>
+                         </div>
+
+                         <Separator />
+
+                         {/* Sort Order Section */}
+                         <div className="space-y-3">
+                           <h3 className="text-sm font-semibold">Sort Order</h3>
+                           <RadioGroup value={dateOrder} onValueChange={(value: any) => setDateOrder(value)}>
+                             <div className="flex items-center space-x-2">
+                               <RadioGroupItem value="asc" id="order-asc" />
+                               <Label htmlFor="order-asc" className="text-sm font-normal cursor-pointer">
+                                 Ascending
+                               </Label>
+                             </div>
+                             <div className="flex items-center space-x-2">
+                               <RadioGroupItem value="desc" id="order-desc" />
+                               <Label htmlFor="order-desc" className="text-sm font-normal cursor-pointer">
+                                 Descending
+                               </Label>
+                             </div>
+                           </RadioGroup>
+                         </div>
+
+                         <Separator />
+
+                         {/* Columns Section */}
+                         <div className="space-y-3">
+                           <h3 className="text-sm font-semibold">Columns</h3>
+                           <div className="space-y-4">
+                             {dimensions
+                               .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula !== null)
+                               .map((dimension) => (
+                                 <div key={dimension.id} className="flex items-center space-x-2">
+                                   <Checkbox
+                                     id={`col-${dimension.id}`}
+                                     checked={visibleColumns.has(dimension.id)}
+                                     onCheckedChange={() => toggleColumn(dimension.id)}
+                                   />
+                                   <Label
+                                     htmlFor={`col-${dimension.id}`}
+                                     className="text-sm font-normal cursor-pointer"
+                                   >
+                                     {dimension.name}
+                                   </Label>
+                                 </div>
+                               ))}
+                           </div>
+                         </div>
+                       </div>
+                     </SheetContent>
                 </Sheet>
               </div>
               )}
