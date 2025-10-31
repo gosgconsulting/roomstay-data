@@ -43,6 +43,7 @@ export const DimensionSelectorModal = ({
   const [showAddSelector, setShowAddSelector] = useState(false);
   const [selectedToAdd, setSelectedToAdd] = useState<string>("");
   const [dimensionGranularities, setDimensionGranularities] = useState<Record<string, string>>({});
+  const [dimensionSortOrders, setDimensionSortOrders] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (open) {
@@ -86,19 +87,26 @@ export const DimensionSelectorModal = ({
   const handleRemoveDimension = (dimensionId: string) => {
     const updated = selectedDimensions.filter((d) => d !== dimensionId);
     const newGranularities = { ...dimensionGranularities };
+    const newSortOrders = { ...dimensionSortOrders };
     delete newGranularities[dimensionId];
+    delete newSortOrders[dimensionId];
     setDimensionGranularities(newGranularities);
+    setDimensionSortOrders(newSortOrders);
     onDimensionsChange(updated);
   };
 
   const handleAddDimension = () => {
     if (selectedToAdd && !selectedDimensions.includes(selectedToAdd)) {
       const dimension = dimensions.find(d => d.id === selectedToAdd);
-      // For date dimensions, default to "Day" granularity
+      // For date dimensions, default to "Day" granularity and "Asc" sort order
       if (dimension?.type === 'date') {
         setDimensionGranularities({
           ...dimensionGranularities,
           [selectedToAdd]: 'Day'
+        });
+        setDimensionSortOrders({
+          ...dimensionSortOrders,
+          [selectedToAdd]: 'Asc'
         });
       }
       onDimensionsChange([...selectedDimensions, selectedToAdd]);
@@ -114,17 +122,27 @@ export const DimensionSelectorModal = ({
     });
   };
 
-  // Parse existing dimensions to extract granularities
+  const handleSortOrderChange = (dimensionId: string, sortOrder: string) => {
+    setDimensionSortOrders({
+      ...dimensionSortOrders,
+      [dimensionId]: sortOrder
+    });
+  };
+
+  // Parse existing dimensions to extract granularities and sort orders
   useEffect(() => {
     const granularities: Record<string, string> = {};
+    const sortOrders: Record<string, string> = {};
     selectedDimensions.forEach(dim => {
       const dimension = dimensions.find(d => d.id === dim);
       if (dimension?.type === 'date') {
-        // Default to Day if not set
+        // Default to Day and Asc if not set
         granularities[dim] = 'Day';
+        sortOrders[dim] = 'Asc';
       }
     });
     setDimensionGranularities(granularities);
+    setDimensionSortOrders(sortOrders);
   }, [selectedDimensions, dimensions]);
 
   const availableDimensions = dimensions.filter(
@@ -171,7 +189,7 @@ export const DimensionSelectorModal = ({
                           </Button>
                         </div>
                         {isDateDimension && (
-                          <div className="pl-3 pr-3">
+                          <div className="pl-3 pr-3 space-y-2">
                             <Select
                               value={dimensionGranularities[dimensionId] || 'Day'}
                               onValueChange={(value) => handleGranularityChange(dimensionId, value)}
@@ -184,6 +202,18 @@ export const DimensionSelectorModal = ({
                                 <SelectItem value="Week">Week</SelectItem>
                                 <SelectItem value="Month">Month</SelectItem>
                                 <SelectItem value="Year">Year</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Select
+                              value={dimensionSortOrders[dimensionId] || 'Asc'}
+                              onValueChange={(value) => handleSortOrderChange(dimensionId, value)}
+                            >
+                              <SelectTrigger className="h-9 bg-background">
+                                <SelectValue placeholder="Select sort order..." />
+                              </SelectTrigger>
+                              <SelectContent className="bg-background z-50">
+                                <SelectItem value="Asc">Asc</SelectItem>
+                                <SelectItem value="Desc">Desc</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
