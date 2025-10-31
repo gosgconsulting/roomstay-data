@@ -95,7 +95,7 @@ export const DimensionSelectorModal = ({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            Manage dimensions for this grouping
+            Select dimensions to populate Group by, Breakdown by, and Then by options. More dimensions = more breakdown options.
           </DialogDescription>
         </DialogHeader>
 

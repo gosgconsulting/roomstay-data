@@ -713,14 +713,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   };
 
   const getSelectorTitle = () => {
-    switch (currentSelector) {
-      case "group":
-        return "Group by dimensions";
-      case "breakdown":
-        return "Breakdown by dimensions";
-      case "then":
-        return "Then by dimensions";
-    }
+    return "Select dimensions";
   };
 
   const getCurrentDimensions = () => {
@@ -735,20 +728,12 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   };
 
   const handleDimensionsChange = (dimensions: string[]) => {
-    switch (currentSelector) {
-      case "group":
-        setGroupByDimensions(dimensions);
-        setCurrentPage(1); // Reset to first page when grouping changes
-        break;
-      case "breakdown":
-        setBreakdownByDimensions(dimensions);
-        setCurrentPage(1);
-        break;
-      case "then":
-        setThenByDimensions(dimensions);
-        setCurrentPage(1);
-        break;
-    }
+    // Auto-sync dimensions across all dropdowns based on selection count
+    // The same dimensions are available in all dropdowns
+    setGroupByDimensions(dimensions);
+    setBreakdownByDimensions(dimensions);
+    setThenByDimensions(dimensions);
+    setCurrentPage(1); // Reset to first page when grouping changes
   };
 
   // Calculate totals from server-side data
@@ -867,6 +852,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
           
           <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 text-sm">
+                {/* Group by - always shown */}
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">Group by:</span>
                   {groupByDimensions.length > 0 ? (
@@ -881,13 +867,14 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="bg-background z-50">
-                        {dimensions
-                          .filter(d => d.type === "text" || d.type === "date")
-                          .map((dim) => (
+                        {groupByDimensions.map((dimId) => {
+                          const dim = dimensions.find(d => d.id === dimId);
+                          return dim ? (
                             <SelectItem key={dim.id} value={dim.id}>
                               {dim.name}
                             </SelectItem>
-                          ))}
+                          ) : null;
+                        })}
                       </SelectContent>
                     </Select>
                   ) : (
@@ -901,11 +888,12 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
                     </Button>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Breakdown by:</span>
-                  {breakdownByDimensions.length > 0 ? (
+                {/* Breakdown by - shown only if 2+ dimensions selected */}
+                {groupByDimensions.length >= 2 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Breakdown by:</span>
                     <Select
-                      value={breakdownByDimensions[0] || ""}
+                      value={breakdownByDimensions[1] || ""}
                       onValueChange={(value) => handleDimensionChange(value, "breakdown")}
                     >
                       <SelectTrigger 
@@ -915,31 +903,24 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="bg-background z-50">
-                        {dimensions
-                          .filter(d => d.type === "text" || d.type === "date")
-                          .map((dim) => (
+                        {breakdownByDimensions.map((dimId) => {
+                          const dim = dimensions.find(d => d.id === dimId);
+                          return dim ? (
                             <SelectItem key={dim.id} value={dim.id}>
                               {dim.name}
                             </SelectItem>
-                          ))}
+                          ) : null;
+                        })}
                       </SelectContent>
                     </Select>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      className="w-40 justify-start"
-                      onContextMenu={(e) => handleDimensionSelectorOpen(e, "breakdown")}
-                      onClick={(e) => handleDimensionSelectorOpen(e as any, "breakdown")}
-                    >
-                      <span className="text-muted-foreground">Right-click to select</span>
-                    </Button>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Then by:</span>
-                  {thenByDimensions.length > 0 ? (
+                  </div>
+                )}
+                {/* Then by - shown only if 3+ dimensions selected */}
+                {groupByDimensions.length >= 3 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Then by:</span>
                     <Select
-                      value={thenByDimensions[0] || ""}
+                      value={thenByDimensions[2] || ""}
                       onValueChange={(value) => handleDimensionChange(value, "then")}
                     >
                       <SelectTrigger 
@@ -949,26 +930,18 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="bg-background z-50">
-                        {dimensions
-                          .filter(d => d.type === "text" || d.type === "date")
-                          .map((dim) => (
+                        {thenByDimensions.map((dimId) => {
+                          const dim = dimensions.find(d => d.id === dimId);
+                          return dim ? (
                             <SelectItem key={dim.id} value={dim.id}>
                               {dim.name}
                             </SelectItem>
-                          ))}
+                          ) : null;
+                        })}
                       </SelectContent>
                     </Select>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      className="w-40 justify-start"
-                      onContextMenu={(e) => handleDimensionSelectorOpen(e, "then")}
-                      onClick={(e) => handleDimensionSelectorOpen(e as any, "then")}
-                    >
-                      <span className="text-muted-foreground">Right-click to select</span>
-                    </Button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
               
               <div className="flex items-center gap-2">
