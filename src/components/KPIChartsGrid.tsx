@@ -37,7 +37,7 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
   const loadChartData = async () => {
     setIsLoading(true);
     try {
-      // Load dimensions associated with this report (works for both owned and shared reports)
+      // Load dimensions to find Date dimension
       const { data: dimensionData, error: dimDataError } = await supabase
         .from("dimension_data")
         .select("dimension_values")
@@ -63,199 +63,127 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
         }
       }
 
-      // Fetch dimension_data in chunks (5000 rows at a time)
-      const CHUNK_SIZE = 5000;
-      let allDimensionData: any[] = [];
-      let offset = 0;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data: chunkData, error } = await supabase
-          .from("dimension_data")
-          .select("*")
-          .eq("report_id", reportId)
-          .order('row_number', { ascending: true })
-          .range(offset, offset + CHUNK_SIZE - 1);
-
-        if (error) throw error;
-
-        if (chunkData && chunkData.length > 0) {
-          allDimensionData = [...allDimensionData, ...chunkData];
-          offset += CHUNK_SIZE;
-          hasMore = chunkData.length === CHUNK_SIZE;
-        } else {
-          hasMore = false;
-        }
-      }
-
-      if (!dimensions || !allDimensionData) {
+      // Find Date dimension
+      const dateDimension = dimensions?.find((d: any) => d.type === 'date');
+      
+      if (!dateDimension || !dimensions) {
+        // No date dimension - skip charts
         const emptyData: Record<string, ChartData[]> = {};
         kpis.forEach(kpi => {
           emptyData[kpi.title] = [];
         });
         setChartData(emptyData);
+        setIsLoading(false);
         return;
       }
 
-      // Find Date dimension
-      const dateDimension = dimensions.find(d => d.type === 'date');
-      
-      if (!dateDimension) {
-        console.warn('No date dimension found for charts');
-        // If no date dimension, show aggregated totals instead of time series
-        const aggregatedData: Record<string, number> = {};
-        
-        allDimensionData.forEach((row) => {
-          const dimensionValues = row.dimension_values as Record<string, any>;
-          
-          kpis.forEach(kpi => {
-            const dimension = dimensions.find(d => d.name === kpi.title);
-            if (dimension) {
-              const value = dimensionValues[dimension.id];
-              if (value !== null && value !== undefined) {
-                const numValue = parseFloat(value) || 0;
-                aggregatedData[kpi.title] = (aggregatedData[kpi.title] || 0) + numValue;
-              }
-            }
-          });
-        });
-        
-        // Create single data point for each KPI
-        const finalChartData: Record<string, ChartData[]> = {};
-        kpis.forEach(kpi => {
-          finalChartData[kpi.title] = aggregatedData[kpi.title] 
-            ? [{ date: 'Total', value: aggregatedData[kpi.title] }] 
-            : [];
-        });
-        
-        setChartData(finalChartData);
-        return;
-      }
-
-      // Filter data based on applied filters
-      const filteredData = allDimensionData.filter((row) => {
-        const dimensionValues = row.dimension_values as Record<string, any>;
-        
-        // Apply dimension filters
-        for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters)) {
-          if (dimensionValues[dimId] !== filterValue) {
-            return false;
-          }
-        }
-        
-        // Apply date range filter
-        if (filters.dateRange?.from || filters.dateRange?.to) {
-          if (dateDimension && dimensionValues[dateDimension.id]) {
-            const rowDate = new Date(dimensionValues[dateDimension.id]);
-            if (filters.dateRange.from && rowDate < filters.dateRange.from) {
-              return false;
-            }
-            if (filters.dateRange.to && rowDate > filters.dateRange.to) {
-              return false;
-            }
-          }
-        }
-        
-        return true;
+      // Use edge function to get aggregated data by date
+      const { data: performanceData, error: perfError } = await supabase.functions.invoke('get-performance-data', {
+        body: {
+          reportId,
+          groupByDims: [dateDimension.id],
+          breakdownDims: [],
+          thenByDims: [],
+          dimensionFilters: filters.dimensionFilters,
+          dateFrom: filters.dateRange?.from?.toISOString(),
+          dateTo: filters.dateRange?.to?.toISOString(),
+          visibleDimensionIds: dimensions.map((d: any) => d.id),
+          limit: 1000,
+          offset: 0,
+        },
       });
 
-      // Helper to group data by date for a period
-      const groupByDate = (fromDate?: Date, toDate?: Date) => {
-        const periodData = allDimensionData.filter((row) => {
-          const dimensionValues = row.dimension_values as Record<string, any>;
-          
-          // Apply dimension filters
-          for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters)) {
-            if (dimensionValues[dimId] !== filterValue) {
-              return false;
-            }
-          }
-          
-          // Apply date range filter
-          if (fromDate || toDate) {
-            if (dateDimension && dimensionValues[dateDimension.id]) {
-              const rowDate = new Date(dimensionValues[dateDimension.id]);
-              if (fromDate && rowDate < fromDate) {
-                return false;
-              }
-              if (toDate && rowDate > toDate) {
-                return false;
-              }
-            }
-          }
-          
-          return true;
-        });
-
-        const chartDataByKPI: Record<string, Array<{ date: Date; formattedDate: string; value: number }>> = {};
-        kpis.forEach(kpi => {
-          chartDataByKPI[kpi.title] = [];
-        });
-
-        // Group by actual date objects for proper sorting
-        const dateGroups: Record<string, Record<string, number>> = {};
-        kpis.forEach(kpi => {
-          dateGroups[kpi.title] = {};
-        });
-
-        periodData.forEach((row) => {
-          const dimensionValues = row.dimension_values as Record<string, any>;
-          const dateValue = dimensionValues[dateDimension.id];
-          
-          if (!dateValue) return;
-
-          const date = new Date(dateValue);
-          const dateKey = date.toISOString().split('T')[0]; // Use ISO date as key
-
-          // Aggregate each KPI
-          kpis.forEach(kpi => {
-            const dimension = dimensions.find(d => d.name === kpi.title);
-            if (!dimension) return;
-
-            const value = dimensionValues[dimension.id];
-            if (value !== null && value !== undefined) {
-              const numValue = parseFloat(value) || 0;
-              if (!dateGroups[kpi.title][dateKey]) {
-                dateGroups[kpi.title][dateKey] = 0;
-              }
-              dateGroups[kpi.title][dateKey] += numValue;
-            }
-          });
-        });
-
-        // Convert to array and sort by date
-        kpis.forEach(kpi => {
-          chartDataByKPI[kpi.title] = Object.entries(dateGroups[kpi.title])
-            .map(([dateKey, value]) => ({
-              date: new Date(dateKey),
-              formattedDate: format(new Date(dateKey), 'MMM dd'),
-              value
-            }))
-            .sort((a, b) => a.date.getTime() - b.date.getTime());
-        });
-
-        return chartDataByKPI;
-      };
-
-      // Get current period data
-      const currentData = groupByDate(filters.dateRange?.from, filters.dateRange?.to);
-
-      // Get comparison period data if enabled
-      let compareData: Record<string, Array<{ date: Date; formattedDate: string; value: number }>> | null = null;
-      if (filters.compareEnabled && filters.compareDateRange?.from && filters.compareDateRange?.to) {
-        compareData = groupByDate(filters.compareDateRange.from, filters.compareDateRange.to);
+      if (perfError) {
+        console.error('Error fetching chart data:', perfError);
+        throw perfError;
       }
 
-      // Merge current and comparison data by aligning by position (day 1, day 2, etc.)
+      const allDimensionData = performanceData?.rows || [];
+
+      // Process the aggregated data from edge function
+      const chartDataByKPI: Record<string, Array<{ date: string; value: number }>> = {};
+      kpis.forEach(kpi => {
+        chartDataByKPI[kpi.title] = [];
+      });
+
+      // The data from edge function is already grouped by date
+      allDimensionData.forEach((row: any) => {
+        const rowData = row.data || row;
+        const dateValue = row.name; // The grouped dimension value (date)
+        
+        if (!dateValue) return;
+
+        kpis.forEach(kpi => {
+          const dimension = dimensions.find((d: any) => d.name === kpi.title);
+          if (!dimension) return;
+
+          const value = rowData[dimension.id];
+          if (value !== null && value !== undefined) {
+            const numValue = parseFloat(value) || 0;
+            chartDataByKPI[kpi.title].push({
+              date: format(new Date(dateValue), 'MMM dd'),
+              value: numValue
+            });
+          }
+        });
+      });
+
+      // Get comparison data if enabled
+      let compareChartData: Record<string, Array<{ date: string; value: number }>> = {};
+      if (filters.compareEnabled && filters.compareDateRange?.from && filters.compareDateRange?.to) {
+        const { data: comparePerformanceData, error: comparePerfError } = await supabase.functions.invoke('get-performance-data', {
+          body: {
+            reportId,
+            groupByDims: [dateDimension.id],
+            breakdownDims: [],
+            thenByDims: [],
+            dimensionFilters: filters.dimensionFilters,
+            dateFrom: filters.compareDateRange.from.toISOString(),
+            dateTo: filters.compareDateRange.to.toISOString(),
+            visibleDimensionIds: dimensions.map((d: any) => d.id),
+            limit: 1000,
+            offset: 0,
+          },
+        });
+
+        if (!comparePerfError && comparePerformanceData?.rows) {
+          kpis.forEach(kpi => {
+            compareChartData[kpi.title] = [];
+          });
+
+          comparePerformanceData.rows.forEach((row: any) => {
+            const rowData = row.data || row;
+            const dateValue = row.name;
+            
+            if (!dateValue) return;
+
+            kpis.forEach(kpi => {
+              const dimension = dimensions.find((d: any) => d.name === kpi.title);
+              if (!dimension) return;
+
+              const value = rowData[dimension.id];
+              if (value !== null && value !== undefined) {
+                const numValue = parseFloat(value) || 0;
+                compareChartData[kpi.title].push({
+                  date: format(new Date(dateValue), 'MMM dd'),
+                  value: numValue
+                });
+              }
+            });
+          });
+        }
+      }
+
+      // Merge current and comparison data
       const finalChartData: Record<string, ChartData[]> = {};
       kpis.forEach(kpi => {
-        const currentPoints = currentData[kpi.title] || [];
-        const comparePoints = compareData ? (compareData[kpi.title] || []) : [];
+        const currentPoints = chartDataByKPI[kpi.title] || [];
+        const comparePoints = compareChartData[kpi.title] || [];
         
         const chartPoints: ChartData[] = currentPoints.map((point, index) => ({
-          date: point.formattedDate,
+          date: point.date,
           value: point.value,
-          compareValue: comparePoints[index]?.value, // Align by index position
+          compareValue: comparePoints[index]?.value,
         }));
         
         finalChartData[kpi.title] = chartPoints;
