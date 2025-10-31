@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
         filteredData = filteredData.filter((row) => {
           const dimValues = row.dimension_values as Record<string, any>;
           const dateValue = dimValues[dateDim.id];
-          if (!dateValue) return true;
+          if (!dateValue) return false; // Exclude rows without date values
 
           const rowDate = new Date(dateValue);
           if (dateFrom && rowDate < new Date(dateFrom)) return false;
