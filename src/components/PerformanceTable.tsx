@@ -28,7 +28,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { ChevronDown, ChevronRight, Columns3, Copy, Trash2, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, Columns3, Copy, Trash2, Plus, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -54,6 +54,8 @@ interface TableRow {
   parentId?: string;
   data: Record<string, any>;
   children?: TableRow[];
+  compareData?: Record<string, any>;
+  changeData?: Record<string, number>;
 }
 
 interface PerformanceTableProps {
@@ -72,6 +74,8 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
   const [isLoadingDimensions, setIsLoadingDimensions] = useState(true);
   const [tableData, setTableData] = useState<TableRow[]>([]);
   const [totalData, setTotalData] = useState<Record<string, any>>({});
+  const [totalCompareData, setTotalCompareData] = useState<Record<string, any>>({});
+  const [totalChangeData, setTotalChangeData] = useState<Record<string, number>>({});
   const [isLoadingData, setIsLoadingData] = useState(true);
   
   // Multiple table views state
@@ -612,6 +616,8 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
     if (!reportId || groupByDimensions.length === 0) {
       setTableData([]);
       setTotalData({});
+      setTotalCompareData({});
+      setTotalChangeData({});
       return;
     }
 
@@ -630,6 +636,9 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
           visibleDimensionIds: Array.from(visibleColumns),
           limit: 100000, // Load a lot of data for now
           offset: 0,
+          compareEnabled: filters.compareEnabled || false,
+          compareDateFrom: filters.compareDateRange?.from?.toISOString(),
+          compareDateTo: filters.compareDateRange?.to?.toISOString(),
         },
       });
 
@@ -646,6 +655,8 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       console.log('Loaded performance data:', data);
       setTableData(data.rows || []);
       setTotalData(data.totalData || {});
+      setTotalCompareData(data.totalCompareData || {});
+      setTotalChangeData(data.totalChangeData || {});
     } catch (error) {
       console.error('Error loading performance data:', error);
     } finally {
@@ -802,11 +813,30 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
                       d.formula !== null) && 
                      visibleColumns.has(d.id);
             })
-            .map((dimension) => (
-              <td key={dimension.id} className="py-3 px-4 text-right">
-                {formatValue(row.data[dimension.name], dimension)}
-              </td>
-            ))}
+            .map((dimension) => {
+              const value = row.data[dimension.name];
+              const change = row.changeData?.[dimension.name];
+              const hasComparison = filters.compareEnabled && change !== undefined;
+              
+              return (
+                <td key={dimension.id} className="py-3 px-4 text-right">
+                  <div className="flex flex-col items-end gap-1">
+                    <span>{formatValue(value, dimension)}</span>
+                    {hasComparison && (
+                      <span className={cn(
+                        "text-xs flex items-center gap-1",
+                        change > 0 ? "text-green-600" : change < 0 ? "text-red-600" : "text-muted-foreground"
+                      )}>
+                        {change > 0 && <ArrowUp className="h-3 w-3" />}
+                        {change < 0 && <ArrowDown className="h-3 w-3" />}
+                        {change === 0 && <Minus className="h-3 w-3" />}
+                        {Math.abs(change).toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                </td>
+              );
+            })}
         </tr>
         {isExpanded &&
           row.children?.map((child) => renderRow(child))}
@@ -1144,11 +1174,30 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
                                   d.formula !== null) && 
                                  visibleColumns.has(d.id);
                         })
-                        .map((dimension) => (
-                          <td key={dimension.id} className="py-3 px-4 text-right">
-                            {formatValue(totals[dimension.name], dimension)}
-                          </td>
-                        ))}
+                        .map((dimension) => {
+                          const value = totals[dimension.name];
+                          const change = totalChangeData[dimension.name];
+                          const hasComparison = filters.compareEnabled && change !== undefined;
+                          
+                          return (
+                            <td key={dimension.id} className="py-3 px-4 text-right">
+                              <div className="flex flex-col items-end gap-1">
+                                <span>{formatValue(value, dimension)}</span>
+                                {hasComparison && (
+                                  <span className={cn(
+                                    "text-xs flex items-center gap-1",
+                                    change > 0 ? "text-green-600" : change < 0 ? "text-red-600" : "text-muted-foreground"
+                                  )}>
+                                    {change > 0 && <ArrowUp className="h-3 w-3" />}
+                                    {change < 0 && <ArrowDown className="h-3 w-3" />}
+                                    {change === 0 && <Minus className="h-3 w-3" />}
+                                    {Math.abs(change).toFixed(1)}%
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })}
                     </tr>
                   </tbody>
                 </table>

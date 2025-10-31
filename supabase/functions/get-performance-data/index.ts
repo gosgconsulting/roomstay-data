@@ -129,6 +129,44 @@ Deno.serve(async (req) => {
 
     console.log(`After filtering: ${filteredData.length} rows`);
 
+    // Fetch and filter comparison period data if enabled
+    let compareFilteredData: any[] = [];
+    if (compareEnabled && compareDateFrom && compareDateTo && dimensions) {
+      const dateDim = dimensions.find(d => d.type === 'date');
+      if (dateDim) {
+        // Filter the same rawData for comparison period
+        let compareData = rawData || [];
+        
+        // Apply same dimension filters
+        if (Object.keys(dimensionFilters).length > 0) {
+          compareData = compareData.filter((row) => {
+            const dimValues = row.dimension_values as Record<string, any>;
+            for (const [dimId, filterValue] of Object.entries(dimensionFilters)) {
+              if (dimValues[dimId] !== filterValue) {
+                return false;
+              }
+            }
+            return true;
+          });
+        }
+        
+        // Filter by comparison date range
+        compareData = compareData.filter((row) => {
+          const dimValues = row.dimension_values as Record<string, any>;
+          const dateValue = dimValues[dateDim.id];
+          if (!dateValue) return false;
+
+          const rowDate = new Date(dateValue);
+          if (rowDate < new Date(compareDateFrom)) return false;
+          if (rowDate > new Date(compareDateTo)) return false;
+          return true;
+        });
+        
+        compareFilteredData = compareData;
+        console.log(`Comparison period: ${compareFilteredData.length} rows`);
+      }
+    }
+
     // Group data by the first group dimension
     const groupDimId = groupByDims[0];
     if (!groupDimId) {
@@ -213,6 +251,46 @@ Deno.serve(async (req) => {
 
     const groupedArray = Array.from(grouped.values());
 
+    // Group comparison data by the same dimension if enabled
+    const compareGrouped = new Map<string, any>();
+    if (compareFilteredData.length > 0 && dimensions) {
+      for (const row of compareFilteredData) {
+        const dimValues = row.dimension_values as Record<string, any>;
+        const groupKey = dimValues[groupDimId] || 'Unknown';
+
+        if (!compareGrouped.has(groupKey)) {
+          compareGrouped.set(groupKey, {
+            data: {},
+          });
+        }
+
+        const groupItem = compareGrouped.get(groupKey);
+
+        // Aggregate base metrics (non-formula dimensions)
+        for (const dim of dimensions) {
+          if (dim.formula) continue;
+
+          const value = dimValues[dim.id];
+          if (value !== undefined && value !== null) {
+            if (dim.type === 'number' || dim.type === 'currency') {
+              const numValue = parseFloat(value) || 0;
+              groupItem.data[dim.name] = (groupItem.data[dim.name] || 0) + numValue;
+            }
+          }
+        }
+      }
+
+      // Calculate formulas for comparison groups
+      for (const [key, group] of compareGrouped.entries()) {
+        for (const dim of dimensions) {
+          if (dim.formula) {
+            const calculatedValue = calculateFormula(dim.formula, group.data);
+            group.data[dim.name] = calculatedValue;
+          }
+        }
+      }
+    }
+
     // Sort by group key - if grouping by date, sort descending (most recent first)
     const groupDimension = dimensions?.find(d => d.id === groupDimId);
     if (groupDimension?.type === 'date') {
@@ -229,6 +307,35 @@ Deno.serve(async (req) => {
         if (dim.formula) {
           const calculatedValue = calculateFormula(dim.formula, group.data);
           group.data[dim.name] = calculatedValue;
+        }
+      }
+
+      // Add comparison data and percentage changes if available
+      if (compareGrouped.size > 0) {
+        const compareGroup = compareGrouped.get(group.name);
+        if (compareGroup && dimensions) {
+          group.compareData = {};
+          group.changeData = {};
+          
+          for (const dim of dimensions) {
+            if (dim.type === 'number' || dim.type === 'currency' || dim.formula) {
+              const currentValue = group.data[dim.name] || 0;
+              const compareValue = compareGroup.data[dim.name] || 0;
+              
+              group.compareData[dim.name] = compareValue;
+              
+              // Calculate percentage change
+              if (compareValue !== 0) {
+                const change = ((currentValue - compareValue) / compareValue) * 100;
+                group.changeData[dim.name] = change;
+              } else if (currentValue !== 0) {
+                // If compare value is 0 but current is not, show 100% or -100%
+                group.changeData[dim.name] = currentValue > 0 ? 100 : -100;
+              } else {
+                group.changeData[dim.name] = 0;
+              }
+            }
+          }
         }
       }
 
@@ -312,9 +419,55 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Calculate comparison totals if enabled
+    let totalCompareData: Record<string, any> = {};
+    let totalChangeData: Record<string, any> = {};
+    if (compareFilteredData.length > 0 && dimensions) {
+      for (const dim of dimensions) {
+        if (dim.formula) continue;
+        if (dim.type === 'number' || dim.type === 'currency') {
+          let sum = 0;
+          for (const row of compareFilteredData) {
+            const dimValues = row.dimension_values as Record<string, any>;
+            const value = dimValues[dim.id];
+            if (value !== undefined && value !== null) {
+              sum += parseFloat(value) || 0;
+            }
+          }
+          totalCompareData[dim.name] = sum;
+        }
+      }
+
+      // Calculate formula totals for comparison
+      for (const dim of dimensions) {
+        if (dim.formula) {
+          totalCompareData[dim.name] = calculateFormula(dim.formula, totalCompareData);
+        }
+      }
+
+      // Calculate percentage changes for totals
+      for (const dim of dimensions) {
+        if (dim.type === 'number' || dim.type === 'currency' || dim.formula) {
+          const currentValue = totalData[dim.name] || 0;
+          const compareValue = totalCompareData[dim.name] || 0;
+          
+          if (compareValue !== 0) {
+            const change = ((currentValue - compareValue) / compareValue) * 100;
+            totalChangeData[dim.name] = change;
+          } else if (currentValue !== 0) {
+            totalChangeData[dim.name] = currentValue > 0 ? 100 : -100;
+          } else {
+            totalChangeData[dim.name] = 0;
+          }
+        }
+      }
+    }
+
     const response = {
       rows: groupedArray,
       totalData,
+      totalCompareData: Object.keys(totalCompareData).length > 0 ? totalCompareData : undefined,
+      totalChangeData: Object.keys(totalChangeData).length > 0 ? totalChangeData : undefined,
       totalCount: filteredData.length,
       hasMore: offset + limit < filteredData.length,
     };
