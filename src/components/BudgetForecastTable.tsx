@@ -314,14 +314,13 @@ export const BudgetForecastTable = ({ reportId }: BudgetForecastTableProps) => {
             <div className="flex items-center gap-2">
               <Label>Breakdown by:</Label>
               <Select
-                value={breakdownByDimensions[0] || ""}
+                value={breakdownByDimensions[0] || undefined}
                 onValueChange={(value) => handleDimensionChange('breakdown', value)}
               >
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
                   {getAvailableDimensions(breakdownByDimensions, groupByDimensions, thenByDimensions).map((dim) => (
                     <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
                   ))}
@@ -332,14 +331,13 @@ export const BudgetForecastTable = ({ reportId }: BudgetForecastTableProps) => {
             <div className="flex items-center gap-2">
               <Label>Then by:</Label>
               <Select
-                value={thenByDimensions[0] || ""}
+                value={thenByDimensions[0] || undefined}
                 onValueChange={(value) => handleDimensionChange('then', value)}
               >
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
                   {getAvailableDimensions(thenByDimensions, groupByDimensions, breakdownByDimensions).map((dim) => (
                     <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
                   ))}
