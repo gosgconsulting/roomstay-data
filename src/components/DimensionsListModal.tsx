@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Eye, Trash2, Plus } from "lucide-react";
+import { Eye, Trash2, Plus, Link } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -46,12 +46,54 @@ export const DimensionsListModal = ({
 }: DimensionsListModalProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [mappedDimensionIds, setMappedDimensionIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (open) {
       loadDimensions();
+      loadMappedDimensions();
     }
   }, [open]);
+
+  const loadMappedDimensions = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get all data sources for the user's reports
+      const { data: reports } = await supabase
+        .from("reports")
+        .select("id")
+        .eq("user_id", user.id);
+
+      if (!reports) return;
+
+      const reportIds = reports.map(r => r.id);
+
+      // Get all data sources for these reports
+      const { data: dataSources } = await supabase
+        .from("data_sources")
+        .select("column_mappings")
+        .in("report_id", reportIds);
+
+      if (!dataSources) return;
+
+      // Extract all mapped dimension IDs
+      const mappedIds = new Set<string>();
+      dataSources.forEach(ds => {
+        if (ds.column_mappings) {
+          const mappings = ds.column_mappings as Record<string, string>;
+          Object.values(mappings).forEach(dimensionId => {
+            if (dimensionId) mappedIds.add(dimensionId);
+          });
+        }
+      });
+
+      setMappedDimensionIds(mappedIds);
+    } catch (error) {
+      console.error("Error loading mapped dimensions:", error);
+    }
+  };
 
   const loadDimensions = async () => {
     try {
@@ -142,6 +184,16 @@ export const DimensionsListModal = ({
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
+                        {mappedDimensionIds.has(dimension.id) && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-primary"
+                            title="Mapped to data source"
+                          >
+                            <Link className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
