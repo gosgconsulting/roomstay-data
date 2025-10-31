@@ -9,7 +9,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ChevronDown, ChevronRight, X, Plus } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,6 +23,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 interface Dimension {
   id: string;
@@ -251,14 +258,27 @@ export const BudgetForecastTable = ({ reportId }: BudgetForecastTableProps) => {
     return dimensions.filter(d => !allSelected.includes(d.id));
   };
 
-  const handleDimensionChange = (type: 'group' | 'breakdown' | 'then', value: string) => {
-    if (type === 'group') {
-      setGroupByDimensions(value ? [value] : []);
-    } else if (type === 'breakdown') {
+  const handleDimensionChange = (type: 'breakdown' | 'then', value: string) => {
+    if (type === 'breakdown') {
       setBreakdownByDimensions(value ? [value] : []);
     } else if (type === 'then') {
       setThenByDimensions(value ? [value] : []);
     }
+  };
+
+  const addGroupByDimension = (dimensionId: string) => {
+    if (!groupByDimensions.includes(dimensionId)) {
+      setGroupByDimensions([...groupByDimensions, dimensionId]);
+    }
+  };
+
+  const removeGroupByDimension = (dimensionId: string) => {
+    // Don't allow removing the date dimension if it's the only one
+    const dateDim = dimensions.find(d => d.type === "date");
+    if (dateDim && dimensionId === dateDim.id && groupByDimensions.length === 1) {
+      return;
+    }
+    setGroupByDimensions(groupByDimensions.filter(id => id !== dimensionId));
   };
 
   const dateDimension = dimensions.find(d => d.type === "date");
@@ -287,63 +307,84 @@ export const BudgetForecastTable = ({ reportId }: BudgetForecastTableProps) => {
       <CardContent>
         <div className="space-y-4">
           {/* Dimension Selectors */}
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-start gap-4">
+            <div className="flex flex-col gap-2">
               <Label>Group by:</Label>
-              <Select
-                value={groupByDimensions[0] || ""}
-                onValueChange={(value) => handleDimensionChange('group', value)}
-                disabled={!dateDimension}
-              >
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Select dimension" />
-                </SelectTrigger>
-                <SelectContent>
-                  {dateDimension && (
-                    <SelectItem value={dateDimension.id}>{dateDimension.name}</SelectItem>
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  <div className="flex flex-wrap items-center gap-2 min-h-[40px] border rounded-md p-2 cursor-pointer hover:bg-accent/50 transition-colors">
+                    {groupByDimensions.map((dimId) => {
+                      const dim = dimensions.find(d => d.id === dimId);
+                      if (!dim) return null;
+                      const isDate = dim.type === "date";
+                      return (
+                        <Badge key={dimId} variant="secondary" className="flex items-center gap-1">
+                          {dim.name}
+                          {(!isDate || groupByDimensions.length > 1) && (
+                            <X 
+                              className="h-3 w-3 cursor-pointer hover:text-destructive" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeGroupByDimension(dimId);
+                              }}
+                            />
+                          )}
+                        </Badge>
+                      );
+                    })}
+                    <Plus className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  {getAvailableDimensions(groupByDimensions, breakdownByDimensions, thenByDimensions).map((dim) => (
+                    <ContextMenuItem key={dim.id} onClick={() => addGroupByDimension(dim.id)}>
+                      {dim.name}
+                    </ContextMenuItem>
+                  ))}
+                  {getAvailableDimensions(groupByDimensions, breakdownByDimensions, thenByDimensions).length === 0 && (
+                    <ContextMenuItem disabled>No dimensions available</ContextMenuItem>
                   )}
-                  {getAvailableDimensions(groupByDimensions, breakdownByDimensions, thenByDimensions)
-                    .filter(d => d.type !== "date")
-                    .map((dim) => (
-                      <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+                </ContextMenuContent>
+              </ContextMenu>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Label>Breakdown by:</Label>
-              <Select
-                value={breakdownByDimensions[0] || undefined}
-                onValueChange={(value) => handleDimensionChange('breakdown', value)}
-              >
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="None" />
-                </SelectTrigger>
-                <SelectContent>
-                  {getAvailableDimensions(breakdownByDimensions, groupByDimensions, thenByDimensions).map((dim) => (
-                    <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {groupByDimensions.length > 0 && (
+              <>
+                <div className="flex items-center gap-2">
+                  <Label>Breakdown by:</Label>
+                  <Select
+                    value={breakdownByDimensions[0] || undefined}
+                    onValueChange={(value) => handleDimensionChange('breakdown', value)}
+                  >
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getAvailableDimensions(breakdownByDimensions, groupByDimensions, thenByDimensions).map((dim) => (
+                        <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div className="flex items-center gap-2">
-              <Label>Then by:</Label>
-              <Select
-                value={thenByDimensions[0] || undefined}
-                onValueChange={(value) => handleDimensionChange('then', value)}
-              >
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="None" />
-                </SelectTrigger>
-                <SelectContent>
-                  {getAvailableDimensions(thenByDimensions, groupByDimensions, breakdownByDimensions).map((dim) => (
-                    <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                <div className="flex items-center gap-2">
+                  <Label>Then by:</Label>
+                  <Select
+                    value={thenByDimensions[0] || undefined}
+                    onValueChange={(value) => handleDimensionChange('then', value)}
+                  >
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getAvailableDimensions(thenByDimensions, groupByDimensions, breakdownByDimensions).map((dim) => (
+                        <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Table */}
@@ -352,8 +393,8 @@ export const BudgetForecastTable = ({ reportId }: BudgetForecastTableProps) => {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[300px]">
-                    {groupByDimensions[0] 
-                      ? dimensions.find(d => d.id === groupByDimensions[0])?.name 
+                    {groupByDimensions.length > 0
+                      ? groupByDimensions.map(id => dimensions.find(d => d.id === id)?.name).filter(Boolean).join(" / ")
                       : "Dimension"}
                   </TableHead>
                   {Array.from(visibleColumns).map((colName) => (
