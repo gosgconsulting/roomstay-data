@@ -772,18 +772,33 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
     value: string,
     selector: "group" | "breakdown" | "then"
   ) => {
-    let index = 0;
+    let targetIndex = 0;
     if (selector === "group") {
-      index = 0;
+      targetIndex = 0;
     } else if (selector === "breakdown") {
-      index = 1;
+      targetIndex = 1;
     } else {
-      index = 2;
+      targetIndex = 2;
     }
     
-    // Keep all dimensions but swap the one at the specific index
+    // Find the current index of the selected dimension
+    const currentIndex = groupByDimensions.indexOf(value);
+    
+    if (currentIndex === -1) {
+      // Dimension not found, shouldn't happen but handle gracefully
+      return;
+    }
+    
+    // If clicking on the same dimension that's already at this position, do nothing
+    if (currentIndex === targetIndex) {
+      return;
+    }
+    
+    // Swap the dimensions - reorder the array
     const newDimensions = [...groupByDimensions];
-    newDimensions[index] = value;
+    const temp = newDimensions[targetIndex];
+    newDimensions[targetIndex] = value;
+    newDimensions[currentIndex] = temp;
     
     // Sync across all dimension arrays
     setGroupByDimensions(newDimensions);
