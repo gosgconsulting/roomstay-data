@@ -85,60 +85,25 @@ export const EditMappingModal = ({
     setIsLoading(true);
     
     try {
-      // Fetch all data from the sheet (up to 300,000 rows)
-      const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
-        body: {
-          spreadsheetId: dataSource.spreadsheet_id,
-          tabName: dataSource.tab_name,
-          range: `${dataSource.header_row}:300000`,
-        },
-      });
-
-      if (sheetsError) throw sheetsError;
-
-      if (!sheetsData?.values || sheetsData.values.length === 0) {
-        throw new Error("No data found in the specified range");
-      }
-
-      const sheetHeaders = sheetsData.values[0];
-      const dataRows = sheetsData.values.slice(1);
-
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
-      // Update data source with new mappings
-      const { error: updateError } = await supabase
-        .from('data_sources')
-        .update({
-          column_mappings: mappings,
-        })
-        .eq('id', dataSource.id);
-
-      if (updateError) throw updateError;
-
-      // Delete existing dimension_data for this data source
-      const { error: deleteError } = await supabase
-        .from('dimension_data')
-        .delete()
-        .eq('data_source_id', dataSource.id);
-
-      if (deleteError) throw deleteError;
-
-      // Auto-create new dimensions and build dimension ID map
-      const dimensionIdMap: Record<string, string> = {};
-      const visibleMappings = mappings.filter(m => m.visible);
-      
-      // Fetch report_id from data_source
-      const { data: dsData } = await supabase
+      // Get report_id from data_source
+      const { data: dsData, error: dsError } = await supabase
         .from('data_sources')
         .select('report_id')
         .eq('id', dataSource.id)
-        .single();
+        .maybeSingle();
       
+      if (dsError) throw dsError;
       const reportId = dsData?.report_id;
+
+      // Create any new dimensions first
+      const updatedMappings = [...mappings];
       
-      for (const mapping of visibleMappings) {
+      for (let i = 0; i < updatedMappings.length; i++) {
+        const mapping = updatedMappings[i];
         if (mapping.dimensionId === 'create_new' && mapping.newDimensionName) {
           // Create new dimension
           const { data: newDim, error: dimError } = await supabase
@@ -151,69 +116,33 @@ export const EditMappingModal = ({
               type: mapping.newDimensionType || 'text',
             })
             .select()
-            .single();
+            .maybeSingle();
           
           if (dimError) throw dimError;
-          dimensionIdMap[mapping.column] = newDim.id;
-        } else if (mapping.dimensionId && mapping.dimensionId !== 'none') {
-          // Use existing dimension
-          dimensionIdMap[mapping.column] = mapping.dimensionId;
-        }
-      }
-
-      // Helper function to parse values based on dimension type
-      const parseValue = (value: any, dimensionType: string): any => {
-        if (value === null || value === undefined || value === '') return null;
-        
-        // For numeric types, clean and parse the value
-        if (dimensionType === 'number' || dimensionType === 'currency' || dimensionType === 'percentage') {
-          const stringValue = String(value);
-          // Remove currency symbols ($, €, £, etc.), commas, and spaces
-          const cleanedValue = stringValue.replace(/[$€£¥,\s]/g, '');
-          const numValue = parseFloat(cleanedValue);
-          return isNaN(numValue) ? null : numValue;
-        }
-        
-        // For other types, return as-is
-        return value;
-      };
-
-      // Transform and re-insert data with new mappings
-      const rowsToInsert = dataRows.map((row, index) => {
-        const dimensionValues: Record<string, any> = {};
-        
-        visibleMappings.forEach((mapping) => {
-          const colIndex = sheetHeaders.indexOf(mapping.column);
-          if (colIndex !== -1 && dimensionIdMap[mapping.column]) {
-            const rawValue = row[colIndex];
-            const dimensionType = mapping.newDimensionType || mapping.dimensionType || 'text';
-            const value = parseValue(rawValue, dimensionType);
-            dimensionValues[dimensionIdMap[mapping.column]] = value;
+          
+          // Update the mapping with the new dimension ID
+          if (newDim) {
+            updatedMappings[i] = {
+              ...mapping,
+              dimensionId: newDim.id,
+            };
           }
-        });
-        
-        return {
-          report_id: reportId,
-          data_source_id: dataSource.id,
-          row_number: index + 1,
-          dimension_values: dimensionValues,
-        };
-      });
-
-      // Insert in batches to dimension_data
-      const batchSize = 500;
-      for (let i = 0; i < rowsToInsert.length; i += batchSize) {
-        const batch = rowsToInsert.slice(i, i + batchSize);
-        const { error: insertError } = await supabase
-          .from('dimension_data')
-          .insert(batch);
-
-        if (insertError) throw insertError;
+        }
       }
+
+      // Update data source with new mappings
+      const { error: updateError } = await supabase
+        .from('data_sources')
+        .update({
+          column_mappings: updatedMappings,
+        })
+        .eq('id', dataSource.id);
+
+      if (updateError) throw updateError;
 
       toast({
         title: "Mappings updated",
-        description: `Successfully updated ${dataSource.name} with ${visibleMappings.length} columns and ${dataRows.length} rows`,
+        description: `Successfully updated ${dataSource.name}. Use the Sync button to refresh the data with new mappings.`,
       });
       
       onSuccess();
