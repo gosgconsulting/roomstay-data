@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
       dateFrom,
       dateTo,
       visibleDimensionIds = [],
-      limit = 1000,
+      limit = 10000,
       offset = 0,
       compareEnabled = false,
       compareDateFrom,
@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
       .select('dimension_values, row_number')
       .eq('report_id', reportId)
       .order('row_number', { ascending: true })
-      .abortSignal(AbortSignal.timeout(30000)); // 30 second timeout
+      .abortSignal(AbortSignal.timeout(60000)); // 60 second timeout
 
     // Apply date filters if provided
     if (dateFrom || dateTo) {

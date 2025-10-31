@@ -734,7 +734,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
           dateFrom: filters.dateRange?.from?.toISOString(),
           dateTo: filters.dateRange?.to?.toISOString(),
           visibleDimensionIds: Array.from(visibleColumns),
-          limit: 100000, // Load a lot of data for now
+          limit: 10000, // Reasonable limit to prevent timeouts
           offset: 0,
           compareEnabled: filters.compareEnabled || false,
           compareDateFrom: filters.compareDateRange?.from?.toISOString(),
