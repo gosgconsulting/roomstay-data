@@ -5,6 +5,7 @@ import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import { KPIChart } from "@/components/KPIChart";
 import { PerformanceTable } from "@/components/PerformanceTable";
+import { BudgetForecastTable } from "@/components/BudgetForecastTable";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Session } from "@supabase/supabase-js";
@@ -234,6 +235,7 @@ const Index = () => {
             <KPIMetricsCards reportId={reportId} filters={filters} key={`metrics-${dataRefreshKey}`} />
             <KPIChart reportId={reportId} filters={filters} key={`charts-${dataRefreshKey}`} />
             <PerformanceTable reportId={reportId} filters={filters} isSharedView={isSharedView} key={`table-${dataRefreshKey}`} />
+            <BudgetForecastTable reportId={reportId} key={`forecast-${dataRefreshKey}`} />
           </main>
         </>
       ) : (
