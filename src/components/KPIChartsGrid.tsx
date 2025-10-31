@@ -124,7 +124,23 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
           console.log('KPI Charts - First row sample:', { row, dateValue, rowData });
         }
         
-        if (!dateValue) return;
+        if (!dateValue) {
+          console.log('KPI Charts - Skipping row with no date value');
+          return;
+        }
+
+        // Parse date more robustly
+        let dateObj: Date;
+        try {
+          dateObj = new Date(dateValue);
+          if (isNaN(dateObj.getTime())) {
+            console.error('KPI Charts - Invalid date:', dateValue);
+            return;
+          }
+        } catch (e) {
+          console.error('KPI Charts - Error parsing date:', dateValue, e);
+          return;
+        }
 
         kpis.forEach(kpi => {
           // Data from edge function is keyed by dimension name, not ID
@@ -132,7 +148,7 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
           if (value !== null && value !== undefined) {
             const numValue = parseFloat(value) || 0;
             chartDataByKPI[kpi.title].push({
-              date: format(new Date(dateValue), 'MMM dd'),
+              date: format(dateObj, 'MMM dd'),
               value: numValue
             });
           }
