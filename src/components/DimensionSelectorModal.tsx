@@ -29,6 +29,10 @@ interface DimensionSelectorModalProps {
   title: string;
   selectedDimensions: string[];
   onDimensionsChange: (dimensions: string[]) => void;
+  onDateGranularityChange?: (granularity: string) => void;
+  onDateSortOrderChange?: (sortOrder: string) => void;
+  currentDateGranularity?: string;
+  currentDateSortOrder?: string;
 }
 
 export const DimensionSelectorModal = ({
@@ -37,6 +41,10 @@ export const DimensionSelectorModal = ({
   title,
   selectedDimensions,
   onDimensionsChange,
+  onDateGranularityChange,
+  onDateSortOrderChange,
+  currentDateGranularity = 'day',
+  currentDateSortOrder = 'desc',
 }: DimensionSelectorModalProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -98,7 +106,7 @@ export const DimensionSelectorModal = ({
   const handleAddDimension = () => {
     if (selectedToAdd && !selectedDimensions.includes(selectedToAdd)) {
       const dimension = dimensions.find(d => d.id === selectedToAdd);
-      // For date dimensions, default to "Day" granularity and "Asc" sort order
+      // For date dimensions, default to "Day" granularity and "Desc" sort order
       if (dimension?.type === 'date') {
         setDimensionGranularities({
           ...dimensionGranularities,
@@ -106,8 +114,15 @@ export const DimensionSelectorModal = ({
         });
         setDimensionSortOrders({
           ...dimensionSortOrders,
-          [selectedToAdd]: 'Asc'
+          [selectedToAdd]: 'Desc'
         });
+        // Notify parent component of defaults
+        if (onDateGranularityChange) {
+          onDateGranularityChange('day');
+        }
+        if (onDateSortOrderChange) {
+          onDateSortOrderChange('desc');
+        }
       }
       onDimensionsChange([...selectedDimensions, selectedToAdd]);
       setSelectedToAdd("");
@@ -120,6 +135,11 @@ export const DimensionSelectorModal = ({
       ...dimensionGranularities,
       [dimensionId]: granularity
     });
+    // Notify parent component if this is a date dimension
+    const dimension = dimensions.find(d => d.id === dimensionId);
+    if (dimension?.type === 'date' && onDateGranularityChange) {
+      onDateGranularityChange(granularity.toLowerCase());
+    }
   };
 
   const handleSortOrderChange = (dimensionId: string, sortOrder: string) => {
@@ -127,6 +147,11 @@ export const DimensionSelectorModal = ({
       ...dimensionSortOrders,
       [dimensionId]: sortOrder
     });
+    // Notify parent component if this is a date dimension
+    const dimension = dimensions.find(d => d.id === dimensionId);
+    if (dimension?.type === 'date' && onDateSortOrderChange) {
+      onDateSortOrderChange(sortOrder.toLowerCase());
+    }
   };
 
   // Parse existing dimensions to extract granularities and sort orders
@@ -136,14 +161,16 @@ export const DimensionSelectorModal = ({
     selectedDimensions.forEach(dim => {
       const dimension = dimensions.find(d => d.id === dim);
       if (dimension?.type === 'date') {
-        // Default to Day and Asc if not set
-        granularities[dim] = 'Day';
-        sortOrders[dim] = 'Asc';
+        // Use current values from parent or default to Day/Desc
+        const capitalizedGranularity = currentDateGranularity.charAt(0).toUpperCase() + currentDateGranularity.slice(1);
+        const capitalizedSortOrder = currentDateSortOrder.charAt(0).toUpperCase() + currentDateSortOrder.slice(1);
+        granularities[dim] = capitalizedGranularity;
+        sortOrders[dim] = capitalizedSortOrder;
       }
     });
     setDimensionGranularities(granularities);
     setDimensionSortOrders(sortOrders);
-  }, [selectedDimensions, dimensions]);
+  }, [selectedDimensions, dimensions, currentDateGranularity, currentDateSortOrder]);
 
   const availableDimensions = dimensions.filter(
     (d) => !selectedDimensions.includes(d.id)
