@@ -55,14 +55,58 @@ Deno.serve(async (req) => {
       compareEnabled,
     });
 
-    // Fetch all dimensions (they are user-level, not report-level)
-    const { data: dimensions, error: dimError } = await supabase
-      .from('dimensions')
-      .select('id, name, type, formula');
+    // Helper function to retry queries with exponential backoff
+    const retryQuery = async <T>(
+      queryFn: () => Promise<{ data: T | null; error: any }>,
+      maxRetries = 3,
+      baseDelay = 1000
+    ): Promise<{ data: T | null; error: any }> => {
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const result = await queryFn();
+        
+        if (!result.error) {
+          return result;
+        }
+        
+        // Check if error is retryable (connection issues, timeouts, 5xx errors)
+        const isRetryable = 
+          result.error.message?.includes('520') ||
+          result.error.message?.includes('timeout') ||
+          result.error.message?.includes('ETIMEDOUT') ||
+          result.error.message?.includes('ECONNREFUSED') ||
+          result.error.code === 'PGRST301';
+        
+        if (!isRetryable || attempt === maxRetries - 1) {
+          return result;
+        }
+        
+        // Exponential backoff with jitter
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+        console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      
+      return await queryFn();
+    };
+
+    // Fetch all dimensions (they are user-level, not report-level) with retry
+    const dimensionsResult = await retryQuery(async () => {
+      const result = await supabase
+        .from('dimensions')
+        .select('id, name, type, formula');
+      return result;
+    });
+    
+    const { data: dimensions, error: dimError } = dimensionsResult;
 
     if (dimError) {
       console.error('Error fetching dimensions:', dimError);
-      throw dimError;
+      throw new Error(`Failed to fetch dimensions: ${dimError.message || 'Unknown error'}`);
+    }
+
+    if (!dimensions || dimensions.length === 0) {
+      console.error('No dimensions found');
+      throw new Error('No dimensions configured for this report');
     }
 
     console.log(`Loaded ${dimensions?.length || 0} dimensions for aggregation`);
@@ -82,14 +126,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch data with limit and offset
+    // Fetch data with limit and offset with retry
     query = query.range(offset, offset + limit - 1);
 
-    const { data: rawData, error: dataError } = await query;
+    const rawDataResult = await retryQuery(async () => await query);
+    const { data: rawData, error: dataError } = rawDataResult;
 
     if (dataError) {
       console.error('Error fetching dimension data:', dataError);
-      throw dataError;
+      throw new Error(`Failed to fetch dimension data: ${dataError.message || 'Unknown error'}`);
     }
 
     console.log(`Fetched ${rawData?.length || 0} raw rows`);
@@ -228,14 +273,27 @@ Deno.serve(async (req) => {
         // This prevents "Cost" from being replaced when we want "Cost of sale"
         const dimensionNames = (dimensions || []).map(d => d.name).sort((a, b) => b.length - a.length);
         
+        // Also check for "Total <dimensionName>" pattern which refers to the sum of that dimension
         for (const dimName of dimensionNames) {
+          // Check for "Total <dimensionName>" pattern first
+          const totalPattern = `Total ${dimName}`;
+          if (expression.includes(totalPattern)) {
+            const value = data[dimName];
+            const numValue = (value !== null && value !== undefined) ? (typeof value === 'number' ? value : parseFloat(value) || 0) : 0;
+            
+            const escapedPattern = totalPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(escapedPattern, 'g');
+            expression = expression.replace(regex, `(${numValue})`);
+          }
+          
+          // Then replace individual dimension names
           if (expression.includes(dimName)) {
             const value = data[dimName];
             const numValue = (value !== null && value !== undefined) ? (typeof value === 'number' ? value : parseFloat(value) || 0) : 0;
             
             // Escape special regex characters and replace all occurrences
             const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const regex = new RegExp(escapedName, 'g');
+            const regex = new RegExp(`\\b${escapedName}\\b`, 'g');
             expression = expression.replace(regex, `(${numValue})`);
           }
         }
@@ -483,10 +541,32 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error('Error in get-performance-data:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    
+    // Provide more detailed error messages
+    let errorMessage = 'Unknown error occurred';
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      
+      // Check for specific error types
+      if (errorMessage.includes('dimensions') || errorMessage.includes('dimension data')) {
+        statusCode = 503; // Service Unavailable - temporary database issue
+      } else if (errorMessage.includes('timeout') || errorMessage.includes('520')) {
+        statusCode = 504; // Gateway Timeout
+      }
+    }
+    
+    return new Response(
+      JSON.stringify({ 
+        error: errorMessage,
+        details: error instanceof Error ? error.stack : undefined,
+        timestamp: Date.now(),
+      }), 
+      {
+        status: statusCode,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
   }
 });
