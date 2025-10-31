@@ -57,6 +57,9 @@ Deno.serve(async (req) => {
       limit,
       offset,
       compareEnabled,
+      dateFrom,
+      dateTo,
+      dateGranularity
     });
 
     // Helper function to retry queries with exponential backoff

@@ -38,6 +38,12 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
     setIsLoading(true);
     try {
       console.log('KPI Charts - Starting load for reportId:', reportId);
+      console.log('KPI Charts - Filters received:', {
+        dateRange: filters.dateRange,
+        dateFrom: filters.dateRange?.from,
+        dateTo: filters.dateRange?.to,
+        dimensionFilters: filters.dimensionFilters
+      });
       
       // Load dimensions to find Date dimension
       const { data: dimensionData, error: dimDataError } = await supabase
