@@ -37,6 +37,8 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
   const loadChartData = async () => {
     setIsLoading(true);
     try {
+      console.log('KPI Charts - Starting load for reportId:', reportId);
+      
       // Load dimensions to find Date dimension
       const { data: dimensionData, error: dimDataError } = await supabase
         .from("dimension_data")
@@ -45,7 +47,10 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
         .limit(1)
         .maybeSingle();
 
-      if (dimDataError) throw dimDataError;
+      if (dimDataError) {
+        console.error('KPI Charts - Error loading dimension data:', dimDataError);
+        throw dimDataError;
+      }
 
       let dimensions = null;
 
@@ -221,7 +226,8 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
 
       setChartData(finalChartData);
     } catch (error) {
-      console.error("Error loading chart data:", error);
+      console.error("KPI Charts - Error loading chart data:", error);
+      // Set empty data on error but don't break the UI
       const emptyData: Record<string, ChartData[]> = {};
       kpis.forEach(kpi => {
         emptyData[kpi.title] = [];
@@ -273,7 +279,7 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
               <CardContent>
                 {!hasData ? (
                   <div className="h-[150px] flex items-center justify-center text-muted-foreground text-sm">
-                    No data available. Connect a data source to view charts.
+                    No chart data for selected date range
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height={150}>
