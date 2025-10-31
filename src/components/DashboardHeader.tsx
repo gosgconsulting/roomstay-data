@@ -311,107 +311,68 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-80 bg-background z-50">
-              {(() => {
-                const ownedReports = reports.filter(r => !r.is_shared);
-                const sharedReports = reports.filter(r => r.is_shared);
-                
-                return (
-                  <>
-                    {ownedReports.length > 0 && (
-                      <>
-                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                          My Reports
-                        </div>
-                        {ownedReports.map((report) => (
-                          <DropdownMenuItem 
-                            key={report.id}
-                            className="justify-between group"
-                            onSelect={(e) => e.preventDefault()}
-                          >
-                            <span 
-                              className="flex-1 cursor-pointer"
-                              onClick={() => {
-                                setCurrentReport(report);
-                                onReportChange(report.id);
-                              }}
-                            >
-                              {report.name}
-                            </span>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingReport(report);
-                                  setShowReportModal(true);
-                                }}
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-destructive"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteReport(report);
-                                }}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </DropdownMenuItem>
-                        ))}
-                      </>
-                    )}
-                    
-                    {sharedReports.length > 0 && (
-                      <>
-                        {ownedReports.length > 0 && <DropdownMenuSeparator />}
-                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                          Shared with me
-                        </div>
-                        {sharedReports.map((report) => (
-                          <DropdownMenuItem 
-                            key={report.id}
-                            className="justify-between group flex-col items-start"
-                            onSelect={(e) => e.preventDefault()}
-                          >
-                            <div className="flex items-center justify-between w-full">
-                              <span 
-                                className="flex-1 cursor-pointer font-medium"
-                                onClick={() => {
-                                  setCurrentReport(report);
-                                  onReportChange(report.id);
-                                }}
-                              >
-                                {report.name}
-                              </span>
-                            </div>
-                            <span className="text-xs text-muted-foreground">
-                              Owner: {report.owner_email}
-                            </span>
-                          </DropdownMenuItem>
-                        ))}
-                      </>
-                    )}
-                    
-                    {reports.length > 0 && <DropdownMenuSeparator />}
-                    <DropdownMenuItem 
-                      className="text-primary" 
+              {reports.map((report) => (
+                <DropdownMenuItem 
+                  key={report.id}
+                  className={`justify-between group ${report.is_shared ? 'flex-col items-start' : ''}`}
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span 
+                      className="flex-1 cursor-pointer"
                       onClick={() => {
-                        setEditingReport(null);
-                        setShowReportModal(true);
+                        setCurrentReport(report);
+                        onReportChange(report.id);
                       }}
                     >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add new
-                    </DropdownMenuItem>
-                  </>
-                );
-              })()}
+                      {report.name}
+                    </span>
+                    {!report.is_shared && (
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingReport(report);
+                            setShowReportModal(true);
+                          }}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteReport(report);
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  {report.is_shared && report.owner_email && (
+                    <span className="text-xs text-muted-foreground mt-1">
+                      Owner: {report.owner_email}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              ))}
+              {reports.length > 0 && <DropdownMenuSeparator />}
+              <DropdownMenuItem 
+                className="text-primary" 
+                onClick={() => {
+                  setEditingReport(null);
+                  setShowReportModal(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add new
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
