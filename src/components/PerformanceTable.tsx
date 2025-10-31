@@ -772,13 +772,23 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
     value: string,
     selector: "group" | "breakdown" | "then"
   ) => {
+    let index = 0;
     if (selector === "group") {
-      setGroupByDimensions([value]);
+      index = 0;
     } else if (selector === "breakdown") {
-      setBreakdownByDimensions([value]);
+      index = 1;
     } else {
-      setThenByDimensions([value]);
+      index = 2;
     }
+    
+    // Keep all dimensions but swap the one at the specific index
+    const newDimensions = [...groupByDimensions];
+    newDimensions[index] = value;
+    
+    // Sync across all dimension arrays
+    setGroupByDimensions(newDimensions);
+    setBreakdownByDimensions(newDimensions);
+    setThenByDimensions(newDimensions);
   };
 
   const getSelectorTitle = () => {
