@@ -42,6 +42,7 @@ export const DimensionSelectorModal = ({
   const [isLoading, setIsLoading] = useState(true);
   const [showAddSelector, setShowAddSelector] = useState(false);
   const [selectedToAdd, setSelectedToAdd] = useState<string>("");
+  const [dimensionGranularities, setDimensionGranularities] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (open) {
@@ -84,16 +85,47 @@ export const DimensionSelectorModal = ({
 
   const handleRemoveDimension = (dimensionId: string) => {
     const updated = selectedDimensions.filter((d) => d !== dimensionId);
+    const newGranularities = { ...dimensionGranularities };
+    delete newGranularities[dimensionId];
+    setDimensionGranularities(newGranularities);
     onDimensionsChange(updated);
   };
 
   const handleAddDimension = () => {
     if (selectedToAdd && !selectedDimensions.includes(selectedToAdd)) {
+      const dimension = dimensions.find(d => d.id === selectedToAdd);
+      // For date dimensions, default to "Day" granularity
+      if (dimension?.type === 'date') {
+        setDimensionGranularities({
+          ...dimensionGranularities,
+          [selectedToAdd]: 'Day'
+        });
+      }
       onDimensionsChange([...selectedDimensions, selectedToAdd]);
       setSelectedToAdd("");
       setShowAddSelector(false);
     }
   };
+
+  const handleGranularityChange = (dimensionId: string, granularity: string) => {
+    setDimensionGranularities({
+      ...dimensionGranularities,
+      [dimensionId]: granularity
+    });
+  };
+
+  // Parse existing dimensions to extract granularities
+  useEffect(() => {
+    const granularities: Record<string, string> = {};
+    selectedDimensions.forEach(dim => {
+      const dimension = dimensions.find(d => d.id === dim);
+      if (dimension?.type === 'date') {
+        // Default to Day if not set
+        granularities[dim] = 'Day';
+      }
+    });
+    setDimensionGranularities(granularities);
+  }, [selectedDimensions, dimensions]);
 
   const availableDimensions = dimensions.filter(
     (d) => !selectedDimensions.includes(d.id)
@@ -121,20 +153,41 @@ export const DimensionSelectorModal = ({
                 <div className="space-y-2 mb-3">
                   {selectedDimensions.map((dimensionId) => {
                     const dimension = dimensions.find(d => d.id === dimensionId);
+                    const isDateDimension = dimension?.type === 'date';
                     return (
                       <div
                         key={dimensionId}
-                        className="flex items-center justify-between py-2 px-3 bg-muted rounded-md"
+                        className="space-y-2"
                       >
-                        <span className="font-medium">{dimension?.name || dimensionId}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-destructive hover:text-destructive"
-                          onClick={() => handleRemoveDimension(dimensionId)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center justify-between py-2 px-3 bg-muted rounded-md">
+                          <span className="font-medium">{dimension?.name || dimensionId}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-destructive hover:text-destructive"
+                            onClick={() => handleRemoveDimension(dimensionId)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        {isDateDimension && (
+                          <div className="pl-3 pr-3">
+                            <Select
+                              value={dimensionGranularities[dimensionId] || 'Day'}
+                              onValueChange={(value) => handleGranularityChange(dimensionId, value)}
+                            >
+                              <SelectTrigger className="h-9 bg-background">
+                                <SelectValue placeholder="Select granularity..." />
+                              </SelectTrigger>
+                              <SelectContent className="bg-background z-50">
+                                <SelectItem value="Day">Day</SelectItem>
+                                <SelectItem value="Week">Week</SelectItem>
+                                <SelectItem value="Month">Month</SelectItem>
+                                <SelectItem value="Year">Year</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
