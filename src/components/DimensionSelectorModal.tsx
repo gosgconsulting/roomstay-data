@@ -198,6 +198,8 @@ export const DimensionSelectorModal = ({
                                 <SelectItem value="Week">Week</SelectItem>
                                 <SelectItem value="Month">Month</SelectItem>
                                 <SelectItem value="Year">Year</SelectItem>
+                                <SelectItem value="Forecast">Forecast</SelectItem>
+                                <SelectItem value="Forecast Historical">Historical Forecast</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>

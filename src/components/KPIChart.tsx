@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO, addDays } from "date-fns";
 import { FilterState } from "./FiltersBar";
@@ -12,6 +12,7 @@ import { trackPerformance } from "@/lib/monitoring";
 interface ChartData {
   date: string;
   value: number;
+  compareValue?: number;
 }
 
 interface KPIChartProps {
@@ -78,6 +79,14 @@ export const KPIChart = ({ reportId, filters }: KPIChartProps) => {
           });
         } else {
           console.log('[CHART] No date range provided');
+        }
+        
+        // Debug compare date range
+        if (filters.compareEnabled && filters.compareDateRange) {
+          console.log('[CHART] Compare date range:', {
+            from: filters.compareDateRange.from ? filters.compareDateRange.from.toISOString() : 'undefined',
+            to: filters.compareDateRange.to ? filters.compareDateRange.to.toISOString() : 'undefined'
+          });
         }
         
         // Get the current user to load all dimensions
@@ -204,8 +213,38 @@ export const KPIChart = ({ reportId, filters }: KPIChartProps) => {
           console.log(`[CHART] Possible keys for ${selectedKPI}:`, possibleKpiKeys);
         }
         
-        // Filter data by date range and dimension filters
-        const filteredData = allDimensionData.filter((row) => {
+        // Find the dimension ID for the selected KPI
+        const kpiDimensionId = kpiDimension?.id;
+        console.log(`[CHART] KPI dimension ID for ${selectedKPI}:`, kpiDimensionId);
+        
+        // Helper function to extract KPI value from dimension values
+        const extractKpiValue = (dimensionValues: Record<string, string>): number => {
+          let value = 0;
+          
+          // If we have a matching dimension for the KPI, use its ID to get the value
+          if (kpiDimensionId && dimensionValues[kpiDimensionId] !== undefined) {
+            value = parseFloat(dimensionValues[kpiDimensionId]) || 0;
+          } 
+          // Otherwise try to find by name (legacy approach)
+          else if (dimensionValues[selectedKPI] !== undefined) {
+            value = parseFloat(dimensionValues[selectedKPI]) || 0;
+          } else {
+            // Look for a key that might contain the KPI name
+            const matchingKey = Object.keys(dimensionValues).find(key => {
+              const dim = dimensions.find(d => d.id === key);
+              return dim && dim.name === selectedKPI;
+            });
+            
+            if (matchingKey) {
+              value = parseFloat(dimensionValues[matchingKey]) || 0;
+            }
+          }
+          
+          return value;
+        };
+        
+        // Filter and process main period data
+        const mainPeriodData = allDimensionData.filter((row) => {
           const dimensionValues = row.dimension_values as Record<string, string>;
           
           // Apply dimension filters
@@ -250,61 +289,109 @@ export const KPIChart = ({ reportId, filters }: KPIChartProps) => {
           return true;
         });
         
-        console.log(`[CHART] After filtering: ${filteredData.length} rows`);
+        // Group main period data by date
+        const mainPeriodByDate = new Map<string, number>();
         
-        // Group data by date
-        const groupedByDate = new Map<string, number>();
-        
-        // Find the dimension ID for the selected KPI
-        const kpiDimensionId = kpiDimension?.id;
-        console.log(`[CHART] KPI dimension ID for ${selectedKPI}:`, kpiDimensionId);
-        
-        filteredData.forEach((row) => {
+        mainPeriodData.forEach((row) => {
           const dimensionValues = row.dimension_values as Record<string, string>;
           const dateValue = dimensionValues[dateDimension.id];
           
           if (!dateValue) return;
           
           // Get or initialize value for this date
-          const currentValue = groupedByDate.get(dateValue) || 0;
+          const currentValue = mainPeriodByDate.get(dateValue) || 0;
+          const rowValue = extractKpiValue(dimensionValues);
           
-          // Add this row's value for the selected KPI
-          let rowValue = 0;
-          
-          // If we have a matching dimension for the KPI, use its ID to get the value
-          if (kpiDimensionId && dimensionValues[kpiDimensionId] !== undefined) {
-            rowValue = parseFloat(dimensionValues[kpiDimensionId]) || 0;
-            console.log(`[CHART] Found ${selectedKPI} value using dimension ID:`, rowValue);
-          } 
-          // Otherwise try to find by name (legacy approach)
-          else if (dimensionValues[selectedKPI] !== undefined) {
-            rowValue = parseFloat(dimensionValues[selectedKPI]) || 0;
-            console.log(`[CHART] Found ${selectedKPI} value using name:`, rowValue);
-          } else {
-            // Look for a key that might contain the KPI name
-            const matchingKey = Object.keys(dimensionValues).find(key => {
-              const dim = dimensions.find(d => d.id === key);
-              return dim && dim.name === selectedKPI;
-            });
-            
-            if (matchingKey) {
-              rowValue = parseFloat(dimensionValues[matchingKey]) || 0;
-              console.log(`[CHART] Found ${selectedKPI} value using matching key ${matchingKey}:`, rowValue);
-            } else {
-              console.log(`[CHART] No value found for ${selectedKPI} in row:`, dimensionValues);
-            }
-          }
-          
-          groupedByDate.set(dateValue, currentValue + rowValue);
+          mainPeriodByDate.set(dateValue, currentValue + rowValue);
         });
         
-        console.log(`[CHART] Grouped data by date:`, Object.fromEntries(groupedByDate));
+        console.log(`[CHART] Main period data by date:`, Object.fromEntries(mainPeriodByDate));
         
-        // Convert to chart data points
-        const chartPoints: ChartData[] = Array.from(groupedByDate.entries())
+        // Process comparison period if enabled
+        const comparePeriodByDate = new Map<string, number>();
+        
+        if (filters.compareEnabled && filters.compareDateRange?.from && filters.compareDateRange?.to) {
+          // Filter data for comparison period
+          const comparePeriodData = allDimensionData.filter((row) => {
+            const dimensionValues = row.dimension_values as Record<string, string>;
+            
+            // Apply dimension filters
+            for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters || {})) {
+              // Handle both string and array filter values
+              if (Array.isArray(filterValue)) {
+                if (!filterValue.includes(dimensionValues[dimId])) {
+                  return false;
+                }
+              } else if (dimensionValues[dimId] !== filterValue) {
+                return false;
+              }
+            }
+            
+            // Apply compare date range filter
+            if (dimensionValues[dateDimension.id]) {
+              const dateStr = dimensionValues[dateDimension.id];
+              let rowDate: Date;
+              
+              if (dateStr.includes('/')) {
+                const [month, day, year] = dateStr.split('/');
+                rowDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              } else {
+                rowDate = new Date(dateStr);
+              }
+              
+              // Add a day to the end date to include the full day
+              const adjustedEndDate = filters.compareDateRange?.to 
+                ? addDays(filters.compareDateRange.to, 1)
+                : undefined;
+              
+              if (filters.compareDateRange?.from && rowDate < filters.compareDateRange.from) {
+                return false;
+              }
+              if (adjustedEndDate && rowDate >= adjustedEndDate) {
+                return false;
+              }
+            } else {
+              return false;
+            }
+            
+            return true;
+          });
+          
+          console.log(`[CHART] Compare period filtered data: ${comparePeriodData.length} rows`);
+          
+          // Group comparison period data by date
+          comparePeriodData.forEach((row) => {
+            const dimensionValues = row.dimension_values as Record<string, string>;
+            const dateValue = dimensionValues[dateDimension.id];
+            
+            if (!dateValue) return;
+            
+            // Get or initialize value for this date
+            const currentValue = comparePeriodByDate.get(dateValue) || 0;
+            const rowValue = extractKpiValue(dimensionValues);
+            
+            comparePeriodByDate.set(dateValue, currentValue + rowValue);
+          });
+          
+          console.log(`[CHART] Compare period data by date:`, Object.fromEntries(comparePeriodByDate));
+        }
+        
+        // Calculate the day difference between main and compare periods
+        let dayOffset = 0;
+        if (filters.compareEnabled && filters.dateRange?.from && filters.compareDateRange?.from) {
+          const mainStart = filters.dateRange.from;
+          const compareStart = filters.compareDateRange.from;
+          
+          // Calculate the difference in days
+          dayOffset = Math.round((mainStart.getTime() - compareStart.getTime()) / (1000 * 60 * 60 * 24));
+          console.log(`[CHART] Day offset between periods: ${dayOffset} days`);
+        }
+        
+        // Convert to chart data points with both main and compare values
+        const chartPoints = Array.from(mainPeriodByDate.entries())
           .map(([dateStr, value]) => {
             try {
-              // Handle different date formats
+              // Parse the date
               let dateObj: Date;
               
               if (dateStr.includes('/')) {
@@ -319,10 +406,36 @@ export const KPIChart = ({ reportId, filters }: KPIChartProps) => {
                 return null;
               }
               
+              // Format the date for display
+              const formattedDate = format(dateObj, 'MMM dd');
+              
+              // Find the corresponding compare date if comparison is enabled
+              let compareValue: number | undefined = undefined;
+              
+              if (filters.compareEnabled && filters.compareDateRange) {
+                // Calculate the equivalent date in the compare period
+                const compareDate = new Date(dateObj);
+                compareDate.setDate(compareDate.getDate() - dayOffset);
+                
+                // Format the compare date in the same format as the data
+                let compareDateStr: string;
+                if (dateStr.includes('/')) {
+                  compareDateStr = `${compareDate.getMonth() + 1}/${compareDate.getDate()}/${compareDate.getFullYear()}`;
+                } else {
+                  compareDateStr = compareDate.toISOString().split('T')[0];
+                }
+                
+                // Look up the value for this date in the compare period
+                if (comparePeriodByDate.has(compareDateStr)) {
+                  compareValue = comparePeriodByDate.get(compareDateStr);
+                }
+              }
+              
               return {
-                date: format(dateObj, 'MMM dd'),
+                date: formattedDate,
                 value: value,
-              };
+                compareValue: compareValue,
+              } as ChartData;
             } catch (e) {
               console.error('[CHART] Error parsing date:', e, dateStr);
               return null;
@@ -397,6 +510,10 @@ export const KPIChart = ({ reportId, filters }: KPIChartProps) => {
                   <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
                   <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                 </linearGradient>
+                <linearGradient id="compareGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(var(--secondary))" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="hsl(var(--secondary))" stopOpacity={0} />
+                </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
               <XAxis
@@ -424,15 +541,46 @@ export const KPIChart = ({ reportId, filters }: KPIChartProps) => {
                   borderRadius: "8px",
                   color: "hsl(var(--foreground))",
                 }}
-                formatter={(value: number) => [value.toLocaleString(), selectedKPI]}
+                formatter={(value: number, name: string) => {
+                  const label = name === 'value' ? 'Current' : 'Previous';
+                  return [value.toLocaleString(), `${label} ${selectedKPI}`];
+                }}
               />
               <Area
                 type="monotone"
                 dataKey="value"
+                name="value"
                 stroke="hsl(var(--primary))"
                 strokeWidth={2}
                 fill="url(#chartGradient)"
               />
+              {filters.compareEnabled && chartData.some(d => d.compareValue !== undefined) && (
+                <Area
+                  type="monotone"
+                  dataKey="compareValue"
+                  name="compareValue"
+                  stroke="hsl(var(--secondary))"
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  fill="url(#compareGradient)"
+                />
+              )}
+              {filters.compareEnabled && (
+                <Legend 
+                  content={({ payload }) => (
+                    <div className="flex justify-center gap-4 text-xs mt-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-primary rounded-full"></div>
+                        <span>Current Period</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-secondary rounded-full"></div>
+                        <span>Previous Period</span>
+                      </div>
+                    </div>
+                  )}
+                />
+              )}
             </AreaChart>
           </ResponsiveContainer>
         )}

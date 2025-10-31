@@ -1,233 +1,182 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import { KPIChart } from "@/components/KPIChart";
 import { PerformanceTable } from "@/components/PerformanceTable";
-import { BudgetForecastTable } from "@/components/BudgetForecastTable";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 
-const Index = () => {
+export default function Index() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const sharedSlug = searchParams.get("shared");
+  const location = useLocation();
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [reportId, setReportId] = useState<string | null>(null);
   const [isSharedView, setIsSharedView] = useState(false);
-  const [sharedReportIds, setSharedReportIds] = useState<string[]>([]);
-  const [sharedReports, setSharedReports] = useState<Array<{id: string, name: string}>>([]);
+  const [reportId, setReportId] = useState<string | null>(null);
+  const [dataRefreshKey, setDataRefreshKey] = useState(0);
+  
+  // Filter state
   const [filters, setFilters] = useState<FilterState>({
     dimensionFilters: {},
     dateRange: undefined,
-    datePreset: "this_month",
+    datePreset: "last_30_days",
     compareEnabled: false,
     compareType: "previous_period",
+    compareDateRange: undefined,
   });
-  const [dataRefreshKey, setDataRefreshKey] = useState(0);
   
-
   // Reset filters when report changes
   useEffect(() => {
     setFilters({
       dimensionFilters: {},
       dateRange: undefined,
-      datePreset: "this_month",
+      datePreset: "last_30_days",
       compareEnabled: false,
       compareType: "previous_period",
+      compareDateRange: undefined,
     });
   }, [reportId]);
-
+  
   useEffect(() => {
-    let isMounted = true;
-
     // Check if this is a shared view
-    if (sharedSlug) {
-      const authKey = `share_auth_${sharedSlug}`;
-      const shareDataKey = `share_data_${sharedSlug}`;
-      const storedAuth = sessionStorage.getItem(authKey);
-      const storedData = sessionStorage.getItem(shareDataKey);
-      
-      if (storedAuth === "true" && storedData) {
-        const shareData = JSON.parse(storedData);
-        setIsSharedView(true);
-        setSharedReportIds(shareData.report_ids);
-        
-        // Load report details
-        const loadSharedReports = async () => {
-          if (shareData.report_ids && shareData.report_ids.length > 0) {
-            const { data, error } = await supabase
-              .from("reports")
-              .select("id, name")
-              .in("id", shareData.report_ids);
-            
-            if (!error && data) {
-              setSharedReports(data);
-              setReportId(data[0].id);
-            }
-          }
-          setIsLoading(false);
-        };
-        
-        loadSharedReports();
-        return;
-      } else {
-        // Not authenticated for this share link
-        navigate(`/${sharedSlug}`);
-        return;
-      }
+    const params = new URLSearchParams(location.search);
+    const sharedToken = params.get('token');
+    
+    if (sharedToken) {
+      setIsSharedView(true);
+      loadSharedReport(sharedToken);
+    } else {
+      checkAuth();
     }
-
-    const initializeAuth = async () => {
-      try {
-        // Set up auth state listener
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-          (event, session) => {
-            if (isMounted) {
-              setSession(session);
-              setIsLoading(false);
-            }
-          }
-        );
-
-        // Check for existing session
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error("Error getting session:", error);
-        }
-
-        if (isMounted) {
-          setSession(session);
-          setIsLoading(false);
-          
-          // Load reports if authenticated
-          if (session) {
-            loadFirstReport();
-          }
-        }
-
-        return () => {
-          isMounted = false;
-          subscription.unsubscribe();
-        };
-      } catch (error) {
-        console.error("Error initializing auth:", error);
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    initializeAuth();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [sharedSlug]);
-
-  const loadFirstReport = async () => {
+  }, [location.search]);
+  
+  const loadSharedReport = async (token: string) => {
     try {
-      // Only load reports if user is authenticated
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      // Load user's own reports
-      const { data: reports, error: fetchError } = await supabase
-        .from("reports")
-        .select("*")
-        .eq("user_id", session.user.id)
-        .order("name")
-        .limit(1);
-
-      if (fetchError) throw fetchError;
-
+      // Verify the shared link token
+      const { data, error } = await supabase
+        .from('shared_links')
+        .select('report_id, expires_at')
+        .eq('token', token)
+        .single();
+      
+      if (error) throw error;
+      
+      if (!data) {
+        toast({
+          title: "Invalid Link",
+          description: "This shared link is invalid or has been deleted.",
+          variant: "destructive",
+        });
+        navigate('/');
+        return;
+      }
+      
+      // Check if link has expired
+      if (data.expires_at && new Date(data.expires_at) < new Date()) {
+        toast({
+          title: "Link Expired",
+          description: "This shared link has expired.",
+          variant: "destructive",
+        });
+        navigate('/');
+        return;
+      }
+      
+      // Set the report ID from the shared link
+      setReportId(data.report_id);
+      setIsLoading(false);
+      
+    } catch (error) {
+      console.error('Error loading shared report:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load shared report.",
+        variant: "destructive",
+      });
+      navigate('/');
+    }
+  };
+  
+  const checkAuth = async () => {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) throw error;
+      
+      if (!session) {
+        navigate('/auth');
+        return;
+      }
+      
+      setSession(session);
+      
+      // Load user's reports
+      const { data: reports, error: reportsError } = await supabase
+        .from('reports')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false });
+      
+      if (reportsError) throw reportsError;
+      
+      // If user has reports, select the first one
       if (reports && reports.length > 0) {
         setReportId(reports[0].id);
       }
+      
+      setIsLoading(false);
     } catch (error) {
-      console.error("Error loading report:", error);
+      console.error('Error checking auth:', error);
+      toast({
+        title: "Authentication Error",
+        description: "Please sign in again.",
+        variant: "destructive",
+      });
+      navigate('/auth');
     }
   };
-
+  
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate("/auth");
+    try {
+      await supabase.auth.signOut();
+      navigate('/auth');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      toast({
+        title: "Error",
+        description: "Failed to sign out.",
+        variant: "destructive",
+      });
+    }
   };
-
-  const handleDataSync = () => {
-    // Trigger refresh by updating the key - this will cause all components to reload their data
+  
+  const refreshData = () => {
     setDataRefreshKey(prev => prev + 1);
-    
-    // Show feedback to user
-    toast({
-      title: "Refreshing data",
-      description: "All components are reloading their data...",
-    });
-    
-    console.log('Data refresh triggered. Components will reload with key:', dataRefreshKey + 1);
   };
-
+  
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
       </div>
     );
   }
-
+  
   return (
     <div className="min-h-screen bg-background">
-      {!isSharedView && (
-        <div className="border-b">
-          <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h1 className="text-xl font-semibold">Data Dashboard</h1>
-              {session?.user && (
-                <span className="text-sm text-muted-foreground">{session.user.email}</span>
-              )}
-            </div>
-            {session ? (
-              <Button variant="outline" onClick={handleSignOut}>
-                Sign Out
-              </Button>
-            ) : (
-              <Button variant="outline" onClick={() => navigate("/auth")}>
-                Sign In
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-      {!isSharedView ? (
-        <DashboardHeader 
-          reportId={reportId} 
-          onReportChange={setReportId} 
-          onDataSync={handleDataSync}
-        />
-      ) : (
-        sharedReports.length > 1 && (
-          <div className="border-b">
-            <div className="container mx-auto px-6 py-3">
-              <select
-                value={reportId || ""}
-                onChange={(e) => setReportId(e.target.value)}
-                className="w-full max-w-xs px-4 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                {sharedReports.map((report) => (
-                  <option key={report.id} value={report.id}>
-                    {report.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )
-      )}
+      <DashboardHeader 
+        reportId={reportId} 
+        onReportChange={setReportId} 
+        onRefreshData={refreshData}
+        session={session}
+        onSignOut={handleSignOut}
+        isSharedView={isSharedView}
+      />
+      
       {reportId ? (
         <>
           <FiltersBar reportId={reportId} onFiltersChange={setFilters} isSharedView={isSharedView} />
@@ -235,20 +184,19 @@ const Index = () => {
             <KPIMetricsCards reportId={reportId} filters={filters} key={`metrics-${dataRefreshKey}`} />
             <KPIChart reportId={reportId} filters={filters} key={`charts-${dataRefreshKey}`} />
             <PerformanceTable reportId={reportId} filters={filters} isSharedView={isSharedView} key={`table-${dataRefreshKey}`} />
-            <BudgetForecastTable reportId={reportId} key={`forecast-${dataRefreshKey}`} />
           </main>
         </>
       ) : (
         <main className="container mx-auto px-6 py-6">
           <div className="text-center py-12">
-            <p className="text-muted-foreground">
-              {isSharedView ? "No reports available in this share" : "Create a report to get started"}
+            <h2 className="text-2xl font-bold mb-4">No Reports Found</h2>
+            <p className="text-muted-foreground mb-6">
+              You don't have any reports yet. Create your first report to get started.
             </p>
+            <Button>Create Report</Button>
           </div>
         </main>
       )}
     </div>
   );
-};
-
-export default Index;
+}
