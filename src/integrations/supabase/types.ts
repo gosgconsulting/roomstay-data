@@ -364,6 +364,10 @@ export type Database = {
           row_count: number
         }[]
       }
+      has_report_access: {
+        Args: { _report_id: string; _user_id: string }
+        Returns: boolean
+      }
       is_master_account: { Args: { _user_id: string }; Returns: boolean }
       owns_report: {
         Args: { _report_id: string; _user_id: string }
