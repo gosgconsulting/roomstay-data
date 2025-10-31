@@ -95,6 +95,10 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  
+  // Tab editing state
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
+  const [editingTabName, setEditingTabName] = useState("");
 
   useEffect(() => {
     if (reportId) {
@@ -447,6 +451,53 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
   const handleViewChange = (viewId: string) => {
     setActiveViewId(viewId);
     loadViewSettings(viewId);
+  };
+
+  const handleTabDoubleClick = (viewId: string, currentName: string) => {
+    if (isSharedView) return;
+    setEditingTabId(viewId);
+    setEditingTabName(currentName);
+  };
+
+  const handleTabNameSave = async () => {
+    if (!editingTabId || !editingTabName.trim()) {
+      setEditingTabId(null);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("report_views")
+        .update({ name: editingTabName.trim() })
+        .eq("id", editingTabId);
+
+      if (error) throw error;
+
+      // Update local state
+      setTableViews(prev => prev.map(v => 
+        v.id === editingTabId ? { ...v, name: editingTabName.trim() } : v
+      ));
+
+      toast({
+        title: "Table renamed",
+        description: `Renamed to "${editingTabName.trim()}"`,
+      });
+    } catch (error) {
+      console.error("Error renaming table:", error);
+      toast({
+        title: "Error",
+        description: "Failed to rename table",
+        variant: "destructive",
+      });
+    } finally {
+      setEditingTabId(null);
+      setEditingTabName("");
+    }
+  };
+
+  const handleTabNameCancel = () => {
+    setEditingTabId(null);
+    setEditingTabName("");
   };
 
   const loadDimensions = async () => {
@@ -850,16 +901,38 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
               <div className="flex items-center gap-2">
                 <TabsList>
                   {tableViews.map((view) => (
-                    <TabsTrigger key={view.id} value={view.id}>
-                      {view.name}
+                    <TabsTrigger 
+                      key={view.id} 
+                      value={view.id}
+                      onDoubleClick={() => handleTabDoubleClick(view.id, view.name)}
+                      className="relative"
+                    >
+                      {editingTabId === view.id ? (
+                        <input
+                          type="text"
+                          value={editingTabName}
+                          onChange={(e) => setEditingTabName(e.target.value)}
+                          onBlur={handleTabNameSave}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleTabNameSave();
+                            } else if (e.key === 'Escape') {
+                              handleTabNameCancel();
+                            }
+                          }}
+                          className="bg-transparent border-none outline-none text-center w-full px-0"
+                          autoFocus
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        view.name
+                      )}
                     </TabsTrigger>
                   ))}
                 </TabsList>
               </div>
             </Tabs>
           )}
-          
-          <CardTitle className="mb-4">Performance Table</CardTitle>
           
           <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 text-sm">
