@@ -620,10 +620,10 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
       
       switch (granularity) {
         case 'day':
-          return format(date, 'MMM d, yyyy'); // Oct 31, 2025
+          return format(date, 'MMMM d, yyyy'); // October 31, 2025
         case 'week':
           const weekStart = startOfWeek(date);
-          return format(weekStart, 'MMM d, yyyy'); // Week starting date
+          return format(weekStart, 'MMMM d, yyyy'); // Week starting date
         case 'month':
           return format(date, 'MMMM yyyy'); // October 2025
         case 'year':
@@ -635,6 +635,37 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
       console.error('Error formatting date:', error);
       return "-";
     }
+  };
+  
+  // Helper to format row name - check if it's a date
+  const formatRowName = (name: string, level: number): string => {
+    // Get the dimension for this level
+    let dimId: string | undefined;
+    if (level === 0) {
+      dimId = groupByDimensions[0];
+    } else if (level === 1) {
+      dimId = groupByDimensions[1];
+    } else if (level === 2) {
+      dimId = groupByDimensions[2];
+    }
+    
+    if (!dimId) return name;
+    
+    const dimension = dimensions.find(d => d.id === dimId);
+    
+    // If it's a date dimension, format it
+    if (dimension?.type === 'date') {
+      try {
+        const date = new Date(name);
+        if (!isNaN(date.getTime())) {
+          return format(date, 'MMMM d, yyyy'); // October 29, 2025
+        }
+      } catch (error) {
+        console.error('Error formatting date name:', error);
+      }
+    }
+    
+    return name;
   };
 
   // Helper to format values based on dimension type
@@ -874,7 +905,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                 <div className="w-4" />
               )}
               <span className={cn("font-medium", row.level > 0 && "font-normal")}>
-                {row.name}
+                {formatRowName(row.name, row.level)}
               </span>
             </div>
           </td>
