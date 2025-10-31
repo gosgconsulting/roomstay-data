@@ -178,6 +178,38 @@ export type Database = {
         }
         Relationships: []
       }
+      report_shares: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          report_id: string
+          shared_with_email: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          report_id: string
+          shared_with_email: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          report_id?: string
+          shared_with_email?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_shares_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       report_views: {
         Row: {
           breakdown_by_dimensions: string[] | null

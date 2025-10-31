@@ -13,6 +13,7 @@ import { DataSourcesListModal } from "./DataSourcesListModal";
 import { DimensionsListModal } from "./DimensionsListModal";
 import { DimensionModal } from "./DimensionModal";
 import { ReportModal } from "./ReportModal";
+import { ShareModal } from "./ShareModal";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -33,6 +34,7 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
   const [showDimensionModal, setShowDimensionModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [currentReport, setCurrentReport] = useState<Report | null>(null);
@@ -338,7 +340,12 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
         </div>
 
         <div className="flex items-center gap-3">
-          <Button variant="outline" className="gap-2">
+          <Button 
+            variant="outline" 
+            className="gap-2"
+            onClick={() => setShowShareModal(true)}
+            disabled={!currentReport}
+          >
             <Share2 className="h-4 w-4" />
             Share
           </Button>
@@ -403,6 +410,15 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
         title={editingReport ? "Edit Report" : "Create New Report"}
         description={editingReport ? "Update the report name" : "Enter a name for your new report"}
       />
+
+      {currentReport && (
+        <ShareModal
+          reportId={currentReport.id}
+          reportName={currentReport.name}
+          open={showShareModal}
+          onOpenChange={setShowShareModal}
+        />
+      )}
     </>
   );
 };
