@@ -121,74 +121,115 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
         return;
       }
 
-      // Get owned reports
-      const { data: ownedReports, error: ownedError } = await supabase
-        .from('reports')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      // Check if user is master account
+      const isMasterAccount = user.email === 'contact@gosgconsulting.com';
 
-      if (ownedError) {
-        console.error("Error loading owned reports:", ownedError);
-        throw ownedError;
-      }
-
-      // Get shared report IDs
-      const { data: shares, error: sharesError } = await supabase
-        .from('report_shares')
-        .select('report_id, created_by')
-        .eq('shared_with_email', user.email);
-
-      if (sharesError) {
-        console.error("Error loading shares:", sharesError);
-        throw sharesError;
-      }
-
-      let sharedReportsWithOwner = [];
-      
-      if (shares && shares.length > 0) {
-        // Get shared reports
-        const sharedReportIds = shares.map(s => s.report_id);
-        const { data: sharedReports, error: sharedReportsError } = await supabase
+      if (isMasterAccount) {
+        // Master account sees all reports
+        const { data: allReportsData, error: allReportsError } = await supabase
           .from('reports')
           .select('*')
-          .in('id', sharedReportIds);
+          .order('created_at', { ascending: false });
 
-        if (sharedReportsError) {
-          console.error("Error loading shared reports:", sharedReportsError);
-        } else {
-          // Get owner emails
-          const ownerIds = [...new Set(shares.map(s => s.created_by))];
-          const { data: owners, error: ownersError } = await supabase
-            .from('profiles')
-            .select('id, email')
-            .in('id', ownerIds);
-
-          if (ownersError) {
-            console.error("Error loading owner profiles:", ownersError);
-          }
-
-          const ownerMap = new Map(owners?.map(o => [o.id, o.email]) || []);
-          
-          sharedReportsWithOwner = (sharedReports || []).map(report => {
-            const share = shares.find(s => s.report_id === report.id);
-            return {
-              ...report,
-              owner_email: share ? ownerMap.get(share.created_by) : 'Unknown',
-              is_shared: true,
-            };
-          });
+        if (allReportsError) {
+          console.error("Error loading all reports:", allReportsError);
+          throw allReportsError;
         }
-      }
 
-      const allReports = [
-        ...(ownedReports || []).map(r => ({ ...r, is_shared: false })),
-        ...sharedReportsWithOwner,
-      ];
+        // Get all user IDs to fetch owner emails
+        const userIds = [...new Set((allReportsData || []).map(r => r.user_id))];
+        const { data: owners, error: ownersError } = await supabase
+          .from('profiles')
+          .select('id, email')
+          .in('id', userIds);
 
-      setReports(allReports);
-      if (allReports.length > 0) {
-        setCurrentReport(allReports[0]);
+        if (ownersError) {
+          console.error("Error loading owner profiles:", ownersError);
+        }
+
+        const ownerMap = new Map(owners?.map(o => [o.id, o.email]) || []);
+        
+        const allReports = (allReportsData || []).map(report => ({
+          ...report,
+          owner_email: ownerMap.get(report.user_id),
+          is_shared: report.user_id !== user.id,
+        }));
+
+        setReports(allReports);
+        if (allReports.length > 0) {
+          setCurrentReport(allReports[0]);
+        }
+      } else {
+        // Regular user: get owned and shared reports
+        // Get owned reports
+        const { data: ownedReports, error: ownedError } = await supabase
+          .from('reports')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (ownedError) {
+          console.error("Error loading owned reports:", ownedError);
+          throw ownedError;
+        }
+
+        // Get shared report IDs
+        const { data: shares, error: sharesError } = await supabase
+          .from('report_shares')
+          .select('report_id, created_by')
+          .eq('shared_with_email', user.email);
+
+        if (sharesError) {
+          console.error("Error loading shares:", sharesError);
+          throw sharesError;
+        }
+
+        let sharedReportsWithOwner = [];
+        
+        if (shares && shares.length > 0) {
+          // Get shared reports
+          const sharedReportIds = shares.map(s => s.report_id);
+          const { data: sharedReports, error: sharedReportsError } = await supabase
+            .from('reports')
+            .select('*')
+            .in('id', sharedReportIds);
+
+          if (sharedReportsError) {
+            console.error("Error loading shared reports:", sharedReportsError);
+          } else {
+            // Get owner emails
+            const ownerIds = [...new Set(shares.map(s => s.created_by))];
+            const { data: owners, error: ownersError } = await supabase
+              .from('profiles')
+              .select('id, email')
+              .in('id', ownerIds);
+
+            if (ownersError) {
+              console.error("Error loading owner profiles:", ownersError);
+            }
+
+            const ownerMap = new Map(owners?.map(o => [o.id, o.email]) || []);
+            
+            sharedReportsWithOwner = (sharedReports || []).map(report => {
+              const share = shares.find(s => s.report_id === report.id);
+              return {
+                ...report,
+                owner_email: share ? ownerMap.get(share.created_by) : 'Unknown',
+                is_shared: true,
+              };
+            });
+          }
+        }
+
+        const allReports = [
+          ...(ownedReports || []).map(r => ({ ...r, is_shared: false })),
+          ...sharedReportsWithOwner,
+        ];
+
+        setReports(allReports);
+        if (allReports.length > 0) {
+          setCurrentReport(allReports[0]);
+        }
       }
     } catch (error) {
       console.error("Error loading reports:", error);
