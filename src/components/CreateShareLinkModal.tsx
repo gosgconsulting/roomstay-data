@@ -56,18 +56,72 @@ export const CreateShareLinkModal = ({
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data, error } = await supabase
-      .from("reports")
-      .select("id, name")
-      .eq("user_id", user.id)
-      .order("name");
+    // Check if user is master account
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("email")
+      .eq("id", user.id)
+      .single();
 
-    if (error) {
-      console.error("Error loading reports:", error);
-      return;
+    const isMaster = profile?.email === "contact@gosgconsulting.com";
+
+    let allReports: Report[] = [];
+
+    if (isMaster) {
+      // Master account: Load ALL reports
+      const { data, error } = await supabase
+        .from("reports")
+        .select("id, name")
+        .order("name");
+
+      if (error) {
+        console.error("Error loading reports:", error);
+        return;
+      }
+
+      allReports = data || [];
+    } else {
+      // Regular user: Load own reports and shared reports
+      // Get own reports
+      const { data: ownReports, error: ownError } = await supabase
+        .from("reports")
+        .select("id, name")
+        .eq("user_id", user.id)
+        .order("name");
+
+      if (ownError) {
+        console.error("Error loading own reports:", ownError);
+        return;
+      }
+
+      // Get shared reports
+      const { data: sharedReports, error: sharedError } = await supabase
+        .from("report_shares")
+        .select("report_id, reports!inner(id, name)")
+        .eq("shared_with_email", profile?.email || "");
+
+      if (sharedError) {
+        console.error("Error loading shared reports:", sharedError);
+      }
+
+      // Combine and deduplicate
+      const ownReportsList = ownReports || [];
+      const sharedReportsList = sharedReports?.map(sr => ({
+        id: sr.reports.id,
+        name: sr.reports.name,
+      })) || [];
+
+      const reportMap = new Map<string, Report>();
+      [...ownReportsList, ...sharedReportsList].forEach(report => {
+        reportMap.set(report.id, report);
+      });
+
+      allReports = Array.from(reportMap.values()).sort((a, b) => 
+        a.name.localeCompare(b.name)
+      );
     }
 
-    setReports(data || []);
+    setReports(allReports);
   };
 
   const validateSlug = (value: string) => {
