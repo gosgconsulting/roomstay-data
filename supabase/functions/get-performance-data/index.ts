@@ -398,9 +398,9 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Build children if breakdown dimension exists
-      if (breakdownDims[0] && group.rawRows.length > 0) {
-        const breakdownDimId = breakdownDims[0];
+      // Build children if breakdown dimension exists (use index 1, not 0)
+      if (breakdownDims.length > 1 && breakdownDims[1] && group.rawRows.length > 0) {
+        const breakdownDimId = breakdownDims[1]; // Use second dimension for breakdown
         const breakdownGrouped = new Map<string, any>();
 
         for (const row of group.rawRows) {
