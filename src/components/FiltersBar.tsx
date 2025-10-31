@@ -70,11 +70,9 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
     }
   }, [activeDimensions, reportId]);
 
-  // Apply default date range on mount
+  // Apply default date range on mount - always apply to ensure consistency
   useEffect(() => {
-    if (!dateRange) {
-      applyDatePreset("this_month");
-    }
+    applyDatePreset("this_month");
   }, []);
 
   // Save filter settings whenever they change
@@ -127,15 +125,13 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
         if (data.filter_values) {
           setSelectedFilters(data.filter_values as Record<string, string>);
         }
-        if (data.date_range_preset) {
-          setDatePreset(data.date_range_preset);
-          applyDatePreset(data.date_range_preset);
-        } else if (data.date_range_start && data.date_range_end) {
-          setDateRange({
-            from: new Date(data.date_range_start),
-            to: new Date(data.date_range_end),
-          });
-        }
+        // Always apply date preset if saved, or default to "this_month"
+        const preset = data.date_range_preset || "this_month";
+        setDatePreset(preset);
+        applyDatePreset(preset);
+      } else {
+        // No saved view, apply default
+        applyDatePreset("this_month");
       }
     } catch (error) {
       console.error("Error loading filter settings:", error);

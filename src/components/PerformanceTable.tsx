@@ -208,6 +208,13 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
       
       console.log('Creating default view for report:', reportId, 'with dimension:', defaultGroupDimension?.name);
 
+      // Set default visible columns - hide some columns by default
+      const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
+      const defaultVisibleIds = dimensions
+        .filter(d => !hiddenColumns.includes(d.name) && 
+                    (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula))
+        .map(d => d.id);
+
       const { data: newView, error } = await supabase
         .from("report_views")
         .insert({
@@ -218,7 +225,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
           group_by_dimensions: defaultGroupDimension ? [defaultGroupDimension.id] : [],
           breakdown_by_dimensions: [],
           then_by_dimensions: [],
-          visible_columns: [],
+          visible_columns: defaultVisibleIds,
           date_granularity: 'none',
           date_order: 'desc',
         })
