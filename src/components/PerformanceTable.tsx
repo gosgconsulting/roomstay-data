@@ -155,19 +155,37 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      
+      console.log('Loading views for report:', reportId, 'isSharedView:', isSharedView);
+
+      let userId = user?.id;
+      
+      // If this is a shared view, load the report owner's views instead
+      if (isSharedView) {
+        const { data: reportData, error: reportError } = await supabase
+          .from("reports")
+          .select("user_id")
+          .eq("id", reportId)
+          .single();
+        
+        if (reportError) {
+          console.error("Error fetching report owner:", reportError);
+          throw reportError;
+        }
+        
+        userId = reportData.user_id;
+        console.log('Loading report owner views for shared view. Owner:', userId);
+      } else if (!user) {
         console.error("Cannot load views: No user");
         return;
       }
 
-      console.log('Loading views for report:', reportId);
-
-      // Load all views for this report
+      // Load all views for this report (either current user or report owner)
       const { data: views, error } = await supabase
         .from("report_views")
         .select("*")
         .eq("report_id", reportId)
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .order("created_at", { ascending: true });
 
       if (error) {
@@ -184,10 +202,12 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
         setActiveViewId(defaultView.id);
         // Load settings directly from the view data instead of searching state
         loadViewSettingsFromData(defaultView);
-      } else {
-        // Create a default view if none exists
+      } else if (!isSharedView) {
+        // Only create a default view if not a shared view and no views exist
         console.log('No views found, creating default view');
         await createDefaultView();
+      } else {
+        console.log('No views found for shared report');
       }
     } catch (error) {
       console.error("Error loading views:", error);
@@ -333,6 +353,12 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
   const saveViewSettings = async () => {
     if (!reportId || !activeViewId) return;
     
+    // Don't save if this is a shared view (read-only)
+    if (isSharedView) {
+      console.log('Skipping save for shared view (read-only)');
+      return;
+    }
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -372,7 +398,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
   };
 
   const handleDuplicateView = async () => {
-    if (!reportId || !activeViewId) return;
+    if (!reportId || !activeViewId || isSharedView) return;
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -432,7 +458,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
   };
 
   const handleDeleteView = async (viewId: string) => {
-    if (!reportId || tableViews.length <= 1) return;
+    if (!reportId || tableViews.length <= 1 || isSharedView) return;
     
     try {
       const { error } = await supabase
@@ -482,7 +508,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
   };
 
   const handleTabNameSave = async () => {
-    if (!editingTabId || !editingTabName.trim()) {
+    if (!editingTabId || !editingTabName.trim() || isSharedView) {
       setEditingTabId(null);
       return;
     }

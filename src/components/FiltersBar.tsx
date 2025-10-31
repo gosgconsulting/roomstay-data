@@ -117,12 +117,27 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Try to load saved filters for this specific report and user
+      let userId = user?.id || '';
+      
+      // If this is a shared view, load the report owner's filters
+      if (isSharedView && reportId) {
+        const { data: reportData, error: reportError } = await supabase
+          .from("reports")
+          .select("user_id")
+          .eq("id", reportId)
+          .single();
+        
+        if (!reportError && reportData) {
+          userId = reportData.user_id;
+        }
+      }
+      
+      // Try to load saved filters for this specific report and user (or report owner for shared views)
       const { data, error } = await supabase
         .from("report_views")
         .select("*")
         .eq("report_id", reportId)
-        .eq("user_id", user?.id || '')
+        .eq("user_id", userId)
         .eq("is_default", true)
         .maybeSingle();
 
@@ -159,6 +174,9 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
 
   const saveFilterSettings = async () => {
     if (!reportId) return;
+    
+    // Don't save if this is a shared view (read-only)
+    if (isSharedView) return;
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
