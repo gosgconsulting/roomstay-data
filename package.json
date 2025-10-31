@@ -8,7 +8,9 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "update-lockfile": "bun update-lockfile.js",
+    "test-deployment": "bun test-deployment.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
