@@ -905,30 +905,15 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                 <div className="w-4" />
               )}
               <span className={cn("font-medium", row.level > 0 && "font-normal")}>
-                {(() => {
-                  // Check if first groupBy is date dimension
-                  const firstDim = dimensions.find(d => d.id === groupByDimensions[0]);
-                  if (firstDim?.type === 'date' && dateGranularity !== 'none') {
-                    // Format the row name based on granularity
-                    return formatDate(row.name, dateGranularity);
-                  }
-                  return formatRowName(row.name, row.level);
-                })()}
+                {formatRowName(row.name, row.level)}
               </span>
             </div>
           </td>
-          {dateGranularity !== 'none' && (() => {
-            const firstDim = dimensions.find(d => d.id === groupByDimensions[0]);
-            // Only show separate date column if first groupBy is NOT a date dimension
-            if (firstDim?.type !== 'date') {
-              return (
-                <td className="py-3 px-4 text-left">
-                  {formatDate(row.data['Date'], dateGranularity)}
-                </td>
-              );
-            }
-            return null;
-          })()}
+          {dateGranularity !== 'none' && (
+            <td className="py-3 px-4 text-left">
+              {formatDate(row.data['Date'], dateGranularity)}
+            </td>
+          )}
           {dimensions
             .filter(d => {
               // Only show metric/value columns (same filter as Column Visibility)
@@ -1260,28 +1245,15 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                         className="py-3 px-4 text-left font-medium text-sm"
                         onContextMenu={(e) => handleContextMenu(e, "name")}
                       >
-                        {(() => {
-                          const firstDim = dimensions.find(d => d.id === groupByDimensions[0]);
-                          if (firstDim?.type === 'date' && dateGranularity !== 'none') {
-                            // Capitalize first letter of granularity
-                            const granularityLabel = dateGranularity.charAt(0).toUpperCase() + dateGranularity.slice(1);
-                            return `Group by ${granularityLabel}`;
-                          }
-                          return firstDim?.name || "Name";
-                        })()}
+                        {groupByDimensions[0] 
+                          ? dimensions.find(d => d.id === groupByDimensions[0])?.name || "Name"
+                          : "Name"}
                       </th>
-                      {dateGranularity !== 'none' && (() => {
-                        const firstDim = dimensions.find(d => d.id === groupByDimensions[0]);
-                        // Only show separate date column if first groupBy is NOT a date dimension
-                        if (firstDim?.type !== 'date') {
-                          return (
-                            <th className="py-3 px-4 text-left font-medium text-sm">
-                              Date
-                            </th>
-                          );
-                        }
-                        return null;
-                      })()}
+                      {dateGranularity !== 'none' && (
+                        <th className="py-3 px-4 text-left font-medium text-sm">
+                          Date
+                        </th>
+                      )}
                       {dimensions
                         .filter(d => {
                           // Only show metric/value columns (same filter as Column Visibility)
@@ -1307,14 +1279,9 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                     {/* Total row */}
                     <tr className="border-t-2 border-primary/20 bg-muted/50 font-semibold">
                       <td className="py-3 px-4">Total</td>
-                      {dateGranularity !== 'none' && (() => {
-                        const firstDim = dimensions.find(d => d.id === groupByDimensions[0]);
-                        // Only show empty date cell if first groupBy is NOT a date dimension
-                        if (firstDim?.type !== 'date') {
-                          return <td className="py-3 px-4"></td>;
-                        }
-                        return null;
-                      })()}
+                      {dateGranularity !== 'none' && (
+                        <td className="py-3 px-4"></td>
+                      )}
                       {dimensions
                         .filter(d => {
                           return (d.type === 'number' || 
