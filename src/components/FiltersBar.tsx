@@ -34,6 +34,7 @@ export interface FilterState {
 interface FiltersBarProps {
   reportId: string | null;
   onFiltersChange?: (filters: FilterState) => void;
+  isSharedView?: boolean;
 }
 
 interface Dimension {
@@ -42,7 +43,7 @@ interface Dimension {
   type: string;
 }
 
-export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
+export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: FiltersBarProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [activeDimensions, setActiveDimensions] = useState<string[]>([]);
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
@@ -621,7 +622,7 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
                 </Popover>
               </div>
 
-              {activeDimensions.length === 0 && (
+              {activeDimensions.length === 0 && !isSharedView && (
                 <Button
                   variant="outline"
                   className="gap-2"
@@ -633,7 +634,7 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
               )}
             </div>
 
-            {activeDimensions.length > 0 && (
+            {activeDimensions.length > 0 && !isSharedView && (
               <Button
                 variant="ghost"
                 size="icon"

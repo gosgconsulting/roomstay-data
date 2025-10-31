@@ -61,9 +61,10 @@ interface TableRow {
 interface PerformanceTableProps {
   reportId: string | null;
   filters: FilterState;
+  isSharedView?: boolean;
 }
 
-export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) => {
+export const PerformanceTable = ({ reportId, filters, isSharedView = false }: PerformanceTableProps) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
   const [dimensionSelectorOpen, setDimensionSelectorOpen] = useState(false);
@@ -844,7 +845,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
       <Card>
         <CardHeader className="pb-3">
           {/* Table View Tabs */}
-          {tableViews.length > 0 && (
+          {!isSharedView && tableViews.length > 0 && (
             <Tabs value={activeViewId || undefined} onValueChange={handleViewChange} className="mb-4">
               <div className="flex items-center gap-2">
                 <TabsList>
@@ -872,7 +873,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
                     >
                       <SelectTrigger 
                         className="w-40 bg-background"
-                        onContextMenu={(e) => handleDimensionSelectorOpen(e as any, "group")}
+                        onContextMenu={!isSharedView ? (e) => handleDimensionSelectorOpen(e as any, "group") : undefined}
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -887,7 +888,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
                         })}
                       </SelectContent>
                     </Select>
-                  ) : (
+                  ) : !isSharedView ? (
                     <Button
                       variant="outline"
                       className="w-40 justify-start"
@@ -896,6 +897,8 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
                     >
                       <span className="text-muted-foreground">Right-click to select</span>
                     </Button>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">-</span>
                   )}
                 </div>
                 {/* Breakdown by - shown only if 2+ dimensions selected */}
@@ -908,7 +911,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
                     >
                       <SelectTrigger 
                         className="w-40 bg-background"
-                        onContextMenu={(e) => handleDimensionSelectorOpen(e as any, "breakdown")}
+                        onContextMenu={!isSharedView ? (e) => handleDimensionSelectorOpen(e as any, "breakdown") : undefined}
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -935,7 +938,7 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
                     >
                       <SelectTrigger 
                         className="w-40 bg-background"
-                        onContextMenu={(e) => handleDimensionSelectorOpen(e as any, "then")}
+                        onContextMenu={!isSharedView ? (e) => handleDimensionSelectorOpen(e as any, "then") : undefined}
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -954,145 +957,48 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
                 )}
               </div>
               
-              <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  className="h-9 w-9"
-                  onClick={handleDuplicateView}
-                  title="Duplicate table"
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-                
-                {tableViews.length > 1 && (
+              {!isSharedView && (
+                <div className="flex items-center gap-2">
                   <Button 
                     variant="outline" 
                     size="icon" 
-                    className="h-9 w-9 text-destructive hover:text-destructive"
-                    onClick={() => activeViewId && handleDeleteView(activeViewId)}
-                    title="Delete table"
+                    className="h-9 w-9"
+                    onClick={handleDuplicateView}
+                    title="Duplicate table"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Copy className="h-4 w-4" />
                   </Button>
-                )}
-                
-                <Sheet>
-                  <SheetTrigger asChild>
-                    <Button variant="outline" size="icon" className="h-9 w-9">
-                      <Columns3 className="h-4 w-4" />
+                  
+                  {tableViews.length > 1 && (
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="h-9 w-9 text-destructive hover:text-destructive"
+                      onClick={() => activeViewId && handleDeleteView(activeViewId)}
+                      title="Delete table"
+                    >
+                      <Trash2 className="h-4 w-4" />
                     </Button>
-                  </SheetTrigger>
-                  <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
-                  <SheetHeader>
-                    <SheetTitle>Column Visibility</SheetTitle>
-                    <SheetDescription>
-                      Select which metrics to display in the table
-                    </SheetDescription>
-                  </SheetHeader>
-                  <div className="mt-6 space-y-6">
-                    {/* Date Section */}
-                    <div className="space-y-3">
-                      <h3 className="text-sm font-semibold">Date</h3>
-                      <RadioGroup value={dateGranularity} onValueChange={(value) => setDateGranularity(value as any)}>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="none" id="date-none" />
-                          <Label htmlFor="date-none" className="cursor-pointer font-normal">None</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="day" id="date-day" />
-                          <Label htmlFor="date-day" className="cursor-pointer font-normal">Day</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="week" id="date-week" />
-                          <Label htmlFor="date-week" className="cursor-pointer font-normal">Week</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="month" id="date-month" />
-                          <Label htmlFor="date-month" className="cursor-pointer font-normal">Month</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="year" id="date-year" />
-                          <Label htmlFor="date-year" className="cursor-pointer font-normal">Year</Label>
-                        </div>
-                      </RadioGroup>
-                      
-                      {dateGranularity !== 'none' && (
-                        <>
-                          <div className="mt-4 pt-3 border-t">
-                            <h4 className="text-sm font-medium mb-2">Order by</h4>
-                            <RadioGroup value={dateOrder} onValueChange={(value) => setDateOrder(value as 'asc' | 'desc')}>
-                              <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="desc" id="date-order-desc" />
-                                <Label htmlFor="date-order-desc" className="cursor-pointer font-normal">
-                                  Descending (Latest first)
-                                </Label>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="asc" id="date-order-asc" />
-                                <Label htmlFor="date-order-asc" className="cursor-pointer font-normal">
-                                  Ascending (Earliest first)
-                                </Label>
-                              </div>
-                            </RadioGroup>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    <Separator />
-
-                    {/* Metrics Section */}
-                    <div className="space-y-3">
-                      <h3 className="text-sm font-semibold">Metrics</h3>
-                      {isLoadingDimensions ? (
-                        <div className="text-sm text-muted-foreground">Loading dimensions...</div>
-                      ) : dimensions.length === 0 ? (
-                        <div className="text-sm text-muted-foreground">No dimensions found</div>
-                      ) : (
-                        <div className="space-y-3">
-                          {dimensions
-                            .filter(dimension => {
-                              // Only show metric/value fields (number, currency, percentage, formula)
-                              // Exclude attribute fields that are used for grouping
-                              return dimension.type === 'number' || 
-                                     dimension.type === 'currency' || 
-                                     dimension.type === 'percentage' ||
-                                     dimension.formula !== null;
-                            })
-                            .map((dimension) => (
-                              <div key={dimension.id} className="flex items-center space-x-3">
-                                <Checkbox
-                                  id={dimension.id}
-                                  checked={visibleColumns.has(dimension.id)}
-                                  onCheckedChange={() => toggleColumn(dimension.id)}
-                                />
-                                <label
-                                  htmlFor={dimension.id}
-                                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
-                                >
-                                  {dimension.name}
-                                  {dimension.formula && (
-                                    <span className="ml-2 text-xs text-muted-foreground">
-                                      (formula)
-                                    </span>
-                                  )}
-                                </label>
-                              </div>
-                            ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </SheetContent>
-              </Sheet>
-            </div>
+                  )}
+                  
+                  <Sheet>
+                    <SheetTrigger asChild>
+                      <Button variant="outline" size="icon" className="h-9 w-9">
+                        <Columns3 className="h-4 w-4" />
+                      </Button>
+                    </SheetTrigger>
+                    <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
+...
+                  </SheetContent>
+                </Sheet>
+              </div>
+              )}
           </div>
         </CardHeader>
         <CardContent>
           {groupByDimensions.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
-              Right-click on "Group by" to select dimensions
+              {isSharedView ? "No data available" : "Right-click on \"Group by\" to select dimensions"}
             </div>
           ) : isLoadingData ? (
             <div className="py-8 text-center text-muted-foreground">
