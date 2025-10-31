@@ -135,39 +135,13 @@ const Index = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      // Check if user is master account
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("email")
-        .eq("id", session.user.id)
-        .single();
-
-      const isMaster = profile?.email === "contact@gosgconsulting.com";
-
-      let reports;
-      let fetchError;
-
-      if (isMaster) {
-        // Master account: Load ALL reports
-        const result = await supabase
-          .from("reports")
-          .select("*")
-          .order("name")
-          .limit(1);
-        
-        reports = result.data;
-        fetchError = result.error;
-      } else {
-        // Regular user: Load own reports
-        const result = await supabase
-          .from("reports")
-          .select("*")
-          .eq("user_id", session.user.id)
-          .limit(1);
-        
-        reports = result.data;
-        fetchError = result.error;
-      }
+      // Load user's own reports
+      const { data: reports, error: fetchError } = await supabase
+        .from("reports")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("name")
+        .limit(1);
 
       if (fetchError) throw fetchError;
 
