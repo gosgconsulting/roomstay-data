@@ -522,13 +522,23 @@ export const PerformanceTable = ({ reportId, filters }: PerformanceTableProps) =
         return indexA - indexB;
       });
 
-      setDimensions(sortedDimensions);
+      // Deduplicate dimensions by name (keep first occurrence)
+      const seenNames = new Set<string>();
+      const uniqueDimensions = sortedDimensions.filter(dim => {
+        if (seenNames.has(dim.name)) {
+          return false;
+        }
+        seenNames.add(dim.name);
+        return true;
+      });
+
+      setDimensions(uniqueDimensions);
       
       // Set default visibility only if no saved view exists
       // This will be overridden by loadViewSettings if a saved view exists
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
       const defaultVisible = new Set<string>(
-        sortedDimensions
+        uniqueDimensions
           .filter(d => !hiddenColumns.includes(d.name) && 
                       (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula))
           .map(d => d.id)
