@@ -59,6 +59,16 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
 
   useEffect(() => {
     if (reportId) {
+      // Reset all filter state when report changes
+      setActiveDimensions([]);
+      setSelectedFilters({});
+      setDateRange(undefined);
+      setDatePreset("this_month");
+      setCompareEnabled(false);
+      setCompareType("previous_period");
+      setCompareDateRange(undefined);
+      
+      // Then load settings for the new report
       loadDimensions();
       loadFilterSettings();
     }
@@ -107,22 +117,25 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
     if (!reportId) return;
     
     try {
-      // Try to load saved filters (public access - first available)
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // Try to load saved filters for this specific report and user
       const { data, error } = await supabase
         .from("report_views")
         .select("*")
         .eq("report_id", reportId)
+        .eq("user_id", user?.id || '')
         .eq("is_default", true)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error && error.code !== 'PGRST116') throw error; // Ignore "no rows" error
 
       if (data) {
-        // Load saved filter settings
-        if (data.filter_dimensions) {
+        // Load saved filter settings for this report
+        if (data.filter_dimensions && data.filter_dimensions.length > 0) {
           setActiveDimensions(data.filter_dimensions);
         }
-        if (data.filter_values) {
+        if (data.filter_values && Object.keys(data.filter_values).length > 0) {
           setSelectedFilters(data.filter_values as Record<string, string>);
         }
         // Always apply date preset if saved, or default to "this_month"
@@ -130,11 +143,13 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
         setDatePreset(preset);
         applyDatePreset(preset);
       } else {
-        // No saved view, apply default
+        // No saved view for this report, apply defaults
         applyDatePreset("this_month");
       }
     } catch (error) {
       console.error("Error loading filter settings:", error);
+      // On error, apply defaults
+      applyDatePreset("this_month");
     }
   };
 
