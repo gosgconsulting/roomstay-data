@@ -42,6 +42,7 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
   const [reports, setReports] = useState<Report[]>([]);
   const [currentReport, setCurrentReport] = useState<Report | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [lastUpdateDate, setLastUpdateDate] = useState<string | null>(null);
 
   // Load reports on mount
   useEffect(() => {
@@ -64,6 +65,40 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
       }
     }
   }, [reportId, reports]);
+
+  // Load last update date when report changes
+  useEffect(() => {
+    if (reportId) {
+      loadLastUpdateDate(reportId);
+    }
+  }, [reportId]);
+
+  const loadLastUpdateDate = async (reportId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('dimension_data')
+        .select('updated_at')
+        .eq('report_id', reportId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error) {
+        console.error("Error loading last update date:", error);
+        setLastUpdateDate(null);
+        return;
+      }
+
+      if (data) {
+        // Format date as YYYY-MM-DD
+        const date = new Date(data.updated_at);
+        setLastUpdateDate(date.toISOString().split('T')[0]);
+      }
+    } catch (error) {
+      console.error("Error loading last update date:", error);
+      setLastUpdateDate(null);
+    }
+  };
 
   const createDefaultDimensions = async () => {
     try {
@@ -457,6 +492,11 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
         </div>
 
         <div className="flex items-center gap-3">
+          {lastUpdateDate && (
+            <span className="text-sm text-muted-foreground">
+              Last update: {lastUpdateDate}
+            </span>
+          )}
           <Button 
             variant="outline" 
             className="gap-2"
