@@ -75,11 +75,20 @@ export const ViewDataModal = ({
       }
 
       // Fetch dimension details
+      // Get report_id from data source
+      const { data: dsData, error: dsError } = await supabase
+        .from('data_sources')
+        .select('report_id')
+        .eq('id', dataSource.id)
+        .single();
+
+      if (dsError) throw dsError;
+
       const { data: dimensionsData, error: dimError } = await supabase
         .from('dimensions')
         .select('*')
         .in('id', dimensionIds)
-        .eq('user_id', user.id);
+        .eq('report_id', dsData.report_id);
 
       if (dimError) throw dimError;
 
