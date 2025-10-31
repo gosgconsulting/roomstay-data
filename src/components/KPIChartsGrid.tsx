@@ -114,10 +114,8 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
         if (!dateValue) return;
 
         kpis.forEach(kpi => {
-          const dimension = dimensions.find((d: any) => d.name === kpi.title);
-          if (!dimension) return;
-
-          const value = rowData[dimension.id];
+          // Data from edge function is keyed by dimension name, not ID
+          const value = rowData[kpi.title];
           if (value !== null && value !== undefined) {
             const numValue = parseFloat(value) || 0;
             chartDataByKPI[kpi.title].push({
@@ -158,10 +156,8 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
             if (!dateValue) return;
 
             kpis.forEach(kpi => {
-              const dimension = dimensions.find((d: any) => d.name === kpi.title);
-              if (!dimension) return;
-
-              const value = rowData[dimension.id];
+              // Data from edge function is keyed by dimension name, not ID
+              const value = rowData[kpi.title];
               if (value !== null && value !== undefined) {
                 const numValue = parseFloat(value) || 0;
                 compareChartData[kpi.title].push({
