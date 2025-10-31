@@ -136,10 +136,14 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
     }
   }, [reportId, groupByDimensions, breakdownByDimensions, thenByDimensions, dimensions.length, dateOrder, debouncedFilters]);
 
-  // Save view settings whenever they change
+  // Save view settings whenever they change (with debounce to prevent excessive saves)
   useEffect(() => {
     if (reportId && dimensions.length > 0 && activeViewId) {
-      saveViewSettings();
+      const timeoutId = setTimeout(() => {
+        saveViewSettings();
+      }, 500); // Debounce for 500ms
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, dateGranularity, dateOrder, reportId, activeViewId]);
 
@@ -276,6 +280,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
     setThenByDimensions(view.then_by_dimensions || []);
     
     if (view.visible_columns && view.visible_columns.length > 0) {
+      console.log('Loading visible columns:', view.visible_columns);
       setVisibleColumns(new Set(view.visible_columns));
     } else if (dimensions.length > 0) {
       // Set default visibility if not set
@@ -286,20 +291,23 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                       (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula))
           .map(d => d.id)
       );
+      console.log('Setting default visible columns:', Array.from(defaultVisible));
       setVisibleColumns(defaultVisible);
     }
     
     // Load date granularity if available (default to none)
     if (view.date_granularity) {
+      console.log('Loading date granularity:', view.date_granularity);
       setDateGranularity(view.date_granularity as 'none' | 'day' | 'week' | 'month' | 'year');
     }
     
     // Load date order if available (default to desc)
     if (view.date_order) {
+      console.log('Loading date order:', view.date_order);
       setDateOrder(view.date_order as 'asc' | 'desc');
     }
     
-    console.log('View settings loaded. Group by:', groupDimensions);
+    console.log('View settings loaded successfully');
   };
 
   const loadViewSettings = async (viewId: string) => {
@@ -340,12 +348,19 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
         date_order: dateOrder,
       };
 
+      console.log('Saving view settings:', activeViewId, viewData);
+
       const { error } = await supabase
         .from("report_views")
         .update(viewData)
         .eq("id", activeViewId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error saving view settings:', error);
+        throw error;
+      }
+
+      console.log('View settings saved successfully');
 
       // Update local state
       setTableViews(prev => prev.map(v => 
