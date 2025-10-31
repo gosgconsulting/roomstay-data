@@ -413,10 +413,12 @@ Deno.serve(async (req) => {
               name: breakdownKey,
               level: 1,
               data: {},
+              rawRows: [], // Store raw rows for third level
             });
           }
 
           const breakdownItem = breakdownGrouped.get(breakdownKey);
+          breakdownItem.rawRows.push(row);
 
           // Aggregate for breakdown
           for (const dim of dimensions || []) {
@@ -444,6 +446,60 @@ Deno.serve(async (req) => {
               breakdownItem.data[dim.name] = calculatedValue;
             }
           }
+          
+          // Build third level if "then by" dimension exists (use index 2)
+          if (thenByDims.length > 2 && thenByDims[2] && breakdownItem.rawRows.length > 0) {
+            const thenByDimId = thenByDims[2]; // Use third dimension for "then by"
+            const thenByGrouped = new Map<string, any>();
+
+            for (const row of breakdownItem.rawRows) {
+              const dimValues = row.dimension_values as Record<string, any>;
+              const thenByKey = dimValues[thenByDimId] || 'Unknown';
+
+              if (!thenByGrouped.has(thenByKey)) {
+                thenByGrouped.set(thenByKey, {
+                  id: `${breakdownItem.id}-${thenByKey}`.toLowerCase().replace(/\s+/g, '-'),
+                  name: thenByKey,
+                  level: 2,
+                  data: {},
+                });
+              }
+
+              const thenByItem = thenByGrouped.get(thenByKey);
+
+              // Aggregate for third level
+              for (const dim of dimensions || []) {
+                if (dim.formula) continue;
+
+                const value = dimValues[dim.id];
+                if (value !== undefined && value !== null) {
+                  if (dim.type === 'number' || dim.type === 'currency') {
+                    const numValue = parseFloat(value) || 0;
+                    thenByItem.data[dim.name] = (thenByItem.data[dim.name] || 0) + numValue;
+                  } else {
+                    thenByItem.data[dim.name] = value;
+                  }
+                }
+              }
+            }
+
+            const thenByArray = Array.from(thenByGrouped.values());
+
+            // Calculate formulas for third level
+            for (const thenByItem of thenByArray) {
+              for (const dim of dimensions || []) {
+                if (dim.formula) {
+                  const calculatedValue = calculateFormula(dim.formula, thenByItem.data);
+                  thenByItem.data[dim.name] = calculatedValue;
+                }
+              }
+            }
+
+            breakdownItem.children = thenByArray;
+          }
+          
+          // Clean up rawRows from breakdown level
+          delete breakdownItem.rawRows;
         }
 
         group.children = breakdownArray;
