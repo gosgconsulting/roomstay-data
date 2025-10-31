@@ -19,6 +19,7 @@ const Index = () => {
   const [reportId, setReportId] = useState<string | null>(null);
   const [isSharedView, setIsSharedView] = useState(false);
   const [sharedReportIds, setSharedReportIds] = useState<string[]>([]);
+  const [sharedReports, setSharedReports] = useState<Array<{id: string, name: string}>>([]);
   const [filters, setFilters] = useState<FilterState>({
     dimensionFilters: {},
     dateRange: undefined,
@@ -54,12 +55,24 @@ const Index = () => {
         const shareData = JSON.parse(storedData);
         setIsSharedView(true);
         setSharedReportIds(shareData.report_ids);
-        setIsLoading(false);
         
-        // Load first report from shared list
-        if (shareData.report_ids && shareData.report_ids.length > 0) {
-          setReportId(shareData.report_ids[0]);
-        }
+        // Load report details
+        const loadSharedReports = async () => {
+          if (shareData.report_ids && shareData.report_ids.length > 0) {
+            const { data, error } = await supabase
+              .from("reports")
+              .select("id, name")
+              .in("id", shareData.report_ids);
+            
+            if (!error && data) {
+              setSharedReports(data);
+              setReportId(data[0].id);
+            }
+          }
+          setIsLoading(false);
+        };
+        
+        loadSharedReports();
         return;
       } else {
         // Not authenticated for this share link
@@ -215,12 +228,30 @@ const Index = () => {
           </div>
         </div>
       )}
-      {!isSharedView && (
+      {!isSharedView ? (
         <DashboardHeader 
           reportId={reportId} 
           onReportChange={setReportId} 
           onDataSync={handleDataSync}
         />
+      ) : (
+        sharedReports.length > 1 && (
+          <div className="border-b">
+            <div className="container mx-auto px-6 py-3">
+              <select
+                value={reportId || ""}
+                onChange={(e) => setReportId(e.target.value)}
+                className="w-full max-w-xs px-4 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {sharedReports.map((report) => (
+                  <option key={report.id} value={report.id}>
+                    {report.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )
       )}
       {reportId ? (
         <>
