@@ -24,11 +24,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 interface Dimension {
   id: string;
@@ -57,6 +59,7 @@ export const BudgetForecastTable = ({ reportId }: BudgetForecastTableProps) => {
   const [tableData, setTableData] = useState<TableRow[]>([]);
   const [totalData, setTotalData] = useState<Record<string, any>>({});
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isDimensionModalOpen, setIsDimensionModalOpen] = useState(false);
   
   const [groupByDimensions, setGroupByDimensions] = useState<string[]>([]);
   const [breakdownByDimensions, setBreakdownByDimensions] = useState<string[]>([]);
@@ -310,42 +313,93 @@ export const BudgetForecastTable = ({ reportId }: BudgetForecastTableProps) => {
           <div className="flex flex-wrap items-start gap-4">
             <div className="flex flex-col gap-2">
               <Label>Group by:</Label>
-              <ContextMenu>
-                <ContextMenuTrigger asChild>
-                  <div className="flex flex-wrap items-center gap-2 min-h-[40px] border rounded-md p-2 cursor-pointer hover:bg-accent/50 transition-colors">
+              <Dialog open={isDimensionModalOpen} onOpenChange={setIsDimensionModalOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="justify-start h-auto min-h-[40px] px-3 py-2">
+                    {groupByDimensions.length === 0 ? (
+                      <Plus className="h-4 w-4" />
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {groupByDimensions.map((dimId) => {
+                          const dim = dimensions.find(d => d.id === dimId);
+                          if (!dim) return null;
+                          return (
+                            <Badge key={dimId} variant="secondary">
+                              {dim.name}
+                            </Badge>
+                          );
+                        })}
+                        <Plus className="h-4 w-4 ml-1" />
+                      </div>
+                    )}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[500px]">
+                  <DialogHeader>
+                    <DialogTitle>Select dimensions</DialogTitle>
+                    <DialogDescription>
+                      Select dimensions to populate Group by, Breakdown by, and Then by options. More dimensions = more breakdown options.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
                     {groupByDimensions.map((dimId) => {
                       const dim = dimensions.find(d => d.id === dimId);
                       if (!dim) return null;
                       const isDate = dim.type === "date";
                       return (
-                        <Badge key={dimId} variant="secondary" className="flex items-center gap-1">
-                          {dim.name}
-                          {(!isDate || groupByDimensions.length > 1) && (
-                            <X 
-                              className="h-3 w-3 cursor-pointer hover:text-destructive" 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeGroupByDimension(dimId);
-                              }}
-                            />
-                          )}
-                        </Badge>
+                        <div key={dimId} className="flex items-center justify-between">
+                          <span className="font-medium">{dim.name}</span>
+                          <div className="flex items-center gap-2">
+                            {isDate && (
+                              <Select defaultValue="day">
+                                <SelectTrigger className="w-[120px]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="day">Day</SelectItem>
+                                  <SelectItem value="week">Week</SelectItem>
+                                  <SelectItem value="month">Month</SelectItem>
+                                  <SelectItem value="quarter">Quarter</SelectItem>
+                                  <SelectItem value="year">Year</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
+                            {(!isDate || groupByDimensions.length > 1) && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                onClick={() => removeGroupByDimension(dimId)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                       );
                     })}
-                    <Plus className="h-4 w-4 text-muted-foreground" />
+                    
+                    {getAvailableDimensions(groupByDimensions, breakdownByDimensions, thenByDimensions).length > 0 && (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => {
+                          const availableDims = getAvailableDimensions(groupByDimensions, breakdownByDimensions, thenByDimensions);
+                          if (availableDims.length > 0) {
+                            addGroupByDimension(availableDims[0].id);
+                          }
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add dimension
+                      </Button>
+                    )}
                   </div>
-                </ContextMenuTrigger>
-                <ContextMenuContent>
-                  {getAvailableDimensions(groupByDimensions, breakdownByDimensions, thenByDimensions).map((dim) => (
-                    <ContextMenuItem key={dim.id} onClick={() => addGroupByDimension(dim.id)}>
-                      {dim.name}
-                    </ContextMenuItem>
-                  ))}
-                  {getAvailableDimensions(groupByDimensions, breakdownByDimensions, thenByDimensions).length === 0 && (
-                    <ContextMenuItem disabled>No dimensions available</ContextMenuItem>
-                  )}
-                </ContextMenuContent>
-              </ContextMenu>
+                  <div className="flex justify-end">
+                    <Button onClick={() => setIsDimensionModalOpen(false)}>Close</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
 
             {groupByDimensions.length > 0 && (
