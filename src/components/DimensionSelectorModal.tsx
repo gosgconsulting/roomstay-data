@@ -56,7 +56,6 @@ export const DimensionSelectorModal = ({
       if (!user) return;
 
       // Load all dimensions - both metrics and attributes
-      // In the future, we should add an 'attribute' type for grouping dimensions
       const { data, error } = await supabase
         .from("dimensions")
         .select("*")
@@ -64,7 +63,18 @@ export const DimensionSelectorModal = ({
         .order("name", { ascending: true });
 
       if (error) throw error;
-      setDimensions(data || []);
+      
+      // Deduplicate dimensions by name (keep first occurrence)
+      const seenNames = new Set<string>();
+      const uniqueDimensions = (data || []).filter(dim => {
+        if (seenNames.has(dim.name)) {
+          return false;
+        }
+        seenNames.add(dim.name);
+        return true;
+      });
+      
+      setDimensions(uniqueDimensions);
     } catch (error) {
       console.error("Error loading dimensions:", error);
     } finally {
