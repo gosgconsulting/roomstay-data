@@ -75,13 +75,14 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
 
   const loadLastUpdateDate = async (reportId: string) => {
     try {
+      // Use data_sources table instead which is much smaller
       const { data, error } = await supabase
-        .from('dimension_data')
+        .from('data_sources')
         .select('updated_at')
         .eq('report_id', reportId)
         .order('updated_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error("Error loading last update date:", error);

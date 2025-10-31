@@ -111,12 +111,13 @@ Deno.serve(async (req) => {
 
     console.log(`Loaded ${dimensions?.length || 0} dimensions for aggregation`);
 
-    // Build filter for the main query
+    // Build filter for the main query with optimized settings
     let query = supabase
       .from('dimension_data')
       .select('dimension_values, row_number')
       .eq('report_id', reportId)
-      .order('row_number', { ascending: true });
+      .order('row_number', { ascending: true })
+      .abortSignal(AbortSignal.timeout(30000)); // 30 second timeout
 
     // Apply date filters if provided
     if (dateFrom || dateTo) {
