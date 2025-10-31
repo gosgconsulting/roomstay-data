@@ -6,7 +6,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, Database, Share2, Plus, Trash2, Pencil, Grid3x3 } from "lucide-react";
+import { ChevronDown, Database, Share2, Plus, Trash2, Pencil, Grid3x3, RefreshCw } from "lucide-react";
 import { useState, useEffect } from "react";
 import { DataSourceModal } from "./DataSourceModal";
 import { DataSourcesListModal } from "./DataSourcesListModal";
@@ -457,6 +457,15 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
         </div>
 
         <div className="flex items-center gap-3">
+          <Button 
+            variant="outline" 
+            className="gap-2"
+            onClick={onDataSync}
+            disabled={!currentReport}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
           <Button 
             variant="outline" 
             className="gap-2"
