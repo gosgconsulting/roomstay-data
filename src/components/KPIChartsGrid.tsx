@@ -66,7 +66,11 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
       // Find Date dimension
       const dateDimension = dimensions?.find((d: any) => d.type === 'date');
       
+      console.log('KPI Charts - Date dimension found:', dateDimension);
+      console.log('KPI Charts - All dimensions:', dimensions);
+      
       if (!dateDimension || !dimensions) {
+        console.log('KPI Charts - No date dimension or dimensions found, skipping charts');
         // No date dimension - skip charts
         const emptyData: Record<string, ChartData[]> = {};
         kpis.forEach(kpi => {
@@ -94,11 +98,13 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
       });
 
       if (perfError) {
-        console.error('Error fetching chart data:', perfError);
+        console.error('KPI Charts - Error fetching chart data:', perfError);
         throw perfError;
       }
 
+      console.log('KPI Charts - Performance data received:', performanceData);
       const allDimensionData = performanceData?.rows || [];
+      console.log('KPI Charts - Rows count:', allDimensionData.length);
 
       // Process the aggregated data from edge function
       const chartDataByKPI: Record<string, Array<{ date: string; value: number }>> = {};
@@ -107,9 +113,13 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
       });
 
       // The data from edge function is already grouped by date
-      allDimensionData.forEach((row: any) => {
+      allDimensionData.forEach((row: any, index: number) => {
         const rowData = row.data || row;
         const dateValue = row.name; // The grouped dimension value (date)
+        
+        if (index === 0) {
+          console.log('KPI Charts - First row sample:', { row, dateValue, rowData });
+        }
         
         if (!dateValue) return;
 
@@ -125,6 +135,8 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
           }
         });
       });
+      
+      console.log('KPI Charts - Processed chart data:', chartDataByKPI);
 
       // Get comparison data if enabled
       let compareChartData: Record<string, Array<{ date: string; value: number }>> = {};
