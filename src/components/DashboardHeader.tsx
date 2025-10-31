@@ -116,7 +116,10 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
   const loadReports = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
 
       // Get owned reports
       const { data: ownedReports, error: ownedError } = await supabase
@@ -125,42 +128,58 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (ownedError) throw ownedError;
+      if (ownedError) {
+        console.error("Error loading owned reports:", ownedError);
+        throw ownedError;
+      }
 
-      // Get shared reports with owner info
-      const { data: sharedReports, error: sharedError } = await supabase
+      // Get shared report IDs
+      const { data: shares, error: sharesError } = await supabase
         .from('report_shares')
-        .select(`
-          report_id,
-          reports (
-            id,
-            name,
-            user_id,
-            created_at,
-            updated_at
-          ),
-          created_by
-        `)
+        .select('report_id, created_by')
         .eq('shared_with_email', user.email);
 
-      if (sharedError) throw sharedError;
+      if (sharesError) {
+        console.error("Error loading shares:", sharesError);
+        throw sharesError;
+      }
 
-      // Get owner emails for shared reports
-      const sharedReportsWithOwner = await Promise.all(
-        (sharedReports || []).map(async (share: any) => {
-          const { data: ownerProfile } = await supabase
+      let sharedReportsWithOwner = [];
+      
+      if (shares && shares.length > 0) {
+        // Get shared reports
+        const sharedReportIds = shares.map(s => s.report_id);
+        const { data: sharedReports, error: sharedReportsError } = await supabase
+          .from('reports')
+          .select('*')
+          .in('id', sharedReportIds);
+
+        if (sharedReportsError) {
+          console.error("Error loading shared reports:", sharedReportsError);
+        } else {
+          // Get owner emails
+          const ownerIds = [...new Set(shares.map(s => s.created_by))];
+          const { data: owners, error: ownersError } = await supabase
             .from('profiles')
-            .select('email')
-            .eq('id', share.created_by)
-            .single();
+            .select('id, email')
+            .in('id', ownerIds);
 
-          return {
-            ...share.reports,
-            owner_email: ownerProfile?.email,
-            is_shared: true,
-          };
-        })
-      );
+          if (ownersError) {
+            console.error("Error loading owner profiles:", ownersError);
+          }
+
+          const ownerMap = new Map(owners?.map(o => [o.id, o.email]) || []);
+          
+          sharedReportsWithOwner = (sharedReports || []).map(report => {
+            const share = shares.find(s => s.report_id === report.id);
+            return {
+              ...report,
+              owner_email: share ? ownerMap.get(share.created_by) : 'Unknown',
+              is_shared: true,
+            };
+          });
+        }
+      }
 
       const allReports = [
         ...(ownedReports || []).map(r => ({ ...r, is_shared: false })),
