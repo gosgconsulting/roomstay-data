@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "update-lockfile": "bun update-lockfile.js",
-    "test-deployment": "bun test-deployment.js"
+    "test-deployment": "bun test-deployment.js",
+    "test-domain": "bun test-domain.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
