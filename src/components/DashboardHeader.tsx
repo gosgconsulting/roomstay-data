@@ -20,6 +20,9 @@ import { toast } from "@/hooks/use-toast";
 interface Report {
   id: string;
   name: string;
+  user_id?: string;
+  owner_email?: string;
+  is_shared?: boolean;
 }
 
 interface DashboardHeaderProps {
@@ -112,16 +115,61 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
 
   const loadReports = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get owned reports
+      const { data: ownedReports, error: ownedError } = await supabase
         .from('reports')
         .select('*')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (ownedError) throw ownedError;
 
-      setReports(data || []);
-      if (data && data.length > 0) {
-        setCurrentReport(data[0]);
+      // Get shared reports with owner info
+      const { data: sharedReports, error: sharedError } = await supabase
+        .from('report_shares')
+        .select(`
+          report_id,
+          reports (
+            id,
+            name,
+            user_id,
+            created_at,
+            updated_at
+          ),
+          created_by
+        `)
+        .eq('shared_with_email', user.email);
+
+      if (sharedError) throw sharedError;
+
+      // Get owner emails for shared reports
+      const sharedReportsWithOwner = await Promise.all(
+        (sharedReports || []).map(async (share: any) => {
+          const { data: ownerProfile } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('id', share.created_by)
+            .single();
+
+          return {
+            ...share.reports,
+            owner_email: ownerProfile?.email,
+            is_shared: true,
+          };
+        })
+      );
+
+      const allReports = [
+        ...(ownedReports || []).map(r => ({ ...r, is_shared: false })),
+        ...sharedReportsWithOwner,
+      ];
+
+      setReports(allReports);
+      if (allReports.length > 0) {
+        setCurrentReport(allReports[0]);
       }
     } catch (error) {
       console.error("Error loading reports:", error);
@@ -262,60 +310,108 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync }: Dashbo
                 {currentReport?.name || "Select Report"} <ChevronDown className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56 bg-background z-50">
-              {reports.map((report) => (
-                <DropdownMenuItem 
-                  key={report.id}
-                  className="justify-between group"
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  <span 
-                    className="flex-1 cursor-pointer"
-                    onClick={() => {
-                      setCurrentReport(report);
-                      onReportChange(report.id); // Notify parent
-                    }}
-                  >
-                    {report.name}
-                  </span>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingReport(report);
+            <DropdownMenuContent align="start" className="w-80 bg-background z-50">
+              {(() => {
+                const ownedReports = reports.filter(r => !r.is_shared);
+                const sharedReports = reports.filter(r => r.is_shared);
+                
+                return (
+                  <>
+                    {ownedReports.length > 0 && (
+                      <>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                          My Reports
+                        </div>
+                        {ownedReports.map((report) => (
+                          <DropdownMenuItem 
+                            key={report.id}
+                            className="justify-between group"
+                            onSelect={(e) => e.preventDefault()}
+                          >
+                            <span 
+                              className="flex-1 cursor-pointer"
+                              onClick={() => {
+                                setCurrentReport(report);
+                                onReportChange(report.id);
+                              }}
+                            >
+                              {report.name}
+                            </span>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingReport(report);
+                                  setShowReportModal(true);
+                                }}
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteReport(report);
+                                }}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </DropdownMenuItem>
+                        ))}
+                      </>
+                    )}
+                    
+                    {sharedReports.length > 0 && (
+                      <>
+                        {ownedReports.length > 0 && <DropdownMenuSeparator />}
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                          Shared with me
+                        </div>
+                        {sharedReports.map((report) => (
+                          <DropdownMenuItem 
+                            key={report.id}
+                            className="justify-between group flex-col items-start"
+                            onSelect={(e) => e.preventDefault()}
+                          >
+                            <div className="flex items-center justify-between w-full">
+                              <span 
+                                className="flex-1 cursor-pointer font-medium"
+                                onClick={() => {
+                                  setCurrentReport(report);
+                                  onReportChange(report.id);
+                                }}
+                              >
+                                {report.name}
+                              </span>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              Owner: {report.owner_email}
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                      </>
+                    )}
+                    
+                    {reports.length > 0 && <DropdownMenuSeparator />}
+                    <DropdownMenuItem 
+                      className="text-primary" 
+                      onClick={() => {
+                        setEditingReport(null);
                         setShowReportModal(true);
                       }}
                     >
-                      <Pencil className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteReport(report);
-                      }}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </DropdownMenuItem>
-              ))}
-              {reports.length > 0 && <DropdownMenuSeparator />}
-              <DropdownMenuItem 
-                className="text-primary" 
-                onClick={() => {
-                  setEditingReport(null);
-                  setShowReportModal(true);
-                }}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add new
-              </DropdownMenuItem>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add new
+                    </DropdownMenuItem>
+                  </>
+                );
+              })()}
             </DropdownMenuContent>
           </DropdownMenu>
 
