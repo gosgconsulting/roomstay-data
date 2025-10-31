@@ -4,8 +4,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, addDays } from "date-fns";
 import { FilterState } from "./FiltersBar";
+import { debugLog, inspectObject, validateChartData } from "@/lib/debug";
+import { trackPerformance } from "@/lib/monitoring";
 
 interface ChartData {
   date: string;
@@ -15,6 +17,24 @@ interface ChartData {
 interface KPIChartProps {
   reportId: string | null;
   filters: FilterState;
+}
+
+interface Dimension {
+  id: string;
+  name: string;
+  type: string;
+  formula?: string;
+}
+
+interface DimensionData {
+  row_number: number;
+  report_id: string;
+  dimension_values: Record<string, string>;
+  [key: string]: unknown;
+}
+
+interface DimensionValue {
+  [key: string]: string | number;
 }
 
 const kpiOptions = [
@@ -33,6 +53,7 @@ export const KPIChart = ({ reportId, filters }: KPIChartProps) => {
   const [selectedKPI, setSelectedKPI] = useState("Revenue");
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (reportId) {
@@ -42,77 +63,284 @@ export const KPIChart = ({ reportId, filters }: KPIChartProps) => {
 
   const loadChartData = async () => {
     setIsLoading(true);
+    setError(null);
+    
     try {
-      // Get all dimensions for this report
-      const { data: dimensions, error: dimError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("report_id", reportId);
-
-      if (dimError) throw dimError;
-      if (!dimensions || dimensions.length === 0) {
-        setChartData([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Find the date dimension
-      const dateDimension = dimensions.find((d: any) => d.type === 'date');
-      
-      if (!dateDimension) {
-        setChartData([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Call edge function to get performance data grouped by date
-      const { data: response, error: perfError } = await supabase.functions.invoke('get-performance-data', {
-        body: {
-          reportId,
-          groupByDims: [dateDimension.id],
-          dimensionFilters: filters.dimensionFilters || {},
-          dateFrom: filters.dateRange?.from?.toISOString(),
-          dateTo: filters.dateRange?.to?.toISOString(),
-          visibleDimensionIds: dimensions.map((d: any) => d.id),
-          limit: 10000,
-          offset: 0,
-          dateGranularity: 'day',
-          dateOrder: 'asc',
-          compareEnabled: false,
-        },
-      });
-
-      if (perfError) throw perfError;
-
-      const rows = response?.rows || [];
-      
-      // Transform data for chart
-      const chartPoints: ChartData[] = rows
-        .map((row: any) => {
-          const dateValue = row.name;
-          const data = row.data || row;
+      await trackPerformance('KPIChart', 'loadData', async () => {
+        debugLog('KPIChart', `Loading chart data for report ${reportId} with KPI ${selectedKPI}`);
+        console.log('[CHART] Loading data with filters:', filters);
+        
+        // Debug date range
+        if (filters.dateRange) {
+          console.log('[CHART] Date range:', {
+            from: filters.dateRange.from ? filters.dateRange.from.toISOString() : 'undefined',
+            to: filters.dateRange.to ? filters.dateRange.to.toISOString() : 'undefined'
+          });
+        } else {
+          console.log('[CHART] No date range provided');
+        }
+        
+        // Get the current user to load all dimensions
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        let dimensions: Dimension[] | null = null;
+        
+        // First, try to fetch dimensions by user_id (all user's dimensions across all reports)
+        if (user) {
+          const { data: userDimensions, error: userError } = await supabase
+            .from("dimensions")
+            .select("*")
+            .eq("user_id", user.id);
+            
+          if (userError) throw userError;
+          dimensions = userDimensions as Dimension[];
+        }
+        
+        // If no user or no dimensions found by user_id, fall back to loading from any dimension_data
+        if (!dimensions || dimensions.length === 0) {
+          const { data: dimensionData, error: dimDataError } = await supabase
+            .from("dimension_data")
+            .select("dimension_values")
+            .limit(1)
+            .maybeSingle();
+            
+          if (dimDataError) throw dimDataError;
           
-          // Get the metric value
-          let value = 0;
-          if (data[selectedKPI] !== null && data[selectedKPI] !== undefined) {
-            value = parseFloat(data[selectedKPI]) || 0;
+          if (dimensionData?.dimension_values) {
+            const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, string>);
+            
+            if (dimensionIds.length > 0) {
+              const { data: dimensionsById, error: dimError2 } = await supabase
+                .from("dimensions")
+                .select("*")
+                .in("id", dimensionIds);
+                
+              if (dimError2) throw dimError2;
+              dimensions = dimensionsById as Dimension[];
+            }
           }
+        }
 
-          try {
-            const dateObj = parseISO(dateValue);
-            return {
-              date: format(dateObj, 'MMM dd'),
-              value: value,
-            };
-          } catch (e) {
-            return null;
+        debugLog('KPIChart', `Found ${dimensions?.length || 0} dimensions`);
+        console.log('[CHART] All dimensions:', dimensions);
+
+        if (!dimensions || dimensions.length === 0) {
+          debugLog('KPIChart', 'No dimensions found for report');
+          console.error('[CHART] No dimensions found');
+          setChartData([]);
+          return;
+        }
+
+        // Find the date dimension
+        const dateDimension = dimensions.find((d: Dimension) => d.type === 'date');
+        
+        if (!dateDimension) {
+          debugLog('KPIChart', 'No date dimension found');
+          console.error('[CHART] No date dimension found in:', dimensions);
+          setChartData([]);
+          return;
+        }
+
+        // Find the dimension that matches the selected KPI
+        const kpiDimension = dimensions.find((d: Dimension) => d.name === selectedKPI);
+        console.log(`[CHART] KPI dimension for ${selectedKPI}:`, kpiDimension);
+
+        debugLog('KPIChart', `Using date dimension: ${dateDimension.name} (${dateDimension.id})`);
+        console.log('[CHART] Date dimension:', dateDimension);
+
+        // Fetch dimension_data directly in chunks (5000 rows at a time)
+        const CHUNK_SIZE = 5000;
+        let allDimensionData: DimensionData[] = [];
+        let offset = 0;
+        let hasMore = true;
+        
+        console.log('[CHART] Fetching dimension_data for report:', reportId);
+        
+        while (hasMore) {
+          const { data: chunkData, error } = await supabase
+            .from("dimension_data")
+            .select("*")
+            .eq("report_id", reportId)
+            .order('row_number', { ascending: true })
+            .range(offset, offset + CHUNK_SIZE - 1);
+            
+          if (error) throw error;
+          
+          if (chunkData && chunkData.length > 0) {
+            allDimensionData = [...allDimensionData, ...chunkData as DimensionData[]];
+            offset += CHUNK_SIZE;
+            hasMore = chunkData.length === CHUNK_SIZE;
+          } else {
+            hasMore = false;
           }
-        })
-        .filter((item): item is ChartData => item !== null);
-
-      setChartData(chartPoints);
+        }
+        
+        console.log(`[CHART] Fetched ${allDimensionData.length} rows of dimension_data`);
+        
+        if (allDimensionData.length === 0) {
+          setChartData([]);
+          return;
+        }
+        
+        // Create a sample of date values for debugging
+        const sampleDates = allDimensionData
+          .slice(0, 5)
+          .map(row => row.dimension_values[dateDimension.id])
+          .filter(Boolean);
+        console.log('[CHART] Sample date values:', sampleDates);
+        
+        // Sample of dimension values for debugging
+        if (allDimensionData.length > 0) {
+          const sampleRow = allDimensionData[0];
+          console.log('[CHART] Sample dimension values:', sampleRow.dimension_values);
+          
+          // Check for the selected KPI in dimension values
+          const kpiKeys = Object.keys(sampleRow.dimension_values);
+          const possibleKpiKeys = kpiKeys.filter(key => {
+            const dim = dimensions.find(d => d.id === key);
+            return dim && dim.name === selectedKPI;
+          });
+          
+          console.log(`[CHART] Possible keys for ${selectedKPI}:`, possibleKpiKeys);
+        }
+        
+        // Filter data by date range and dimension filters
+        const filteredData = allDimensionData.filter((row) => {
+          const dimensionValues = row.dimension_values as Record<string, string>;
+          
+          // Apply dimension filters
+          for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters || {})) {
+            // Handle both string and array filter values
+            if (Array.isArray(filterValue)) {
+              if (!filterValue.includes(dimensionValues[dimId])) {
+                return false;
+              }
+            } else if (dimensionValues[dimId] !== filterValue) {
+              return false;
+            }
+          }
+          
+          // Apply date range filter if there's a Date dimension
+          if (filters.dateRange?.from || filters.dateRange?.to) {
+            if (dimensionValues[dateDimension.id]) {
+              const dateStr = dimensionValues[dateDimension.id];
+              let rowDate: Date;
+              
+              if (dateStr.includes('/')) {
+                const [month, day, year] = dateStr.split('/');
+                rowDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              } else {
+                rowDate = new Date(dateStr);
+              }
+              
+              // Add a day to the end date to include the full day
+              const adjustedEndDate = filters.dateRange?.to 
+                ? addDays(filters.dateRange.to, 1)
+                : undefined;
+              
+              if (filters.dateRange?.from && rowDate < filters.dateRange.from) {
+                return false;
+              }
+              if (adjustedEndDate && rowDate >= adjustedEndDate) {
+                return false;
+              }
+            }
+          }
+          
+          return true;
+        });
+        
+        console.log(`[CHART] After filtering: ${filteredData.length} rows`);
+        
+        // Group data by date
+        const groupedByDate = new Map<string, number>();
+        
+        // Find the dimension ID for the selected KPI
+        const kpiDimensionId = kpiDimension?.id;
+        console.log(`[CHART] KPI dimension ID for ${selectedKPI}:`, kpiDimensionId);
+        
+        filteredData.forEach((row) => {
+          const dimensionValues = row.dimension_values as Record<string, string>;
+          const dateValue = dimensionValues[dateDimension.id];
+          
+          if (!dateValue) return;
+          
+          // Get or initialize value for this date
+          const currentValue = groupedByDate.get(dateValue) || 0;
+          
+          // Add this row's value for the selected KPI
+          let rowValue = 0;
+          
+          // If we have a matching dimension for the KPI, use its ID to get the value
+          if (kpiDimensionId && dimensionValues[kpiDimensionId] !== undefined) {
+            rowValue = parseFloat(dimensionValues[kpiDimensionId]) || 0;
+            console.log(`[CHART] Found ${selectedKPI} value using dimension ID:`, rowValue);
+          } 
+          // Otherwise try to find by name (legacy approach)
+          else if (dimensionValues[selectedKPI] !== undefined) {
+            rowValue = parseFloat(dimensionValues[selectedKPI]) || 0;
+            console.log(`[CHART] Found ${selectedKPI} value using name:`, rowValue);
+          } else {
+            // Look for a key that might contain the KPI name
+            const matchingKey = Object.keys(dimensionValues).find(key => {
+              const dim = dimensions.find(d => d.id === key);
+              return dim && dim.name === selectedKPI;
+            });
+            
+            if (matchingKey) {
+              rowValue = parseFloat(dimensionValues[matchingKey]) || 0;
+              console.log(`[CHART] Found ${selectedKPI} value using matching key ${matchingKey}:`, rowValue);
+            } else {
+              console.log(`[CHART] No value found for ${selectedKPI} in row:`, dimensionValues);
+            }
+          }
+          
+          groupedByDate.set(dateValue, currentValue + rowValue);
+        });
+        
+        console.log(`[CHART] Grouped data by date:`, Object.fromEntries(groupedByDate));
+        
+        // Convert to chart data points
+        const chartPoints: ChartData[] = Array.from(groupedByDate.entries())
+          .map(([dateStr, value]) => {
+            try {
+              // Handle different date formats
+              let dateObj: Date;
+              
+              if (dateStr.includes('/')) {
+                const [month, day, year] = dateStr.split('/');
+                dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              } else {
+                dateObj = parseISO(dateStr);
+              }
+              
+              if (isNaN(dateObj.getTime())) {
+                console.error('[CHART] Invalid date:', dateStr);
+                return null;
+              }
+              
+              return {
+                date: format(dateObj, 'MMM dd'),
+                value: value,
+              };
+            } catch (e) {
+              console.error('[CHART] Error parsing date:', e, dateStr);
+              return null;
+            }
+          })
+          .filter((item): item is ChartData => item !== null)
+          .sort((a, b) => a.date.localeCompare(b.date));
+        
+        debugLog('KPIChart', `Processed ${chartPoints.length} valid data points`);
+        console.log('[CHART] Final chart data points:', chartPoints);
+        
+        validateChartData(chartPoints);
+        
+        setChartData(chartPoints);
+      });
     } catch (error) {
-      console.error("Error loading chart data:", error);
+      console.error("[CHART] Error loading chart data:", error);
+      setError(error instanceof Error ? error.message : 'Failed to load chart data');
       setChartData([]);
     } finally {
       setIsLoading(false);
@@ -153,7 +381,11 @@ export const KPIChart = ({ reportId, filters }: KPIChartProps) => {
         </Select>
       </CardHeader>
       <CardContent>
-        {chartData.length === 0 ? (
+        {error ? (
+          <div className="h-[300px] flex items-center justify-center text-destructive text-sm">
+            Error loading chart data: {error}
+          </div>
+        ) : chartData.length === 0 ? (
           <div className="h-[300px] flex items-center justify-center text-muted-foreground text-sm">
             No chart data for selected date range
           </div>
