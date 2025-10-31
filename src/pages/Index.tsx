@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
@@ -12,9 +12,13 @@ import { toast } from "@/hooks/use-toast";
 
 const Index = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sharedSlug = searchParams.get("shared");
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reportId, setReportId] = useState<string | null>(null);
+  const [isSharedView, setIsSharedView] = useState(false);
+  const [sharedReportIds, setSharedReportIds] = useState<string[]>([]);
   const [filters, setFilters] = useState<FilterState>({
     dimensionFilters: {},
     dateRange: undefined,
@@ -38,6 +42,31 @@ const Index = () => {
 
   useEffect(() => {
     let isMounted = true;
+
+    // Check if this is a shared view
+    if (sharedSlug) {
+      const authKey = `share_auth_${sharedSlug}`;
+      const shareDataKey = `share_data_${sharedSlug}`;
+      const storedAuth = sessionStorage.getItem(authKey);
+      const storedData = sessionStorage.getItem(shareDataKey);
+      
+      if (storedAuth === "true" && storedData) {
+        const shareData = JSON.parse(storedData);
+        setIsSharedView(true);
+        setSharedReportIds(shareData.report_ids);
+        setIsLoading(false);
+        
+        // Load first report from shared list
+        if (shareData.report_ids && shareData.report_ids.length > 0) {
+          setReportId(shareData.report_ids[0]);
+        }
+        return;
+      } else {
+        // Not authenticated for this share link
+        navigate(`/${sharedSlug}`);
+        return;
+      }
+    }
 
     const initializeAuth = async () => {
       try {
@@ -85,7 +114,7 @@ const Index = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [sharedSlug]);
 
   const loadFirstReport = async () => {
     try {
@@ -165,30 +194,34 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="border-b">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-semibold">Data Dashboard</h1>
-            {session?.user && (
-              <span className="text-sm text-muted-foreground">{session.user.email}</span>
+      {!isSharedView && (
+        <div className="border-b">
+          <div className="container mx-auto px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <h1 className="text-xl font-semibold">Data Dashboard</h1>
+              {session?.user && (
+                <span className="text-sm text-muted-foreground">{session.user.email}</span>
+              )}
+            </div>
+            {session ? (
+              <Button variant="outline" onClick={handleSignOut}>
+                Sign Out
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={() => navigate("/auth")}>
+                Sign In
+              </Button>
             )}
           </div>
-          {session ? (
-            <Button variant="outline" onClick={handleSignOut}>
-              Sign Out
-            </Button>
-          ) : (
-            <Button variant="outline" onClick={() => navigate("/auth")}>
-              Sign In
-            </Button>
-          )}
         </div>
-      </div>
-      <DashboardHeader 
-        reportId={reportId} 
-        onReportChange={setReportId} 
-        onDataSync={handleDataSync}
-      />
+      )}
+      {!isSharedView && (
+        <DashboardHeader 
+          reportId={reportId} 
+          onReportChange={setReportId} 
+          onDataSync={handleDataSync}
+        />
+      )}
       {reportId ? (
         <>
           <FiltersBar reportId={reportId} onFiltersChange={setFilters} />
@@ -201,7 +234,9 @@ const Index = () => {
       ) : (
         <main className="container mx-auto px-6 py-6">
           <div className="text-center py-12">
-            <p className="text-muted-foreground">Create a report to get started</p>
+            <p className="text-muted-foreground">
+              {isSharedView ? "No reports available in this share" : "Create a report to get started"}
+            </p>
           </div>
         </main>
       )}

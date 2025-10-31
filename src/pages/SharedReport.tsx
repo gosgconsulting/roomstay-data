@@ -71,19 +71,20 @@ export default function SharedReport() {
     const passwordHash = btoa(password);
 
     if (passwordHash === shareLink.password_hash) {
-      // Store authentication in session storage
+      // Store authentication in session storage with the share link data
       const authKey = `share_auth_${slug}`;
       sessionStorage.setItem(authKey, "true");
+      sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(shareLink));
       
       setAuthenticated(true);
       toast({
         title: "Access granted",
-        description: "Redirecting to reports...",
+        description: "Loading reports...",
       });
 
-      // Redirect to main page with the share link ID in URL
+      // Redirect to main page with shared view indicator
       setTimeout(() => {
-        navigate(`/?share=${shareLink.id}`);
+        navigate(`/?shared=${slug}`);
       }, 500);
     } else {
       toast({
