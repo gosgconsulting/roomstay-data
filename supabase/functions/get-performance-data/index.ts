@@ -180,7 +180,16 @@ Deno.serve(async (req) => {
           const dateValue = dimValues[dateDim.id];
           if (!dateValue) return false; // Exclude rows without date values
 
-          const rowDate = new Date(dateValue);
+          // Parse MM/DD/YYYY format properly
+          let rowDate: Date;
+          if (dateValue.includes('/')) {
+            const [month, day, year] = dateValue.split('/');
+            rowDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          } else {
+            rowDate = new Date(dateValue);
+          }
+          
+          if (isNaN(rowDate.getTime())) return false;
           if (dateFrom && rowDate < new Date(dateFrom)) return false;
           if (dateTo && rowDate > new Date(dateTo)) return false;
           return true;
@@ -217,7 +226,16 @@ Deno.serve(async (req) => {
           const dateValue = dimValues[dateDim.id];
           if (!dateValue) return false;
 
-          const rowDate = new Date(dateValue);
+          // Parse MM/DD/YYYY format properly
+          let rowDate: Date;
+          if (dateValue.includes('/')) {
+            const [month, day, year] = dateValue.split('/');
+            rowDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          } else {
+            rowDate = new Date(dateValue);
+          }
+          
+          if (isNaN(rowDate.getTime())) return false;
           if (rowDate < new Date(compareDateFrom)) return false;
           if (rowDate > new Date(compareDateTo)) return false;
           return true;
@@ -231,7 +249,15 @@ Deno.serve(async (req) => {
     // Helper function to format date based on granularity
     const formatDateByGranularity = (dateStr: string, granularity: string): { key: string; display: string } => {
       try {
-        const date = new Date(dateStr);
+        // Parse MM/DD/YYYY format properly
+        let date: Date;
+        if (dateStr.includes('/')) {
+          const [month, day, year] = dateStr.split('/');
+          date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+        } else {
+          date = new Date(dateStr);
+        }
+        
         if (isNaN(date.getTime())) {
           return { key: dateStr, display: dateStr };
         }
