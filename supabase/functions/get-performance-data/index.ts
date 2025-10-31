@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
       .from('dimension_data')
       .select('dimension_values, row_number')
       .eq('report_id', reportId)
-      .order('row_number', { ascending: true })
+      .order('row_number', { ascending: false })
       .abortSignal(AbortSignal.timeout(60000)); // 60 second timeout
 
     // Apply date filters if provided
