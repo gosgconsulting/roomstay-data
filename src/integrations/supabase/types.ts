@@ -305,6 +305,36 @@ export type Database = {
         }
         Relationships: []
       }
+      share_links: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          password_hash: string
+          report_ids: string[]
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          password_hash: string
+          report_ids?: string[]
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          password_hash?: string
+          report_ids?: string[]
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sheet_data: {
         Row: {
           created_at: string
