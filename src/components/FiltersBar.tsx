@@ -262,43 +262,29 @@ export const FiltersBar = ({ reportId, onFiltersChange }: FiltersBarProps) => {
     if (!reportId) return;
     
     try {
-      // Get the current user to load all their dimensions
-      const { data: { user } } = await supabase.auth.getUser();
-      
+      // Load dimensions associated with this report (works for both owned and shared reports)
+      const { data: dimensionData, error: dimDataError } = await supabase
+        .from("dimension_data")
+        .select("dimension_values")
+        .eq("report_id", reportId)
+        .limit(1)
+        .maybeSingle();
+
+      if (dimDataError) throw dimDataError;
+
       let data = null;
-      
-      // First, try to fetch dimensions by user_id (all user's dimensions across all reports)
-      if (user) {
-        const { data: userDimensions, error: userError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("user_id", user.id);
 
-        if (userError) throw userError;
-        data = userDimensions;
-      }
-      
-      // If no user or no dimensions found by user_id, fall back to loading from any dimension_data
-      if (!data || data.length === 0) {
-        const { data: dimensionData, error: dimDataError } = await supabase
-          .from("dimension_data")
-          .select("dimension_values")
-          .limit(1);
+      if (dimensionData?.dimension_values) {
+        const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, any>);
+        
+        if (dimensionIds.length > 0) {
+          const { data: dimensionsById, error: dimError } = await supabase
+            .from("dimensions")
+            .select("*")
+            .in("id", dimensionIds);
 
-        if (dimDataError) throw dimDataError;
-
-        if (dimensionData && dimensionData.length > 0) {
-          const dimensionIds = Object.keys(dimensionData[0].dimension_values as Record<string, any>);
-          
-          if (dimensionIds.length > 0) {
-            const { data: dimensionsById, error: dimError } = await supabase
-              .from("dimensions")
-              .select("*")
-              .in("id", dimensionIds);
-
-            if (dimError) throw dimError;
-            data = dimensionsById;
-          }
+          if (dimError) throw dimError;
+          data = dimensionsById;
         }
       }
 
