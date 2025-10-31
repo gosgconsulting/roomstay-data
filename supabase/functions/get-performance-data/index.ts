@@ -19,6 +19,8 @@ interface PerformanceDataRequest {
   compareEnabled?: boolean;
   compareDateFrom?: string;
   compareDateTo?: string;
+  dateGranularity?: string;
+  dateOrder?: string;
 }
 
 Deno.serve(async (req) => {
@@ -45,6 +47,8 @@ Deno.serve(async (req) => {
       compareEnabled = false,
       compareDateFrom,
       compareDateTo,
+      dateGranularity = 'none',
+      dateOrder = 'desc',
     }: PerformanceDataRequest = await req.json();
 
     console.log('get-performance-data: Starting request', {
@@ -321,6 +325,23 @@ Deno.serve(async (req) => {
 
     const groupedArray = Array.from(grouped.values());
 
+    // Sort by date if first dimension is a date type
+    const firstDimension = dimensions?.find(d => d.id === groupDimId);
+    if (firstDimension?.type === 'date' && dateGranularity !== 'none') {
+      groupedArray.sort((a, b) => {
+        const dateA = new Date(a.name);
+        const dateB = new Date(b.name);
+        
+        if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+          // If dates are invalid, keep original order
+          return 0;
+        }
+        
+        // Sort based on dateOrder (desc = newest first, asc = oldest first)
+        return dateOrder === 'desc' ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
+      });
+    }
+
     // Group comparison data by the same dimension if enabled
     const compareGrouped = new Map<string, any>();
     if (compareFilteredData.length > 0 && dimensions) {
@@ -449,6 +470,21 @@ Deno.serve(async (req) => {
 
         const breakdownArray = Array.from(breakdownGrouped.values());
 
+        // Sort breakdown by date if second dimension is a date type
+        const breakdownDimension = dimensions?.find(d => d.id === breakdownDimId);
+        if (breakdownDimension?.type === 'date' && dateGranularity !== 'none') {
+          breakdownArray.sort((a, b) => {
+            const dateA = new Date(a.name);
+            const dateB = new Date(b.name);
+            
+            if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+              return 0;
+            }
+            
+            return dateOrder === 'desc' ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
+          });
+        }
+
         // Calculate formulas for breakdowns
         for (const breakdownItem of breakdownArray) {
           for (const dim of dimensions || []) {
@@ -495,6 +531,21 @@ Deno.serve(async (req) => {
             }
 
             const thenByArray = Array.from(thenByGrouped.values());
+
+            // Sort thenBy by date if third dimension is a date type
+            const thenByDimension = dimensions?.find(d => d.id === thenByDimId);
+            if (thenByDimension?.type === 'date' && dateGranularity !== 'none') {
+              thenByArray.sort((a, b) => {
+                const dateA = new Date(a.name);
+                const dateB = new Date(b.name);
+                
+                if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+                  return 0;
+                }
+                
+                return dateOrder === 'desc' ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
+              });
+            }
 
             // Calculate formulas for third level
             for (const thenByItem of thenByArray) {

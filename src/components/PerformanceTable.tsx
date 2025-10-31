@@ -739,6 +739,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
           compareEnabled: filters.compareEnabled || false,
           compareDateFrom: filters.compareDateRange?.from?.toISOString(),
           compareDateTo: filters.compareDateRange?.to?.toISOString(),
+          dateGranularity: dateGranularity,
+          dateOrder: dateOrder,
         },
       });
 
