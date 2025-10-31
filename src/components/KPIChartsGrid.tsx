@@ -94,6 +94,9 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
           visibleDimensionIds: dimensions.map((d: any) => d.id),
           limit: 1000,
           offset: 0,
+          dateGranularity: 'day',
+          dateOrder: 'asc',
+          compareEnabled: false,
         },
       });
 
@@ -153,6 +156,9 @@ export const KPIChartsGrid = ({ reportId, filters }: KPIChartsGridProps) => {
             visibleDimensionIds: dimensions.map((d: any) => d.id),
             limit: 1000,
             offset: 0,
+            dateGranularity: 'day',
+            dateOrder: 'asc',
+            compareEnabled: false,
           },
         });
 
