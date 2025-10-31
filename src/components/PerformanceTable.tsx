@@ -1068,8 +1068,32 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                       </Button>
                     </SheetTrigger>
                     <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
-...
-                  </SheetContent>
+                      <SheetHeader>
+                        <SheetTitle>Column Visibility</SheetTitle>
+                        <SheetDescription>
+                          Show or hide columns in the table
+                        </SheetDescription>
+                      </SheetHeader>
+                      <div className="mt-6 space-y-4">
+                        {dimensions
+                          .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula !== null)
+                          .map((dimension) => (
+                            <div key={dimension.id} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`col-${dimension.id}`}
+                                checked={visibleColumns.has(dimension.id)}
+                                onCheckedChange={() => toggleColumn(dimension.id)}
+                              />
+                              <Label
+                                htmlFor={`col-${dimension.id}`}
+                                className="text-sm font-normal cursor-pointer"
+                              >
+                                {dimension.name}
+                              </Label>
+                            </div>
+                          ))}
+                      </div>
+                    </SheetContent>
                 </Sheet>
               </div>
               )}
