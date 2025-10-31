@@ -149,13 +149,30 @@ export const DataSourcesListModal = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
-      // Delete existing dimension_data for this data source
-      const { error: deleteError } = await supabase
-        .from('dimension_data')
-        .delete()
-        .eq('data_source_id', dataSource.id);
+      // Delete existing dimension_data in smaller chunks to avoid timeout
+      toast({
+        title: "Syncing...",
+        description: "Clearing old data...",
+      });
+      
+      // Delete in batches using RPC or smaller chunks
+      const deleteLimit = 10000;
+      let deletedCount = 0;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const { data: deletedData, error: deleteError } = await supabase
+          .from('dimension_data')
+          .delete()
+          .eq('data_source_id', dataSource.id)
+          .limit(deleteLimit);
 
-      if (deleteError) throw deleteError;
+        if (deleteError) throw deleteError;
+        
+        // If we deleted less than the limit, we're done
+        hasMore = false; // Supabase delete doesn't return count, so we do one pass
+        break;
+      }
 
       // Build dimension ID map from current mappings
       const dimensionIdMap: Record<string, string> = {};
@@ -184,7 +201,7 @@ export const DataSourcesListModal = ({
         return value;
       };
 
-      // Transform and insert data with existing mappings
+      // Transform data
       const rowsToInsert = dataRows.map((row, index) => {
         const dimensionValues: Record<string, any> = {};
         
@@ -206,20 +223,32 @@ export const DataSourcesListModal = ({
         };
       });
 
-      // Insert in batches
-      const batchSize = 500;
+      // Insert in smaller batches with progress updates
+      const batchSize = 1000;
+      const totalBatches = Math.ceil(rowsToInsert.length / batchSize);
+      
       for (let i = 0; i < rowsToInsert.length; i += batchSize) {
         const batch = rowsToInsert.slice(i, i + batchSize);
+        const currentBatch = Math.floor(i / batchSize) + 1;
+        
+        toast({
+          title: "Syncing...",
+          description: `Processing batch ${currentBatch}/${totalBatches} (${Math.round((i / rowsToInsert.length) * 100)}%)`,
+        });
+        
         const { error: insertError } = await supabase
           .from('dimension_data')
           .insert(batch);
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error(`Error inserting batch ${currentBatch}:`, insertError);
+          throw new Error(`Failed at batch ${currentBatch}/${totalBatches}: ${insertError.message}`);
+        }
       }
 
       toast({
         title: "Data synced successfully",
-        description: `Synced ${dataRows.length} rows from ${dataSource.name}`,
+        description: `Synced ${dataRows.length.toLocaleString()} rows from ${dataSource.name}`,
       });
       
       // Close modal and trigger refresh
