@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,19 +20,47 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
+interface Dimension {
+  id: string;
+  name: string;
+  type: string;
+  formula: string | null;
+}
+
 interface DimensionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  dimension?: Dimension;
+  mode?: 'add' | 'edit';
+  onSaved?: () => void;
 }
 
 export const DimensionModal = ({
   open,
   onOpenChange,
+  dimension,
+  mode = 'add',
+  onSaved,
 }: DimensionModalProps) => {
   const [name, setName] = useState("");
   const [type, setType] = useState("number");
   const [formula, setFormula] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // [testing] Reset form when modal opens/closes or dimension changes
+  useEffect(() => {
+    if (open && mode === 'edit' && dimension) {
+      console.log('[testing] Populating form for edit mode:', dimension);
+      setName(dimension.name);
+      setType(dimension.type);
+      setFormula(dimension.formula || "");
+    } else if (open && mode === 'add') {
+      console.log('[testing] Resetting form for add mode');
+      setName("");
+      setType("number");
+      setFormula("");
+    }
+  }, [open, mode, dimension]);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -50,32 +78,57 @@ export const DimensionModal = ({
       
       if (!user) throw new Error("User not authenticated");
 
-      const { error } = await supabase
-        .from("dimensions")
-        .insert({
-          user_id: user.id,
-          name: name.trim(),
-          type,
-          formula: formula.trim() || null,
+      if (mode === 'edit' && dimension) {
+        console.log('[testing] Updating dimension:', dimension.id);
+        const { error } = await supabase
+          .from("dimensions")
+          .update({
+            name: name.trim(),
+            type,
+            formula: formula.trim() || null,
+          })
+          .eq("id", dimension.id);
+
+        if (error) throw error;
+
+        toast({
+          title: "Dimension updated",
+          description: `Updated dimension "${name}"`,
         });
+      } else {
+        console.log('[testing] Creating new dimension');
+        const { error } = await supabase
+          .from("dimensions")
+          .insert({
+            user_id: user.id,
+            name: name.trim(),
+            type,
+            formula: formula.trim() || null,
+          });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: "Dimension added",
-        description: `Created dimension "${name}"`,
-      });
+        toast({
+          title: "Dimension added",
+          description: `Created dimension "${name}"`,
+        });
+      }
 
       // Reset form
       setName("");
       setType("number");
       setFormula("");
       onOpenChange(false);
+      
+      // Notify parent component to refresh data
+      if (onSaved) {
+        onSaved();
+      }
     } catch (error) {
-      console.error("Error creating dimension:", error);
+      console.error(`Error ${mode === 'edit' ? 'updating' : 'creating'} dimension:`, error);
       toast({
         title: "Error",
-        description: "Failed to create dimension",
+        description: `Failed to ${mode === 'edit' ? 'update' : 'create'} dimension`,
         variant: "destructive",
       });
     } finally {
@@ -87,9 +140,9 @@ export const DimensionModal = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add Dimension</DialogTitle>
+          <DialogTitle>{mode === 'edit' ? 'Edit Dimension' : 'Add Dimension'}</DialogTitle>
           <DialogDescription>
-            Create a new dimension for your report
+            {mode === 'edit' ? 'Update the dimension details' : 'Create a new dimension for your report'}
           </DialogDescription>
         </DialogHeader>
 

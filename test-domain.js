@@ -12,6 +12,7 @@ const server = createServer((req, res) => {
   // Check if the host is allowed
   const allowedHosts = [
     'datagosgconsultingcom-production.up.railway.app',
+    'data.sparti.ai',
     'localhost',
     '127.0.0.1',
     'localhost:3000',
@@ -38,6 +39,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`[testing] Server running at http://0.0.0.0:${PORT}/`);
   console.log('[testing] Allowed hosts:', [
     'datagosgconsultingcom-production.up.railway.app',
+    'data.sparti.ai',
     'localhost',
     '127.0.0.1'
   ]);

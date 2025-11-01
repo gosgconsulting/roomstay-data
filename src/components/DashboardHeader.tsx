@@ -17,6 +17,13 @@ import { ShareModal } from "./ShareModal";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
+interface Dimension {
+  id: string;
+  name: string;
+  type: string;
+  formula: string | null;
+}
+
 interface Report {
   id: string;
   name: string;
@@ -43,6 +50,9 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
   const [showReportModal, setShowReportModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
+  const [editingDimension, setEditingDimension] = useState<Dimension | null>(null);
+  const [dimensionModalMode, setDimensionModalMode] = useState<'add' | 'edit'>('add');
+  const [dimensionRefreshTrigger, setDimensionRefreshTrigger] = useState(0);
   const [reports, setReports] = useState<Report[]>([]);
   const [currentReport, setCurrentReport] = useState<Report | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -615,7 +625,18 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
       <DimensionsListModal
         open={showDimensionsListModal}
         onOpenChange={setShowDimensionsListModal}
+        refreshTrigger={dimensionRefreshTrigger}
         onAddNew={() => {
+          console.log('[testing] Opening add dimension modal');
+          setDimensionModalMode('add');
+          setEditingDimension(null);
+          setShowDimensionsListModal(false);
+          setShowDimensionModal(true);
+        }}
+        onEdit={(dimension) => {
+          console.log('[testing] Opening edit dimension modal for:', dimension);
+          setDimensionModalMode('edit');
+          setEditingDimension(dimension);
           setShowDimensionsListModal(false);
           setShowDimensionModal(true);
         }}
@@ -626,9 +647,17 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
         onOpenChange={(open) => {
           setShowDimensionModal(open);
           if (!open) {
-            // Reopen the list modal when closing the add modal
+            // Reopen the list modal when closing the modal
             setShowDimensionsListModal(true);
+            setEditingDimension(null);
           }
+        }}
+        dimension={editingDimension}
+        mode={dimensionModalMode}
+        onSaved={() => {
+          console.log('[testing] Dimension saved, refreshing list');
+          // Trigger refresh of dimensions list
+          setDimensionRefreshTrigger(prev => prev + 1);
         }}
       />
 

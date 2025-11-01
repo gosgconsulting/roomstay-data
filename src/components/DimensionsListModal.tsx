@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Eye, Trash2, Plus, Link } from "lucide-react";
+import { Pencil, Trash2, Plus, Link } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -29,6 +29,8 @@ interface DimensionsListModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAddNew: () => void;
+  onEdit?: (dimension: Dimension) => void;
+  refreshTrigger?: number; // Used to trigger refresh from parent
 }
 
 const typeLabels: Record<string, string> = {
@@ -43,6 +45,8 @@ export const DimensionsListModal = ({
   open,
   onOpenChange,
   onAddNew,
+  onEdit,
+  refreshTrigger,
 }: DimensionsListModalProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,7 +57,7 @@ export const DimensionsListModal = ({
       loadDimensions();
       loadMappedDimensions();
     }
-  }, [open]);
+  }, [open, refreshTrigger]);
 
   const loadMappedDimensions = async () => {
     try {
@@ -102,6 +106,7 @@ export const DimensionsListModal = ({
       
       if (!user) throw new Error("User not authenticated");
 
+      console.log('[testing] Loading dimensions for user:', user.id);
       const { data, error } = await supabase
         .from("dimensions")
         .select("*")
@@ -109,6 +114,7 @@ export const DimensionsListModal = ({
         .order("created_at", { ascending: false });
 
       if (error) throw error;
+      console.log('[testing] Loaded dimensions:', data?.length || 0);
       setDimensions(data || []);
     } catch (error) {
       console.error("Error loading dimensions:", error);
@@ -198,8 +204,11 @@ export const DimensionsListModal = ({
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
+                          onClick={() => onEdit?.(dimension)}
+                          title="Edit dimension"
+                          data-testid="edit-button"
                         >
-                          <Eye className="h-4 w-4" />
+                          <Pencil className="h-4 w-4" data-testid="edit-icon" />
                         </Button>
                         <Button
                           variant="ghost"

@@ -35,16 +35,23 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    console.log('[testing] KPIMetricsCards - reportId:', reportId);
+    console.log('[testing] KPIMetricsCards - filters:', filters);
     if (reportId) {
       loadMetrics();
+    } else {
+      console.log('[testing] KPIMetricsCards - No reportId, skipping loadMetrics');
+      setIsLoading(false);
     }
   }, [reportId, filters]);
 
   const loadMetrics = async () => {
+    console.log('[testing] loadMetrics - Starting data fetch for reportId:', reportId);
     setIsLoading(true);
     try {
       // Get the current user to load all their dimensions
       const { data: { user } } = await supabase.auth.getUser();
+      console.log('[testing] loadMetrics - User:', user?.id);
       
       // Load KPI visibility and order settings from report_views
       let visibleKPIs: string[] | null = null;
@@ -76,6 +83,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
 
         if (userError) throw userError;
         dimensions = userDimensions;
+        console.log('[testing] loadMetrics - Dimensions loaded:', dimensions?.length);
       }
       
       // If no user or no dimensions found by user_id, fall back to loading from any dimension_data
@@ -128,7 +136,11 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
         }
       }
 
+      console.log('[testing] loadMetrics - Total dimension_data rows loaded:', allDimensionData.length);
+
       if (!dimensions || !allDimensionData) {
+        console.log('[testing] loadMetrics - No dimensions or data, setting empty metrics');
+        console.log('[testing] loadMetrics - dimensions:', dimensions?.length, 'allDimensionData:', allDimensionData?.length);
         setMetrics([]);
         return;
       }
@@ -275,10 +287,14 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
         }
       });
 
+      console.log('[testing] loadMetrics - Display metrics created:', displayMetrics.length);
+      console.log('[testing] loadMetrics - Metrics:', displayMetrics.map(m => ({ label: m.label, value: m.value })));
+      
       setMetrics(displayMetrics);
     } catch (error) {
-      console.error("Error loading metrics:", error);
+      console.error("[testing] Error loading metrics:", error);
     } finally {
+      console.log('[testing] loadMetrics - Setting isLoading to false');
       setIsLoading(false);
       onLoadingComplete?.();
     }
@@ -355,7 +371,10 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
     return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
+  console.log('[testing] KPIMetricsCards render - isLoading:', isLoading, 'metrics.length:', metrics.length);
+
   if (isLoading) {
+    console.log('[testing] KPIMetricsCards - Rendering loading state');
     return (
       <div>
         <h2 className="text-lg font-semibold mb-4">Analytics & Insights</h2>
@@ -378,6 +397,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
 
   // Don't hide if no metrics - show empty state only if explicitly no dimensions
   if (metrics.length === 0) {
+    console.log('[testing] KPIMetricsCards - Rendering empty state (no metrics)');
     return (
       <div>
         <div className="flex items-center justify-between mb-4">
@@ -390,6 +410,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
     );
   }
 
+  console.log('[testing] KPIMetricsCards - Rendering metrics cards:', metrics.length);
   return (
     <div>
       <div className="flex items-center justify-between mb-4">

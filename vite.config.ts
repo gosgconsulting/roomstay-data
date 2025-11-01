@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => ({
     port: 3000,
     allowedHosts: [
       "datagosgconsultingcom-production.up.railway.app",
+      "data.sparti.ai",
       "localhost",
       "127.0.0.1"
     ],
