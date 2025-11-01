@@ -32,8 +32,7 @@ export function DeleteAccountDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete Account</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to delete "<strong>{accountName}</strong>"? This action cannot be undone.
-            {/* Add note about associated reports if needed */}
+            Are you sure you want to delete "{accountName}"? This action cannot be undone. All associated reports will also be deleted.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="flex justify-end gap-2">
