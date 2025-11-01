@@ -22,6 +22,7 @@ interface Dimension {
   name: string;
   type: string;
   formula: string | null;
+  scope?: 'global' | 'custom';
 }
 
 interface Report {
