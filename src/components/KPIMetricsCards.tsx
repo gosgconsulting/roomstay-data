@@ -29,6 +29,7 @@ interface KPIMetricsCardsProps {
   reportId: string | null;
   filters: FilterState;
   onLoadingComplete?: () => void;
+  accountId?: string;
 }
 
 export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMetricsCardsProps) => {
