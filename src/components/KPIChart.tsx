@@ -19,6 +19,7 @@ interface KPIChartProps {
   reportId: string | null;
   filters: FilterState;
   onLoadingComplete?: () => void;
+  accountId?: string;
 }
 
 interface Dimension {
