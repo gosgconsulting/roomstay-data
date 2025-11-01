@@ -15,6 +15,7 @@ export default function Index() {
   const location = useLocation();
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDataLoading, setIsDataLoading] = useState(false);
   const [isSharedView, setIsSharedView] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
@@ -29,16 +30,26 @@ export default function Index() {
     compareDateRange: undefined,
   });
   
-  // Reset filters when report changes
+  // Reset filters and show loading when report changes
   useEffect(() => {
-    setFilters({
-      dimensionFilters: {},
-      dateRange: undefined,
-      datePreset: "last_30_days",
-      compareEnabled: false,
-      compareType: "previous_period",
-      compareDateRange: undefined,
-    });
+    if (reportId) {
+      setIsDataLoading(true);
+      setFilters({
+        dimensionFilters: {},
+        dateRange: undefined,
+        datePreset: "last_30_days",
+        compareEnabled: false,
+        compareType: "previous_period",
+        compareDateRange: undefined,
+      });
+      
+      // Give components time to mount and start loading
+      const timer = setTimeout(() => {
+        setIsDataLoading(false);
+      }, 1500);
+      
+      return () => clearTimeout(timer);
+    }
   }, [reportId]);
   
   useEffect(() => {
@@ -144,19 +155,38 @@ export default function Index() {
   };
   
   const refreshData = () => {
+    setIsDataLoading(true);
     setDataRefreshKey(prev => prev + 1);
+    
+    // Hide loading after components have had time to fetch
+    setTimeout(() => {
+      setIsDataLoading(false);
+    }, 1500);
   };
   
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+          <p className="text-muted-foreground">Loading your workspace...</p>
+        </div>
       </div>
     );
   }
   
   return (
     <div className="min-h-screen bg-background">
+      {/* Full screen loading overlay for data loading */}
+      {isDataLoading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+            <p className="text-muted-foreground">Loading report data...</p>
+          </div>
+        </div>
+      )}
+      
       <DashboardHeader 
         reportId={reportId} 
         onReportChange={setReportId} 
