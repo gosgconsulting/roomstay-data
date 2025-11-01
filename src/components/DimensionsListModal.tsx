@@ -167,7 +167,7 @@ export const DimensionsListModal = ({
   };
 
   const handleDelete = async (id: string, name: string, dimension: Dimension) => {
-    // [testing] Prevent deletion of system dimensions
+    // Prevent deletion of system dimensions
     if (isSystemDimension(dimension)) {
       console.log('[testing] Attempted to delete system dimension:', name);
       toast({
@@ -178,8 +178,18 @@ export const DimensionsListModal = ({
       return;
     }
 
+    // Prevent deletion of global dimensions
+    if (dimension.scope === 'global') {
+      toast({
+        title: "Cannot delete global dimension",
+        description: `"${name}" is a global dimension and can only be deleted by administrators`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      console.log('[testing] Deleting user dimension:', name);
+      console.log('[testing] Deleting custom dimension:', name);
       const { error } = await supabase
         .from("dimensions")
         .delete()
@@ -187,7 +197,7 @@ export const DimensionsListModal = ({
 
       if (error) throw error;
 
-      setDimensions(dimensions.filter((d) => d.id !== id));
+      setCustomDimensions(customDimensions.filter((d) => d.id !== id));
       toast({
         title: "Dimension deleted",
         description: `Deleted "${name}"`,
