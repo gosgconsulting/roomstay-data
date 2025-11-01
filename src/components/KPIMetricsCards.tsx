@@ -4,10 +4,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { FilterState } from "./FiltersBar";
 import { cn } from "@/lib/utils";
-import { 
-  Eye, 
-  MousePointerClick, 
-  TrendingUp, 
+import { debugLog, retryWithBackoff } from "@/lib/debug";
+import {
+  Eye,
+  MousePointerClick,
+  TrendingUp,
   ShoppingCart,
   Percent,
   DollarSign,
