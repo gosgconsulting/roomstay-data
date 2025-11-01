@@ -287,14 +287,14 @@ export const DimensionModal = ({
 
           <div className="space-y-2">
             <Label htmlFor="type">Type</Label>
-            <Select 
-              value={type} 
+            <Select
+              value={type}
               onValueChange={setType}
-              disabled={mode === 'edit' && isSystemDimension(dimension)}
+              disabled={mode === 'edit' && isSystemDimension(dimension) && !(dimension?.scope === 'global' && accountId)}
             >
-              <SelectTrigger 
-                id="type" 
-                className={`bg-background ${mode === 'edit' && isSystemDimension(dimension) ? 'bg-gray-50' : ''}`}
+              <SelectTrigger
+                id="type"
+                className={`bg-background ${mode === 'edit' && isSystemDimension(dimension) && !(dimension?.scope === 'global' && accountId) ? 'bg-gray-50' : ''}`}
               >
                 <SelectValue />
               </SelectTrigger>
@@ -306,9 +306,14 @@ export const DimensionModal = ({
                 <SelectItem value="percentage">Percentage</SelectItem>
               </SelectContent>
             </Select>
-            {mode === 'edit' && isSystemDimension(dimension) && (
+            {mode === 'edit' && isSystemDimension(dimension) && !(dimension?.scope === 'global' && accountId) && (
               <p className="text-xs text-muted-foreground">
                 System dimension types cannot be changed
+              </p>
+            )}
+            {mode === 'edit' && dimension?.scope === 'global' && accountId && (
+              <p className="text-xs text-blue-600">
+                This will create an account-specific version with the new type
               </p>
             )}
           </div>
