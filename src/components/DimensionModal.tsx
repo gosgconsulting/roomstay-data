@@ -223,11 +223,13 @@ export const DimensionModal = ({
             )}
           </DialogTitle>
           <DialogDescription>
-            {mode === 'edit' && isSystemDimension(dimension) 
-              ? 'This is a system dimension. Only the formula can be modified.'
-              : mode === 'edit' 
-                ? 'Update the dimension details' 
-                : 'Create a new dimension for your report'
+            {mode === 'edit' && dimension?.scope === 'global' && accountId
+              ? 'Editing this global dimension will create an account-specific version. Only this account will be affected.'
+              : mode === 'edit' && isSystemDimension(dimension) && dimension?.scope !== 'global'
+                ? 'This is a system dimension. Only the formula can be modified.'
+                : mode === 'edit'
+                  ? 'Update the dimension details'
+                  : 'Create a new dimension for your report'
             }
           </DialogDescription>
         </DialogHeader>
