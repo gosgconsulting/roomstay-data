@@ -60,15 +60,15 @@ export const DimensionSelectorModal = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load all dimensions - both metrics and attributes
+      // Load both global dimensions and user's custom dimensions
       const { data, error } = await supabase
         .from("dimensions")
         .select("*")
-        .eq("user_id", user.id)
+        .or(`scope.eq.global,and(scope.eq.custom,user_id.eq.${user.id})`)
         .order("name", { ascending: true });
 
       if (error) throw error;
-      
+
       // Deduplicate dimensions by name (keep first occurrence)
       const seenNames = new Set<string>();
       const uniqueDimensions = (data || []).filter(dim => {
@@ -78,7 +78,7 @@ export const DimensionSelectorModal = ({
         seenNames.add(dim.name);
         return true;
       });
-      
+
       setDimensions(uniqueDimensions);
     } catch (error) {
       console.error("Error loading dimensions:", error);
