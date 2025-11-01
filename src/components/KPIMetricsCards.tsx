@@ -79,14 +79,22 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
       // RLS policies will filter global and custom dimensions automatically
       if (user) {
         try {
-          const { data: allDims, error: dimError } = await supabase
-            .from("dimensions")
-            .select("*");
+          const allDims = await retryWithBackoff(
+            async () => {
+              const { data, error } = await supabase
+                .from("dimensions")
+                .select("*");
 
-          if (dimError) {
-            const errorMsg = dimError instanceof Error ? dimError.message : JSON.stringify(dimError);
-            throw new Error(`Failed to load dimensions: ${errorMsg}`);
-          }
+              if (error) {
+                const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+                throw new Error(`Failed to load dimensions: ${errorMsg}`);
+              }
+
+              return data || [];
+            },
+            3, // max attempts
+            500 // initial delay in ms
+          );
 
           // Filter to global dimensions and custom dimensions for this report if reportId provided
           if (reportId) {
