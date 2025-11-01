@@ -651,43 +651,28 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
       
       let data = null;
 
-      // Fetch both global dimensions and user's custom dimensions for this report
-      if (user && reportId) {
-        const { data: globalDims, error: globalError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("scope", "global");
+      // Fetch dimensions accessible to the user
+      if (user) {
+        try {
+          const { data: allDims, error: dimError } = await supabase
+            .from("dimensions")
+            .select("*");
 
-        if (globalError) throw globalError;
+          if (dimError) throw dimError;
 
-        const { data: customDims, error: customError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("scope", "custom")
-          .eq("user_id", user.id)
-          .eq("report_id", reportId);
-
-        if (customError) throw customError;
-
-        data = [...(globalDims || []), ...(customDims || [])];
-      } else if (user) {
-        // Fallback: fetch all global dimensions and user's dimensions
-        const { data: globalDims, error: globalError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("scope", "global");
-
-        if (globalError) throw globalError;
-
-        const { data: customDims, error: customError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("scope", "custom")
-          .eq("user_id", user.id);
-
-        if (customError) throw customError;
-
-        data = [...(globalDims || []), ...(customDims || [])];
+          // Filter to global dimensions and custom dimensions for this report if reportId provided
+          if (reportId) {
+            data = (allDims || []).filter((d: any) =>
+              d.scope === 'global' ||
+              (d.scope === 'custom' && d.report_id === reportId)
+            );
+          } else {
+            data = allDims || [];
+          }
+        } catch (error) {
+          console.error('Error loading dimensions:', error);
+          data = [];
+        }
       }
 
       // If no dimensions found, try falling back to loading from dimension_data
