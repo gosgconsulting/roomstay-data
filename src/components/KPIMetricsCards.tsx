@@ -74,45 +74,31 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
       
       let dimensions = null;
       
-      // Fetch both global dimensions and user's custom dimensions for this report
-      if (user && reportId) {
-        const { data: globalDims, error: globalError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("scope", "global");
+      // Fetch dimensions accessible to the user
+      // RLS policies will filter global and custom dimensions automatically
+      if (user) {
+        try {
+          const { data: allDims, error: dimError } = await supabase
+            .from("dimensions")
+            .select("*");
 
-        if (globalError) throw globalError;
+          if (dimError) throw dimError;
 
-        const { data: customDims, error: customError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("scope", "custom")
-          .eq("user_id", user.id)
-          .eq("report_id", reportId);
+          // Filter to global dimensions and custom dimensions for this report if reportId provided
+          if (reportId) {
+            dimensions = (allDims || []).filter((d: any) =>
+              d.scope === 'global' ||
+              (d.scope === 'custom' && d.report_id === reportId)
+            );
+          } else {
+            dimensions = allDims || [];
+          }
 
-        if (customError) throw customError;
-
-        dimensions = [...(globalDims || []), ...(customDims || [])];
-        console.log('[testing] loadMetrics - Dimensions loaded:', dimensions?.length);
-      } else if (user) {
-        // Fallback: fetch all global dimensions and user's custom dimensions
-        const { data: globalDims, error: globalError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("scope", "global");
-
-        if (globalError) throw globalError;
-
-        const { data: customDims, error: customError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("scope", "custom")
-          .eq("user_id", user.id);
-
-        if (customError) throw customError;
-
-        dimensions = [...(globalDims || []), ...(customDims || [])];
-        console.log('[testing] loadMetrics - Dimensions loaded:', dimensions?.length);
+          console.log('[testing] loadMetrics - Dimensions loaded:', dimensions?.length);
+        } catch (error) {
+          console.error('[testing] Error loading metrics:', error);
+          dimensions = [];
+        }
       }
 
       // If no dimensions found, try falling back to loading from dimension_data
