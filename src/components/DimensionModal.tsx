@@ -103,27 +103,51 @@ export const DimensionModal = ({
       if (mode === 'edit' && dimension) {
         console.log('[testing] Updating dimension:', dimension.id);
 
-        // For system dimensions, only allow formula updates
-        const updateData = isSystemDimension(dimension)
-          ? { formula: formula.trim() || null }
-          : {
+        // If editing a global dimension in an account context, create an account-specific copy instead
+        if (dimension.scope === 'global' && accountId) {
+          console.log('[testing] Creating account-specific copy of global dimension:', dimension.id);
+
+          const { data, error } = await supabase
+            .from("dimensions")
+            .insert({
               name: name.trim(),
               type,
               formula: formula.trim() || null,
-              scope,
-            };
+              account_id: accountId,
+              scope: 'account',
+            })
+            .select()
+            .single();
 
-        const { error } = await supabase
-          .from("dimensions")
-          .update(updateData)
-          .eq("id", dimension.id);
+          if (error) throw error;
 
-        if (error) throw error;
+          toast({
+            title: "Dimension customized",
+            description: `Created account-specific version of "${name}"`,
+          });
+        } else {
+          // For custom or account dimensions, update directly
+          // For system dimensions, only allow formula updates
+          const updateData = isSystemDimension(dimension)
+            ? { formula: formula.trim() || null }
+            : {
+                name: name.trim(),
+                type,
+                formula: formula.trim() || null,
+              };
 
-        toast({
-          title: "Dimension updated",
-          description: `Updated dimension "${name}"`,
-        });
+          const { error } = await supabase
+            .from("dimensions")
+            .update(updateData)
+            .eq("id", dimension.id);
+
+          if (error) throw error;
+
+          toast({
+            title: "Dimension updated",
+            description: `Updated dimension "${name}"`,
+          });
+        }
       } else {
         console.log('[testing] Creating new dimension for report:', reportId);
 
