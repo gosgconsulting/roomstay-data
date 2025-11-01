@@ -231,9 +231,10 @@ export default function ReportDashboard() {
         </div>
       </header>
       
-      <DashboardHeader 
-        reportId={reportId} 
-        onReportChange={setReportId} 
+      <DashboardHeader
+        reportId={reportId}
+        accountId={accountId}
+        onReportChange={setReportId}
         onRefreshData={refreshData}
         session={session}
         onSignOut={handleSignOut}
