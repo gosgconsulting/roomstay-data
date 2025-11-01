@@ -46,6 +46,25 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
       // Get the current user to load all their dimensions
       const { data: { user } } = await supabase.auth.getUser();
       
+      // Load KPI visibility and order settings from report_views
+      let visibleKPIs: string[] | null = null;
+      let kpiOrder: string[] | null = null;
+      
+      if (user && reportId) {
+        const { data: viewSettings } = await supabase
+          .from("report_views")
+          .select("visible_kpis, kpi_order")
+          .eq("report_id", reportId)
+          .eq("user_id", user.id)
+          .eq("is_default", true)
+          .maybeSingle();
+        
+        if (viewSettings) {
+          visibleKPIs = viewSettings.visible_kpis as string[] | null;
+          kpiOrder = viewSettings.kpi_order as string[] | null;
+        }
+      }
+      
       let dimensions = null;
       
       // First, try to fetch dimensions by user_id (all user's dimensions across all reports)
@@ -203,13 +222,22 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
       };
 
       // Build metrics in specific order
-      const orderedMetrics = [
+      const defaultOrderedMetrics = [
         'Impressions', 'Clicks', 'CTR', 'Conversions',
         'Conversion rate', 'CPC', 'Cost', 'Revenue',
         'ROAS', 'Cost of sale'
       ];
+      
+      // Use custom order if available, otherwise use default
+      const orderedMetrics = kpiOrder || defaultOrderedMetrics;
+      
+      // Get visible KPIs set
+      const visibleKPIsSet = visibleKPIs ? new Set(visibleKPIs) : new Set(defaultOrderedMetrics);
 
       orderedMetrics.forEach((metricName) => {
+        // Skip if not visible
+        if (!visibleKPIsSet.has(metricName)) return;
+        
         if (aggregatedValues[metricName] !== undefined) {
           const dimension = dimensions.find(d => d.name === metricName);
           if (dimension) {
@@ -344,13 +372,11 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
     );
   }
 
-  if (metrics.length === 0) {
-    return null;
-  }
-
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-4">Analytics & Insights</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold">Analytics & Insights</h2>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {metrics.map((metric, index) => {
           const IconComponent = metric.icon;

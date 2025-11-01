@@ -225,12 +225,14 @@ export type Database = {
           group_by_dimensions: string[] | null
           id: string
           is_default: boolean | null
+          kpi_order: string[] | null
           name: string
           report_id: string
           then_by_dimensions: string[] | null
           updated_at: string
           user_id: string
           visible_columns: string[] | null
+          visible_kpis: string[] | null
         }
         Insert: {
           breakdown_by_dimensions?: string[] | null
@@ -246,12 +248,14 @@ export type Database = {
           group_by_dimensions?: string[] | null
           id?: string
           is_default?: boolean | null
+          kpi_order?: string[] | null
           name?: string
           report_id: string
           then_by_dimensions?: string[] | null
           updated_at?: string
           user_id: string
           visible_columns?: string[] | null
+          visible_kpis?: string[] | null
         }
         Update: {
           breakdown_by_dimensions?: string[] | null
@@ -267,12 +271,14 @@ export type Database = {
           group_by_dimensions?: string[] | null
           id?: string
           is_default?: boolean | null
+          kpi_order?: string[] | null
           name?: string
           report_id?: string
           then_by_dimensions?: string[] | null
           updated_at?: string
           user_id?: string
           visible_columns?: string[] | null
+          visible_kpis?: string[] | null
         }
         Relationships: [
           {

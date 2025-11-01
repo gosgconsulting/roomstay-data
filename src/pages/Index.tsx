@@ -5,10 +5,12 @@ import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import { KPIChart } from "@/components/KPIChart";
 import { PerformanceTable } from "@/components/PerformanceTable";
+import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
+import { Settings } from "lucide-react";
 
 export default function Index() {
   const navigate = useNavigate();
@@ -20,6 +22,7 @@ export default function Index() {
   const [isSharedView, setIsSharedView] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
+  const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
@@ -208,12 +211,27 @@ export default function Index() {
         <>
           <FiltersBar reportId={reportId} onFiltersChange={setFilters} isSharedView={isSharedView} />
           <main className="container mx-auto px-6 py-6 space-y-6">
-            <KPIMetricsCards 
-              reportId={reportId} 
-              filters={filters} 
-              key={`metrics-${dataRefreshKey}`}
-              onLoadingComplete={() => markComponentLoaded('metrics')}
-            />
+            <div className="relative">
+              <div className="absolute right-0 -top-2 z-10">
+                {!isSharedView && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setKpiSettingsOpen(true)}
+                    className="gap-2"
+                  >
+                    <Settings className="h-4 w-4" />
+                    KPI Settings
+                  </Button>
+                )}
+              </div>
+              <KPIMetricsCards 
+                reportId={reportId} 
+                filters={filters} 
+                key={`metrics-${dataRefreshKey}`}
+                onLoadingComplete={() => markComponentLoaded('metrics')}
+              />
+            </div>
             <KPIChart 
               reportId={reportId} 
               filters={filters} 
@@ -222,6 +240,13 @@ export default function Index() {
             />
             <PerformanceTable reportId={reportId} filters={filters} isSharedView={isSharedView} key={`table-${dataRefreshKey}`} />
           </main>
+          
+          <KPISettingsModal
+            open={kpiSettingsOpen}
+            onOpenChange={setKpiSettingsOpen}
+            reportId={reportId}
+            onSettingsChange={refreshData}
+          />
         </>
       ) : (
         <main className="container mx-auto px-6 py-6">
