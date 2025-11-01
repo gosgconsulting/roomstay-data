@@ -99,15 +99,23 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps
         if (user && reportId) {
           try {
             // Single query to get all dimensions user can access for this report
-            // RLS policies will handle filtering
-            const { data: allDims, error: dimError } = await supabase
-              .from("dimensions")
-              .select("*");
+            // RLS policies will handle filtering, with retry for network resilience
+            const allDims = await retryWithBackoff(
+              async () => {
+                const { data, error } = await supabase
+                  .from("dimensions")
+                  .select("*");
 
-            if (dimError) {
-              const errorMsg = dimError instanceof Error ? dimError.message : JSON.stringify(dimError);
-              throw new Error(`Failed to fetch dimensions: ${errorMsg}`);
-            }
+                if (error) {
+                  const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+                  throw new Error(`Failed to fetch dimensions: ${errorMsg}`);
+                }
+
+                return data || [];
+              },
+              3, // max attempts
+              500 // initial delay in ms
+            );
 
             // Filter to only global dimensions and custom dimensions for this report
             dimensions = (allDims || []).filter((d: any) =>
@@ -125,14 +133,23 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps
         } else if (user) {
           // Fallback: just fetch all dimensions (RLS will filter them)
           try {
-            const { data: allDims, error: dimError } = await supabase
-              .from("dimensions")
-              .select("*");
+            const allDims = await retryWithBackoff(
+              async () => {
+                const { data, error } = await supabase
+                  .from("dimensions")
+                  .select("*");
 
-            if (dimError) {
-              const errorMsg = dimError instanceof Error ? dimError.message : JSON.stringify(dimError);
-              throw new Error(`Failed to fetch dimensions: ${errorMsg}`);
-            }
+                if (error) {
+                  const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+                  throw new Error(`Failed to fetch dimensions: ${errorMsg}`);
+                }
+
+                return data || [];
+              },
+              3, // max attempts
+              500 // initial delay in ms
+            );
+
             dimensions = allDims as Dimension[];
           } catch (error) {
             const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
