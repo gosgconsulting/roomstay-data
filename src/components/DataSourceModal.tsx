@@ -213,6 +213,8 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
       const dimensionIdMap: Record<string, string> = {};
       const visibleMappings = mappings.filter(m => m.visible);
       
+      console.log(`[IMPORT] Processing ${visibleMappings.length} visible mappings`);
+      
       for (const mapping of visibleMappings) {
         if (mapping.dimensionId === 'create_new' && mapping.newDimensionName) {
           // Create new dimension
@@ -230,11 +232,15 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
           
           if (dimError) throw dimError;
           dimensionIdMap[mapping.column] = newDim.id;
+          console.log(`[IMPORT] Created new dimension "${mapping.newDimensionName}" for column "${mapping.column}"`);
         } else if (mapping.dimensionId && mapping.dimensionId !== 'none') {
           // Use existing dimension
           dimensionIdMap[mapping.column] = mapping.dimensionId;
+          console.log(`[IMPORT] Mapped column "${mapping.column}" to existing dimension ${mapping.dimensionId}`);
         }
       }
+      
+      console.log(`[IMPORT] Successfully mapped ${Object.keys(dimensionIdMap).length} columns`);
 
       // Helper function to parse values based on dimension type
       const parseValue = (value: any, dimensionType: string): any => {
@@ -272,6 +278,15 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
             const dimensionType = mapping.newDimensionType || mapping.dimensionType || 'text';
             const value = parseValue(rawValue, dimensionType);
             dimensionValues[dimensionIdMap[mapping.column]] = value;
+            
+            // Log first row values for debugging
+            if (index === 0) {
+              console.log(`[IMPORT] Row 1 - ${mapping.column}: "${rawValue}" -> ${value} (${dimensionType})`);
+            }
+          } else if (!dimensionIdMap[mapping.column]) {
+            if (index === 0) {
+              console.warn(`[IMPORT] Column "${mapping.column}" not mapped to any dimension`);
+            }
           }
         });
         
@@ -283,6 +298,8 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
         };
       });
 
+      console.log(`[IMPORT] Prepared ${rowsToInsert.length} rows for insertion`);
+
       // Insert data in batches to dimension_data
       const batchSize = 500;
       for (let i = 0; i < rowsToInsert.length; i += batchSize) {
@@ -291,8 +308,13 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
           .from('dimension_data')
           .insert(batch);
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error(`[IMPORT] Error inserting batch at index ${i}:`, insertError);
+          throw insertError;
+        }
       }
+      
+      console.log(`[IMPORT] Successfully imported ${rowsToInsert.length} rows`);
 
       toast({
         title: "Data source saved",

@@ -127,6 +127,8 @@ export const DataSourcesListModal = ({
     setSyncingIds(prev => new Set(prev).add(dataSource.id));
     
     try {
+      console.log(`[REFRESH] Starting refresh for data source: ${dataSource.name}`);
+      
       // First, fetch just the header to validate the sheet
       const { data: headerData, error: headerError } = await supabase.functions.invoke('fetch-google-sheets', {
         body: {
@@ -142,6 +144,7 @@ export const DataSourcesListModal = ({
       }
 
       const sheetHeaders = headerData.values[0];
+      console.log(`[REFRESH] Found ${sheetHeaders.length} columns in sheet:`, sheetHeaders);
 
       // Now fetch all data rows (up to 300,000 rows)
       toast({
@@ -211,15 +214,33 @@ export const DataSourcesListModal = ({
         }
       }
 
-      // Build dimension ID map from current mappings
+      // Build dimension ID map from current mappings and validate against sheet headers
       const dimensionIdMap: Record<string, string> = {};
       const visibleMappings = (dataSource.column_mappings || []).filter((m: any) => m.visible);
       
+      console.log(`[REFRESH] Processing ${visibleMappings.length} visible mappings`);
+      
       visibleMappings.forEach((mapping: any) => {
         if (mapping.dimensionId && mapping.dimensionId !== 'none') {
-          dimensionIdMap[mapping.column] = mapping.dimensionId;
+          // Verify this column exists in the sheet (exact or normalized match)
+          let colIndex = sheetHeaders.indexOf(mapping.column);
+          if (colIndex === -1) {
+            const normalizedMappingCol = mapping.column.trim().toLowerCase();
+            colIndex = sheetHeaders.findIndex((header: string) => 
+              header.trim().toLowerCase() === normalizedMappingCol
+            );
+          }
+          
+          if (colIndex !== -1) {
+            dimensionIdMap[mapping.column] = mapping.dimensionId;
+            console.log(`[REFRESH] Mapped "${mapping.column}" -> dimension ${mapping.dimensionId}`);
+          } else {
+            console.warn(`[REFRESH] Column "${mapping.column}" not found in sheet headers`);
+          }
         }
       });
+      
+      console.log(`[REFRESH] Successfully mapped ${Object.keys(dimensionIdMap).length} columns`);
 
       // Helper function to parse values based on dimension type
       const parseValue = (value: any, dimensionType: string): any => {
@@ -238,7 +259,7 @@ export const DataSourcesListModal = ({
         return value;
       };
 
-      // Transform data
+      // Transform data with detailed logging for first row
       const rowsToInsert = dataRows.map((row, index) => {
         const dimensionValues: Record<string, any> = {};
         
@@ -257,6 +278,11 @@ export const DataSourcesListModal = ({
             const dimensionType = mapping.newDimensionType || mapping.dimensionType || 'text';
             const value = parseValue(rawValue, dimensionType);
             dimensionValues[dimensionIdMap[mapping.column]] = value;
+            
+            // Log first row values for debugging
+            if (index === 0) {
+              console.log(`[REFRESH] Row 1 - ${mapping.column}: "${rawValue}" -> ${value} (${dimensionType})`);
+            }
           }
         });
         
@@ -268,6 +294,8 @@ export const DataSourcesListModal = ({
         };
       });
 
+      console.log(`[REFRESH] Prepared ${rowsToInsert.length} rows for insertion`);
+      
       // Insert in smaller batches with progress updates
       const batchSize = 1000;
       const totalBatches = Math.ceil(rowsToInsert.length / batchSize);
@@ -278,7 +306,7 @@ export const DataSourcesListModal = ({
         
         toast({
           title: "Syncing...",
-          description: `Processing batch ${currentBatch}/${totalBatches} (${Math.round((i / rowsToInsert.length) * 100)}%)`,
+          description: `Importing batch ${currentBatch}/${totalBatches} (${Math.round((i / rowsToInsert.length) * 100)}%)`,
         });
         
         const { error: insertError } = await supabase
@@ -286,15 +314,21 @@ export const DataSourcesListModal = ({
           .insert(batch);
 
         if (insertError) {
-          console.error(`Error inserting batch ${currentBatch}:`, insertError);
+          console.error(`[REFRESH] Error inserting batch ${currentBatch}:`, insertError);
           throw new Error(`Failed at batch ${currentBatch}/${totalBatches}: ${insertError.message}`);
         }
+        
+        console.log(`[REFRESH] Inserted batch ${currentBatch}/${totalBatches}`);
       }
+      
+      console.log(`[REFRESH] Successfully imported all ${rowsToInsert.length} rows`);
 
       toast({
-        title: "Data synced successfully",
-        description: `Synced ${dataRows.length.toLocaleString()} rows from ${dataSource.name}`,
+        title: "Refresh complete",
+        description: `Successfully imported ${dataRows.length.toLocaleString()} rows with ${Object.keys(dimensionIdMap).length} dimensions`,
       });
+      
+      console.log(`[REFRESH] Refresh completed for "${dataSource.name}"`);
       
       // Close modal and trigger refresh
       onOpenChange(false);
@@ -302,10 +336,10 @@ export const DataSourcesListModal = ({
         onDataSync();
       }
     } catch (error) {
-      console.error("Error syncing data:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to sync data";
+      console.error("[REFRESH] Error syncing data source:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to refresh data";
       toast({
-        title: "Sync failed",
+        title: "Refresh failed",
         description: errorMessage,
         variant: "destructive",
       });
