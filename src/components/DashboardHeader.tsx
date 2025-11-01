@@ -676,6 +676,7 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
               dimension={editingDimension}
               mode={dimensionModalMode}
               reportId={reportId}
+              accountId={accountId}
               onSaved={() => {
                 console.log('[testing] Dimension saved, refreshing list');
                 // Trigger refresh of dimensions list
