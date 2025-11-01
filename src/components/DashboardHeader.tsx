@@ -47,6 +47,7 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
   const [currentReport, setCurrentReport] = useState<Report | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdateDate, setLastUpdateDate] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Load reports on mount
   useEffect(() => {
@@ -351,6 +352,108 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
     }
   };
 
+  const handleRefresh = async () => {
+    if (!reportId) return;
+    
+    setIsSyncing(true);
+    
+    try {
+      // Get all data sources for this report
+      const { data: dataSources, error: dsError } = await supabase
+        .from('data_sources')
+        .select('*')
+        .eq('report_id', reportId);
+
+      if (dsError) throw dsError;
+
+      if (!dataSources || dataSources.length === 0) {
+        toast({
+          title: "No data sources",
+          description: "Add a data source to sync data",
+          variant: "destructive",
+        });
+        setIsSyncing(false);
+        return;
+      }
+
+      toast({
+        title: "Syncing data...",
+        description: `Importing data from ${dataSources.length} source(s)`,
+      });
+
+      let totalRowsImported = 0;
+
+      // Sync each data source
+      for (const dataSource of dataSources) {
+        try {
+          // Fetch data from Google Sheets
+          const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
+            body: {
+              spreadsheetId: dataSource.spreadsheet_id,
+              tabName: dataSource.tab_name,
+              range: `${dataSource.header_row + 1}:300000`,
+            },
+          });
+
+          if (sheetsError) throw sheetsError;
+
+          const sheetRows = sheetsData?.values || [];
+          
+          // Invoke migrate-sheet-data edge function to process the data
+          const { data: migrateResult, error: migrateError } = await supabase.functions.invoke('migrate-sheet-data', {
+            body: {
+              dataSourceId: dataSource.id,
+              reportId: reportId,
+              sheetData: sheetRows,
+              columnMappings: dataSource.column_mappings,
+            },
+          });
+
+          if (migrateError) throw migrateError;
+
+          if (migrateResult?.rowCount) {
+            totalRowsImported += migrateResult.rowCount;
+          }
+
+          // Update the data source's updated_at timestamp
+          await supabase
+            .from('data_sources')
+            .update({ updated_at: new Date().toISOString() })
+            .eq('id', dataSource.id);
+
+        } catch (sourceError) {
+          console.error(`Error syncing data source ${dataSource.name}:`, sourceError);
+          toast({
+            title: "Partial sync",
+            description: `Failed to sync ${dataSource.name}`,
+            variant: "destructive",
+          });
+        }
+      }
+
+      // Refresh the last update date
+      await loadLastUpdateDate(reportId);
+
+      toast({
+        title: "Refresh complete",
+        description: `Successfully imported ${totalRowsImported.toLocaleString()} rows with ${dataSources.length} dimension(s)`,
+      });
+
+      // Trigger data refresh in the parent component
+      onRefreshData?.();
+
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh data from Google Sheets",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <header className="border-b bg-card px-6 py-3 flex items-center justify-between">
@@ -464,11 +567,11 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
           <Button 
             variant="outline" 
             className="gap-2"
-            onClick={onRefreshData}
-            disabled={!currentReport}
+            onClick={handleRefresh}
+            disabled={!currentReport || isSyncing}
           >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
+            <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            {isSyncing ? 'Syncing...' : 'Refresh'}
           </Button>
           <Button 
             variant="outline" 
