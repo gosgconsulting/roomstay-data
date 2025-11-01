@@ -121,18 +121,19 @@ export const ColumnMappingStep = ({
   const findBestMatch = (columnName: string, dimensions: Dimension[]): Dimension | null => {
     const normalizedColumn = normalizeString(columnName);
     
-    // Define common synonyms/mappings
+    // Define common synonyms/mappings - more specific matches
     const synonyms: Record<string, string[]> = {
-      'impressions': ['impression', 'impr', 'imp'],
-      'clicks': ['click', 'clk'],
-      'conversions': ['conversion', 'booking', 'bookings', 'conv', 'cvr'],
-      'cost': ['spend', 'cost', 'cpc_local'],
-      'revenue': ['rev', 'income', 'sales'],
-      'ctr': ['click_through_rate', 'clickrate'],
-      'cpc': ['cost_per_click', 'cpc_local'],
-      'cpm': ['cost_per_mille', 'cost_per_thousand'],
-      'roas': ['return_on_ad_spend'],
-      'leads': ['lead', 'prospects'],
+      'impressions': ['impression', 'impr', 'imp', 'impressions'],
+      'clicks': ['click', 'clk', 'clicks'],
+      'conversions': ['conversion', 'conversions', 'booking', 'bookings', 'conv', 'cvr'],
+      'purchases': ['purchase', 'purchases', 'orders', 'order'],
+      'cost': ['spend', 'cost', 'costs'],
+      'revenue': ['rev', 'revenue', 'income', 'sales'],
+      'ctr': ['click_through_rate', 'clickrate', 'ctr'],
+      'cpc': ['cost_per_click', 'costperclick'],
+      'cpm': ['cost_per_mille', 'cost_per_thousand', 'cpm'],
+      'roas': ['return_on_ad_spend', 'returnon_ad_spend', 'roas'],
+      'leads': ['lead', 'leads', 'prospects'],
     };
 
     // First try exact match (case-insensitive)
@@ -141,18 +142,27 @@ export const ColumnMappingStep = ({
     );
     if (exactMatch) return exactMatch;
 
-    // Try synonym matching
+    // Try synonym matching with exact synonym match first
     for (const [dimensionKey, synonymList] of Object.entries(synonyms)) {
-      if (synonymList.some(syn => normalizedColumn.includes(syn) || syn.includes(normalizedColumn))) {
-        const match = dimensions.find(d => normalizeString(d.name).includes(dimensionKey));
+      // Check if the column name exactly matches any synonym
+      if (synonymList.includes(normalizedColumn)) {
+        const match = dimensions.find(d => normalizeString(d.name) === dimensionKey || normalizeString(d.name).includes(dimensionKey));
         if (match) return match;
       }
     }
 
-    // Try partial match (column name contains dimension name or vice versa)
+    // Try more lenient partial match for compound names (e.g., "Purchases conversion value")
+    // Only match if dimension name is a complete word in the column
     const partialMatch = dimensions.find(d => {
       const normalizedDim = normalizeString(d.name);
-      return normalizedColumn.includes(normalizedDim) || normalizedDim.includes(normalizedColumn);
+      // Only match if dimension appears as a complete word segment
+      const columnWords = columnName.toLowerCase().split(/[\s_-]+/);
+      const dimensionWords = d.name.toLowerCase().split(/[\s_-]+/);
+      
+      // Check if all dimension words appear in column words
+      return dimensionWords.every(dimWord => 
+        columnWords.some(colWord => colWord === dimWord || colWord.includes(dimWord))
+      );
     });
     
     return partialMatch || null;
