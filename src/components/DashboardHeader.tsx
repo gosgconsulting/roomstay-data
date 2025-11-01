@@ -119,15 +119,19 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
   const createDefaultDimensions = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user || !reportId) return;
 
-      // Get existing dimensions
+      console.log('[testing] Creating default dimensions for report:', reportId);
+
+      // Get existing dimensions for this specific report
       const { data: existingDimensions } = await supabase
         .from('dimensions')
         .select('name, id')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .eq('report_id', reportId);
 
       const existingNames = new Set(existingDimensions?.map(d => d.name) || []);
+      console.log('[testing] Existing dimensions for report:', Array.from(existingNames));
 
       // Define all default dimensions
       const defaultMetrics = [
@@ -149,14 +153,27 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
         { name: 'Impression Share', type: 'percentage', formula: 'Impressions / Total Impressions * 100' },
       ];
 
-      // Filter out dimensions that already exist
+      // Filter out dimensions that already exist and mark as system dimensions
       const missingDimensions = [
-        ...defaultMetrics.filter(m => !existingNames.has(m.name)).map(m => ({ ...m, user_id: user.id, formula: null })),
-        ...formulaKPIs.filter(k => !existingNames.has(k.name)).map(k => ({ ...k, user_id: user.id }))
+        ...defaultMetrics.filter(m => !existingNames.has(m.name)).map(m => ({ 
+          ...m, 
+          user_id: user.id,
+          report_id: reportId,
+          formula: null,
+          is_system: true 
+        })),
+        ...formulaKPIs.filter(k => !existingNames.has(k.name)).map(k => ({ 
+          ...k, 
+          user_id: user.id,
+          report_id: reportId,
+          is_system: true 
+        }))
       ];
 
       // Only insert if there are missing dimensions
       if (missingDimensions.length > 0) {
+        console.log('[testing] Creating report-specific system dimensions:', missingDimensions.map(d => d.name));
+        console.log('[testing] For report ID:', reportId);
         await supabase.from('dimensions').insert(missingDimensions);
       }
     } catch (error) {
@@ -622,44 +639,46 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
         </>
       )}
 
-      <DimensionsListModal
-        open={showDimensionsListModal}
-        onOpenChange={setShowDimensionsListModal}
-        refreshTrigger={dimensionRefreshTrigger}
-        onAddNew={() => {
-          console.log('[testing] Opening add dimension modal');
-          setDimensionModalMode('add');
-          setEditingDimension(null);
-          setShowDimensionsListModal(false);
-          setShowDimensionModal(true);
-        }}
-        onEdit={(dimension) => {
-          console.log('[testing] Opening edit dimension modal for:', dimension);
-          setDimensionModalMode('edit');
-          setEditingDimension(dimension);
-          setShowDimensionsListModal(false);
-          setShowDimensionModal(true);
-        }}
-      />
+                  <DimensionsListModal
+              open={showDimensionsListModal}
+              onOpenChange={setShowDimensionsListModal}
+              refreshTrigger={dimensionRefreshTrigger}
+              reportId={reportId}
+              onAddNew={() => {
+                console.log('[testing] Opening add dimension modal');
+                setDimensionModalMode('add');
+                setEditingDimension(null);
+                setShowDimensionsListModal(false);
+                setShowDimensionModal(true);
+              }}
+              onEdit={(dimension) => {
+                console.log('[testing] Opening edit dimension modal for:', dimension);
+                setDimensionModalMode('edit');
+                setEditingDimension(dimension);
+                setShowDimensionsListModal(false);
+                setShowDimensionModal(true);
+              }}
+            />
       
-      <DimensionModal
-        open={showDimensionModal}
-        onOpenChange={(open) => {
-          setShowDimensionModal(open);
-          if (!open) {
-            // Reopen the list modal when closing the modal
-            setShowDimensionsListModal(true);
-            setEditingDimension(null);
-          }
-        }}
-        dimension={editingDimension}
-        mode={dimensionModalMode}
-        onSaved={() => {
-          console.log('[testing] Dimension saved, refreshing list');
-          // Trigger refresh of dimensions list
-          setDimensionRefreshTrigger(prev => prev + 1);
-        }}
-      />
+                  <DimensionModal
+              open={showDimensionModal}
+              onOpenChange={(open) => {
+                setShowDimensionModal(open);
+                if (!open) {
+                  // Reopen the list modal when closing the modal
+                  setShowDimensionsListModal(true);
+                  setEditingDimension(null);
+                }
+              }}
+              dimension={editingDimension}
+              mode={dimensionModalMode}
+              reportId={reportId}
+              onSaved={() => {
+                console.log('[testing] Dimension saved, refreshing list');
+                // Trigger refresh of dimensions list
+                setDimensionRefreshTrigger(prev => prev + 1);
+              }}
+            />
 
       <ReportModal
         open={showReportModal}

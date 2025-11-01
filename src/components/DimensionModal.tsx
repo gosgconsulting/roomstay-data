@@ -25,6 +25,7 @@ interface Dimension {
   name: string;
   type: string;
   formula: string | null;
+  is_system?: boolean;
 }
 
 interface DimensionModalProps {
@@ -33,6 +34,7 @@ interface DimensionModalProps {
   dimension?: Dimension;
   mode?: 'add' | 'edit';
   onSaved?: () => void;
+  reportId?: string;
 }
 
 export const DimensionModal = ({
@@ -41,11 +43,22 @@ export const DimensionModal = ({
   dimension,
   mode = 'add',
   onSaved,
+  reportId,
 }: DimensionModalProps) => {
   const [name, setName] = useState("");
   const [type, setType] = useState("number");
   const [formula, setFormula] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // [testing] Check if dimension is a system/default dimension
+  const isSystemDimension = (dim: Dimension | null): boolean => {
+    if (!dim) return false;
+    const systemDimensionNames = [
+      'Impressions', 'Clicks', 'Revenue', 'Cost', 'Conversions', 'Leads',
+      'CTR', 'ROAS', 'Cost of sale', 'Conversion Rate', 'CPM', 'CPC', 'Impression Share'
+    ];
+    return dim.is_system === true || systemDimensionNames.includes(dim.name);
+  };
 
   // [testing] Reset form when modal opens/closes or dimension changes
   useEffect(() => {
@@ -80,13 +93,19 @@ export const DimensionModal = ({
 
       if (mode === 'edit' && dimension) {
         console.log('[testing] Updating dimension:', dimension.id);
+        
+        // [testing] For system dimensions, only allow formula updates
+        const updateData = isSystemDimension(dimension) 
+          ? { formula: formula.trim() || null }
+          : {
+              name: name.trim(),
+              type,
+              formula: formula.trim() || null,
+            };
+
         const { error } = await supabase
           .from("dimensions")
-          .update({
-            name: name.trim(),
-            type,
-            formula: formula.trim() || null,
-          })
+          .update(updateData)
           .eq("id", dimension.id);
 
         if (error) throw error;
@@ -96,21 +115,28 @@ export const DimensionModal = ({
           description: `Updated dimension "${name}"`,
         });
       } else {
-        console.log('[testing] Creating new dimension');
+        console.log('[testing] Creating new dimension for report:', reportId);
+        
+        if (!reportId) {
+          throw new Error("Report ID is required for creating dimensions");
+        }
+
         const { error } = await supabase
           .from("dimensions")
           .insert({
             user_id: user.id,
+            report_id: reportId,
             name: name.trim(),
             type,
             formula: formula.trim() || null,
+            is_system: false, // User-created dimensions are not system dimensions
           });
 
         if (error) throw error;
 
         toast({
           title: "Dimension added",
-          description: `Created dimension "${name}"`,
+          description: `Created dimension "${name}" for this report`,
         });
       }
 
@@ -140,9 +166,21 @@ export const DimensionModal = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{mode === 'edit' ? 'Edit Dimension' : 'Add Dimension'}</DialogTitle>
+          <DialogTitle>
+            {mode === 'edit' ? 'Edit Dimension' : 'Add Dimension'}
+            {mode === 'edit' && isSystemDimension(dimension) && (
+              <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                System
+              </span>
+            )}
+          </DialogTitle>
           <DialogDescription>
-            {mode === 'edit' ? 'Update the dimension details' : 'Create a new dimension for your report'}
+            {mode === 'edit' && isSystemDimension(dimension) 
+              ? 'This is a system dimension. Only the formula can be modified.'
+              : mode === 'edit' 
+                ? 'Update the dimension details' 
+                : 'Create a new dimension for your report'
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -154,13 +192,27 @@ export const DimensionModal = ({
               placeholder="e.g., Impressions, Clicks, Revenue"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={mode === 'edit' && isSystemDimension(dimension)}
+              className={mode === 'edit' && isSystemDimension(dimension) ? 'bg-gray-50' : ''}
             />
+            {mode === 'edit' && isSystemDimension(dimension) && (
+              <p className="text-xs text-muted-foreground">
+                System dimension names cannot be changed
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="type">Type</Label>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger id="type" className="bg-background">
+            <Select 
+              value={type} 
+              onValueChange={setType}
+              disabled={mode === 'edit' && isSystemDimension(dimension)}
+            >
+              <SelectTrigger 
+                id="type" 
+                className={`bg-background ${mode === 'edit' && isSystemDimension(dimension) ? 'bg-gray-50' : ''}`}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-background z-50">
@@ -171,6 +223,11 @@ export const DimensionModal = ({
                 <SelectItem value="percentage">Percentage</SelectItem>
               </SelectContent>
             </Select>
+            {mode === 'edit' && isSystemDimension(dimension) && (
+              <p className="text-xs text-muted-foreground">
+                System dimension types cannot be changed
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

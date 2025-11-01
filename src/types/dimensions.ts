@@ -11,6 +11,7 @@ export interface Dimension {
   type: string;
   user_id?: string;
   formula?: string | null;
+  is_system?: boolean;
 }
 
 /**
