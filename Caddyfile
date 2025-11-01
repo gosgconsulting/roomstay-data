@@ -2,10 +2,12 @@
     auto_https off
 }
 
-:{$PORT:3000}, datagosgconsultingcom-production.up.railway.app, data.sparti.ai {
+:{$PORT:3000} {
     root * /app/dist
     encode gzip
     try_files {path} /index.html
     file_server
     header Access-Control-Allow-Origin *
+    header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    header Access-Control-Allow-Headers "Content-Type, Authorization"
 }

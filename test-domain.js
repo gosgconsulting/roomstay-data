@@ -1,46 +1,43 @@
-#!/usr/bin/env bun
-import { createServer } from 'http';
+/**
+ * [testing] Domain test server - Updated to allow all domains
+ * This server tests domain accessibility without restrictions
+ */
 
-// Create a simple HTTP server
+const { createServer } = require('http');
+
+const PORT = process.env.PORT || 3000;
+
 const server = createServer((req, res) => {
-  console.log(`[testing] Received request: ${req.method} ${req.url}`);
-  console.log(`[testing] Headers: ${JSON.stringify(req.headers, null, 2)}`);
+  console.log(`[testing] Request from host: ${req.headers.host}`);
   
-  // Log the host header
-  console.log(`[testing] Host: ${req.headers.host}`);
-  
-  // Check if the host is allowed
-  const allowedHosts = [
-    'datagosgconsultingcom-production.up.railway.app',
-    'data.sparti.ai',
-    'localhost',
-    '127.0.0.1',
-    'localhost:3000',
-    '127.0.0.1:3000'
-  ];
-  
-  const host = req.headers.host?.split(':')[0];
-  const isAllowed = host ? allowedHosts.includes(host) : false;
-  
-  console.log(`[testing] Host ${host} is ${isAllowed ? 'allowed' : 'not allowed'}`);
-  
-  // Send response
-  res.writeHead(200, { 'Content-Type': 'application/json' });
+  // Allow all hosts - no restrictions
+  console.log(`[testing] ✅ All domains allowed - Host: ${req.headers.host}`);
+
+  // Set CORS headers for all domains
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Content-Type', 'application/json');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+
+  // Respond with success
+  res.writeHead(200);
   res.end(JSON.stringify({
-    message: 'Domain test server',
+    message: 'Domain test successful',
     host: req.headers.host,
-    allowed: isAllowed,
-    url: req.url
+    timestamp: new Date().toISOString(),
+    status: 'All domains allowed'
   }));
 });
 
-const PORT = 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[testing] Server running at http://0.0.0.0:${PORT}/`);
-  console.log('[testing] Allowed hosts:', [
-    'datagosgconsultingcom-production.up.railway.app',
-    'data.sparti.ai',
-    'localhost',
-    '127.0.0.1'
-  ]);
+  console.log('[testing] ✅ All domains are now allowed');
+  console.log('[testing] No domain restrictions applied');
 });
