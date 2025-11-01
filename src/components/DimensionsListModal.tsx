@@ -114,22 +114,37 @@ export const DimensionsListModal = ({
     try {
       setIsLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) throw new Error("User not authenticated");
       if (!reportId) throw new Error("Report ID not provided");
 
       console.log('[testing] Loading dimensions for user:', user.id, 'report:', reportId);
-      const { data, error } = await supabase
+
+      // Load global dimensions (available to all users)
+      const { data: globalData, error: globalError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("scope", "global")
+        .order("created_at", { ascending: false });
+
+      if (globalError) throw globalError;
+
+      // Load custom dimensions for this specific report
+      const { data: customData, error: customError } = await supabase
         .from("dimensions")
         .select("*")
         .eq("user_id", user.id)
         .eq("report_id", reportId)
+        .eq("scope", "custom")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      console.log('[testing] Loaded report-specific dimensions:', data?.length || 0);
-      console.log('[testing] Dimensions:', data?.map(d => `${d.name} (${d.is_system ? 'system' : 'user'})`));
-      setDimensions(data || []);
+      if (customError) throw customError;
+
+      console.log('[testing] Loaded global dimensions:', globalData?.length || 0);
+      console.log('[testing] Loaded custom dimensions:', customData?.length || 0);
+
+      setGlobalDimensions(globalData || []);
+      setCustomDimensions(customData || []);
     } catch (error) {
       console.error("Error loading dimensions:", error);
       toast({
