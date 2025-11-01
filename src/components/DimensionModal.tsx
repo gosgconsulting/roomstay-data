@@ -69,12 +69,14 @@ export const DimensionModal = ({
       setName(dimension.name);
       setType(dimension.type);
       setFormula(dimension.formula || "");
+      // Always show the dimension's actual scope in edit mode (read-only)
       setScope(dimension.scope || 'custom');
     } else if (open && mode === 'add') {
       console.log('[testing] Resetting form for add mode');
       setName("");
       setType("number");
       setFormula("");
+      // Always create custom dimensions (users can't create global)
       setScope('custom');
     }
   }, [open, mode, dimension]);
