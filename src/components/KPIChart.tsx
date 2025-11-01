@@ -97,23 +97,45 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps
 
         // Fetch both global dimensions and user's custom dimensions for this report
         if (user && reportId) {
-          // Fetch all global dimensions and custom dimensions for this report
-          const { data: allDimensions, error: dimError } = await supabase
+          // Fetch all global dimensions
+          const { data: globalDims, error: globalError } = await supabase
             .from("dimensions")
             .select("*")
-            .or(`scope.eq.global,and(scope.eq.custom,user_id.eq.${user.id},report_id.eq.${reportId})`);
+            .eq("scope", "global");
 
-          if (dimError) throw dimError;
-          dimensions = allDimensions as Dimension[];
+          if (globalError) throw globalError;
+
+          // Fetch custom dimensions for this report
+          const { data: customDims, error: customError } = await supabase
+            .from("dimensions")
+            .select("*")
+            .eq("scope", "custom")
+            .eq("user_id", user.id)
+            .eq("report_id", reportId);
+
+          if (customError) throw customError;
+
+          // Combine both
+          dimensions = [...(globalDims || []), ...(customDims || [])] as Dimension[];
         } else if (user) {
-          // Fallback: fetch all global dimensions and user's dimensions
-          const { data: allDimensions, error: dimError } = await supabase
+          // Fallback: fetch all global dimensions and user's custom dimensions
+          const { data: globalDims, error: globalError } = await supabase
             .from("dimensions")
             .select("*")
-            .or(`scope.eq.global,user_id.eq.${user.id}`);
+            .eq("scope", "global");
 
-          if (dimError) throw dimError;
-          dimensions = allDimensions as Dimension[];
+          if (globalError) throw globalError;
+
+          const { data: customDims, error: customError } = await supabase
+            .from("dimensions")
+            .select("*")
+            .eq("scope", "custom")
+            .eq("user_id", user.id);
+
+          if (customError) throw customError;
+
+          // Combine both
+          dimensions = [...(globalDims || []), ...(customDims || [])] as Dimension[];
         }
 
         // If no dimensions found, try falling back to loading from dimension_data
