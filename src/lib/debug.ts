@@ -3,6 +3,37 @@
  */
 
 /**
+ * Retries a function with exponential backoff
+ * @param fn The async function to retry
+ * @param maxAttempts Maximum number of attempts (default: 3)
+ * @param delayMs Initial delay in milliseconds (default: 1000)
+ * @returns The result of the function
+ */
+export const retryWithBackoff = async <T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+  delayMs = 1000
+): Promise<T> => {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      if (attempt < maxAttempts) {
+        const delay = delayMs * Math.pow(2, attempt - 1);
+        console.warn(`[RETRY] Attempt ${attempt} failed, retrying in ${delay}ms:`, lastError.message);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError || new Error('Failed after max attempts');
+};
+
+/**
  * Logs data with a prefix for easier filtering in console
  * @param prefix The prefix to add to the log
  * @param data The data to log
