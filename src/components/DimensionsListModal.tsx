@@ -310,22 +310,22 @@ export const DimensionsListModal = ({
               Loading dimensions...
             </div>
           ) : (
-            <Tabs defaultValue="custom" className="w-full">
+            <Tabs defaultValue="global" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="custom">
-                  Custom ({customDimensions.length})
-                </TabsTrigger>
                 <TabsTrigger value="global">
                   Global ({globalDimensions.length})
                 </TabsTrigger>
+                <TabsTrigger value="custom">
+                  Custom ({customDimensions.length})
+                </TabsTrigger>
               </TabsList>
-
-              <TabsContent value="custom" className="mt-4">
-                <DimensionTable dimensions={customDimensions} showActions={true} />
-              </TabsContent>
 
               <TabsContent value="global" className="mt-4">
                 <DimensionTable dimensions={globalDimensions} showActions={true} />
+              </TabsContent>
+
+              <TabsContent value="custom" className="mt-4">
+                <DimensionTable dimensions={customDimensions} showActions={true} />
               </TabsContent>
             </Tabs>
           )}
