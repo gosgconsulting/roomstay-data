@@ -207,36 +207,29 @@ export const DimensionModal = ({
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="scope">Scope</Label>
-            <Select
-              value={scope}
-              onValueChange={(value) => setScope(value as 'global' | 'custom')}
-              disabled={mode === 'edit'}
-            >
-              <SelectTrigger id="scope" className="bg-background">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-background z-50">
-                <SelectItem value="custom">
-                  <div className="flex flex-col">
-                    <span>Custom</span>
-                    <span className="text-xs text-muted-foreground">For this report only</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="global">
-                  <div className="flex flex-col">
-                    <span>Global</span>
-                    <span className="text-xs text-muted-foreground">Available across all reports</span>
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+              <input
+                type="radio"
+                id="custom"
+                value="custom"
+                checked={scope === 'custom'}
+                onChange={() => setScope('custom')}
+                disabled={mode === 'edit'}
+              />
+              <label htmlFor="custom" className="cursor-pointer flex-1">
+                <div>
+                  <span className="font-medium">Custom</span>
+                  <p className="text-xs text-muted-foreground">For this report only</p>
+                </div>
+              </label>
+            </div>
             {mode === 'edit' && (
               <p className="text-xs text-muted-foreground">
                 Scope cannot be changed after creation
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              Global dimensions are available across all reports and accounts. Custom dimensions are only for this report.
+              Custom dimensions are specific to this report. Contact an administrator to create global dimensions available across all reports.
             </p>
           </div>
 
