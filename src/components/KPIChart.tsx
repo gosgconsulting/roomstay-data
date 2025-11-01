@@ -485,7 +485,8 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps
         setChartData(chartPoints);
       });
     } catch (error) {
-      console.error("[CHART] Error loading chart data:", error);
+      const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+      console.error("[CHART] Error loading chart data:", errorMessage);
       setError(error instanceof Error ? error.message : 'Failed to load chart data');
       setChartData([]);
     } finally {
