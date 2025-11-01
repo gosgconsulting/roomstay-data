@@ -104,7 +104,10 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps
               .from("dimensions")
               .select("*");
 
-            if (dimError) throw dimError;
+            if (dimError) {
+              const errorMsg = dimError instanceof Error ? dimError.message : JSON.stringify(dimError);
+              throw new Error(`Failed to fetch dimensions: ${errorMsg}`);
+            }
 
             // Filter to only global dimensions and custom dimensions for this report
             dimensions = (allDims || []).filter((d: any) =>
@@ -114,7 +117,8 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps
 
             debugLog('KPIChart', `Loaded ${dimensions?.length || 0} dimensions for report ${reportId}`);
           } catch (error) {
-            console.error('[CHART] Failed to load dimensions:', error);
+            const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+            console.error('[CHART] Failed to load dimensions:', errorMsg);
             // Fallback to dimensions associated with report via data
             dimensions = [];
           }
@@ -125,10 +129,14 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps
               .from("dimensions")
               .select("*");
 
-            if (dimError) throw dimError;
+            if (dimError) {
+              const errorMsg = dimError instanceof Error ? dimError.message : JSON.stringify(dimError);
+              throw new Error(`Failed to fetch dimensions: ${errorMsg}`);
+            }
             dimensions = allDims as Dimension[];
           } catch (error) {
-            console.error('[CHART] Failed to load dimensions:', error);
+            const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+            console.error('[CHART] Failed to load dimensions:', errorMsg);
             dimensions = [];
           }
         }
