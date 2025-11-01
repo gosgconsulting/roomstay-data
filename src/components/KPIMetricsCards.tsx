@@ -76,23 +76,42 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
       
       // Fetch both global dimensions and user's custom dimensions for this report
       if (user && reportId) {
-        const { data: allDimensions, error: dimError } = await supabase
+        const { data: globalDims, error: globalError } = await supabase
           .from("dimensions")
           .select("*")
-          .or(`scope.eq.global,and(scope.eq.custom,user_id.eq.${user.id},report_id.eq.${reportId})`);
+          .eq("scope", "global");
 
-        if (dimError) throw dimError;
-        dimensions = allDimensions;
+        if (globalError) throw globalError;
+
+        const { data: customDims, error: customError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("scope", "custom")
+          .eq("user_id", user.id)
+          .eq("report_id", reportId);
+
+        if (customError) throw customError;
+
+        dimensions = [...(globalDims || []), ...(customDims || [])];
         console.log('[testing] loadMetrics - Dimensions loaded:', dimensions?.length);
       } else if (user) {
-        // Fallback: fetch all global dimensions and user's dimensions
-        const { data: allDimensions, error: dimError } = await supabase
+        // Fallback: fetch all global dimensions and user's custom dimensions
+        const { data: globalDims, error: globalError } = await supabase
           .from("dimensions")
           .select("*")
-          .or(`scope.eq.global,user_id.eq.${user.id}`);
+          .eq("scope", "global");
 
-        if (dimError) throw dimError;
-        dimensions = allDimensions;
+        if (globalError) throw globalError;
+
+        const { data: customDims, error: customError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("scope", "custom")
+          .eq("user_id", user.id);
+
+        if (customError) throw customError;
+
+        dimensions = [...(globalDims || []), ...(customDims || [])];
         console.log('[testing] loadMetrics - Dimensions loaded:', dimensions?.length);
       }
 
