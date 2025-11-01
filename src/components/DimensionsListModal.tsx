@@ -30,6 +30,7 @@ interface Dimension {
   type: string;
   formula: string | null;
   is_system?: boolean;
+  scope?: 'global' | 'custom';
 }
 
 interface DimensionsListModalProps {
