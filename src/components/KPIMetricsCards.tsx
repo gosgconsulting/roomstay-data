@@ -82,7 +82,10 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
             .from("dimensions")
             .select("*");
 
-          if (dimError) throw dimError;
+          if (dimError) {
+            const errorMsg = dimError instanceof Error ? dimError.message : JSON.stringify(dimError);
+            throw new Error(`Failed to load dimensions: ${errorMsg}`);
+          }
 
           // Filter to global dimensions and custom dimensions for this report if reportId provided
           if (reportId) {
@@ -96,7 +99,8 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
 
           console.log('[testing] loadMetrics - Dimensions loaded:', dimensions?.length);
         } catch (error) {
-          console.error('[testing] Error loading metrics:', error);
+          const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+          console.error('[testing] Error loading metrics:', errorMsg);
           dimensions = [];
         }
       }
