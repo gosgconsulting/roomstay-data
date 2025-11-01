@@ -170,10 +170,11 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps
 
         // Find the date dimension
         const dateDimension = dimensions.find((d: Dimension) => d.type === 'date');
-        
+
         if (!dateDimension) {
           debugLog('KPIChart', 'No date dimension found');
-          console.error('[CHART] No date dimension found in:', dimensions);
+          const dimensionNames = dimensions.map((d: Dimension) => `${d.name} (${d.type})`).join(', ');
+          console.error('[CHART] No date dimension found. Available dimensions:', dimensionNames);
           setChartData([]);
           return;
         }
