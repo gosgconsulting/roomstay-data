@@ -72,7 +72,7 @@ export const ColumnMappingStep = ({
       const { data, error } = await supabase
         .from("dimensions")
         .select("*")
-        .eq("user_id", user.id)
+        .or(`scope.eq.global,and(scope.eq.custom,user_id.eq.${user.id})`)
         .order("name", { ascending: true });
 
       if (error) throw error;
