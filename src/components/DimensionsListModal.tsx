@@ -58,7 +58,8 @@ export const DimensionsListModal = ({
   refreshTrigger,
   reportId,
 }: DimensionsListModalProps) => {
-  const [dimensions, setDimensions] = useState<Dimension[]>([]);
+  const [globalDimensions, setGlobalDimensions] = useState<Dimension[]>([]);
+  const [customDimensions, setCustomDimensions] = useState<Dimension[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [mappedDimensionIds, setMappedDimensionIds] = useState<Set<string>>(new Set());
 
