@@ -159,10 +159,22 @@ export const DimensionModal = ({
         onSaved();
       }
     } catch (error) {
-      console.error(`Error ${mode === 'edit' ? 'updating' : 'creating'} dimension:`, error);
+      // Properly serialize error for logging
+      let errorMessage = '';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = (error as any).message;
+      } else {
+        errorMessage = JSON.stringify(error, null, 2);
+      }
+
+      console.error(`Error ${mode === 'edit' ? 'updating' : 'creating'} dimension:`, errorMessage);
       toast({
         title: "Error",
-        description: `Failed to ${mode === 'edit' ? 'update' : 'create'} dimension`,
+        description: errorMessage || `Failed to ${mode === 'edit' ? 'update' : 'create'} dimension`,
         variant: "destructive",
       });
     } finally {
