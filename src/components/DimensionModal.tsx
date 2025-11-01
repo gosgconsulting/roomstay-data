@@ -97,14 +97,15 @@ export const DimensionModal = ({
 
       if (mode === 'edit' && dimension) {
         console.log('[testing] Updating dimension:', dimension.id);
-        
-        // [testing] For system dimensions, only allow formula updates
-        const updateData = isSystemDimension(dimension) 
+
+        // For system dimensions, only allow formula updates
+        const updateData = isSystemDimension(dimension)
           ? { formula: formula.trim() || null }
           : {
               name: name.trim(),
               type,
               formula: formula.trim() || null,
+              scope,
             };
 
         const { error } = await supabase
@@ -120,27 +121,29 @@ export const DimensionModal = ({
         });
       } else {
         console.log('[testing] Creating new dimension for report:', reportId);
-        
-        if (!reportId) {
-          throw new Error("Report ID is required for creating dimensions");
+
+        if (!reportId && scope === 'custom') {
+          throw new Error("Report ID is required for creating custom dimensions");
         }
 
         const { error } = await supabase
           .from("dimensions")
           .insert({
-            user_id: user.id,
-            report_id: reportId,
+            user_id: scope === 'global' ? null : user.id,
+            report_id: scope === 'custom' ? reportId : null,
             name: name.trim(),
             type,
             formula: formula.trim() || null,
-            is_system: false, // User-created dimensions are not system dimensions
+            is_system: false,
+            scope,
           });
 
         if (error) throw error;
 
+        const dimensionType = scope === 'global' ? 'global dimension' : 'dimension for this report';
         toast({
           title: "Dimension added",
-          description: `Created dimension "${name}" for this report`,
+          description: `Created ${dimensionType} "${name}"`,
         });
       }
 
@@ -148,6 +151,7 @@ export const DimensionModal = ({
       setName("");
       setType("number");
       setFormula("");
+      setScope('custom');
       onOpenChange(false);
       
       // Notify parent component to refresh data
