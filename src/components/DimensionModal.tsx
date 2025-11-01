@@ -270,12 +270,17 @@ export const DimensionModal = ({
               placeholder="e.g., Impressions, Clicks, Revenue"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              disabled={mode === 'edit' && isSystemDimension(dimension)}
-              className={mode === 'edit' && isSystemDimension(dimension) ? 'bg-gray-50' : ''}
+              disabled={mode === 'edit' && isSystemDimension(dimension) && !(dimension?.scope === 'global' && accountId)}
+              className={mode === 'edit' && isSystemDimension(dimension) && !(dimension?.scope === 'global' && accountId) ? 'bg-gray-50' : ''}
             />
-            {mode === 'edit' && isSystemDimension(dimension) && (
+            {mode === 'edit' && isSystemDimension(dimension) && !(dimension?.scope === 'global' && accountId) && (
               <p className="text-xs text-muted-foreground">
                 System dimension names cannot be changed
+              </p>
+            )}
+            {mode === 'edit' && dimension?.scope === 'global' && accountId && (
+              <p className="text-xs text-blue-600">
+                This will create an account-specific version with the new name
               </p>
             )}
           </div>
