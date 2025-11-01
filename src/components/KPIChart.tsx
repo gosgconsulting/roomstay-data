@@ -118,11 +118,36 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId }: KP
               500 // initial delay in ms
             );
 
-            // Filter to only global dimensions and custom dimensions for this report
-            dimensions = (allDims || []).filter((d: any) =>
-              d.scope === 'global' ||
-              (d.scope === 'custom' && d.report_id === reportId)
-            ) as Dimension[];
+            // Filter and prioritize dimensions:
+            // 1. Account-specific dimensions (if accountId provided)
+            // 2. Custom report dimensions
+            // 3. Global dimensions (fallback)
+            const dimensionsByName: Record<string, any> = {};
+
+            // First pass: add global dimensions as base
+            (allDims || []).filter((d: any) => d.scope === 'global').forEach((d: any) => {
+              dimensionsByName[d.name] = d;
+            });
+
+            // Second pass: override with account-specific dimensions
+            if (accountId) {
+              (allDims || [])
+                .filter((d: any) => d.scope === 'account' && d.account_id === accountId)
+                .forEach((d: any) => {
+                  dimensionsByName[d.name] = d; // Override global with account version
+                });
+            }
+
+            // Third pass: add custom report dimensions (highest priority)
+            if (reportId) {
+              (allDims || [])
+                .filter((d: any) => d.scope === 'custom' && d.report_id === reportId)
+                .forEach((d: any) => {
+                  dimensionsByName[d.name] = d; // Override with custom version
+                });
+            }
+
+            dimensions = Object.values(dimensionsByName) as Dimension[];
 
             debugLog('KPIChart', `Loaded ${dimensions?.length || 0} dimensions for report ${reportId}`);
           } catch (error) {
