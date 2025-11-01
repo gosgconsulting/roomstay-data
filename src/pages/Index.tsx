@@ -16,6 +16,7 @@ export default function Index() {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDataLoading, setIsDataLoading] = useState(false);
+  const [loadingComponents, setLoadingComponents] = useState<Set<string>>(new Set());
   const [isSharedView, setIsSharedView] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
@@ -30,10 +31,28 @@ export default function Index() {
     compareDateRange: undefined,
   });
   
-  // Reset filters and show loading when report changes
+  // Track component loading states
+  const markComponentLoading = (component: string) => {
+    setLoadingComponents(prev => new Set(prev).add(component));
+    setIsDataLoading(true);
+  };
+  
+  const markComponentLoaded = (component: string) => {
+    setLoadingComponents(prev => {
+      const next = new Set(prev);
+      next.delete(component);
+      if (next.size === 0) {
+        setIsDataLoading(false);
+      }
+      return next;
+    });
+  };
+  
+  // Reset filters and mark loading when report changes
   useEffect(() => {
     if (reportId) {
-      setIsDataLoading(true);
+      markComponentLoading('metrics');
+      markComponentLoading('chart');
       setFilters({
         dimensionFilters: {},
         dateRange: undefined,
@@ -42,13 +61,6 @@ export default function Index() {
         compareType: "previous_period",
         compareDateRange: undefined,
       });
-      
-      // Give components time to mount and start loading
-      const timer = setTimeout(() => {
-        setIsDataLoading(false);
-      }, 1500);
-      
-      return () => clearTimeout(timer);
     }
   }, [reportId]);
   
@@ -155,13 +167,9 @@ export default function Index() {
   };
   
   const refreshData = () => {
-    setIsDataLoading(true);
+    markComponentLoading('metrics');
+    markComponentLoading('chart');
     setDataRefreshKey(prev => prev + 1);
-    
-    // Hide loading after components have had time to fetch
-    setTimeout(() => {
-      setIsDataLoading(false);
-    }, 1500);
   };
   
   if (isLoading) {
@@ -200,8 +208,18 @@ export default function Index() {
         <>
           <FiltersBar reportId={reportId} onFiltersChange={setFilters} isSharedView={isSharedView} />
           <main className="container mx-auto px-6 py-6 space-y-6">
-            <KPIMetricsCards reportId={reportId} filters={filters} key={`metrics-${dataRefreshKey}`} />
-            <KPIChart reportId={reportId} filters={filters} key={`charts-${dataRefreshKey}`} />
+            <KPIMetricsCards 
+              reportId={reportId} 
+              filters={filters} 
+              key={`metrics-${dataRefreshKey}`}
+              onLoadingComplete={() => markComponentLoaded('metrics')}
+            />
+            <KPIChart 
+              reportId={reportId} 
+              filters={filters} 
+              key={`charts-${dataRefreshKey}`}
+              onLoadingComplete={() => markComponentLoaded('chart')}
+            />
             <PerformanceTable reportId={reportId} filters={filters} isSharedView={isSharedView} key={`table-${dataRefreshKey}`} />
           </main>
         </>

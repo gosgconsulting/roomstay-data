@@ -18,6 +18,7 @@ interface ChartData {
 interface KPIChartProps {
   reportId: string | null;
   filters: FilterState;
+  onLoadingComplete?: () => void;
 }
 
 interface Dimension {
@@ -50,7 +51,7 @@ const kpiOptions = [
   { value: "Cost of sale", label: "Cost of sale" },
 ];
 
-export const KPIChart = ({ reportId, filters }: KPIChartProps) => {
+export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps) => {
   const [selectedKPI, setSelectedKPI] = useState("Revenue");
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -457,6 +458,7 @@ export const KPIChart = ({ reportId, filters }: KPIChartProps) => {
       setChartData([]);
     } finally {
       setIsLoading(false);
+      onLoadingComplete?.();
     }
   };
 

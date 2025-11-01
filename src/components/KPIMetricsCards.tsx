@@ -27,9 +27,10 @@ interface KPIMetric {
 interface KPIMetricsCardsProps {
   reportId: string | null;
   filters: FilterState;
+  onLoadingComplete?: () => void;
 }
 
-export const KPIMetricsCards = ({ reportId, filters }: KPIMetricsCardsProps) => {
+export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMetricsCardsProps) => {
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -247,6 +248,7 @@ export const KPIMetricsCards = ({ reportId, filters }: KPIMetricsCardsProps) => 
       console.error("Error loading metrics:", error);
     } finally {
       setIsLoading(false);
+      onLoadingComplete?.();
     }
   };
 
