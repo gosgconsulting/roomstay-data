@@ -69,25 +69,12 @@ export const ColumnMappingStep = ({
       
       if (!user) return;
 
-      const { data: globalDims, error: globalError } = await supabase
+      const { data, error } = await supabase
         .from("dimensions")
         .select("*")
-        .eq("scope", "global");
+        .order("name", { ascending: true });
 
-      if (globalError) throw globalError;
-
-      const { data: customDims, error: customError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("scope", "custom")
-        .eq("user_id", user.id);
-
-      if (customError) throw customError;
-
-      const data = [...(globalDims || []), ...(customDims || [])];
-
-      // Sort by name
-      data.sort((a, b) => a.name.localeCompare(b.name));
+      if (error) throw error;
 
       setDimensions(data || []);
     } catch (error) {
