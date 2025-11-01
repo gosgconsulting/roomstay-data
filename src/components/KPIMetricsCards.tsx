@@ -32,7 +32,7 @@ interface KPIMetricsCardsProps {
   accountId?: string;
 }
 
-export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMetricsCardsProps) => {
+export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountId }: KPIMetricsCardsProps) => {
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
