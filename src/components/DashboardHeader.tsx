@@ -464,7 +464,7 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
           <Button 
             variant="outline" 
             className="gap-2"
-            onClick={onDataSync}
+            onClick={onRefreshData}
             disabled={!currentReport}
           >
             <RefreshCw className="h-4 w-4" />
