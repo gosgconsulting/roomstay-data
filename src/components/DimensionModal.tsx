@@ -26,7 +26,8 @@ interface Dimension {
   type: string;
   formula: string | null;
   is_system?: boolean;
-  scope?: 'global' | 'custom';
+  scope?: 'global' | 'custom' | 'account';
+  account_id?: string;
 }
 
 interface DimensionModalProps {
@@ -36,6 +37,7 @@ interface DimensionModalProps {
   mode?: 'add' | 'edit';
   onSaved?: () => void;
   reportId?: string;
+  accountId?: string;
 }
 
 export const DimensionModal = ({
