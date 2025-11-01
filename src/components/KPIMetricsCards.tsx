@@ -219,20 +219,24 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
         'Cost of sale': { icon: Calculator, color: 'bg-yellow-500' },
         'Cost': { icon: DollarSign, color: 'bg-blue-500' },
         'Revenue': { icon: DollarSign, color: 'bg-cyan-500' },
+        'Purchases': { icon: ShoppingCart, color: 'bg-green-500' },
+        'Leads': { icon: Target, color: 'bg-indigo-500' },
       };
 
-      // Build metrics in specific order
-      const defaultOrderedMetrics = [
-        'Impressions', 'Clicks', 'CTR', 'Conversions',
-        'Conversion rate', 'CPC', 'Cost', 'Revenue',
-        'ROAS', 'Cost of sale'
-      ];
+      // Get all available metric names from dimensions
+      const allAvailableMetrics = dimensions
+        .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage')
+        .map(d => d.name);
+
+      // Use custom order if available, otherwise use all available metrics
+      const orderedMetrics = kpiOrder && kpiOrder.length > 0 
+        ? kpiOrder 
+        : allAvailableMetrics;
       
-      // Use custom order if available, otherwise use default
-      const orderedMetrics = kpiOrder || defaultOrderedMetrics;
-      
-      // Get visible KPIs set
-      const visibleKPIsSet = visibleKPIs ? new Set(visibleKPIs) : new Set(defaultOrderedMetrics);
+      // Get visible KPIs set - default to all if not specified
+      const visibleKPIsSet = visibleKPIs && visibleKPIs.length > 0
+        ? new Set(visibleKPIs) 
+        : new Set(allAvailableMetrics);
 
       orderedMetrics.forEach((metricName) => {
         // Skip if not visible
@@ -241,7 +245,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
         if (aggregatedValues[metricName] !== undefined) {
           const dimension = dimensions.find(d => d.name === metricName);
           if (dimension) {
-            const config = metricConfigs[metricName];
+            const config = metricConfigs[metricName] || { icon: Calculator, color: 'bg-slate-500' }; // Default fallback
             const currentValue = aggregatedValues[metricName];
             
             let change: number | undefined;
@@ -367,6 +371,20 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
               </div>
             </Card>
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Don't hide if no metrics - show empty state only if explicitly no dimensions
+  if (metrics.length === 0) {
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Analytics & Insights</h2>
+        </div>
+        <div className="text-center py-8 text-muted-foreground">
+          <p>No KPIs configured. Add dimensions to see metrics here.</p>
         </div>
       </div>
     );

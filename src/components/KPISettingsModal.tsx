@@ -107,6 +107,24 @@ export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChang
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Load all available dimensions (number and currency types only)
+      const { data: dimensions, error: dimError } = await supabase
+        .from("dimensions")
+        .select("name, type")
+        .eq("user_id", user.id)
+        .in("type", ["number", "currency", "percentage"]);
+
+      if (dimError) throw dimError;
+
+      // Get all available KPI names from dimensions
+      const availableKPIs = dimensions?.map(d => d.name) || [];
+      
+      if (availableKPIs.length === 0) {
+        setKpis([]);
+        setIsLoading(false);
+        return;
+      }
+
       // Load the current view settings
       const { data: views, error: viewError } = await supabase
         .from("report_views")
@@ -118,28 +136,28 @@ export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChang
 
       if (viewError) throw viewError;
 
-      // Default KPI order
-      const defaultKPIs = [
-        'Impressions', 'Clicks', 'CTR', 'Conversions',
-        'Conversion rate', 'CPC', 'Cost', 'Revenue',
-        'ROAS', 'Cost of sale'
-      ];
-
       let kpiConfigs: KPIConfig[];
 
       if (views?.visible_kpis && views?.kpi_order) {
         // Load from saved settings
         const visibleKPIs = new Set(views.visible_kpis as string[]);
-        const kpiOrder = views.kpi_order as string[];
+        const savedOrder = views.kpi_order as string[];
         
-        kpiConfigs = kpiOrder.map((name, index) => ({
-          name,
-          visible: visibleKPIs.has(name),
-          order: index,
-        }));
+        // Merge saved order with any new KPIs that might have been added
+        const savedKPIsSet = new Set(savedOrder);
+        const newKPIs = availableKPIs.filter(name => !savedKPIsSet.has(name));
+        const allKPIsOrdered = [...savedOrder, ...newKPIs];
+        
+        kpiConfigs = allKPIsOrdered
+          .filter(name => availableKPIs.includes(name)) // Only include KPIs that still exist
+          .map((name, index) => ({
+            name,
+            visible: visibleKPIs.has(name),
+            order: index,
+          }));
       } else {
-        // Use default settings - all visible
-        kpiConfigs = defaultKPIs.map((name, index) => ({
+        // Use all available KPIs as default - all visible
+        kpiConfigs = availableKPIs.map((name, index) => ({
           name,
           visible: true,
           order: index,

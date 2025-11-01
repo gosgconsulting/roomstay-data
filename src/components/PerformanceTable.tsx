@@ -309,6 +309,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
         .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula)
         .map(d => d.id);
 
+      // Set default KPI settings - all numeric/currency dimensions visible
+      const defaultKPIs = dimensions
+        .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage')
+        .map(d => d.name);
+
       const { data: newView, error } = await supabase
         .from("report_views")
         .insert({
@@ -321,6 +326,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
           then_by_dimensions: [],
           visible_columns: defaultVisibleIds,
           column_order: defaultColumnOrder,
+          visible_kpis: defaultKPIs,
+          kpi_order: defaultKPIs,
           date_granularity: 'none',
           date_order: 'desc',
         })
@@ -513,6 +520,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
           then_by_dimensions: activeView.then_by_dimensions || [],
           visible_columns: activeView.visible_columns || [],
           column_order: activeView.column_order || [],
+          visible_kpis: activeView.visible_kpis || [],
+          kpi_order: activeView.kpi_order || [],
           date_granularity: activeView.date_granularity || 'none',
           date_order: activeView.date_order || 'desc',
         })
