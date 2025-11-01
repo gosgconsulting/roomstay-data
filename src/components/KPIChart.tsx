@@ -95,47 +95,42 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps
         
         let dimensions: Dimension[] | null = null;
 
-        // Fetch both global dimensions and user's custom dimensions for this report
+        // Fetch dimensions accessible to the user (global + custom for this report)
         if (user && reportId) {
-          // Fetch all global dimensions
-          const { data: globalDims, error: globalError } = await supabase
-            .from("dimensions")
-            .select("*")
-            .eq("scope", "global");
+          try {
+            // Single query to get all dimensions user can access for this report
+            // RLS policies will handle filtering
+            const { data: allDims, error: dimError } = await supabase
+              .from("dimensions")
+              .select("*");
 
-          if (globalError) throw globalError;
+            if (dimError) throw dimError;
 
-          // Fetch custom dimensions for this report
-          const { data: customDims, error: customError } = await supabase
-            .from("dimensions")
-            .select("*")
-            .eq("scope", "custom")
-            .eq("user_id", user.id)
-            .eq("report_id", reportId);
+            // Filter to only global dimensions and custom dimensions for this report
+            dimensions = (allDims || []).filter((d: any) =>
+              d.scope === 'global' ||
+              (d.scope === 'custom' && d.report_id === reportId)
+            ) as Dimension[];
 
-          if (customError) throw customError;
-
-          // Combine both
-          dimensions = [...(globalDims || []), ...(customDims || [])] as Dimension[];
+            debugLog('KPIChart', `Loaded ${dimensions?.length || 0} dimensions for report ${reportId}`);
+          } catch (error) {
+            console.error('[CHART] Failed to load dimensions:', error);
+            // Fallback to dimensions associated with report via data
+            dimensions = [];
+          }
         } else if (user) {
-          // Fallback: fetch all global dimensions and user's custom dimensions
-          const { data: globalDims, error: globalError } = await supabase
-            .from("dimensions")
-            .select("*")
-            .eq("scope", "global");
+          // Fallback: just fetch all dimensions (RLS will filter them)
+          try {
+            const { data: allDims, error: dimError } = await supabase
+              .from("dimensions")
+              .select("*");
 
-          if (globalError) throw globalError;
-
-          const { data: customDims, error: customError } = await supabase
-            .from("dimensions")
-            .select("*")
-            .eq("scope", "custom")
-            .eq("user_id", user.id);
-
-          if (customError) throw customError;
-
-          // Combine both
-          dimensions = [...(globalDims || []), ...(customDims || [])] as Dimension[];
+            if (dimError) throw dimError;
+            dimensions = allDims as Dimension[];
+          } catch (error) {
+            console.error('[CHART] Failed to load dimensions:', error);
+            dimensions = [];
+          }
         }
 
         // If no dimensions found, try falling back to loading from dimension_data
