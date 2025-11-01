@@ -47,6 +47,7 @@ export const DimensionModal = ({
   mode = 'add',
   onSaved,
   reportId,
+  accountId,
 }: DimensionModalProps) => {
   const [name, setName] = useState("");
   const [type, setType] = useState("number");
