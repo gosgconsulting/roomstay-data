@@ -258,7 +258,15 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
         const dimensionValues: Record<string, any> = {};
         
         visibleMappings.forEach((mapping) => {
-          const colIndex = sheetHeaders.indexOf(mapping.column);
+          // Try exact match first, then normalized match (trim and case-insensitive)
+          let colIndex = sheetHeaders.indexOf(mapping.column);
+          if (colIndex === -1) {
+            const normalizedMappingCol = mapping.column.trim().toLowerCase();
+            colIndex = sheetHeaders.findIndex((header: string) => 
+              header.trim().toLowerCase() === normalizedMappingCol
+            );
+          }
+          
           if (colIndex !== -1 && dimensionIdMap[mapping.column]) {
             const rawValue = row[colIndex];
             const dimensionType = mapping.newDimensionType || mapping.dimensionType || 'text';
