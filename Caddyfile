@@ -2,7 +2,7 @@
     auto_https off
 }
 
-:3000, datagosgconsultingcom-production.up.railway.app, data.sparti.ai {
+:{$PORT:3000}, datagosgconsultingcom-production.up.railway.app, data.sparti.ai {
     root * /app/dist
     encode gzip
     try_files {path} /index.html

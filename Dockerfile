@@ -1,4 +1,5 @@
-FROM oven/bun:1.3
+# Use multi-stage build for better optimization
+FROM oven/bun:1.3 AS builder
 
 WORKDIR /app
 
@@ -15,8 +16,17 @@ COPY . .
 # Build the application
 RUN bun run build
 
-# Expose the port the app will run on
+# Production stage with Caddy
+FROM caddy:2.8-alpine
+
+# Copy built application
+COPY --from=builder /app/dist /app/dist
+
+# Copy Caddyfile
+COPY Caddyfile /etc/caddy/Caddyfile
+
+# Expose the port
 EXPOSE 3000
 
-# Start the application
-CMD ["bun", "run", "preview", "--host", "0.0.0.0", "--port", "3000"]
+# Start Caddy with the configuration
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile"]
