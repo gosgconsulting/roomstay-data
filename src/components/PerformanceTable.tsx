@@ -1162,7 +1162,12 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                     </Button>
                   )}
                   
-                  <Sheet>
+                  <Sheet onOpenChange={(open) => {
+                    if (open) {
+                      // Refresh dimensions when opening column visibility to show newly added dimensions
+                      loadDimensions();
+                    }
+                  }}>
                     <SheetTrigger asChild>
                       <Button variant="outline" size="icon" className="h-9 w-9">
                         <Columns3 className="h-4 w-4" />
