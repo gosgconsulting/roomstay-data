@@ -74,19 +74,29 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
       
       let dimensions = null;
       
-      // First, try to fetch dimensions by user_id (all user's dimensions across all reports)
-      if (user) {
-        const { data: userDimensions, error: userError } = await supabase
+      // Fetch both global dimensions and user's custom dimensions for this report
+      if (user && reportId) {
+        const { data: allDimensions, error: dimError } = await supabase
           .from("dimensions")
           .select("*")
-          .eq("user_id", user.id);
+          .or(`scope.eq.global,and(scope.eq.custom,user_id.eq.${user.id},report_id.eq.${reportId})`);
 
-        if (userError) throw userError;
-        dimensions = userDimensions;
+        if (dimError) throw dimError;
+        dimensions = allDimensions;
+        console.log('[testing] loadMetrics - Dimensions loaded:', dimensions?.length);
+      } else if (user) {
+        // Fallback: fetch all global dimensions and user's dimensions
+        const { data: allDimensions, error: dimError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .or(`scope.eq.global,user_id.eq.${user.id}`);
+
+        if (dimError) throw dimError;
+        dimensions = allDimensions;
         console.log('[testing] loadMetrics - Dimensions loaded:', dimensions?.length);
       }
-      
-      // If no user or no dimensions found by user_id, fall back to loading from any dimension_data
+
+      // If no dimensions found, try falling back to loading from dimension_data
       if (!dimensions || dimensions.length === 0) {
         const { data: dimensionData, error: dimDataError } = await supabase
           .from("dimension_data")
@@ -98,7 +108,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
 
         if (dimensionData?.dimension_values) {
           const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, any>);
-          
+
           if (dimensionIds.length > 0) {
             const { data: dimensionsById, error: dimError2 } = await supabase
               .from("dimensions")
