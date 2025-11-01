@@ -22,7 +22,8 @@ interface Dimension {
   name: string;
   type: string;
   formula: string | null;
-  scope?: 'global' | 'custom';
+  scope?: 'global' | 'custom' | 'account';
+  account_id?: string;
 }
 
 interface Report {
@@ -35,6 +36,7 @@ interface Report {
 
 interface DashboardHeaderProps {
   reportId: string | null;
+  accountId?: string;
   onReportChange: (reportId: string) => void;
   onDataSync?: () => void;
   onRefreshData?: () => void;
