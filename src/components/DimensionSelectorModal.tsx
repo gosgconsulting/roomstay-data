@@ -60,26 +60,13 @@ export const DimensionSelectorModal = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load both global dimensions and user's custom dimensions
-      const { data: globalDims, error: globalError } = await supabase
+      // Load dimensions accessible to the user
+      const { data, error } = await supabase
         .from("dimensions")
         .select("*")
-        .eq("scope", "global");
+        .order("name", { ascending: true });
 
-      if (globalError) throw globalError;
-
-      const { data: customDims, error: customError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("scope", "custom")
-        .eq("user_id", user.id);
-
-      if (customError) throw customError;
-
-      const data = [...(globalDims || []), ...(customDims || [])];
-
-      // Sort by name
-      data.sort((a, b) => a.name.localeCompare(b.name));
+      if (error) throw error;
 
       // Deduplicate dimensions by name (keep first occurrence)
       const seenNames = new Set<string>();
