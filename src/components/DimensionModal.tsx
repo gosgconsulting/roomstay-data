@@ -62,18 +62,20 @@ export const DimensionModal = ({
     return dim.is_system === true || systemDimensionNames.includes(dim.name);
   };
 
-  // [testing] Reset form when modal opens/closes or dimension changes
+  // Reset form when modal opens/closes or dimension changes
   useEffect(() => {
     if (open && mode === 'edit' && dimension) {
       console.log('[testing] Populating form for edit mode:', dimension);
       setName(dimension.name);
       setType(dimension.type);
       setFormula(dimension.formula || "");
+      setScope(dimension.scope || 'custom');
     } else if (open && mode === 'add') {
       console.log('[testing] Resetting form for add mode');
       setName("");
       setType("number");
       setFormula("");
+      setScope('custom');
     }
   }, [open, mode, dimension]);
 
