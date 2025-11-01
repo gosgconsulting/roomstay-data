@@ -242,7 +242,7 @@ export default function ReportDashboard() {
       
       {reportId ? (
         <>
-          <FiltersBar reportId={reportId} onFiltersChange={setFilters} isSharedView={isSharedView} />
+          <FiltersBar reportId={reportId} onFiltersChange={setFilters} isSharedView={isSharedView} accountId={accountId} />
           <main className="container mx-auto px-6 py-6 space-y-6">
             <div className="relative">
               <div className="absolute right-0 -top-2 z-10">
@@ -258,20 +258,22 @@ export default function ReportDashboard() {
                   </Button>
                 )}
               </div>
-              <KPIMetricsCards 
-                reportId={reportId} 
-                filters={filters} 
+              <KPIMetricsCards
+                reportId={reportId}
+                filters={filters}
+                accountId={accountId}
                 key={`metrics-${dataRefreshKey}`}
                 onLoadingComplete={() => markComponentLoaded('metrics')}
               />
             </div>
-            <KPIChart 
-              reportId={reportId} 
-              filters={filters} 
+            <KPIChart
+              reportId={reportId}
+              filters={filters}
+              accountId={accountId}
               key={`charts-${dataRefreshKey}`}
               onLoadingComplete={() => markComponentLoaded('chart')}
             />
-            <PerformanceTable reportId={reportId} filters={filters} isSharedView={isSharedView} key={`table-${dataRefreshKey}`} />
+            <PerformanceTable reportId={reportId} filters={filters} isSharedView={isSharedView} accountId={accountId} key={`table-${dataRefreshKey}`} />
           </main>
           
           <KPISettingsModal
