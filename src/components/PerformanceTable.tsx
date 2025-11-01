@@ -650,19 +650,28 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
       const { data: { user } } = await supabase.auth.getUser();
       
       let data = null;
-      
-      // First, try to fetch dimensions by user_id (all user's dimensions across all reports)
-      if (user) {
-        const { data: userDimensions, error: userError } = await supabase
+
+      // Fetch both global dimensions and user's custom dimensions for this report
+      if (user && reportId) {
+        const { data: allDimensions, error: dimError } = await supabase
           .from("dimensions")
           .select("*")
-          .eq("user_id", user.id);
+          .or(`scope.eq.global,and(scope.eq.custom,user_id.eq.${user.id},report_id.eq.${reportId})`);
 
-        if (userError) throw userError;
-        data = userDimensions;
+        if (dimError) throw dimError;
+        data = allDimensions;
+      } else if (user) {
+        // Fallback: fetch all global dimensions and user's dimensions
+        const { data: allDimensions, error: dimError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .or(`scope.eq.global,user_id.eq.${user.id}`);
+
+        if (dimError) throw dimError;
+        data = allDimensions;
       }
-      
-      // If no user or no dimensions found by user_id, fall back to loading from any dimension_data
+
+      // If no dimensions found, try falling back to loading from dimension_data
       if (!data || data.length === 0) {
         const { data: dimensionData, error: dimDataError } = await supabase
           .from("dimension_data")
@@ -673,7 +682,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
 
         if (dimensionData && dimensionData.length > 0) {
           const dimensionIds = Object.keys(dimensionData[0].dimension_values as Record<string, any>);
-          
+
           if (dimensionIds.length > 0) {
             const { data: dimensionsById, error: dimError2 } = await supabase
               .from("dimensions")
