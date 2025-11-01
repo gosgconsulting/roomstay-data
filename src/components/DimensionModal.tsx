@@ -49,6 +49,7 @@ export const DimensionModal = ({
   const [name, setName] = useState("");
   const [type, setType] = useState("number");
   const [formula, setFormula] = useState("");
+  const [scope, setScope] = useState<'global' | 'custom'>('custom');
   const [isLoading, setIsLoading] = useState(false);
 
   // [testing] Check if dimension is a system/default dimension
