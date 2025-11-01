@@ -52,7 +52,7 @@ const kpiOptions = [
   { value: "Cost of sale", label: "Cost of sale" },
 ];
 
-export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps) => {
+export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId }: KPIChartProps) => {
   const [selectedKPI, setSelectedKPI] = useState("Revenue");
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
