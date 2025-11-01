@@ -6,7 +6,7 @@ import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianG
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO, addDays } from "date-fns";
 import { FilterState } from "./FiltersBar";
-import { debugLog, inspectObject, validateChartData } from "@/lib/debug";
+import { debugLog, inspectObject, validateChartData, retryWithBackoff } from "@/lib/debug";
 import { trackPerformance } from "@/lib/monitoring";
 
 interface ChartData {
