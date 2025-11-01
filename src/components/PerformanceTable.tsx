@@ -28,7 +28,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { ChevronDown, ChevronRight, Columns3, Copy, Trash2, Plus, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { ChevronDown, ChevronRight, Columns3, Copy, Trash2, Plus, ArrowUp, ArrowDown, Minus, GripVertical } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -39,6 +39,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { format, startOfWeek, startOfMonth, startOfYear } from "date-fns";
 import { FilterState } from "./FiltersBar";
 import { TableVirtuoso } from "react-virtuoso";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Dimension {
   id: string;
@@ -64,6 +81,53 @@ interface PerformanceTableProps {
   isSharedView?: boolean;
 }
 
+// Sortable column item component
+function SortableColumnItem({ 
+  dimension, 
+  isVisible, 
+  onToggle 
+}: { 
+  dimension: Dimension; 
+  isVisible: boolean; 
+  onToggle: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: dimension.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center space-x-2 p-2 bg-background rounded border"
+    >
+      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+        <GripVertical className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <Checkbox
+        id={`col-${dimension.id}`}
+        checked={isVisible}
+        onCheckedChange={onToggle}
+      />
+      <Label
+        htmlFor={`col-${dimension.id}`}
+        className="text-sm font-normal cursor-pointer flex-1"
+      >
+        {dimension.name}
+      </Label>
+    </div>
+  );
+}
+
 export const PerformanceTable = ({ reportId, filters, isSharedView = false }: PerformanceTableProps) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
@@ -72,6 +136,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
   const [currentSelector, setCurrentSelector] = useState<"group" | "breakdown" | "then">("group");
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set());
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [isLoadingDimensions, setIsLoadingDimensions] = useState(true);
   const [tableData, setTableData] = useState<TableRow[]>([]);
   const [totalData, setTotalData] = useState<Record<string, any>>({});
@@ -116,6 +181,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
       setBreakdownByDimensions([]);
       setThenByDimensions([]);
       setVisibleColumns(new Set());
+      setColumnOrder([]);
       setTableData([]);
       setTotalData({});
     }
@@ -145,7 +211,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
       
       return () => clearTimeout(timeoutId);
     }
-  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, dateGranularity, dateOrder, reportId, activeViewId]);
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, columnOrder, dateGranularity, dateOrder, reportId, activeViewId]);
 
   const loadAllViews = async () => {
     if (!reportId) {
@@ -238,6 +304,10 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
         .filter(d => !hiddenColumns.includes(d.name) && 
                     (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula))
         .map(d => d.id);
+      
+      const defaultColumnOrder = dimensions
+        .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula)
+        .map(d => d.id);
 
       const { data: newView, error } = await supabase
         .from("report_views")
@@ -250,6 +320,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
           breakdown_by_dimensions: [],
           then_by_dimensions: [],
           visible_columns: defaultVisibleIds,
+          column_order: defaultColumnOrder,
           date_granularity: 'none',
           date_order: 'desc',
         })
@@ -315,6 +386,18 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
       setVisibleColumns(defaultVisible);
     }
     
+    // Load column order if available
+    if (view.column_order && view.column_order.length > 0) {
+      console.log('Loading column order:', view.column_order);
+      setColumnOrder(view.column_order);
+    } else if (dimensions.length > 0) {
+      // Set default order based on dimensions
+      const metricDimensions = dimensions.filter(d => 
+        d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
+      );
+      setColumnOrder(metricDimensions.map(d => d.id));
+    }
+    
     // Load date granularity if available (default to none)
     if (view.date_granularity) {
       console.log('Loading date granularity:', view.date_granularity);
@@ -370,6 +453,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
         breakdown_by_dimensions: breakdownByDimensions,
         then_by_dimensions: thenByDimensions,
         visible_columns: Array.from(visibleColumns),
+        column_order: columnOrder,
         date_granularity: dateGranularity,
         date_order: dateOrder,
       };
@@ -428,6 +512,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
           breakdown_by_dimensions: activeView.breakdown_by_dimensions || [],
           then_by_dimensions: activeView.then_by_dimensions || [],
           visible_columns: activeView.visible_columns || [],
+          column_order: activeView.column_order || [],
           date_granularity: activeView.date_granularity || 'none',
           date_order: activeView.date_order || 'desc',
         })
@@ -634,6 +719,14 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
 
       setDimensions(uniqueDimensions);
       
+      // Initialize column order if not set
+      if (columnOrder.length === 0) {
+        const metricDimensions = uniqueDimensions.filter(d => 
+          d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
+        );
+        setColumnOrder(metricDimensions.map(d => d.id));
+      }
+      
       // Set default visibility only if no saved view exists
       // This will be overridden by loadViewSettings if a saved view exists
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
@@ -823,6 +916,55 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
     }
     setVisibleColumns(newVisible);
   };
+  
+  // Get dimensions in the custom order
+  const getOrderedDimensions = (): Dimension[] => {
+    const metricDimensions = dimensions.filter(d => 
+      d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
+    );
+    
+    if (columnOrder.length === 0) {
+      return metricDimensions;
+    }
+    
+    // Create a map for quick lookup
+    const dimensionMap = new Map(metricDimensions.map(d => [d.id, d]));
+    
+    // First, add dimensions in the saved order
+    const ordered: Dimension[] = [];
+    columnOrder.forEach(id => {
+      const dim = dimensionMap.get(id);
+      if (dim) {
+        ordered.push(dim);
+        dimensionMap.delete(id);
+      }
+    });
+    
+    // Add any remaining dimensions that aren't in the order (new dimensions)
+    dimensionMap.forEach(dim => ordered.push(dim));
+    
+    return ordered;
+  };
+  
+  const handleColumnReorder = (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (over && active.id !== over.id) {
+      const orderedDims = getOrderedDimensions();
+      const oldIndex = orderedDims.findIndex(d => d.id === active.id);
+      const newIndex = orderedDims.findIndex(d => d.id === over.id);
+      
+      const newOrder = arrayMove(orderedDims, oldIndex, newIndex).map(d => d.id);
+      setColumnOrder(newOrder);
+    }
+  };
+  
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const toggleRow = (id: string) => {
     const newExpanded = new Set(expandedRows);
@@ -959,15 +1101,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
               </span>
             </div>
           </td>
-          {dimensions
-            .filter(d => {
-              // Only show metric/value columns (same filter as Column Visibility)
-              return (d.type === 'number' || 
-                      d.type === 'currency' || 
-                      d.type === 'percentage' ||
-                      d.formula !== null) && 
-                     visibleColumns.has(d.id);
-            })
+          {getOrderedDimensions()
+            .filter(d => visibleColumns.has(d.id))
             .map((dimension) => {
               const value = row.data[dimension.name];
               const change = row.changeData?.[dimension.name];
@@ -1181,31 +1316,33 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                          </SheetDescription>
                        </SheetHeader>
                        
-                       <div className="mt-6 space-y-6">
-                         {/* Columns Section */}
-                         <div className="space-y-3">
-                           <h3 className="text-sm font-semibold">Columns</h3>
-                           <div className="space-y-4">
-                             {dimensions
-                               .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula !== null)
-                               .map((dimension) => (
-                                 <div key={dimension.id} className="flex items-center space-x-2">
-                                   <Checkbox
-                                     id={`col-${dimension.id}`}
-                                     checked={visibleColumns.has(dimension.id)}
-                                     onCheckedChange={() => toggleColumn(dimension.id)}
-                                   />
-                                   <Label
-                                     htmlFor={`col-${dimension.id}`}
-                                     className="text-sm font-normal cursor-pointer"
-                                   >
-                                     {dimension.name}
-                                   </Label>
-                                 </div>
-                               ))}
-                           </div>
-                         </div>
-                       </div>
+                        <div className="mt-6 space-y-6">
+                          {/* Columns Section */}
+                          <div className="space-y-3">
+                            <h3 className="text-sm font-semibold">Columns</h3>
+                            <DndContext
+                              sensors={sensors}
+                              collisionDetection={closestCenter}
+                              onDragEnd={handleColumnReorder}
+                            >
+                              <SortableContext
+                                items={getOrderedDimensions().map(d => d.id)}
+                                strategy={verticalListSortingStrategy}
+                              >
+                                <div className="space-y-2">
+                                  {getOrderedDimensions().map((dimension) => (
+                                    <SortableColumnItem
+                                      key={dimension.id}
+                                      dimension={dimension}
+                                      isVisible={visibleColumns.has(dimension.id)}
+                                      onToggle={() => toggleColumn(dimension.id)}
+                                    />
+                                  ))}
+                                </div>
+                              </SortableContext>
+                            </DndContext>
+                          </div>
+                        </div>
                      </SheetContent>
                 </Sheet>
               </div>
@@ -1239,15 +1376,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                         ? dimensions.find(d => d.id === groupByDimensions[0])?.name || "Name"
                         : "Name"}
                     </th>
-                      {dimensions
-                        .filter(d => {
-                          // Only show metric/value columns (same filter as Column Visibility)
-                          return (d.type === 'number' || 
-                                  d.type === 'currency' || 
-                                  d.type === 'percentage' ||
-                                  d.formula !== null) && 
-                                 visibleColumns.has(d.id);
-                        })
+                      {getOrderedDimensions()
+                        .filter(d => visibleColumns.has(d.id))
                         .map((dimension) => (
                           <th
                             key={dimension.id}
@@ -1264,14 +1394,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                     {/* Total row */}
                     <tr className="border-t-2 border-primary/20 bg-muted/50 font-semibold">
                       <td className="py-3 px-4">Total</td>
-                      {dimensions
-                        .filter(d => {
-                          return (d.type === 'number' || 
-                                  d.type === 'currency' || 
-                                  d.type === 'percentage' ||
-                                  d.formula !== null) && 
-                                 visibleColumns.has(d.id);
-                        })
+                      {getOrderedDimensions()
+                        .filter(d => visibleColumns.has(d.id))
                         .map((dimension) => {
                           const value = totals[dimension.name];
                           const change = totalChangeData[dimension.name];

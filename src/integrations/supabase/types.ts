@@ -213,6 +213,7 @@ export type Database = {
       report_views: {
         Row: {
           breakdown_by_dimensions: string[] | null
+          column_order: string[] | null
           created_at: string
           date_granularity: string | null
           date_order: string | null
@@ -233,6 +234,7 @@ export type Database = {
         }
         Insert: {
           breakdown_by_dimensions?: string[] | null
+          column_order?: string[] | null
           created_at?: string
           date_granularity?: string | null
           date_order?: string | null
@@ -253,6 +255,7 @@ export type Database = {
         }
         Update: {
           breakdown_by_dimensions?: string[] | null
+          column_order?: string[] | null
           created_at?: string
           date_granularity?: string | null
           date_order?: string | null
