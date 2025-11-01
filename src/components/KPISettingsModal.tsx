@@ -107,25 +107,13 @@ export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChang
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load both global and custom dimensions (number and currency types only)
-      const { data: globalDims, error: globalError } = await supabase
+      // Load dimensions accessible to the user (number and currency types only)
+      const { data: dimensions, error: dimError } = await supabase
         .from("dimensions")
         .select("name, type")
-        .eq("scope", "global")
         .in("type", ["number", "currency", "percentage"]);
 
-      if (globalError) throw globalError;
-
-      const { data: customDims, error: customError } = await supabase
-        .from("dimensions")
-        .select("name, type")
-        .eq("scope", "custom")
-        .eq("user_id", user.id)
-        .in("type", ["number", "currency", "percentage"]);
-
-      if (customError) throw customError;
-
-      const dimensions = [...(globalDims || []), ...(customDims || [])];
+      if (dimError) throw dimError;
 
       // Get all available KPI names from dimensions
       const availableKPIs = dimensions?.map(d => d.name) || [];
