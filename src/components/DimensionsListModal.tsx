@@ -212,11 +212,96 @@ export const DimensionsListModal = ({
     }
   };
 
+  const DimensionTable = ({ dimensions, showActions = true }: { dimensions: Dimension[], showActions?: boolean }) => (
+    dimensions.length === 0 ? (
+      <div className="text-center py-8 text-muted-foreground">
+        No dimensions in this category yet.
+      </div>
+    ) : (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Type</TableHead>
+            <TableHead>Formula</TableHead>
+            {showActions && <TableHead className="text-right">Actions</TableHead>}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {dimensions.map((dimension) => (
+            <TableRow key={dimension.id}>
+              <TableCell className="font-medium">
+                {dimension.name}
+              </TableCell>
+              <TableCell>{typeLabels[dimension.type] || dimension.type}</TableCell>
+              <TableCell className="text-muted-foreground">
+                {dimension.formula || "-"}
+              </TableCell>
+              {showActions && (
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-2">
+                    {mappedDimensionIds.has(dimension.id) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-primary"
+                        title="Mapped to data source"
+                      >
+                        <Link className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => onEdit?.(dimension)}
+                      title="Edit dimension"
+                      data-testid="edit-button"
+                    >
+                      <Pencil className="h-4 w-4" data-testid="edit-icon" />
+                    </Button>
+                    {dimension.scope === 'custom' && !isSystemDimension(dimension) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(dimension.id, dimension.name, dimension)}
+                        title="Delete dimension"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {dimension.scope === 'global' && (
+                      <div className="h-8 w-8 flex items-center justify-center">
+                        <span className="text-xs text-muted-foreground font-semibold" title="Global dimension">
+                          GLOBAL
+                        </span>
+                      </div>
+                    )}
+                    {isSystemDimension(dimension) && (
+                      <div className="h-8 w-8 flex items-center justify-center">
+                        <span className="text-xs text-muted-foreground" title="System dimension - cannot be deleted">
+                          SYS
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </TableCell>
+              )}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    )
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Dimensions ({dimensions.length})</DialogTitle>
+          <DialogTitle>
+            Dimensions ({globalDimensions.length + customDimensions.length})
+          </DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-auto">
@@ -224,76 +309,25 @@ export const DimensionsListModal = ({
             <div className="text-center py-8 text-muted-foreground">
               Loading dimensions...
             </div>
-          ) : dimensions.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No dimensions yet. Add your first dimension to get started.
-            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Formula</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {dimensions.map((dimension) => (
-                  <TableRow key={dimension.id}>
-                    <TableCell className="font-medium">
-                      {dimension.name}
-                    </TableCell>
-                    <TableCell>{typeLabels[dimension.type] || dimension.type}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {dimension.formula || "-"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        {mappedDimensionIds.has(dimension.id) && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-primary"
-                            title="Mapped to data source"
-                          >
-                            <Link className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => onEdit?.(dimension)}
-                          title="Edit dimension"
-                          data-testid="edit-button"
-                        >
-                          <Pencil className="h-4 w-4" data-testid="edit-icon" />
-                        </Button>
-                        {!isSystemDimension(dimension) && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(dimension.id, dimension.name, dimension)}
-                            title="Delete dimension"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {isSystemDimension(dimension) && (
-                          <div className="h-8 w-8 flex items-center justify-center">
-                            <span className="text-xs text-muted-foreground" title="System dimension - cannot be deleted">
-                              SYS
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <Tabs defaultValue="custom" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="custom">
+                  Custom ({customDimensions.length})
+                </TabsTrigger>
+                <TabsTrigger value="global">
+                  Global ({globalDimensions.length})
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="custom" className="mt-4">
+                <DimensionTable dimensions={customDimensions} showActions={true} />
+              </TabsContent>
+
+              <TabsContent value="global" className="mt-4">
+                <DimensionTable dimensions={globalDimensions} showActions={true} />
+              </TabsContent>
+            </Tabs>
           )}
         </div>
 
