@@ -194,6 +194,41 @@ export const DimensionModal = ({
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
+            <Label htmlFor="scope">Scope</Label>
+            <Select
+              value={scope}
+              onValueChange={(value) => setScope(value as 'global' | 'custom')}
+              disabled={mode === 'edit'}
+            >
+              <SelectTrigger id="scope" className="bg-background">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-background z-50">
+                <SelectItem value="custom">
+                  <div className="flex flex-col">
+                    <span>Custom</span>
+                    <span className="text-xs text-muted-foreground">For this report only</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="global">
+                  <div className="flex flex-col">
+                    <span>Global</span>
+                    <span className="text-xs text-muted-foreground">Available across all reports</span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            {mode === 'edit' && (
+              <p className="text-xs text-muted-foreground">
+                Scope cannot be changed after creation
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Global dimensions are available across all reports and accounts. Custom dimensions are only for this report.
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
             <Input
               id="name"
