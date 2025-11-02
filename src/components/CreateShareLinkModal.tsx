@@ -17,6 +17,7 @@ interface CreateShareLinkModalProps {
     slug: string;
     report_ids: string[];
   } | null;
+  accountId?: string;
 }
 
 interface Report {
@@ -24,11 +25,12 @@ interface Report {
   name: string;
 }
 
-export const CreateShareLinkModal = ({ 
-  open, 
-  onOpenChange, 
+export const CreateShareLinkModal = ({
+  open,
+  onOpenChange,
   onSuccess,
-  editingLink 
+  editingLink,
+  accountId
 }: CreateShareLinkModalProps) => {
   const [slug, setSlug] = useState("");
   const [password, setPassword] = useState("");
@@ -237,6 +239,7 @@ export const CreateShareLinkModal = ({
           password_hash: passwordHash,
           report_ids: selectedReports,
           created_by: user.id,
+          account_id: accountId,
         });
 
       setLoading(false);
