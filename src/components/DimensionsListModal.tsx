@@ -75,20 +75,26 @@ export const DimensionsListModal = ({
     }
   }, [open, refreshTrigger]);
 
-  // When dimensions load, set all as visible by default
+  // When dimensions load and we have no saved settings, initialize all as visible
   useEffect(() => {
-    const allDimensionIds = new Set<string>();
+    // Only run once after dimensions are loaded
+    if (isLoading || visibleDimensions === null) return;
 
-    globalDimensions.forEach(d => allDimensionIds.add(d.id));
-    accountDimensions.forEach(d => allDimensionIds.add(d.id));
-    customDimensions.forEach(d => allDimensionIds.add(d.id));
+    // If visibleDimensions is an empty set, it means no saved settings were found
+    // So initialize with all dimension IDs to show all as visible
+    if (visibleDimensions.size === 0) {
+      const allDimensionIds = new Set<string>();
 
-    // Only set if we haven't loaded saved visibility settings yet
-    if (visibleDimensions.size === 0 && allDimensionIds.size > 0) {
-      console.log('[testing] Initializing all dimensions as visible:', allDimensionIds.size);
-      setVisibleDimensions(allDimensionIds);
+      globalDimensions.forEach(d => allDimensionIds.add(d.id));
+      accountDimensions.forEach(d => allDimensionIds.add(d.id));
+      customDimensions.forEach(d => allDimensionIds.add(d.id));
+
+      if (allDimensionIds.size > 0) {
+        console.log('[testing] No saved visibility settings, initializing all', allDimensionIds.size, 'dimensions as visible');
+        setVisibleDimensions(allDimensionIds);
+      }
     }
-  }, [globalDimensions, accountDimensions, customDimensions]);
+  }, [isLoading, visibleDimensions]);
 
   const loadVisibleDimensions = async () => {
     try {
