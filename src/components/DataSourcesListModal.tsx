@@ -395,7 +395,16 @@ export const DataSourcesListModal = ({
                           {dataSource.name}
                         </div>
                       </TableCell>
-                      <TableCell>Google Sheets</TableCell>
+                      <TableCell>
+                        <a
+                          href={dataSource.google_sheets_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline cursor-pointer"
+                        >
+                          Google Sheets
+                        </a>
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button
