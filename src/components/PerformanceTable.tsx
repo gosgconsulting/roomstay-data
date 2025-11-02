@@ -677,25 +677,42 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
 
       // If no dimensions found, try falling back to loading from dimension_data
       if (!data || data.length === 0) {
-        const { data: dimensionData, error: dimDataError } = await supabase
-          .from("dimension_data")
-          .select("dimension_values")
-          .limit(1);
+        try {
+          const dimensionData = await retryWithBackoff(
+            async () => {
+              const { data, error } = await supabase
+                .from("dimension_data")
+                .select("dimension_values")
+                .limit(1);
 
-        if (dimDataError) throw dimDataError;
+              if (error) throw error;
+              return data;
+            },
+            3,
+            500
+          );
 
-        if (dimensionData && dimensionData.length > 0) {
-          const dimensionIds = Object.keys(dimensionData[0].dimension_values as Record<string, any>);
+          if (dimensionData && dimensionData.length > 0) {
+            const dimensionIds = Object.keys(dimensionData[0].dimension_values as Record<string, any>);
 
-          if (dimensionIds.length > 0) {
-            const { data: dimensionsById, error: dimError2 } = await supabase
-              .from("dimensions")
-              .select("*")
-              .in("id", dimensionIds);
+            if (dimensionIds.length > 0) {
+              data = await retryWithBackoff(
+                async () => {
+                  const { data, error } = await supabase
+                    .from("dimensions")
+                    .select("*")
+                    .in("id", dimensionIds);
 
-            if (dimError2) throw dimError2;
-            data = dimensionsById;
+                  if (error) throw error;
+                  return data;
+                },
+                3,
+                500
+              );
+            }
           }
+        } catch (error) {
+          console.error('Error loading dimensions from fallback:', error);
         }
       }
 
