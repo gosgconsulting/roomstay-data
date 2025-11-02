@@ -21,7 +21,7 @@ export const filterDimensionsByVisibility = async (
   }
 
   try {
-    const { data: viewSettings } = await supabase
+    const { data: viewSettings, error } = await supabase
       .from("report_views")
       .select("visible_dimensions")
       .eq("report_id", reportId)
@@ -29,16 +29,25 @@ export const filterDimensionsByVisibility = async (
       .eq("is_default", true)
       .maybeSingle();
 
-    if (viewSettings?.visible_dimensions && viewSettings.visible_dimensions.length > 0) {
-      // Filter to only visible dimensions
-      const visibleSet = new Set(viewSettings.visible_dimensions);
-      return dimensions.filter(d => visibleSet.has(d.id));
+    if (error) {
+      console.warn("[DEBUG] Could not load visibility settings, showing all dimensions:", error);
+      // If we can't load settings, show all dimensions (default behavior)
+      return dimensions;
     }
 
-    // If no visibility settings, show all dimensions
+    // If visibility settings exist and have items, filter to only visible dimensions
+    if (viewSettings?.visible_dimensions && Array.isArray(viewSettings.visible_dimensions) && viewSettings.visible_dimensions.length > 0) {
+      const visibleSet = new Set(viewSettings.visible_dimensions);
+      const filtered = dimensions.filter(d => visibleSet.has(d.id));
+      console.log("[DEBUG] Filtered dimensions by visibility:", filtered.length, "of", dimensions.length);
+      return filtered;
+    }
+
+    // If no visibility settings exist, show all dimensions (default: everything is visible)
+    console.log("[DEBUG] No visibility settings found, showing all", dimensions.length, "dimensions");
     return dimensions;
   } catch (error) {
-    console.error("Error filtering dimensions by visibility:", error);
+    console.error("[DEBUG] Error filtering dimensions by visibility:", error);
     // Fallback: return all dimensions if filter fails
     return dimensions;
   }
