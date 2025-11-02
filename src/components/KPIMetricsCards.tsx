@@ -130,26 +130,47 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
 
       // If no dimensions found, try falling back to loading from dimension_data
       if (!dimensions || dimensions.length === 0) {
-        const { data: dimensionData, error: dimDataError } = await supabase
-          .from("dimension_data")
-          .select("dimension_values")
-          .limit(1)
-          .maybeSingle();
+        try {
+          const dimensionData = await retryWithBackoff(
+            async () => {
+              const { data, error } = await supabase
+                .from("dimension_data")
+                .select("dimension_values")
+                .limit(1)
+                .maybeSingle();
 
-        if (dimDataError) throw dimDataError;
+              if (error) throw error;
+              return data;
+            },
+            3,
+            500
+          );
 
-        if (dimensionData?.dimension_values) {
-          const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, any>);
+          if (dimensionData?.dimension_values) {
+            const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, any>);
 
-          if (dimensionIds.length > 0) {
-            const { data: dimensionsById, error: dimError2 } = await supabase
-              .from("dimensions")
-              .select("*")
-              .in("id", dimensionIds);
+            if (dimensionIds.length > 0) {
+              const dimensionsById = await retryWithBackoff(
+                async () => {
+                  const { data, error } = await supabase
+                    .from("dimensions")
+                    .select("*")
+                    .in("id", dimensionIds);
 
-            if (dimError2) throw dimError2;
-            dimensions = dimensionsById;
+                  if (error) throw error;
+                  return data;
+                },
+                3,
+                500
+              );
+
+              if (dimensionsById) {
+                dimensions = dimensionsById;
+              }
+            }
           }
+        } catch (error) {
+          console.error('[testing] Failed to load dimensions from fallback:', error);
         }
       }
 
