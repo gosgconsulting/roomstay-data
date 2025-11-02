@@ -71,6 +71,7 @@ export const DimensionsListModal = ({
     if (open) {
       loadDimensions();
       loadMappedDimensions();
+      loadVisibleDimensions();
     }
   }, [open, refreshTrigger]);
 
