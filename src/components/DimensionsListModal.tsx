@@ -65,7 +65,7 @@ export const DimensionsListModal = ({
   const [accountDimensions, setAccountDimensions] = useState<Dimension[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [mappedDimensionIds, setMappedDimensionIds] = useState<Set<string>>(new Set());
-  const [visibleDimensions, setVisibleDimensions] = useState<Set<string>>(new Set());
+  const [visibleDimensions, setVisibleDimensions] = useState<Set<string> | null>(null); // null = not loaded yet
 
   useEffect(() => {
     if (open) {
