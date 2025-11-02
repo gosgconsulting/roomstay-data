@@ -87,9 +87,12 @@ export const ColumnMappingStep = ({
       // 3. Global dimensions (fallback)
       const dimensionsByName: Record<string, Dimension> = {};
 
+      // Helper function to normalize dimension name for deduplication (case-insensitive)
+      const normalizeKey = (name: string) => name.toLowerCase().trim();
+
       // First pass: add global dimensions as base
       (data || []).filter((d: any) => d.scope === 'global').forEach((d: any) => {
-        dimensionsByName[d.name] = d;
+        dimensionsByName[normalizeKey(d.name)] = d;
       });
 
       // Second pass: override with account-specific dimensions
@@ -97,7 +100,7 @@ export const ColumnMappingStep = ({
         (data || [])
           .filter((d: any) => d.scope === 'account' && d.account_id === accountId)
           .forEach((d: any) => {
-            dimensionsByName[d.name] = d; // Override global with account version
+            dimensionsByName[normalizeKey(d.name)] = d; // Override global with account version
           });
       }
 
@@ -106,7 +109,7 @@ export const ColumnMappingStep = ({
         (data || [])
           .filter((d: any) => d.scope === 'custom' && d.report_id === reportId)
           .forEach((d: any) => {
-            dimensionsByName[d.name] = d; // Override with custom version
+            dimensionsByName[normalizeKey(d.name)] = d; // Override with custom version
           });
       }
 
