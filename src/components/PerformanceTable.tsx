@@ -1416,7 +1416,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedData.map((row) => renderRow(row))}
+                    {paginatedData.map((row) => (
+                      <Fragment key={row.id}>
+                        {renderRow(row)}
+                      </Fragment>
+                    ))}
                     {/* Total row */}
                     <tr className="border-t-2 border-primary/20 bg-muted/50 font-semibold">
                       <td className="py-3 px-4">Total</td>
