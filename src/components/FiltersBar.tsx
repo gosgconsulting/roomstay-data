@@ -365,13 +365,20 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
     try {
       // Load distinct values for each dimension using a more efficient query
       // Limit to 10,000 rows for faster processing
-      const { data, error } = await supabase
-        .from("dimension_data")
-        .select("dimension_values")
-        .eq("report_id", reportId)
-        .limit(10000); // Limit for performance
+      const data = await retryWithBackoff(
+        async () => {
+          const { data, error } = await supabase
+            .from("dimension_data")
+            .select("dimension_values")
+            .eq("report_id", reportId)
+            .limit(10000); // Limit for performance
 
-      if (error) throw error;
+          if (error) throw error;
+          return data;
+        },
+        3,
+        500
+      );
 
       const valuesMap: Record<string, Set<string>> = {};
 
