@@ -469,17 +469,63 @@ export const DimensionModal = ({
 
           <div className="space-y-2">
             <Label htmlFor="formula">Formula (optional)</Label>
-            <Textarea
-              id="formula"
-              placeholder="e.g., Cost / Clicks, Revenue / Cost"
-              value={formula}
-              onChange={(e) => setFormula(e.target.value)}
-              rows={3}
-              className="resize-none"
-            />
-            <p className="text-xs text-muted-foreground">
-              Use metric names for calculations. Leave empty for base metrics that come from your data source.
-            </p>
+            <div className="relative">
+              <Textarea
+                ref={formulaInputRef}
+                id="formula"
+                placeholder="e.g., Cost / Clicks, Revenue / Cost. Type @ to insert a dimension"
+                value={formula}
+                onChange={handleFormulaChange}
+                rows={3}
+                className="resize-none"
+              />
+
+              {showMentionDropdown && (
+                <div className="absolute left-0 top-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-48 overflow-y-auto w-full">
+                  {availableDimensions
+                    .filter((d) =>
+                      d.name
+                        .toLowerCase()
+                        .includes(mentionSearchTerm.toLowerCase())
+                    )
+                    .map((dim) => (
+                      <button
+                        key={dim.id}
+                        onClick={() => insertDimensionMention(dim.name)}
+                        className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm flex items-center justify-between"
+                      >
+                        <span className="font-medium">{dim.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          ({dim.type})
+                        </span>
+                      </button>
+                    ))}
+                  {availableDimensions.filter((d) =>
+                    d.name
+                      .toLowerCase()
+                      .includes(mentionSearchTerm.toLowerCase())
+                  ).length === 0 && (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">
+                      No dimensions found
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                Use metric names for calculations. Type @ to insert a dimension. Leave empty for base metrics.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={testFormula}
+                disabled={!formula.trim()}
+              >
+                Test
+              </Button>
+            </div>
           </div>
         </div>
 
