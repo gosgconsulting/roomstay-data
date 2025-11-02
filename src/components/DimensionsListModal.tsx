@@ -78,11 +78,18 @@ export const DimensionsListModal = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get all data sources for the user's reports
-      const { data: reports } = await supabase
+      // Get all data sources for the user's reports in this account
+      let query = supabase
         .from("reports")
         .select("id")
         .eq("user_id", user.id);
+
+      // Filter by account if provided
+      if (accountId) {
+        query = query.eq("account_id", accountId);
+      }
+
+      const { data: reports } = await query;
 
       if (!reports) return;
 
