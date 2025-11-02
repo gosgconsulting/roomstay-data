@@ -52,7 +52,7 @@ export const CreateShareLinkModal = ({
         setSelectedReports([]);
       }
     }
-  }, [open, editingLink]);
+  }, [open, editingLink, accountId]);
 
   const loadReports = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -83,13 +83,19 @@ export const CreateShareLinkModal = ({
 
       allReports = data || [];
     } else {
-      // Regular user: Load own reports and shared reports
-      // Get own reports
-      const { data: ownReports, error: ownError } = await supabase
+      // Regular user: Load own reports and shared reports for this account
+      // Get own reports for this account
+      let query = supabase
         .from("reports")
         .select("id, name")
-        .eq("user_id", user.id)
-        .order("name");
+        .eq("user_id", user.id);
+
+      // Filter by account if provided
+      if (accountId) {
+        query = query.eq("account_id", accountId);
+      }
+
+      const { data: ownReports, error: ownError } = await query.order("name");
 
       if (ownError) {
         console.error("Error loading own reports:", ownError);
