@@ -187,6 +187,8 @@ export const EditMappingModal = ({
               onBack={() => onOpenChange(false)}
               isLoading={isLoading}
               existingMappings={dataSource?.column_mappings || undefined}
+              accountId={accountId}
+              reportId={dataSource?.report_id || undefined}
             />
           ) : (
             <div className="text-center py-8 text-muted-foreground">
