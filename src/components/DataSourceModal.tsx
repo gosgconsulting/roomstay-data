@@ -427,6 +427,8 @@ export const DataSourceModal = ({ open, onOpenChange, reportId, accountId }: Dat
               onSave={handleSaveMappings}
               onBack={handleBack}
               isLoading={isLoading}
+              accountId={accountId}
+              reportId={reportId}
             />
           )}
         </div>
