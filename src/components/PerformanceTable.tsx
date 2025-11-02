@@ -31,11 +31,12 @@ import {
 import { ChevronDown, ChevronRight, Columns3, Copy, Trash2, Plus, ArrowUp, ArrowDown, Minus, GripVertical } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
 import { cn } from "@/lib/utils";
 import { MappingModal } from "./MappingModal";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { supabase } from "@/integrations/supabase/client";
+import { retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
 import { format, startOfWeek, startOfMonth, startOfYear } from "date-fns";
 import { FilterState } from "./FiltersBar";
 import { TableVirtuoso } from "react-virtuoso";
@@ -650,40 +651,75 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
       const { data: { user } } = await supabase.auth.getUser();
       
       let data = null;
-      
-      // First, try to fetch dimensions by user_id (all user's dimensions across all reports)
+
+      // Fetch dimensions accessible to the user
       if (user) {
-        const { data: userDimensions, error: userError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("user_id", user.id);
+        try {
+          const { data: allDims, error: dimError } = await supabase
+            .from("dimensions")
+            .select("*");
 
-        if (userError) throw userError;
-        data = userDimensions;
-      }
-      
-      // If no user or no dimensions found by user_id, fall back to loading from any dimension_data
-      if (!data || data.length === 0) {
-        const { data: dimensionData, error: dimDataError } = await supabase
-          .from("dimension_data")
-          .select("dimension_values")
-          .limit(1);
+          if (dimError) throw dimError;
 
-        if (dimDataError) throw dimDataError;
-
-        if (dimensionData && dimensionData.length > 0) {
-          const dimensionIds = Object.keys(dimensionData[0].dimension_values as Record<string, any>);
-          
-          if (dimensionIds.length > 0) {
-            const { data: dimensionsById, error: dimError2 } = await supabase
-              .from("dimensions")
-              .select("*")
-              .in("id", dimensionIds);
-
-            if (dimError2) throw dimError2;
-            data = dimensionsById;
+          // Filter to global dimensions and custom dimensions for this report if reportId provided
+          if (reportId) {
+            data = (allDims || []).filter((d: any) =>
+              d.scope === 'global' ||
+              (d.scope === 'custom' && d.report_id === reportId)
+            );
+          } else {
+            data = allDims || [];
           }
+        } catch (error) {
+          console.error('Error loading dimensions:', error);
+          data = [];
         }
+      }
+
+      // If no dimensions found, try falling back to loading from dimension_data
+      if (!data || data.length === 0) {
+        try {
+          const dimensionData = await retryWithBackoff(
+            async () => {
+              const { data, error } = await supabase
+                .from("dimension_data")
+                .select("dimension_values")
+                .limit(1);
+
+              if (error) throw error;
+              return data;
+            },
+            3,
+            500
+          );
+
+          if (dimensionData && dimensionData.length > 0) {
+            const dimensionIds = Object.keys(dimensionData[0].dimension_values as Record<string, any>);
+
+            if (dimensionIds.length > 0) {
+              data = await retryWithBackoff(
+                async () => {
+                  const { data, error } = await supabase
+                    .from("dimensions")
+                    .select("*")
+                    .in("id", dimensionIds);
+
+                  if (error) throw error;
+                  return data;
+                },
+                3,
+                500
+              );
+            }
+          }
+        } catch (error) {
+          console.error('Error loading dimensions from fallback:', error);
+        }
+      }
+
+      // Filter dimensions by visibility settings
+      if (user && reportId && data && data.length > 0) {
+        data = await filterDimensionsByVisibility(data, reportId, user.id, supabase);
       }
 
       // Define the desired column order
@@ -1138,7 +1174,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
             })}
         </tr>
         {isExpanded &&
-          row.children?.map((child) => renderRow(child))}
+          row.children?.map((child) => (
+            <Fragment key={child.id}>
+              {renderRow(child)}
+            </Fragment>
+          ))}
       </>
     );
   };
@@ -1399,7 +1439,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedData.map((row) => renderRow(row))}
+                    {paginatedData.map((row) => (
+                      <Fragment key={row.id}>
+                        {renderRow(row)}
+                      </Fragment>
+                    ))}
                     {/* Total row */}
                     <tr className="border-t-2 border-primary/20 bg-muted/50 font-semibold">
                       <td className="py-3 px-4">Total</td>

@@ -61,9 +61,20 @@ export const failMetric = (id: number, error: any): void => {
     metric.duration = metric.endTime - metric.startTime;
     metric.success = false;
     metric.error = error;
-    
+
     if (process.env.NODE_ENV !== 'production') {
-      console.error(`[PERF:ERROR] ${metric.component}.${metric.action}: ${metric.duration.toFixed(2)}ms`, error);
+      // Serialize error properly
+      let errorMessage = '';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else {
+        errorMessage = JSON.stringify(error, null, 2);
+      }
+      console.error(`[PERF:ERROR] ${metric.component}.${metric.action}: ${metric.duration.toFixed(2)}ms - ${errorMessage}`);
     }
   }
 };

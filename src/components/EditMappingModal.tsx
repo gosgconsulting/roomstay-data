@@ -27,13 +27,15 @@ interface EditMappingModalProps {
   onOpenChange: (open: boolean) => void;
   dataSource: DataSource | null;
   onSuccess: () => void;
+  accountId?: string;
 }
 
-export const EditMappingModal = ({ 
-  open, 
-  onOpenChange, 
+export const EditMappingModal = ({
+  open,
+  onOpenChange,
   dataSource,
-  onSuccess 
+  onSuccess,
+  accountId
 }: EditMappingModalProps) => {
   const [headers, setHeaders] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -185,6 +187,8 @@ export const EditMappingModal = ({
               onBack={() => onOpenChange(false)}
               isLoading={isLoading}
               existingMappings={dataSource?.column_mappings || undefined}
+              accountId={accountId}
+              reportId={dataSource?.report_id || undefined}
             />
           ) : (
             <div className="text-center py-8 text-muted-foreground">

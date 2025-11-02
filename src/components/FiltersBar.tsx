@@ -17,6 +17,7 @@ import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
 
 export interface FilterState {
   dimensionFilters: Record<string, string[]>;
@@ -297,28 +298,41 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
     
     try {
       // Load dimensions associated with this report (works for both owned and shared reports)
-      const { data: dimensionData, error: dimDataError } = await supabase
-        .from("dimension_data")
-        .select("dimension_values")
-        .eq("report_id", reportId)
-        .limit(1)
-        .maybeSingle();
+      const dimensionData = await retryWithBackoff(
+        async () => {
+          const { data, error } = await supabase
+            .from("dimension_data")
+            .select("dimension_values")
+            .eq("report_id", reportId)
+            .limit(1)
+            .maybeSingle();
 
-      if (dimDataError) throw dimDataError;
+          if (error) throw error;
+          return data;
+        },
+        3,
+        500
+      );
 
       let data = null;
 
       if (dimensionData?.dimension_values) {
         const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, any>);
-        
-        if (dimensionIds.length > 0) {
-          const { data: dimensionsById, error: dimError } = await supabase
-            .from("dimensions")
-            .select("*")
-            .in("id", dimensionIds);
 
-          if (dimError) throw dimError;
-          data = dimensionsById;
+        if (dimensionIds.length > 0) {
+          data = await retryWithBackoff(
+            async () => {
+              const { data, error } = await supabase
+                .from("dimensions")
+                .select("*")
+                .in("id", dimensionIds);
+
+              if (error) throw error;
+              return data;
+            },
+            3,
+            500
+          );
         }
       }
 
@@ -336,8 +350,15 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
         seenNames.add(dim.name);
         return true;
       });
-      
-      setDimensions(uniqueDimensions);
+
+      // Filter dimensions by visibility settings
+      const { data: { user } } = await supabase.auth.getUser();
+      let finalDimensions = uniqueDimensions;
+      if (user && reportId) {
+        finalDimensions = await filterDimensionsByVisibility(uniqueDimensions, reportId, user.id, supabase);
+      }
+
+      setDimensions(finalDimensions);
     } catch (error) {
       console.error("Error loading dimensions:", error);
     } finally {
@@ -352,13 +373,20 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
     try {
       // Load distinct values for each dimension using a more efficient query
       // Limit to 10,000 rows for faster processing
-      const { data, error } = await supabase
-        .from("dimension_data")
-        .select("dimension_values")
-        .eq("report_id", reportId)
-        .limit(10000); // Limit for performance
+      const data = await retryWithBackoff(
+        async () => {
+          const { data, error } = await supabase
+            .from("dimension_data")
+            .select("dimension_values")
+            .eq("report_id", reportId)
+            .limit(10000); // Limit for performance
 
-      if (error) throw error;
+          if (error) throw error;
+          return data;
+        },
+        3,
+        500
+      );
 
       const valuesMap: Record<string, Set<string>> = {};
 

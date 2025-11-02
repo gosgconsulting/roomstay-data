@@ -25,9 +25,10 @@ interface DataSourceModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   reportId: string;
+  accountId?: string;
 }
 
-export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModalProps) => {
+export const DataSourceModal = ({ open, onOpenChange, reportId, accountId }: DataSourceModalProps) => {
   const [step, setStep] = useState(1);
   const [dataName, setDataName] = useState("");
   const [url, setUrl] = useState("");
@@ -426,6 +427,8 @@ export const DataSourceModal = ({ open, onOpenChange, reportId }: DataSourceModa
               onSave={handleSaveMappings}
               onBack={handleBack}
               isLoading={isLoading}
+              accountId={accountId}
+              reportId={reportId}
             />
           )}
         </div>

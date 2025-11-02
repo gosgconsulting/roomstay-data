@@ -22,6 +22,8 @@ interface Dimension {
   name: string;
   type: string;
   formula: string | null;
+  scope?: 'global' | 'custom' | 'account';
+  account_id?: string;
 }
 
 interface Report {
@@ -34,6 +36,7 @@ interface Report {
 
 interface DashboardHeaderProps {
   reportId: string | null;
+  accountId?: string;
   onReportChange: (reportId: string) => void;
   onDataSync?: () => void;
   onRefreshData?: () => void;
@@ -42,7 +45,7 @@ interface DashboardHeaderProps {
   isSharedView?: boolean;
 }
 
-export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefreshData }: DashboardHeaderProps) => {
+export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSync, onRefreshData }: DashboardHeaderProps) => {
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
@@ -59,10 +62,10 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
   const [lastUpdateDate, setLastUpdateDate] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Load reports on mount
+  // Load reports on mount and when accountId changes
   useEffect(() => {
     loadReports();
-  }, []);
+  }, [accountId]);
 
   // Create default dimensions when reportId changes
   useEffect(() => {
@@ -189,12 +192,18 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
         return;
       }
 
-      // Get owned reports
-      const { data: ownedReports, error: ownedError } = await supabase
+      // Get owned reports for this account
+      let query = supabase
         .from('reports')
         .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        .eq('user_id', user.id);
+
+      // Filter by account if provided
+      if (accountId) {
+        query = query.eq('account_id', accountId);
+      }
+
+      const { data: ownedReports, error: ownedError } = await query.order('created_at', { ascending: false });
 
       if (ownedError) {
         console.error("Error loading owned reports:", ownedError);
@@ -217,10 +226,17 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
       if (shares && shares.length > 0) {
         // Get shared reports
         const sharedReportIds = shares.map(s => s.report_id);
-        const { data: sharedReports, error: sharedReportsError } = await supabase
+        let sharedQuery = supabase
           .from('reports')
           .select('*')
           .in('id', sharedReportIds);
+
+        // Filter by account if provided
+        if (accountId) {
+          sharedQuery = sharedQuery.eq('account_id', accountId);
+        }
+
+        const { data: sharedReports, error: sharedReportsError } = await sharedQuery;
 
         if (sharedReportsError) {
           console.error("Error loading shared reports:", sharedReportsError);
@@ -618,6 +634,7 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
             open={showDataSourcesListModal}
             onOpenChange={setShowDataSourcesListModal}
             reportId={currentReport.id}
+            accountId={accountId}
             onAddNew={() => {
               setShowDataSourcesListModal(false);
               setShowDataSourceModal(true);
@@ -635,6 +652,7 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
               }
             }}
             reportId={currentReport.id}
+            accountId={accountId}
           />
         </>
       )}
@@ -644,6 +662,7 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
               onOpenChange={setShowDimensionsListModal}
               refreshTrigger={dimensionRefreshTrigger}
               reportId={reportId}
+              accountId={accountId}
               onAddNew={() => {
                 console.log('[testing] Opening add dimension modal');
                 setDimensionModalMode('add');
@@ -673,6 +692,7 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
               dimension={editingDimension}
               mode={dimensionModalMode}
               reportId={reportId}
+              accountId={accountId}
               onSaved={() => {
                 console.log('[testing] Dimension saved, refreshing list');
                 // Trigger refresh of dimensions list
@@ -698,6 +718,7 @@ export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefres
           reportName={currentReport.name}
           open={showShareModal}
           onOpenChange={setShowShareModal}
+          accountId={accountId}
         />
       )}
     </>

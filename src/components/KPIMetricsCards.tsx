@@ -4,10 +4,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { FilterState } from "./FiltersBar";
 import { cn } from "@/lib/utils";
-import { 
-  Eye, 
-  MousePointerClick, 
-  TrendingUp, 
+import { debugLog, retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
+import {
+  Eye,
+  MousePointerClick,
+  TrendingUp,
   ShoppingCart,
   Percent,
   DollarSign,
@@ -28,9 +29,10 @@ interface KPIMetricsCardsProps {
   reportId: string | null;
   filters: FilterState;
   onLoadingComplete?: () => void;
+  accountId?: string;
 }
 
-export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMetricsCardsProps) => {
+export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountId }: KPIMetricsCardsProps) => {
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -56,59 +58,126 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
       // Load KPI visibility and order settings from report_views
       let visibleKPIs: string[] | null = null;
       let kpiOrder: string[] | null = null;
-      
+
       if (user && reportId) {
-        const { data: viewSettings } = await supabase
-          .from("report_views")
-          .select("visible_kpis, kpi_order")
-          .eq("report_id", reportId)
-          .eq("user_id", user.id)
-          .eq("is_default", true)
-          .maybeSingle();
-        
-        if (viewSettings) {
-          visibleKPIs = viewSettings.visible_kpis as string[] | null;
-          kpiOrder = viewSettings.kpi_order as string[] | null;
+        try {
+          const viewSettings = await retryWithBackoff(
+            async () => {
+              const { data, error } = await supabase
+                .from("report_views")
+                .select("visible_kpis, kpi_order")
+                .eq("report_id", reportId)
+                .eq("user_id", user.id)
+                .eq("is_default", true)
+                .maybeSingle();
+
+              if (error) throw error;
+              return data;
+            },
+            3,
+            500
+          );
+
+          if (viewSettings) {
+            visibleKPIs = viewSettings.visible_kpis as string[] | null;
+            kpiOrder = viewSettings.kpi_order as string[] | null;
+          }
+        } catch (error) {
+          console.error('[testing] Failed to load KPI view settings:', error);
         }
       }
       
       let dimensions = null;
       
-      // First, try to fetch dimensions by user_id (all user's dimensions across all reports)
+      // Fetch dimensions accessible to the user
+      // RLS policies will filter global and custom dimensions automatically
       if (user) {
-        const { data: userDimensions, error: userError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("user_id", user.id);
+        try {
+          const allDims = await retryWithBackoff(
+            async () => {
+              const { data, error } = await supabase
+                .from("dimensions")
+                .select("*");
 
-        if (userError) throw userError;
-        dimensions = userDimensions;
-        console.log('[testing] loadMetrics - Dimensions loaded:', dimensions?.length);
-      }
-      
-      // If no user or no dimensions found by user_id, fall back to loading from any dimension_data
-      if (!dimensions || dimensions.length === 0) {
-        const { data: dimensionData, error: dimDataError } = await supabase
-          .from("dimension_data")
-          .select("dimension_values")
-          .limit(1)
-          .maybeSingle();
+              if (error) {
+                const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+                throw new Error(`Failed to load dimensions: ${errorMsg}`);
+              }
 
-        if (dimDataError) throw dimDataError;
+              return data || [];
+            },
+            3, // max attempts
+            500 // initial delay in ms
+          );
 
-        if (dimensionData?.dimension_values) {
-          const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, any>);
-          
-          if (dimensionIds.length > 0) {
-            const { data: dimensionsById, error: dimError2 } = await supabase
-              .from("dimensions")
-              .select("*")
-              .in("id", dimensionIds);
-
-            if (dimError2) throw dimError2;
-            dimensions = dimensionsById;
+          // Filter to global dimensions and custom dimensions for this report if reportId provided
+          if (reportId) {
+            dimensions = (allDims || []).filter((d: any) =>
+              d.scope === 'global' ||
+              (d.scope === 'custom' && d.report_id === reportId)
+            );
+          } else {
+            dimensions = allDims || [];
           }
+
+          console.log('[testing] loadMetrics - Dimensions loaded:', dimensions?.length);
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+          console.error('[testing] Error loading metrics:', errorMsg);
+          dimensions = [];
         }
+      }
+
+      // If no dimensions found, try falling back to loading from dimension_data
+      if (!dimensions || dimensions.length === 0) {
+        try {
+          const dimensionData = await retryWithBackoff(
+            async () => {
+              const { data, error } = await supabase
+                .from("dimension_data")
+                .select("dimension_values")
+                .limit(1)
+                .maybeSingle();
+
+              if (error) throw error;
+              return data;
+            },
+            3,
+            500
+          );
+
+          if (dimensionData?.dimension_values) {
+            const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, any>);
+
+            if (dimensionIds.length > 0) {
+              const dimensionsById = await retryWithBackoff(
+                async () => {
+                  const { data, error } = await supabase
+                    .from("dimensions")
+                    .select("*")
+                    .in("id", dimensionIds);
+
+                  if (error) throw error;
+                  return data;
+                },
+                3,
+                500
+              );
+
+              if (dimensionsById) {
+                dimensions = dimensionsById;
+              }
+            }
+          }
+        } catch (error) {
+          console.error('[testing] Failed to load dimensions from fallback:', error);
+        }
+      }
+
+      // Filter dimensions by visibility settings
+      if (user && reportId && dimensions && dimensions.length > 0) {
+        dimensions = await filterDimensionsByVisibility(dimensions, reportId, user.id, supabase);
+        console.log('[testing] Dimensions after visibility filter:', dimensions?.length);
       }
 
       // Fetch dimension_data in chunks (5000 rows at a time)
@@ -118,14 +187,21 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete }: KPIMet
       let hasMore = true;
 
       while (hasMore) {
-        const { data: chunkData, error } = await supabase
-          .from("dimension_data")
-          .select("*")
-          .eq("report_id", reportId)
-          .order('row_number', { ascending: true })
-          .range(offset, offset + CHUNK_SIZE - 1);
+        const chunkData = await retryWithBackoff(
+          async () => {
+            const { data, error } = await supabase
+              .from("dimension_data")
+              .select("*")
+              .eq("report_id", reportId)
+              .order('row_number', { ascending: true })
+              .range(offset, offset + CHUNK_SIZE - 1);
 
-        if (error) throw error;
+            if (error) throw error;
+            return data;
+          },
+          3,
+          500
+        );
 
         if (chunkData && chunkData.length > 0) {
           allDimensionData = [...allDimensionData, ...chunkData];

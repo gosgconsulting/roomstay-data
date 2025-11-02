@@ -37,14 +37,16 @@ interface DataSourcesListModalProps {
   reportId: string;
   onAddNew: () => void;
   onDataSync?: () => void;
+  accountId?: string;
 }
 
-export const DataSourcesListModal = ({ 
-  open, 
-  onOpenChange, 
+export const DataSourcesListModal = ({
+  open,
+  onOpenChange,
   reportId,
   onAddNew,
-  onDataSync
+  onDataSync,
+  accountId
 }: DataSourcesListModalProps) => {
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -393,7 +395,16 @@ export const DataSourcesListModal = ({
                           {dataSource.name}
                         </div>
                       </TableCell>
-                      <TableCell>Google Sheets</TableCell>
+                      <TableCell>
+                        <a
+                          href={dataSource.google_sheets_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline cursor-pointer"
+                        >
+                          Google Sheets
+                        </a>
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button
@@ -460,6 +471,7 @@ export const DataSourcesListModal = ({
         onOpenChange={setIsEditModalOpen}
         dataSource={editingDataSource}
         onSuccess={handleEditSuccess}
+        accountId={accountId}
       />
 
       <ViewDataModal

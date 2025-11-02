@@ -14,7 +14,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Pencil, Trash2, Plus, Link } from "lucide-react";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { Pencil, Trash2, Plus, Link, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -24,6 +30,7 @@ interface Dimension {
   type: string;
   formula: string | null;
   is_system?: boolean;
+  scope?: 'global' | 'custom';
 }
 
 interface DimensionsListModalProps {
@@ -33,6 +40,7 @@ interface DimensionsListModalProps {
   onEdit?: (dimension: Dimension) => void;
   refreshTrigger?: number; // Used to trigger refresh from parent
   reportId?: string;
+  accountId?: string;
 }
 
 const typeLabels: Record<string, string> = {
@@ -50,28 +58,184 @@ export const DimensionsListModal = ({
   onEdit,
   refreshTrigger,
   reportId,
+  accountId,
 }: DimensionsListModalProps) => {
-  const [dimensions, setDimensions] = useState<Dimension[]>([]);
+  const [globalDimensions, setGlobalDimensions] = useState<Dimension[]>([]);
+  const [customDimensions, setCustomDimensions] = useState<Dimension[]>([]);
+  const [accountDimensions, setAccountDimensions] = useState<Dimension[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [mappedDimensionIds, setMappedDimensionIds] = useState<Set<string>>(new Set());
+  const [visibleDimensions, setVisibleDimensions] = useState<Set<string> | null>(null); // null = not loaded yet
 
   useEffect(() => {
     if (open) {
       loadDimensions();
       loadMappedDimensions();
+      loadVisibleDimensions();
     }
   }, [open, refreshTrigger]);
+
+  // When dimensions load and we have no saved settings, initialize all as visible
+  useEffect(() => {
+    // Only run once after dimensions are loaded
+    if (isLoading || visibleDimensions === null) return;
+
+    // If visibleDimensions is an empty set, it means no saved settings were found
+    // So initialize with all dimension IDs to show all as visible
+    if (visibleDimensions.size === 0) {
+      const allDimensionIds = new Set<string>();
+
+      globalDimensions.forEach(d => allDimensionIds.add(d.id));
+      accountDimensions.forEach(d => allDimensionIds.add(d.id));
+      customDimensions.forEach(d => allDimensionIds.add(d.id));
+
+      if (allDimensionIds.size > 0) {
+        console.log('[testing] No saved visibility settings, initializing all', allDimensionIds.size, 'dimensions as visible');
+        setVisibleDimensions(allDimensionIds);
+      }
+    }
+  }, [isLoading, visibleDimensions]);
+
+  const loadVisibleDimensions = async () => {
+    try {
+      if (!reportId) {
+        // No report ID, so can't have saved settings - default all visible
+        setVisibleDimensions(new Set()); // Will be populated once dimensions load
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setVisibleDimensions(new Set());
+        return;
+      }
+
+      // Try to get saved visibility settings
+      const { data: viewSettings, error } = await supabase
+        .from("report_views")
+        .select("visible_dimensions")
+        .eq("report_id", reportId)
+        .eq("user_id", user.id)
+        .eq("is_default", true)
+        .maybeSingle();
+
+      if (error) {
+        console.warn("[testing] Could not load visible dimensions, will default to all visible:", error);
+        // If we can't load settings, mark as empty (will be populated with all dimensions)
+        setVisibleDimensions(new Set());
+      } else if (viewSettings?.visible_dimensions && Array.isArray(viewSettings.visible_dimensions) && viewSettings.visible_dimensions.length > 0) {
+        // Use saved visibility settings
+        console.log("[testing] Loaded saved visibility settings:", viewSettings.visible_dimensions.length);
+        setVisibleDimensions(new Set(viewSettings.visible_dimensions));
+      } else {
+        // No saved settings - will default to all visible
+        console.log("[testing] No saved visibility settings, will default to all visible");
+        setVisibleDimensions(new Set());
+      }
+    } catch (error) {
+      console.error("[testing] Error loading visible dimensions:", error);
+      // Fallback: default all visible
+      setVisibleDimensions(new Set());
+    }
+  };
+
+  const toggleDimensionVisibility = async (dimensionId: string) => {
+    try {
+      if (!reportId) {
+        console.warn("[testing] No reportId provided, cannot toggle visibility");
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.warn("[testing] No user authenticated, cannot toggle visibility");
+        return;
+      }
+
+      // If visibleDimensions hasn't been initialized yet, start with all dimensions
+      const currentVisible = visibleDimensions === null ? new Set<string>() : visibleDimensions;
+      const newVisibleDimensions = new Set(currentVisible);
+
+      if (newVisibleDimensions.has(dimensionId)) {
+        newVisibleDimensions.delete(dimensionId);
+      } else {
+        newVisibleDimensions.add(dimensionId);
+      }
+
+      // Update local state immediately for responsive UI
+      setVisibleDimensions(newVisibleDimensions);
+
+      // Try to persist to database, but don't fail if it doesn't work
+      try {
+        const { data: existingView, error: viewError } = await supabase
+          .from("report_views")
+          .select("id")
+          .eq("report_id", reportId)
+          .eq("user_id", user.id)
+          .eq("is_default", true)
+          .maybeSingle();
+
+        if (viewError) {
+          console.warn("[testing] Warning - could not fetch report view:", viewError);
+          // Don't throw, just warn - continue with local state
+          return;
+        }
+
+        if (existingView?.id) {
+          // Update existing view
+          const { error: updateError } = await supabase
+            .from("report_views")
+            .update({ visible_dimensions: Array.from(newVisibleDimensions) })
+            .eq("id", existingView.id);
+
+          if (updateError) {
+            console.warn("[testing] Warning - could not update report view:", updateError);
+            // Don't throw - local state is updated
+          }
+        } else {
+          // Create new default view with this setting
+          const { error: insertError } = await supabase
+            .from("report_views")
+            .insert({
+              report_id: reportId,
+              user_id: user.id,
+              is_default: true,
+              name: "Default View",
+              visible_dimensions: Array.from(newVisibleDimensions),
+            });
+
+          if (insertError) {
+            console.warn("[testing] Warning - could not create report view:", insertError);
+            // Don't throw - local state is updated
+          }
+        }
+      } catch (dbError) {
+        // Silently fail on database operations - local state is already updated
+        console.warn("[testing] Database operation failed but local state updated:", dbError);
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : (typeof error === 'string' ? error : JSON.stringify(error));
+      console.error('[testing] Unexpected error in toggleDimensionVisibility:', errorMsg);
+    }
+  };
 
   const loadMappedDimensions = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get all data sources for the user's reports
-      const { data: reports } = await supabase
+      // Get all data sources for the user's reports in this account
+      let query = supabase
         .from("reports")
         .select("id")
         .eq("user_id", user.id);
+
+      // Filter by account if provided
+      if (accountId) {
+        query = query.eq("account_id", accountId);
+      }
+
+      const { data: reports } = await query;
 
       if (!reports) return;
 
@@ -106,22 +270,56 @@ export const DimensionsListModal = ({
     try {
       setIsLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) throw new Error("User not authenticated");
-      if (!reportId) throw new Error("Report ID not provided");
 
-      console.log('[testing] Loading dimensions for user:', user.id, 'report:', reportId);
-      const { data, error } = await supabase
+      if (!user) throw new Error("User not authenticated");
+
+      console.log('[testing] Loading dimensions for user:', user.id, 'report:', reportId, 'account:', accountId);
+
+      // Load global dimensions (available to all users)
+      const { data: globalData, error: globalError } = await supabase
         .from("dimensions")
         .select("*")
-        .eq("user_id", user.id)
-        .eq("report_id", reportId)
+        .eq("scope", "global")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      console.log('[testing] Loaded report-specific dimensions:', data?.length || 0);
-      console.log('[testing] Dimensions:', data?.map(d => `${d.name} (${d.is_system ? 'system' : 'user'})`));
-      setDimensions(data || []);
+      if (globalError) throw globalError;
+
+      // Load account-specific dimensions if accountId is provided
+      let accountData: Dimension[] = [];
+      if (accountId) {
+        const { data, error: accountError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("scope", "account")
+          .eq("account_id", accountId)
+          .order("created_at", { ascending: false });
+
+        if (accountError) throw accountError;
+        accountData = data || [];
+      }
+
+      // Load custom dimensions for this specific report if reportId is provided
+      let customData: Dimension[] = [];
+      if (reportId) {
+        const { data, error: customError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("report_id", reportId)
+          .eq("scope", "custom")
+          .order("created_at", { ascending: false });
+
+        if (customError) throw customError;
+        customData = data || [];
+      }
+
+      console.log('[testing] Loaded global dimensions:', globalData?.length || 0);
+      console.log('[testing] Loaded account dimensions:', accountData?.length || 0);
+      console.log('[testing] Loaded custom dimensions:', customData?.length || 0);
+
+      setGlobalDimensions(globalData || []);
+      setAccountDimensions(accountData);
+      setCustomDimensions(customData);
     } catch (error) {
       console.error("Error loading dimensions:", error);
       toast({
@@ -144,7 +342,7 @@ export const DimensionsListModal = ({
   };
 
   const handleDelete = async (id: string, name: string, dimension: Dimension) => {
-    // [testing] Prevent deletion of system dimensions
+    // Prevent deletion of system dimensions
     if (isSystemDimension(dimension)) {
       console.log('[testing] Attempted to delete system dimension:', name);
       toast({
@@ -155,8 +353,18 @@ export const DimensionsListModal = ({
       return;
     }
 
+    // Prevent deletion of global dimensions
+    if (dimension.scope === 'global') {
+      toast({
+        title: "Cannot delete global dimension",
+        description: `"${name}" is a global dimension and can only be deleted by administrators`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      console.log('[testing] Deleting user dimension:', name);
+      console.log('[testing] Deleting custom dimension:', name);
       const { error } = await supabase
         .from("dimensions")
         .delete()
@@ -164,7 +372,7 @@ export const DimensionsListModal = ({
 
       if (error) throw error;
 
-      setDimensions(dimensions.filter((d) => d.id !== id));
+      setCustomDimensions(customDimensions.filter((d) => d.id !== id));
       toast({
         title: "Dimension deleted",
         description: `Deleted "${name}"`,
@@ -179,11 +387,111 @@ export const DimensionsListModal = ({
     }
   };
 
+  const DimensionTable = ({ dimensions, showActions = true }: { dimensions: Dimension[], showActions?: boolean }) => (
+    dimensions.length === 0 ? (
+      <div className="text-center py-8 text-muted-foreground">
+        No dimensions in this category yet.
+      </div>
+    ) : (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Type</TableHead>
+            <TableHead>Formula</TableHead>
+            {showActions && <TableHead className="text-right">Actions</TableHead>}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {dimensions.map((dimension) => (
+            <TableRow key={dimension.id}>
+              <TableCell className="font-medium">
+                {dimension.name}
+              </TableCell>
+              <TableCell>{typeLabels[dimension.type] || dimension.type}</TableCell>
+              <TableCell className="text-muted-foreground">
+                {dimension.formula || "-"}
+              </TableCell>
+              {showActions && (
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-2">
+                    {reportId && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => toggleDimensionVisibility(dimension.id)}
+                        title={visibleDimensions === null || visibleDimensions.has(dimension.id) ? "Deactivate for report" : "Activate for report"}
+                      >
+                        {visibleDimensions === null || visibleDimensions.has(dimension.id) ? (
+                          <Eye className="h-4 w-4 text-primary" />
+                        ) : (
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                    )}
+                    {mappedDimensionIds.has(dimension.id) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-primary"
+                        title="Mapped to data source"
+                      >
+                        <Link className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => onEdit?.(dimension)}
+                      title="Edit dimension"
+                      data-testid="edit-button"
+                    >
+                      <Pencil className="h-4 w-4" data-testid="edit-icon" />
+                    </Button>
+                    {dimension.scope === 'custom' && !isSystemDimension(dimension) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(dimension.id, dimension.name, dimension)}
+                        title="Delete dimension"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {dimension.scope === 'global' && (
+                      <div className="h-8 w-8 flex items-center justify-center">
+                        <span className="text-xs text-muted-foreground font-semibold" title="Global dimension">
+                          GLOBAL
+                        </span>
+                      </div>
+                    )}
+                    {isSystemDimension(dimension) && (
+                      <div className="h-8 w-8 flex items-center justify-center">
+                        <span className="text-xs text-muted-foreground" title="System dimension - cannot be deleted">
+                          SYS
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </TableCell>
+              )}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    )
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Dimensions ({dimensions.length})</DialogTitle>
+          <DialogTitle>
+            Dimensions ({globalDimensions.length + accountDimensions.length + customDimensions.length})
+          </DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-auto">
@@ -191,76 +499,36 @@ export const DimensionsListModal = ({
             <div className="text-center py-8 text-muted-foreground">
               Loading dimensions...
             </div>
-          ) : dimensions.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No dimensions yet. Add your first dimension to get started.
-            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Formula</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {dimensions.map((dimension) => (
-                  <TableRow key={dimension.id}>
-                    <TableCell className="font-medium">
-                      {dimension.name}
-                    </TableCell>
-                    <TableCell>{typeLabels[dimension.type] || dimension.type}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {dimension.formula || "-"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        {mappedDimensionIds.has(dimension.id) && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-primary"
-                            title="Mapped to data source"
-                          >
-                            <Link className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => onEdit?.(dimension)}
-                          title="Edit dimension"
-                          data-testid="edit-button"
-                        >
-                          <Pencil className="h-4 w-4" data-testid="edit-icon" />
-                        </Button>
-                        {!isSystemDimension(dimension) && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(dimension.id, dimension.name, dimension)}
-                            title="Delete dimension"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {isSystemDimension(dimension) && (
-                          <div className="h-8 w-8 flex items-center justify-center">
-                            <span className="text-xs text-muted-foreground" title="System dimension - cannot be deleted">
-                              SYS
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <Tabs defaultValue="global" className="w-full">
+              <TabsList className={`grid w-full ${accountDimensions.length > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                <TabsTrigger value="global">
+                  Global ({globalDimensions.length})
+                </TabsTrigger>
+                {accountDimensions.length > 0 && (
+                  <TabsTrigger value="account">
+                    Account ({accountDimensions.length})
+                  </TabsTrigger>
+                )}
+                <TabsTrigger value="custom">
+                  Custom ({customDimensions.length})
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="global" className="mt-4">
+                <DimensionTable dimensions={globalDimensions} showActions={true} />
+              </TabsContent>
+
+              {accountDimensions.length > 0 && (
+                <TabsContent value="account" className="mt-4">
+                  <DimensionTable dimensions={accountDimensions} showActions={true} />
+                </TabsContent>
+              )}
+
+              <TabsContent value="custom" className="mt-4">
+                <DimensionTable dimensions={customDimensions} showActions={true} />
+              </TabsContent>
+            </Tabs>
           )}
         </div>
 

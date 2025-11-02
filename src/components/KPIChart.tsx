@@ -6,7 +6,7 @@ import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianG
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO, addDays } from "date-fns";
 import { FilterState } from "./FiltersBar";
-import { debugLog, inspectObject, validateChartData } from "@/lib/debug";
+import { debugLog, inspectObject, validateChartData, retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
 import { trackPerformance } from "@/lib/monitoring";
 
 interface ChartData {
@@ -19,6 +19,7 @@ interface KPIChartProps {
   reportId: string | null;
   filters: FilterState;
   onLoadingComplete?: () => void;
+  accountId?: string;
 }
 
 interface Dimension {
@@ -51,7 +52,7 @@ const kpiOptions = [
   { value: "Cost of sale", label: "Cost of sale" },
 ];
 
-export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps) => {
+export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId }: KPIChartProps) => {
   const [selectedKPI, setSelectedKPI] = useState("Revenue");
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -94,40 +95,139 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps
         const { data: { user } } = await supabase.auth.getUser();
         
         let dimensions: Dimension[] | null = null;
-        
-        // First, try to fetch dimensions by user_id (all user's dimensions across all reports)
-        if (user) {
-          const { data: userDimensions, error: userError } = await supabase
-            .from("dimensions")
-            .select("*")
-            .eq("user_id", user.id);
-            
-          if (userError) throw userError;
-          dimensions = userDimensions as Dimension[];
-        }
-        
-        // If no user or no dimensions found by user_id, fall back to loading from any dimension_data
-        if (!dimensions || dimensions.length === 0) {
-          const { data: dimensionData, error: dimDataError } = await supabase
-            .from("dimension_data")
-            .select("dimension_values")
-            .limit(1)
-            .maybeSingle();
-            
-          if (dimDataError) throw dimDataError;
-          
-          if (dimensionData?.dimension_values) {
-            const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, string>);
-            
-            if (dimensionIds.length > 0) {
-              const { data: dimensionsById, error: dimError2 } = await supabase
-                .from("dimensions")
-                .select("*")
-                .in("id", dimensionIds);
-                
-              if (dimError2) throw dimError2;
-              dimensions = dimensionsById as Dimension[];
+
+        // Fetch dimensions accessible to the user (global + custom for this report)
+        if (user && reportId) {
+          try {
+            // Single query to get all dimensions user can access for this report
+            // RLS policies will handle filtering, with retry for network resilience
+            const allDims = await retryWithBackoff(
+              async () => {
+                const { data, error } = await supabase
+                  .from("dimensions")
+                  .select("*");
+
+                if (error) {
+                  const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+                  throw new Error(`Failed to fetch dimensions: ${errorMsg}`);
+                }
+
+                return data || [];
+              },
+              3, // max attempts
+              500 // initial delay in ms
+            );
+
+            // Filter and prioritize dimensions:
+            // 1. Account-specific dimensions (if accountId provided)
+            // 2. Custom report dimensions
+            // 3. Global dimensions (fallback)
+            const dimensionsByName: Record<string, any> = {};
+
+            // First pass: add global dimensions as base
+            (allDims || []).filter((d: any) => d.scope === 'global').forEach((d: any) => {
+              dimensionsByName[d.name] = d;
+            });
+
+            // Second pass: override with account-specific dimensions
+            if (accountId) {
+              (allDims || [])
+                .filter((d: any) => d.scope === 'account' && d.account_id === accountId)
+                .forEach((d: any) => {
+                  dimensionsByName[d.name] = d; // Override global with account version
+                });
             }
+
+            // Third pass: add custom report dimensions (highest priority)
+            if (reportId) {
+              (allDims || [])
+                .filter((d: any) => d.scope === 'custom' && d.report_id === reportId)
+                .forEach((d: any) => {
+                  dimensionsByName[d.name] = d; // Override with custom version
+                });
+            }
+
+            dimensions = Object.values(dimensionsByName) as Dimension[];
+
+            debugLog('KPIChart', `Loaded ${dimensions?.length || 0} dimensions for report ${reportId}`);
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+            console.error('[CHART] Failed to load dimensions:', errorMsg);
+            // Fallback to dimensions associated with report via data
+            dimensions = [];
+          }
+        } else if (user) {
+          // Fallback: just fetch all dimensions (RLS will filter them)
+          try {
+            const allDims = await retryWithBackoff(
+              async () => {
+                const { data, error } = await supabase
+                  .from("dimensions")
+                  .select("*");
+
+                if (error) {
+                  const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+                  throw new Error(`Failed to fetch dimensions: ${errorMsg}`);
+                }
+
+                return data || [];
+              },
+              3, // max attempts
+              500 // initial delay in ms
+            );
+
+            dimensions = allDims as Dimension[];
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+            console.error('[CHART] Failed to load dimensions:', errorMsg);
+            dimensions = [];
+          }
+        }
+
+        // If no dimensions found, try falling back to loading from dimension_data
+        if (!dimensions || dimensions.length === 0) {
+          try {
+            const dimensionData = await retryWithBackoff(
+              async () => {
+                const { data, error } = await supabase
+                  .from("dimension_data")
+                  .select("dimension_values")
+                  .limit(1)
+                  .maybeSingle();
+
+                if (error) throw error;
+                return data;
+              },
+              3,
+              500
+            );
+
+            if (dimensionData?.dimension_values) {
+              const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, string>);
+
+              if (dimensionIds.length > 0) {
+                const dimensionsById = await retryWithBackoff(
+                  async () => {
+                    const { data, error } = await supabase
+                      .from("dimensions")
+                      .select("*")
+                      .in("id", dimensionIds);
+
+                    if (error) throw error;
+                    return data;
+                  },
+                  3,
+                  500
+                );
+
+                if (dimensionsById) {
+                  dimensions = dimensionsById as Dimension[];
+                }
+              }
+            }
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+            console.error('[CHART] Failed to load dimensions from fallback:', errorMsg);
           }
         }
 
@@ -141,12 +241,19 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps
           return;
         }
 
+        // Filter dimensions by visibility settings
+        if (user && reportId) {
+          dimensions = await filterDimensionsByVisibility(dimensions, reportId, user.id, supabase);
+          console.log('[CHART] Dimensions after visibility filter:', dimensions?.length);
+        }
+
         // Find the date dimension
         const dateDimension = dimensions.find((d: Dimension) => d.type === 'date');
-        
+
         if (!dateDimension) {
           debugLog('KPIChart', 'No date dimension found');
-          console.error('[CHART] No date dimension found in:', dimensions);
+          const dimensionNames = dimensions.map((d: Dimension) => `${d.name} (${d.type})`).join(', ');
+          console.error('[CHART] No date dimension found. Available dimensions:', dimensionNames);
           setChartData([]);
           return;
         }
@@ -167,15 +274,22 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps
         console.log('[CHART] Fetching dimension_data for report:', reportId);
         
         while (hasMore) {
-          const { data: chunkData, error } = await supabase
-            .from("dimension_data")
-            .select("*")
-            .eq("report_id", reportId)
-            .order('row_number', { ascending: true })
-            .range(offset, offset + CHUNK_SIZE - 1);
-            
-          if (error) throw error;
-          
+          const chunkData = await retryWithBackoff(
+            async () => {
+              const { data, error } = await supabase
+                .from("dimension_data")
+                .select("*")
+                .eq("report_id", reportId)
+                .order('row_number', { ascending: true })
+                .range(offset, offset + CHUNK_SIZE - 1);
+
+              if (error) throw error;
+              return data;
+            },
+            3,
+            500
+          );
+
           if (chunkData && chunkData.length > 0) {
             allDimensionData = [...allDimensionData, ...chunkData as DimensionData[]];
             offset += CHUNK_SIZE;
@@ -453,7 +567,8 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete }: KPIChartProps
         setChartData(chartPoints);
       });
     } catch (error) {
-      console.error("[CHART] Error loading chart data:", error);
+      const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+      console.error("[CHART] Error loading chart data:", errorMessage);
       setError(error instanceof Error ? error.message : 'Failed to load chart data');
       setChartData([]);
     } finally {

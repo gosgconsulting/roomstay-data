@@ -107,11 +107,10 @@ export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChang
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load all available dimensions (number and currency types only)
+      // Load dimensions accessible to the user (number and currency types only)
       const { data: dimensions, error: dimError } = await supabase
         .from("dimensions")
         .select("name, type")
-        .eq("user_id", user.id)
         .in("type", ["number", "currency", "percentage"]);
 
       if (dimError) throw dimError;

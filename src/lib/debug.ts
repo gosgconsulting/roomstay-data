@@ -3,6 +3,88 @@
  */
 
 /**
+ * Filters dimensions by visibility settings from report_views
+ * @param dimensions The dimensions to filter
+ * @param reportId The report ID
+ * @param userId The user ID
+ * @param supabase The Supabase client
+ * @returns Filtered dimensions array
+ */
+export const filterDimensionsByVisibility = async (
+  dimensions: any[],
+  reportId: string | null,
+  userId: string,
+  supabase: any
+): Promise<any[]> => {
+  if (!reportId || !dimensions || dimensions.length === 0) {
+    return dimensions;
+  }
+
+  try {
+    const { data: viewSettings, error } = await supabase
+      .from("report_views")
+      .select("visible_dimensions")
+      .eq("report_id", reportId)
+      .eq("user_id", userId)
+      .eq("is_default", true)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("[DEBUG] Could not load visibility settings, showing all dimensions:", error);
+      // If we can't load settings, show all dimensions (default behavior)
+      return dimensions;
+    }
+
+    // If visibility settings exist and have items, filter to only visible dimensions
+    if (viewSettings?.visible_dimensions && Array.isArray(viewSettings.visible_dimensions) && viewSettings.visible_dimensions.length > 0) {
+      const visibleSet = new Set(viewSettings.visible_dimensions);
+      const filtered = dimensions.filter(d => visibleSet.has(d.id));
+      console.log("[DEBUG] Filtered dimensions by visibility:", filtered.length, "of", dimensions.length);
+      return filtered;
+    }
+
+    // If no visibility settings exist, show all dimensions (default: everything is visible)
+    console.log("[DEBUG] No visibility settings found, showing all", dimensions.length, "dimensions");
+    return dimensions;
+  } catch (error) {
+    console.error("[DEBUG] Error filtering dimensions by visibility:", error);
+    // Fallback: return all dimensions if filter fails
+    return dimensions;
+  }
+};
+
+/**
+ * Retries a function with exponential backoff
+ * @param fn The async function to retry
+ * @param maxAttempts Maximum number of attempts (default: 3)
+ * @param delayMs Initial delay in milliseconds (default: 1000)
+ * @returns The result of the function
+ */
+export const retryWithBackoff = async <T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+  delayMs = 1000
+): Promise<T> => {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      if (attempt < maxAttempts) {
+        const delay = delayMs * Math.pow(2, attempt - 1);
+        console.warn(`[RETRY] Attempt ${attempt} failed, retrying in ${delay}ms:`, lastError.message);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError || new Error('Failed after max attempts');
+};
+
+/**
  * Logs data with a prefix for easier filtering in console
  * @param prefix The prefix to add to the log
  * @param data The data to log

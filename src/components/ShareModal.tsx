@@ -12,6 +12,7 @@ interface ShareModalProps {
   reportName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  accountId?: string;
 }
 
 interface ShareLink {
@@ -21,7 +22,7 @@ interface ShareLink {
   created_at: string;
 }
 
-export const ShareModal = ({ reportId, reportName, open, onOpenChange }: ShareModalProps) => {
+export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId }: ShareModalProps) => {
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -32,19 +33,25 @@ export const ShareModal = ({ reportId, reportName, open, onOpenChange }: ShareMo
     if (open) {
       loadShareLinks();
     }
-  }, [open]);
+  }, [open, accountId]);
 
   const loadShareLinks = async () => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) return;
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("share_links")
       .select("*")
-      .eq("created_by", user.id)
-      .order("created_at", { ascending: false });
+      .eq("created_by", user.id);
+
+    // Filter by account if provided
+    if (accountId) {
+      query = query.eq("account_id", accountId);
+    }
+
+    const { data, error } = await query.order("created_at", { ascending: false });
 
     setLoading(false);
 
@@ -186,6 +193,7 @@ export const ShareModal = ({ reportId, reportName, open, onOpenChange }: ShareMo
         onOpenChange={setShowCreateModal}
         onSuccess={handleCreateSuccess}
         editingLink={editingLink}
+        accountId={accountId}
       />
     </>
   );
