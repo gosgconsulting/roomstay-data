@@ -246,15 +246,22 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId }: KP
         console.log('[CHART] Fetching dimension_data for report:', reportId);
         
         while (hasMore) {
-          const { data: chunkData, error } = await supabase
-            .from("dimension_data")
-            .select("*")
-            .eq("report_id", reportId)
-            .order('row_number', { ascending: true })
-            .range(offset, offset + CHUNK_SIZE - 1);
-            
-          if (error) throw error;
-          
+          const chunkData = await retryWithBackoff(
+            async () => {
+              const { data, error } = await supabase
+                .from("dimension_data")
+                .select("*")
+                .eq("report_id", reportId)
+                .order('row_number', { ascending: true })
+                .range(offset, offset + CHUNK_SIZE - 1);
+
+              if (error) throw error;
+              return data;
+            },
+            3,
+            500
+          );
+
           if (chunkData && chunkData.length > 0) {
             allDimensionData = [...allDimensionData, ...chunkData as DimensionData[]];
             offset += CHUNK_SIZE;
