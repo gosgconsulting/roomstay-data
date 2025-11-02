@@ -75,6 +75,21 @@ export const DimensionsListModal = ({
     }
   }, [open, refreshTrigger]);
 
+  // When dimensions load, set all as visible by default
+  useEffect(() => {
+    const allDimensionIds = new Set<string>();
+
+    globalDimensions.forEach(d => allDimensionIds.add(d.id));
+    accountDimensions.forEach(d => allDimensionIds.add(d.id));
+    customDimensions.forEach(d => allDimensionIds.add(d.id));
+
+    // Only set if we haven't loaded saved visibility settings yet
+    if (visibleDimensions.size === 0 && allDimensionIds.size > 0) {
+      console.log('[testing] Initializing all dimensions as visible:', allDimensionIds.size);
+      setVisibleDimensions(allDimensionIds);
+    }
+  }, [globalDimensions, accountDimensions, customDimensions]);
+
   const loadVisibleDimensions = async () => {
     try {
       if (!reportId) return;
