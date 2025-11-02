@@ -181,14 +181,21 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
       let hasMore = true;
 
       while (hasMore) {
-        const { data: chunkData, error } = await supabase
-          .from("dimension_data")
-          .select("*")
-          .eq("report_id", reportId)
-          .order('row_number', { ascending: true })
-          .range(offset, offset + CHUNK_SIZE - 1);
+        const chunkData = await retryWithBackoff(
+          async () => {
+            const { data, error } = await supabase
+              .from("dimension_data")
+              .select("*")
+              .eq("report_id", reportId)
+              .order('row_number', { ascending: true })
+              .range(offset, offset + CHUNK_SIZE - 1);
 
-        if (error) throw error;
+            if (error) throw error;
+            return data;
+          },
+          3,
+          500
+        );
 
         if (chunkData && chunkData.length > 0) {
           allDimensionData = [...allDimensionData, ...chunkData];
