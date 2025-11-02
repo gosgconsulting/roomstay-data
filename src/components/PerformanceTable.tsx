@@ -717,6 +717,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
         }
       }
 
+      // Filter dimensions by visibility settings
+      if (user && reportId && data && data.length > 0) {
+        data = await filterDimensionsByVisibility(data, reportId, user.id, supabase);
+      }
+
       // Define the desired column order
       const columnOrder = [
         'Impressions',
