@@ -39,6 +39,8 @@ interface ColumnMappingStepProps {
   onBack: () => void;
   isLoading: boolean;
   existingMappings?: ColumnMapping[];
+  accountId?: string;
+  reportId?: string;
 }
 
 export const ColumnMappingStep = ({
@@ -47,6 +49,8 @@ export const ColumnMappingStep = ({
   onBack,
   isLoading,
   existingMappings,
+  accountId,
+  reportId,
 }: ColumnMappingStepProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
