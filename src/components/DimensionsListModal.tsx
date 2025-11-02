@@ -117,7 +117,7 @@ export const DimensionsListModal = ({
       }
 
       // Get or create the default view for this report
-      const { data: existingView } = await supabase
+      const { data: existingView, error: viewError } = await supabase
         .from("report_views")
         .select("id")
         .eq("report_id", reportId)
@@ -125,17 +125,27 @@ export const DimensionsListModal = ({
         .eq("is_default", true)
         .maybeSingle();
 
+      if (viewError) {
+        const errorMsg = viewError instanceof Error ? viewError.message : JSON.stringify(viewError);
+        console.error('[testing] Error fetching existing view:', errorMsg);
+        throw viewError;
+      }
+
       if (existingView) {
         // Update existing view
-        const { error } = await supabase
+        const { error: updateError } = await supabase
           .from("report_views")
           .update({ visible_dimensions: Array.from(newVisibleDimensions) })
           .eq("id", existingView.id);
 
-        if (error) throw error;
+        if (updateError) {
+          const errorMsg = updateError instanceof Error ? updateError.message : JSON.stringify(updateError);
+          console.error('[testing] Error updating view:', errorMsg);
+          throw updateError;
+        }
       } else {
         // Create new default view with this setting
-        const { error } = await supabase
+        const { error: insertError } = await supabase
           .from("report_views")
           .insert({
             report_id: reportId,
@@ -145,15 +155,24 @@ export const DimensionsListModal = ({
             visible_dimensions: Array.from(newVisibleDimensions),
           });
 
-        if (error) throw error;
+        if (insertError) {
+          const errorMsg = insertError instanceof Error ? insertError.message : JSON.stringify(insertError);
+          console.error('[testing] Error inserting view:', errorMsg);
+          throw insertError;
+        }
       }
 
       setVisibleDimensions(newVisibleDimensions);
+      toast({
+        title: "Success",
+        description: "Dimension visibility updated",
+      });
     } catch (error) {
-      console.error("Error toggling dimension visibility:", error);
+      const errorMsg = error instanceof Error ? error.message : (typeof error === 'string' ? error : JSON.stringify(error));
+      console.error('[testing] Error toggling dimension visibility:', errorMsg);
       toast({
         title: "Error",
-        description: "Failed to update dimension visibility",
+        description: errorMsg || "Failed to update dimension visibility",
         variant: "destructive",
       });
     }
