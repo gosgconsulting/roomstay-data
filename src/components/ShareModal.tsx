@@ -193,6 +193,7 @@ export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId
         onOpenChange={setShowCreateModal}
         onSuccess={handleCreateSuccess}
         editingLink={editingLink}
+        accountId={accountId}
       />
     </>
   );
