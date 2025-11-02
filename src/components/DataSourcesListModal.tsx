@@ -37,14 +37,16 @@ interface DataSourcesListModalProps {
   reportId: string;
   onAddNew: () => void;
   onDataSync?: () => void;
+  accountId?: string;
 }
 
-export const DataSourcesListModal = ({ 
-  open, 
-  onOpenChange, 
+export const DataSourcesListModal = ({
+  open,
+  onOpenChange,
   reportId,
   onAddNew,
-  onDataSync
+  onDataSync,
+  accountId
 }: DataSourcesListModalProps) => {
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
