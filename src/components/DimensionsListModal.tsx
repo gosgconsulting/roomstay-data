@@ -92,12 +92,19 @@ export const DimensionsListModal = ({
 
   const loadVisibleDimensions = async () => {
     try {
-      if (!reportId) return;
+      if (!reportId) {
+        // No report ID, so can't have saved settings - default all visible
+        setVisibleDimensions(new Set()); // Will be populated once dimensions load
+        return;
+      }
 
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setVisibleDimensions(new Set());
+        return;
+      }
 
-      // Get the default report view settings for this report
+      // Try to get saved visibility settings
       const { data: viewSettings, error } = await supabase
         .from("report_views")
         .select("visible_dimensions")
@@ -107,18 +114,21 @@ export const DimensionsListModal = ({
         .maybeSingle();
 
       if (error) {
-        console.warn("[testing] Could not load visible dimensions settings, defaulting all to visible:", error);
-        // If we can't load settings, make all dimensions visible by default
+        console.warn("[testing] Could not load visible dimensions, will default to all visible:", error);
+        // If we can't load settings, mark as empty (will be populated with all dimensions)
         setVisibleDimensions(new Set());
-      } else if (viewSettings?.visible_dimensions && Array.isArray(viewSettings.visible_dimensions)) {
+      } else if (viewSettings?.visible_dimensions && Array.isArray(viewSettings.visible_dimensions) && viewSettings.visible_dimensions.length > 0) {
+        // Use saved visibility settings
+        console.log("[testing] Loaded saved visibility settings:", viewSettings.visible_dimensions.length);
         setVisibleDimensions(new Set(viewSettings.visible_dimensions));
       } else {
-        // Default: all dimensions visible
+        // No saved settings - will default to all visible
+        console.log("[testing] No saved visibility settings, will default to all visible");
         setVisibleDimensions(new Set());
       }
     } catch (error) {
       console.error("[testing] Error loading visible dimensions:", error);
-      // Fallback: all dimensions visible
+      // Fallback: default all visible
       setVisibleDimensions(new Set());
     }
   };
