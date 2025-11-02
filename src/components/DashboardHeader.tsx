@@ -62,10 +62,10 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const [lastUpdateDate, setLastUpdateDate] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Load reports on mount
+  // Load reports on mount and when accountId changes
   useEffect(() => {
     loadReports();
-  }, []);
+  }, [accountId]);
 
   // Create default dimensions when reportId changes
   useEffect(() => {
@@ -192,12 +192,18 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
         return;
       }
 
-      // Get owned reports
-      const { data: ownedReports, error: ownedError } = await supabase
+      // Get owned reports for this account
+      let query = supabase
         .from('reports')
         .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        .eq('user_id', user.id);
+
+      // Filter by account if provided
+      if (accountId) {
+        query = query.eq('account_id', accountId);
+      }
+
+      const { data: ownedReports, error: ownedError } = await query.order('created_at', { ascending: false });
 
       if (ownedError) {
         console.error("Error loading owned reports:", ownedError);
