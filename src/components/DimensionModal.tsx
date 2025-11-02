@@ -56,6 +56,12 @@ export const DimensionModal = ({
   const [scope, setScope] = useState<'global' | 'custom'>('custom');
   const [isLoading, setIsLoading] = useState(false);
 
+  const [availableDimensions, setAvailableDimensions] = useState<Dimension[]>([]);
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionSearchTerm, setMentionSearchTerm] = useState("");
+  const [mentionCursorPos, setMentionCursorPos] = useState(0);
+  const formulaInputRef = useRef<HTMLTextAreaElement>(null);
+
   // [testing] Check if dimension is a system/default dimension
   const isSystemDimension = (dim: Dimension | null): boolean => {
     if (!dim) return false;
