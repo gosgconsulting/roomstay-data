@@ -147,14 +147,17 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
                 });
             }
 
-            // Third pass: add custom report dimensions (highest priority)
-            if (reportId) {
-              (allDims || [])
-                .filter((d: any) => d.scope === 'custom' && d.report_id === reportId)
-                .forEach((d: any) => {
-                  dimensionsByName[d.name] = d; // Override with custom version
-                });
-            }
+            // Third pass: add custom dimensions (highest priority)
+            // Include both global custom (report_id = null) and report-specific custom dimensions
+            (allDims || [])
+              .filter((d: any) => 
+                d.scope === 'custom' && 
+                d.user_id === user.id &&
+                (d.report_id === null || d.report_id === reportId)
+              )
+              .forEach((d: any) => {
+                dimensionsByName[d.name] = d; // Override with custom version
+              });
 
             dimensions = Object.values(dimensionsByName) as Dimension[];
 

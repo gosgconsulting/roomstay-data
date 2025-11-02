@@ -125,7 +125,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
           if (reportId) {
             dimensions = (allDims || []).filter((d: any) =>
               d.scope === 'global' ||
-              (d.scope === 'custom' && d.report_id === reportId)
+              (d.scope === 'custom' && d.user_id === user.id && (d.report_id === null || d.report_id === reportId))
             );
           } else {
             dimensions = allDims || [];

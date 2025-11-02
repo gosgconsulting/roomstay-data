@@ -409,10 +409,12 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     setThenByDimensions(view.then_by_dimensions || []);
     
     if (view.visible_columns && view.visible_columns.length > 0) {
-      console.log('Loading visible columns:', view.visible_columns);
-      const visibleSet = new Set(view.visible_columns);
+      console.log('[testing] Loading visible columns from view:', view.visible_columns.length, 'columns');
+      console.log('[testing] Visible column IDs:', view.visible_columns);
+      const visibleSet = new Set<string>(view.visible_columns);
       setVisibleColumns(visibleSet);
-      setInitialVisibleColumns(new Set(visibleSet));
+      setInitialVisibleColumns(new Set<string>(visibleSet));
+      console.log('[testing] Set visibleColumns state:', visibleSet.size, 'columns');
     } else if (dimensions.length > 0) {
       // Set default visibility if not set
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
@@ -1035,6 +1037,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       // Update initial state to match current state
       setInitialVisibleColumns(new Set(visibleColumns));
       setInitialColumnOrder([...columnOrder]);
+
+      console.log('[testing] Updated initial state - visible columns:', visibleColumns.size, 'column order:', columnOrder.length);
 
       toast({
         title: "Success",
