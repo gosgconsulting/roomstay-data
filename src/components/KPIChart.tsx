@@ -186,26 +186,48 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId }: KP
 
         // If no dimensions found, try falling back to loading from dimension_data
         if (!dimensions || dimensions.length === 0) {
-          const { data: dimensionData, error: dimDataError } = await supabase
-            .from("dimension_data")
-            .select("dimension_values")
-            .limit(1)
-            .maybeSingle();
+          try {
+            const dimensionData = await retryWithBackoff(
+              async () => {
+                const { data, error } = await supabase
+                  .from("dimension_data")
+                  .select("dimension_values")
+                  .limit(1)
+                  .maybeSingle();
 
-          if (dimDataError) throw dimDataError;
+                if (error) throw error;
+                return data;
+              },
+              3,
+              500
+            );
 
-          if (dimensionData?.dimension_values) {
-            const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, string>);
+            if (dimensionData?.dimension_values) {
+              const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, string>);
 
-            if (dimensionIds.length > 0) {
-              const { data: dimensionsById, error: dimError2 } = await supabase
-                .from("dimensions")
-                .select("*")
-                .in("id", dimensionIds);
+              if (dimensionIds.length > 0) {
+                const dimensionsById = await retryWithBackoff(
+                  async () => {
+                    const { data, error } = await supabase
+                      .from("dimensions")
+                      .select("*")
+                      .in("id", dimensionIds);
 
-              if (dimError2) throw dimError2;
-              dimensions = dimensionsById as Dimension[];
+                    if (error) throw error;
+                    return data;
+                  },
+                  3,
+                  500
+                );
+
+                if (dimensionsById) {
+                  dimensions = dimensionsById as Dimension[];
+                }
+              }
             }
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+            console.error('[CHART] Failed to load dimensions from fallback:', errorMsg);
           }
         }
 
