@@ -102,11 +102,18 @@ export const CreateShareLinkModal = ({
         return;
       }
 
-      // Get shared reports
-      const { data: sharedReports, error: sharedError } = await supabase
+      // Get shared reports for this account
+      let sharedQuery = supabase
         .from("report_shares")
         .select("report_id, reports!inner(id, name)")
         .eq("shared_with_email", profile?.email || "");
+
+      // Filter by account if provided
+      if (accountId) {
+        sharedQuery = sharedQuery.eq("reports.account_id", accountId);
+      }
+
+      const { data: sharedReports, error: sharedError } = await sharedQuery;
 
       if (sharedError) {
         console.error("Error loading shared reports:", sharedError);
