@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { FilterState } from "./FiltersBar";
 import { cn } from "@/lib/utils";
-import { debugLog, retryWithBackoff } from "@/lib/debug";
+import { debugLog, retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
 import {
   Eye,
   MousePointerClick,
