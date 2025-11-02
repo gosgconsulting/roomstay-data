@@ -17,6 +17,7 @@ import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { retryWithBackoff } from "@/lib/debug";
 
 export interface FilterState {
   dimensionFilters: Record<string, string[]>;
