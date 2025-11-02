@@ -45,7 +45,7 @@ interface DashboardHeaderProps {
   isSharedView?: boolean;
 }
 
-export const DashboardHeader = ({ reportId, onReportChange, onDataSync, onRefreshData }: DashboardHeaderProps) => {
+export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSync, onRefreshData }: DashboardHeaderProps) => {
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
