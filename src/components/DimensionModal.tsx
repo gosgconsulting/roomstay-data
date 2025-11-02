@@ -124,6 +124,115 @@ export const DimensionModal = ({
     }
   }, [open, mode, dimension]);
 
+  const handleFormulaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value;
+    const cursorPos = e.target.selectionStart;
+
+    setFormula(text);
+    setMentionCursorPos(cursorPos);
+
+    // Check for @ mention
+    const textBeforeCursor = text.substring(0, cursorPos);
+    const lastAtIndex = textBeforeCursor.lastIndexOf("@");
+
+    if (lastAtIndex !== -1) {
+      const searchTerm = textBeforeCursor.substring(lastAtIndex + 1).trim();
+      // Show dropdown if @ is followed by optional search term
+      if (!textBeforeCursor.substring(lastAtIndex).includes(" ") || searchTerm === "") {
+        setMentionSearchTerm(searchTerm);
+        setShowMentionDropdown(true);
+      } else {
+        setShowMentionDropdown(false);
+      }
+    } else {
+      setShowMentionDropdown(false);
+    }
+  };
+
+  const insertDimensionMention = (dimensionName: string) => {
+    const text = formula;
+    const cursorPos = mentionCursorPos;
+
+    const textBeforeCursor = text.substring(0, cursorPos);
+    const lastAtIndex = textBeforeCursor.lastIndexOf("@");
+
+    if (lastAtIndex !== -1) {
+      const textAfterCursor = text.substring(cursorPos);
+      const newFormula =
+        text.substring(0, lastAtIndex) +
+        dimensionName +
+        " " +
+        textAfterCursor;
+
+      setFormula(newFormula);
+      setShowMentionDropdown(false);
+      setMentionSearchTerm("");
+
+      // Refocus and position cursor after inserted text
+      setTimeout(() => {
+        if (formulaInputRef.current) {
+          const newCursorPos = lastAtIndex + dimensionName.length + 1;
+          formulaInputRef.current.focus();
+          formulaInputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      }, 0);
+    }
+  };
+
+  const testFormula = () => {
+    if (!formula.trim()) {
+      toast({
+        title: "No formula",
+        description: "Please enter a formula to test",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Create a safe evaluation context with available dimensions
+      const context: Record<string, number> = {};
+      availableDimensions.forEach((dim) => {
+        // Use the dimension name as the variable, replacing spaces with underscores
+        const varName = dim.name.replace(/\s+/g, "_");
+        context[varName] = 100; // Test value
+        // Also support the original name with spaces (for formula compatibility)
+        context[dim.name] = 100;
+      });
+
+      // Replace dimension names with test values
+      let testFormula = formula;
+      availableDimensions.forEach((dim) => {
+        // Escape special regex characters in dimension name
+        const escapedName = dim.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        testFormula = testFormula.replace(new RegExp(escapedName, 'g'), '100');
+      });
+
+      // Remove any remaining @ symbols
+      testFormula = testFormula.replace(/@/g, '');
+
+      // Simple evaluation - only allow basic math operations
+      if (!/^[\d\s+\-*/%().]+$/.test(testFormula)) {
+        throw new Error("Formula contains invalid characters. Only numbers and operators (+, -, *, /, %) are allowed.");
+      }
+
+      // Evaluate the formula safely
+      const result = Function('"use strict"; return (' + testFormula + ')')();
+
+      toast({
+        title: "Formula test successful",
+        description: `Result: ${typeof result === 'number' ? result.toFixed(2) : result}`,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Invalid formula syntax";
+      toast({
+        title: "Formula test failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSave = async () => {
     if (!name.trim()) {
       toast({
