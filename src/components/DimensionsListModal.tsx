@@ -322,7 +322,7 @@ export const DimensionsListModal = ({
       <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            Dimensions ({globalDimensions.length + customDimensions.length})
+            Dimensions ({globalDimensions.length + accountDimensions.length + customDimensions.length})
           </DialogTitle>
         </DialogHeader>
 
@@ -333,10 +333,15 @@ export const DimensionsListModal = ({
             </div>
           ) : (
             <Tabs defaultValue="global" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className={`grid w-full ${accountDimensions.length > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                 <TabsTrigger value="global">
                   Global ({globalDimensions.length})
                 </TabsTrigger>
+                {accountDimensions.length > 0 && (
+                  <TabsTrigger value="account">
+                    Account ({accountDimensions.length})
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="custom">
                   Custom ({customDimensions.length})
                 </TabsTrigger>
@@ -345,6 +350,12 @@ export const DimensionsListModal = ({
               <TabsContent value="global" className="mt-4">
                 <DimensionTable dimensions={globalDimensions} showActions={true} />
               </TabsContent>
+
+              {accountDimensions.length > 0 && (
+                <TabsContent value="account" className="mt-4">
+                  <DimensionTable dimensions={accountDimensions} showActions={true} />
+                </TabsContent>
+              )}
 
               <TabsContent value="custom" className="mt-4">
                 <DimensionTable dimensions={customDimensions} showActions={true} />
