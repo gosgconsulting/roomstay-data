@@ -58,19 +58,32 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
       // Load KPI visibility and order settings from report_views
       let visibleKPIs: string[] | null = null;
       let kpiOrder: string[] | null = null;
-      
+
       if (user && reportId) {
-        const { data: viewSettings } = await supabase
-          .from("report_views")
-          .select("visible_kpis, kpi_order")
-          .eq("report_id", reportId)
-          .eq("user_id", user.id)
-          .eq("is_default", true)
-          .maybeSingle();
-        
-        if (viewSettings) {
-          visibleKPIs = viewSettings.visible_kpis as string[] | null;
-          kpiOrder = viewSettings.kpi_order as string[] | null;
+        try {
+          const viewSettings = await retryWithBackoff(
+            async () => {
+              const { data, error } = await supabase
+                .from("report_views")
+                .select("visible_kpis, kpi_order")
+                .eq("report_id", reportId)
+                .eq("user_id", user.id)
+                .eq("is_default", true)
+                .maybeSingle();
+
+              if (error) throw error;
+              return data;
+            },
+            3,
+            500
+          );
+
+          if (viewSettings) {
+            visibleKPIs = viewSettings.visible_kpis as string[] | null;
+            kpiOrder = viewSettings.kpi_order as string[] | null;
+          }
+        } catch (error) {
+          console.error('[testing] Failed to load KPI view settings:', error);
         }
       }
       
