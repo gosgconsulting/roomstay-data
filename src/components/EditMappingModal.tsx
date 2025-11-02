@@ -27,13 +27,15 @@ interface EditMappingModalProps {
   onOpenChange: (open: boolean) => void;
   dataSource: DataSource | null;
   onSuccess: () => void;
+  accountId?: string;
 }
 
-export const EditMappingModal = ({ 
-  open, 
-  onOpenChange, 
+export const EditMappingModal = ({
+  open,
+  onOpenChange,
   dataSource,
-  onSuccess 
+  onSuccess,
+  accountId
 }: EditMappingModalProps) => {
   const [headers, setHeaders] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
