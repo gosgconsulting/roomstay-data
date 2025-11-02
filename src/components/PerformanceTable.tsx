@@ -36,7 +36,7 @@ import { cn } from "@/lib/utils";
 import { MappingModal } from "./MappingModal";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { supabase } from "@/integrations/supabase/client";
-import { retryWithBackoff } from "@/lib/debug";
+import { retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
 import { format, startOfWeek, startOfMonth, startOfYear } from "date-fns";
 import { FilterState } from "./FiltersBar";
 import { TableVirtuoso } from "react-virtuoso";
