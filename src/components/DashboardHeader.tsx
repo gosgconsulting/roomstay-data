@@ -647,6 +647,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
               onOpenChange={setShowDimensionsListModal}
               refreshTrigger={dimensionRefreshTrigger}
               reportId={reportId}
+              accountId={accountId}
               onAddNew={() => {
                 console.log('[testing] Opening add dimension modal');
                 setDimensionModalMode('add');
