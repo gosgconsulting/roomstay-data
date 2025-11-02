@@ -651,6 +651,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
               }
             }}
             reportId={currentReport.id}
+            accountId={accountId}
           />
         </>
       )}
