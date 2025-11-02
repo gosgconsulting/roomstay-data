@@ -634,6 +634,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
             open={showDataSourcesListModal}
             onOpenChange={setShowDataSourcesListModal}
             reportId={currentReport.id}
+            accountId={accountId}
             onAddNew={() => {
               setShowDataSourcesListModal(false);
               setShowDataSourceModal(true);
