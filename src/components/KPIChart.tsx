@@ -241,6 +241,12 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId }: KP
           return;
         }
 
+        // Filter dimensions by visibility settings
+        if (user && reportId) {
+          dimensions = await filterDimensionsByVisibility(dimensions, reportId, user.id, supabase);
+          console.log('[CHART] Dimensions after visibility filter:', dimensions?.length);
+        }
+
         // Find the date dimension
         const dateDimension = dimensions.find((d: Dimension) => d.type === 'date');
 
