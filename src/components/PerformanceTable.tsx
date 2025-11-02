@@ -31,7 +31,7 @@ import {
 import { ChevronDown, ChevronRight, Columns3, Copy, Trash2, Plus, ArrowUp, ArrowDown, Minus, GripVertical } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
 import { cn } from "@/lib/utils";
 import { MappingModal } from "./MappingModal";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
@@ -1151,7 +1151,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
             })}
         </tr>
         {isExpanded &&
-          row.children?.map((child) => renderRow(child))}
+          row.children?.map((child) => (
+            <Fragment key={child.id}>
+              {renderRow(child)}
+            </Fragment>
+          ))}
       </>
     );
   };
