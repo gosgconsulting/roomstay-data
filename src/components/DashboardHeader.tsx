@@ -40,12 +40,13 @@ interface DashboardHeaderProps {
   onReportChange: (reportId: string) => void;
   onDataSync?: () => void;
   onRefreshData?: () => void;
+  onVisibilityChange?: () => void;
   session?: any;
   onSignOut?: () => Promise<void>;
   isSharedView?: boolean;
 }
 
-export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSync, onRefreshData }: DashboardHeaderProps) => {
+export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSync, onRefreshData, onVisibilityChange }: DashboardHeaderProps) => {
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
@@ -56,6 +57,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const [editingDimension, setEditingDimension] = useState<Dimension | null>(null);
   const [dimensionModalMode, setDimensionModalMode] = useState<'add' | 'edit'>('add');
   const [dimensionRefreshTrigger, setDimensionRefreshTrigger] = useState(0);
+  const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
   const [reports, setReports] = useState<Report[]>([]);
   const [currentReport, setCurrentReport] = useState<Report | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -676,6 +678,12 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
                 setEditingDimension(dimension);
                 setShowDimensionsListModal(false);
                 setShowDimensionModal(true);
+              }}
+              onVisibilityChange={() => {
+                console.log('[testing] Dimension visibility changed, triggering refresh of other components');
+                setVisibilityRefreshTrigger(prev => prev + 1);
+                onRefreshData?.(); // Refresh the data to apply new visibility settings
+                onVisibilityChange?.(); // Notify parent component
               }}
             />
       

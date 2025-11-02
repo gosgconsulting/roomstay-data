@@ -20,7 +20,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { Pencil, Trash2, Plus, Link, Eye, EyeOff } from "lucide-react";
+import { Pencil, Trash2, Plus, Link, Eye, EyeOff, Save, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -41,6 +41,7 @@ interface DimensionsListModalProps {
   refreshTrigger?: number; // Used to trigger refresh from parent
   reportId?: string;
   accountId?: string;
+  onVisibilityChange?: () => void; // Callback when visibility settings are saved
 }
 
 const typeLabels: Record<string, string> = {
@@ -59,6 +60,7 @@ export const DimensionsListModal = ({
   refreshTrigger,
   reportId,
   accountId,
+  onVisibilityChange,
 }: DimensionsListModalProps) => {
   const [globalDimensions, setGlobalDimensions] = useState<Dimension[]>([]);
   const [customDimensions, setCustomDimensions] = useState<Dimension[]>([]);
@@ -66,6 +68,8 @@ export const DimensionsListModal = ({
   const [isLoading, setIsLoading] = useState(true);
   const [mappedDimensionIds, setMappedDimensionIds] = useState<Set<string>>(new Set());
   const [visibleDimensions, setVisibleDimensions] = useState<Set<string> | null>(null); // null = not loaded yet
+  const [initialVisibleDimensions, setInitialVisibleDimensions] = useState<Set<string> | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -101,12 +105,14 @@ export const DimensionsListModal = ({
       if (!reportId) {
         // No report ID, so can't have saved settings - default all visible
         setVisibleDimensions(new Set()); // Will be populated once dimensions load
+        setInitialVisibleDimensions(new Set());
         return;
       }
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         setVisibleDimensions(new Set());
+        setInitialVisibleDimensions(new Set());
         return;
       }
 
@@ -123,100 +129,197 @@ export const DimensionsListModal = ({
         console.warn("[testing] Could not load visible dimensions, will default to all visible:", error);
         // If we can't load settings, mark as empty (will be populated with all dimensions)
         setVisibleDimensions(new Set());
+        setInitialVisibleDimensions(new Set());
       } else if (viewSettings?.visible_dimensions && Array.isArray(viewSettings.visible_dimensions) && viewSettings.visible_dimensions.length > 0) {
         // Use saved visibility settings
         console.log("[testing] Loaded saved visibility settings:", viewSettings.visible_dimensions.length);
-        setVisibleDimensions(new Set(viewSettings.visible_dimensions));
+        const visibleSet = new Set(viewSettings.visible_dimensions);
+        setVisibleDimensions(visibleSet);
+        setInitialVisibleDimensions(new Set(visibleSet));
       } else {
         // No saved settings - will default to all visible
         console.log("[testing] No saved visibility settings, will default to all visible");
         setVisibleDimensions(new Set());
+        setInitialVisibleDimensions(new Set());
       }
     } catch (error) {
       console.error("[testing] Error loading visible dimensions:", error);
       // Fallback: default all visible
       setVisibleDimensions(new Set());
+      setInitialVisibleDimensions(new Set());
     }
   };
 
-  const toggleDimensionVisibility = async (dimensionId: string) => {
+  const toggleDimensionVisibility = (dimensionId: string) => {
+    if (!reportId) {
+      console.warn("[testing] No reportId provided, cannot toggle visibility");
+      return;
+    }
+
+    // If visibleDimensions hasn't been initialized yet, start with all dimensions
+    const currentVisible = visibleDimensions === null ? new Set<string>() : visibleDimensions;
+    const newVisibleDimensions = new Set(currentVisible);
+
+    if (newVisibleDimensions.has(dimensionId)) {
+      newVisibleDimensions.delete(dimensionId);
+    } else {
+      newVisibleDimensions.add(dimensionId);
+    }
+
+    // Update local state only - no database save yet
+    setVisibleDimensions(newVisibleDimensions);
+    console.log('[testing] Toggled dimension visibility locally:', dimensionId);
+  };
+
+  const saveVisibilityChanges = async () => {
     try {
       if (!reportId) {
-        console.warn("[testing] No reportId provided, cannot toggle visibility");
+        console.warn("[testing] No reportId provided, cannot save visibility changes");
         return;
       }
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.warn("[testing] No user authenticated, cannot toggle visibility");
+        toast({
+          title: "Error",
+          description: "You must be logged in to save visibility changes",
+          variant: "destructive",
+        });
         return;
       }
 
-      // If visibleDimensions hasn't been initialized yet, start with all dimensions
-      const currentVisible = visibleDimensions === null ? new Set<string>() : visibleDimensions;
-      const newVisibleDimensions = new Set(currentVisible);
+      setIsSaving(true);
+      console.log('[testing] Saving visibility changes to database');
 
-      if (newVisibleDimensions.has(dimensionId)) {
-        newVisibleDimensions.delete(dimensionId);
-      } else {
-        newVisibleDimensions.add(dimensionId);
+      const visibilityArray = visibleDimensions ? Array.from(visibleDimensions) : [];
+
+      // Get all dimensions to sync with other visibility systems
+      const allDimensions = [...globalDimensions, ...accountDimensions, ...customDimensions];
+      
+      // Create synchronized visibility settings
+      const visibleDimensionNames = allDimensions
+        .filter(d => visibleDimensions?.has(d.id))
+        .map(d => d.name);
+
+      // Sync visible_columns (for table columns)
+      const visibleColumnIds = allDimensions
+        .filter(d => visibleDimensions?.has(d.id))
+        .map(d => d.id);
+
+      // Sync visible_kpis (for KPI cards and chart) - only numeric/currency/percentage types
+      const visibleKPIs = allDimensions
+        .filter(d => 
+          visibleDimensions?.has(d.id) && 
+          ['number', 'currency', 'percentage'].includes(d.type)
+        )
+        .map(d => d.name);
+
+      console.log('[testing] Syncing visibility across all systems:', {
+        dimensions: visibilityArray.length,
+        columns: visibleColumnIds.length,
+        kpis: visibleKPIs.length
+      });
+
+      // Try to get existing view
+      const { data: existingView, error: viewError } = await supabase
+        .from("report_views")
+        .select("id, kpi_order")
+        .eq("report_id", reportId)
+        .eq("user_id", user.id)
+        .eq("is_default", true)
+        .maybeSingle();
+
+      if (viewError) {
+        throw new Error(`Failed to fetch report view: ${viewError.message}`);
       }
 
-      // Update local state immediately for responsive UI
-      setVisibleDimensions(newVisibleDimensions);
+      // Preserve existing KPI order, but filter to only visible KPIs
+      let kpiOrder = visibleKPIs;
+      if (existingView?.kpi_order && Array.isArray(existingView.kpi_order)) {
+        // Keep existing order for visible KPIs, add new ones at the end
+        const existingOrder = existingView.kpi_order.filter((kpi: string) => visibleKPIs.includes(kpi));
+        const newKPIs = visibleKPIs.filter(kpi => !existingOrder.includes(kpi));
+        kpiOrder = [...existingOrder, ...newKPIs];
+      }
 
-      // Try to persist to database, but don't fail if it doesn't work
-      try {
-        const { data: existingView, error: viewError } = await supabase
+      const updateData = {
+        visible_dimensions: visibilityArray,
+        visible_columns: visibleColumnIds,
+        visible_kpis: visibleKPIs,
+        kpi_order: kpiOrder,
+      };
+
+      if (existingView?.id) {
+        // Update existing view
+        const { error: updateError } = await supabase
           .from("report_views")
-          .select("id")
-          .eq("report_id", reportId)
-          .eq("user_id", user.id)
-          .eq("is_default", true)
-          .maybeSingle();
+          .update(updateData)
+          .eq("id", existingView.id);
 
-        if (viewError) {
-          console.warn("[testing] Warning - could not fetch report view:", viewError);
-          // Don't throw, just warn - continue with local state
-          return;
+        if (updateError) {
+          throw new Error(`Failed to update report view: ${updateError.message}`);
         }
+      } else {
+        // Create new default view
+        const { error: insertError } = await supabase
+          .from("report_views")
+          .insert({
+            report_id: reportId,
+            user_id: user.id,
+            is_default: true,
+            name: "Default View",
+            ...updateData,
+          });
 
-        if (existingView?.id) {
-          // Update existing view
-          const { error: updateError } = await supabase
-            .from("report_views")
-            .update({ visible_dimensions: Array.from(newVisibleDimensions) })
-            .eq("id", existingView.id);
-
-          if (updateError) {
-            console.warn("[testing] Warning - could not update report view:", updateError);
-            // Don't throw - local state is updated
-          }
-        } else {
-          // Create new default view with this setting
-          const { error: insertError } = await supabase
-            .from("report_views")
-            .insert({
-              report_id: reportId,
-              user_id: user.id,
-              is_default: true,
-              name: "Default View",
-              visible_dimensions: Array.from(newVisibleDimensions),
-            });
-
-          if (insertError) {
-            console.warn("[testing] Warning - could not create report view:", insertError);
-            // Don't throw - local state is updated
-          }
+        if (insertError) {
+          throw new Error(`Failed to create report view: ${insertError.message}`);
         }
-      } catch (dbError) {
-        // Silently fail on database operations - local state is already updated
-        console.warn("[testing] Database operation failed but local state updated:", dbError);
       }
+
+      // Update initial state to match current state
+      setInitialVisibleDimensions(new Set(visibleDimensions));
+
+      toast({
+        title: "Success",
+        description: "Visibility settings saved and synchronized across all components",
+      });
+
+      console.log('[testing] Successfully saved and synchronized visibility changes');
+      
+      // Notify parent components that visibility has changed
+      onVisibilityChange?.();
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : (typeof error === 'string' ? error : JSON.stringify(error));
-      console.error('[testing] Unexpected error in toggleDimensionVisibility:', errorMsg);
+      console.error('[testing] Error saving visibility changes:', errorMsg);
+      toast({
+        title: "Error",
+        description: "Failed to save visibility settings. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
     }
+  };
+
+  const cancelVisibilityChanges = () => {
+    // Revert to initial state
+    if (initialVisibleDimensions) {
+      setVisibleDimensions(new Set(initialVisibleDimensions));
+      console.log('[testing] Cancelled visibility changes, reverted to initial state');
+    }
+  };
+
+  const hasUnsavedChanges = () => {
+    if (!initialVisibleDimensions || !visibleDimensions) return false;
+    
+    // Compare sets
+    if (initialVisibleDimensions.size !== visibleDimensions.size) return true;
+    
+    for (const id of visibleDimensions) {
+      if (!initialVisibleDimensions.has(id)) return true;
+    }
+    
+    return false;
   };
 
   const loadMappedDimensions = async () => {
@@ -298,24 +401,20 @@ export const DimensionsListModal = ({
         accountData = data || [];
       }
 
-      // Load custom dimensions for this specific report if reportId is provided
+      // Load custom dimensions for this user (both global custom and report-specific)
       let customData: Dimension[] = [];
-      if (reportId) {
-        const { data, error: customError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("report_id", reportId)
-          .eq("scope", "custom")
-          .order("created_at", { ascending: false });
+      const { data, error: customError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("scope", "custom")
+        .or(`report_id.is.null,report_id.eq.${reportId}`) // Include both global custom (report_id=null) and report-specific
+        .order("created_at", { ascending: false });
 
-        if (customError) throw customError;
-        customData = data || [];
-      }
+      if (customError) throw customError;
+      customData = data || [];
 
-      console.log('[testing] Loaded global dimensions:', globalData?.length || 0);
-      console.log('[testing] Loaded account dimensions:', accountData?.length || 0);
-      console.log('[testing] Loaded custom dimensions:', customData?.length || 0);
+      console.log('[testing] Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0);
 
       setGlobalDimensions(globalData || []);
       setAccountDimensions(accountData);
@@ -532,8 +631,33 @@ export const DimensionsListModal = ({
           )}
         </div>
 
-        <div className="border-t pt-4">
-          <Button onClick={onAddNew} className="w-full gap-2">
+        <div className="border-t pt-4 space-y-3">
+          {/* Save/Cancel buttons for visibility changes - only show when reportId is present */}
+          {reportId && hasUnsavedChanges() && (
+            <div className="flex gap-2">
+              <Button 
+                onClick={saveVisibilityChanges} 
+                disabled={isSaving}
+                className="flex-1 gap-2"
+                variant="default"
+              >
+                <Save className="h-4 w-4" />
+                {isSaving ? "Saving..." : "Save Visibility Changes"}
+              </Button>
+              <Button 
+                onClick={cancelVisibilityChanges} 
+                disabled={isSaving}
+                variant="outline"
+                className="gap-2"
+              >
+                <X className="h-4 w-4" />
+                Cancel
+              </Button>
+            </div>
+          )}
+          
+          {/* Add Dimension button */}
+          <Button onClick={onAddNew} className="w-full gap-2" variant={reportId && hasUnsavedChanges() ? "secondary" : "default"}>
             <Plus className="h-4 w-4" />
             ADD A DIMENSION
           </Button>

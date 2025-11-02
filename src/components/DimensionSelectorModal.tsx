@@ -60,22 +60,53 @@ export const DimensionSelectorModal = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load dimensions accessible to the user
-      const { data, error } = await supabase
+      console.log('[testing] DimensionSelectorModal - Loading dimensions for user:', user.id);
+
+      // Load global dimensions (available to all users)
+      const { data: globalData, error: globalError } = await supabase
         .from("dimensions")
         .select("*")
-        .order("name", { ascending: true });
+        .eq("scope", "global")
+        .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (globalError) throw globalError;
 
-      // Deduplicate dimensions by name (keep first occurrence)
-      const seenNames = new Set<string>();
-      const uniqueDimensions = (data || []).filter(dim => {
-        if (seenNames.has(dim.name)) {
-          return false;
-        }
-        seenNames.add(dim.name);
-        return true;
+      // Load account-specific dimensions (we don't have accountId here, so load all account dimensions)
+      const { data: accountData, error: accountError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("scope", "account")
+        .order("created_at", { ascending: false });
+
+      if (accountError) throw accountError;
+
+      // Load user's custom dimensions
+      const { data: customData, error: customError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("scope", "custom")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (customError) throw customError;
+
+      // Combine all dimensions and remove duplicates by name (keep the most specific scope)
+      const allDimensions = [
+        ...(customData || []),    // Custom dimensions take precedence
+        ...(accountData || []),   // Then account dimensions
+        ...(globalData || [])     // Finally global dimensions
+      ];
+
+      // Remove duplicates by name, keeping the first occurrence (most specific scope)
+      const uniqueDimensions = allDimensions.filter((dim, index, arr) => 
+        arr.findIndex(d => d.name === dim.name) === index
+      );
+
+      console.log('[testing] DimensionSelectorModal - Loaded dimensions:', {
+        global: globalData?.length || 0,
+        account: accountData?.length || 0,
+        custom: customData?.length || 0,
+        total: uniqueDimensions.length
       });
 
       setDimensions(uniqueDimensions);

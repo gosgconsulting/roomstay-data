@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      accounts: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       data_sources: {
         Row: {
           column_mappings: Json | null
@@ -108,39 +135,52 @@ export type Database = {
       }
       dimensions: {
         Row: {
+          account_id: string | null
           created_at: string
           data_source_id: string | null
           formula: string | null
           id: string
           name: string
           report_id: string | null
+          scope: string | null
           type: string
           updated_at: string
           user_id: string | null
         }
         Insert: {
+          account_id?: string | null
           created_at?: string
           data_source_id?: string | null
           formula?: string | null
           id?: string
           name: string
           report_id?: string | null
+          scope?: string | null
           type: string
           updated_at?: string
           user_id?: string | null
         }
         Update: {
+          account_id?: string | null
           created_at?: string
           data_source_id?: string | null
           formula?: string | null
           id?: string
           name?: string
           report_id?: string | null
+          scope?: string | null
           type?: string
           updated_at?: string
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "dimensions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "dimensions_data_source_id_fkey"
             columns: ["data_source_id"]
@@ -232,6 +272,7 @@ export type Database = {
           updated_at: string
           user_id: string
           visible_columns: string[] | null
+          visible_dimensions: string[] | null
           visible_kpis: string[] | null
         }
         Insert: {
@@ -255,6 +296,7 @@ export type Database = {
           updated_at?: string
           user_id: string
           visible_columns?: string[] | null
+          visible_dimensions?: string[] | null
           visible_kpis?: string[] | null
         }
         Update: {
@@ -278,6 +320,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           visible_columns?: string[] | null
+          visible_dimensions?: string[] | null
           visible_kpis?: string[] | null
         }
         Relationships: [
@@ -292,6 +335,7 @@ export type Database = {
       }
       reports: {
         Row: {
+          account_id: string | null
           created_at: string
           id: string
           name: string
@@ -299,6 +343,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           created_at?: string
           id?: string
           name: string
@@ -306,16 +351,26 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           created_at?: string
           id?: string
           name?: string
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "reports_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       share_links: {
         Row: {
+          account_id: string | null
           created_at: string
           created_by: string
           id: string
@@ -325,6 +380,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_id?: string | null
           created_at?: string
           created_by: string
           id?: string
@@ -334,6 +390,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_id?: string | null
           created_at?: string
           created_by?: string
           id?: string
@@ -342,7 +399,15 @@ export type Database = {
           slug?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "share_links_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sheet_data: {
         Row: {

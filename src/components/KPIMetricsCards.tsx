@@ -30,9 +30,10 @@ interface KPIMetricsCardsProps {
   filters: FilterState;
   onLoadingComplete?: () => void;
   accountId?: string;
+  visibilityRefreshTrigger?: number; // Trigger to refresh when dimension visibility changes
 }
 
-export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountId }: KPIMetricsCardsProps) => {
+export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountId, visibilityRefreshTrigger }: KPIMetricsCardsProps) => {
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -46,6 +47,14 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
       setIsLoading(false);
     }
   }, [reportId, filters]);
+
+  // Refresh metrics when dimension visibility changes
+  useEffect(() => {
+    if (reportId && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
+      console.log('[testing] Refreshing KPI metrics due to dimension visibility change');
+      loadMetrics();
+    }
+  }, [visibilityRefreshTrigger, reportId]);
 
   const loadMetrics = async () => {
     console.log('[testing] loadMetrics - Starting data fetch for reportId:', reportId);

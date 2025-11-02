@@ -28,7 +28,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { ChevronDown, ChevronRight, Columns3, Copy, Trash2, Plus, ArrowUp, ArrowDown, Minus, GripVertical } from "lucide-react";
+import { ChevronDown, ChevronRight, Columns3, Copy, Trash2, Plus, ArrowUp, ArrowDown, Minus, GripVertical, Save, X } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
@@ -80,6 +80,8 @@ interface PerformanceTableProps {
   reportId: string | null;
   filters: FilterState;
   isSharedView?: boolean;
+  accountId?: string;
+  visibilityRefreshTrigger?: number; // Trigger to refresh when dimension visibility changes
 }
 
 // Sortable column item component
@@ -129,15 +131,19 @@ function SortableColumnItem({
   );
 }
 
-export const PerformanceTable = ({ reportId, filters, isSharedView = false }: PerformanceTableProps) => {
+export const PerformanceTable = ({ reportId, filters, isSharedView = false, accountId, visibilityRefreshTrigger }: PerformanceTableProps) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
   const [dimensionSelectorOpen, setDimensionSelectorOpen] = useState(false);
   const [selectedKPI, setSelectedKPI] = useState("");
   const [currentSelector, setCurrentSelector] = useState<"group" | "breakdown" | "then">("group");
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
+  const [hasDataSources, setHasDataSources] = useState<boolean>(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set());
+  const [initialVisibleColumns, setInitialVisibleColumns] = useState<Set<string>>(new Set());
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
+  const [initialColumnOrder, setInitialColumnOrder] = useState<string[]>([]);
+  const [isSavingColumnSettings, setIsSavingColumnSettings] = useState(false);
   const [isLoadingDimensions, setIsLoadingDimensions] = useState(true);
   const [tableData, setTableData] = useState<TableRow[]>([]);
   const [totalData, setTotalData] = useState<Record<string, any>>({});
@@ -169,6 +175,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
   useEffect(() => {
     if (reportId) {
       loadDimensions();
+      checkDataSources();
     }
   }, [reportId]);
 
@@ -185,23 +192,45 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
       setColumnOrder([]);
       setTableData([]);
       setTotalData({});
+      setHasDataSources(false); // Reset data sources check
     }
   }, [reportId]);
 
   useEffect(() => {
     if (reportId && dimensions.length > 0) {
       loadAllViews();
+      // Re-check data sources when dimensions change (might indicate data source was added)
+      checkDataSources();
     }
   }, [reportId, dimensions.length]);
+
+  // Refresh view settings when dimension visibility changes from DimensionsListModal
+  useEffect(() => {
+    if (reportId && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
+      console.log('[testing] Refreshing view settings due to dimension visibility change');
+      loadAllViews(); // Reload view settings to get updated visibility
+    }
+  }, [visibilityRefreshTrigger, reportId]);
 
   // Debounced filter change to reduce API calls
   const debouncedFilters = useMemo(() => filters, [JSON.stringify(filters)]);
 
   useEffect(() => {
-    if (reportId && groupByDimensions.length > 0 && dimensions.length > 0) {
+    console.log('[testing] PerformanceTable data loading check:', {
+      reportId: !!reportId,
+      groupByDimensions: groupByDimensions.length,
+      dimensions: dimensions.length,
+      hasDataSources,
+      groupByDims: groupByDimensions
+    });
+    
+    if (reportId && groupByDimensions.length > 0 && dimensions.length > 0 && hasDataSources) {
+      console.log('[testing] All conditions met, loading performance data');
       loadPerformanceData();
+    } else {
+      console.log('[testing] Not loading data - conditions not met');
     }
-  }, [reportId, groupByDimensions, breakdownByDimensions, thenByDimensions, dimensions.length, dateOrder, debouncedFilters]);
+  }, [reportId, groupByDimensions, breakdownByDimensions, thenByDimensions, dimensions.length, dateOrder, debouncedFilters, hasDataSources]);
 
   // Save view settings whenever they change (with debounce to prevent excessive saves)
   useEffect(() => {
@@ -294,10 +323,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
         return;
       }
 
-      // Find first text dimension to use as default grouping
-      const defaultGroupDimension = dimensions.find(d => d.type === 'text');
+      // Find date dimension first, fallback to text dimension for default grouping
+      const defaultGroupDimension = dimensions.find(d => d.type === 'date') || dimensions.find(d => d.type === 'text');
+      const isDateGrouping = defaultGroupDimension?.type === 'date';
       
-      console.log('Creating default view for report:', reportId, 'with dimension:', defaultGroupDimension?.name);
+      console.log('Creating default view for report:', reportId, 'with dimension:', defaultGroupDimension?.name, 'type:', defaultGroupDimension?.type);
 
       // Set default visible columns - hide some columns by default
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
@@ -329,7 +359,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
           column_order: defaultColumnOrder,
           visible_kpis: defaultKPIs,
           kpi_order: defaultKPIs,
-          date_granularity: 'none',
+          date_granularity: isDateGrouping ? 'day' : 'none',
           date_order: 'desc',
         })
         .select()
@@ -380,7 +410,9 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
     
     if (view.visible_columns && view.visible_columns.length > 0) {
       console.log('Loading visible columns:', view.visible_columns);
-      setVisibleColumns(new Set(view.visible_columns));
+      const visibleSet = new Set(view.visible_columns);
+      setVisibleColumns(visibleSet);
+      setInitialVisibleColumns(new Set(visibleSet));
     } else if (dimensions.length > 0) {
       // Set default visibility if not set
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
@@ -392,18 +424,22 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
       );
       console.log('Setting default visible columns:', Array.from(defaultVisible));
       setVisibleColumns(defaultVisible);
+      setInitialVisibleColumns(new Set(defaultVisible));
     }
     
     // Load column order if available
     if (view.column_order && view.column_order.length > 0) {
       console.log('Loading column order:', view.column_order);
       setColumnOrder(view.column_order);
+      setInitialColumnOrder([...view.column_order]);
     } else if (dimensions.length > 0) {
       // Set default order based on dimensions
       const metricDimensions = dimensions.filter(d => 
         d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
       );
-      setColumnOrder(metricDimensions.map(d => d.id));
+      const orderIds = metricDimensions.map(d => d.id);
+      setColumnOrder(orderIds);
+      setInitialColumnOrder([...orderIds]);
     }
     
     // Load date granularity if available (default to none)
@@ -647,145 +683,128 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
     if (!reportId) return;
     
     try {
-      // Get the current user to load all their dimensions
+      setIsLoadingDimensions(true);
       const { data: { user } } = await supabase.auth.getUser();
       
-      let data = null;
-
-      // Fetch dimensions accessible to the user
-      if (user) {
-        try {
-          const { data: allDims, error: dimError } = await supabase
-            .from("dimensions")
-            .select("*");
-
-          if (dimError) throw dimError;
-
-          // Filter to global dimensions and custom dimensions for this report if reportId provided
-          if (reportId) {
-            data = (allDims || []).filter((d: any) =>
-              d.scope === 'global' ||
-              (d.scope === 'custom' && d.report_id === reportId)
-            );
-          } else {
-            data = allDims || [];
-          }
-        } catch (error) {
-          console.error('Error loading dimensions:', error);
-          data = [];
-        }
+      if (!user) {
+        console.error("User not authenticated");
+        return;
       }
 
-      // If no dimensions found, try falling back to loading from dimension_data
-      if (!data || data.length === 0) {
-        try {
-          const dimensionData = await retryWithBackoff(
-            async () => {
-              const { data, error } = await supabase
-                .from("dimension_data")
-                .select("dimension_values")
-                .limit(1);
+      console.log('[testing] PerformanceTable - Loading dimensions for user:', user.id, 'account:', accountId);
 
-              if (error) throw error;
-              return data;
-            },
-            3,
-            500
-          );
+      // Load global dimensions (available to all users)
+      const { data: globalData, error: globalError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("scope", "global")
+        .order("created_at", { ascending: false });
 
-          if (dimensionData && dimensionData.length > 0) {
-            const dimensionIds = Object.keys(dimensionData[0].dimension_values as Record<string, any>);
+      if (globalError) throw globalError;
 
-            if (dimensionIds.length > 0) {
-              data = await retryWithBackoff(
-                async () => {
-                  const { data, error } = await supabase
-                    .from("dimensions")
-                    .select("*")
-                    .in("id", dimensionIds);
+      // Load account-specific dimensions if accountId is provided
+      let accountData: any[] = [];
+      if (accountId) {
+        const { data: accData, error: accountError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("scope", "account")
+          .eq("account_id", accountId)
+          .order("created_at", { ascending: false });
 
-                  if (error) throw error;
-                  return data;
-                },
-                3,
-                500
-              );
-            }
-          }
-        } catch (error) {
-          console.error('Error loading dimensions from fallback:', error);
-        }
+        if (accountError) throw accountError;
+        accountData = accData || [];
       }
 
-      // Filter dimensions by visibility settings
-      if (user && reportId && data && data.length > 0) {
-        data = await filterDimensionsByVisibility(data, reportId, user.id, supabase);
-      }
+      // Load user's custom dimensions
+      const { data: customData, error: customError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("scope", "custom")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
 
-      // Define the desired column order
-      const columnOrder = [
-        'Impressions',
-        'Impression Share',
-        'Clicks',
-        'CTR',
-        'Conversions',
-        'Conversion Rate',
-        'CPC',
-        'CPM',
-        'Cost',
-        'Revenue',
-        'Leads',
-        'ROAS',
-        'Cost of sale'
+      if (customError) throw customError;
+
+      // Combine all dimensions and remove duplicates by name (keep the most specific scope)
+      const allDimensions = [
+        ...(customData || []),    // Custom dimensions take precedence
+        ...(accountData || []),   // Then account dimensions
+        ...(globalData || [])     // Finally global dimensions
       ];
 
-      // Sort dimensions according to the defined order
-      const sortedDimensions = (data || []).sort((a, b) => {
-        const indexA = columnOrder.indexOf(a.name);
-        const indexB = columnOrder.indexOf(b.name);
-        
-        // If not in the order list, put at the end
-        if (indexA === -1 && indexB === -1) return 0;
-        if (indexA === -1) return 1;
-        if (indexB === -1) return -1;
-        
-        return indexA - indexB;
+      // Remove duplicates by name, keeping the first occurrence (most specific scope)
+      const uniqueDimensions = allDimensions.filter((dim, index, arr) => 
+        arr.findIndex(d => d.name === dim.name) === index
+      );
+
+      console.log('[testing] PerformanceTable - Loaded dimensions:', {
+        global: globalData?.length || 0,
+        account: accountData?.length || 0,
+        custom: customData?.length || 0,
+        total: uniqueDimensions.length
       });
 
-      // Deduplicate dimensions by name (keep first occurrence)
-      const seenNames = new Set<string>();
-      const uniqueDimensions = sortedDimensions.filter(dim => {
-        if (seenNames.has(dim.name)) {
-          return false;
-        }
-        seenNames.add(dim.name);
-        return true;
-      });
-
+      // Set all dimensions (needed for Group by/Breakdown by selectors)
       setDimensions(uniqueDimensions);
       
-      // Initialize column order if not set
+      // Initialize column order if not set (only for numeric dimensions)
       if (columnOrder.length === 0) {
-        const metricDimensions = uniqueDimensions.filter(d => 
+        const numericDimensions = uniqueDimensions.filter(d => 
           d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
         );
-        setColumnOrder(metricDimensions.map(d => d.id));
+        const orderIds = numericDimensions.map(d => d.id);
+        setColumnOrder(orderIds);
+        setInitialColumnOrder([...orderIds]);
       }
       
-      // Set default visibility only if no saved view exists
+      // Set default visibility only if no saved view exists (only for numeric dimensions)
       // This will be overridden by loadViewSettings if a saved view exists
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
+      const numericDimensions = uniqueDimensions.filter(d => 
+        d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
+      );
       const defaultVisible = new Set<string>(
-        uniqueDimensions
-          .filter(d => !hiddenColumns.includes(d.name) && 
-                      (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula))
+        numericDimensions
+          .filter(d => !hiddenColumns.includes(d.name))
           .map(d => d.id)
       );
       setVisibleColumns(defaultVisible);
+      setInitialVisibleColumns(new Set(defaultVisible));
     } catch (error) {
       console.error("Error loading dimensions:", error);
     } finally {
       setIsLoadingDimensions(false);
+    }
+  };
+
+  const checkDataSources = async () => {
+    if (!reportId) {
+      setHasDataSources(false);
+      return;
+    }
+    
+    try {
+      console.log('[testing] Checking data sources for report:', reportId);
+      
+      const { data: dataSources, error } = await supabase
+        .from('data_sources')
+        .select('id')
+        .eq('report_id', reportId)
+        .limit(1);
+      
+      if (error) {
+        console.error('Error checking data sources:', error);
+        setHasDataSources(false);
+        return;
+      }
+      
+      const hasData = dataSources && dataSources.length > 0;
+      console.log('[testing] Data sources found:', hasData ? 'Yes' : 'No');
+      setHasDataSources(hasData);
+    } catch (error) {
+      console.error('Error checking data sources:', error);
+      setHasDataSources(false);
     }
   };
 
@@ -899,7 +918,15 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
 
   // Load performance data using the new edge function
   const loadPerformanceData = async () => {
-    if (!reportId || groupByDimensions.length === 0) {
+    console.log('[testing] loadPerformanceData called with:', {
+      reportId,
+      groupByDimensions: groupByDimensions.length,
+      dimensions: dimensions.length,
+      groupByDims: groupByDimensions
+    });
+
+    if (!reportId || groupByDimensions.length === 0 || !hasDataSources) {
+      console.log('[testing] No data loading - missing reportId, groupByDimensions, or data sources');
       setTableData([]);
       setTotalData({});
       setTotalCompareData({});
@@ -910,6 +937,13 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
     setIsLoadingData(true);
 
     try {
+      console.log('[testing] Calling get-performance-data with:', {
+        reportId,
+        groupByDims: groupByDimensions,
+        breakdownDims: breakdownByDimensions,
+        thenByDims: thenByDimensions
+      });
+
       const { data, error } = await supabase.functions.invoke('get-performance-data', {
         body: {
           reportId,
@@ -919,6 +953,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
           dimensionFilters: filters.dimensionFilters,
           dateFrom: filters.dateRange?.from?.toISOString(),
           dateTo: filters.dateRange?.to?.toISOString(),
+          accountId, // Pass accountId to edge function
           visibleDimensionIds: Array.from(visibleColumns),
           limit: 10000, // Reasonable limit to prevent timeouts
           offset: 0,
@@ -931,7 +966,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
       });
 
       if (error) {
-        console.error('Error loading performance data:', error);
+        console.error('[testing] Error loading performance data:', error);
         toast({
           title: "Error loading data",
           description: "Failed to load performance table data.",
@@ -940,7 +975,13 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
         return;
       }
 
-      console.log('Loaded performance data:', data);
+      console.log('[testing] Performance data response:', {
+        hasData: !!data,
+        rowsCount: data?.rows?.length || 0,
+        totalData: !!data?.totalData,
+        error: error
+      });
+
       setTableData(data.rows || []);
       setTotalData(data.totalData || {});
       setTotalCompareData(data.totalCompareData || {});
@@ -960,6 +1001,65 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
       newVisible.add(dimensionId);
     }
     setVisibleColumns(newVisible);
+  };
+
+  const applyColumnSettings = async () => {
+    if (!reportId || !activeViewId || isSharedView) return;
+
+    try {
+      setIsSavingColumnSettings(true);
+      console.log('[testing] Applying column visibility settings');
+
+      const viewData = {
+        visible_columns: Array.from(visibleColumns),
+        column_order: columnOrder,
+      };
+
+      const { error } = await supabase
+        .from("report_views")
+        .update(viewData)
+        .eq("id", activeViewId);
+
+      if (error) throw error;
+
+      // Update initial state to match current state
+      setInitialVisibleColumns(new Set(visibleColumns));
+      setInitialColumnOrder([...columnOrder]);
+
+      toast({
+        title: "Success",
+        description: "Column visibility settings applied successfully",
+      });
+
+      console.log('[testing] Column visibility settings applied successfully');
+    } catch (error) {
+      console.error("Error applying column settings:", error);
+      toast({
+        title: "Error",
+        description: "Failed to apply column settings. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingColumnSettings(false);
+    }
+  };
+
+  const cancelColumnSettings = () => {
+    setVisibleColumns(new Set(initialVisibleColumns));
+    setColumnOrder([...initialColumnOrder]);
+    console.log('[testing] Cancelled column visibility changes');
+  };
+
+  const hasUnsavedColumnChanges = () => {
+    // Compare visible columns
+    if (visibleColumns.size !== initialVisibleColumns.size) return true;
+    for (const id of visibleColumns) {
+      if (!initialVisibleColumns.has(id)) return true;
+    }
+    
+    // Compare column order
+    if (columnOrder.length !== initialColumnOrder.length) return true;
+    return columnOrder.some((id, index) => id !== initialColumnOrder[index]);
   };
   
   // Get dimensions in the custom order
@@ -1392,6 +1492,32 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
                             </DndContext>
                           </div>
                         </div>
+
+                        {/* Apply/Cancel buttons for Column Visibility */}
+                        {hasUnsavedColumnChanges() && (
+                          <div className="border-t pt-4 mt-6 space-y-3">
+                            <div className="flex gap-2">
+                              <Button 
+                                onClick={applyColumnSettings} 
+                                disabled={isSavingColumnSettings}
+                                className="flex-1 gap-2"
+                                variant="default"
+                              >
+                                <Save className="h-4 w-4" />
+                                {isSavingColumnSettings ? "Applying..." : "Apply Changes"}
+                              </Button>
+                              <Button 
+                                onClick={cancelColumnSettings} 
+                                disabled={isSavingColumnSettings}
+                                variant="outline"
+                                className="gap-2"
+                              >
+                                <X className="h-4 w-4" />
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                      </SheetContent>
                 </Sheet>
               </div>
@@ -1399,7 +1525,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false }: Pe
           </div>
         </CardHeader>
         <CardContent>
-          {groupByDimensions.length === 0 ? (
+          {!hasDataSources ? (
+            <div className="py-8 text-center text-muted-foreground">
+              {isSharedView ? "No data available" : "Connect a data source to view the performance table"}
+            </div>
+          ) : groupByDimensions.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               {isSharedView ? "No data available" : "Right-click on \"Group by\" to select dimensions"}
             </div>

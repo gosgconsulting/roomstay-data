@@ -111,14 +111,14 @@ export const DimensionModal = ({
       setName(dimension.name);
       setType(dimension.type);
       setFormula(dimension.formula || "");
-      // Always show the dimension's actual scope in edit mode (read-only)
+      // Show the dimension's actual scope in edit mode (editable for custom dimensions)
       setScope(dimension.scope || 'custom');
     } else if (open && mode === 'add') {
       console.log('[testing] Resetting form for add mode');
       setName("");
       setType("number");
       setFormula("");
-      // Always create custom dimensions (users can't create global)
+      // Default to individual (custom) scope for new dimensions
       setScope('custom');
     }
   }, [open, mode, dimension]);
@@ -276,13 +276,20 @@ export const DimensionModal = ({
         } else {
           // For custom or account dimensions, update directly
           // For system dimensions, only allow formula updates
+          // Handle scope changes for custom dimensions
+          const scopeChanged = !isSystemDimension(dimension) && scope !== dimension.scope;
+          
           const updateData = isSystemDimension(dimension)
             ? { formula: formula.trim() || null }
             : {
                 name: name.trim(),
                 type,
                 formula: formula.trim() || null,
+                scope, // Allow scope changes for custom dimensions
+                report_id: scope === 'custom' ? reportId : null, // Set report_id based on scope
               };
+
+          console.log('[testing] Updating dimension with data:', updateData, 'Scope changed:', scopeChanged);
 
           const { error } = await supabase
             .from("dimensions")
@@ -291,9 +298,13 @@ export const DimensionModal = ({
 
           if (error) throw error;
 
+          const scopeMessage = scopeChanged 
+            ? ` (changed to ${scope === 'global' ? 'global - now available across all reports' : 'individual - now report-specific'})`
+            : '';
+
           toast({
             title: "Dimension updated",
-            description: `Updated dimension "${name}"`,
+            description: `Updated dimension "${name}"${scopeMessage}`,
           });
         }
       } else {
@@ -304,22 +315,30 @@ export const DimensionModal = ({
           throw new Error("Report ID is required for creating dimensions");
         }
 
+        // Create new dimension with proper scope handling
+        const dimensionData = {
+          name: name.trim(),
+          type,
+          formula: formula.trim() || null,
+          scope,
+          user_id: user.id, // Track creator for both global and individual
+          account_id: null, // Not account-specific
+          report_id: scope === 'custom' ? reportId : null, // Only individual dimensions are report-specific
+        };
+
+        console.log('[testing] Creating dimension with scope:', scope, dimensionData);
+
         const { error } = await supabase
           .from("dimensions")
-          .insert({
-            user_id: user.id,
-            report_id: reportId,
-            name: name.trim(),
-            type,
-            formula: formula.trim() || null,
-            scope: 'custom', // Always custom for user-created dimensions
-          });
+          .insert(dimensionData);
 
         if (error) throw error;
 
         toast({
           title: "Dimension added",
-          description: `Created dimension "${name}" for this report`,
+          description: scope === 'global' 
+            ? `Created global dimension "${name}" (available across all reports)`
+            : `Created individual dimension "${name}" for this report`,
         });
       }
 
@@ -327,7 +346,7 @@ export const DimensionModal = ({
       setName("");
       setType("number");
       setFormula("");
-      setScope('custom');
+      setScope('custom'); // Default back to individual
       onOpenChange(false);
       
       // Notify parent component to refresh data
@@ -385,29 +404,59 @@ export const DimensionModal = ({
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="scope">Scope</Label>
+            
+            {/* Global Option */}
             <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
               <input
                 type="radio"
-                id="custom"
+                id="global"
+                value="global"
+                checked={scope === 'global'}
+                onChange={() => setScope('global')}
+                disabled={mode === 'edit' && isSystemDimension(dimension)}
+              />
+              <label htmlFor="global" className="cursor-pointer flex-1">
+                <div>
+                  <span className="font-medium">Global</span>
+                  <p className="text-xs text-muted-foreground">Available across all reports</p>
+                </div>
+              </label>
+            </div>
+
+            {/* Individual Option */}
+            <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+              <input
+                type="radio"
+                id="individual"
                 value="custom"
                 checked={scope === 'custom'}
                 onChange={() => setScope('custom')}
-                disabled={mode === 'edit'}
+                disabled={mode === 'edit' && isSystemDimension(dimension)}
               />
-              <label htmlFor="custom" className="cursor-pointer flex-1">
+              <label htmlFor="individual" className="cursor-pointer flex-1">
                 <div>
-                  <span className="font-medium">Custom</span>
+                  <span className="font-medium">Individual</span>
                   <p className="text-xs text-muted-foreground">For this report only</p>
                 </div>
               </label>
             </div>
-            {mode === 'edit' && (
+
+            {mode === 'edit' && isSystemDimension(dimension) && (
               <p className="text-xs text-muted-foreground">
-                Scope cannot be changed after creation
+                System dimension scope cannot be changed
               </p>
             )}
+            {mode === 'edit' && !isSystemDimension(dimension) && (
+              <p className="text-xs text-blue-600">
+                You can change the scope to make this dimension {scope === 'global' ? 'individual (report-specific)' : 'global (available across all reports)'}
+              </p>
+            )}
+            
             <p className="text-xs text-muted-foreground">
-              Custom dimensions are specific to this report. Contact an administrator to create global dimensions available across all reports.
+              {scope === 'global' 
+                ? 'Global dimensions will be available in all reports and can be used by all users.'
+                : 'Individual dimensions are specific to this report only.'
+              }
             </p>
           </div>
 

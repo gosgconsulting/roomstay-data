@@ -31,6 +31,7 @@ export default function ReportDashboard() {
   const [isSharedView, setIsSharedView] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
+  const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   
   // Filter state
@@ -236,6 +237,7 @@ export default function ReportDashboard() {
         accountId={accountId}
         onReportChange={setReportId}
         onRefreshData={refreshData}
+        onVisibilityChange={() => setVisibilityRefreshTrigger(prev => prev + 1)}
         session={session}
         onSignOut={handleSignOut}
         isSharedView={isSharedView}
@@ -263,6 +265,7 @@ export default function ReportDashboard() {
                 reportId={reportId}
                 filters={filters}
                 accountId={accountId}
+                visibilityRefreshTrigger={visibilityRefreshTrigger}
                 key={`metrics-${dataRefreshKey}`}
                 onLoadingComplete={() => markComponentLoaded('metrics')}
               />
@@ -271,10 +274,18 @@ export default function ReportDashboard() {
               reportId={reportId}
               filters={filters}
               accountId={accountId}
+              visibilityRefreshTrigger={visibilityRefreshTrigger}
               key={`charts-${dataRefreshKey}`}
               onLoadingComplete={() => markComponentLoaded('chart')}
             />
-            <PerformanceTable reportId={reportId} filters={filters} isSharedView={isSharedView} accountId={accountId} key={`table-${dataRefreshKey}`} />
+            <PerformanceTable 
+              reportId={reportId} 
+              filters={filters} 
+              isSharedView={isSharedView} 
+              accountId={accountId} 
+              visibilityRefreshTrigger={visibilityRefreshTrigger}
+              key={`table-${dataRefreshKey}`} 
+            />
           </main>
           
           <KPISettingsModal
@@ -282,6 +293,7 @@ export default function ReportDashboard() {
             onOpenChange={setKpiSettingsOpen}
             reportId={reportId}
             onSettingsChange={refreshData}
+            visibilityRefreshTrigger={visibilityRefreshTrigger}
           />
         </>
       ) : (

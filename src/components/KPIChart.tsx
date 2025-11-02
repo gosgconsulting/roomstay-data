@@ -20,6 +20,7 @@ interface KPIChartProps {
   filters: FilterState;
   onLoadingComplete?: () => void;
   accountId?: string;
+  visibilityRefreshTrigger?: number; // Trigger to refresh when dimension visibility changes
 }
 
 interface Dimension {
@@ -52,7 +53,7 @@ const kpiOptions = [
   { value: "Cost of sale", label: "Cost of sale" },
 ];
 
-export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId }: KPIChartProps) => {
+export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visibilityRefreshTrigger }: KPIChartProps) => {
   const [selectedKPI, setSelectedKPI] = useState("Revenue");
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,6 +64,14 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId }: KP
       loadChartData();
     }
   }, [reportId, filters, selectedKPI]);
+
+  // Refresh chart when dimension visibility changes
+  useEffect(() => {
+    if (reportId && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
+      console.log('[testing] Refreshing KPI chart due to dimension visibility change');
+      loadChartData();
+    }
+  }, [visibilityRefreshTrigger, reportId]);
 
   const loadChartData = async () => {
     setIsLoading(true);
