@@ -226,10 +226,17 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
       if (shares && shares.length > 0) {
         // Get shared reports
         const sharedReportIds = shares.map(s => s.report_id);
-        const { data: sharedReports, error: sharedReportsError } = await supabase
+        let sharedQuery = supabase
           .from('reports')
           .select('*')
           .in('id', sharedReportIds);
+
+        // Filter by account if provided
+        if (accountId) {
+          sharedQuery = sharedQuery.eq('account_id', accountId);
+        }
+
+        const { data: sharedReports, error: sharedReportsError } = await sharedQuery;
 
         if (sharedReportsError) {
           console.error("Error loading shared reports:", sharedReportsError);
