@@ -40,6 +40,7 @@ interface DimensionsListModalProps {
   onEdit?: (dimension: Dimension) => void;
   refreshTrigger?: number; // Used to trigger refresh from parent
   reportId?: string;
+  accountId?: string;
 }
 
 const typeLabels: Record<string, string> = {
