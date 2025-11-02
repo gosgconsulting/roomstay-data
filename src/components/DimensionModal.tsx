@@ -72,6 +72,39 @@ export const DimensionModal = ({
     return dim.is_system === true || systemDimensionNames.includes(dim.name);
   };
 
+  // Load available dimensions for the @ mention dropdown
+  useEffect(() => {
+    if (open) {
+      loadAvailableDimensions();
+    }
+  }, [open, reportId]);
+
+  const loadAvailableDimensions = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get dimensions for the current report
+      let query = supabase.from("dimensions").select("*");
+
+      if (reportId) {
+        query = query.eq("report_id", reportId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      // Filter out the current dimension (if editing) and exclude the dimension we're currently editing
+      const filtered = (data || []).filter((d: any) =>
+        !dimension || d.id !== dimension.id
+      );
+
+      setAvailableDimensions(filtered as Dimension[]);
+    } catch (error) {
+      console.error("Error loading available dimensions:", error);
+    }
+  };
+
   // Reset form when modal opens/closes or dimension changes
   useEffect(() => {
     if (open && mode === 'edit' && dimension) {
