@@ -462,6 +462,7 @@ export const DataSourcesListModal = ({
         onOpenChange={setIsEditModalOpen}
         dataSource={editingDataSource}
         onSuccess={handleEditSuccess}
+        accountId={accountId}
       />
 
       <ViewDataModal
