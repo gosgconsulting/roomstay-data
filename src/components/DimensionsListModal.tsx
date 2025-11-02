@@ -119,9 +119,8 @@ export const DimensionsListModal = ({
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) throw new Error("User not authenticated");
-      if (!reportId) throw new Error("Report ID not provided");
 
-      console.log('[testing] Loading dimensions for user:', user.id, 'report:', reportId);
+      console.log('[testing] Loading dimensions for user:', user.id, 'report:', reportId, 'account:', accountId);
 
       // Load global dimensions (available to all users)
       const { data: globalData, error: globalError } = await supabase
@@ -132,22 +131,42 @@ export const DimensionsListModal = ({
 
       if (globalError) throw globalError;
 
-      // Load custom dimensions for this specific report
-      const { data: customData, error: customError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("report_id", reportId)
-        .eq("scope", "custom")
-        .order("created_at", { ascending: false });
+      // Load account-specific dimensions if accountId is provided
+      let accountData: Dimension[] = [];
+      if (accountId) {
+        const { data, error: accountError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("scope", "account")
+          .eq("account_id", accountId)
+          .order("created_at", { ascending: false });
 
-      if (customError) throw customError;
+        if (accountError) throw accountError;
+        accountData = data || [];
+      }
+
+      // Load custom dimensions for this specific report if reportId is provided
+      let customData: Dimension[] = [];
+      if (reportId) {
+        const { data, error: customError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("report_id", reportId)
+          .eq("scope", "custom")
+          .order("created_at", { ascending: false });
+
+        if (customError) throw customError;
+        customData = data || [];
+      }
 
       console.log('[testing] Loaded global dimensions:', globalData?.length || 0);
+      console.log('[testing] Loaded account dimensions:', accountData?.length || 0);
       console.log('[testing] Loaded custom dimensions:', customData?.length || 0);
 
       setGlobalDimensions(globalData || []);
-      setCustomDimensions(customData || []);
+      setAccountDimensions(accountData);
+      setCustomDimensions(customData);
     } catch (error) {
       console.error("Error loading dimensions:", error);
       toast({
