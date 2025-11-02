@@ -703,6 +703,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
           reportName={currentReport.name}
           open={showShareModal}
           onOpenChange={setShowShareModal}
+          accountId={accountId}
         />
       )}
     </>
