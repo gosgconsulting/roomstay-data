@@ -174,6 +174,12 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
         }
       }
 
+      // Filter dimensions by visibility settings
+      if (user && reportId && dimensions && dimensions.length > 0) {
+        dimensions = await filterDimensionsByVisibility(dimensions, reportId, user.id, supabase);
+        console.log('[testing] Dimensions after visibility filter:', dimensions?.length);
+      }
+
       // Fetch dimension_data in chunks (5000 rows at a time)
       const CHUNK_SIZE = 5000;
       let allDimensionData: any[] = [];
