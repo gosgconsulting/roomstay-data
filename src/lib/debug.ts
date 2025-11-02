@@ -3,6 +3,48 @@
  */
 
 /**
+ * Filters dimensions by visibility settings from report_views
+ * @param dimensions The dimensions to filter
+ * @param reportId The report ID
+ * @param userId The user ID
+ * @param supabase The Supabase client
+ * @returns Filtered dimensions array
+ */
+export const filterDimensionsByVisibility = async (
+  dimensions: any[],
+  reportId: string | null,
+  userId: string,
+  supabase: any
+): Promise<any[]> => {
+  if (!reportId || !dimensions || dimensions.length === 0) {
+    return dimensions;
+  }
+
+  try {
+    const { data: viewSettings } = await supabase
+      .from("report_views")
+      .select("visible_dimensions")
+      .eq("report_id", reportId)
+      .eq("user_id", userId)
+      .eq("is_default", true)
+      .maybeSingle();
+
+    if (viewSettings?.visible_dimensions && viewSettings.visible_dimensions.length > 0) {
+      // Filter to only visible dimensions
+      const visibleSet = new Set(viewSettings.visible_dimensions);
+      return dimensions.filter(d => visibleSet.has(d.id));
+    }
+
+    // If no visibility settings, show all dimensions
+    return dimensions;
+  } catch (error) {
+    console.error("Error filtering dimensions by visibility:", error);
+    // Fallback: return all dimensions if filter fails
+    return dimensions;
+  }
+};
+
+/**
  * Retries a function with exponential backoff
  * @param fn The async function to retry
  * @param maxAttempts Maximum number of attempts (default: 3)
