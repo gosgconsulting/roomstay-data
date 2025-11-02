@@ -152,7 +152,9 @@ export const DimensionsListModal = ({
         return;
       }
 
-      const newVisibleDimensions = new Set(visibleDimensions);
+      // If visibleDimensions hasn't been initialized yet, start with all dimensions
+      const currentVisible = visibleDimensions === null ? new Set<string>() : visibleDimensions;
+      const newVisibleDimensions = new Set(currentVisible);
 
       if (newVisibleDimensions.has(dimensionId)) {
         newVisibleDimensions.delete(dimensionId);
