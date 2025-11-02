@@ -119,52 +119,64 @@ export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChang
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load dimensions with proper scope filtering (same logic as DimensionsListModal)
-      console.log('[testing] KPISettings - Loading dimensions for user:', user.id);
+      // Load all KPIs that are mapped in data sources or have formulas (even if currently zero/empty)
+      console.log('[testing] KPISettings - Loading all mapped KPIs for report:', reportId);
 
-      // Load global dimensions
-      const { data: globalData, error: globalError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("scope", "global")
-        .in("type", ["number", "currency", "percentage"])
-        .order("created_at", { ascending: false });
-
-      if (globalError) throw globalError;
-
-      // Load account-specific dimensions if accountId is available (we don't have it in this modal)
-      // For now, we'll skip account dimensions in KPI Settings
+      // Get all dimensions that are either:
+      // 1. Mapped in data sources for this report
+      // 2. Have formulas (calculated KPIs)
+      // 3. Are numeric types (exclude text dimensions)
       
-      // Load user's custom dimensions
-      const { data: customData, error: customError } = await supabase
+      // First, get dimension IDs that are mapped in data sources
+      const { data: dataSources, error: dsError } = await supabase
+        .from("data_sources")
+        .select("column_mappings")
+        .eq("report_id", reportId);
+
+      if (dsError) throw dsError;
+
+      const mappedDimensionIds = new Set<string>();
+      
+      if (dataSources && dataSources.length > 0) {
+        dataSources.forEach(ds => {
+          if (ds.column_mappings && Array.isArray(ds.column_mappings)) {
+            ds.column_mappings.forEach((mapping: any) => {
+              if (mapping.dimensionId && mapping.dimensionId !== 'none' && mapping.dimensionId !== null) {
+                mappedDimensionIds.add(mapping.dimensionId);
+              }
+            });
+          }
+        });
+      }
+
+      console.log('[testing] Found mapped dimension IDs:', Array.from(mappedDimensionIds));
+
+      // Get all numeric dimensions (global and custom) - include all since mappings exist
+      const { data: allDimensions, error: dimError } = await supabase
         .from("dimensions")
-        .select("*")
-        .eq("scope", "custom")
-        .eq("user_id", user.id)
-        .in("type", ["number", "currency", "percentage"])
-        .order("created_at", { ascending: false });
+        .select("id, name, type, scope, formula")
+        .in("type", ["number", "currency", "percentage"]) // Exclude text dimensions
+        .or(`scope.eq.global,and(scope.eq.custom,user_id.eq.${user.id})`);
 
-      if (customError) throw customError;
+      if (dimError) throw dimError;
 
-      // Combine dimensions with proper precedence (custom > global)
-      const allDimensions = [
-        ...(customData || []),    // Custom dimensions take precedence
-        ...(globalData || [])     // Then global dimensions
-      ];
+      // Filter to include:
+      // 1. Dimensions that are mapped in data sources
+      // 2. Dimensions with formulas (calculated KPIs)
+      // 3. All global dimensions (they're available for all reports)
+      const relevantDimensions = allDimensions?.filter(dim => 
+        mappedDimensionIds.has(dim.id) ||  // Mapped in data source
+        dim.formula ||                     // Has formula (calculated)
+        dim.scope === 'global'             // Global dimensions are always available
+      ) || [];
 
-      // Remove duplicates by name, keeping first occurrence (most specific scope)
-      const uniqueDimensions = allDimensions.filter((dim, index, arr) => 
+      // Remove duplicates by name, prioritizing custom > global
+      const uniqueDimensions = relevantDimensions.filter((dim, index, arr) => 
         arr.findIndex(d => d.name === dim.name) === index
       );
 
-      console.log('[testing] KPISettings - Loaded dimensions:', {
-        global: globalData?.length || 0,
-        custom: customData?.length || 0,
-        total: uniqueDimensions.length
-      });
-
-      // Get all available KPI names from dimensions
-      const availableKPIs = uniqueDimensions?.map(d => d.name) || [];
+      const availableKPIs = uniqueDimensions.map(d => d.name);
+      console.log('[testing] KPISettings - All available KPIs (mapped + formulas):', availableKPIs.length, availableKPIs);
       
       if (availableKPIs.length === 0) {
         setKpis([]);

@@ -13,7 +13,9 @@ import {
   Percent,
   DollarSign,
   Target,
-  Calculator
+  Calculator,
+  Calendar,
+  PieChart
 } from "lucide-react";
 
 interface KPIMetric {
@@ -285,6 +287,9 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
             const calculatedValue = calculateFormula(dimension.formula, aggregatedValues, dimensions);
             if (calculatedValue !== null) {
               aggregatedValues[dimension.name] = calculatedValue;
+              console.log('[testing] Calculated KPI:', dimension.name, '=', calculatedValue, 'from formula:', dimension.formula);
+            } else {
+              console.log('[testing] Failed to calculate KPI:', dimension.name, 'formula:', dimension.formula);
             }
           }
         });
@@ -294,6 +299,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
 
       // Get current period data
       const aggregatedValues = aggregateForPeriod(filters.dateRange?.from, filters.dateRange?.to);
+      console.log('[testing] Aggregated values after calculation:', Object.keys(aggregatedValues), aggregatedValues);
 
       // Get comparison period data if comparison is enabled
       let compareValues: Record<string, number> | null = null;
@@ -304,20 +310,29 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
       // Map to display metrics with icons and colors
       const displayMetrics: KPIMetric[] = [];
       
-      // Define metric configurations with icons and colors
+      // Define metric configurations with icons and colors for all KPIs
       const metricConfigs: Record<string, { icon: any; color: string }> = {
+        // Direct KPIs
         'Impressions': { icon: Eye, color: 'bg-pink-500' },
         'Clicks': { icon: MousePointerClick, color: 'bg-purple-500' },
-        'CTR': { icon: TrendingUp, color: 'bg-emerald-500' },
-        'Conversions': { icon: ShoppingCart, color: 'bg-orange-500' },
-        'Conversion rate': { icon: Percent, color: 'bg-pink-500' },
-        'CPC': { icon: DollarSign, color: 'bg-purple-500' },
-        'ROAS': { icon: Target, color: 'bg-pink-500' },
-        'Cost of sale': { icon: Calculator, color: 'bg-yellow-500' },
         'Cost': { icon: DollarSign, color: 'bg-blue-500' },
         'Revenue': { icon: DollarSign, color: 'bg-cyan-500' },
-        'Purchases': { icon: ShoppingCart, color: 'bg-green-500' },
+        'Conversions': { icon: ShoppingCart, color: 'bg-orange-500' },
+        'Bookings': { icon: Calendar, color: 'bg-green-500' }, // Added Bookings icon
         'Leads': { icon: Target, color: 'bg-indigo-500' },
+        
+        // Calculated KPIs
+        'CTR': { icon: TrendingUp, color: 'bg-emerald-500' },
+        'ROAS': { icon: Target, color: 'bg-rose-500' },
+        'Conversion Rate': { icon: Percent, color: 'bg-violet-500' }, // Fixed name case
+        'CPC': { icon: DollarSign, color: 'bg-amber-500' },
+        'CPM': { icon: DollarSign, color: 'bg-teal-500' },
+        'Cost of sale': { icon: Calculator, color: 'bg-yellow-500' },
+        'Impression Share': { icon: PieChart, color: 'bg-slate-500' },
+        
+        // Legacy/fallback names
+        'Conversion rate': { icon: Percent, color: 'bg-violet-500' }, // Fallback for case mismatch
+        'Purchases': { icon: ShoppingCart, color: 'bg-green-500' }, // Legacy name
       };
 
       // Get all available metric names from dimensions
@@ -337,7 +352,9 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
 
       orderedMetrics.forEach((metricName) => {
         // Skip if not visible
-        if (!visibleKPIsSet.has(metricName)) return;
+        if (!visibleKPIsSet.has(metricName)) {
+          return;
+        }
         
         if (aggregatedValues[metricName] !== undefined) {
           const dimension = dimensions.find(d => d.name === metricName);

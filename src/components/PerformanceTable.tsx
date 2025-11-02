@@ -1004,23 +1004,33 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   };
 
   const applyColumnSettings = async () => {
-    if (!reportId || !activeViewId || isSharedView) return;
+    if (!reportId || !activeViewId || isSharedView) {
+      console.log('[testing] Cannot apply column settings:', { reportId: !!reportId, activeViewId: !!activeViewId, isSharedView });
+      return;
+    }
 
     try {
       setIsSavingColumnSettings(true);
-      console.log('[testing] Applying column visibility settings');
+      console.log('[testing] Applying column visibility settings to view:', activeViewId);
 
       const viewData = {
         visible_columns: Array.from(visibleColumns),
         column_order: columnOrder,
       };
 
+      console.log('[testing] Updating report_views with data:', viewData);
+
       const { error } = await supabase
         .from("report_views")
         .update(viewData)
         .eq("id", activeViewId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('[testing] Error updating report_views:', error);
+        throw error;
+      }
+
+      console.log('[testing] Successfully updated report_views');
 
       // Update initial state to match current state
       setInitialVisibleColumns(new Set(visibleColumns));
