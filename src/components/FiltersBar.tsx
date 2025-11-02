@@ -350,8 +350,15 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: 
         seenNames.add(dim.name);
         return true;
       });
-      
-      setDimensions(uniqueDimensions);
+
+      // Filter dimensions by visibility settings
+      const { data: { user } } = await supabase.auth.getUser();
+      let finalDimensions = uniqueDimensions;
+      if (user && reportId) {
+        finalDimensions = await filterDimensionsByVisibility(uniqueDimensions, reportId, user.id, supabase);
+      }
+
+      setDimensions(finalDimensions);
     } catch (error) {
       console.error("Error loading dimensions:", error);
     } finally {
