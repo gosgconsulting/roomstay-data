@@ -75,6 +75,90 @@ export const DimensionsListModal = ({
     }
   }, [open, refreshTrigger]);
 
+  const loadVisibleDimensions = async () => {
+    try {
+      if (!reportId) return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get the default report view settings for this report
+      const { data: viewSettings } = await supabase
+        .from("report_views")
+        .select("visible_dimensions")
+        .eq("report_id", reportId)
+        .eq("user_id", user.id)
+        .eq("is_default", true)
+        .maybeSingle();
+
+      if (viewSettings?.visible_dimensions) {
+        setVisibleDimensions(new Set(viewSettings.visible_dimensions));
+      } else {
+        setVisibleDimensions(new Set());
+      }
+    } catch (error) {
+      console.error("Error loading visible dimensions:", error);
+    }
+  };
+
+  const toggleDimensionVisibility = async (dimensionId: string) => {
+    try {
+      if (!reportId) return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const newVisibleDimensions = new Set(visibleDimensions);
+
+      if (newVisibleDimensions.has(dimensionId)) {
+        newVisibleDimensions.delete(dimensionId);
+      } else {
+        newVisibleDimensions.add(dimensionId);
+      }
+
+      // Get or create the default view for this report
+      const { data: existingView } = await supabase
+        .from("report_views")
+        .select("id")
+        .eq("report_id", reportId)
+        .eq("user_id", user.id)
+        .eq("is_default", true)
+        .maybeSingle();
+
+      if (existingView) {
+        // Update existing view
+        const { error } = await supabase
+          .from("report_views")
+          .update({ visible_dimensions: Array.from(newVisibleDimensions) })
+          .eq("id", existingView.id);
+
+        if (error) throw error;
+      } else {
+        // Create new default view with this setting
+        const { error } = await supabase
+          .from("report_views")
+          .insert({
+            report_id: reportId,
+            user_id: user.id,
+            is_default: true,
+            name: "Default View",
+            visible_dimensions: Array.from(newVisibleDimensions),
+          });
+
+        if (error) throw error;
+      }
+
+      setVisibleDimensions(newVisibleDimensions);
+    } catch (error) {
+      console.error("Error toggling dimension visibility:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update dimension visibility",
+        variant: "destructive",
+      });
+    }
+  };
+
   const loadMappedDimensions = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
