@@ -70,9 +70,10 @@ export const ColumnMappingStep = ({
     try {
       const { supabase } = await import("@/integrations/supabase/client");
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) return;
 
+      // Get all dimensions accessible to the user
       const { data, error } = await supabase
         .from("dimensions")
         .select("*")
@@ -80,7 +81,36 @@ export const ColumnMappingStep = ({
 
       if (error) throw error;
 
-      setDimensions(data || []);
+      // Filter and prioritize dimensions:
+      // 1. Account-specific dimensions (if accountId provided)
+      // 2. Custom report dimensions (if reportId provided)
+      // 3. Global dimensions (fallback)
+      const dimensionsByName: Record<string, Dimension> = {};
+
+      // First pass: add global dimensions as base
+      (data || []).filter((d: any) => d.scope === 'global').forEach((d: any) => {
+        dimensionsByName[d.name] = d;
+      });
+
+      // Second pass: override with account-specific dimensions
+      if (accountId) {
+        (data || [])
+          .filter((d: any) => d.scope === 'account' && d.account_id === accountId)
+          .forEach((d: any) => {
+            dimensionsByName[d.name] = d; // Override global with account version
+          });
+      }
+
+      // Third pass: add custom report dimensions (highest priority)
+      if (reportId) {
+        (data || [])
+          .filter((d: any) => d.scope === 'custom' && d.report_id === reportId)
+          .forEach((d: any) => {
+            dimensionsByName[d.name] = d; // Override with custom version
+          });
+      }
+
+      setDimensions(Object.values(dimensionsByName));
     } catch (error) {
       console.error("Error loading dimensions:", error);
     } finally {
