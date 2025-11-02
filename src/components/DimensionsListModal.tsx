@@ -83,7 +83,7 @@ export const DimensionsListModal = ({
       if (!user) return;
 
       // Get the default report view settings for this report
-      const { data: viewSettings } = await supabase
+      const { data: viewSettings, error } = await supabase
         .from("report_views")
         .select("visible_dimensions")
         .eq("report_id", reportId)
@@ -91,13 +91,20 @@ export const DimensionsListModal = ({
         .eq("is_default", true)
         .maybeSingle();
 
-      if (viewSettings?.visible_dimensions) {
+      if (error) {
+        console.warn("[testing] Could not load visible dimensions settings, defaulting all to visible:", error);
+        // If we can't load settings, make all dimensions visible by default
+        setVisibleDimensions(new Set());
+      } else if (viewSettings?.visible_dimensions && Array.isArray(viewSettings.visible_dimensions)) {
         setVisibleDimensions(new Set(viewSettings.visible_dimensions));
       } else {
+        // Default: all dimensions visible
         setVisibleDimensions(new Set());
       }
     } catch (error) {
-      console.error("Error loading visible dimensions:", error);
+      console.error("[testing] Error loading visible dimensions:", error);
+      // Fallback: all dimensions visible
+      setVisibleDimensions(new Set());
     }
   };
 
