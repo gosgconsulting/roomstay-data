@@ -413,9 +413,9 @@ export const DimensionsListModal = ({
                         size="icon"
                         className="h-8 w-8"
                         onClick={() => toggleDimensionVisibility(dimension.id)}
-                        title={visibleDimensions.has(dimension.id) ? "Deactivate for report" : "Activate for report"}
+                        title={visibleDimensions === null || visibleDimensions.has(dimension.id) ? "Deactivate for report" : "Activate for report"}
                       >
-                        {visibleDimensions.has(dimension.id) ? (
+                        {visibleDimensions === null || visibleDimensions.has(dimension.id) ? (
                           <Eye className="h-4 w-4 text-primary" />
                         ) : (
                           <EyeOff className="h-4 w-4 text-muted-foreground" />
