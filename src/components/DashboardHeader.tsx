@@ -8,7 +8,7 @@ import { DimensionModal } from "./DimensionModal";
 import { ReportModal } from "./ReportModal";
 import { ShareModal } from "./ShareModal";
 import { SyncModeModal } from "./SyncModeModal";
-import { DataRowsModal } from "./DataRowsModal";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -64,7 +64,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const [showReportModal, setShowReportModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSyncModeModal, setShowSyncModeModal] = useState(false);
-  const [showDataRowsModal, setShowDataRowsModal] = useState(false);
+
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [editingDimension, setEditingDimension] = useState<Dimension | null>(null);
   const [dimensionModalMode, setDimensionModalMode] = useState<'add' | 'edit'>('add');
@@ -552,8 +552,15 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
         description: `Successfully completed ${syncModeText}: ${totalRowsImported.toLocaleString()} rows with ${dataSources.length} dimension(s)`,
       });
 
-      // Trigger data refresh in the parent component
+      // Trigger comprehensive data refresh in the parent component
+      console.log('[SYNC] Triggering comprehensive component refresh...');
       onRefreshData?.();
+      
+      // Force a small delay to ensure refresh propagates
+      setTimeout(() => {
+        console.log('[SYNC] Secondary refresh trigger for stubborn components...');
+        onRefreshData?.();
+      }, 500);
 
       // Trigger monthly aggregation for better performance
       try {

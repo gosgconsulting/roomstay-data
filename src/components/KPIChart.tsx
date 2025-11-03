@@ -233,38 +233,16 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
         debugLog('KPIChart', `Using date dimension: ${dateDimension.name} (${dateDimension.id})`);
         console.log('[CHART] Date dimension:', dateDimension);
 
-        // Implement more efficient data fetching with smaller chunks and timeout handling
-        const CHUNK_SIZE = 1000; // Further reduced chunk size to avoid timeouts
-        const MAX_ROWS = 15000; // Further reduced limit to prevent blank page issues
+        // Implement more efficient data fetching - LOAD LATEST DATA FIRST
+        const CHUNK_SIZE = 1000; // Optimized chunk size
+        const MAX_ROWS = 15000; // Limit to prevent performance issues
         let allDimensionData: DimensionData[] = [];
         let offset = 0;
         let hasMore = true;
         let timeoutCount = 0;
         const MAX_TIMEOUTS = 3;
         
-        console.log('[CHART] Fetching dimension_data for report:', reportId);
-        
-        // Try to use monthly aggregated data for better performance if available
-        let useMonthlyData = false;
-        let monthlyDataAvailable = false;
-        
-        try {
-          const { MonthlyDataService } = await import("@/services/MonthlyDataService");
-          const monthlyOverview = await MonthlyDataService.getDataOverview(reportId);
-          
-          if (monthlyOverview.monthCount > 0) {
-            monthlyDataAvailable = true;
-            console.log(`[CHART] Monthly data available: ${monthlyOverview.monthCount} months`);
-            
-            // Use monthly data if we have a large dataset (>20K rows) and date filtering is applied
-            if (monthlyOverview.totalRows > 20000 && stableFilters.dateRange?.from && stableFilters.dateRange?.to) {
-              useMonthlyData = true;
-              console.log('[CHART] Using monthly aggregated data for better performance');
-            }
-          }
-        } catch (error) {
-          console.warn('[CHART] Monthly data service not available, using raw data:', error);
-        }
+        console.log('[CHART] Fetching dimension_data for report (LATEST FIRST):', reportId);
         
         try {
           while (hasMore && offset < MAX_ROWS && timeoutCount < MAX_TIMEOUTS) {
@@ -275,9 +253,9 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
                 async () => {
                   const { data, error } = await supabase
                     .from("dimension_data")
-                    .select("*")
+                    .select("id, row_number, dimension_values") // Only select needed columns
                     .eq("report_id", reportId)
-                    .order('row_number', { ascending: true })
+                    .order('row_number', { ascending: false }) // LATEST DATA FIRST
                     .range(offset, offset + CHUNK_SIZE - 1);
 
                   if (error) {

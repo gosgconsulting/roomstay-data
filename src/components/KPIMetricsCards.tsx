@@ -211,43 +211,23 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
         console.log('[testing] Dimensions after visibility filter:', dimensions?.length);
       }
 
-      // Fetch dimension_data in chunks (2000 rows at a time for better performance)
-      const CHUNK_SIZE = 2000;
-      const MAX_ROWS = 15000; // Reduced limit to prevent blank page issues
+      // Fetch dimension_data efficiently - LOAD LATEST DATA FIRST
+      const CHUNK_SIZE = 2000; // Optimized chunk size
+      const MAX_ROWS = 15000; // Limit to prevent performance issues
       let allDimensionData: any[] = [];
       let offset = 0;
       let hasMore = true;
 
-      // Try to use monthly aggregated data for better performance if available
-      let useMonthlyData = false;
-      let monthlyDataAvailable = false;
-      
-      try {
-        const { MonthlyDataService } = await import("@/services/MonthlyDataService");
-        const monthlyOverview = await MonthlyDataService.getDataOverview(reportId);
-        
-        if (monthlyOverview.monthCount > 0) {
-          monthlyDataAvailable = true;
-          console.log(`[testing] KPIMetricsCards - Monthly data available: ${monthlyOverview.monthCount} months`);
-          
-          // Use monthly data if we have a large dataset (>20K rows) and date filtering is applied
-          if (monthlyOverview.totalRows > 20000 && stableFilters.dateRange?.from && stableFilters.dateRange?.to) {
-            useMonthlyData = true;
-            console.log('[testing] KPIMetricsCards - Using monthly aggregated data for better performance');
-          }
-        }
-      } catch (error) {
-        console.warn('[testing] KPIMetricsCards - Monthly data service not available, using raw data:', error);
-      }
+      console.log('[testing] KPIMetricsCards - Loading data (LATEST FIRST) for report:', reportId);
 
       while (hasMore && offset < MAX_ROWS) {
         const chunkData = await retryWithBackoff(
           async () => {
             const { data, error } = await supabase
               .from("dimension_data")
-              .select("*")
+              .select("id, row_number, dimension_values") // Only select needed columns
               .eq("report_id", reportId)
-              .order('row_number', { ascending: true })
+              .order('row_number', { ascending: false }) // LATEST DATA FIRST
               .range(offset, offset + CHUNK_SIZE - 1);
 
             if (error) throw error;

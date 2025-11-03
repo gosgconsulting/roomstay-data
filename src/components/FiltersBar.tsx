@@ -48,7 +48,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
-  const [datePreset, setDatePreset] = useState<string>("this_month");
+  const [datePreset, setDatePreset] = useState<string>("last_7_days");
   const [showDimensionSelector, setShowDimensionSelector] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingFilters, setIsLoadingFilters] = useState(false);
@@ -171,19 +171,19 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
           });
           setSelectedFilters(normalizedFilters);
         }
-        // Always apply date preset if saved, or default to "this_month"
-        const preset = data.date_range_preset || "this_month";
+        // Always apply date preset if saved, or default to "last_7_days"
+        const preset = data.date_range_preset || "last_7_days";
         setDatePreset(preset);
         applyDatePreset(preset);
-      } else {
-        // No saved view for this report, apply defaults
-        applyDatePreset("this_month");
+              } else {
+          // No saved view for this report, apply defaults
+          applyDatePreset("last_7_days");
+        }
+          } catch (error) {
+        console.error("Error loading filter settings:", error);
+        // On error, apply defaults
+        applyDatePreset("last_7_days");
       }
-    } catch (error) {
-      console.error("Error loading filter settings:", error);
-      // On error, apply defaults
-      applyDatePreset("this_month");
-    }
   };
 
   const saveFilterSettings = async () => {
@@ -306,42 +306,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     setDatePreset(preset);
   };
 
-  const applySmartDateRange = async () => {
-    if (!reportId) return;
 
-    try {
-      console.log('[testing] FiltersBar - Applying smart date range based on actual data');
-      const { SmartDateService } = await import("@/services/SmartDateService");
-      
-      // Get the most recent date with data
-      const mostRecentDate = await SmartDateService.getMostRecentDataDate(reportId);
-      
-      if (mostRecentDate) {
-        // Use the most recent 7 days of available data
-        const optimalEnd = mostRecentDate;
-        const optimalStart = subDays(optimalEnd, 6); // 7 days total including end date
-        
-        console.log('[testing] FiltersBar - Using smart date range based on actual data:', {
-          from: optimalStart.toISOString().split('T')[0],
-          to: optimalEnd.toISOString().split('T')[0],
-          mostRecentDataDate: mostRecentDate.toISOString().split('T')[0]
-        });
-        
-        setDateRange({ from: optimalStart, to: optimalEnd });
-        setDatePreset("data_smart");
-        
-        // Show user feedback about the smart date selection
-        console.log(`[testing] FiltersBar - Set filter to most recent 7 days of data: ${format(optimalStart, 'MMM d')} - ${format(optimalEnd, 'MMM d, yyyy')}`);
-      } else {
-        console.log('[testing] FiltersBar - No data date found, using standard fallback');
-        applyDatePreset("last_7_days");
-      }
-    } catch (error) {
-      console.error('[testing] FiltersBar - Error applying smart date range:', error);
-      // Fallback to standard preset
-      applyDatePreset("last_7_days");
-    }
-  };
 
   const loadDimensions = async () => {
     if (!reportId) return;
@@ -697,13 +662,13 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0 bg-background z-50" align="start">
-                    <div className="p-3 border-b space-y-2">
-                      <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2 border-b">
+                      <div className="grid grid-cols-3 gap-1">
                         <Button
                           variant={datePreset === "today" ? "default" : "outline"}
                           size="sm"
                           onClick={() => applyDatePreset("today")}
-                          className="text-xs"
+                          className="text-xs h-7 px-2"
                         >
                           Today
                         </Button>
@@ -711,7 +676,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
                           variant={datePreset === "yesterday" ? "default" : "outline"}
                           size="sm"
                           onClick={() => applyDatePreset("yesterday")}
-                          className="text-xs"
+                          className="text-xs h-7 px-2"
                         >
                           Yesterday
                         </Button>
@@ -719,7 +684,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
                           variant={datePreset === "this_week" ? "default" : "outline"}
                           size="sm"
                           onClick={() => applyDatePreset("this_week")}
-                          className="text-xs"
+                          className="text-xs h-7 px-2"
                         >
                           This Week
                         </Button>
@@ -727,31 +692,33 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
                           variant={datePreset === "last_7_days" ? "default" : "outline"}
                           size="sm"
                           onClick={() => applyDatePreset("last_7_days")}
-                          className="text-xs"
+                          className="text-xs h-7 px-2 font-medium"
                         >
                           Last 7 Days
-                        </Button>
-                        <Button
-                          variant={datePreset === "this_month" ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => applyDatePreset("this_month")}
-                          className="text-xs"
-                        >
-                          This Month
                         </Button>
                         <Button
                           variant={datePreset === "last_30_days" ? "default" : "outline"}
                           size="sm"
                           onClick={() => applyDatePreset("last_30_days")}
-                          className="text-xs"
+                          className="text-xs h-7 px-2"
                         >
                           Last 30 Days
                         </Button>
                         <Button
+                          variant={datePreset === "this_month" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => applyDatePreset("this_month")}
+                          className="text-xs h-7 px-2"
+                        >
+                          This Month
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1 mt-1">
+                        <Button
                           variant={datePreset === "last_month" ? "default" : "outline"}
                           size="sm"
                           onClick={() => applyDatePreset("last_month")}
-                          className="text-xs"
+                          className="text-xs h-7 px-2"
                         >
                           Last Month
                         </Button>
@@ -759,7 +726,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
                           variant={datePreset === "this_year" ? "default" : "outline"}
                           size="sm"
                           onClick={() => applyDatePreset("this_year")}
-                          className="text-xs"
+                          className="text-xs h-7 px-2"
                         >
                           This Year
                         </Button>
@@ -768,7 +735,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
                         variant={datePreset === "all_time" ? "default" : "outline"}
                         size="sm"
                         onClick={() => applyDatePreset("all_time")}
-                        className="text-xs w-full"
+                        className="text-xs h-7 w-full mt-1"
                       >
                         All Time
                       </Button>
