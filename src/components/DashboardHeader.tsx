@@ -497,8 +497,10 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
             console.log(`[SYNC] First row sample:`, firstRow?.slice(0, 5));
             console.log(`[SYNC] Last row sample:`, lastRow?.slice(0, 5));
             
-            // Find date column (assuming it's the first column based on mapping)
-            const dateColumnIndex = dataSource.column_mappings?.find(m => m.dimensionId === '425eddda-29ff-468d-a107-08b0f3d6efb9')?.columnIndex || 0;
+                         // Find date column (assuming it's the first column based on mapping)
+             const mappings = Array.isArray(dataSource.column_mappings) ? dataSource.column_mappings : [];
+             const dateMapping = mappings.find((m: any) => m.dimensionId === '425eddda-29ff-468d-a107-08b0f3d6efb9') as any;
+             const dateColumnIndex = dateMapping?.columnIndex || 0;
             if (firstRow && lastRow && firstRow.length > dateColumnIndex && lastRow.length > dateColumnIndex) {
               console.log(`[SYNC] Date range in sheets: ${firstRow[dateColumnIndex]} to ${lastRow[dateColumnIndex]}`);
             }
@@ -562,39 +564,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
         onRefreshData?.();
       }, 500);
 
-      // Trigger monthly aggregation for better performance
-      try {
-        console.log('[SYNC] Starting automatic monthly aggregation...');
-        const { MonthlyDataService } = await import("@/services/MonthlyDataService");
-        
-        // Check if aggregation is needed
-        const needsAggregation = await MonthlyDataService.needsAggregation(reportId);
-        
-        if (needsAggregation || syncMode === 'full') {
-          console.log('[SYNC] Monthly aggregation needed, processing...');
-          const aggregationSuccess = await MonthlyDataService.aggregateMonthlyData(reportId, undefined, syncMode === 'full');
-          
-          if (aggregationSuccess) {
-            console.log('[SYNC] Monthly aggregation completed successfully');
-            toast({
-              title: "Data organized",
-              description: "Data has been organized by month for faster access",
-            });
-          } else {
-            console.warn('[SYNC] Monthly aggregation failed, but sync was successful');
-          }
-        } else {
-          console.log('[SYNC] Monthly aggregation not needed, data is up to date');
-        }
-      } catch (aggregationError) {
-        console.error('[SYNC] Error during monthly aggregation:', aggregationError);
-        // Don't fail the entire sync if aggregation fails
-        toast({
-          title: "Aggregation warning",
-          description: "Data sync completed but monthly organization failed",
-          variant: "destructive",
-        });
-      }
+      
 
     } catch (error) {
       console.error("Error refreshing data:", error);
@@ -710,15 +680,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
             <Grid3x3 className="h-4 w-4" />
             Dimensions
           </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setShowDataRowsModal(true)}
-            disabled={!currentReport}
-          >
-            <Database className="h-4 w-4" />
-            Data Rows
-          </Button>
+          
         </div>
 
         <div className="flex items-center gap-3">
@@ -857,14 +819,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
         totalRows={totalRows}
       />
 
-      {currentReport && (
-        <DataRowsModal
-          open={showDataRowsModal}
-          onOpenChange={setShowDataRowsModal}
-          reportId={currentReport.id}
-          reportName={currentReport.name}
-        />
-      )}
+      
     </>
   );
 };
