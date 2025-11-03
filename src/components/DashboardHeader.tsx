@@ -1,21 +1,29 @@
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
-import { ChevronDown, Database, Share2, Plus, Trash2, Pencil, Grid3x3, RefreshCw } from "lucide-react";
 import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Plus, RefreshCw, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2 } from "lucide-react";
 import { DataSourceModal } from "./DataSourceModal";
 import { DataSourcesListModal } from "./DataSourcesListModal";
 import { DimensionsListModal } from "./DimensionsListModal";
 import { DimensionModal } from "./DimensionModal";
 import { ReportModal } from "./ReportModal";
 import { ShareModal } from "./ShareModal";
+import { SyncModeModal } from "./SyncModeModal";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/use-toast";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Dimension {
   id: string;
@@ -53,6 +61,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const [showDimensionModal, setShowDimensionModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showSyncModeModal, setShowSyncModeModal] = useState(false);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [editingDimension, setEditingDimension] = useState<Dimension | null>(null);
   const [dimensionModalMode, setDimensionModalMode] = useState<'add' | 'edit'>('add');
@@ -62,6 +71,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const [currentReport, setCurrentReport] = useState<Report | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdateDate, setLastUpdateDate] = useState<string | null>(null);
+  const [totalRows, setTotalRows] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
 
   // Load reports on mount and when accountId changes
@@ -90,6 +100,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   useEffect(() => {
     if (reportId) {
       loadLastUpdateDate(reportId);
+      loadTotalRows(reportId);
     }
   }, [reportId]);
 
@@ -118,6 +129,26 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
     } catch (error) {
       console.error("Error loading last update date:", error);
       setLastUpdateDate(null);
+    }
+  };
+
+  const loadTotalRows = async (reportId: string) => {
+    try {
+      const { count, error } = await supabase
+        .from('dimension_data')
+        .select('*', { count: 'exact', head: true })
+        .eq('report_id', reportId);
+
+      if (error) {
+        console.error("Error loading total rows:", error);
+        setTotalRows(0);
+        return;
+      }
+
+      setTotalRows(count || 0);
+    } catch (error) {
+      console.error("Error loading total rows:", error);
+      setTotalRows(0);
     }
   };
 
@@ -397,9 +428,15 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
     }
   };
 
-  const handleRefresh = async () => {
+  const handleRefreshClick = () => {
+    if (!reportId) return;
+    setShowSyncModeModal(true);
+  };
+
+  const handleSync = async (syncMode: 'incremental' | 'full') => {
     if (!reportId) return;
     
+    setShowSyncModeModal(false);
     setIsSyncing(true);
     
     try {
@@ -444,20 +481,21 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
 
           const sheetRows = sheetsData?.values || [];
           
-          // Invoke migrate-sheet-data edge function to process the data
-          const { data: migrateResult, error: migrateError } = await supabase.functions.invoke('migrate-sheet-data', {
+          // Invoke sync-sheet-data edge function to process the data
+          const { data: syncResult, error: syncError } = await supabase.functions.invoke('sync-sheet-data', {
             body: {
               dataSourceId: dataSource.id,
               reportId: reportId,
               sheetData: sheetRows,
               columnMappings: dataSource.column_mappings,
+              syncMode: syncMode,
             },
           });
 
-          if (migrateError) throw migrateError;
+          if (syncError) throw syncError;
 
-          if (migrateResult?.rowCount) {
-            totalRowsImported += migrateResult.rowCount;
+          if (syncResult?.rowCount) {
+            totalRowsImported += syncResult.rowCount;
           }
 
           // Update the data source's updated_at timestamp
@@ -476,12 +514,14 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
         }
       }
 
-      // Refresh the last update date
+      // Refresh the last update date and total rows
       await loadLastUpdateDate(reportId);
+      await loadTotalRows(reportId);
 
+      const syncModeText = syncMode === 'incremental' ? 'incremental sync' : 'full refresh';
       toast({
-        title: "Refresh complete",
-        description: `Successfully imported ${totalRowsImported.toLocaleString()} rows with ${dataSources.length} dimension(s)`,
+        title: "Sync complete",
+        description: `Successfully completed ${syncModeText}: ${totalRowsImported.toLocaleString()} rows with ${dataSources.length} dimension(s)`,
       });
 
       // Trigger data refresh in the parent component
@@ -612,7 +652,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
           <Button 
             variant="outline" 
             className="gap-2"
-            onClick={handleRefresh}
+            onClick={handleRefreshClick}
             disabled={!currentReport || isSyncing}
           >
             <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -729,6 +769,15 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
           accountId={accountId}
         />
       )}
+
+      <SyncModeModal
+        open={showSyncModeModal}
+        onOpenChange={setShowSyncModeModal}
+        onSync={handleSync}
+        isLoading={isSyncing}
+        lastSyncTime={lastUpdateDate}
+        totalRows={totalRows}
+      />
     </>
   );
 };

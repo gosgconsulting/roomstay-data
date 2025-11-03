@@ -33,6 +33,7 @@ interface FiltersBarProps {
   onFiltersChange?: (filters: FilterState) => void;
   isSharedView?: boolean;
   accountId?: string;
+  refreshTrigger?: number;
 }
 
 interface Dimension {
@@ -41,7 +42,7 @@ interface Dimension {
   type: string;
 }
 
-export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, accountId }: FiltersBarProps) => {
+export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, accountId, refreshTrigger }: FiltersBarProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [activeDimensions, setActiveDimensions] = useState<string[]>([]);
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
@@ -73,6 +74,14 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
       loadFilterSettings();
     }
   }, [reportId]);
+
+  // Refresh dimensions when data is remapped/synced
+  useEffect(() => {
+    if (reportId && refreshTrigger && refreshTrigger > 0) {
+      console.log('[testing] FiltersBar - Refreshing dimensions due to data sync, trigger:', refreshTrigger);
+      loadDimensions();
+    }
+  }, [refreshTrigger, reportId]);
 
   useEffect(() => {
     if (activeDimensions.length > 0 && reportId) {

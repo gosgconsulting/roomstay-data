@@ -284,6 +284,7 @@ export default function SharedReport() {
         onFiltersChange={handleFiltersChange} 
         isSharedView={true} 
         accountId={account?.id} 
+        refreshTrigger={loadingGeneration}
       />
       
       <main className="container mx-auto px-6 py-6 space-y-6">

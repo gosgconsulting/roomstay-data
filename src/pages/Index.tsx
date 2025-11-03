@@ -181,7 +181,7 @@ export default function Index() {
       
       {reportId ? (
         <>
-          <FiltersBar reportId={reportId} onFiltersChange={setFilters} isSharedView={false} />
+          <FiltersBar reportId={reportId} onFiltersChange={setFilters} isSharedView={false} refreshTrigger={loadingGeneration} />
           <main className="container mx-auto px-6 py-6 space-y-6">
             <div className="relative">
               <div className="absolute right-0 -top-2 z-10">
