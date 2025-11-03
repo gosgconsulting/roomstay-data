@@ -332,6 +332,26 @@ export const DataSourcesListModal = ({
       
       console.log(`[REFRESH] Refresh completed for "${dataSource.name}"`);
       
+      // Trigger monthly aggregation for the updated data
+      try {
+        console.log('[REFRESH] Starting automatic monthly aggregation...');
+        const { MonthlyDataService } = await import("@/services/MonthlyDataService");
+        const aggregationSuccess = await MonthlyDataService.aggregateMonthlyData(reportId || '', dataSource.id, true);
+        
+        if (aggregationSuccess) {
+          console.log('[REFRESH] Monthly aggregation completed successfully');
+          toast({
+            title: "Data organized",
+            description: "Data has been organized by month for faster access",
+          });
+        } else {
+          console.warn('[REFRESH] Monthly aggregation failed, but sync was successful');
+        }
+      } catch (aggregationError) {
+        console.error('[REFRESH] Error during monthly aggregation:', aggregationError);
+        // Don't fail if aggregation fails
+      }
+      
       // Close modal and trigger refresh
       onOpenChange(false);
       if (onDataSync) {

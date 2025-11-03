@@ -218,6 +218,28 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
       let offset = 0;
       let hasMore = true;
 
+      // Try to use monthly aggregated data for better performance if available
+      let useMonthlyData = false;
+      let monthlyDataAvailable = false;
+      
+      try {
+        const { MonthlyDataService } = await import("@/services/MonthlyDataService");
+        const monthlyOverview = await MonthlyDataService.getDataOverview(reportId);
+        
+        if (monthlyOverview.monthCount > 0) {
+          monthlyDataAvailable = true;
+          console.log(`[testing] KPIMetricsCards - Monthly data available: ${monthlyOverview.monthCount} months`);
+          
+          // Use monthly data if we have a large dataset (>20K rows) and date filtering is applied
+          if (monthlyOverview.totalRows > 20000 && stableFilters.dateRange?.from && stableFilters.dateRange?.to) {
+            useMonthlyData = true;
+            console.log('[testing] KPIMetricsCards - Using monthly aggregated data for better performance');
+          }
+        }
+      } catch (error) {
+        console.warn('[testing] KPIMetricsCards - Monthly data service not available, using raw data:', error);
+      }
+
       while (hasMore && offset < MAX_ROWS) {
         const chunkData = await retryWithBackoff(
           async () => {

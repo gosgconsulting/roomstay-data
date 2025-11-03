@@ -244,6 +244,28 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
         
         console.log('[CHART] Fetching dimension_data for report:', reportId);
         
+        // Try to use monthly aggregated data for better performance if available
+        let useMonthlyData = false;
+        let monthlyDataAvailable = false;
+        
+        try {
+          const { MonthlyDataService } = await import("@/services/MonthlyDataService");
+          const monthlyOverview = await MonthlyDataService.getDataOverview(reportId);
+          
+          if (monthlyOverview.monthCount > 0) {
+            monthlyDataAvailable = true;
+            console.log(`[CHART] Monthly data available: ${monthlyOverview.monthCount} months`);
+            
+            // Use monthly data if we have a large dataset (>20K rows) and date filtering is applied
+            if (monthlyOverview.totalRows > 20000 && stableFilters.dateRange?.from && stableFilters.dateRange?.to) {
+              useMonthlyData = true;
+              console.log('[CHART] Using monthly aggregated data for better performance');
+            }
+          }
+        } catch (error) {
+          console.warn('[CHART] Monthly data service not available, using raw data:', error);
+        }
+        
         try {
           while (hasMore && offset < MAX_ROWS && timeoutCount < MAX_TIMEOUTS) {
             console.log(`[CHART] Fetching chunk at offset ${offset} (timeouts: ${timeoutCount})`);

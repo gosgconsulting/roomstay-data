@@ -60,11 +60,11 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
 
   useEffect(() => {
     if (reportId) {
-      // Reset all filter state when report changes
+      // Reset all filter state when report changes - use last 7 days for performance
       setActiveDimensions([]);
       setSelectedFilters({});
       setDateRange(undefined);
-      setDatePreset("this_month");
+      setDatePreset("last_7_days");
       setCompareEnabled(false);
       setCompareType("previous_period");
       setCompareDateRange(undefined);
@@ -89,9 +89,9 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     }
   }, [activeDimensions, reportId]);
 
-  // Apply default date range on mount - always apply to ensure consistency
+  // Apply default date range on mount - use last 7 days for better performance with large datasets
   useEffect(() => {
-    applyDatePreset("this_month");
+    applyDatePreset("last_7_days");
   }, []);
 
   // Save filter settings whenever they change

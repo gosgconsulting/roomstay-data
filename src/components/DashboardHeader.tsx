@@ -8,6 +8,7 @@ import { DimensionModal } from "./DimensionModal";
 import { ReportModal } from "./ReportModal";
 import { ShareModal } from "./ShareModal";
 import { SyncModeModal } from "./SyncModeModal";
+import { DataRowsModal } from "./DataRowsModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -63,6 +64,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const [showReportModal, setShowReportModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSyncModeModal, setShowSyncModeModal] = useState(false);
+  const [showDataRowsModal, setShowDataRowsModal] = useState(false);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [editingDimension, setEditingDimension] = useState<Dimension | null>(null);
   const [dimensionModalMode, setDimensionModalMode] = useState<'add' | 'edit'>('add');
@@ -528,6 +530,40 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
       // Trigger data refresh in the parent component
       onRefreshData?.();
 
+      // Trigger monthly aggregation for better performance
+      try {
+        console.log('[SYNC] Starting automatic monthly aggregation...');
+        const { MonthlyDataService } = await import("@/services/MonthlyDataService");
+        
+        // Check if aggregation is needed
+        const needsAggregation = await MonthlyDataService.needsAggregation(reportId);
+        
+        if (needsAggregation || syncMode === 'full') {
+          console.log('[SYNC] Monthly aggregation needed, processing...');
+          const aggregationSuccess = await MonthlyDataService.aggregateMonthlyData(reportId, undefined, syncMode === 'full');
+          
+          if (aggregationSuccess) {
+            console.log('[SYNC] Monthly aggregation completed successfully');
+            toast({
+              title: "Data organized",
+              description: "Data has been organized by month for faster access",
+            });
+          } else {
+            console.warn('[SYNC] Monthly aggregation failed, but sync was successful');
+          }
+        } else {
+          console.log('[SYNC] Monthly aggregation not needed, data is up to date');
+        }
+      } catch (aggregationError) {
+        console.error('[SYNC] Error during monthly aggregation:', aggregationError);
+        // Don't fail the entire sync if aggregation fails
+        toast({
+          title: "Aggregation warning",
+          description: "Data sync completed but monthly organization failed",
+          variant: "destructive",
+        });
+      }
+
     } catch (error) {
       console.error("Error refreshing data:", error);
       toast({
@@ -641,6 +677,15 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
           >
             <Grid3x3 className="h-4 w-4" />
             Dimensions
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setShowDataRowsModal(true)}
+            disabled={!currentReport}
+          >
+            <Database className="h-4 w-4" />
+            Data Rows
           </Button>
         </div>
 
@@ -779,6 +824,15 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
         lastSyncTime={lastUpdateDate}
         totalRows={totalRows}
       />
+
+      {currentReport && (
+        <DataRowsModal
+          open={showDataRowsModal}
+          onOpenChange={setShowDataRowsModal}
+          reportId={currentReport.id}
+          reportName={currentReport.name}
+        />
+      )}
     </>
   );
 };

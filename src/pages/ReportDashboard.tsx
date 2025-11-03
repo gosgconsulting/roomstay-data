@@ -36,11 +36,11 @@ export default function ReportDashboard() {
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   
-  // Filter state
+  // Filter state - default to last 7 days for better performance with large datasets
   const [filters, setFilters] = useState<FilterState>({
     dimensionFilters: {},
     dateRange: undefined,
-    datePreset: "last_30_days",
+    datePreset: "last_7_days",
     compareEnabled: false,
     compareType: "previous_period",
     compareDateRange: undefined,
