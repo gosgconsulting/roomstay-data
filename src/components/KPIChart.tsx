@@ -234,8 +234,8 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
         console.log('[CHART] Date dimension:', dateDimension);
 
         // Implement more efficient data fetching with smaller chunks and timeout handling
-        const CHUNK_SIZE = 2000; // Reduced chunk size to avoid timeouts
-        const MAX_ROWS = 50000; // Limit total rows to prevent excessive memory usage
+        const CHUNK_SIZE = 1000; // Further reduced chunk size to avoid timeouts
+        const MAX_ROWS = 15000; // Further reduced limit to prevent blank page issues
         let allDimensionData: DimensionData[] = [];
         let offset = 0;
         let hasMore = true;
@@ -268,7 +268,7 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
                   }
                   return data;
                 },
-                2, // Reduced retry attempts for faster failure
+                3, // max attempts
                 1000 // Increased delay between retries
               );
 
@@ -280,6 +280,11 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
                 
                 // Reset timeout count on successful fetch
                 timeoutCount = 0;
+                
+                // Add progressive loading feedback for large datasets
+                if (allDimensionData.length > 5000 && allDimensionData.length % 5000 === 0) {
+                  console.log(`[CHART] Progress: ${allDimensionData.length} rows loaded...`);
+                }
               } else {
                 hasMore = false;
                 console.log('[CHART] No more data to fetch');
@@ -301,14 +306,15 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
                   continue;
                 }
               } else {
-                // For non-timeout errors, stop fetching
-                throw chunkError;
+                // For non-timeout errors, stop fetching but continue with available data
+                console.warn('[CHART] Non-timeout error, stopping fetch but continuing with available data:', chunkError);
+                hasMore = false;
               }
             }
           }
           
           if (offset >= MAX_ROWS) {
-            console.warn(`[CHART] Reached maximum row limit (${MAX_ROWS}), using available data`);
+            console.warn(`[CHART] Reached maximum row limit (${MAX_ROWS}), using available data for chart display`);
           }
           
         } catch (chunkError) {
@@ -318,7 +324,10 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
           if (allDimensionData.length > 0) {
             console.warn(`[CHART] Continuing with ${allDimensionData.length} rows despite error:`, chunkError);
           } else {
-            throw new Error(`Failed to fetch dimension data: ${chunkError instanceof Error ? chunkError.message : String(chunkError)}`);
+            // If no data at all, show error but don't crash
+            console.error('[CHART] No data loaded, showing empty chart');
+            setChartData([]);
+            return;
           }
         }
         

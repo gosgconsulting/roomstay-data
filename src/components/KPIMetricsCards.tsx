@@ -211,13 +211,14 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
         console.log('[testing] Dimensions after visibility filter:', dimensions?.length);
       }
 
-      // Fetch dimension_data in chunks (5000 rows at a time)
-      const CHUNK_SIZE = 5000;
+      // Fetch dimension_data in chunks (2000 rows at a time for better performance)
+      const CHUNK_SIZE = 2000;
+      const MAX_ROWS = 15000; // Reduced limit to prevent blank page issues
       let allDimensionData: any[] = [];
       let offset = 0;
       let hasMore = true;
 
-      while (hasMore) {
+      while (hasMore && offset < MAX_ROWS) {
         const chunkData = await retryWithBackoff(
           async () => {
             const { data, error } = await supabase
@@ -241,6 +242,10 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
         } else {
           hasMore = false;
         }
+      }
+
+      if (offset >= MAX_ROWS) {
+        console.warn(`[testing] KPIMetricsCards - Reached maximum row limit (${MAX_ROWS}), using available data for calculations`);
       }
 
       console.log('[testing] loadMetrics - Total dimension_data rows loaded:', allDimensionData.length);

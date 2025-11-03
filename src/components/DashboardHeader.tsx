@@ -136,7 +136,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
     try {
       const { count, error } = await supabase
         .from('dimension_data')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('report_id', reportId);
 
       if (error) {
