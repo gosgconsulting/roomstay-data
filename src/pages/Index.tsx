@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
@@ -19,7 +19,7 @@ export default function Index() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [loadingComponents, setLoadingComponents] = useState<Set<string>>(new Set());
-  const [isSharedView, setIsSharedView] = useState(false);
+
   const [reportId, setReportId] = useState<string | null>(null);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
@@ -68,53 +68,8 @@ export default function Index() {
   }, [reportId]);
   
   useEffect(() => {
-    // Check if this is a shared view
-    const params = new URLSearchParams(location.search);
-    const sharedToken = params.get('token');
-    
-    if (sharedToken) {
-      setIsSharedView(true);
-      loadSharedReport(sharedToken);
-    } else {
-      checkAuth();
-    }
-  }, [location.search]);
-  
-  const loadSharedReport = async (token: string) => {
-    try {
-      // Verify the shared link token from share_links table
-      const { data, error } = await supabase
-        .from('share_links')
-        .select('report_ids, slug')
-        .eq('slug', token)
-        .single();
-      
-      if (error) throw error;
-      
-      if (!data || !data.report_ids || data.report_ids.length === 0) {
-        toast({
-          title: "Invalid Link",
-          description: "This shared link is invalid or has been deleted.",
-          variant: "destructive",
-        });
-        navigate('/');
-        return;
-      }
-      
-      // Set the first report ID from the shared link
-      setReportId(data.report_ids[0]);
-      setIsLoading(false);
-      
-    } catch (error) {
-      console.error('Error loading shared report:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load shared report.",
-        variant: "destructive",
-      });
-      navigate('/');
-    }
-  };
+    checkAuth();
+  }, []);
   
   const checkAuth = async () => {
     try {
@@ -204,16 +159,16 @@ export default function Index() {
         onRefreshData={refreshData}
         session={session}
         onSignOut={handleSignOut}
-        isSharedView={isSharedView}
+        isSharedView={false}
       />
       
       {reportId ? (
         <>
-          <FiltersBar reportId={reportId} onFiltersChange={setFilters} isSharedView={isSharedView} />
+          <FiltersBar reportId={reportId} onFiltersChange={setFilters} isSharedView={false} />
           <main className="container mx-auto px-6 py-6 space-y-6">
             <div className="relative">
               <div className="absolute right-0 -top-2 z-10">
-                {!isSharedView && (
+                {true && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -238,7 +193,7 @@ export default function Index() {
               key={`charts-${dataRefreshKey}`}
               onLoadingComplete={() => markComponentLoaded('chart')}
             />
-            <PerformanceTable reportId={reportId} filters={filters} isSharedView={isSharedView} key={`table-${dataRefreshKey}`} />
+            <PerformanceTable reportId={reportId} filters={filters} isSharedView={false} key={`table-${dataRefreshKey}`} />
           </main>
           
           <KPISettingsModal

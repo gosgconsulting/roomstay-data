@@ -212,8 +212,27 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     }
   }, [visibilityRefreshTrigger, reportId]);
 
-  // Debounced filter change to reduce API calls
-  const debouncedFilters = useMemo(() => filters, [JSON.stringify(filters)]);
+  // Create a stable reference for filters to prevent unnecessary re-renders
+  const debouncedFilters = useMemo(() => {
+    console.log('[testing] PerformanceTable - Creating stable filters reference:', filters);
+    return {
+      dimensionFilters: filters.dimensionFilters,
+      dateRange: filters.dateRange,
+      datePreset: filters.datePreset,
+      compareEnabled: filters.compareEnabled,
+      compareType: filters.compareType,
+      compareDateRange: filters.compareDateRange,
+    };
+  }, [
+    JSON.stringify(filters.dimensionFilters),
+    filters.dateRange?.from?.toISOString(),
+    filters.dateRange?.to?.toISOString(),
+    filters.datePreset,
+    filters.compareEnabled,
+    filters.compareType,
+    filters.compareDateRange?.from?.toISOString(),
+    filters.compareDateRange?.to?.toISOString(),
+  ]);
 
   useEffect(() => {
     console.log('[testing] PerformanceTable data loading check:', {

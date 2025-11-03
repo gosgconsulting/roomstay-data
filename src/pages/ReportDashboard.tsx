@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
@@ -43,6 +43,12 @@ export default function ReportDashboard() {
     compareType: "previous_period",
     compareDateRange: undefined,
   });
+
+  // Stabilize the onFiltersChange callback to prevent unnecessary re-renders
+  const handleFiltersChange = useCallback((newFilters: FilterState) => {
+    console.log('[testing] ReportDashboard - Filters changing:', newFilters);
+    setFilters(newFilters);
+  }, []);
   
   // Track component loading states
   const markComponentLoading = (component: string) => {
@@ -245,7 +251,7 @@ export default function ReportDashboard() {
       
       {reportId ? (
         <>
-          <FiltersBar reportId={reportId} onFiltersChange={setFilters} isSharedView={isSharedView} accountId={accountId} />
+          <FiltersBar reportId={reportId} onFiltersChange={handleFiltersChange} isSharedView={isSharedView} accountId={accountId} />
           <main className="container mx-auto px-6 py-6 space-y-6">
             <div className="relative">
               <div className="absolute right-0 -top-2 z-10">

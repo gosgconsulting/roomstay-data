@@ -101,17 +101,20 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
 
   // Notify parent of filter changes
   useEffect(() => {
+    console.log('[testing] FiltersBar - Filter state changed, notifying parent');
     if (onFiltersChange) {
-      onFiltersChange({
+      const newFilters = {
         dimensionFilters: selectedFilters,
         dateRange,
         datePreset,
         compareEnabled,
         compareType,
         compareDateRange: compareEnabled ? compareDateRange : undefined,
-      });
+      };
+      console.log('[testing] FiltersBar - Calling onFiltersChange with:', newFilters);
+      onFiltersChange(newFilters);
     }
-  }, [selectedFilters, dateRange, datePreset, compareEnabled, compareType, compareDateRange]);
+  }, [onFiltersChange, selectedFilters, dateRange, datePreset, compareEnabled, compareType, compareDateRange]);
 
   const loadFilterSettings = async () => {
     if (!reportId) return;

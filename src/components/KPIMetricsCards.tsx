@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,16 +39,38 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Create a stable reference for filters to prevent unnecessary re-renders
+  const stableFilters = useMemo(() => {
+    console.log('[testing] KPIMetricsCards - Creating stable filters reference:', filters);
+    return {
+      dimensionFilters: filters.dimensionFilters,
+      dateRange: filters.dateRange,
+      datePreset: filters.datePreset,
+      compareEnabled: filters.compareEnabled,
+      compareType: filters.compareType,
+      compareDateRange: filters.compareDateRange,
+    };
+  }, [
+    JSON.stringify(filters.dimensionFilters),
+    filters.dateRange?.from?.toISOString(),
+    filters.dateRange?.to?.toISOString(),
+    filters.datePreset,
+    filters.compareEnabled,
+    filters.compareType,
+    filters.compareDateRange?.from?.toISOString(),
+    filters.compareDateRange?.to?.toISOString(),
+  ]);
+
   useEffect(() => {
     console.log('[testing] KPIMetricsCards - reportId:', reportId);
-    console.log('[testing] KPIMetricsCards - filters:', filters);
+    console.log('[testing] KPIMetricsCards - stableFilters:', stableFilters);
     if (reportId) {
       loadMetrics();
     } else {
       console.log('[testing] KPIMetricsCards - No reportId, skipping loadMetrics');
       setIsLoading(false);
     }
-  }, [reportId, filters]);
+  }, [reportId, stableFilters]);
 
   // Refresh metrics when dimension visibility changes
   useEffect(() => {
@@ -238,7 +260,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
           const dimensionValues = row.dimension_values as Record<string, any>;
           
           // Apply dimension filters
-          for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters)) {
+          for (const [dimId, filterValue] of Object.entries(stableFilters.dimensionFilters)) {
             if (dimensionValues[dimId] !== filterValue) {
               return false;
             }
@@ -298,13 +320,13 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
       };
 
       // Get current period data
-      const aggregatedValues = aggregateForPeriod(filters.dateRange?.from, filters.dateRange?.to);
+      const aggregatedValues = aggregateForPeriod(stableFilters.dateRange?.from, stableFilters.dateRange?.to);
       console.log('[testing] Aggregated values after calculation:', Object.keys(aggregatedValues), aggregatedValues);
 
       // Get comparison period data if comparison is enabled
       let compareValues: Record<string, number> | null = null;
-      if (filters.compareEnabled && filters.compareDateRange?.from && filters.compareDateRange?.to) {
-        compareValues = aggregateForPeriod(filters.compareDateRange.from, filters.compareDateRange.to);
+      if (stableFilters.compareEnabled && stableFilters.compareDateRange?.from && stableFilters.compareDateRange?.to) {
+        compareValues = aggregateForPeriod(stableFilters.compareDateRange.from, stableFilters.compareDateRange.to);
       }
 
       // Map to display metrics with icons and colors
@@ -394,7 +416,32 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
       
       setMetrics(displayMetrics);
     } catch (error) {
-      console.error("[testing] Error loading metrics:", error);
+      // Enhanced error handling to get more specific error information
+      let errorMessage = 'Unknown error occurred';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null) {
+        // Handle Supabase errors and other objects
+        if ('message' in error) {
+          errorMessage = String(error.message);
+        } else {
+          try {
+            errorMessage = JSON.stringify(error, null, 2);
+          } catch {
+            errorMessage = 'Failed to serialize error object';
+          }
+        }
+      } else {
+        errorMessage = String(error);
+      }
+      
+      console.error("[testing] Error loading metrics:", {
+        error,
+        errorMessage,
+        reportId,
+        filtersApplied: stableFilters
+      });
     } finally {
       console.log('[testing] loadMetrics - Setting isLoading to false');
       setIsLoading(false);

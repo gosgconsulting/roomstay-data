@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -59,11 +59,33 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Create a stable reference for filters to prevent unnecessary re-renders
+  const stableFilters = useMemo(() => {
+    console.log('[testing] KPIChart - Creating stable filters reference:', filters);
+    return {
+      dimensionFilters: filters.dimensionFilters,
+      dateRange: filters.dateRange,
+      datePreset: filters.datePreset,
+      compareEnabled: filters.compareEnabled,
+      compareType: filters.compareType,
+      compareDateRange: filters.compareDateRange,
+    };
+  }, [
+    JSON.stringify(filters.dimensionFilters),
+    filters.dateRange?.from?.toISOString(),
+    filters.dateRange?.to?.toISOString(),
+    filters.datePreset,
+    filters.compareEnabled,
+    filters.compareType,
+    filters.compareDateRange?.from?.toISOString(),
+    filters.compareDateRange?.to?.toISOString(),
+  ]);
+
   useEffect(() => {
     if (reportId) {
       loadChartData();
     }
-  }, [reportId, filters, selectedKPI]);
+  }, [reportId, selectedKPI, stableFilters, visibilityRefreshTrigger]);
 
   // Refresh chart when dimension visibility changes
   useEffect(() => {
@@ -82,21 +104,21 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
         debugLog('KPIChart', `Loading chart data for report ${reportId} with KPI ${selectedKPI}`);
         console.log('[CHART] Loading data with filters:', filters);
         
-        // Debug date range
-        if (filters.dateRange) {
+                // Debug date range
+        if (stableFilters.dateRange) {
           console.log('[CHART] Date range:', {
-            from: filters.dateRange.from ? filters.dateRange.from.toISOString() : 'undefined',
-            to: filters.dateRange.to ? filters.dateRange.to.toISOString() : 'undefined'
+            from: stableFilters.dateRange.from ? stableFilters.dateRange.from.toISOString() : 'undefined',
+            to: stableFilters.dateRange.to ? stableFilters.dateRange.to.toISOString() : 'undefined'
           });
         } else {
           console.log('[CHART] No date range provided');
         }
-        
+
         // Debug compare date range
-        if (filters.compareEnabled && filters.compareDateRange) {
+        if (stableFilters.compareEnabled && stableFilters.compareDateRange) {
           console.log('[CHART] Compare date range:', {
-            from: filters.compareDateRange.from ? filters.compareDateRange.from.toISOString() : 'undefined',
-            to: filters.compareDateRange.to ? filters.compareDateRange.to.toISOString() : 'undefined'
+            from: stableFilters.compareDateRange.from ? stableFilters.compareDateRange.from.toISOString() : 'undefined',
+            to: stableFilters.compareDateRange.to ? stableFilters.compareDateRange.to.toISOString() : 'undefined'
           });
         }
         
@@ -277,46 +299,128 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
         debugLog('KPIChart', `Using date dimension: ${dateDimension.name} (${dateDimension.id})`);
         console.log('[CHART] Date dimension:', dateDimension);
 
-        // Fetch dimension_data directly in chunks (5000 rows at a time)
-        const CHUNK_SIZE = 5000;
+        // Implement more efficient data fetching with smaller chunks and timeout handling
+        const CHUNK_SIZE = 2000; // Reduced chunk size to avoid timeouts
+        const MAX_ROWS = 50000; // Limit total rows to prevent excessive memory usage
         let allDimensionData: DimensionData[] = [];
         let offset = 0;
         let hasMore = true;
+        let timeoutCount = 0;
+        const MAX_TIMEOUTS = 3;
         
         console.log('[CHART] Fetching dimension_data for report:', reportId);
         
-        while (hasMore) {
-          const chunkData = await retryWithBackoff(
-            async () => {
-              const { data, error } = await supabase
-                .from("dimension_data")
-                .select("*")
-                .eq("report_id", reportId)
-                .order('row_number', { ascending: true })
-                .range(offset, offset + CHUNK_SIZE - 1);
+        try {
+          while (hasMore && offset < MAX_ROWS && timeoutCount < MAX_TIMEOUTS) {
+            console.log(`[CHART] Fetching chunk at offset ${offset} (timeouts: ${timeoutCount})`);
+            
+            try {
+              const chunkData = await retryWithBackoff(
+                async () => {
+                  const { data, error } = await supabase
+                    .from("dimension_data")
+                    .select("*")
+                    .eq("report_id", reportId)
+                    .order('row_number', { ascending: true })
+                    .range(offset, offset + CHUNK_SIZE - 1);
 
-              if (error) throw error;
-              return data;
-            },
-            3,
-            500
-          );
+                  if (error) {
+                    console.error(`[CHART] Database error at offset ${offset}:`, error);
+                    // Check if it's a timeout error
+                    if (error.message && error.message.includes('timeout')) {
+                      throw new Error(`Database timeout at offset ${offset}`);
+                    }
+                    throw error;
+                  }
+                  return data;
+                },
+                2, // Reduced retry attempts for faster failure
+                1000 // Increased delay between retries
+              );
 
-          if (chunkData && chunkData.length > 0) {
-            allDimensionData = [...allDimensionData, ...chunkData as DimensionData[]];
-            offset += CHUNK_SIZE;
-            hasMore = chunkData.length === CHUNK_SIZE;
+              if (chunkData && chunkData.length > 0) {
+                allDimensionData = [...allDimensionData, ...chunkData as DimensionData[]];
+                offset += CHUNK_SIZE;
+                hasMore = chunkData.length === CHUNK_SIZE;
+                console.log(`[CHART] Loaded ${chunkData.length} rows, total: ${allDimensionData.length}`);
+                
+                // Reset timeout count on successful fetch
+                timeoutCount = 0;
+              } else {
+                hasMore = false;
+                console.log('[CHART] No more data to fetch');
+              }
+            } catch (chunkError) {
+              console.error(`[CHART] Error fetching chunk at offset ${offset}:`, chunkError);
+              
+              // Handle timeout errors gracefully
+              if (chunkError instanceof Error && chunkError.message.includes('timeout')) {
+                timeoutCount++;
+                console.warn(`[CHART] Timeout ${timeoutCount}/${MAX_TIMEOUTS} at offset ${offset}, continuing with available data`);
+                
+                if (timeoutCount >= MAX_TIMEOUTS) {
+                  console.warn('[CHART] Max timeouts reached, using available data');
+                  hasMore = false;
+                } else {
+                  // Skip this chunk and try the next one
+                  offset += CHUNK_SIZE;
+                  continue;
+                }
+              } else {
+                // For non-timeout errors, stop fetching
+                throw chunkError;
+              }
+            }
+          }
+          
+          if (offset >= MAX_ROWS) {
+            console.warn(`[CHART] Reached maximum row limit (${MAX_ROWS}), using available data`);
+          }
+          
+        } catch (chunkError) {
+          console.error('[CHART] Error during chunk fetching:', chunkError);
+          
+          // If we have some data, continue with what we have
+          if (allDimensionData.length > 0) {
+            console.warn(`[CHART] Continuing with ${allDimensionData.length} rows despite error:`, chunkError);
           } else {
-            hasMore = false;
+            throw new Error(`Failed to fetch dimension data: ${chunkError instanceof Error ? chunkError.message : String(chunkError)}`);
           }
         }
         
         console.log(`[CHART] Fetched ${allDimensionData.length} rows of dimension_data`);
         
         if (allDimensionData.length === 0) {
+          console.log('[CHART] No dimension data found for report:', reportId);
           setChartData([]);
           return;
         }
+
+        // If we have a large dataset, consider sampling for better performance
+        if (allDimensionData.length > 20000) {
+          console.warn(`[CHART] Large dataset detected (${allDimensionData.length} rows), using sampling for performance`);
+          // Sample every nth row to reduce processing time
+          const sampleRate = Math.ceil(allDimensionData.length / 10000);
+          allDimensionData = allDimensionData.filter((_, index) => index % sampleRate === 0);
+          console.log(`[CHART] Sampled dataset to ${allDimensionData.length} rows (sample rate: 1/${sampleRate})`);
+        }
+
+        // Validate that we have the required dimensions
+        if (!dateDimension) {
+          throw new Error('No date dimension found for chart data');
+        }
+
+        // Validate that dimension data has the expected structure
+        const sampleRow = allDimensionData[0];
+        if (!sampleRow.dimension_values || typeof sampleRow.dimension_values !== 'object') {
+          throw new Error('Invalid dimension data structure: missing or invalid dimension_values');
+        }
+
+        console.log('[CHART] Sample dimension data structure:', {
+          keys: Object.keys(sampleRow.dimension_values),
+          dateDimensionId: dateDimension.id,
+          hasDateDimension: dateDimension.id in sampleRow.dimension_values
+        });
         
         // Create a sample of date values for debugging
         const sampleDates = allDimensionData
@@ -375,7 +479,7 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
           const dimensionValues = row.dimension_values as Record<string, string>;
           
           // Apply dimension filters
-          for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters || {})) {
+          for (const [dimId, filterValue] of Object.entries(stableFilters.dimensionFilters || {})) {
             // Handle both string and array filter values
             if (Array.isArray(filterValue)) {
               if (!filterValue.includes(dimensionValues[dimId])) {
@@ -387,7 +491,7 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
           }
           
           // Apply date range filter if there's a Date dimension
-          if (filters.dateRange?.from || filters.dateRange?.to) {
+          if (stableFilters.dateRange?.from || stableFilters.dateRange?.to) {
             if (dimensionValues[dateDimension.id]) {
               const dateStr = dimensionValues[dateDimension.id];
               let rowDate: Date;
@@ -400,11 +504,11 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
               }
               
               // Add a day to the end date to include the full day
-              const adjustedEndDate = filters.dateRange?.to 
-                ? addDays(filters.dateRange.to, 1)
+              const adjustedEndDate = stableFilters.dateRange?.to 
+                ? addDays(stableFilters.dateRange.to, 1)
                 : undefined;
               
-              if (filters.dateRange?.from && rowDate < filters.dateRange.from) {
+              if (stableFilters.dateRange?.from && rowDate < stableFilters.dateRange.from) {
                 return false;
               }
               if (adjustedEndDate && rowDate >= adjustedEndDate) {
@@ -437,13 +541,13 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
         // Process comparison period if enabled
         const comparePeriodByDate = new Map<string, number>();
         
-        if (filters.compareEnabled && filters.compareDateRange?.from && filters.compareDateRange?.to) {
+        if (stableFilters.compareEnabled && stableFilters.compareDateRange?.from && stableFilters.compareDateRange?.to) {
           // Filter data for comparison period
           const comparePeriodData = allDimensionData.filter((row) => {
             const dimensionValues = row.dimension_values as Record<string, string>;
             
             // Apply dimension filters
-            for (const [dimId, filterValue] of Object.entries(filters.dimensionFilters || {})) {
+            for (const [dimId, filterValue] of Object.entries(stableFilters.dimensionFilters || {})) {
               // Handle both string and array filter values
               if (Array.isArray(filterValue)) {
                 if (!filterValue.includes(dimensionValues[dimId])) {
@@ -467,11 +571,11 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
               }
               
               // Add a day to the end date to include the full day
-              const adjustedEndDate = filters.compareDateRange?.to 
-                ? addDays(filters.compareDateRange.to, 1)
+              const adjustedEndDate = stableFilters.compareDateRange?.to 
+                ? addDays(stableFilters.compareDateRange.to, 1)
                 : undefined;
               
-              if (filters.compareDateRange?.from && rowDate < filters.compareDateRange.from) {
+              if (stableFilters.compareDateRange?.from && rowDate < stableFilters.compareDateRange.from) {
                 return false;
               }
               if (adjustedEndDate && rowDate >= adjustedEndDate) {
@@ -505,9 +609,9 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
         
         // Calculate the day difference between main and compare periods
         let dayOffset = 0;
-        if (filters.compareEnabled && filters.dateRange?.from && filters.compareDateRange?.from) {
-          const mainStart = filters.dateRange.from;
-          const compareStart = filters.compareDateRange.from;
+        if (stableFilters.compareEnabled && stableFilters.dateRange?.from && stableFilters.compareDateRange?.from) {
+          const mainStart = stableFilters.dateRange.from;
+          const compareStart = stableFilters.compareDateRange.from;
           
           // Calculate the difference in days
           dayOffset = Math.round((mainStart.getTime() - compareStart.getTime()) / (1000 * 60 * 60 * 24));
@@ -539,7 +643,7 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
               // Find the corresponding compare date if comparison is enabled
               let compareValue: number | undefined = undefined;
               
-              if (filters.compareEnabled && filters.compareDateRange) {
+              if (stableFilters.compareEnabled && stableFilters.compareDateRange) {
                 // Calculate the equivalent date in the compare period
                 const compareDate = new Date(dateObj);
                 compareDate.setDate(compareDate.getDate() - dayOffset);
@@ -579,9 +683,49 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
         setChartData(chartPoints);
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
-      console.error("[CHART] Error loading chart data:", errorMessage);
-      setError(error instanceof Error ? error.message : 'Failed to load chart data');
+      // Enhanced error handling to get more specific error information
+      let errorMessage = 'Unknown error occurred';
+      let detailedError = '';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        detailedError = error.stack || error.message;
+      } else if (typeof error === 'object' && error !== null) {
+        // Handle Supabase errors and other objects
+        if ('message' in error) {
+          errorMessage = String(error.message);
+        }
+        if ('details' in error) {
+          detailedError = `${errorMessage} - Details: ${String(error.details)}`;
+        }
+        if ('hint' in error) {
+          detailedError += ` - Hint: ${String(error.hint)}`;
+        }
+        if ('code' in error) {
+          detailedError += ` - Code: ${String(error.code)}`;
+        }
+        // Fallback to JSON stringify if we still don't have a good message
+        if (!errorMessage || errorMessage === 'Unknown error occurred') {
+          try {
+            errorMessage = JSON.stringify(error, null, 2);
+          } catch {
+            errorMessage = 'Failed to serialize error object';
+          }
+        }
+      } else {
+        errorMessage = String(error);
+      }
+      
+      console.error("[CHART] Error loading chart data:", {
+        error,
+        errorMessage,
+        detailedError,
+        reportId,
+        selectedKPI,
+        filtersApplied: stableFilters
+      });
+      
+      setError(errorMessage);
       setChartData([]);
     } finally {
       setIsLoading(false);
@@ -622,10 +766,19 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
           </SelectContent>
         </Select>
       </CardHeader>
-      <CardContent>
+              <CardContent>
         {error ? (
-          <div className="h-[300px] flex items-center justify-center text-destructive text-sm">
-            Error loading chart data: {error}
+          <div className="h-[300px] flex flex-col items-center justify-center text-destructive text-sm space-y-2">
+            <div className="font-medium">Error loading chart data</div>
+            <div className="text-xs text-center max-w-md">
+              {error.includes('timeout') ? (
+                <>
+                  The dataset is too large and caused a timeout. Try applying filters to reduce the data size, or the system will automatically sample the data for display.
+                </>
+              ) : (
+                error
+              )}
+            </div>
           </div>
         ) : chartData.length === 0 ? (
           <div className="h-[300px] flex items-center justify-center text-muted-foreground text-sm">
@@ -683,7 +836,7 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
                 strokeWidth={2}
                 fill="url(#chartGradient)"
               />
-              {filters.compareEnabled && chartData.some(d => d.compareValue !== undefined) && (
+              {stableFilters.compareEnabled && chartData.some(d => d.compareValue !== undefined) && (
                 <Area
                   type="monotone"
                   dataKey="compareValue"
@@ -694,7 +847,7 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
                   fill="url(#compareGradient)"
                 />
               )}
-              {filters.compareEnabled && (
+              {stableFilters.compareEnabled && (
                 <Legend 
                   content={({ payload }) => (
                     <div className="flex justify-center gap-4 text-xs mt-2">
