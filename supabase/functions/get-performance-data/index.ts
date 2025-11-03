@@ -13,6 +13,8 @@ interface PerformanceDataRequest {
   dimensionFilters?: Record<string, string | string[]>;
   dateFrom?: string;
   dateTo?: string;
+  accountId?: string;
+  userId?: string;
   visibleDimensionIds?: string[];
   limit?: number;
   offset?: number;
@@ -41,6 +43,8 @@ Deno.serve(async (req) => {
       dimensionFilters = {},
       dateFrom,
       dateTo,
+      accountId,
+      userId,
       visibleDimensionIds = [],
       limit = 10000,
       offset = 0,
@@ -96,20 +100,37 @@ Deno.serve(async (req) => {
       return await queryFn();
     };
 
-    // Fetch all dimensions (they are user-level, not report-level) with retry
+    // Fetch dimensions (global + custom for the user) with retry
     const dimensionsResult = await retryQuery(async () => {
-      const result = await supabase
+      let query = supabase
         .from('dimensions')
-        .select('id, name, type, formula');
-      return result;
+        .select('id, name, type, formula, scope, user_id, report_id');
+      
+      // Load global dimensions and custom dimensions for the user
+      if (userId) {
+        query = query.or(`scope.eq.global,and(scope.eq.custom,user_id.eq.${userId})`);
+      } else {
+        // If no userId, only load global dimensions
+        query = query.eq('scope', 'global');
+      }
+      
+      return query;
     });
     
-    const { data: dimensions, error: dimError } = dimensionsResult;
+    const { data: allDimensions, error: dimError } = dimensionsResult;
 
     if (dimError) {
       console.error('Error fetching dimensions:', dimError);
       throw new Error(`Failed to fetch dimensions: ${dimError.message || 'Unknown error'}`);
     }
+
+    // Filter dimensions for this specific report (include global + custom for this report)
+    const dimensions = (allDimensions || []).filter((d: any) => 
+      d.scope === 'global' || 
+      (d.scope === 'custom' && d.user_id === userId && (d.report_id === null || d.report_id === reportId))
+    );
+
+    console.log(`Loaded ${dimensions.length} dimensions (${allDimensions?.length} total) for user ${userId}, report ${reportId}`);
 
     if (!dimensions || dimensions.length === 0) {
       console.error('No dimensions found');

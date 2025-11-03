@@ -82,6 +82,7 @@ interface PerformanceTableProps {
   isSharedView?: boolean;
   accountId?: string;
   visibilityRefreshTrigger?: number; // Trigger to refresh when dimension visibility changes
+  onLoadingComplete?: () => void;
 }
 
 // Sortable column item component
@@ -131,7 +132,7 @@ function SortableColumnItem({
   );
 }
 
-export const PerformanceTable = ({ reportId, filters, isSharedView = false, accountId, visibilityRefreshTrigger }: PerformanceTableProps) => {
+export const PerformanceTable = ({ reportId, filters, isSharedView = false, accountId, visibilityRefreshTrigger, onLoadingComplete }: PerformanceTableProps) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
   const [dimensionSelectorOpen, setDimensionSelectorOpen] = useState(false);
@@ -958,11 +959,15 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     setIsLoadingData(true);
 
     try {
+      // Get current user for custom dimensions
+      const { data: { user } } = await supabase.auth.getUser();
+      
       console.log('[testing] Calling get-performance-data with:', {
         reportId,
         groupByDims: groupByDimensions,
         breakdownDims: breakdownByDimensions,
-        thenByDims: thenByDimensions
+        thenByDims: thenByDimensions,
+        userId: user?.id
       });
 
       const { data, error } = await supabase.functions.invoke('get-performance-data', {
@@ -975,6 +980,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
           dateFrom: filters.dateRange?.from?.toISOString(),
           dateTo: filters.dateRange?.to?.toISOString(),
           accountId, // Pass accountId to edge function
+          userId: user?.id, // Pass userId for custom dimensions
           visibleDimensionIds: Array.from(visibleColumns),
           limit: 10000, // Reasonable limit to prevent timeouts
           offset: 0,
@@ -1011,6 +1017,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       console.error('Error loading performance data:', error);
     } finally {
       setIsLoadingData(false);
+      onLoadingComplete?.();
     }
   };
 

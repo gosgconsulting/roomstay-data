@@ -127,142 +127,76 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
         
         let dimensions: Dimension[] | null = null;
 
-        // Fetch dimensions accessible to the user (global + custom for this report)
-        if (user && reportId) {
+        // Load dimensions using the same approach as FiltersBar
+        if (user) {
           try {
-            // Single query to get all dimensions user can access for this report
-            // RLS policies will handle filtering, with retry for network resilience
-            const allDims = await retryWithBackoff(
-              async () => {
-                const { data, error } = await supabase
-                  .from("dimensions")
-                  .select("*");
+            console.log('[CHART] Loading dimensions for user:', user.id, 'report:', reportId, 'account:', accountId);
 
-                if (error) {
-                  const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
-                  throw new Error(`Failed to fetch dimensions: ${errorMsg}`);
-                }
+            // Load global dimensions (available to all users)
+            const { data: globalData, error: globalError } = await supabase
+              .from("dimensions")
+              .select("*")
+              .eq("scope", "global")
+              .order("created_at", { ascending: false });
 
-                return data || [];
-              },
-              3, // max attempts
-              500 // initial delay in ms
-            );
+            if (globalError) throw globalError;
 
-            // Filter and prioritize dimensions:
-            // 1. Account-specific dimensions (if accountId provided)
-            // 2. Custom report dimensions
-            // 3. Global dimensions (fallback)
-            const dimensionsByName: Record<string, any> = {};
-
-            // First pass: add global dimensions as base
-            (allDims || []).filter((d: any) => d.scope === 'global').forEach((d: any) => {
-              dimensionsByName[d.name] = d;
-            });
-
-            // Second pass: override with account-specific dimensions
+            // Load account-specific dimensions if accountId is provided
+            let accountData: Dimension[] = [];
             if (accountId) {
-              (allDims || [])
-                .filter((d: any) => d.scope === 'account' && d.account_id === accountId)
-                .forEach((d: any) => {
-                  dimensionsByName[d.name] = d; // Override global with account version
-                });
+              const { data, error: accountError } = await supabase
+                .from("dimensions")
+                .select("*")
+                .eq("scope", "account")
+                .eq("account_id", accountId)
+                .order("created_at", { ascending: false });
+
+              if (accountError) throw accountError;
+              accountData = (data || []) as Dimension[];
             }
 
-            // Third pass: add custom dimensions (highest priority)
-            // Include both global custom (report_id = null) and report-specific custom dimensions
-            (allDims || [])
-              .filter((d: any) => 
-                d.scope === 'custom' && 
-                d.user_id === user.id &&
-                (d.report_id === null || d.report_id === reportId)
-              )
-              .forEach((d: any) => {
-                dimensionsByName[d.name] = d; // Override with custom version
-              });
+            // Load custom dimensions for this user (both global custom and report-specific)
+            let customData: Dimension[] = [];
+            const { data, error: customError } = await supabase
+              .from("dimensions")
+              .select("*")
+              .eq("user_id", user.id)
+              .eq("scope", "custom")
+              .or(`report_id.is.null,report_id.eq.${reportId}`) // Include both global custom (report_id=null) and report-specific
+              .order("created_at", { ascending: false });
 
-            dimensions = Object.values(dimensionsByName) as Dimension[];
+            if (customError) throw customError;
+            customData = (data || []) as Dimension[];
 
+            // Combine all dimensions
+            const allDimensions = [
+              ...(globalData || []),
+              ...accountData,
+              ...customData
+            ] as Dimension[];
+
+            console.log('[CHART] Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0);
+
+            // Deduplicate dimensions by name (keep first occurrence)
+            const seenNames = new Set<string>();
+            const uniqueDimensions = allDimensions.filter(dim => {
+              if (seenNames.has(dim.name)) {
+                return false;
+              }
+              seenNames.add(dim.name);
+              return true;
+            });
+
+            dimensions = uniqueDimensions;
             debugLog('KPIChart', `Loaded ${dimensions?.length || 0} dimensions for report ${reportId}`);
           } catch (error) {
             const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
             console.error('[CHART] Failed to load dimensions:', errorMsg);
-            // Fallback to dimensions associated with report via data
             dimensions = [];
           }
-        } else if (user) {
-          // Fallback: just fetch all dimensions (RLS will filter them)
-          try {
-            const allDims = await retryWithBackoff(
-              async () => {
-                const { data, error } = await supabase
-                  .from("dimensions")
-                  .select("*");
-
-                if (error) {
-                  const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
-                  throw new Error(`Failed to fetch dimensions: ${errorMsg}`);
-                }
-
-                return data || [];
-              },
-              3, // max attempts
-              500 // initial delay in ms
-            );
-
-            dimensions = allDims as Dimension[];
-          } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
-            console.error('[CHART] Failed to load dimensions:', errorMsg);
-            dimensions = [];
-          }
-        }
-
-        // If no dimensions found, try falling back to loading from dimension_data
-        if (!dimensions || dimensions.length === 0) {
-          try {
-            const dimensionData = await retryWithBackoff(
-              async () => {
-                const { data, error } = await supabase
-                  .from("dimension_data")
-                  .select("dimension_values")
-                  .limit(1)
-                  .maybeSingle();
-
-                if (error) throw error;
-                return data;
-              },
-              3,
-              500
-            );
-
-            if (dimensionData?.dimension_values) {
-              const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, string>);
-
-              if (dimensionIds.length > 0) {
-                const dimensionsById = await retryWithBackoff(
-                  async () => {
-                    const { data, error } = await supabase
-                      .from("dimensions")
-                      .select("*")
-                      .in("id", dimensionIds);
-
-                    if (error) throw error;
-                    return data;
-                  },
-                  3,
-                  500
-                );
-
-                if (dimensionsById) {
-                  dimensions = dimensionsById as Dimension[];
-                }
-              }
-            }
-          } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
-            console.error('[CHART] Failed to load dimensions from fallback:', errorMsg);
-          }
+        } else {
+          console.error('[CHART] No user authenticated');
+          dimensions = [];
         }
 
         debugLog('KPIChart', `Found ${dimensions?.length || 0} dimensions`);

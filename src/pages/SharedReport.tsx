@@ -12,6 +12,7 @@ import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import { KPIChart } from "@/components/KPIChart";
 import { PerformanceTable } from "@/components/PerformanceTable";
+import { LoadingToast } from "@/components/LoadingToast";
 
 export default function SharedReport() {
   const { slug } = useParams();
@@ -32,6 +33,7 @@ export default function SharedReport() {
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
+  const [loadingGeneration, setLoadingGeneration] = useState(0);
   
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
@@ -119,6 +121,18 @@ export default function SharedReport() {
     
     // Set the first report ID from the shared link
     if (linkData.report_ids && linkData.report_ids.length > 0) {
+      // Cancel previous loading by incrementing generation
+      setLoadingGeneration(prev => prev + 1);
+      
+      // Clear previous loading states immediately
+      setLoadingComponents(new Set());
+      setIsDataLoading(false);
+      
+      // Mark components as loading
+      markComponentLoading('metrics');
+      markComponentLoading('chart');
+      markComponentLoading('table');
+      
       setReportId(linkData.report_ids[0]);
       
       // Load account information if account_id is available
@@ -249,15 +263,11 @@ export default function SharedReport() {
   // Render the full report dashboard
   return (
     <div className="min-h-screen bg-background">
-      {/* Full screen loading overlay for data loading */}
-      {isDataLoading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            <p className="text-sm text-muted-foreground">Loading data...</p>
-          </div>
-        </div>
-      )}
+      {/* Loading toast for data loading */}
+      <LoadingToast 
+        isVisible={isDataLoading} 
+        loadingComponents={loadingComponents}
+      />
 
       <DashboardHeader 
         reportId={reportId}
@@ -283,7 +293,7 @@ export default function SharedReport() {
             filters={filters}
             accountId={account?.id}
             visibilityRefreshTrigger={visibilityRefreshTrigger}
-            key={`metrics-${dataRefreshKey}`}
+            key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
             onLoadingComplete={() => markComponentLoaded('metrics')}
           />
         </div>
@@ -293,7 +303,7 @@ export default function SharedReport() {
           filters={filters}
           accountId={account?.id}
           visibilityRefreshTrigger={visibilityRefreshTrigger}
-          key={`charts-${dataRefreshKey}`}
+          key={`charts-${dataRefreshKey}-${loadingGeneration}`}
           onLoadingComplete={() => markComponentLoaded('chart')}
         />
         
@@ -303,7 +313,8 @@ export default function SharedReport() {
           isSharedView={true} 
           accountId={account?.id} 
           visibilityRefreshTrigger={visibilityRefreshTrigger}
-          key={`table-${dataRefreshKey}`} 
+          key={`table-${dataRefreshKey}-${loadingGeneration}`}
+          onLoadingComplete={() => markComponentLoaded('table')}
         />
       </main>
     </div>

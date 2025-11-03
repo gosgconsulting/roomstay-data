@@ -6,6 +6,7 @@ import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import { KPIChart } from "@/components/KPIChart";
 import { PerformanceTable } from "@/components/PerformanceTable";
 import { KPISettingsModal } from "@/components/KPISettingsModal";
+import { LoadingToast } from "@/components/LoadingToast";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Session } from "@supabase/supabase-js";
@@ -33,6 +34,7 @@ export default function ReportDashboard() {
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
+  const [loadingGeneration, setLoadingGeneration] = useState(0);
   
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
@@ -70,8 +72,18 @@ export default function ReportDashboard() {
   // Reset filters and mark loading when report changes
   useEffect(() => {
     if (reportId) {
+      // Cancel previous loading by incrementing generation
+      setLoadingGeneration(prev => prev + 1);
+      
+      // Clear previous loading states immediately
+      setLoadingComponents(new Set());
+      setIsDataLoading(false);
+      
+      // Start new loading cycle
       markComponentLoading('metrics');
       markComponentLoading('chart');
+      markComponentLoading('table');
+      
       setFilters({
         dimensionFilters: {},
         dateRange: undefined,
@@ -183,8 +195,17 @@ export default function ReportDashboard() {
   };
   
   const refreshData = () => {
+    // Cancel previous loading by incrementing generation
+    setLoadingGeneration(prev => prev + 1);
+    
+    // Clear previous loading states immediately
+    setLoadingComponents(new Set());
+    setIsDataLoading(false);
+    
+    // Start new loading cycle
     markComponentLoading('metrics');
     markComponentLoading('chart');
+    markComponentLoading('table');
     setDataRefreshKey(prev => prev + 1);
   };
   
@@ -201,15 +222,11 @@ export default function ReportDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Full screen loading overlay for data loading */}
-      {isDataLoading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-            <p className="text-muted-foreground">Loading report data...</p>
-          </div>
-        </div>
-      )}
+      {/* Loading toast for data loading */}
+      <LoadingToast 
+        isVisible={isDataLoading} 
+        loadingComponents={loadingComponents}
+      />
       
       {/* Header with back button and account info */}
       <header className="border-b">
@@ -272,7 +289,7 @@ export default function ReportDashboard() {
                 filters={filters}
                 accountId={accountId}
                 visibilityRefreshTrigger={visibilityRefreshTrigger}
-                key={`metrics-${dataRefreshKey}`}
+                key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
                 onLoadingComplete={() => markComponentLoaded('metrics')}
               />
             </div>
@@ -281,7 +298,7 @@ export default function ReportDashboard() {
               filters={filters}
               accountId={accountId}
               visibilityRefreshTrigger={visibilityRefreshTrigger}
-              key={`charts-${dataRefreshKey}`}
+              key={`charts-${dataRefreshKey}-${loadingGeneration}`}
               onLoadingComplete={() => markComponentLoaded('chart')}
             />
             <PerformanceTable 
@@ -290,7 +307,8 @@ export default function ReportDashboard() {
               isSharedView={isSharedView} 
               accountId={accountId} 
               visibilityRefreshTrigger={visibilityRefreshTrigger}
-              key={`table-${dataRefreshKey}`} 
+              key={`table-${dataRefreshKey}-${loadingGeneration}`}
+              onLoadingComplete={() => markComponentLoaded('table')}
             />
           </main>
           

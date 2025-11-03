@@ -18,6 +18,17 @@ import {
   PieChart
 } from "lucide-react";
 
+interface Dimension {
+  id: string;
+  name: string;
+  type: string;
+  formula?: string;
+  scope?: string;
+  user_id?: string;
+  report_id?: string;
+  account_id?: string;
+}
+
 interface KPIMetric {
   label: string;
   value: string;
@@ -120,91 +131,78 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
         }
       }
       
-      let dimensions = null;
+      let dimensions: Dimension[] | null = null;
       
-      // Fetch dimensions accessible to the user
-      // RLS policies will filter global and custom dimensions automatically
+      // Load dimensions using the same approach as FiltersBar
       if (user) {
         try {
-          const allDims = await retryWithBackoff(
-            async () => {
-              const { data, error } = await supabase
-                .from("dimensions")
-                .select("*");
+          console.log('[testing] KPIMetricsCards - Loading dimensions for user:', user.id, 'report:', reportId, 'account:', accountId);
 
-              if (error) {
-                const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
-                throw new Error(`Failed to load dimensions: ${errorMsg}`);
-              }
+          // Load global dimensions (available to all users)
+          const { data: globalData, error: globalError } = await supabase
+            .from("dimensions")
+            .select("*")
+            .eq("scope", "global")
+            .order("created_at", { ascending: false });
 
-              return data || [];
-            },
-            3, // max attempts
-            500 // initial delay in ms
-          );
+          if (globalError) throw globalError;
 
-          // Filter to global dimensions and custom dimensions for this report if reportId provided
-          if (reportId) {
-            dimensions = (allDims || []).filter((d: any) =>
-              d.scope === 'global' ||
-              (d.scope === 'custom' && d.user_id === user.id && (d.report_id === null || d.report_id === reportId))
-            );
-          } else {
-            dimensions = allDims || [];
+          // Load account-specific dimensions if accountId is provided
+          let accountData: Dimension[] = [];
+          if (accountId) {
+            const { data, error: accountError } = await supabase
+              .from("dimensions")
+              .select("*")
+              .eq("scope", "account")
+              .eq("account_id", accountId)
+              .order("created_at", { ascending: false });
+
+            if (accountError) throw accountError;
+            accountData = (data || []);
           }
 
-          console.log('[testing] loadMetrics - Dimensions loaded:', dimensions?.length);
+          // Load custom dimensions for this user (both global custom and report-specific)
+          let customData: Dimension[] = [];
+          const { data, error: customError } = await supabase
+            .from("dimensions")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("scope", "custom")
+            .or(`report_id.is.null,report_id.eq.${reportId}`) // Include both global custom (report_id=null) and report-specific
+            .order("created_at", { ascending: false });
+
+          if (customError) throw customError;
+          customData = (data || []);
+
+          // Combine all dimensions
+          const allDimensions = [
+            ...(globalData || []),
+            ...accountData,
+            ...customData
+          ];
+
+          console.log('[testing] KPIMetricsCards - Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0);
+
+          // Deduplicate dimensions by name (keep first occurrence)
+          const seenNames = new Set<string>();
+          const uniqueDimensions = allDimensions.filter(dim => {
+            if (seenNames.has(dim.name)) {
+              return false;
+            }
+            seenNames.add(dim.name);
+            return true;
+          });
+
+          dimensions = uniqueDimensions;
+          console.log('[testing] KPIMetricsCards - Final dimensions:', dimensions?.length);
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
           console.error('[testing] Error loading metrics:', errorMsg);
           dimensions = [];
         }
-      }
-
-      // If no dimensions found, try falling back to loading from dimension_data
-      if (!dimensions || dimensions.length === 0) {
-        try {
-          const dimensionData = await retryWithBackoff(
-            async () => {
-              const { data, error } = await supabase
-                .from("dimension_data")
-                .select("dimension_values")
-                .limit(1)
-                .maybeSingle();
-
-              if (error) throw error;
-              return data;
-            },
-            3,
-            500
-          );
-
-          if (dimensionData?.dimension_values) {
-            const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, any>);
-
-            if (dimensionIds.length > 0) {
-              const dimensionsById = await retryWithBackoff(
-                async () => {
-                  const { data, error } = await supabase
-                    .from("dimensions")
-                    .select("*")
-                    .in("id", dimensionIds);
-
-                  if (error) throw error;
-                  return data;
-                },
-                3,
-                500
-              );
-
-              if (dimensionsById) {
-                dimensions = dimensionsById;
-              }
-            }
-          }
-        } catch (error) {
-          console.error('[testing] Failed to load dimensions from fallback:', error);
-        }
+      } else {
+        console.error('[testing] KPIMetricsCards - No user authenticated');
+        dimensions = [];
       }
 
       // Filter dimensions by visibility settings

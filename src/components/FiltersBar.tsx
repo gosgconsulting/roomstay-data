@@ -301,47 +301,58 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     if (!reportId) return;
     
     try {
-      // Load dimensions associated with this report (works for both owned and shared reports)
-      const dimensionData = await retryWithBackoff(
-        async () => {
-          const { data, error } = await supabase
-            .from("dimension_data")
-            .select("dimension_values")
-            .eq("report_id", reportId)
-            .limit(1)
-            .maybeSingle();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
 
-          if (error) throw error;
-          return data;
-        },
-        3,
-        500
-      );
+      console.log('[testing] FiltersBar - Loading dimensions for user:', user.id, 'report:', reportId, 'account:', accountId);
 
-      let data = null;
+      // Load global dimensions (available to all users)
+      const { data: globalData, error: globalError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("scope", "global")
+        .order("created_at", { ascending: false });
 
-      if (dimensionData?.dimension_values) {
-        const dimensionIds = Object.keys(dimensionData.dimension_values as Record<string, any>);
+      if (globalError) throw globalError;
 
-        if (dimensionIds.length > 0) {
-          data = await retryWithBackoff(
-            async () => {
-              const { data, error } = await supabase
-                .from("dimensions")
-                .select("*")
-                .in("id", dimensionIds);
+      // Load account-specific dimensions if accountId is provided
+      let accountData: Dimension[] = [];
+      if (accountId) {
+        const { data, error: accountError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("scope", "account")
+          .eq("account_id", accountId)
+          .order("created_at", { ascending: false });
 
-              if (error) throw error;
-              return data;
-            },
-            3,
-            500
-          );
-        }
+        if (accountError) throw accountError;
+        accountData = (data || []) as Dimension[];
       }
 
+      // Load custom dimensions for this user (both global custom and report-specific)
+      let customData: Dimension[] = [];
+      const { data, error: customError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("scope", "custom")
+        .or(`report_id.is.null,report_id.eq.${reportId}`) // Include both global custom (report_id=null) and report-specific
+        .order("created_at", { ascending: false });
+
+      if (customError) throw customError;
+      customData = (data || []) as Dimension[];
+
+      // Combine all dimensions
+      const allDimensions = [
+        ...(globalData || []),
+        ...accountData,
+        ...customData
+      ] as Dimension[];
+
+      console.log('[testing] FiltersBar - Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0);
+
       // Filter only attribute dimensions (text type) that can be used for filtering
-      const filterableDimensions = (data || []).filter(
+      const filterableDimensions = allDimensions.filter(
         (d) => d.type === "text" || d.type === "date"
       );
       
@@ -356,12 +367,12 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
       });
 
       // Filter dimensions by visibility settings
-      const { data: { user } } = await supabase.auth.getUser();
       let finalDimensions = uniqueDimensions;
       if (user && reportId) {
         finalDimensions = await filterDimensionsByVisibility(uniqueDimensions, reportId, user.id, supabase);
       }
 
+      console.log('[testing] FiltersBar - Final filterable dimensions:', finalDimensions.length);
       setDimensions(finalDimensions);
     } catch (error) {
       console.error("Error loading dimensions:", error);
