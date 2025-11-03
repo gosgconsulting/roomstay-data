@@ -12,7 +12,7 @@ export interface Dimension {
   user_id?: string;
   formula?: string | null;
   is_system?: boolean;
-  scope?: 'global' | 'custom';
+  scope?: 'global' | 'custom' | 'account';
 }
 
 /**

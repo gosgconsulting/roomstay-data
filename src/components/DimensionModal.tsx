@@ -52,7 +52,7 @@ export const DimensionModal = ({
   const [name, setName] = useState("");
   const [type, setType] = useState("number");
   const [formula, setFormula] = useState("");
-  const [scope, setScope] = useState<'global' | 'custom'>('custom');
+  const [scope, setScope] = useState<'global' | 'custom' | 'account'>('custom');
   const [isLoading, setIsLoading] = useState(false);
 
   const [availableDimensions, setAvailableDimensions] = useState<Dimension[]>([]);

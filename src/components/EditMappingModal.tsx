@@ -20,6 +20,7 @@ interface DataSource {
   tab_name: string;
   header_row: number;
   column_mappings: any[] | null;
+  report_id?: string;
 }
 
 interface EditMappingModalProps {

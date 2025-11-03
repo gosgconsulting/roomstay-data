@@ -32,6 +32,7 @@ interface FiltersBarProps {
   reportId: string | null;
   onFiltersChange?: (filters: FilterState) => void;
   isSharedView?: boolean;
+  accountId?: string;
 }
 
 interface Dimension {
@@ -40,7 +41,7 @@ interface Dimension {
   type: string;
 }
 
-export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false }: FiltersBarProps) => {
+export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, accountId }: FiltersBarProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [activeDimensions, setActiveDimensions] = useState<string[]>([]);
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});

@@ -30,7 +30,7 @@ interface Dimension {
   type: string;
   formula: string | null;
   is_system?: boolean;
-  scope?: 'global' | 'custom';
+  scope?: 'global' | 'custom' | 'account';
 }
 
 interface DimensionsListModalProps {
@@ -398,7 +398,7 @@ export const DimensionsListModal = ({
           .order("created_at", { ascending: false });
 
         if (accountError) throw accountError;
-        accountData = data || [];
+        accountData = (data || []) as Dimension[];
       }
 
       // Load custom dimensions for this user (both global custom and report-specific)
@@ -412,11 +412,11 @@ export const DimensionsListModal = ({
         .order("created_at", { ascending: false });
 
       if (customError) throw customError;
-      customData = data || [];
+      customData = (data || []) as Dimension[];
 
       console.log('[testing] Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0);
 
-      setGlobalDimensions(globalData || []);
+      setGlobalDimensions((globalData || []) as Dimension[]);
       setAccountDimensions(accountData);
       setCustomDimensions(customData);
     } catch (error) {
