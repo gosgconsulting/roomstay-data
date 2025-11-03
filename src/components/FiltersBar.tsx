@@ -306,6 +306,43 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     setDatePreset(preset);
   };
 
+  const applySmartDateRange = async () => {
+    if (!reportId) return;
+
+    try {
+      console.log('[testing] FiltersBar - Applying smart date range based on actual data');
+      const { SmartDateService } = await import("@/services/SmartDateService");
+      
+      // Get the most recent date with data
+      const mostRecentDate = await SmartDateService.getMostRecentDataDate(reportId);
+      
+      if (mostRecentDate) {
+        // Use the most recent 7 days of available data
+        const optimalEnd = mostRecentDate;
+        const optimalStart = subDays(optimalEnd, 6); // 7 days total including end date
+        
+        console.log('[testing] FiltersBar - Using smart date range based on actual data:', {
+          from: optimalStart.toISOString().split('T')[0],
+          to: optimalEnd.toISOString().split('T')[0],
+          mostRecentDataDate: mostRecentDate.toISOString().split('T')[0]
+        });
+        
+        setDateRange({ from: optimalStart, to: optimalEnd });
+        setDatePreset("data_smart");
+        
+        // Show user feedback about the smart date selection
+        console.log(`[testing] FiltersBar - Set filter to most recent 7 days of data: ${format(optimalStart, 'MMM d')} - ${format(optimalEnd, 'MMM d, yyyy')}`);
+      } else {
+        console.log('[testing] FiltersBar - No data date found, using standard fallback');
+        applyDatePreset("last_7_days");
+      }
+    } catch (error) {
+      console.error('[testing] FiltersBar - Error applying smart date range:', error);
+      // Fallback to standard preset
+      applyDatePreset("last_7_days");
+    }
+  };
+
   const loadDimensions = async () => {
     if (!reportId) return;
     

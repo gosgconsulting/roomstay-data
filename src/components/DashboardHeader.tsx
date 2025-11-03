@@ -471,6 +471,11 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
       // Sync each data source
       for (const dataSource of dataSources) {
         try {
+          console.log(`[SYNC] Processing data source: ${dataSource.name}`);
+          console.log(`[SYNC] Spreadsheet ID: ${dataSource.spreadsheet_id}`);
+          console.log(`[SYNC] Tab name: ${dataSource.tab_name}`);
+          console.log(`[SYNC] Header row: ${dataSource.header_row}`);
+          
           // Fetch data from Google Sheets
           const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
             body: {
@@ -483,6 +488,21 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
           if (sheetsError) throw sheetsError;
 
           const sheetRows = sheetsData?.values || [];
+          console.log(`[SYNC] Fetched ${sheetRows.length} rows from Google Sheets`);
+          
+          // Debug: Check the date range in the fetched data
+          if (sheetRows.length > 0) {
+            const firstRow = sheetRows[0];
+            const lastRow = sheetRows[sheetRows.length - 1];
+            console.log(`[SYNC] First row sample:`, firstRow?.slice(0, 5));
+            console.log(`[SYNC] Last row sample:`, lastRow?.slice(0, 5));
+            
+            // Find date column (assuming it's the first column based on mapping)
+            const dateColumnIndex = dataSource.column_mappings?.find(m => m.dimensionId === '425eddda-29ff-468d-a107-08b0f3d6efb9')?.columnIndex || 0;
+            if (firstRow && lastRow && firstRow.length > dateColumnIndex && lastRow.length > dateColumnIndex) {
+              console.log(`[SYNC] Date range in sheets: ${firstRow[dateColumnIndex]} to ${lastRow[dateColumnIndex]}`);
+            }
+          }
           
           // Invoke sync-sheet-data edge function to process the data
           const { data: syncResult, error: syncError } = await supabase.functions.invoke('sync-sheet-data', {
@@ -495,7 +515,12 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
             },
           });
 
-          if (syncError) throw syncError;
+          if (syncError) {
+            console.error(`[SYNC] Sync error for ${dataSource.name}:`, syncError);
+            throw syncError;
+          }
+
+          console.log(`[SYNC] Sync result for ${dataSource.name}:`, syncResult);
 
           if (syncResult?.rowCount) {
             totalRowsImported += syncResult.rowCount;
