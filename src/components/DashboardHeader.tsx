@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, RefreshCw, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2 } from "lucide-react";
+import { Plus, RefreshCw, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, ChevronDown, Pencil, Database, Grid3x3 } from "lucide-react";
 import { DataSourceModal } from "./DataSourceModal";
 import { DataSourcesListModal } from "./DataSourcesListModal";
 import { DimensionsListModal } from "./DimensionsListModal";
@@ -55,6 +55,7 @@ interface DashboardHeaderProps {
 }
 
 export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSync, onRefreshData, onVisibilityChange }: DashboardHeaderProps) => {
+  const { toast } = useToast();
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);

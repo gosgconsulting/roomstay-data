@@ -272,10 +272,10 @@ export default function SharedReport() {
       <DashboardHeader 
         reportId={reportId}
         onReportChange={setReportId}
-        onDataRefresh={() => setDataRefreshKey(prev => prev + 1)}
+        onRefreshData={() => setDataRefreshKey(prev => prev + 1)}
         onVisibilityChange={() => setVisibilityRefreshTrigger(prev => prev + 1)}
         session={null} // No session for shared reports
-        onSignOut={() => {}} // No sign out for shared reports
+        onSignOut={async () => {}} // No sign out for shared reports
         isSharedView={true}
       />
       
