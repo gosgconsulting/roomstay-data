@@ -557,13 +557,12 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
 
       // Trigger comprehensive data refresh in the parent component
       console.log('[SYNC] Triggering comprehensive component refresh...');
-      onRefreshData?.();
       
-      // Force a small delay to ensure refresh propagates
+      // Force a small delay to ensure data is committed before refresh
       setTimeout(() => {
-        console.log('[SYNC] Secondary refresh trigger for stubborn components...');
+        console.log('[SYNC] Triggering data refresh after sync completion...');
         onRefreshData?.();
-      }, 500);
+      }, 1000);
 
       
 

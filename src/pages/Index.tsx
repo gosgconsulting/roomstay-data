@@ -140,6 +140,8 @@ export default function Index() {
   };
   
   const refreshData = () => {
+    console.log('[INDEX] Starting comprehensive data refresh...');
+    
     // Cancel previous loading by incrementing generation
     setLoadingGeneration(prev => prev + 1);
     
@@ -152,6 +154,8 @@ export default function Index() {
     markComponentLoading('chart');
     markComponentLoading('table');
     setDataRefreshKey(prev => prev + 1);
+    
+    console.log('[INDEX] Data refresh triggered - all components will reload');
   };
   
   if (isLoading) {
