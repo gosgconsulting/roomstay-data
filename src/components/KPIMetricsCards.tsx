@@ -50,6 +50,8 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  console.log('[KPI-DEBUG] Component render - reportId:', reportId, 'accountId:', accountId, 'filters:', filters);
+
   // Create a stable reference for filters to prevent unnecessary re-renders
   const stableFilters = useMemo(() => {
     console.log('[testing] KPIMetricsCards - Creating stable filters reference:', filters);
@@ -73,12 +75,15 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
   ]);
 
   useEffect(() => {
+    console.log('[KPI-DEBUG] useEffect triggered - reportId:', reportId, 'accountId:', accountId);
     console.log('[testing] KPIMetricsCards - reportId:', reportId);
     console.log('[testing] KPIMetricsCards - stableFilters:', stableFilters);
     if (reportId) {
+      console.log('[KPI-DEBUG] Calling loadMetrics...');
       loadMetrics();
     } else {
       console.log('[testing] KPIMetricsCards - No reportId, skipping loadMetrics');
+      console.log('[KPI-DEBUG] No reportId, setting isLoading to false');
       setIsLoading(false);
     }
   }, [reportId, stableFilters]);
