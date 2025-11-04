@@ -1733,6 +1733,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         onDimensionsChange={handleDimensionsChange}
         onDateGranularityChange={(granularity) => setDateGranularity(granularity as any)}
         currentDateGranularity={dateGranularity}
+        reportId={reportId}
       />
     </>
   );

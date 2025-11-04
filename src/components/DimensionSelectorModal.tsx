@@ -31,6 +31,7 @@ interface DimensionSelectorModalProps {
   onDimensionsChange: (dimensions: string[]) => void;
   onDateGranularityChange?: (granularity: string) => void;
   currentDateGranularity?: string;
+  reportId?: string; // Added reportId prop
 }
 
 export const DimensionSelectorModal = ({
@@ -41,6 +42,7 @@ export const DimensionSelectorModal = ({
   onDimensionsChange,
   onDateGranularityChange,
   currentDateGranularity = 'day',
+  reportId, // Destructure reportId
 }: DimensionSelectorModalProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -123,25 +125,24 @@ export const DimensionSelectorModal = ({
     delete newGranularities[dimensionId];
     setDimensionGranularities(newGranularities);
     onDimensionsChange(updated);
+    
+    // Save dimension changes per report
+    if (reportId) {
+      saveDimensionSettings(updated);
+    }
   };
 
   const handleAddDimension = () => {
     if (selectedToAdd && !selectedDimensions.includes(selectedToAdd)) {
-      const dimension = dimensions.find(d => d.id === selectedToAdd);
-      // For date dimensions, default to "Day" granularity
-      if (dimension?.type === 'date') {
-        setDimensionGranularities({
-          ...dimensionGranularities,
-          [selectedToAdd]: 'Day'
-        });
-        // Notify parent component of defaults
-        if (onDateGranularityChange) {
-          onDateGranularityChange('day');
-        }
-      }
-      onDimensionsChange([...selectedDimensions, selectedToAdd]);
+      const updated = [...selectedDimensions, selectedToAdd];
+      onDimensionsChange(updated);
       setSelectedToAdd("");
       setShowAddSelector(false);
+      
+      // Save dimension changes per report
+      if (reportId) {
+        saveDimensionSettings(updated);
+      }
     }
   };
 
@@ -174,6 +175,67 @@ export const DimensionSelectorModal = ({
   const availableDimensions = dimensions.filter(
     (d) => !selectedDimensions.includes(d.id)
   );
+
+  const saveDimensionSettings = async (dimensions: string[]) => {
+    if (!reportId) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      console.log(`[DIMENSION-SELECTOR] Saving dimensions for report ${reportId}:`, dimensions);
+
+      // Check if a default view already exists for this report
+      const { data: existingView } = await supabase
+        .from("report_views")
+        .select("id, filter_values, date_range_start, date_range_end, date_range_preset")
+        .eq("report_id", reportId)
+        .eq("user_id", user.id)
+        .eq("is_default", true)
+        .maybeSingle();
+
+      const viewData = {
+        filter_dimensions: dimensions,
+        // Preserve existing filter settings if they exist
+        filter_values: existingView?.filter_values || {},
+        date_range_start: existingView?.date_range_start || null,
+        date_range_end: existingView?.date_range_end || null,
+        date_range_preset: existingView?.date_range_preset || "last_7_days",
+      };
+
+      if (existingView) {
+        // Update existing view
+        const { error } = await supabase
+          .from("report_views")
+          .update(viewData)
+          .eq("id", existingView.id);
+
+        if (error) {
+          console.error('[DIMENSION-SELECTOR] Error updating report view:', error);
+        } else {
+          console.log('[DIMENSION-SELECTOR] Successfully updated dimension settings for report');
+        }
+      } else {
+        // Create new view
+        const { error } = await supabase
+          .from("report_views")
+          .insert({
+            ...viewData,
+            report_id: reportId,
+            user_id: user.id,
+            is_default: true,
+          });
+
+        if (error) {
+          console.error('[DIMENSION-SELECTOR] Error creating report view:', error);
+        } else {
+          console.log('[DIMENSION-SELECTOR] Successfully created dimension settings for report');
+        }
+      }
+    } catch (error) {
+      console.error('[DIMENSION-SELECTOR] Error saving dimension settings:', error);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

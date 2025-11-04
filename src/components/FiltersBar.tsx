@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Filter, Calendar, Settings, Check, Search } from "lucide-react";
+import { Filter, Calendar, Settings, Check, Search, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import {
@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
+import { useToast } from "@/components/ui/use-toast";
 
 export interface FilterState {
   dimensionFilters: Record<string, string[]>;
@@ -57,6 +58,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
   const [compareDateRange, setCompareDateRange] = useState<DateRange | undefined>();
   const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
   const [openPopovers, setOpenPopovers] = useState<Record<string, boolean>>({});
+  const { toast } = useToast();
 
   useEffect(() => {
     if (reportId) {
@@ -306,7 +308,57 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     setDatePreset(preset);
   };
 
+  // Check if any filters are currently applied
+  const hasActiveFilters = () => {
+    // Check if any dimension has selected filter values
+    const hasDimensionFilters = Object.keys(selectedFilters).some(
+      dimensionId => selectedFilters[dimensionId] && selectedFilters[dimensionId].length > 0
+    );
+    const hasDateFilter = datePreset !== "last_7_days" || dateRange !== undefined;
+    const hasCompareFilter = compareEnabled;
+    return hasDimensionFilters || hasDateFilter || hasCompareFilter;
+  };
 
+  // Count active filters for display
+  const getActiveFiltersCount = () => {
+    let count = 0;
+    
+    // Count dimension filters that have actual values selected
+    Object.keys(selectedFilters).forEach(dimensionId => {
+      if (selectedFilters[dimensionId] && selectedFilters[dimensionId].length > 0) {
+        count += 1;
+      }
+    });
+    
+    // Count date filter if not default
+    if (datePreset !== "last_7_days" || dateRange !== undefined) {
+      count += 1;
+    }
+    
+    // Count compare filter if enabled
+    if (compareEnabled) {
+      count += 1;
+    }
+    
+    return count;
+  };
+
+  const handleResetFilters = () => {
+    // Keep the active dimensions but clear their selected values
+    // setActiveDimensions([]); // DON'T remove dimensions from filter bar
+    setSelectedFilters({}); // Clear all filter values
+    setDateRange(undefined);
+    setDatePreset("last_7_days");
+    setCompareEnabled(false);
+    setCompareType("previous_period");
+    setCompareDateRange(undefined);
+    setSearchTerms({});
+    
+    toast({
+      title: "Filters reset",
+      description: "Filter values cleared. Dimensions remain available for filtering.",
+    });
+  };
 
   const loadDimensions = async () => {
     if (!reportId) return;
@@ -418,7 +470,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
 
       // Extract unique values for each active dimension
       data?.forEach((row) => {
-        const dimensionValues = row.dimension_values as Record<string, any>;
+        const dimensionValues = row.dimension_values as Record<string, string | number | boolean>;
         activeDimensions.forEach((dimId) => {
           const value = dimensionValues[dimId];
           if (value) {
@@ -837,17 +889,31 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
               )}
             </div>
 
-            {activeDimensions.length > 0 && !isSharedView && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowDimensionSelector(true)}
-                className="ml-auto"
-                title="Edit filter dimensions"
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-            )}
+            <div className="flex items-center gap-2 ml-auto">
+              {hasActiveFilters() && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetFilters}
+                  className="gap-2 text-muted-foreground hover:text-foreground"
+                  title={`Reset ${getActiveFiltersCount()} active filter${getActiveFiltersCount() > 1 ? 's' : ''}`}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset Filters ({getActiveFiltersCount()})
+                </Button>
+              )}
+
+              {activeDimensions.length > 0 && !isSharedView && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowDimensionSelector(true)}
+                  title="Edit filter dimensions"
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -858,6 +924,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
         title="Configure Filter Dimensions"
         selectedDimensions={activeDimensions}
         onDimensionsChange={handleDimensionsChange}
+        reportId={reportId}
       />
     </>
   );

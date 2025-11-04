@@ -3,8 +3,9 @@
  */
 
 /**
- * Filters dimensions by visibility settings from report_views
- * @param dimensions The dimensions to filter
+ * Filters dimensions based on visibility settings from report_views
+ * Always includes filter dimensions even if they're not in visible_dimensions
+ * @param dimensions The dimensions array to filter
  * @param reportId The report ID
  * @param userId The user ID
  * @param supabase The Supabase client
@@ -23,7 +24,7 @@ export const filterDimensionsByVisibility = async (
   try {
     const { data: viewSettings, error } = await supabase
       .from("report_views")
-      .select("visible_dimensions")
+      .select("visible_dimensions, filter_dimensions")
       .eq("report_id", reportId)
       .eq("user_id", userId)
       .eq("is_default", true)
@@ -38,8 +39,17 @@ export const filterDimensionsByVisibility = async (
     // If visibility settings exist and have items, filter to only visible dimensions
     if (viewSettings?.visible_dimensions && Array.isArray(viewSettings.visible_dimensions) && viewSettings.visible_dimensions.length > 0) {
       const visibleSet = new Set(viewSettings.visible_dimensions);
+      
+      // Always include filter dimensions, even if they're not in visible_dimensions
+      if (viewSettings.filter_dimensions && Array.isArray(viewSettings.filter_dimensions)) {
+        viewSettings.filter_dimensions.forEach((filterId: string) => {
+          visibleSet.add(filterId);
+        });
+      }
+      
       const filtered = dimensions.filter(d => visibleSet.has(d.id));
-      console.log("[DEBUG] Filtered dimensions by visibility:", filtered.length, "of", dimensions.length);
+      console.log("[DEBUG] Filtered dimensions by visibility (including filter dimensions):", filtered.length, "of", dimensions.length);
+      console.log("[DEBUG] Filter dimensions included:", viewSettings.filter_dimensions);
       return filtered;
     }
 

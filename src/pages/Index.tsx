@@ -18,14 +18,12 @@ export default function Index() {
   const location = useLocation();
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isDataLoading, setIsDataLoading] = useState(false);
-  const [loadingComponents, setLoadingComponents] = useState<Set<string>>(new Set());
-
   const [reportId, setReportId] = useState<string | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
+  const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
   
   // Filter state
   // Filter state - default to last 7 days for better performance with large datasets
@@ -38,24 +36,35 @@ export default function Index() {
     compareDateRange: undefined,
   });
   
-  // Track component loading states
+  // Loading state management
+  const [isDataLoading, setIsDataLoading] = useState(false);
+  const [loadingComponents, setLoadingComponents] = useState<Set<string>>(new Set());
+
   const markComponentLoading = (component: string) => {
+    console.log(`[INDEX] Marking ${component} as loading`);
     setLoadingComponents(prev => new Set(prev).add(component));
     setIsDataLoading(true);
   };
-  
+
   const markComponentLoaded = (component: string) => {
+    console.log(`[INDEX] Marking ${component} as loaded`);
     setLoadingComponents(prev => {
-      const next = new Set(prev);
-      next.delete(component);
-      if (next.size === 0) {
+      const newSet = new Set(prev);
+      newSet.delete(component);
+      if (newSet.size === 0) {
         setIsDataLoading(false);
+        console.log('[INDEX] All components loaded');
       }
-      return next;
+      return newSet;
     });
   };
   
-  // Reset filters and mark loading when report changes
+  // Load user session and reports on mount
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  // When reportId changes, refresh all components
   useEffect(() => {
     if (reportId) {
       // Cancel previous loading by incrementing generation
@@ -69,22 +78,10 @@ export default function Index() {
       markComponentLoading('metrics');
       markComponentLoading('chart');
       markComponentLoading('table');
-      
-      setFilters({
-        dimensionFilters: {},
-        dateRange: undefined,
-        datePreset: "last_30_days",
-        compareEnabled: false,
-        compareType: "previous_period",
-        compareDateRange: undefined,
-      });
+      setDataRefreshKey(prev => prev + 1);
     }
   }, [reportId]);
-  
-  useEffect(() => {
-    checkAuth();
-  }, []);
-  
+
   const checkAuth = async () => {
     try {
       const { data: { session }, error } = await supabase.auth.getSession();
@@ -104,24 +101,35 @@ export default function Index() {
         .select('*')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: false });
-      
+
       if (reportsError) throw reportsError;
-      
-      // If user has reports, select the first one
+
       if (reports && reports.length > 0) {
-        setReportId(reports[0].id);
-        setAccountId(reports[0].account_id || null);
+        // Check if there's a reportId in the URL
+        const urlParams = new URLSearchParams(location.search);
+        const urlReportId = urlParams.get('reportId');
+        
+        if (urlReportId && reports.find(r => r.id === urlReportId)) {
+          setReportId(urlReportId);
+        } else {
+          setReportId(reports[0].id);
+        }
+        
+        // Load account ID for the selected report
+        const selectedReport = reports.find(r => r.id === (urlReportId || reports[0].id));
+        if (selectedReport?.account_id) {
+          setAccountId(selectedReport.account_id);
+        }
       }
       
       setIsLoading(false);
     } catch (error) {
       console.error('Error checking auth:', error);
       toast({
-        title: "Authentication Error",
-        description: "Please sign in again.",
+        title: "Error",
+        description: "Failed to load user session",
         variant: "destructive",
       });
-      navigate('/auth');
     }
   };
   
@@ -149,13 +157,16 @@ export default function Index() {
     setLoadingComponents(new Set());
     setIsDataLoading(false);
     
-    // Start new loading cycle
+    // Start new loading cycle with proper sequencing
     markComponentLoading('metrics');
     markComponentLoading('chart');
     markComponentLoading('table');
-    setDataRefreshKey(prev => prev + 1);
     
-    console.log('[INDEX] Data refresh triggered - all components will reload');
+    // Increment both refresh keys to ensure all components reload
+    setDataRefreshKey(prev => prev + 1);
+    setVisibilityRefreshTrigger(prev => prev + 1);
+    
+    console.log('[INDEX] Data refresh triggered - all components will reload with fresh data');
   };
   
   if (isLoading) {
@@ -192,6 +203,7 @@ export default function Index() {
           }
         }}
         onRefreshData={refreshData}
+        onVisibilityChange={() => setVisibilityRefreshTrigger(prev => prev + 1)}
         session={session}
         onSignOut={handleSignOut}
         isSharedView={false}
@@ -209,17 +221,15 @@ export default function Index() {
           <main className="container mx-auto px-6 py-6 space-y-6">
             <div className="relative">
               <div className="absolute right-0 -top-2 z-10">
-                {true && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setKpiSettingsOpen(true)}
-                    className="gap-2"
-                  >
-                    <Settings className="h-4 w-4" />
-                    KPI Settings
-                  </Button>
-                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setKpiSettingsOpen(true)}
+                  className="gap-2"
+                >
+                  <Settings className="h-4 w-4" />
+                  KPI Settings
+                </Button>
               </div>
               <KPIMetricsCards 
                 reportId={reportId} 
@@ -227,6 +237,7 @@ export default function Index() {
                 accountId={accountId || undefined}
                 key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
                 onLoadingComplete={() => markComponentLoaded('metrics')}
+                visibilityRefreshTrigger={visibilityRefreshTrigger}
               />
             </div>
             <KPIChart 

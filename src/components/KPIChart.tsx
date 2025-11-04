@@ -436,14 +436,28 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
           // Apply date range filter if there's a Date dimension
           if (stableFilters.dateRange?.from || stableFilters.dateRange?.to) {
             if (dimensionValues[dateDimension.id]) {
-              const dateStr = dimensionValues[dateDimension.id];
+              const dateValue = dimensionValues[dateDimension.id];
               let rowDate: Date;
               
-              if (dateStr.includes('/')) {
-                const [month, day, year] = dateStr.split('/');
-                rowDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              // Handle different date formats - string or number
+              if (typeof dateValue === 'number') {
+                // Handle Excel serial dates or timestamps
+                if (dateValue > 1 && dateValue < 100000) {
+                  // Excel serial date
+                  const excelEpoch = new Date(1899, 11, 30);
+                  rowDate = new Date(excelEpoch.getTime() + dateValue * 24 * 60 * 60 * 1000);
+                } else {
+                  // Timestamp
+                  rowDate = new Date(dateValue);
+                }
               } else {
-                rowDate = new Date(dateStr);
+                const dateStr = String(dateValue);
+                if (dateStr.includes('/')) {
+                  const [month, day, year] = dateStr.split('/');
+                  rowDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                } else {
+                  rowDate = new Date(dateStr);
+                }
               }
               
               // Add a day to the end date to include the full day
@@ -503,14 +517,28 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
             
             // Apply compare date range filter
             if (dimensionValues[dateDimension.id]) {
-              const dateStr = dimensionValues[dateDimension.id];
+              const dateValue = dimensionValues[dateDimension.id];
               let rowDate: Date;
               
-              if (dateStr.includes('/')) {
-                const [month, day, year] = dateStr.split('/');
-                rowDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              // Handle different date formats - string or number
+              if (typeof dateValue === 'number') {
+                // Handle Excel serial dates or timestamps
+                if (dateValue > 1 && dateValue < 100000) {
+                  // Excel serial date
+                  const excelEpoch = new Date(1899, 11, 30);
+                  rowDate = new Date(excelEpoch.getTime() + dateValue * 24 * 60 * 60 * 1000);
+                } else {
+                  // Timestamp
+                  rowDate = new Date(dateValue);
+                }
               } else {
-                rowDate = new Date(dateStr);
+                const dateStr = String(dateValue);
+                if (dateStr.includes('/')) {
+                  const [month, day, year] = dateStr.split('/');
+                  rowDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                } else {
+                  rowDate = new Date(dateStr);
+                }
               }
               
               // Add a day to the end date to include the full day
@@ -563,20 +591,34 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
         
         // Convert to chart data points with both main and compare values
         const chartPoints = Array.from(mainPeriodByDate.entries())
-          .map(([dateStr, value]) => {
+          .map(([dateKey, value]) => {
             try {
               // Parse the date
               let dateObj: Date;
               
-              if (dateStr.includes('/')) {
-                const [month, day, year] = dateStr.split('/');
-                dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              // Handle different date formats - string or number
+              if (typeof dateKey === 'number') {
+                // Handle Excel serial dates or timestamps
+                if (dateKey > 1 && dateKey < 100000) {
+                  // Excel serial date
+                  const excelEpoch = new Date(1899, 11, 30);
+                  dateObj = new Date(excelEpoch.getTime() + dateKey * 24 * 60 * 60 * 1000);
+                } else {
+                  // Timestamp
+                  dateObj = new Date(dateKey);
+                }
               } else {
-                dateObj = parseISO(dateStr);
+                const dateStr = String(dateKey);
+                if (dateStr.includes('/')) {
+                  const [month, day, year] = dateStr.split('/');
+                  dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                } else {
+                  dateObj = parseISO(dateStr);
+                }
               }
               
               if (isNaN(dateObj.getTime())) {
-                console.error('[CHART] Invalid date:', dateStr);
+                console.error('[CHART] Invalid date:', dateKey);
                 return null;
               }
               
@@ -593,7 +635,8 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
                 
                 // Format the compare date in the same format as the data
                 let compareDateStr: string;
-                if (dateStr.includes('/')) {
+                const originalDateStr = String(dateKey);
+                if (originalDateStr.includes('/')) {
                   compareDateStr = `${compareDate.getMonth() + 1}/${compareDate.getDate()}/${compareDate.getFullYear()}`;
                 } else {
                   compareDateStr = compareDate.toISOString().split('T')[0];
@@ -611,7 +654,7 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
                 compareValue: compareValue,
               } as ChartData;
             } catch (e) {
-              console.error('[CHART] Error parsing date:', e, dateStr);
+              console.error('[CHART] Error parsing date:', e, dateKey);
               return null;
             }
           })

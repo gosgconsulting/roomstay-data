@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, RefreshCw, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, ChevronDown, Pencil, Database, Grid3x3 } from "lucide-react";
+import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, ChevronDown, Pencil, Database, Grid3x3 } from "lucide-react";
 import { DataSourceModal } from "./DataSourceModal";
 import { DataSourcesListModal } from "./DataSourcesListModal";
 import { DimensionsListModal } from "./DimensionsListModal";
@@ -8,6 +8,7 @@ import { DimensionModal } from "./DimensionModal";
 import { ReportModal } from "./ReportModal";
 import { ShareModal } from "./ShareModal";
 import { SyncModeModal } from "./SyncModeModal";
+import { Session } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -50,7 +51,7 @@ interface DashboardHeaderProps {
   onDataSync?: () => void;
   onRefreshData?: () => void;
   onVisibilityChange?: () => void;
-  session?: any;
+  session?: Session | null;
   onSignOut?: () => Promise<void>;
   isSharedView?: boolean;
 }
@@ -431,11 +432,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
     }
   };
 
-  const handleRefreshClick = () => {
-    if (!reportId) return;
-    // Directly trigger full sync without modal
-    handleSync('full');
-  };
+
 
   const handleSync = async (syncMode: 'incremental' | 'full') => {
     if (!reportId) return;
@@ -444,13 +441,24 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
     setIsSyncing(true);
     
     try {
+      console.log(`[SYNC] Starting ${syncMode} sync for report ${reportId}`);
+      
       // Get all data sources for this report
-      const { data: dataSources, error: dsError } = await supabase
+      const { data: dataSources, error: dataSourcesError } = await supabase
         .from('data_sources')
         .select('*')
         .eq('report_id', reportId);
 
-      if (dsError) throw dsError;
+      if (dataSourcesError) {
+        console.error('[SYNC] Error fetching data sources:', dataSourcesError);
+        toast({
+          title: "Error",
+          description: "Failed to fetch data sources",
+          variant: "destructive",
+        });
+        setIsSyncing(false);
+        return;
+      }
 
       if (!dataSources || dataSources.length === 0) {
         toast({
@@ -468,6 +476,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
       });
 
       let totalRowsImported = 0;
+      let syncSuccess = true;
 
       // Sync each data source
       for (const dataSource of dataSources) {
@@ -486,33 +495,30 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
             },
           });
 
-          if (sheetsError) throw sheetsError;
-
-          const sheetRows = sheetsData?.values || [];
-          console.log(`[SYNC] Fetched ${sheetRows.length} rows from Google Sheets`);
-          
-          // Debug: Check the date range in the fetched data
-          if (sheetRows.length > 0) {
-            const firstRow = sheetRows[0];
-            const lastRow = sheetRows[sheetRows.length - 1];
-            console.log(`[SYNC] First row sample:`, firstRow?.slice(0, 5));
-            console.log(`[SYNC] Last row sample:`, lastRow?.slice(0, 5));
-            
-                         // Find date column (assuming it's the first column based on mapping)
-             const mappings = Array.isArray(dataSource.column_mappings) ? dataSource.column_mappings : [];
-             const dateMapping = mappings.find((m: any) => m.dimensionId === '425eddda-29ff-468d-a107-08b0f3d6efb9') as any;
-             const dateColumnIndex = dateMapping?.columnIndex || 0;
-            if (firstRow && lastRow && firstRow.length > dateColumnIndex && lastRow.length > dateColumnIndex) {
-              console.log(`[SYNC] Date range in sheets: ${firstRow[dateColumnIndex]} to ${lastRow[dateColumnIndex]}`);
-            }
+          if (sheetsError) {
+            console.error(`[SYNC] Error fetching sheets data for ${dataSource.name}:`, sheetsError);
+            toast({
+              title: "Warning",
+              description: `Failed to fetch data from ${dataSource.name}: ${sheetsError.message}`,
+              variant: "destructive",
+            });
+            syncSuccess = false;
+            continue;
           }
-          
-          // Invoke sync-sheet-data edge function to process the data
+
+          if (!sheetsData?.values || sheetsData.values.length === 0) {
+            console.log(`[SYNC] No data found for ${dataSource.name}`);
+            continue;
+          }
+
+          console.log(`[SYNC] Fetched ${sheetsData.values.length} rows for ${dataSource.name}`);
+
+          // Use sync-sheet-data function to process and store the data
           const { data: syncResult, error: syncError } = await supabase.functions.invoke('sync-sheet-data', {
             body: {
               dataSourceId: dataSource.id,
               reportId: reportId,
-              sheetData: sheetRows,
+              sheetData: sheetsData.values,
               columnMappings: dataSource.column_mappings,
               syncMode: syncMode,
             },
@@ -520,7 +526,13 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
 
           if (syncError) {
             console.error(`[SYNC] Sync error for ${dataSource.name}:`, syncError);
-            throw syncError;
+            toast({
+              title: "Warning", 
+              description: `Failed to sync ${dataSource.name}: ${syncError.message}`,
+              variant: "destructive",
+            });
+            syncSuccess = false;
+            continue;
           }
 
           console.log(`[SYNC] Sync result for ${dataSource.name}:`, syncResult);
@@ -529,42 +541,42 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
             totalRowsImported += syncResult.rowCount;
           }
 
-          // Update the data source's updated_at timestamp
-          await supabase
-            .from('data_sources')
-            .update({ updated_at: new Date().toISOString() })
-            .eq('id', dataSource.id);
-
-        } catch (sourceError) {
-          console.error(`Error syncing data source ${dataSource.name}:`, sourceError);
+        } catch (error) {
+          console.error(`[SYNC] Unexpected error processing ${dataSource.name}:`, error);
           toast({
-            title: "Partial sync",
-            description: `Failed to sync ${dataSource.name}`,
+            title: "Warning",
+            description: `Unexpected error processing ${dataSource.name}`,
             variant: "destructive",
           });
+          syncSuccess = false;
         }
       }
 
-      // Refresh the last update date and total rows
-      await loadLastUpdateDate(reportId);
-      await loadTotalRows(reportId);
+      if (syncSuccess) {
+        // Update last sync time
+        await supabase
+          .from('reports')
+          .update({ 
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', reportId);
 
-      const syncModeText = syncMode === 'incremental' ? 'incremental sync' : 'full refresh';
-      toast({
-        title: "Sync complete",
-        description: `Successfully completed ${syncModeText}: ${totalRowsImported.toLocaleString()} rows with ${dataSources.length} dimension(s)`,
-      });
+        toast({
+          title: "Sync complete",
+          description: `Successfully imported ${totalRowsImported} rows from ${dataSources.length} source(s)`,
+        });
 
-      // Trigger comprehensive data refresh in the parent component
-      console.log('[SYNC] Triggering comprehensive component refresh...');
-      
-      // Force a small delay to ensure data is committed before refresh
-      setTimeout(() => {
-        console.log('[SYNC] Triggering data refresh after sync completion...');
-        onRefreshData?.();
-      }, 1000);
-
-      
+        // Refresh the UI components after successful sync
+        console.log('[SYNC] Triggering comprehensive component refresh...');
+        
+                 // Use a longer delay to ensure data is fully committed and indexed
+         setTimeout(() => {
+           console.log('[SYNC] Triggering data refresh after sync completion...');
+           onRefreshData?.();
+           // Also trigger visibility change to ensure all components refresh properly
+           onVisibilityChange?.();
+         }, 2000); // Increased delay to 2 seconds for better reliability
+      }
 
     } catch (error) {
       console.error("Error refreshing data:", error);
@@ -689,15 +701,6 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
               Last update: {lastUpdateDate}
             </span>
           )}
-          <Button 
-            variant="outline" 
-            className="gap-2"
-            onClick={handleRefreshClick}
-            disabled={!currentReport || isSyncing}
-          >
-            <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-            {isSyncing ? 'Syncing...' : 'Refresh'}
-          </Button>
           <Button 
             variant="outline" 
             className="gap-2"
