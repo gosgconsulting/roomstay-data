@@ -200,10 +200,18 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   useEffect(() => {
     if (reportId && dimensions.length > 0) {
       loadAllViews();
-      // Re-check data sources when dimensions change (might indicate data source was added)
+      // Check data sources when dimensions change (might indicate data source was added)
       checkDataSources();
     }
   }, [reportId, dimensions.length]);
+
+  // Re-check data sources when refresh is triggered (after sync completes)
+  useEffect(() => {
+    if (reportId && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
+      console.log('[testing] Re-checking data sources after refresh trigger');
+      checkDataSources();
+    }
+  }, [visibilityRefreshTrigger, reportId]);
 
   // Refresh view settings when dimension visibility changes from DimensionsListModal
   useEffect(() => {
@@ -240,17 +248,22 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       reportId: !!reportId,
       groupByDimensions: groupByDimensions.length,
       dimensions: dimensions.length,
-      hasDataSources,
       groupByDims: groupByDimensions
     });
     
-    if (reportId && groupByDimensions.length > 0 && dimensions.length > 0 && hasDataSources) {
+    // Try to load data if we have reportId, groupByDimensions, and dimensions
+    // Don't block on hasDataSources - let the load attempt determine if data exists
+    if (reportId && groupByDimensions.length > 0 && dimensions.length > 0) {
       console.log('[testing] All conditions met, loading performance data');
       loadPerformanceData();
     } else {
-      console.log('[testing] Not loading data - conditions not met');
+      console.log('[testing] Not loading data - conditions not met:', {
+        reportId: !!reportId,
+        groupByDimensions: groupByDimensions.length,
+        dimensions: dimensions.length
+      });
     }
-  }, [reportId, groupByDimensions, breakdownByDimensions, thenByDimensions, dimensions.length, dateOrder, debouncedFilters, hasDataSources]);
+  }, [reportId, groupByDimensions, breakdownByDimensions, thenByDimensions, dimensions.length, dateOrder, debouncedFilters, visibilityRefreshTrigger]);
 
   // Save view settings whenever they change (with debounce to prevent excessive saves)
   useEffect(() => {
@@ -947,8 +960,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       groupByDims: groupByDimensions
     });
 
-    if (!reportId || groupByDimensions.length === 0 || !hasDataSources) {
-      console.log('[testing] No data loading - missing reportId, groupByDimensions, or data sources');
+    if (!reportId || groupByDimensions.length === 0) {
+      console.log('[testing] No data loading - missing reportId or groupByDimensions');
       setTableData([]);
       setTotalData({});
       setTotalCompareData({});
@@ -1565,11 +1578,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
           </div>
         </CardHeader>
         <CardContent>
-          {!hasDataSources ? (
-            <div className="py-8 text-center text-muted-foreground">
-              {isSharedView ? "No data available" : "Connect a data source to view the performance table"}
-            </div>
-          ) : groupByDimensions.length === 0 ? (
+          {groupByDimensions.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               {isSharedView ? "No data available" : "Right-click on \"Group by\" to select dimensions"}
             </div>
@@ -1577,9 +1586,9 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
             <div className="py-8 text-center text-muted-foreground">
               Loading data...
             </div>
-          ) : tableData.length === 0 ? (
+          ) : tableData.length === 0 && !isLoadingData ? (
             <div className="py-8 text-center text-muted-foreground">
-              No data available. Connect a data source to view the table.
+              {isSharedView ? "No data available for the selected filters." : "No data available. This may indicate that no data has been synced yet or the filters don't match any data."}
             </div>
           ) : (
             <>

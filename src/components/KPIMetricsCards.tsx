@@ -266,13 +266,18 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
 
       // Helper to filter and aggregate data for a date range
       const aggregateForPeriod = (fromDate?: Date, toDate?: Date) => {
+        console.log('[KPI-DEBUG] Aggregating period data with filters:', stableFilters.dimensionFilters);
         const filteredData = allDimensionData.filter((row) => {
           const dimensionValues = row.dimension_values as Record<string, any>;
           
           // Apply dimension filters
-          for (const [dimId, filterValue] of Object.entries(stableFilters.dimensionFilters)) {
-            if (dimensionValues[dimId] !== filterValue) {
-              return false;
+          for (const [dimId, filterValues] of Object.entries(stableFilters.dimensionFilters)) {
+            if (filterValues && filterValues.length > 0) {
+              const rowValue = dimensionValues[dimId];
+              // Check if the row value matches any of the selected filter values
+              if (!filterValues.includes(String(rowValue))) {
+                return false;
+              }
             }
           }
           
@@ -292,6 +297,8 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
           
           return true;
         });
+
+        console.log('[KPI-DEBUG] Filtered data count:', filteredData.length, 'from', allDimensionData.length, 'total rows');
 
         // Calculate aggregated values for each dimension
         const aggregatedValues: Record<string, number> = {};
