@@ -32,8 +32,8 @@ import { ChevronDown, ChevronRight, Columns3, Copy, Trash2, Plus, ArrowUp, Arrow
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
-import { cn } from "@/lib/utils";
-import { MappingModal } from "./MappingModal";
+import { cn, sortKPIsByDefaultOrder } from "@/lib/utils";
+import { ColumnFilterModal } from "./ColumnFilterModal";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
@@ -83,6 +83,7 @@ interface PerformanceTableProps {
   accountId?: string;
   visibilityRefreshTrigger?: number; // Trigger to refresh when dimension visibility changes
   onLoadingComplete?: () => void;
+  onFiltersChange?: (filters: FilterState) => void;
 }
 
 // Sortable column item component
@@ -132,9 +133,9 @@ function SortableColumnItem({
   );
 }
 
-export const PerformanceTable = ({ reportId, filters, isSharedView = false, accountId, visibilityRefreshTrigger, onLoadingComplete }: PerformanceTableProps) => {
+export const PerformanceTable = ({ reportId, filters, isSharedView = false, accountId, visibilityRefreshTrigger, onLoadingComplete, onFiltersChange }: PerformanceTableProps) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [mappingModalOpen, setMappingModalOpen] = useState(false);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [dimensionSelectorOpen, setDimensionSelectorOpen] = useState(false);
   const [selectedKPI, setSelectedKPI] = useState("");
   const [currentSelector, setCurrentSelector] = useState<"group" | "breakdown" | "then">("group");
@@ -373,10 +374,12 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula)
         .map(d => d.id);
 
-      // Set default KPI settings - all numeric/currency dimensions visible
-      const defaultKPIs = dimensions
-        .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage')
-        .map(d => d.name);
+        // Set default KPI settings - all numeric/currency dimensions visible
+        const defaultKPIs = sortKPIsByDefaultOrder(
+          dimensions
+            .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage')
+            .map(d => d.name)
+        );
 
       const { data: newView, error } = await supabase
         .from("report_views")
@@ -1176,8 +1179,14 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
 
   const handleContextMenu = (e: React.MouseEvent, kpi: string) => {
     e.preventDefault();
-    setSelectedKPI(kpi);
-    setMappingModalOpen(true);
+    // If kpi is "name", it's the group dimension column
+    if (kpi === "name" && groupByDimensions[0]) {
+      const groupDim = dimensions.find(d => d.id === groupByDimensions[0]);
+      setSelectedKPI(groupDim?.name || "name");
+    } else {
+      setSelectedKPI(kpi);
+    }
+    setFilterModalOpen(true);
   };
 
   const handleDimensionSelectorOpen = (
@@ -1251,20 +1260,144 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     setCurrentPage(1); // Reset to first page when grouping changes
   };
 
-  // Calculate totals from server-side data
-  const calculateTotals = (): Record<string, any> => {
-    // Use server-side totals directly
-    return totalData;
-  };
+  // Apply column filters (text and numeric)
+  const filteredTableData = useMemo(() => {
+    if (!filters.dimensionFilters || Object.keys(filters.dimensionFilters).length === 0) {
+      return tableData;
+    }
+
+    console.log('[testing] Applying filters:', filters.dimensionFilters);
+
+    return tableData.filter((row) => {
+      // Check each dimension filter
+      for (const [dimId, filterValues] of Object.entries(filters.dimensionFilters)) {
+        if (!filterValues || filterValues.length === 0) continue;
+
+        const dimension = dimensions.find(d => d.id === dimId);
+        if (!dimension) {
+          console.log('[testing] Dimension not found for filter:', dimId);
+          continue;
+        }
+
+        const isNumeric = dimension.type === 'number' || dimension.type === 'currency' || dimension.type === 'percentage';
+        const isGroupDimension = groupByDimensions[0] === dimId;
+        
+        // Check each filter value
+        let matchesAnyValue = false;
+        for (const filterValue of filterValues) {
+          if (isNumeric && (filterValue.startsWith('>') || filterValue.startsWith('<') || filterValue.startsWith('='))) {
+            // Numeric comparison filter
+            const operator = filterValue[0];
+            const threshold = parseFloat(filterValue.substring(1));
+            if (isNaN(threshold)) continue;
+
+            const rowValue = row.data[dimension.name];
+            const numRowValue = parseFloat(rowValue) || 0;
+
+            let matches = false;
+            if (operator === '>') {
+              matches = numRowValue > threshold;
+            } else if (operator === '<') {
+              matches = numRowValue < threshold;
+            } else if (operator === '=') {
+              matches = Math.abs(numRowValue - threshold) < 0.01; // Allow small floating point differences
+            }
+
+            if (matches) {
+              matchesAnyValue = true;
+              break; // Found a match, no need to check other values
+            }
+          } else {
+            // Text filter - check if row name (for group dimension) or dimension value matches
+            const filterLower = filterValue.toLowerCase().trim();
+            if (filterLower === '') continue;
+            
+            // For group dimension, check row name
+            if (isGroupDimension) {
+              const rowNameLower = row.name.toLowerCase();
+              if (rowNameLower.includes(filterLower)) {
+                matchesAnyValue = true;
+                break; // Found a match
+              }
+            }
+            
+            // Check dimension value in row data
+            const dimValue = row.data[dimension.name];
+            if (dimValue !== undefined && dimValue !== null) {
+              const dimValueStr = String(dimValue).toLowerCase();
+              if (dimValueStr.includes(filterLower)) {
+                matchesAnyValue = true;
+                break; // Found a match
+              }
+            }
+          }
+        }
+
+        // If no filter value matched, this row doesn't pass this filter
+        if (!matchesAnyValue) {
+          return false;
+        }
+      }
+
+      return true; // All filters passed
+    });
+  }, [tableData, filters.dimensionFilters, dimensions, groupByDimensions]);
 
   // Paginate data
-  const paginatedData = tableData.slice(
+  const paginatedData = filteredTableData.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
   
-  const totalPages = Math.ceil(tableData.length / itemsPerPage);
-  const totals = calculateTotals();
+  const totalPages = Math.ceil(filteredTableData.length / itemsPerPage);
+  // Calculate totals from filtered data
+  const totals = useMemo(() => {
+    if (filteredTableData.length === 0) return totalData;
+    
+    // Recalculate totals from filtered data
+    const filteredTotals: Record<string, any> = {};
+    for (const dim of dimensions) {
+      if (dim.formula) continue;
+      if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
+        let sum = 0;
+        const calculateRowTotal = (rows: TableRow[]) => {
+          rows.forEach(row => {
+            const value = row.data[dim.name];
+            if (value !== undefined && value !== null) {
+              sum += parseFloat(value) || 0;
+            }
+            if (row.children) {
+              calculateRowTotal(row.children);
+            }
+          });
+        };
+        calculateRowTotal(filteredTableData);
+        filteredTotals[dim.name] = sum;
+      }
+    }
+    
+    // Calculate formula totals
+    for (const dim of dimensions) {
+      if (dim.formula) {
+        try {
+          let expression = dim.formula;
+          const dimensionNames = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
+          for (const dimName of dimensionNames) {
+            const value = filteredTotals[dimName] || 0;
+            const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`\\b${escapedName}\\b`, 'g');
+            expression = expression.replace(regex, `(${value})`);
+          }
+          const result = eval(expression);
+          filteredTotals[dim.name] = typeof result === 'number' && !isNaN(result) && isFinite(result) ? result : 0;
+        } catch (error) {
+          filteredTotals[dim.name] = 0;
+        }
+      }
+    }
+    
+    return filteredTotals;
+  }, [filteredTableData, dimensions, totalData]);
 
   const renderRow = (row: TableRow) => {
     const isExpanded = expandedRows.has(row.id);
@@ -1728,10 +1861,18 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         </CardContent>
       </Card>
 
-      <MappingModal
-        open={mappingModalOpen}
-        onOpenChange={setMappingModalOpen}
-        kpiName={selectedKPI}
+      <ColumnFilterModal
+        open={filterModalOpen}
+        onOpenChange={setFilterModalOpen}
+        columnName={selectedKPI}
+        dimension={
+          selectedKPI === "name" && groupByDimensions[0]
+            ? dimensions.find(d => d.id === groupByDimensions[0])
+            : dimensions.find(d => d.name === selectedKPI)
+        }
+        currentFilters={filters}
+        onFiltersChange={onFiltersChange}
+        tableData={tableData}
       />
 
       <DimensionSelectorModal

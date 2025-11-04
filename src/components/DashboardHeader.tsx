@@ -331,11 +331,16 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
         throw new Error("User not authenticated");
       }
 
+      if (!accountId) {
+        throw new Error("Account ID is required to create a report");
+      }
+
       const { data, error } = await supabase
         .from('reports')
         .insert({ 
           name,
-          user_id: user.id 
+          user_id: user.id,
+          account_id: accountId
         })
         .select()
         .single();

@@ -252,6 +252,7 @@ export default function Index() {
               filters={filters} 
               isSharedView={false}
               accountId={accountId || undefined}
+              onFiltersChange={setFilters}
               key={`table-${dataRefreshKey}-${loadingGeneration}`}
               onLoadingComplete={() => markComponentLoaded('table')}
             />

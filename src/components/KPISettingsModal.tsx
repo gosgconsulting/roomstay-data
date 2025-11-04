@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { sortKPIsByDefaultOrder } from "@/lib/utils";
 import {
   Sheet,
   SheetContent,
@@ -175,7 +176,7 @@ export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChang
         arr.findIndex(d => d.name === dim.name) === index
       );
 
-      const availableKPIs = uniqueDimensions.map(d => d.name);
+      const availableKPIs = sortKPIsByDefaultOrder(uniqueDimensions.map(d => d.name));
       console.log('[testing] KPISettings - All available KPIs (mapped + formulas):', availableKPIs.length, availableKPIs);
       
       if (availableKPIs.length === 0) {
@@ -205,7 +206,9 @@ export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChang
         // Merge saved order with any new KPIs that might have been added
         const savedKPIsSet = new Set(savedOrder);
         const newKPIs = availableKPIs.filter(name => !savedKPIsSet.has(name));
-        const allKPIsOrdered = [...savedOrder, ...newKPIs];
+        // Sort new KPIs using default order, then append to saved order
+        const sortedNewKPIs = sortKPIsByDefaultOrder(newKPIs);
+        const allKPIsOrdered = [...savedOrder, ...sortedNewKPIs];
         
         kpiConfigs = allKPIsOrdered
           .filter(name => availableKPIs.includes(name)) // Only include KPIs that still exist
