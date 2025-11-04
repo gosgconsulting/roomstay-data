@@ -16,8 +16,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Check } from "lucide-react";
 import { useState, useEffect } from "react";
+import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Dimension {
   id: string;
@@ -55,6 +57,7 @@ export const ColumnMappingStep = ({
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
   const [isLoadingDimensions, setIsLoadingDimensions] = useState(true);
+  const [creatingDimensionIndex, setCreatingDimensionIndex] = useState<number | null>(null);
 
   useEffect(() => {
     loadDimensions();
@@ -68,7 +71,6 @@ export const ColumnMappingStep = ({
 
   const loadDimensions = async () => {
     try {
-      const { supabase } = await import("@/integrations/supabase/client");
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) return;
@@ -228,15 +230,107 @@ export const ColumnMappingStep = ({
     setMappings(newMappings);
   };
 
-  const toggleVisibility = (index: number) => {
-    const newMappings = [...mappings];
-    newMappings[index].visible = !newMappings[index].visible;
-    setMappings(newMappings);
-  };
+    const toggleVisibility = (index: number) => {
+      const newMappings = [...mappings];
+      newMappings[index].visible = !newMappings[index].visible;
+      setMappings(newMappings);
+    };
 
-  const handleSave = () => {
-    onSave(mappings);
-  };
+    const handleCreateDimension = async (index: number) => {
+      const mapping = mappings[index];
+      
+      if (!mapping.newDimensionName || mapping.newDimensionName.trim() === '') {
+        toast({
+          title: "Error",
+          description: "Please enter a dimension name",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!reportId) {
+        toast({
+          title: "Error",
+          description: "Report ID is required to create dimensions",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setCreatingDimensionIndex(index);
+
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          throw new Error("User not authenticated");
+        }
+
+        // Check if dimension with same name already exists
+        const normalizedName = mapping.newDimensionName.trim();
+        const existingDimension = dimensions.find(
+          d => d.name.toLowerCase() === normalizedName.toLowerCase()
+        );
+
+        if (existingDimension) {
+          // Use existing dimension
+          const newMappings = [...mappings];
+          newMappings[index].dimensionId = existingDimension.id;
+          newMappings[index].newDimensionName = undefined;
+          newMappings[index].newDimensionType = undefined;
+          setMappings(newMappings);
+          
+          toast({
+            title: "Dimension already exists",
+            description: `Using existing dimension "${existingDimension.name}"`,
+          });
+          return;
+        }
+
+        // Create new dimension
+        const { data: newDimension, error: createError } = await supabase
+          .from('dimensions')
+          .insert({
+            user_id: user.id,
+            report_id: reportId,
+            name: normalizedName,
+            type: mapping.newDimensionType || 'text',
+            scope: 'custom',
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+
+        // Update mapping to use the newly created dimension
+        const newMappings = [...mappings];
+        newMappings[index].dimensionId = newDimension.id;
+        newMappings[index].newDimensionName = undefined;
+        newMappings[index].newDimensionType = undefined;
+        setMappings(newMappings);
+
+        // Reload dimensions to include the new one
+        await loadDimensions();
+
+        toast({
+          title: "Dimension created",
+          description: `Successfully created dimension "${newDimension.name}"`,
+        });
+      } catch (error) {
+        console.error("Error creating dimension:", error);
+        const errorMessage = error instanceof Error ? error.message : "Failed to create dimension";
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } finally {
+        setCreatingDimensionIndex(null);
+      }
+    };
+
+    const handleSave = () => {
+      onSave(mappings);
+    };
 
   if (isLoadingDimensions) {
     return (
@@ -287,37 +381,59 @@ export const ColumnMappingStep = ({
                       </SelectContent>
                     </Select>
                     {mapping.dimensionId === 'create_new' && (
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Dimension name"
-                          value={mapping.newDimensionName || ''}
-                          onChange={(e) => {
-                            const newMappings = [...mappings];
-                            newMappings[index].newDimensionName = e.target.value;
-                            setMappings(newMappings);
-                          }}
-                          className="flex-1"
-                        />
-                        <Select
-                          value={mapping.newDimensionType || 'text'}
-                          onValueChange={(value) => {
-                            const newMappings = [...mappings];
-                            newMappings[index].newDimensionType = value;
-                            setMappings(newMappings);
-                          }}
-                        >
-                          <SelectTrigger className="w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="text">Text</SelectItem>
-                            <SelectItem value="number">Number</SelectItem>
-                            <SelectItem value="currency">Currency</SelectItem>
-                            <SelectItem value="date">Date</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Dimension name"
+                            value={mapping.newDimensionName || ''}
+                            onChange={(e) => {
+                              const newMappings = [...mappings];
+                              newMappings[index].newDimensionName = e.target.value;
+                              setMappings(newMappings);
+                            }}
+                            className="flex-1"
+                            disabled={creatingDimensionIndex === index}
+                          />
+                          <Select
+                            value={mapping.newDimensionType || 'text'}
+                            onValueChange={(value) => {
+                              const newMappings = [...mappings];
+                              newMappings[index].newDimensionType = value;
+                              setMappings(newMappings);
+                            }}
+                            disabled={creatingDimensionIndex === index}
+                          >
+                            <SelectTrigger className="w-32">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="text">Text</SelectItem>
+                              <SelectItem value="number">Number</SelectItem>
+                              <SelectItem value="currency">Currency</SelectItem>
+                              <SelectItem value="date">Date</SelectItem>
+                              <SelectItem value="percentage">Percentage</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            onClick={() => handleCreateDimension(index)}
+                            disabled={creatingDimensionIndex === index || !mapping.newDimensionName?.trim()}
+                            size="sm"
+                            className="gap-2"
+                          >
+                            {creatingDimensionIndex === index ? (
+                              <>
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                Creating...
+                              </>
+                            ) : (
+                              <>
+                                <Check className="h-4 w-4" />
+                                Create
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      )}
                   </div>
                 </TableCell>
                 <TableCell className="text-center">

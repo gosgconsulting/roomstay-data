@@ -14,6 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, X } from "lucide-react";
 import { FilterState } from "./FiltersBar";
+import { toast } from "@/hooks/use-toast";
 
 interface TableRow {
   id: string;
@@ -45,7 +46,6 @@ export const ColumnFilterModal = ({
   onFiltersChange,
   tableData = [],
 }: ColumnFilterModalProps) => {
-  const [searchTerm, setSearchTerm] = useState("");
   const [selectedValues, setSelectedValues] = useState<string[]>([]);
   const [numericOperator, setNumericOperator] = useState<"gt" | "lt" | "eq">("gt");
   const [numericValue, setNumericValue] = useState<string>("");
@@ -106,6 +106,11 @@ export const ColumnFilterModal = ({
   const handleApplyFilter = () => {
     if (!dimension || !onFiltersChange || !currentFilters) {
       console.log('[testing] Cannot apply filter - missing:', { dimension: !!dimension, onFiltersChange: !!onFiltersChange, currentFilters: !!currentFilters });
+      toast({
+        title: "Error",
+        description: "Cannot apply filter. Missing required data.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -119,43 +124,49 @@ export const ColumnFilterModal = ({
         console.log('[testing] Applying numeric filter:', filterValues);
       } else {
         console.log('[testing] Invalid numeric value:', numericValue);
+        return;
       }
     } else {
       // For text filters, use selected values or search term
       if (selectedValues.length > 0) {
-        filterValues = selectedValues;
-        console.log('[testing] Applying filter with selected values:', filterValues);
+        // If all available values are selected, clear the filter (show all)
+        if (selectedValues.length === availableValues.length && 
+            availableValues.every(v => selectedValues.includes(v))) {
+          filterValues = [];
+          console.log('[testing] All values selected, clearing filter');
+        } else {
+          filterValues = selectedValues;
+          console.log('[testing] Applying filter with selected values:', filterValues);
+        }
       } else if (textSearchTerm.trim()) {
         // If search term is provided but no values selected, use search term
         filterValues = [textSearchTerm.trim()];
         console.log('[testing] Applying filter with search term:', filterValues);
+      } else {
+        // No selection and no search term - clear filter
+        filterValues = [];
       }
     }
 
-    if (filterValues.length === 0) {
-      console.log('[testing] No filter values to apply, clearing filter');
-      // Clear the filter
-      const newFilters: FilterState = {
-        ...currentFilters,
-        dimensionFilters: { ...currentFilters.dimensionFilters },
-      };
-      delete newFilters.dimensionFilters[dimension.id];
-      onFiltersChange(newFilters);
-      onOpenChange(false);
-      return;
-    }
-
+    // Create new filters object
     const newFilters: FilterState = {
       ...currentFilters,
-      dimensionFilters: {
-        ...currentFilters.dimensionFilters,
-        [dimension.id]: filterValues,
-      },
+      dimensionFilters: { ...currentFilters.dimensionFilters },
     };
 
-    console.log('[testing] Applying filter - dimension:', dimension.id, dimension.name, 'values:', filterValues);
+    if (filterValues.length === 0) {
+      // Clear the filter
+      console.log('[testing] No filter values to apply, clearing filter');
+      delete newFilters.dimensionFilters[dimension.id];
+    } else {
+      // Apply the filter
+      newFilters.dimensionFilters[dimension.id] = filterValues;
+      console.log('[testing] Applying filter - dimension:', dimension.id, dimension.name, 'values:', filterValues);
+    }
+
     console.log('[testing] New filters:', newFilters.dimensionFilters);
 
+    // Apply the filter change
     onFiltersChange(newFilters);
     onOpenChange(false);
   };
@@ -176,10 +187,29 @@ export const ColumnFilterModal = ({
   };
 
   const filteredValues = availableValues.filter((value) =>
-    value.toLowerCase().includes(searchTerm.toLowerCase())
-  ).filter((value) =>
     textSearchTerm ? value.toLowerCase().includes(textSearchTerm.toLowerCase()) : true
   );
+
+  // Check if all filtered values are selected
+  const allFilteredSelected = filteredValues.length > 0 && filteredValues.every(value => selectedValues.includes(value));
+
+  const handleToggleSelectAll = () => {
+    if (allFilteredSelected) {
+      // Deselect all filtered values
+      setSelectedValues(prev => prev.filter(v => !filteredValues.includes(v)));
+    } else {
+      // Select all filtered values
+      setSelectedValues(prev => {
+        const newValues = [...prev];
+        filteredValues.forEach(value => {
+          if (!newValues.includes(value)) {
+            newValues.push(value);
+          }
+        });
+        return newValues;
+      });
+    }
+  };
 
   const isNumeric = dimension?.type === "number" || dimension?.type === "currency" || dimension?.type === "percentage";
 
@@ -248,6 +278,21 @@ export const ColumnFilterModal = ({
                 <Label>Or select from available values</Label>
                 <ScrollArea className="h-[200px] border rounded-md">
                   <div className="space-y-1 p-2">
+                    {/* Select All option */}
+                    {filteredValues.length > 0 && (
+                      <div
+                        className="flex items-center space-x-2 cursor-pointer hover:bg-muted p-2 rounded border-b mb-2 pb-2"
+                        onClick={handleToggleSelectAll}
+                      >
+                        <Checkbox
+                          checked={allFilteredSelected}
+                          onCheckedChange={handleToggleSelectAll}
+                        />
+                        <Label className="flex-1 cursor-pointer text-sm font-medium">
+                          Select All {filteredValues.length > 0 && `(${filteredValues.length})`}
+                        </Label>
+                      </div>
+                    )}
                     {filteredValues.slice(0, 100).map((value) => (
                       <div
                         key={value}

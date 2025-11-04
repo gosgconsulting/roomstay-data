@@ -11,15 +11,30 @@ serve(async (req) => {
   }
 
   try {
-    const { spreadsheetId, range, tabName, action } = await req.json();
+    // Parse request body with better error handling
+    let requestBody;
+    try {
+      requestBody = await req.json();
+    } catch (parseError) {
+      console.error('[fetch-google-sheets] Failed to parse request body:', parseError);
+      return new Response(
+        JSON.stringify({ error: 'Invalid request body. Expected JSON.' }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400 
+        }
+      );
+    }
+    
+    const { spreadsheetId, range, tabName, action } = requestBody;
     const apiKey = Deno.env.get('GOOGLE_SHEETS_API_KEY');
 
     if (!apiKey) {
       throw new Error('Google Sheets API key not configured');
     }
 
-    if (!spreadsheetId) {
-      throw new Error('Spreadsheet ID is required');
+    if (!spreadsheetId || typeof spreadsheetId !== 'string' || spreadsheetId.trim() === '') {
+      throw new Error('Spreadsheet ID is required and must be a non-empty string');
     }
 
     // If action is 'metadata', return spreadsheet metadata including available tabs
@@ -30,9 +45,16 @@ serve(async (req) => {
       const response = await fetch(url);
       
       if (!response.ok) {
-        const error = await response.json();
-        console.error('Google Sheets API error:', error);
-        throw new Error(error.error?.message || 'Failed to fetch spreadsheet metadata');
+        const errorText = await response.text();
+        let errorMessage = 'Failed to fetch spreadsheet metadata';
+        try {
+          const error = JSON.parse(errorText);
+          errorMessage = error.error?.message || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        console.error('Google Sheets API error:', errorMessage);
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -52,19 +74,64 @@ serve(async (req) => {
       );
     }
 
+    // Validate and construct the range
+    const defaultRange = 'A:Z';
+    const requestedRange = range || defaultRange;
+    
     // Construct the range with tab name if provided
-    const fullRange = tabName ? `${tabName}!${range || 'A:Z'}` : range || 'A:Z';
+    // Only include tab name if it's a non-empty string
+    let fullRange: string;
+    if (tabName && typeof tabName === 'string' && tabName.trim() !== '') {
+      const trimmedTabName = tabName.trim();
+      // Check if tab name contains spaces, special characters, or starts with a number
+      // If so, wrap in single quotes and escape internal quotes
+      const needsQuotes = /[\s\-_0-9]/.test(trimmedTabName) || /^[0-9]/.test(trimmedTabName);
+      
+      if (needsQuotes) {
+        // Escape single quotes in tab name (double them)
+        const escapedTabName = trimmedTabName.replace(/'/g, "''");
+        fullRange = `'${escapedTabName}'!${requestedRange}`;
+      } else {
+        // Simple tab name without spaces - no quotes needed
+        fullRange = `${trimmedTabName}!${requestedRange}`;
+      }
+    } else {
+      fullRange = requestedRange;
+    }
     
     console.log(`Fetching Google Sheets data: ${spreadsheetId}, range: ${fullRange}`);
 
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(fullRange)}?key=${apiKey}`;
     
+    console.log(`[fetch-google-sheets] Request URL: ${url.replace(apiKey, 'REDACTED')}`);
+    console.log(`[fetch-google-sheets] Full range: ${fullRange}`);
+    console.log(`[fetch-google-sheets] Spreadsheet ID: ${spreadsheetId}`);
+    console.log(`[fetch-google-sheets] Tab name: ${tabName || 'none'}`);
+    
     const response = await fetch(url);
     
     if (!response.ok) {
-      const error = await response.json();
-      console.error('Google Sheets API error:', error);
-      throw new Error(error.error?.message || 'Failed to fetch Google Sheets data');
+      const errorText = await response.text();
+      let errorMessage = 'Failed to fetch Google Sheets data';
+      let errorDetails: any = {};
+      
+      try {
+        const error = JSON.parse(errorText);
+        errorMessage = error.error?.message || errorMessage;
+        errorDetails = error.error || {};
+      } catch {
+        errorMessage = errorText || errorMessage;
+      }
+      
+      console.error('[fetch-google-sheets] Google Sheets API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        message: errorMessage,
+        details: errorDetails,
+        url: url.replace(apiKey, 'REDACTED')
+      });
+      
+      throw new Error(`Google Sheets API error (${response.status}): ${errorMessage}`);
     }
 
     const data = await response.json();

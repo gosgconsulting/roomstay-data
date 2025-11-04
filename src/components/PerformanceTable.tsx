@@ -1354,27 +1354,34 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   const totals = useMemo(() => {
     if (filteredTableData.length === 0) return totalData;
     
-    // Recalculate totals from filtered data
-    const filteredTotals: Record<string, any> = {};
-    for (const dim of dimensions) {
-      if (dim.formula) continue;
-      if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
-        let sum = 0;
-        const calculateRowTotal = (rows: TableRow[]) => {
-          rows.forEach(row => {
-            const value = row.data[dim.name];
-            if (value !== undefined && value !== null) {
-              sum += parseFloat(value) || 0;
-            }
-            if (row.children) {
-              calculateRowTotal(row.children);
-            }
-          });
-        };
-        calculateRowTotal(filteredTableData);
-        filteredTotals[dim.name] = sum;
+      // Recalculate totals from filtered data
+      // Only sum leaf nodes (rows without children) to avoid double-counting
+      const filteredTotals: Record<string, any> = {};
+      for (const dim of dimensions) {
+        if (dim.formula) continue;
+        if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
+          let sum = 0;
+          const calculateRowTotal = (rows: TableRow[]) => {
+            rows.forEach(row => {
+              // Only sum values from leaf nodes (rows without children)
+              // Parent rows with children contain aggregated data that will be counted through their children
+              const hasChildren = row.children && row.children.length > 0;
+              if (!hasChildren) {
+                const value = row.data[dim.name];
+                if (value !== undefined && value !== null) {
+                  sum += parseFloat(value) || 0;
+                }
+              }
+              // Recursively process children
+              if (row.children) {
+                calculateRowTotal(row.children);
+              }
+            });
+          };
+          calculateRowTotal(filteredTableData);
+          filteredTotals[dim.name] = sum;
+        }
       }
-    }
     
     // Calculate formula totals
     for (const dim of dimensions) {
@@ -1474,7 +1481,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       <Card>
         <CardHeader className="pb-3">
           {/* Table View Tabs */}
-          {!isSharedView && tableViews.length > 0 && (
+          {tableViews.length > 0 && (
             <Tabs value={activeViewId || undefined} onValueChange={handleViewChange} className="mb-4">
               <div className="flex items-center gap-2">
                 <TabsList>
@@ -1482,10 +1489,10 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                     <TabsTrigger 
                       key={view.id} 
                       value={view.id}
-                      onDoubleClick={() => handleTabDoubleClick(view.id, view.name)}
+                      onDoubleClick={!isSharedView ? () => handleTabDoubleClick(view.id, view.name) : undefined}
                       className="relative"
                     >
-                      {editingTabId === view.id ? (
+                      {!isSharedView && editingTabId === view.id ? (
                         <input
                           type="text"
                           value={editingTabName}

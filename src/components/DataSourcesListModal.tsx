@@ -19,6 +19,7 @@ import { Database, Plus, Eye, Trash2, FileSpreadsheet, Edit, RefreshCw } from "l
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { EditMappingModal } from "./EditMappingModal";
+import { EditDataSourceModal } from "./EditDataSourceModal";
 import { ViewDataModal } from "./ViewDataModal";
 
 interface DataSource {
@@ -51,10 +52,11 @@ export const DataSourcesListModal = ({
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
-  const [editingDataSource, setEditingDataSource] = useState<DataSource | null>(null);
-  const [viewingDataSource, setViewingDataSource] = useState<DataSource | null>(null);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+    const [editingDataSource, setEditingDataSource] = useState<DataSource | null>(null);
+    const [viewingDataSource, setViewingDataSource] = useState<DataSource | null>(null);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isEditDataSourceModalOpen, setIsEditDataSourceModalOpen] = useState(false);
+    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
   useEffect(() => {
     if (open && reportId) {
@@ -116,53 +118,152 @@ export const DataSourcesListModal = ({
     setIsViewModalOpen(true);
   };
 
-  const handleEdit = (dataSource: DataSource) => {
-    setEditingDataSource(dataSource);
-    setIsEditModalOpen(true);
-  };
+    const handleEdit = (dataSource: DataSource) => {
+      setEditingDataSource(dataSource);
+      setIsEditModalOpen(true); // Edit button opens mapping modal
+    };
 
-  const handleEditSuccess = () => {
-    loadDataSources();
-  };
+    const handleEditDataSource = (dataSource: DataSource) => {
+      setEditingDataSource(dataSource);
+      setIsEditDataSourceModalOpen(true); // Sync button opens edit data source modal
+    };
 
-  const handleSync = async (dataSource: DataSource) => {
-    setSyncingIds(prev => new Set(prev).add(dataSource.id));
-    
-    try {
-      console.log(`[REFRESH] Starting refresh for data source: ${dataSource.name}`);
+    const handleEditSuccess = () => {
+      loadDataSources();
+      setIsEditDataSourceModalOpen(false);
+    };
+
+    const handleSync = async (dataSource: DataSource) => {
+      setSyncingIds(prev => new Set(prev).add(dataSource.id));
       
-      // First, fetch just the header to validate the sheet
-      const { data: headerData, error: headerError } = await supabase.functions.invoke('fetch-google-sheets', {
-        body: {
+      try {
+        console.log(`[REFRESH] Starting refresh for data source: ${dataSource.name}`);
+        
+        // Validate required fields
+        if (!dataSource.spreadsheet_id || dataSource.spreadsheet_id.trim() === '') {
+          throw new Error('Spreadsheet ID is missing');
+        }
+        
+        if (!dataSource.header_row || dataSource.header_row < 1) {
+          throw new Error('Header row must be at least 1');
+        }
+        
+        // First, fetch just the header to validate the sheet
+        // Use A1 notation: A{row}:Z{row} for header row (Z is column 26, should be enough for headers)
+        // If more columns needed, we can expand later
+        const headerRange = `A${dataSource.header_row}:Z${dataSource.header_row}`;
+        const { data: headerData, error: headerError } = await supabase.functions.invoke('fetch-google-sheets', {
+          body: {
+            spreadsheetId: dataSource.spreadsheet_id.trim(),
+            tabName: dataSource.tab_name?.trim() || undefined, // Use undefined if empty/null
+            range: headerRange,
+          },
+        });
+
+      if (headerError) {
+        console.error('[REFRESH] Header fetch error:', headerError);
+        console.error('[REFRESH] Error details:', {
           spreadsheetId: dataSource.spreadsheet_id,
           tabName: dataSource.tab_name,
-          range: `${dataSource.header_row}:${dataSource.header_row}`,
-        },
-      });
-
-      if (headerError) throw headerError;
+          headerRow: dataSource.header_row,
+          headerRange
+        });
+        throw new Error(headerError.message || `Failed to fetch sheet headers: ${headerError}`);
+      }
       if (!headerData?.values || headerData.values.length === 0) {
         throw new Error("Could not read sheet headers");
       }
 
-      const sheetHeaders = headerData.values[0];
-      console.log(`[REFRESH] Found ${sheetHeaders.length} columns in sheet:`, sheetHeaders);
+        let sheetHeaders = headerData.values[0];
+        console.log(`[REFRESH] Found ${sheetHeaders.length} columns in sheet:`, sheetHeaders);
+        
+        // Normalize headers - convert to strings and handle empty values
+        // Keep original length for index matching with data rows
+        sheetHeaders = sheetHeaders.map((header: any) => 
+          header === null || header === undefined ? '' : String(header).trim()
+        );
 
-      // Now fetch all data rows (up to 300,000 rows)
-      toast({
-        title: "Syncing...",
-        description: "Fetching data from Google Sheets...",
-      });
+        // Detect new columns and update column_mappings
+        // Handle column reordering, additions, and removals
+        const currentMappings = dataSource.column_mappings || [];
+        const mappedColumns = new Set(currentMappings.map((m: any) => m.column));
+        const normalizedMappedColumns = new Set(
+          currentMappings.map((m: any) => m.column.trim().toLowerCase())
+        );
+        let newColumns: string[] = [];
+        
+        // Find new columns (non-empty headers that aren't already mapped)
+        sheetHeaders.forEach((header: string, index: number) => {
+          if (header && header.trim() !== '') {
+            const trimmedHeader = header.trim();
+            const normalizedHeader = trimmedHeader.toLowerCase();
+            
+            // Check if this column is already mapped (exact or normalized match)
+            const isExactMatch = mappedColumns.has(trimmedHeader);
+            const isNormalizedMatch = normalizedMappedColumns.has(normalizedHeader);
+            
+            if (!isExactMatch && !isNormalizedMatch) {
+              // This is a truly new column
+              newColumns.push(trimmedHeader);
+              console.log(`[REFRESH] New column detected at index ${index}: "${trimmedHeader}"`);
+            }
+          }
+        });
 
-      const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
-        body: {
-          spreadsheetId: dataSource.spreadsheet_id,
-          tabName: dataSource.tab_name,
-          range: `${dataSource.header_row + 1}:300000`,
-        },
-      });
+        // Auto-update column_mappings if new columns are detected
+        if (newColumns.length > 0) {
+          console.log(`[REFRESH] Detected ${newColumns.length} new columns:`, newColumns);
+          
+          const updatedMappings = [...currentMappings];
+          newColumns.forEach((column) => {
+            updatedMappings.push({
+              column: column,
+              dimensionId: 'none',
+              visible: false, // Hidden by default, user can map it later
+              dimensionType: 'text', // Default type
+            });
+          });
 
-      if (sheetsError) throw sheetsError;
+          // Update data source with new column mappings
+          const { error: updateError } = await supabase
+            .from('data_sources')
+            .update({ column_mappings: updatedMappings })
+            .eq('id', dataSource.id);
+
+          if (updateError) {
+            console.warn(`[REFRESH] Failed to update column_mappings with new columns:`, updateError);
+            // Continue anyway - we'll just skip unmapped columns
+          } else {
+            console.log(`[REFRESH] Updated column_mappings with ${newColumns.length} new columns`);
+            // Update local dataSource object for this sync
+            dataSource.column_mappings = updatedMappings;
+          }
+        }
+
+        // Now fetch all data rows (up to 100,000 rows to avoid timeouts)
+        // Use A1 notation: A{startRow}:Z{endRow} for data rows
+        // Using a reasonable end row limit to avoid requesting too much data at once
+        const startRow = dataSource.header_row + 1;
+        const endRow = 100000; // Reasonable limit to prevent timeouts
+        const dataRange = `A${startRow}:Z${endRow}`;
+        
+        toast({
+          title: "Syncing...",
+          description: "Fetching data from Google Sheets...",
+        });
+
+        const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
+          body: {
+            spreadsheetId: dataSource.spreadsheet_id.trim(),
+            tabName: dataSource.tab_name?.trim() || undefined, // Use undefined if empty/null
+            range: dataRange,
+          },
+        });
+
+      if (sheetsError) {
+        console.error('[REFRESH] Data fetch error:', sheetsError);
+        throw new Error(sheetsError.message || 'Failed to fetch sheet data');
+      }
 
       if (!sheetsData?.values || sheetsData.values.length === 0) {
         throw new Error("No data rows found in the sheet");
@@ -216,33 +317,52 @@ export const DataSourcesListModal = ({
         }
       }
 
-      // Build dimension ID map from current mappings and validate against sheet headers
-      const dimensionIdMap: Record<string, string> = {};
-      const visibleMappings = (dataSource.column_mappings || []).filter((m: any) => m.visible);
-      
-      console.log(`[REFRESH] Processing ${visibleMappings.length} visible mappings`);
-      
-      visibleMappings.forEach((mapping: any) => {
-        if (mapping.dimensionId && mapping.dimensionId !== 'none') {
-          // Verify this column exists in the sheet (exact or normalized match)
-          let colIndex = sheetHeaders.indexOf(mapping.column);
-          if (colIndex === -1) {
-            const normalizedMappingCol = mapping.column.trim().toLowerCase();
-            colIndex = sheetHeaders.findIndex((header: string) => 
-              header.trim().toLowerCase() === normalizedMappingCol
-            );
+        // Build dimension ID map from current mappings and validate against sheet headers
+        // Use a map that tracks both original column name and current sheet header index
+        const dimensionIdMap: Record<string, string> = {}; // Maps original column name -> dimension ID
+        const columnIndexMap: Record<string, number> = {}; // Maps original column name -> current sheet index
+        const visibleMappings = (dataSource.column_mappings || []).filter((m: any) => m.visible);
+        
+        console.log(`[REFRESH] Processing ${visibleMappings.length} visible mappings`);
+        console.log(`[REFRESH] Sheet headers (${sheetHeaders.length}):`, sheetHeaders);
+        
+        // Create a normalized header map for fast lookup (case-insensitive, trimmed)
+        const normalizedHeaderMap = new Map<string, number>();
+        sheetHeaders.forEach((header: string, index: number) => {
+          if (header && header.trim()) {
+            const normalized = header.trim().toLowerCase();
+            // If multiple headers have the same normalized name, keep the first one
+            if (!normalizedHeaderMap.has(normalized)) {
+              normalizedHeaderMap.set(normalized, index);
+            }
           }
-          
-          if (colIndex !== -1) {
-            dimensionIdMap[mapping.column] = mapping.dimensionId;
-            console.log(`[REFRESH] Mapped "${mapping.column}" -> dimension ${mapping.dimensionId}`);
-          } else {
-            console.warn(`[REFRESH] Column "${mapping.column}" not found in sheet headers`);
+        });
+        
+        visibleMappings.forEach((mapping: any) => {
+          if (mapping.dimensionId && mapping.dimensionId !== 'none') {
+            // Find column by name (exact match first, then normalized match)
+            let colIndex = -1;
+            
+            // Try exact match first
+            colIndex = sheetHeaders.indexOf(mapping.column);
+            
+            // If not found, try normalized match
+            if (colIndex === -1) {
+              const normalizedMappingCol = mapping.column.trim().toLowerCase();
+              colIndex = normalizedHeaderMap.get(normalizedMappingCol) ?? -1;
+            }
+            
+            if (colIndex !== -1) {
+              dimensionIdMap[mapping.column] = mapping.dimensionId;
+              columnIndexMap[mapping.column] = colIndex;
+              console.log(`[REFRESH] Mapped "${mapping.column}" (index ${colIndex}) -> dimension ${mapping.dimensionId}`);
+            } else {
+              console.warn(`[REFRESH] Column "${mapping.column}" not found in sheet headers - will be skipped`);
+            }
           }
-        }
-      });
-      
-      console.log(`[REFRESH] Successfully mapped ${Object.keys(dimensionIdMap).length} columns`);
+        });
+        
+        console.log(`[REFRESH] Successfully mapped ${Object.keys(dimensionIdMap).length} columns`);
 
       // Helper function to parse values based on dimension type
       const parseValue = (value: any, dimensionType: string): any => {
@@ -261,40 +381,56 @@ export const DataSourcesListModal = ({
         return value;
       };
 
-      // Transform data with detailed logging for first row
-      const rowsToInsert = dataRows.map((row, index) => {
-        const dimensionValues: Record<string, any> = {};
-        
-        visibleMappings.forEach((mapping: any) => {
-          // Try exact match first, then normalized match (trim and case-insensitive)
-          let colIndex = sheetHeaders.indexOf(mapping.column);
-          if (colIndex === -1) {
-            const normalizedMappingCol = mapping.column.trim().toLowerCase();
-            colIndex = sheetHeaders.findIndex((header: string) => 
-              header.trim().toLowerCase() === normalizedMappingCol
-            );
+        // Transform data with detailed logging for first row
+        // Handle rows that might have different lengths than headers (columns added/removed/reordered)
+        const rowsToInsert = dataRows.map((row, index) => {
+          const dimensionValues: Record<string, any> = {};
+          
+          // Safety check: ensure row is an array
+          if (!Array.isArray(row)) {
+            console.warn(`[REFRESH] Row ${index + 1} is not an array, skipping`);
+            return null;
           }
           
-          if (colIndex !== -1 && dimensionIdMap[mapping.column]) {
-            const rawValue = row[colIndex];
-            const dimensionType = mapping.newDimensionType || mapping.dimensionType || 'text';
-            const value = parseValue(rawValue, dimensionType);
-            dimensionValues[dimensionIdMap[mapping.column]] = value;
+          visibleMappings.forEach((mapping: any) => {
+            // Use the pre-computed column index map for efficient lookup
+            const colIndex = columnIndexMap[mapping.column];
             
-            // Log first row values for debugging
-            if (index === 0) {
-              console.log(`[REFRESH] Row 1 - ${mapping.column}: "${rawValue}" -> ${value} (${dimensionType})`);
+            // Only process if column exists in sheet and is mapped
+            if (colIndex !== undefined && colIndex >= 0 && dimensionIdMap[mapping.column]) {
+              // Handle rows that might be shorter than headers (some columns might be missing)
+              // or longer (extra data that we'll ignore)
+              // Check if row has enough columns for this index
+              if (colIndex < row.length) {
+                const rawValue = row[colIndex];
+                
+                // Process value (even if it's empty string, null, etc.)
+                const dimensionType = mapping.newDimensionType || mapping.dimensionType || 'text';
+                const value = parseValue(rawValue, dimensionType);
+                
+                // Only add if value is not null (null values are optional)
+                if (value !== null) {
+                  dimensionValues[dimensionIdMap[mapping.column]] = value;
+                }
+                
+                // Log first row values for debugging
+                if (index === 0) {
+                  console.log(`[REFRESH] Row 1 - ${mapping.column} (col ${colIndex}): "${rawValue}" -> ${value} (${dimensionType})`);
+                }
+              } else if (index === 0) {
+                // Log missing columns in first row for debugging
+                console.warn(`[REFRESH] Row 1 - Column "${mapping.column}" (expected at index ${colIndex}) not found in row data (row has ${row.length} columns, headers have ${sheetHeaders.length})`);
+              }
             }
-          }
-        });
-        
-        return {
-          report_id: reportId,
-          data_source_id: dataSource.id,
-          row_number: index + 1,
-          dimension_values: dimensionValues,
-        };
-      });
+          });
+          
+          return {
+            report_id: reportId,
+            data_source_id: dataSource.id,
+            row_number: index + 1,
+            dimension_values: dimensionValues,
+          };
+        }).filter((row): row is NonNullable<typeof row> => row !== null); // Remove any null rows from invalid data
 
       console.log(`[REFRESH] Prepared ${rowsToInsert.length} rows for insertion`);
       
@@ -325,20 +461,25 @@ export const DataSourcesListModal = ({
       
       console.log(`[REFRESH] Successfully imported all ${rowsToInsert.length} rows`);
 
-      toast({
-        title: "Refresh complete",
-        description: `Successfully imported ${dataRows.length.toLocaleString()} rows with ${Object.keys(dimensionIdMap).length} dimensions`,
-      });
+        const successMessage = newColumns.length > 0
+          ? `Successfully imported ${dataRows.length.toLocaleString()} rows. ${newColumns.length} new column(s) detected and added to mappings.`
+          : `Successfully imported ${dataRows.length.toLocaleString()} rows with ${Object.keys(dimensionIdMap).length} dimensions`;
+        
+        toast({
+          title: "Refresh complete",
+          description: successMessage,
+        });
       
-      console.log(`[REFRESH] Refresh completed for "${dataSource.name}"`);
-      
-
-      
-      // Close modal and trigger refresh
-      onOpenChange(false);
-      if (onDataSync) {
-        onDataSync();
-      }
+        console.log(`[REFRESH] Refresh completed for "${dataSource.name}"`);
+        
+        // Reload data sources to show updated column mappings
+        await loadDataSources();
+        
+        // Close modal and trigger refresh
+        onOpenChange(false);
+        if (onDataSync) {
+          onDataSync();
+        }
     } catch (error) {
       console.error("[REFRESH] Error syncing data source:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to refresh data";
@@ -418,24 +559,24 @@ export const DataSourcesListModal = ({
                             <Eye className="h-4 w-4 mr-1" />
                             View
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleSync(dataSource)}
-                            disabled={syncingIds.has(dataSource.id)}
-                          >
-                            <RefreshCw className={`h-4 w-4 mr-1 ${syncingIds.has(dataSource.id) ? 'animate-spin' : ''}`} />
-                            Sync
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEdit(dataSource)}
-                            disabled={syncingIds.has(dataSource.id)}
-                          >
-                            <Edit className="h-4 w-4 mr-1" />
-                            Edit
-                          </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditDataSource(dataSource)}
+                              disabled={syncingIds.has(dataSource.id)}
+                            >
+                              <RefreshCw className={`h-4 w-4 mr-1 ${syncingIds.has(dataSource.id) ? 'animate-spin' : ''}`} />
+                              Sync
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(dataSource)}
+                              disabled={syncingIds.has(dataSource.id)}
+                            >
+                              <Edit className="h-4 w-4 mr-1" />
+                              Edit
+                            </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -468,19 +609,27 @@ export const DataSourcesListModal = ({
         </div>
       </DialogContent>
 
-      <EditMappingModal
-        open={isEditModalOpen}
-        onOpenChange={setIsEditModalOpen}
-        dataSource={editingDataSource}
-        onSuccess={handleEditSuccess}
-        accountId={accountId}
-      />
+        <EditDataSourceModal
+          open={isEditDataSourceModalOpen}
+          onOpenChange={setIsEditDataSourceModalOpen}
+          dataSource={editingDataSource}
+          onSuccess={handleEditSuccess}
+          accountId={accountId}
+        />
 
-      <ViewDataModal
-        open={isViewModalOpen}
-        onOpenChange={setIsViewModalOpen}
-        dataSource={viewingDataSource}
-      />
-    </Dialog>
-  );
-};
+        <EditMappingModal
+          open={isEditModalOpen}
+          onOpenChange={setIsEditModalOpen}
+          dataSource={editingDataSource}
+          onSuccess={handleEditSuccess}
+          accountId={accountId}
+        />
+
+        <ViewDataModal
+          open={isViewModalOpen}
+          onOpenChange={setIsViewModalOpen}
+          dataSource={viewingDataSource}
+        />
+      </Dialog>
+    );
+  };
