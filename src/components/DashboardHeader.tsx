@@ -433,7 +433,8 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
 
   const handleRefreshClick = () => {
     if (!reportId) return;
-    setShowSyncModeModal(true);
+    // Directly trigger full sync without modal
+    handleSync('full');
   };
 
   const handleSync = async (syncMode: 'incremental' | 'full') => {
