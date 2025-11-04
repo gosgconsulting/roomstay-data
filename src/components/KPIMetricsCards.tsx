@@ -225,7 +225,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
           async () => {
             const { data, error } = await supabase
               .from("dimension_data")
-              .select("id, row_number, dimension_values") // Only select needed columns
+              .select("id, row_number, report_id, dimension_values") // Added report_id
               .eq("report_id", reportId)
               .order('row_number', { ascending: false }) // LATEST DATA FIRST
               .range(offset, offset + CHUNK_SIZE - 1);

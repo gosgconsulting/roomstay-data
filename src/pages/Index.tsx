@@ -22,6 +22,7 @@ export default function Index() {
   const [loadingComponents, setLoadingComponents] = useState<Set<string>>(new Set());
 
   const [reportId, setReportId] = useState<string | null>(null);
+  const [accountId, setAccountId] = useState<string | null>(null);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
@@ -109,6 +110,7 @@ export default function Index() {
       // If user has reports, select the first one
       if (reports && reports.length > 0) {
         setReportId(reports[0].id);
+        setAccountId(reports[0].account_id || null);
       }
       
       setIsLoading(false);
@@ -173,7 +175,18 @@ export default function Index() {
       
       <DashboardHeader 
         reportId={reportId} 
-        onReportChange={setReportId} 
+        onReportChange={(newReportId) => {
+          setReportId(newReportId);
+          // Load account_id for the new report
+          if (newReportId) {
+            supabase
+              .from('reports')
+              .select('account_id')
+              .eq('id', newReportId)
+              .single()
+              .then(({ data }) => setAccountId(data?.account_id || null));
+          }
+        }}
         onRefreshData={refreshData}
         session={session}
         onSignOut={handleSignOut}
@@ -182,7 +195,13 @@ export default function Index() {
       
       {reportId ? (
         <>
-          <FiltersBar reportId={reportId} onFiltersChange={setFilters} isSharedView={false} refreshTrigger={loadingGeneration} />
+          <FiltersBar 
+            reportId={reportId} 
+            onFiltersChange={setFilters} 
+            isSharedView={false} 
+            accountId={accountId || undefined}
+            refreshTrigger={loadingGeneration} 
+          />
           <main className="container mx-auto px-6 py-6 space-y-6">
             <div className="relative">
               <div className="absolute right-0 -top-2 z-10">
@@ -200,21 +219,24 @@ export default function Index() {
               </div>
               <KPIMetricsCards 
                 reportId={reportId} 
-                filters={filters} 
+                filters={filters}
+                accountId={accountId || undefined}
                 key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
                 onLoadingComplete={() => markComponentLoaded('metrics')}
               />
             </div>
             <KPIChart 
               reportId={reportId} 
-              filters={filters} 
+              filters={filters}
+              accountId={accountId || undefined}
               key={`charts-${dataRefreshKey}-${loadingGeneration}`}
               onLoadingComplete={() => markComponentLoaded('chart')}
             />
             <PerformanceTable 
               reportId={reportId} 
               filters={filters} 
-              isSharedView={false} 
+              isSharedView={false}
+              accountId={accountId || undefined}
               key={`table-${dataRefreshKey}-${loadingGeneration}`}
               onLoadingComplete={() => markComponentLoaded('table')}
             />
