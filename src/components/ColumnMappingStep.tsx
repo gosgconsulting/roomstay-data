@@ -33,10 +33,12 @@ interface ColumnMapping {
   visible: boolean;
   newDimensionName?: string;
   newDimensionType?: string;
+  dateFormat?: string; // Store the date format for date dimensions
 }
 
 interface ColumnMappingStepProps {
   headers: string[];
+  sampleDataRows?: any[][]; // Sample data rows (first few rows) for displaying examples
   onSave: (mappings: ColumnMapping[]) => void;
   onBack: () => void;
   isLoading: boolean;
@@ -47,6 +49,7 @@ interface ColumnMappingStepProps {
 
 export const ColumnMappingStep = ({
   headers,
+  sampleDataRows = [],
   onSave,
   onBack,
   isLoading,
@@ -126,14 +129,51 @@ export const ColumnMappingStep = ({
     }
   };
 
+  // Get example value for a column (from sample data)
+  const getExampleValue = (columnIndex: number): string | null => {
+    if (!sampleDataRows || sampleDataRows.length === 0) return null;
+    if (columnIndex < 0 || columnIndex >= headers.length) return null;
+    
+    // Find first non-empty value in this column
+    // Try each sample row until we find a value
+    for (const row of sampleDataRows) {
+      if (!row || !Array.isArray(row)) continue;
+      
+      // Make sure the row has enough columns
+      if (columnIndex < row.length) {
+        const value = row[columnIndex];
+        
+        // Check if value exists and is not empty
+        if (value !== null && value !== undefined && value !== '') {
+          const stringValue = String(value).trim();
+          if (stringValue.length > 0) {
+            return stringValue;
+          }
+        }
+      }
+    }
+    
+    return null;
+  };
+
+  // Check if selected dimension is a Date type
+  const isDateDimension = (dimensionId: string | null): boolean => {
+    if (!dimensionId || dimensionId === 'none' || dimensionId === 'create_new') return false;
+    const dimension = dimensions.find(d => d.id === dimensionId);
+    return dimension?.type === 'date';
+  };
+
   const initializeMappings = () => {
     // If we have existing mappings, use them
     if (existingMappings && existingMappings.length > 0) {
       // Match existing mappings with current headers
-      const updatedMappings: ColumnMapping[] = headers.map((header) => {
+      const updatedMappings: ColumnMapping[] = headers.map((header, index) => {
         const existingMapping = existingMappings.find(m => m.column === header);
         if (existingMapping) {
-          return existingMapping;
+          return {
+            ...existingMapping,
+            dateFormat: existingMapping.dateFormat || 'yyyy-mm-dd', // Default date format
+          };
         }
         // For new columns not in existing mappings, try smart matching
         const matchedDimension = findBestMatch(header, dimensions);
@@ -141,17 +181,19 @@ export const ColumnMappingStep = ({
           column: header,
           dimensionId: matchedDimension?.id || "none",
           visible: true,
+          dateFormat: matchedDimension?.type === 'date' ? 'yyyy-mm-dd' : undefined,
         };
       });
       setMappings(updatedMappings);
     } else {
       // No existing mappings, use smart matching
-      const initialMappings: ColumnMapping[] = headers.map((header) => {
+      const initialMappings: ColumnMapping[] = headers.map((header, index) => {
         const matchedDimension = findBestMatch(header, dimensions);
         return {
           column: header,
           dimensionId: matchedDimension?.id || "none",
           visible: true,
+          dateFormat: matchedDimension?.type === 'date' ? 'yyyy-mm-dd' : undefined,
         };
       });
       setMappings(initialMappings);
@@ -225,8 +267,23 @@ export const ColumnMappingStep = ({
     if (dimensionId === 'create_new') {
       newMappings[index].newDimensionName = mappings[index].column;
       newMappings[index].newDimensionType = 'text';
+      newMappings[index].dateFormat = undefined;
+    } else {
+      // If Date dimension is selected, set default date format if not already set
+      const dimension = dimensions.find(d => d.id === dimensionId);
+      if (dimension?.type === 'date' && !newMappings[index].dateFormat) {
+        newMappings[index].dateFormat = 'yyyy-mm-dd';
+      } else if (dimension?.type !== 'date') {
+        newMappings[index].dateFormat = undefined;
+      }
     }
     
+    setMappings(newMappings);
+  };
+
+  const updateDateFormat = (index: number, dateFormat: string) => {
+    const newMappings = [...mappings];
+    newMappings[index].dateFormat = dateFormat;
     setMappings(newMappings);
   };
 
@@ -356,9 +413,23 @@ export const ColumnMappingStep = ({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {mappings.map((mapping, index) => (
+            {mappings.map((mapping, index) => {
+              const exampleValue = getExampleValue(index);
+              const isDate = isDateDimension(mapping.dimensionId) || 
+                           (mapping.dimensionId === 'create_new' && mapping.newDimensionType === 'date');
+              
+              return (
               <TableRow key={index}>
-                <TableCell className="font-medium">{mapping.column}</TableCell>
+                <TableCell className="font-medium">
+                  <div className="space-y-1">
+                    <div>{mapping.column}</div>
+                    {exampleValue && (
+                      <div className="text-xs text-muted-foreground italic">
+                        {exampleValue}
+                      </div>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>
                   <div className="space-y-2">
                     <Select
@@ -381,59 +452,97 @@ export const ColumnMappingStep = ({
                       </SelectContent>
                     </Select>
                     {mapping.dimensionId === 'create_new' && (
-                        <div className="flex gap-2">
-                          <Input
-                            placeholder="Dimension name"
-                            value={mapping.newDimensionName || ''}
-                            onChange={(e) => {
-                              const newMappings = [...mappings];
-                              newMappings[index].newDimensionName = e.target.value;
-                              setMappings(newMappings);
-                            }}
-                            className="flex-1"
-                            disabled={creatingDimensionIndex === index}
-                          />
-                          <Select
-                            value={mapping.newDimensionType || 'text'}
-                            onValueChange={(value) => {
-                              const newMappings = [...mappings];
-                              newMappings[index].newDimensionType = value;
-                              setMappings(newMappings);
-                            }}
-                            disabled={creatingDimensionIndex === index}
-                          >
-                            <SelectTrigger className="w-32">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="text">Text</SelectItem>
-                              <SelectItem value="number">Number</SelectItem>
-                              <SelectItem value="currency">Currency</SelectItem>
-                              <SelectItem value="date">Date</SelectItem>
-                              <SelectItem value="percentage">Percentage</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            type="button"
-                            onClick={() => handleCreateDimension(index)}
-                            disabled={creatingDimensionIndex === index || !mapping.newDimensionName?.trim()}
-                            size="sm"
-                            className="gap-2"
-                          >
-                            {creatingDimensionIndex === index ? (
-                              <>
-                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                Creating...
-                              </>
-                            ) : (
-                              <>
-                                <Check className="h-4 w-4" />
-                                Create
-                              </>
-                            )}
-                          </Button>
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Dimension name"
+                              value={mapping.newDimensionName || ''}
+                              onChange={(e) => {
+                                const newMappings = [...mappings];
+                                newMappings[index].newDimensionName = e.target.value;
+                                setMappings(newMappings);
+                              }}
+                              className="flex-1"
+                              disabled={creatingDimensionIndex === index}
+                            />
+                            <Select
+                              value={mapping.newDimensionType || 'text'}
+                              onValueChange={(value) => {
+                                const newMappings = [...mappings];
+                                newMappings[index].newDimensionType = value;
+                                if (value === 'date' && !newMappings[index].dateFormat) {
+                                  newMappings[index].dateFormat = 'yyyy-mm-dd';
+                                } else if (value !== 'date') {
+                                  newMappings[index].dateFormat = undefined;
+                                }
+                                setMappings(newMappings);
+                              }}
+                              disabled={creatingDimensionIndex === index}
+                            >
+                              <SelectTrigger className="w-32">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="text">Text</SelectItem>
+                                <SelectItem value="number">Number</SelectItem>
+                                <SelectItem value="currency">Currency</SelectItem>
+                                <SelectItem value="date">Date</SelectItem>
+                                <SelectItem value="percentage">Percentage</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              type="button"
+                              onClick={() => handleCreateDimension(index)}
+                              disabled={creatingDimensionIndex === index || !mapping.newDimensionName?.trim()}
+                              size="sm"
+                              className="gap-2"
+                            >
+                              {creatingDimensionIndex === index ? (
+                                <>
+                                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                  Creating...
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="h-4 w-4" />
+                                  Create
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                          {mapping.newDimensionType === 'date' && (
+                            <Select
+                              value={mapping.dateFormat || 'yyyy-mm-dd'}
+                              onValueChange={(value) => updateDateFormat(index, value)}
+                              disabled={creatingDimensionIndex === index}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select date format" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="yyyy-mm-dd">YYYY-MM-DD (e.g., 2025-01-01)</SelectItem>
+                                <SelectItem value="dd-mm-yyyy">DD-MM-YYYY (e.g., 01-01-2025)</SelectItem>
+                                <SelectItem value="mm-dd-yyyy">MM-DD-YYYY (e.g., 01-01-2025)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
                         </div>
                       )}
+                    {isDate && mapping.dimensionId !== 'create_new' && (
+                      <Select
+                        value={mapping.dateFormat || 'yyyy-mm-dd'}
+                        onValueChange={(value) => updateDateFormat(index, value)}
+                      >
+                        <SelectTrigger className="w-full mt-2">
+                          <SelectValue placeholder="Select date format" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="yyyy-mm-dd">YYYY-MM-DD (e.g., 2025-01-01)</SelectItem>
+                          <SelectItem value="dd-mm-yyyy">DD-MM-YYYY (e.g., 01-01-2025)</SelectItem>
+                          <SelectItem value="mm-dd-yyyy">MM-DD-YYYY (e.g., 01-01-2025)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell className="text-center">
@@ -451,7 +560,8 @@ export const ColumnMappingStep = ({
                   </Button>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>

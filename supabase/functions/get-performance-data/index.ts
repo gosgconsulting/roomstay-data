@@ -66,6 +66,68 @@ Deno.serve(async (req) => {
       dateGranularity
     });
 
+    // Helper function to parse dates in various formats
+    const parseDateValue = (dateValue: any): Date | null => {
+      if (!dateValue) return null;
+      
+      try {
+        // If already a Date object, return it
+        if (dateValue instanceof Date) {
+          return isNaN(dateValue.getTime()) ? null : dateValue;
+        }
+        
+        const stringValue = String(dateValue).trim();
+        if (!stringValue) return null;
+        
+        // Try YYYY-MM-DD format (ISO format, what we store)
+        if (stringValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          const parts = stringValue.split('-');
+          if (parts.length === 3) {
+            const [year, month, day] = parts;
+            const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+            if (!isNaN(date.getTime())) return date;
+          }
+        }
+        
+        // Try MM/DD/YYYY format (legacy format)
+        if (stringValue.includes('/')) {
+          const parts = stringValue.split('/');
+          if (parts.length === 3) {
+            // Check if first part is 4 digits (YYYY) -> YYYY/MM/DD
+            if (parts[0].length === 4) {
+              const [year, month, day] = parts;
+              const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              if (!isNaN(date.getTime())) return date;
+            } else {
+              // Assume MM/DD/YYYY
+              const [month, day, year] = parts;
+              const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              if (!isNaN(date.getTime())) return date;
+            }
+          }
+        }
+        
+        // Try DD-MM-YYYY format
+        if (stringValue.includes('-') && !stringValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          const parts = stringValue.split('-');
+          if (parts.length === 3 && parts[2].length === 4) {
+            const [day, month, year] = parts;
+            const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+            if (!isNaN(date.getTime())) return date;
+          }
+        }
+        
+        // Fallback: try standard Date parsing
+        const date = new Date(stringValue);
+        if (!isNaN(date.getTime())) return date;
+        
+        return null;
+      } catch (e) {
+        console.warn(`Failed to parse date value: ${dateValue}`, e);
+        return null;
+      }
+    };
+
     // Helper function to retry queries with exponential backoff
     const retryQuery = async <T>(
       queryFn: () => Promise<{ data: T | null; error: any }>,
@@ -166,62 +228,83 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to fetch dimension data: ${dataError.message || 'Unknown error'}`);
     }
 
-    console.log(`Fetched ${rawData?.length || 0} raw rows`);
+      console.log(`Fetched ${rawData?.length || 0} raw rows`);
+      console.log('Dimension filters:', JSON.stringify(dimensionFilters));
+      console.log('Date range:', { dateFrom, dateTo });
 
-    // Apply filters and build hierarchical structure
-    let filteredData = rawData || [];
+      // Apply filters and build hierarchical structure
+      let filteredData = rawData || [];
 
-    // Filter by dimension filters
-    if (Object.keys(dimensionFilters).length > 0) {
-      filteredData = filteredData.filter((row) => {
-        const dimValues = row.dimension_values as Record<string, any>;
-        for (const [dimId, filterValue] of Object.entries(dimensionFilters)) {
-          const rowValue = dimValues[dimId];
-          
-          // Handle both single values and arrays
-          if (Array.isArray(filterValue)) {
-            // For array filters, check if row value is in the array
-            if (!filterValue.includes(rowValue)) {
-              return false;
-            }
-          } else {
-            // For single value filters, check exact match
-            if (rowValue !== filterValue) {
-              return false;
-            }
-          }
-        }
-        return true;
-      });
-    }
-
-    // Filter by date range
-    if ((dateFrom || dateTo) && dimensions) {
-      const dateDim = dimensions.find(d => d.type === 'date');
-      if (dateDim) {
+      // Filter by dimension filters first
+      if (Object.keys(dimensionFilters).length > 0) {
+        const beforeCount = filteredData.length;
         filteredData = filteredData.filter((row) => {
           const dimValues = row.dimension_values as Record<string, any>;
-          const dateValue = dimValues[dateDim.id];
-          if (!dateValue) return false; // Exclude rows without date values
-
-          // Parse MM/DD/YYYY format properly
-          let rowDate: Date;
-          if (dateValue.includes('/')) {
-            const [month, day, year] = dateValue.split('/');
-            rowDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-          } else {
-            rowDate = new Date(dateValue);
+          for (const [dimId, filterValue] of Object.entries(dimensionFilters)) {
+            const rowValue = dimValues[dimId];
+            
+            // Handle both single values and arrays
+            if (Array.isArray(filterValue)) {
+              // For array filters, check if row value is in the array
+              if (!filterValue.includes(rowValue)) {
+                return false;
+              }
+            } else {
+              // For single value filters, check exact match
+              if (rowValue !== filterValue) {
+                return false;
+              }
+            }
           }
-          
-          if (isNaN(rowDate.getTime())) return false;
-          if (dateFrom && rowDate < new Date(dateFrom)) return false;
-          if (dateTo && rowDate > new Date(dateTo)) return false;
           return true;
         });
+        console.log(`After dimension filters: ${filteredData.length} rows (from ${beforeCount})`);
       }
-    }
 
-    console.log(`After filtering: ${filteredData.length} rows`);
+      // Filter by date range (after dimension filters)
+      if ((dateFrom || dateTo) && dimensions) {
+        const dateDim = dimensions.find(d => d.type === 'date');
+        if (dateDim) {
+          const beforeDateCount = filteredData.length;
+          filteredData = filteredData.filter((row) => {
+            const dimValues = row.dimension_values as Record<string, any>;
+            const dateValue = dimValues[dateDim.id];
+            if (!dateValue) return false; // Exclude rows without date values
+
+            // Parse date using helper function
+            const rowDate = parseDateValue(dateValue);
+            if (!rowDate) {
+              console.warn(`Invalid date value: ${dateValue}`);
+              return false;
+            }
+            
+            // Compare dates (ignore time component)
+            const dateFromObj = dateFrom ? new Date(dateFrom) : null;
+            const dateToObj = dateTo ? new Date(dateTo) : null;
+            
+            if (dateFromObj && !isNaN(dateFromObj.getTime())) {
+              // Compare dates at start of day
+              const rowDateStart = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate());
+              const fromDateStart = new Date(dateFromObj.getFullYear(), dateFromObj.getMonth(), dateFromObj.getDate());
+              if (rowDateStart < fromDateStart) return false;
+            }
+            
+            if (dateToObj && !isNaN(dateToObj.getTime())) {
+              // Compare dates at end of day
+              const rowDateEnd = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate(), 23, 59, 59);
+              const toDateEnd = new Date(dateToObj.getFullYear(), dateToObj.getMonth(), dateToObj.getDate(), 23, 59, 59);
+              if (rowDateEnd > toDateEnd) return false;
+            }
+            
+            return true;
+          });
+          console.log(`After date filters: ${filteredData.length} rows (from ${beforeDateCount})`);
+        } else {
+          console.warn('Date filter requested but no date dimension found');
+        }
+      }
+
+    console.log(`After all filtering: ${filteredData.length} rows`);
 
     // Fetch and filter comparison period data if enabled
     let compareFilteredData: any[] = [];
@@ -231,56 +314,72 @@ Deno.serve(async (req) => {
         // Filter the same rawData for comparison period
         let compareData = rawData || [];
         
-        // Apply same dimension filters
-        if (Object.keys(dimensionFilters).length > 0) {
+          // Apply same dimension filters (handle both single values and arrays)
+          if (Object.keys(dimensionFilters).length > 0) {
+            compareData = compareData.filter((row) => {
+              const dimValues = row.dimension_values as Record<string, any>;
+              for (const [dimId, filterValue] of Object.entries(dimensionFilters)) {
+                const rowValue = dimValues[dimId];
+                
+                // Handle both single values and arrays
+                if (Array.isArray(filterValue)) {
+                  // For array filters, check if row value is in the array
+                  if (!filterValue.includes(rowValue)) {
+                    return false;
+                  }
+                } else {
+                  // For single value filters, check exact match
+                  if (rowValue !== filterValue) {
+                    return false;
+                  }
+                }
+              }
+              return true;
+            });
+          }
+        
+          // Filter by comparison date range
           compareData = compareData.filter((row) => {
             const dimValues = row.dimension_values as Record<string, any>;
-            for (const [dimId, filterValue] of Object.entries(dimensionFilters)) {
-              if (dimValues[dimId] !== filterValue) {
-                return false;
-              }
+            const dateValue = dimValues[dateDim.id];
+            if (!dateValue) return false;
+
+            // Parse date using helper function
+            const rowDate = parseDateValue(dateValue);
+            if (!rowDate) return false;
+            
+            // Compare dates (ignore time component)
+            const compareFromObj = compareDateFrom ? new Date(compareDateFrom) : null;
+            const compareToObj = compareDateTo ? new Date(compareDateTo) : null;
+            
+            if (compareFromObj && !isNaN(compareFromObj.getTime())) {
+              const rowDateStart = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate());
+              const fromDateStart = new Date(compareFromObj.getFullYear(), compareFromObj.getMonth(), compareFromObj.getDate());
+              if (rowDateStart < fromDateStart) return false;
             }
+            
+            if (compareToObj && !isNaN(compareToObj.getTime())) {
+              const rowDateEnd = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate(), 23, 59, 59);
+              const toDateEnd = new Date(compareToObj.getFullYear(), compareToObj.getMonth(), compareToObj.getDate(), 23, 59, 59);
+              if (rowDateEnd > toDateEnd) return false;
+            }
+            
             return true;
           });
-        }
-        
-        // Filter by comparison date range
-        compareData = compareData.filter((row) => {
-          const dimValues = row.dimension_values as Record<string, any>;
-          const dateValue = dimValues[dateDim.id];
-          if (!dateValue) return false;
-
-          // Parse MM/DD/YYYY format properly
-          let rowDate: Date;
-          if (dateValue.includes('/')) {
-            const [month, day, year] = dateValue.split('/');
-            rowDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-          } else {
-            rowDate = new Date(dateValue);
-          }
-          
-          if (isNaN(rowDate.getTime())) return false;
-          if (rowDate < new Date(compareDateFrom)) return false;
-          if (rowDate > new Date(compareDateTo)) return false;
-          return true;
-        });
         
         compareFilteredData = compareData;
         console.log(`Comparison period: ${compareFilteredData.length} rows`);
       }
     }
 
-    // Helper function to format date based on granularity
-    const formatDateByGranularity = (dateStr: string, granularity: string): { key: string; display: string } => {
-      try {
-        // Parse MM/DD/YYYY format properly
-        let date: Date;
-        if (dateStr.includes('/')) {
-          const [month, day, year] = dateStr.split('/');
-          date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-        } else {
-          date = new Date(dateStr);
-        }
+      // Helper function to format date based on granularity
+      const formatDateByGranularity = (dateStr: string, granularity: string): { key: string; display: string } => {
+        try {
+          // Parse date using helper function
+          const date = parseDateValue(dateStr);
+          if (!date) {
+            return { key: dateStr, display: dateStr };
+          }
         
         if (isNaN(date.getTime())) {
           return { key: dateStr, display: dateStr };

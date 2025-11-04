@@ -496,7 +496,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
             body: {
               spreadsheetId: dataSource.spreadsheet_id,
               tabName: dataSource.tab_name,
-              range: `${dataSource.header_row + 1}:300000`,
+              range: `A${dataSource.header_row + 1}:Z`, // Fetch all available data (no row limit)
             },
           });
 

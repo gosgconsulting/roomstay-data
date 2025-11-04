@@ -39,6 +39,7 @@ export const EditMappingModal = ({
   accountId
 }: EditMappingModalProps) => {
   const [headers, setHeaders] = useState<string[]>([]);
+  const [sampleDataRows, setSampleDataRows] = useState<any[][]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingHeaders, setIsFetchingHeaders] = useState(false);
 
@@ -58,7 +59,7 @@ export const EditMappingModal = ({
         body: {
           spreadsheetId: dataSource.spreadsheet_id,
           tabName: dataSource.tab_name,
-          range: `${dataSource.header_row}:${dataSource.header_row}`,
+          range: `${dataSource.header_row}:${dataSource.header_row + 100}`, // Fetch header + 100 rows for sample data
         },
       });
 
@@ -69,6 +70,8 @@ export const EditMappingModal = ({
       }
 
       setHeaders(sheetsData.values[0]);
+      const sampleRows = sheetsData.values.slice(1, 6); // Get first 5 data rows as samples
+      setSampleDataRows(sampleRows);
     } catch (error) {
       console.error("Error fetching headers:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to fetch sheet headers";
@@ -184,6 +187,7 @@ export const EditMappingModal = ({
           ) : headers.length > 0 ? (
             <ColumnMappingStep
               headers={headers}
+              sampleDataRows={sampleDataRows}
               onSave={handleSaveMappings}
               onBack={() => onOpenChange(false)}
               isLoading={isLoading}

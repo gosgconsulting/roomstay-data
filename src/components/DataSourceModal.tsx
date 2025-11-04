@@ -20,6 +20,15 @@ import { FileSpreadsheet, ChevronLeft } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ColumnMappingStep } from "./ColumnMappingStep";
+import { 
+  syncDataSource, 
+  extractSpreadsheetId, 
+  fetchGoogleSheetsData,
+  parseValue,
+  insertDataInBatches,
+  type DataSource as SyncDataSource,
+  type SyncOptions 
+} from "@/lib/sync-utils";
 
 interface DataSourceModalProps {
   open: boolean;
@@ -36,12 +45,10 @@ export const DataSourceModal = ({ open, onOpenChange, reportId, accountId }: Dat
   const [selectedTab, setSelectedTab] = useState("");
   const [headerRow, setHeaderRow] = useState("1");
   const [headers, setHeaders] = useState<string[]>([]);
+  const [sampleDataRows, setSampleDataRows] = useState<any[][]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const extractSpreadsheetId = (url: string) => {
-    const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-    return match ? match[1] : null;
-  };
+  // Remove duplicate extractSpreadsheetId - now imported from sync-utils
 
   const handleNext = async () => {
     if (!dataName || !url) {
@@ -128,7 +135,9 @@ export const DataSourceModal = ({ open, onOpenChange, reportId, accountId }: Dat
       }
 
       const fetchedHeaders = sheetsData.values[0];
+      const sampleRows = sheetsData.values.slice(1, 6); // Get first 5 data rows as samples
       setHeaders(fetchedHeaders);
+      setSampleDataRows(sampleRows);
       setStep(3); // Move to mapping step
     } catch (error) {
       console.error("Error fetching sheet data:", error);
@@ -151,12 +160,14 @@ export const DataSourceModal = ({ open, onOpenChange, reportId, accountId }: Dat
     setSelectedTab("");
     setHeaderRow("1");
     setHeaders([]);
+    setSampleDataRows([]);
   };
 
   const handleBack = () => {
     if (step === 3) {
       setStep(2);
       setHeaders([]);
+      setSampleDataRows([]);
     } else {
       setStep(1);
       setAvailableTabs([]);
@@ -171,12 +182,12 @@ export const DataSourceModal = ({ open, onOpenChange, reportId, accountId }: Dat
     setIsLoading(true);
     
     try {
-      // Fetch all data from the sheet (up to 300,000 rows)
+      // Fetch all data from the sheet (no row limit)
       const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
         body: {
           spreadsheetId,
           tabName: selectedTab,
-          range: `${headerRow}:300000`,
+          range: `A${headerRow}:Z`, // Fetch all available data (no row limit)
         },
       });
 
@@ -243,22 +254,7 @@ export const DataSourceModal = ({ open, onOpenChange, reportId, accountId }: Dat
       
       console.log(`[IMPORT] Successfully mapped ${Object.keys(dimensionIdMap).length} columns`);
 
-      // Helper function to parse values based on dimension type
-      const parseValue = (value: any, dimensionType: string): any => {
-        if (value === null || value === undefined || value === '') return null;
-        
-        // For numeric types, clean and parse the value
-        if (dimensionType === 'number' || dimensionType === 'currency' || dimensionType === 'percentage') {
-          const stringValue = String(value);
-          // Remove currency symbols ($, €, £, etc.), commas, and spaces
-          const cleanedValue = stringValue.replace(/[$€£¥,\s]/g, '');
-          const numValue = parseFloat(cleanedValue);
-          return isNaN(numValue) ? null : numValue;
-        }
-        
-        // For other types, return as-is
-        return value;
-      };
+              // Use parseValue and parseDate from sync-utils (remove duplicate implementations)
 
       // Transform data rows to dimension_data format
       const rowsToInsert = dataRows.map((row, index) => {
@@ -277,7 +273,8 @@ export const DataSourceModal = ({ open, onOpenChange, reportId, accountId }: Dat
           if (colIndex !== -1 && dimensionIdMap[mapping.column]) {
             const rawValue = row[colIndex];
             const dimensionType = mapping.newDimensionType || mapping.dimensionType || 'text';
-            const value = parseValue(rawValue, dimensionType);
+            const dateFormat = mapping.dateFormat;
+            const value = parseValue(rawValue, dimensionType, dateFormat);
             dimensionValues[dimensionIdMap[mapping.column]] = value;
             
             // Log first row values for debugging
@@ -301,21 +298,8 @@ export const DataSourceModal = ({ open, onOpenChange, reportId, accountId }: Dat
 
       console.log(`[IMPORT] Prepared ${rowsToInsert.length} rows for insertion`);
 
-      // Insert data in batches to dimension_data
-      const batchSize = 500;
-      for (let i = 0; i < rowsToInsert.length; i += batchSize) {
-        const batch = rowsToInsert.slice(i, i + batchSize);
-        const { error: insertError } = await supabase
-          .from('dimension_data')
-          .insert(batch);
-
-        if (insertError) {
-          console.error(`[IMPORT] Error inserting batch at index ${i}:`, insertError);
-          throw insertError;
-        }
-      }
-      
-      console.log(`[IMPORT] Successfully imported ${rowsToInsert.length} rows`);
+      // Insert data using utility function
+      await insertDataInBatches(rowsToInsert);
 
       toast({
         title: "Data source saved",
@@ -424,6 +408,7 @@ export const DataSourceModal = ({ open, onOpenChange, reportId, accountId }: Dat
           ) : (
             <ColumnMappingStep
               headers={headers}
+              sampleDataRows={sampleDataRows}
               onSave={handleSaveMappings}
               onBack={handleBack}
               isLoading={isLoading}

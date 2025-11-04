@@ -15,11 +15,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { FileSpreadsheet, ChevronLeft, RefreshCw } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ColumnMappingStep } from "./ColumnMappingStep";
+import { 
+  syncDataSource, 
+  extractSpreadsheetId, 
+  fetchGoogleSheetsData,
+  type DataSource as SyncDataSource,
+  type SyncOptions 
+} from "@/lib/sync-utils";
 
 interface DataSource {
   id: string;
@@ -54,8 +61,36 @@ export const EditDataSourceModal = ({
   const [selectedTab, setSelectedTab] = useState("");
   const [headerRow, setHeaderRow] = useState("1");
   const [headers, setHeaders] = useState<string[]>([]);
+  const [sampleDataRows, setSampleDataRows] = useState<any[][]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isResyncing, setIsResyncing] = useState(false);
+  const [syncedRowsCount, setSyncedRowsCount] = useState<number | null>(null);
+  const [syncedColumnsCount, setSyncedColumnsCount] = useState<number | null>(null);
+
+  // Fetch sync statistics
+  const fetchSyncStatistics = useCallback(async () => {
+    if (!dataSource) return;
+
+    try {
+      // Get row count from dimension_data
+      const { count: rowsCount, error: rowsError } = await supabase
+        .from('dimension_data')
+        .select('*', { count: 'exact', head: true })
+        .eq('data_source_id', dataSource.id);
+
+      if (rowsError) throw rowsError;
+      setSyncedRowsCount(rowsCount || 0);
+
+      // Get column count from column_mappings (visible columns)
+      const columnMappings = dataSource.column_mappings || [];
+      const visibleColumns = columnMappings.filter((m: any) => m.visible !== false);
+      setSyncedColumnsCount(visibleColumns.length);
+    } catch (error) {
+      console.error("Error fetching sync statistics:", error);
+      setSyncedRowsCount(null);
+      setSyncedColumnsCount(null);
+    }
+  }, [dataSource]);
 
   // Initialize form with existing data source values
   useEffect(() => {
@@ -67,13 +102,11 @@ export const EditDataSourceModal = ({
       setStep(1);
       setHeaders([]);
       setAvailableTabs([]);
+      fetchSyncStatistics();
     }
-  }, [open, dataSource]);
+  }, [open, dataSource, fetchSyncStatistics]);
 
-  const extractSpreadsheetId = (url: string) => {
-    const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-    return match ? match[1] : null;
-  };
+  // Remove duplicate extractSpreadsheetId - now imported from sync-utils
 
   const handleNext = async () => {
     if (!dataName || !url) {
@@ -152,13 +185,15 @@ export const EditDataSourceModal = ({
     
     try {
       // Use A1 notation for header row
-      const headerRange = `A${headerRow}:Z${headerRow}`;
+      // Fetch header row + sample data rows (up to 100 rows for samples)
+      const headerRowNum = parseInt(headerRow) || 1;
+      const sampleRange = `${headerRowNum}:${headerRowNum + 100}`;
       
       const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
         body: {
           spreadsheetId,
           tabName: selectedTab,
-          range: headerRange,
+          range: sampleRange,
         },
       });
 
@@ -173,8 +208,10 @@ export const EditDataSourceModal = ({
       const normalizedHeaders = fetchedHeaders.map((h: any) => 
         h === null || h === undefined ? '' : String(h).trim()
       );
+      const sampleRows = sheetsData.values.slice(1, 6); // Get first 5 data rows as samples
       
       setHeaders(normalizedHeaders);
+      setSampleDataRows(sampleRows);
       setStep(3); // Move to mapping step
     } catch (error) {
       console.error("Error fetching sheet data:", error);
@@ -195,10 +232,11 @@ export const EditDataSourceModal = ({
       setDataName(dataSource.name || "");
       setUrl(dataSource.google_sheets_url || "");
       setSelectedTab(dataSource.tab_name || "");
-      setHeaderRow(String(dataSource.header_row || 1));
-    }
-    setAvailableTabs([]);
+        setHeaderRow(String(dataSource.header_row || 1));
+      }
+      setAvailableTabs([]);
     setHeaders([]);
+    setSampleDataRows([]);
   };
 
   const handleBack = () => {
@@ -266,197 +304,42 @@ export const EditDataSourceModal = ({
     setIsResyncing(true);
     
     try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("User not authenticated");
-
-      // Get report_id from data source if not available
-      let currentReportId = dataSource.report_id;
-      if (!currentReportId) {
-        const { data: dsData, error: dsError } = await supabase
-          .from('data_sources')
-          .select('report_id')
-          .eq('id', dataSource.id)
-          .maybeSingle();
-        
-        if (dsError) throw dsError;
-        currentReportId = dsData?.report_id || '';
-      }
-
-      const spreadsheetId = extractSpreadsheetId(url) || dataSource.spreadsheet_id;
-      if (!spreadsheetId) {
-        throw new Error("Invalid spreadsheet ID");
-      }
-
-      // Use current form values or fallback to existing data source values
-      const tabName = selectedTab || dataSource.tab_name;
-      const headerRowNum = parseInt(headerRow) || dataSource.header_row;
-
-      // Fetch headers
-      const headerRange = `A${headerRowNum}:Z${headerRowNum}`;
-      const { data: headerData, error: headerError } = await supabase.functions.invoke('fetch-google-sheets', {
-        body: {
-          spreadsheetId,
-          tabName: tabName,
-          range: headerRange,
-        },
-      });
-
-      if (headerError) throw headerError;
-      if (!headerData?.values || headerData.values.length === 0) {
-        throw new Error("Could not read sheet headers");
-      }
-
-      let sheetHeaders = headerData.values[0];
-      sheetHeaders = sheetHeaders.map((h: any) => 
-        h === null || h === undefined ? '' : String(h).trim()
-      );
-
-      // Fetch data rows
-      const startRow = headerRowNum + 1;
-      const dataRange = `A${startRow}:Z100000`;
-      
-      const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
-        body: {
-          spreadsheetId,
-          tabName: tabName,
-          range: dataRange,
-        },
-      });
-
-      if (sheetsError) throw sheetsError;
-      if (!sheetsData?.values || sheetsData.values.length === 0) {
-        throw new Error("No data rows found in the sheet");
-      }
-
-      const dataRows = sheetsData.values;
-
-      // Delete existing dimension_data for this source
-      let totalDeleted = 0;
-      let continueDeleting = true;
-      
-      while (continueDeleting) {
-        const { error: deleteError, count } = await supabase
-          .from('dimension_data')
-          .delete({ count: 'exact' })
-          .eq('data_source_id', dataSource.id)
-          .limit(5000);
-
-        if (deleteError) throw deleteError;
-        
-        if (count !== null && count !== undefined) {
-          totalDeleted += count;
-          if (count < 5000) {
-            continueDeleting = false;
-          }
-        } else {
-          const { data: checkData, error: checkError } = await supabase
-            .from('dimension_data')
-            .select('id', { count: 'exact', head: true })
-            .eq('data_source_id', dataSource.id)
-            .limit(1);
-          
-          if (checkError) throw checkError;
-          continueDeleting = checkData && checkData.length > 0;
-        }
-      }
-
-      // Build dimension ID map from current mappings
-      const currentMappings = dataSource.column_mappings || [];
-      const dimensionIdMap: Record<string, string> = {};
-      const columnIndexMap: Record<string, number> = {};
-      const visibleMappings = currentMappings.filter((m: any) => m.visible);
-      
-      const normalizedHeaderMap = new Map<string, number>();
-      sheetHeaders.forEach((header: string, index: number) => {
-        if (header && header.trim()) {
-          const normalized = header.trim().toLowerCase();
-          if (!normalizedHeaderMap.has(normalized)) {
-            normalizedHeaderMap.set(normalized, index);
-          }
-        }
-      });
-      
-      visibleMappings.forEach((mapping: any) => {
-        if (mapping.dimensionId && mapping.dimensionId !== 'none') {
-          let colIndex = sheetHeaders.indexOf(mapping.column);
-          if (colIndex === -1) {
-            const normalizedMappingCol = mapping.column.trim().toLowerCase();
-            colIndex = normalizedHeaderMap.get(normalizedMappingCol) ?? -1;
-          }
-          
-          if (colIndex !== -1) {
-            dimensionIdMap[mapping.column] = mapping.dimensionId;
-            columnIndexMap[mapping.column] = colIndex;
-          }
-        }
-      });
-
-      // Parse values
-      const parseValue = (value: any, dimensionType: string): any => {
-        if (value === null || value === undefined || value === '') return null;
-        
-        if (dimensionType === 'number' || dimensionType === 'currency' || dimensionType === 'percentage') {
-          const stringValue = String(value);
-          const cleanedValue = stringValue.replace(/[$?,\s]/g, '');
-          const numValue = parseFloat(cleanedValue);
-          return isNaN(numValue) ? null : numValue;
-        }
-        
-        return value;
+      // Convert to sync-utils format
+      const syncDataSourceObj: SyncDataSource = {
+        id: dataSource.id,
+        name: dataSource.name,
+        google_sheets_url: url || dataSource.google_sheets_url,
+        spreadsheet_id: extractSpreadsheetId(url) || dataSource.spreadsheet_id,
+        tab_name: selectedTab || dataSource.tab_name,
+        header_row: parseInt(headerRow) || dataSource.header_row,
+        column_mappings: dataSource.column_mappings,
+        report_id: dataSource.report_id,
       };
 
-      // Transform data
-      const rowsToInsert = dataRows.map((row, index) => {
-        const dimensionValues: Record<string, any> = {};
-        
-        if (!Array.isArray(row)) return null;
-        
-        visibleMappings.forEach((mapping: any) => {
-          const colIndex = columnIndexMap[mapping.column];
-          
-          if (colIndex !== undefined && colIndex >= 0 && dimensionIdMap[mapping.column] && colIndex < row.length) {
-            const rawValue = row[colIndex];
-            const dimensionType = mapping.newDimensionType || mapping.dimensionType || 'text';
-            const value = parseValue(rawValue, dimensionType);
-            
-            if (value !== null) {
-              dimensionValues[dimensionIdMap[mapping.column]] = value;
-            }
-          }
+      const options: SyncOptions = {
+        deleteExistingData: true,
+        recreateDimensions: true,
+        showProgress: true,
+        onProgress: (message) => {
+          console.log(`[RESYNC] ${message}`);
+        }
+      };
+
+      const result = await syncDataSource(syncDataSourceObj, options);
+
+      if (result.success) {
+        toast({
+          title: "Resync complete",
+          description: `Successfully resynced ${result.rowsProcessed.toLocaleString()} rows and recreated ${result.dimensionsCreated} dimensions from scratch`,
         });
         
-        return {
-          report_id: currentReportId,
-          data_source_id: dataSource.id,
-          row_number: index + 1,
-          dimension_values: dimensionValues,
-        };
-      }).filter((row): row is NonNullable<typeof row> => row !== null);
-
-      // Insert in batches
-      const batchSize = 1000;
-      const totalBatches = Math.ceil(rowsToInsert.length / batchSize);
-      
-      for (let i = 0; i < rowsToInsert.length; i += batchSize) {
-        const batch = rowsToInsert.slice(i, i + batchSize);
-        const currentBatch = Math.floor(i / batchSize) + 1;
+        // Refresh sync statistics
+        await fetchSyncStatistics();
         
-        const { error: insertError } = await supabase
-          .from('dimension_data')
-          .insert(batch);
-
-        if (insertError) {
-          throw new Error(`Failed at batch ${currentBatch}/${totalBatches}: ${insertError.message}`);
-        }
+        onSuccess();
+      } else {
+        throw new Error(result.error || "Unknown sync error");
       }
-
-      toast({
-        title: "Resync complete",
-        description: `Successfully resynced ${dataRows.length.toLocaleString()} rows`,
-      });
-      
-      onSuccess();
     } catch (error) {
       console.error("Error resyncing data source:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to resync data";
@@ -527,22 +410,40 @@ export const EditDataSourceModal = ({
                 />
               </div>
 
-              {dataSource && (
-                <div className="flex items-center gap-2 pt-2">
-                  <Button
-                    variant="outline"
-                    onClick={handleResync}
-                    disabled={isResyncing || isLoading}
-                    className="gap-2"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${isResyncing ? 'animate-spin' : ''}`} />
-                    {isResyncing ? 'Resyncing...' : 'Resync Data Now'}
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Resync without changing mappings (uses current URL and settings)
-                  </span>
-                </div>
-              )}
+                {dataSource && (
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={handleResync}
+                        disabled={isResyncing || isLoading}
+                        className="gap-2"
+                      >
+                        <RefreshCw className={`h-4 w-4 ${isResyncing ? 'animate-spin' : ''}`} />
+                        {isResyncing ? 'Resyncing from scratch...' : 'Resync from Scratch'}
+                      </Button>
+                      <span className="text-sm text-muted-foreground">
+                        Completely replaces all data and recreates dimensions from current mappings
+                      </span>
+                    </div>
+                    {(syncedRowsCount !== null || syncedColumnsCount !== null) && (
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground border-t pt-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">Synced:</span>
+                          {syncedRowsCount !== null && (
+                            <span>{syncedRowsCount.toLocaleString()} rows</span>
+                          )}
+                          {syncedRowsCount !== null && syncedColumnsCount !== null && (
+                            <span className="mx-1">•</span>
+                          )}
+                          {syncedColumnsCount !== null && (
+                            <span>{syncedColumnsCount} columns</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
             </>
           ) : step === 2 ? (
             <>
@@ -576,6 +477,7 @@ export const EditDataSourceModal = ({
           ) : (
             <ColumnMappingStep
               headers={headers}
+              sampleDataRows={sampleDataRows}
               onSave={handleSaveMappings}
               onBack={handleBack}
               isLoading={isLoading}

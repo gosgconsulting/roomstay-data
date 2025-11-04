@@ -20,6 +20,16 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { EditMappingModal } from "./EditMappingModal";
 import { EditDataSourceModal } from "./EditDataSourceModal";
+import { 
+  syncDataSource, 
+  fetchGoogleSheetsData,
+  parseValue,
+  parseDate,
+  insertDataInBatches,
+  detectNewColumns,
+  type DataSource as SyncDataSource,
+  type SyncOptions 
+} from "@/lib/sync-utils";
 import { ViewDataModal } from "./ViewDataModal";
 
 interface DataSource {
@@ -183,69 +193,18 @@ export const DataSourcesListModal = ({
           header === null || header === undefined ? '' : String(header).trim()
         );
 
-        // Detect new columns and update column_mappings
-        // Handle column reordering, additions, and removals
-        const currentMappings = dataSource.column_mappings || [];
-        const mappedColumns = new Set(currentMappings.map((m: any) => m.column));
-        const normalizedMappedColumns = new Set(
-          currentMappings.map((m: any) => m.column.trim().toLowerCase())
-        );
-        let newColumns: string[] = [];
+        // Detect new columns and update column_mappings using utility
+        const { newColumns, updatedMappings } = await detectNewColumns(sheetHeaders, dataSource);
         
-        // Find new columns (non-empty headers that aren't already mapped)
-        sheetHeaders.forEach((header: string, index: number) => {
-          if (header && header.trim() !== '') {
-            const trimmedHeader = header.trim();
-            const normalizedHeader = trimmedHeader.toLowerCase();
-            
-            // Check if this column is already mapped (exact or normalized match)
-            const isExactMatch = mappedColumns.has(trimmedHeader);
-            const isNormalizedMatch = normalizedMappedColumns.has(normalizedHeader);
-            
-            if (!isExactMatch && !isNormalizedMatch) {
-              // This is a truly new column
-              newColumns.push(trimmedHeader);
-              console.log(`[REFRESH] New column detected at index ${index}: "${trimmedHeader}"`);
-            }
-          }
-        });
-
-        // Auto-update column_mappings if new columns are detected
+        // Update local dataSource object if new columns were found
         if (newColumns.length > 0) {
-          console.log(`[REFRESH] Detected ${newColumns.length} new columns:`, newColumns);
-          
-          const updatedMappings = [...currentMappings];
-          newColumns.forEach((column) => {
-            updatedMappings.push({
-              column: column,
-              dimensionId: 'none',
-              visible: false, // Hidden by default, user can map it later
-              dimensionType: 'text', // Default type
-            });
-          });
-
-          // Update data source with new column mappings
-          const { error: updateError } = await supabase
-            .from('data_sources')
-            .update({ column_mappings: updatedMappings })
-            .eq('id', dataSource.id);
-
-          if (updateError) {
-            console.warn(`[REFRESH] Failed to update column_mappings with new columns:`, updateError);
-            // Continue anyway - we'll just skip unmapped columns
-          } else {
-            console.log(`[REFRESH] Updated column_mappings with ${newColumns.length} new columns`);
-            // Update local dataSource object for this sync
-            dataSource.column_mappings = updatedMappings;
-          }
+          dataSource.column_mappings = updatedMappings;
         }
 
-        // Now fetch all data rows (up to 100,000 rows to avoid timeouts)
-        // Use A1 notation: A{startRow}:Z{endRow} for data rows
-        // Using a reasonable end row limit to avoid requesting too much data at once
+        // Fetch all data rows - no limit, fetch all available data
+        // Use A1 notation: A{startRow}:Z for data rows (Google Sheets API supports up to 10 million rows)
         const startRow = dataSource.header_row + 1;
-        const endRow = 100000; // Reasonable limit to prevent timeouts
-        const dataRange = `A${startRow}:Z${endRow}`;
+        const dataRange = `A${startRow}:Z`;
         
         toast({
           title: "Syncing...",
@@ -364,22 +323,7 @@ export const DataSourcesListModal = ({
         
         console.log(`[REFRESH] Successfully mapped ${Object.keys(dimensionIdMap).length} columns`);
 
-      // Helper function to parse values based on dimension type
-      const parseValue = (value: any, dimensionType: string): any => {
-        if (value === null || value === undefined || value === '') return null;
-        
-        // For numeric types, clean and parse the value
-        if (dimensionType === 'number' || dimensionType === 'currency' || dimensionType === 'percentage') {
-          const stringValue = String(value);
-          // Remove currency symbols ($, €, £, etc.), commas, and spaces
-          const cleanedValue = stringValue.replace(/[$€£¥,\s]/g, '');
-          const numValue = parseFloat(cleanedValue);
-          return isNaN(numValue) ? null : numValue;
-        }
-        
-        // For other types, return as-is
-        return value;
-      };
+              // Use parseDate and parseValue from sync-utils (remove duplicate implementations)
 
         // Transform data with detailed logging for first row
         // Handle rows that might have different lengths than headers (columns added/removed/reordered)
@@ -406,7 +350,8 @@ export const DataSourcesListModal = ({
                 
                 // Process value (even if it's empty string, null, etc.)
                 const dimensionType = mapping.newDimensionType || mapping.dimensionType || 'text';
-                const value = parseValue(rawValue, dimensionType);
+                const dateFormat = mapping.dateFormat;
+                const value = parseValue(rawValue, dimensionType, dateFormat);
                 
                 // Only add if value is not null (null values are optional)
                 if (value !== null) {
@@ -435,29 +380,13 @@ export const DataSourcesListModal = ({
       console.log(`[REFRESH] Prepared ${rowsToInsert.length} rows for insertion`);
       
       // Insert in smaller batches with progress updates
-      const batchSize = 1000;
-      const totalBatches = Math.ceil(rowsToInsert.length / batchSize);
-      
-      for (let i = 0; i < rowsToInsert.length; i += batchSize) {
-        const batch = rowsToInsert.slice(i, i + batchSize);
-        const currentBatch = Math.floor(i / batchSize) + 1;
-        
-        toast({
-          title: "Syncing...",
-          description: `Importing batch ${currentBatch}/${totalBatches} (${Math.round((i / rowsToInsert.length) * 100)}%)`,
+        // Insert data using utility function
+        await insertDataInBatches(rowsToInsert, (message) => {
+          toast({
+            title: "Syncing...",
+            description: message,
+          });
         });
-        
-        const { error: insertError } = await supabase
-          .from('dimension_data')
-          .insert(batch);
-
-        if (insertError) {
-          console.error(`[REFRESH] Error inserting batch ${currentBatch}:`, insertError);
-          throw new Error(`Failed at batch ${currentBatch}/${totalBatches}: ${insertError.message}`);
-        }
-        
-        console.log(`[REFRESH] Inserted batch ${currentBatch}/${totalBatches}`);
-      }
       
       console.log(`[REFRESH] Successfully imported all ${rowsToInsert.length} rows`);
 
