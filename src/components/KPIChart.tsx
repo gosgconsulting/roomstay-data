@@ -82,8 +82,16 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
   ]);
 
   useEffect(() => {
+    console.log('[CHART-DEBUG] ========== KPIChart useEffect ==========');
+    console.log('[CHART-DEBUG] reportId:', reportId);
+    console.log('[CHART-DEBUG] selectedKPI:', selectedKPI);
+    console.log('[CHART-DEBUG] stableFilters:', JSON.stringify(stableFilters, null, 2));
+    console.log('[CHART-DEBUG] =======================================');
     if (reportId) {
+      console.log('[CHART-DEBUG] ✓ reportId exists, calling loadChartData...');
       loadChartData();
+    } else {
+      console.log('[CHART-DEBUG] ✗ No reportId, skipping loadChartData');
     }
   }, [reportId, selectedKPI, stableFilters, visibilityRefreshTrigger]);
 
@@ -332,10 +340,16 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
           }
         }
         
-        console.log(`[CHART] Fetched ${allDimensionData.length} rows of dimension_data`);
+        console.log('[CHART-DEBUG] ========== DATA LOADING SUMMARY ==========');
+        console.log('[CHART-DEBUG] Total dimension_data rows loaded:', allDimensionData.length);
+        console.log('[CHART-DEBUG] Total dimensions:', dimensions?.length);
+        console.log('[CHART-DEBUG] Date dimension:', dateDimension?.name, '(', dateDimension?.id, ')');
+        console.log('[CHART-DEBUG] KPI dimension:', kpiDimension?.name, '(', kpiDimension?.id, ')');
+        console.log('[CHART-DEBUG] Sample data row:', allDimensionData[0]?.dimension_values);
+        console.log('[CHART-DEBUG] =============================================');
         
         if (allDimensionData.length === 0) {
-          console.log('[CHART] No dimension data found for report:', reportId);
+          console.error('[CHART-DEBUG] ✗ NO DATA FOUND - Showing empty chart');
           setChartData([]);
           return;
         }

@@ -75,15 +75,16 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
   ]);
 
   useEffect(() => {
-    console.log('[KPI-DEBUG] useEffect triggered - reportId:', reportId, 'accountId:', accountId);
-    console.log('[testing] KPIMetricsCards - reportId:', reportId);
-    console.log('[testing] KPIMetricsCards - stableFilters:', stableFilters);
+    console.log('[KPI-DEBUG] ============= KPIMetricsCards useEffect =============');
+    console.log('[KPI-DEBUG] reportId:', reportId);
+    console.log('[KPI-DEBUG] accountId:', accountId);
+    console.log('[KPI-DEBUG] stableFilters:', JSON.stringify(stableFilters, null, 2));
+    console.log('[KPI-DEBUG] =====================================================');
     if (reportId) {
-      console.log('[KPI-DEBUG] Calling loadMetrics...');
+      console.log('[KPI-DEBUG] ✓ reportId exists, calling loadMetrics...');
       loadMetrics();
     } else {
-      console.log('[testing] KPIMetricsCards - No reportId, skipping loadMetrics');
-      console.log('[KPI-DEBUG] No reportId, setting isLoading to false');
+      console.log('[KPI-DEBUG] ✗ No reportId provided, skipping loadMetrics');
       setIsLoading(false);
     }
   }, [reportId, stableFilters]);
@@ -256,11 +257,21 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
         console.warn(`[testing] KPIMetricsCards - Reached maximum row limit (${MAX_ROWS}), using available data for calculations`);
       }
 
-      console.log('[testing] loadMetrics - Total dimension_data rows loaded:', allDimensionData.length);
+      console.log('[KPI-DEBUG] ========== DATA LOADING SUMMARY ==========');
+      console.log('[KPI-DEBUG] Total dimension_data rows loaded:', allDimensionData.length);
+      console.log('[KPI-DEBUG] Total dimensions loaded:', dimensions?.length);
+      console.log('[KPI-DEBUG] Dimension names:', dimensions?.map(d => d.name).join(', '));
+      console.log('[KPI-DEBUG] Sample data row:', allDimensionData[0]?.dimension_values);
+      console.log('[KPI-DEBUG] ========================================');
 
-      if (!dimensions || !allDimensionData) {
-        console.log('[testing] loadMetrics - No dimensions or data, setting empty metrics');
-        console.log('[testing] loadMetrics - dimensions:', dimensions?.length, 'allDimensionData:', allDimensionData?.length);
+      if (!dimensions || dimensions.length === 0) {
+        console.error('[KPI-DEBUG] ✗ NO DIMENSIONS LOADED - Cannot calculate metrics!');
+        setMetrics([]);
+        return;
+      }
+
+      if (!allDimensionData || allDimensionData.length === 0) {
+        console.error('[KPI-DEBUG] ✗ NO DATA LOADED - Setting empty metrics');
         setMetrics([]);
         return;
       }
@@ -429,8 +440,10 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
         }
       });
 
-      console.log('[testing] loadMetrics - Display metrics created:', displayMetrics.length);
-      console.log('[testing] loadMetrics - Metrics:', displayMetrics.map(m => ({ label: m.label, value: m.value })));
+      console.log('[KPI-DEBUG] ========== METRICS DISPLAY SUMMARY ==========');
+      console.log('[KPI-DEBUG] Total display metrics created:', displayMetrics.length);
+      console.log('[KPI-DEBUG] Metrics:', displayMetrics.map(m => ({ label: m.label, value: m.value })));
+      console.log('[KPI-DEBUG] ==========================================');
       
       setMetrics(displayMetrics);
     } catch (error) {
