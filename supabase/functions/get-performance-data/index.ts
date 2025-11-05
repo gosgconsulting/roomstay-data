@@ -452,8 +452,6 @@ Deno.serve(async (req) => {
 
     // Group data by the first group dimension
     const groupDimId = groupByDims[0];
-    const breakdownDims = breakdownByDims || [];
-    const thenByDims = thenByDims || [];
     
     if (!groupDimId) {
       return new Response(
