@@ -360,7 +360,7 @@ export const BudgetModal = ({
 
         // If no items found, try monthly_dimension_data as fallback
         if (items.size === 0) {
-          const { data: monthlyData } = await supabase
+          const { data: monthlyData } = await (supabase as any)
             .from("monthly_dimension_data")
             .select("dimension_values")
             .eq("report_id", reportIdToUse)
@@ -453,7 +453,7 @@ export const BudgetModal = ({
 
       if (budget) {
         // Update existing budget
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from("budgets")
           .update({
             dimension_name: selectedDimension,
@@ -471,7 +471,7 @@ export const BudgetModal = ({
         });
       } else {
         // Create new budget
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from("budgets")
           .insert({
             report_id: reportId,

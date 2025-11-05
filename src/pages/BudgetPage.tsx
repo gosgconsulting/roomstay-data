@@ -86,7 +86,7 @@ export default function BudgetPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      let query = supabase
+      let query = (supabase as any)
         .from("budgets")
         .select("*")
         .eq("user_id", user.id)
@@ -128,7 +128,7 @@ export default function BudgetPage() {
     if (!deletingBudget) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("budgets")
         .delete()
         .eq("id", deletingBudget.id);
