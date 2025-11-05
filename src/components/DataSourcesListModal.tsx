@@ -30,6 +30,7 @@ import {
   type DataSource as SyncDataSource,
   type SyncOptions 
 } from "@/lib/sync-utils";
+import { resyncReportViews } from "@/lib/resync-report-views";
 import { ViewDataModal } from "./ViewDataModal";
 
 interface DataSource {
@@ -400,6 +401,17 @@ export const DataSourcesListModal = ({
         });
       
         console.log(`[REFRESH] Refresh completed for "${dataSource.name}"`);
+        
+        // Resync report views after data sync to ensure they use account-scoped dimensions
+        if (accountId && reportId) {
+          try {
+            console.log('[RESYNC] Resyncing report views after data sync');
+            await resyncReportViews(reportId, accountId);
+          } catch (error) {
+            console.error('[RESYNC] Error resyncing report views after data sync:', error);
+            // Don't block the UI if report views resync fails
+          }
+        }
         
         // Reload data sources to show updated column mappings
         await loadDataSources();

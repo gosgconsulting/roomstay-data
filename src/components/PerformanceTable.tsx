@@ -449,39 +449,149 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
 
     console.log('Loading view settings for:', view.name, view);
     
-    // Load saved settings
-    let groupDimensions = view.group_by_dimensions || [];
+    // Map old dimension IDs to account-scoped dimension IDs for group_by_dimensions
+    const mapDimensionIds = async (dimIds: string[]): Promise<string[]> => {
+      if (!dimIds || dimIds.length === 0) return [];
+      
+      const mapped: string[] = [];
+      const unmappedIds: string[] = [];
+      
+      // First, find dimensions that are already valid
+      for (const dimId of dimIds) {
+        const dimension = dimensions.find(d => d.id === dimId);
+        if (dimension) {
+          mapped.push(dimension.id);
+        } else {
+          unmappedIds.push(dimId);
+        }
+      }
+      
+      // If we have unmapped IDs, query them to get their names and map to account-scoped dimensions
+      if (unmappedIds.length > 0) {
+        try {
+          const dimensionNameToIdMap = new Map<string, string>();
+          dimensions.forEach(dim => {
+            dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
+          });
+          
+          const { data: oldDimensions } = await supabase
+            .from("dimensions")
+            .select("id, name")
+            .in("id", unmappedIds);
+          
+          if (oldDimensions) {
+            oldDimensions.forEach((oldDim) => {
+              const normalizedName = oldDim.name.toLowerCase();
+              const newDimensionId = dimensionNameToIdMap.get(normalizedName);
+              
+              if (newDimensionId) {
+                mapped.push(newDimensionId);
+                console.log(`[testing] Mapped group dimension "${oldDim.name}": ${oldDim.id} -> ${newDimensionId}`);
+              } else {
+                console.warn(`[testing] Could not find account-scoped dimension for "${oldDim.name}" (${oldDim.id})`);
+              }
+            });
+          }
+        } catch (error) {
+          console.error('[testing] Error mapping old dimension IDs:', error);
+        }
+      }
+      
+      return mapped;
+    };
     
-          // If no grouping dimension is set and dimensions are available, set a default
+    // Load saved settings - map dimension IDs asynchronously
+    const loadDimensionsAsync = async () => {
+      const groupDimensions = await mapDimensionIds(view.group_by_dimensions || []);
+      
+      // If no grouping dimension is set and dimensions are available, set a default
+      let finalGroupDimensions = groupDimensions;
       if (groupDimensions.length === 0 && dimensions.length > 0) {
         // Find a suitable dimension for grouping - prefer Date first, then text dimensions
         const dateDimension = dimensions.find(d => d.type === 'date');
         const textDimension = dimensions.find(d => d.type === 'text');
         
         if (dateDimension) {
-          groupDimensions = [dateDimension.id];
+          finalGroupDimensions = [dateDimension.id];
           console.log('Auto-selected Date dimension for grouping:', dateDimension.name);
         } else if (textDimension) {
-          groupDimensions = [textDimension.id];
+          finalGroupDimensions = [textDimension.id];
           console.log('Auto-selected text dimension for grouping:', textDimension.name);
         } else {
           // Fallback to first available dimension
-          groupDimensions = [dimensions[0].id];
+          finalGroupDimensions = [dimensions[0].id];
           console.log('Auto-selected first available dimension for grouping:', dimensions[0].name);
         }
       }
+      
+      setGroupByDimensions(finalGroupDimensions);
+      setBreakdownByDimensions(await mapDimensionIds(view.breakdown_by_dimensions || []));
+      setThenByDimensions(await mapDimensionIds(view.then_by_dimensions || []));
+    };
     
-    setGroupByDimensions(groupDimensions);
-    setBreakdownByDimensions(view.breakdown_by_dimensions || []);
-    setThenByDimensions(view.then_by_dimensions || []);
+    loadDimensionsAsync();
     
     if (view.visible_columns && view.visible_columns.length > 0) {
       console.log('[testing] Loading visible columns from view:', view.visible_columns.length, 'columns');
       console.log('[testing] Visible column IDs:', view.visible_columns);
-      const visibleSet = new Set<string>(view.visible_columns);
-      setVisibleColumns(visibleSet);
-      setInitialVisibleColumns(new Set<string>(visibleSet));
-      console.log('[testing] Set visibleColumns state:', visibleSet.size, 'columns');
+      
+      // Map old dimension IDs to account-scoped dimension IDs
+      const loadVisibleColumnsAsync = async () => {
+        // Create a map of dimension name to account-scoped dimension ID
+        const dimensionNameToIdMap = new Map<string, string>();
+        dimensions.forEach(dim => {
+          dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
+        });
+        
+        // Validate and map visible_columns
+        const mappedVisibleColumns: string[] = [];
+        
+        // First, collect all unmapped IDs to query them in one batch
+        const idsToCheck = view.visible_columns.filter((id: string) => 
+          !dimensions.find(d => d.id === id)
+        );
+        
+        // If we have unmapped IDs, query them to get their names and map to account-scoped dimensions
+        if (idsToCheck.length > 0) {
+          try {
+            const { data: oldDimensions } = await supabase
+              .from("dimensions")
+              .select("id, name")
+              .in("id", idsToCheck);
+            
+            if (oldDimensions) {
+              oldDimensions.forEach((oldDim) => {
+                const normalizedName = oldDim.name.toLowerCase();
+                const newDimensionId = dimensionNameToIdMap.get(normalizedName);
+                
+                if (newDimensionId) {
+                  mappedVisibleColumns.push(newDimensionId);
+                  console.log(`[testing] Mapped visible column "${oldDim.name}": ${oldDim.id} -> ${newDimensionId}`);
+                } else {
+                  console.warn(`[testing] Could not find account-scoped dimension for "${oldDim.name}" (${oldDim.id})`);
+                }
+              });
+            }
+          } catch (error) {
+            console.error('[testing] Error mapping old dimension IDs:', error);
+          }
+        }
+        
+        // Add all valid dimension IDs (those that already exist in loaded dimensions)
+        view.visible_columns.forEach((colDimId: string) => {
+          const dimension = dimensions.find(d => d.id === colDimId);
+          if (dimension && !mappedVisibleColumns.includes(dimension.id)) {
+            mappedVisibleColumns.push(dimension.id);
+          }
+        });
+        
+        const visibleSet = new Set<string>(mappedVisibleColumns);
+        setVisibleColumns(visibleSet);
+        setInitialVisibleColumns(new Set<string>(visibleSet));
+        console.log('[testing] Set visibleColumns state:', visibleSet.size, 'columns (mapped from', view.visible_columns.length, 'original)');
+      };
+      
+      loadVisibleColumnsAsync();
     } else if (dimensions.length > 0) {
       // Set default visibility if not set
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];

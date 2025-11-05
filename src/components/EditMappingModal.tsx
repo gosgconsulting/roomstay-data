@@ -11,6 +11,8 @@ import { FileSpreadsheet } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ColumnMappingStep } from "./ColumnMappingStep";
+import { resyncColumnMappings } from "@/lib/resync-dimensions";
+import { resyncReportViews } from "@/lib/resync-report-views";
 
 interface DataSource {
   id: string;
@@ -48,8 +50,52 @@ export const EditMappingModal = ({
     if (open && dataSource) {
       fetchAccountId();
       fetchHeaders();
+      resyncMappingsIfNeeded();
     }
   }, [open, dataSource, propAccountId]);
+
+  // Resync column mappings with account-scoped dimensions
+  const resyncMappingsIfNeeded = async () => {
+    if (!dataSource || !dataSource.id) return;
+    
+    try {
+      // Get account ID
+      let actualAccountId = propAccountId;
+      if (!actualAccountId && dataSource.report_id) {
+        const { data: reportData } = await supabase
+          .from('reports')
+          .select('account_id')
+          .eq('id', dataSource.report_id)
+          .maybeSingle();
+        actualAccountId = reportData?.account_id || undefined;
+      }
+
+      if (!actualAccountId) {
+        console.log('[RESYNC] No account ID available, skipping resync');
+        return;
+      }
+
+      console.log('[RESYNC] Resyncing column mappings for data source:', dataSource.name);
+      await resyncColumnMappings(dataSource.id, actualAccountId);
+      
+      // Also resync report views if report_id exists
+      if (dataSource.report_id) {
+        console.log('[RESYNC] Resyncing report views for report:', dataSource.report_id);
+        try {
+          await resyncReportViews(dataSource.report_id, actualAccountId);
+        } catch (error) {
+          console.error('[RESYNC] Error resyncing report views:', error);
+          // Don't block the UI if report views resync fails
+        }
+      }
+      
+      // Reload headers to get updated mappings
+      await fetchHeaders();
+    } catch (error) {
+      console.error('[RESYNC] Error resyncing mappings:', error);
+      // Don't show error to user, just log it - the edit modal will still work
+    }
+  };
 
   // Fetch accountId from report if not provided
   const fetchAccountId = async () => {

@@ -168,16 +168,17 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
             if (customError) throw customError;
             customData = (data || []) as Dimension[];
 
-            // Combine all dimensions
+            // Combine all dimensions - prioritize account-scoped over global
+            // Order: account (highest priority) > custom > global (lowest priority)
             const allDimensions = [
-              ...(globalData || []),
               ...accountData,
-              ...customData
+              ...customData,
+              ...(globalData || [])
             ] as Dimension[];
 
             console.log('[CHART] Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0);
 
-            // Deduplicate dimensions by name (keep first occurrence)
+            // Deduplicate dimensions by name (keep first occurrence, which prioritizes account-scoped)
             const seenNames = new Set<string>();
             const uniqueDimensions = allDimensions.filter(dim => {
               if (seenNames.has(dim.name)) {
