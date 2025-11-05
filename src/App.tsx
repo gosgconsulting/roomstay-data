@@ -10,6 +10,7 @@ import Auth from "./pages/Auth";
 import SharedReport from "./pages/SharedReport";
 import NotFound from "./pages/NotFound";
 import AllReports from "./pages/AllReports";
+import BudgetPage from "./pages/BudgetPage";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +28,8 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/tools/report" element={<ReportTool />} />
           <Route path="/tools/report/:accountId" element={<ReportDashboard />} />
+          <Route path="/tools/budget" element={<BudgetPage />} />
+          <Route path="/tools/budget/:accountId" element={<BudgetPage />} />
           <Route path="/shared/:slug" element={<SharedReport />} />
           <Route path="/:slug" element={<SharedReport />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

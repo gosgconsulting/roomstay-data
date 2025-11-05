@@ -552,7 +552,8 @@ export const buildDimensionMappingWithAutoDetection = async (
   userId: string,
   reportId: string,
   dataSourceId: string,
-  recreateDimensions: boolean = false
+  recreateDimensions: boolean = false,
+  accountId?: string | null
 ): Promise<{ dimensionIdMap: Record<string, string>; columnIndexMap: Record<string, number>; createdCount: number }> => {
   const dimensionIdMap: Record<string, string> = {};
   const columnIndexMap: Record<string, number> = {};
@@ -598,8 +599,41 @@ export const buildDimensionMappingWithAutoDetection = async (
         }
       }
       
-      // Get or create dimension
-      const dimensionId = await createOrGetDimension(finalMapping, userId, reportId, dataSourceId);
+      // Helper function to get dimension name from mapping (either from dimensionName or by looking up dimensionId)
+      const getDimensionName = async (m: ColumnMapping): Promise<string | null> => {
+        // If dimensionName is already set, use it
+        if (m.dimensionName) {
+          return m.dimensionName;
+        }
+
+        // If dimensionId is set and not a special value, look up the name
+        if (m.dimensionId && m.dimensionId !== 'none' && m.dimensionId !== 'create_new') {
+          const { data: dimension, error } = await supabase
+            .from('dimensions')
+            .select('name')
+            .eq('id', m.dimensionId)
+            .maybeSingle();
+
+          if (!error && dimension) {
+            return dimension.name;
+          }
+        }
+
+        return null;
+      };
+
+      // Get dimension name (either from mapping or by looking up dimensionId)
+      const dimensionName = await getDimensionName(finalMapping);
+      
+      // If we have a dimension name, resolve it to ID; otherwise try createOrGetDimension
+      let dimensionId: string | null = null;
+      if (dimensionName) {
+        // Resolve dimension name to ID based on account context
+        dimensionId = await resolveDimensionNameToId(dimensionName, accountId || null, reportId, userId);
+      } else if (finalMapping.newDimensionName) {
+        // Creating a new dimension
+        dimensionId = await createOrGetDimension(finalMapping, userId, reportId, dataSourceId, accountId);
+      }
       
       if (dimensionId) {
         dimensionIdMap[mapping.column] = dimensionId;
@@ -624,10 +658,11 @@ export const buildDimensionMapping = async (
   userId: string,
   reportId: string,
   dataSourceId: string,
-  recreateDimensions: boolean = false
+  recreateDimensions: boolean = false,
+  accountId?: string | null
 ): Promise<{ dimensionIdMap: Record<string, string>; columnIndexMap: Record<string, number>; createdCount: number }> => {
   // Use the enhanced version with empty sample data
-  return buildDimensionMappingWithAutoDetection(mappings, headers, [], userId, reportId, dataSourceId, recreateDimensions);
+  return buildDimensionMappingWithAutoDetection(mappings, headers, [], userId, reportId, dataSourceId, recreateDimensions, accountId);
 };
 
 // Transform data rows
@@ -742,11 +777,32 @@ export const updateColumnMappings = async (
   mappings: ColumnMapping[],
   dimensionIdMap: Record<string, string>
 ): Promise<void> => {
+  // Get dimension names for the IDs in dimensionIdMap
+  const dimensionIds = Object.values(dimensionIdMap).filter(id => id && id !== 'none');
+  const dimensionNameMap: Record<string, string> = {};
+  
+  if (dimensionIds.length > 0) {
+    const { data: dimensions, error } = await supabase
+      .from('dimensions')
+      .select('id, name')
+      .in('id', dimensionIds);
+    
+    if (!error && dimensions) {
+      dimensions.forEach((dim: any) => {
+        dimensionNameMap[dim.id] = dim.name;
+      });
+    }
+  }
+
   const updatedMappings = mappings.map((mapping: ColumnMapping) => {
     if (mapping.column in dimensionIdMap && (mapping.dimensionId === 'create_new' || mapping.newDimensionName)) {
+      const dimensionId = dimensionIdMap[mapping.column];
+      const dimensionName = dimensionNameMap[dimensionId] || null;
+      
       return {
         ...mapping,
-        dimensionId: dimensionIdMap[mapping.column],
+        dimensionId: dimensionId, // Keep for backward compatibility
+        dimensionName: dimensionName, // Store name for stable mapping
         newDimensionName: undefined, // Clear temporary fields
         newDimensionType: undefined,
       };
@@ -891,8 +947,10 @@ export const syncDataSource = async (
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("User not authenticated");
 
-    // Get report_id
+    // Get report_id and account_id
     let reportId = dataSource.report_id;
+    let accountId: string | null = null;
+    
     if (!reportId) {
       const { data: dsData, error: dsError } = await supabase
         .from('data_sources')
@@ -904,7 +962,20 @@ export const syncDataSource = async (
       reportId = dsData?.report_id || '';
     }
 
-    console.log(`[SYNC] Starting sync for data source: ${dataSource.name}`);
+    // Get account_id from report
+    if (reportId) {
+      const { data: reportData, error: reportError } = await supabase
+        .from('reports')
+        .select('account_id')
+        .eq('id', reportId)
+        .maybeSingle();
+      
+      if (!reportError && reportData) {
+        accountId = reportData.account_id;
+      }
+    }
+
+    console.log(`[SYNC] Starting sync for data source: ${dataSource.name} (account: ${accountId || 'none'})`);
     
     // Step 1: Fix problematic column mappings
     await fixColumnMappings(dataSource.id);
@@ -949,7 +1020,8 @@ export const syncDataSource = async (
       user.id,
       reportId,
       dataSource.id,
-      recreateDimensions
+      recreateDimensions,
+      accountId
     );
 
     // Step 6: Transform data

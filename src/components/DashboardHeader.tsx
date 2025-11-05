@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, ChevronDown, Pencil, Database, Grid3x3 } from "lucide-react";
+import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, ChevronDown, Pencil, Database, Grid3x3, Wallet } from "lucide-react";
 import { DataSourceModal } from "./DataSourceModal";
 import { DataSourcesListModal } from "./DataSourcesListModal";
 import { DimensionsListModal } from "./DimensionsListModal";
@@ -727,6 +727,21 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
           >
             <Grid3x3 className="h-4 w-4" />
             Dimensions
+          </Button>
+
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => {
+              if (accountId) {
+                navigate(`/tools/budget/${accountId}`);
+              } else {
+                navigate('/tools/budget');
+              }
+            }}
+          >
+            <Wallet className="h-4 w-4" />
+            Budget
           </Button>
           
         </div>

@@ -29,7 +29,8 @@ interface Dimension {
 
 interface ColumnMapping {
   column: string;
-  dimensionId: string | null;
+  dimensionId?: string | null; // Optional, kept for backward compatibility
+  dimensionName?: string | null; // Primary identifier for mapping (stable across accounts)
   visible: boolean;
   newDimensionName?: string;
   newDimensionType?: string;
@@ -194,13 +195,36 @@ export const ColumnMappingStep = ({
       const updatedMappings: ColumnMapping[] = headers.map((header, index) => {
         const existingMapping = existingMappings.find(m => m.column === header);
         if (existingMapping) {
-          // Validate the dimension ID - if it's invalid (global or wrong account), set to "none"
-          const isValid = isValidDimensionId(existingMapping.dimensionId);
-          const dimensionId = isValid ? existingMapping.dimensionId : "none";
+          // Priority: Use dimensionName if available, otherwise fall back to dimensionId
+          let dimensionId: string | null = "none";
+          let dimensionName: string | null = existingMapping.dimensionName || null;
+          
+          if (dimensionName) {
+            // Find dimension by name in the loaded dimensions (account-specific)
+            const dimension = dimensions.find(d => d.name === dimensionName);
+            if (dimension) {
+              dimensionId = dimension.id;
+            } else {
+              // Dimension name not found in account-specific dimensions, clear it
+              dimensionName = null;
+              dimensionId = "none";
+            }
+          } else if (existingMapping.dimensionId) {
+            // Fallback: Validate dimension ID - if it's invalid (global or wrong account), set to "none"
+            const isValid = isValidDimensionId(existingMapping.dimensionId);
+            dimensionId = isValid ? existingMapping.dimensionId : "none";
+            
+            // If dimensionId is valid, look up the name
+            if (isValid && dimensionId && dimensionId !== 'none') {
+              const dimension = dimensions.find(d => d.id === dimensionId);
+              dimensionName = dimension?.name || null;
+            }
+          }
           
           return {
             ...existingMapping,
             dimensionId: dimensionId,
+            dimensionName: dimensionName, // Store name for stable mapping
             dateFormat: existingMapping.dateFormat || 'yyyy-mm-dd', // Default date format
           };
         }
@@ -209,6 +233,7 @@ export const ColumnMappingStep = ({
         return {
           column: header,
           dimensionId: matchedDimension?.id || "none",
+          dimensionName: matchedDimension?.name || null, // Store name for stable mapping
           visible: true,
           dateFormat: matchedDimension?.type === 'date' ? 'yyyy-mm-dd' : undefined,
         };
@@ -221,6 +246,7 @@ export const ColumnMappingStep = ({
         return {
           column: header,
           dimensionId: matchedDimension?.id || "none",
+          dimensionName: matchedDimension?.name || null, // Store name for stable mapping
           visible: true,
           dateFormat: matchedDimension?.type === 'date' ? 'yyyy-mm-dd' : undefined,
         };
@@ -292,6 +318,16 @@ export const ColumnMappingStep = ({
     const newMappings = [...mappings];
     newMappings[index].dimensionId = dimensionId;
     
+    // Store dimension name for stable mapping (primary identifier)
+    if (dimensionId && dimensionId !== 'none' && dimensionId !== 'create_new') {
+      const dimension = dimensions.find(d => d.id === dimensionId);
+      if (dimension) {
+        newMappings[index].dimensionName = dimension.name;
+      }
+    } else {
+      newMappings[index].dimensionName = null;
+    }
+    
     // If "create_new" is selected, auto-populate new dimension name
     if (dimensionId === 'create_new') {
       newMappings[index].newDimensionName = mappings[index].column;
@@ -361,6 +397,7 @@ export const ColumnMappingStep = ({
           // Use existing dimension
           const newMappings = [...mappings];
           newMappings[index].dimensionId = existingDimension.id;
+          newMappings[index].dimensionName = existingDimension.name; // Store name for stable mapping
           newMappings[index].newDimensionName = undefined;
           newMappings[index].newDimensionType = undefined;
           setMappings(newMappings);
@@ -390,6 +427,7 @@ export const ColumnMappingStep = ({
         // Update mapping to use the newly created dimension
         const newMappings = [...mappings];
         newMappings[index].dimensionId = newDimension.id;
+        newMappings[index].dimensionName = newDimension.name; // Store name for stable mapping
         newMappings[index].newDimensionName = undefined;
         newMappings[index].newDimensionType = undefined;
         setMappings(newMappings);
