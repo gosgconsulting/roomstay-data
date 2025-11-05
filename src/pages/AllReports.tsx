@@ -4,9 +4,13 @@ import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { PerformanceTable } from "@/components/PerformanceTable";
 import { LoadingToast } from "@/components/LoadingToast";
+import { KPIMetricsCards } from "@/components/KPIMetricsCards";
+import { KPIChart } from "@/components/KPIChart";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card } from "@/components/ui/card";
 
 interface Report {
   id: string;
@@ -14,6 +18,12 @@ interface Report {
   account_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface DataSource {
+  id: string;
+  name: string;
+  report_id: string;
 }
 
 export default function AllReports() {
@@ -24,6 +34,8 @@ export default function AllReports() {
   const [reports, setReports] = useState<Report[]>([]);
   const [account, setAccount] = useState<{ id: string; name: string } | null>(null);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
+  const [dataSources, setDataSources] = useState<Record<string, DataSource[]>>({});
+  const [activeDataSources, setActiveDataSources] = useState<Record<string, string>>({});
   
   // Filter state for each report - using reportId as key
   const [reportFilters, setReportFilters] = useState<Record<string, FilterState>>({});
@@ -123,6 +135,26 @@ export default function AllReports() {
       if (reports && reports.length > 0) {
         setReports(reports);
         
+        // Load data sources for each report
+        const dataSourcesMap: Record<string, DataSource[]> = {};
+        const activeDataSourceMap: Record<string, string> = {};
+        
+        for (const report of reports) {
+          const { data: sources, error: sourcesError } = await supabase
+            .from('data_sources')
+            .select('id, name, report_id')
+            .eq('report_id', report.id)
+            .order('created_at', { ascending: true });
+          
+          if (!sourcesError && sources && sources.length > 0) {
+            dataSourcesMap[report.id] = sources;
+            activeDataSourceMap[report.id] = sources[0].id;
+          }
+        }
+        
+        setDataSources(dataSourcesMap);
+        setActiveDataSources(activeDataSourceMap);
+        
         // Initialize filters for each report
         const initialFilters: Record<string, FilterState> = {};
         reports.forEach(report => {
@@ -174,6 +206,8 @@ export default function AllReports() {
     
     // Mark all components as loading
     reports.forEach(report => {
+      markComponentLoading(`metrics-${report.id}`);
+      markComponentLoading(`chart-${report.id}`);
       markComponentLoading(`table-${report.id}`);
     });
   };
@@ -220,38 +254,63 @@ export default function AllReports() {
       
       {reports.length > 0 ? (
         <main className="container mx-auto px-6 py-6 space-y-8">
-          {reports.map((report) => (
-            <div key={report.id} className="space-y-4">
-              {/* Report Title */}
-              <div className="border-b pb-2">
-                <h2 className="text-2xl font-bold text-foreground">{report.name}</h2>
-                <p className="text-sm text-muted-foreground">
-                  Last updated: {new Date(report.updated_at).toLocaleDateString()}
-                </p>
-              </div>
-              
-              {/* Filters for this report */}
-              <FiltersBar 
-                reportId={report.id} 
-                onFiltersChange={(filters) => handleFiltersChange(report.id, filters)}
-                isSharedView={false} 
-                accountId={accountId || report.account_id || undefined}
-                refreshTrigger={loadingGeneration} 
-              />
-              
-              {/* Performance Table for this report */}
-              <PerformanceTable 
-                reportId={report.id} 
-                filters={reportFilters[report.id] || getDefaultFilters()} 
-                isSharedView={false}
-                accountId={accountId || report.account_id || undefined}
-                onFiltersChange={(filters) => handleFiltersChange(report.id, filters)}
-                key={`table-${report.id}-${loadingGeneration}`}
-                onLoadingComplete={() => markComponentLoaded(`table-${report.id}`)}
-                visibilityRefreshTrigger={loadingGeneration}
-              />
-            </div>
-          ))}
+          {reports.map((report) => {
+            const reportDataSources = dataSources[report.id] || [];
+            const activeDataSourceId = activeDataSources[report.id];
+            
+            return (
+              <Card key={report.id} className="p-6 space-y-4">
+                {/* Report Title */}
+                <div className="border-b pb-2">
+                  <h2 className="text-2xl font-bold text-foreground">{report.name}</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Last updated: {new Date(report.updated_at).toLocaleDateString()}
+                  </p>
+                </div>
+                
+                {/* Filters for this report */}
+                <FiltersBar 
+                  reportId={report.id} 
+                  onFiltersChange={(filters) => handleFiltersChange(report.id, filters)}
+                  isSharedView={false} 
+                  accountId={accountId || report.account_id || undefined}
+                  refreshTrigger={loadingGeneration} 
+                />
+                
+                {/* KPI Metrics Cards */}
+                <KPIMetricsCards
+                  reportId={report.id}
+                  filters={reportFilters[report.id] || getDefaultFilters()}
+                  accountId={accountId || report.account_id || undefined}
+                  visibilityRefreshTrigger={loadingGeneration}
+                  key={`metrics-${report.id}-${loadingGeneration}`}
+                  onLoadingComplete={() => markComponentLoaded(`metrics-${report.id}`)}
+                />
+                
+                {/* KPI Chart */}
+                <KPIChart
+                  reportId={report.id}
+                  filters={reportFilters[report.id] || getDefaultFilters()}
+                  accountId={accountId || report.account_id || undefined}
+                  visibilityRefreshTrigger={loadingGeneration}
+                  key={`chart-${report.id}-${loadingGeneration}`}
+                  onLoadingComplete={() => markComponentLoaded(`chart-${report.id}`)}
+                />
+                
+                {/* Performance Table - shows all data sources */}
+                <PerformanceTable 
+                  reportId={report.id} 
+                  filters={reportFilters[report.id] || getDefaultFilters()} 
+                  isSharedView={false}
+                  accountId={accountId || report.account_id || undefined}
+                  onFiltersChange={(filters) => handleFiltersChange(report.id, filters)}
+                  key={`table-${report.id}-${loadingGeneration}`}
+                  onLoadingComplete={() => markComponentLoaded(`table-${report.id}`)}
+                  visibilityRefreshTrigger={loadingGeneration}
+                />
+              </Card>
+            );
+          })}
         </main>
       ) : (
         <main className="container mx-auto px-6 py-6">
