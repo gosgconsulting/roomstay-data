@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
@@ -24,6 +24,7 @@ interface Account {
 export default function ReportDashboard() {
   const navigate = useNavigate();
   const { accountId } = useParams<{ accountId: string }>();
+  const [searchParams] = useSearchParams();
   const [session, setSession] = useState<Session | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -163,9 +164,14 @@ export default function ReportDashboard() {
       
       if (reportsError) throw reportsError;
       
-      // If user has reports for this account, select the first one
+      // If user has reports for this account, select the first one or the one from URL params
       if (reports && reports.length > 0) {
-        setReportId(reports[0].id);
+        const reportIdFromUrl = searchParams.get('reportId');
+        if (reportIdFromUrl && reports.find(r => r.id === reportIdFromUrl)) {
+          setReportId(reportIdFromUrl);
+        } else {
+          setReportId(reports[0].id);
+        }
       }
       
       setIsLoading(false);

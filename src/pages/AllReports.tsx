@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { PerformanceTable } from "@/components/PerformanceTable";
@@ -18,9 +18,11 @@ interface Report {
 
 export default function AllReports() {
   const navigate = useNavigate();
+  const { accountId } = useParams<{ accountId?: string }>();
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reports, setReports] = useState<Report[]>([]);
+  const [account, setAccount] = useState<{ id: string; name: string } | null>(null);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   
   // Filter state for each report - using reportId as key
@@ -59,10 +61,10 @@ export default function AllReports() {
     compareDateRange: undefined,
   });
 
-  // Load user session and reports on mount
+  // Load user session and reports on mount and when accountId changes
   useEffect(() => {
     checkAuth();
-  }, []);
+  }, [accountId]);
 
   const checkAuth = async () => {
     try {
@@ -77,11 +79,43 @@ export default function AllReports() {
       
       setSession(session);
       
-      // Load user's reports
-      const { data: reports, error: reportsError } = await supabase
+      // Load account if accountId is provided
+      if (accountId) {
+        const { data: accountData, error: accountError } = await supabase
+          .from('accounts')
+          .select('id, name')
+          .eq('id', accountId)
+          .eq('user_id', session.user.id)
+          .single();
+        
+        if (accountError) {
+          console.error('Error loading account:', accountError);
+          toast({
+            title: "Error",
+            description: "Account not found. Redirecting...",
+            variant: "destructive",
+          });
+          navigate('/');
+          return;
+        }
+        
+        if (accountData) {
+          setAccount(accountData);
+        }
+      }
+      
+      // Load user's reports, filtered by accountId if provided
+      let reportsQuery = supabase
         .from('reports')
         .select('*')
-        .eq('user_id', session.user.id)
+        .eq('user_id', session.user.id);
+      
+      // Filter by account if accountId is provided
+      if (accountId) {
+        reportsQuery = reportsQuery.eq('account_id', accountId);
+      }
+      
+      const { data: reports, error: reportsError } = await reportsQuery
         .order('created_at', { ascending: false });
 
       if (reportsError) throw reportsError;
@@ -95,6 +129,12 @@ export default function AllReports() {
           initialFilters[report.id] = getDefaultFilters();
         });
         setReportFilters(initialFilters);
+      } else if (accountId && reports && reports.length === 0) {
+        // If accountId is provided but no reports found, show message
+        toast({
+          title: "No Reports",
+          description: `No reports found for this account.`,
+        });
       }
       
     } catch (error) {
@@ -159,11 +199,23 @@ export default function AllReports() {
       
       <DashboardHeader 
         reportId={null} // No single report selected in consolidated view
-        onReportChange={() => {}} // Not applicable for consolidated view
+        accountId={accountId || undefined}
+        onReportChange={(selectedReportId) => {
+          // Navigate back to individual report view
+          if (accountId) {
+            navigate(`/tools/report/${accountId}?reportId=${selectedReportId}`);
+          } else {
+            // If no accountId, try to find the report's account_id
+            const selectedReport = reports.find(r => r.id === selectedReportId);
+            if (selectedReport?.account_id) {
+              navigate(`/tools/report/${selectedReport.account_id}?reportId=${selectedReportId}`);
+            }
+          }
+        }}
         session={session}
         onSignOut={handleSignOut}
-        onRefresh={refreshData}
-        title="All Reports" // Custom title for consolidated view
+        onRefreshData={refreshData}
+        // Don't set title so dropdown shows
       />
       
       {reports.length > 0 ? (
@@ -183,7 +235,7 @@ export default function AllReports() {
                 reportId={report.id} 
                 onFiltersChange={(filters) => handleFiltersChange(report.id, filters)}
                 isSharedView={false} 
-                accountId={report.account_id || undefined}
+                accountId={accountId || report.account_id || undefined}
                 refreshTrigger={loadingGeneration} 
               />
               
@@ -192,7 +244,7 @@ export default function AllReports() {
                 reportId={report.id} 
                 filters={reportFilters[report.id] || getDefaultFilters()} 
                 isSharedView={false}
-                accountId={report.account_id || undefined}
+                accountId={accountId || report.account_id || undefined}
                 onFiltersChange={(filters) => handleFiltersChange(report.id, filters)}
                 key={`table-${report.id}-${loadingGeneration}`}
                 onLoadingComplete={() => markComponentLoaded(`table-${report.id}`)}
@@ -206,7 +258,9 @@ export default function AllReports() {
           <div className="text-center py-12">
             <h2 className="text-2xl font-bold mb-4">No Reports Found</h2>
             <p className="text-muted-foreground mb-6">
-              You don't have any reports yet. Create your first report to get started.
+              {accountId 
+                ? `No reports found for ${account?.name || 'this account'}. Create a report to get started.`
+                : "You don't have any reports yet. Create your first report to get started."}
             </p>
           </div>
         </main>

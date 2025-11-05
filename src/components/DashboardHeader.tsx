@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, ChevronDown, Pencil, Database, Grid3x3 } from "lucide-react";
 import { DataSourceModal } from "./DataSourceModal";
@@ -59,6 +60,9 @@ interface DashboardHeaderProps {
 
 export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSync, onRefreshData, onVisibilityChange, session, onSignOut, isSharedView, title }: DashboardHeaderProps) => {
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isAllReportsPage = location.pathname.startsWith('/all-reports');
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
@@ -78,6 +82,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const [lastUpdateDate, setLastUpdateDate] = useState<string | null>(null);
   const [totalRows, setTotalRows] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   // Load reports on mount and when accountId changes
   useEffect(() => {
@@ -608,21 +613,41 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
     <>
       <header className="border-b bg-card px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {title ? (
+          {title && !isAllReportsPage ? (
             <h1 className="text-2xl font-bold text-foreground">{title}</h1>
           ) : (
-            <DropdownMenu>
+            <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="gap-2">
-                  {currentReport?.name || "Select Report"} <ChevronDown className="h-4 w-4" />
+                  {currentReport?.name || (isAllReportsPage ? "All Reports" : "Select Report")} <ChevronDown className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-80 bg-background z-50">
+              <DropdownMenuItem 
+                className={`text-primary font-semibold ${!reportId || isAllReportsPage ? 'bg-accent' : ''}`}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  if (accountId) {
+                    navigate(`/all-reports/${accountId}`);
+                  } else {
+                    navigate('/all-reports');
+                  }
+                }}
+              >
+                <Grid3x3 className="h-4 w-4 mr-2" />
+                All Reports
+              </DropdownMenuItem>
+              {reports.length > 0 && <DropdownMenuSeparator />}
               {reports.map((report) => (
                 <DropdownMenuItem 
                   key={report.id}
-                  className={`justify-between group ${report.is_shared ? 'flex-col items-start' : ''}`}
-                  onSelect={(e) => e.preventDefault()}
+                  className={`justify-between group ${report.is_shared ? 'flex-col items-start' : ''} ${reportId === report.id ? 'bg-accent' : ''}`}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setCurrentReport(report);
+                    onReportChange(report.id);
+                    setDropdownOpen(false);
+                  }}
                 >
                   <div className="flex items-center justify-between w-full">
                     <span 
@@ -630,6 +655,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
                       onClick={() => {
                         setCurrentReport(report);
                         onReportChange(report.id);
+                        setDropdownOpen(false);
                       }}
                     >
                       {report.name}
