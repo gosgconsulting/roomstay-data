@@ -19,6 +19,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Pagination,
   PaginationContent,
@@ -1977,8 +1978,27 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
               {isSharedView ? "No data available" : "Right-click on \"Group by\" to select dimensions"}
             </div>
           ) : isLoadingData ? (
-            <div className="py-8 text-center text-muted-foreground">
-              Loading data...
+            <div className="space-y-4">
+              {/* Table header skeleton */}
+              <div className="overflow-x-auto">
+                <div className="flex gap-4 border-b pb-3">
+                  <Skeleton className="h-6 w-32" />
+                  {[...Array(5)].map((_, i) => (
+                    <Skeleton key={i} className="h-6 w-24" />
+                  ))}
+                </div>
+              </div>
+              {/* Table rows skeleton */}
+              <div className="space-y-3">
+                {[...Array(8)].map((_, i) => (
+                  <div key={i} className="flex gap-4 items-center">
+                    <Skeleton className="h-5 w-40" />
+                    {[...Array(5)].map((_, j) => (
+                      <Skeleton key={j} className="h-5 w-24" />
+                    ))}
+                  </div>
+                ))}
+              </div>
             </div>
           ) : tableData.length === 0 && !isLoadingData ? (
             <div className="py-8 text-center text-muted-foreground">
