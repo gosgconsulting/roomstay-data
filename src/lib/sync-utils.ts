@@ -43,43 +43,113 @@ export const extractSpreadsheetId = (url: string): string | null => {
   return match ? match[1] : null;
 };
 
-// Date parsing utility
-export const parseDate = (value: any, dateFormat: string): Date | null => {
+// Enhanced date parsing utility with auto-detection
+export const parseDate = (value: any, dateFormat: string = 'auto-detect'): Date | null => {
   if (value === null || value === undefined || value === '') return null;
   
   const stringValue = String(value).trim();
   if (!stringValue) return null;
   
   try {
-    // If already a Date object or ISO string, parse directly
+    // If already a Date object, return it
     if (value instanceof Date) return value;
+    
+    // Auto-detect common date formats if no specific format provided
+    if (dateFormat === 'auto-detect') {
+      // Try YYYY-MM-DD format first (ISO format, most common in exports)
+      if (stringValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const parts = stringValue.split('-');
+        if (parts.length === 3) {
+          const [year, month, day] = parts;
+          const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          if (!isNaN(date.getTime())) {
+            console.log(`[SYNC] Auto-detected YYYY-MM-DD format: ${stringValue} -> ${date.toISOString().split('T')[0]}`);
+            return date;
+          }
+        }
+      }
+      
+      // Try MM/DD/YYYY format
+      if (stringValue.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+        const parts = stringValue.split('/');
+        if (parts.length === 3) {
+          const [month, day, year] = parts;
+          const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          if (!isNaN(date.getTime())) {
+            console.log(`[SYNC] Auto-detected MM/DD/YYYY format: ${stringValue} -> ${date.toISOString().split('T')[0]}`);
+            return date;
+          }
+        }
+      }
+      
+      // Try DD/MM/YYYY format
+      if (stringValue.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+        const parts = stringValue.split('/');
+        if (parts.length === 3) {
+          const [day, month, year] = parts;
+          // Only try this if day > 12 (to distinguish from MM/DD/YYYY)
+          if (parseInt(day) > 12) {
+            const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+            if (!isNaN(date.getTime())) {
+              console.log(`[SYNC] Auto-detected DD/MM/YYYY format: ${stringValue} -> ${date.toISOString().split('T')[0]}`);
+              return date;
+            }
+          }
+        }
+      }
+    }
+    
+    // Handle ISO string with time
     if (stringValue.includes('T') || stringValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
       const parsed = new Date(stringValue);
       if (!isNaN(parsed.getTime())) return parsed;
     }
     
-    // Parse based on format
-    let parts: string[] = [];
-    if (dateFormat === 'yyyy-mm-dd') {
-      // Try YYYY-MM-DD or YYYY/MM/DD
-      parts = stringValue.split(/[-/]/);
-      if (parts.length === 3 && parts[0].length === 4) {
-        const [year, month, day] = parts;
-        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    // Handle Excel serial dates (numbers like 44927 for 2023-01-01)
+    const numValue = parseFloat(stringValue);
+    if (!isNaN(numValue) && numValue > 1 && numValue < 100000) {
+      // Excel serial date (days since 1900-01-01, but Excel treats 1900 as leap year)
+      const excelEpoch = new Date(1899, 11, 30); // December 30, 1899
+      const date = new Date(excelEpoch.getTime() + numValue * 24 * 60 * 60 * 1000);
+      if (!isNaN(date.getTime())) {
+        console.log(`[SYNC] Parsed Excel serial date ${numValue} as ${date.toISOString().split('T')[0]}`);
+        return date;
       }
-    } else if (dateFormat === 'dd-mm-yyyy') {
-      // Try DD-MM-YYYY or DD/MM/YYYY
-      parts = stringValue.split(/[-/]/);
-      if (parts.length === 3 && parts[2].length === 4) {
-        const [day, month, year] = parts;
-        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    }
+    
+    // Handle year-only values (like "2023") - treat as January 1st of that year
+    if (/^\d{4}$/.test(stringValue)) {
+      const year = parseInt(stringValue);
+      if (year >= 1900 && year <= 2100) {
+        console.log(`[SYNC] Converting year-only value ${year} to ${year}-01-01`);
+        return new Date(year, 0, 1); // January 1st of that year
       }
-    } else if (dateFormat === 'mm-dd-yyyy') {
-      // Try MM-DD-YYYY or MM/DD/YYYY
-      parts = stringValue.split(/[-/]/);
-      if (parts.length === 3 && parts[2].length === 4) {
-        const [month, day, year] = parts;
-        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    }
+    
+    // Parse based on specific format if provided
+    if (dateFormat !== 'auto-detect') {
+      let parts: string[] = [];
+      if (dateFormat === 'yyyy-mm-dd') {
+        // Try YYYY-MM-DD or YYYY/MM/DD
+        parts = stringValue.split(/[-/]/);
+        if (parts.length === 3 && parts[0].length === 4) {
+          const [year, month, day] = parts;
+          return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+        }
+      } else if (dateFormat === 'dd-mm-yyyy') {
+        // Try DD-MM-YYYY or DD/MM/YYYY
+        parts = stringValue.split(/[-/]/);
+        if (parts.length === 3 && parts[2].length === 4) {
+          const [day, month, year] = parts;
+          return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+        }
+      } else if (dateFormat === 'mm-dd-yyyy') {
+        // Try MM-DD-YYYY or MM/DD/YYYY
+        parts = stringValue.split(/[-/]/);
+        if (parts.length === 3 && parts[2].length === 4) {
+          const [month, day, year] = parts;
+          return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+        }
       }
     }
     
@@ -94,13 +164,16 @@ export const parseDate = (value: any, dateFormat: string): Date | null => {
   }
 };
 
-// Value parsing utility
+// Enhanced value parsing utility with better format detection
 export const parseValue = (value: any, dimensionType: string, dateFormat?: string): any => {
   if (value === null || value === undefined || value === '') return null;
   
-  // For date types, parse with the specified format
-  if (dimensionType === 'date' && dateFormat) {
-    const parsedDate = parseDate(value, dateFormat);
+  const stringValue = String(value).trim();
+  if (!stringValue) return null;
+  
+  // For date types, parse with enhanced detection
+  if (dimensionType === 'date') {
+    const parsedDate = parseDate(value, dateFormat || 'auto-detect');
     if (parsedDate) {
       // Return as ISO string for storage
       return parsedDate.toISOString().split('T')[0]; // YYYY-MM-DD format
@@ -108,11 +181,27 @@ export const parseValue = (value: any, dimensionType: string, dateFormat?: strin
     return null;
   }
   
-  // For numeric types, clean and parse the value
+  // For numeric types, enhanced cleaning and parsing
   if (dimensionType === 'number' || dimensionType === 'currency' || dimensionType === 'percentage') {
-    const stringValue = String(value);
-    // Remove currency symbols ($, €, £, etc.), commas, and spaces
-    const cleanedValue = stringValue.replace(/[$€£¥,\s]/g, '');
+    // Handle percentage values (like "1.76%" or "1.76214537%")
+    if (stringValue.includes('%')) {
+      const percentValue = stringValue.replace(/[%,\s]/g, '');
+      const numValue = parseFloat(percentValue);
+      if (!isNaN(numValue)) {
+        // Store percentage as decimal (1.76% -> 0.0176)
+        return dimensionType === 'percentage' ? numValue / 100 : numValue;
+      }
+    }
+    
+    // Handle currency values (like "$1.64", "$16.47", "€123.45")
+    if (/^[$€£¥₹₽¢]/.test(stringValue) || stringValue.includes('$')) {
+      const cleanedValue = stringValue.replace(/[$€£¥₹₽¢,\s]/g, '');
+      const numValue = parseFloat(cleanedValue);
+      return isNaN(numValue) ? null : numValue;
+    }
+    
+    // Handle regular numbers with commas (like "1,234.56")
+    const cleanedValue = stringValue.replace(/[,\s]/g, '');
     const numValue = parseFloat(cleanedValue);
     return isNaN(numValue) ? null : numValue;
   }
@@ -261,10 +350,84 @@ export const createOrGetDimension = async (
   return newDimension.id;
 };
 
-// Build dimension mapping
-export const buildDimensionMapping = async (
+// Auto-detect data type and format from sample values
+export const autoDetectColumnType = (sampleValues: any[]): { type: string; dateFormat?: string } => {
+  const nonEmptyValues = sampleValues.filter(v => v !== null && v !== undefined && String(v).trim() !== '');
+  if (nonEmptyValues.length === 0) return { type: 'text' };
+  
+  let dateCount = 0;
+  let currencyCount = 0;
+  let percentageCount = 0;
+  let numberCount = 0;
+  
+  for (const value of nonEmptyValues.slice(0, 10)) { // Check first 10 non-empty values
+    const stringValue = String(value).trim();
+    
+    // Check for date patterns
+    if (stringValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      dateCount++;
+    } else if (stringValue.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+      dateCount++;
+    } else if (stringValue.match(/^\d{1,2}-\d{1,2}-\d{4}$/)) {
+      dateCount++;
+    }
+    // Check for currency patterns
+    else if (/^[$€£¥₹₽¢]/.test(stringValue) || stringValue.includes('$')) {
+      currencyCount++;
+    }
+    // Check for percentage patterns
+    else if (stringValue.includes('%')) {
+      percentageCount++;
+    }
+    // Check for number patterns
+    else if (!isNaN(parseFloat(stringValue.replace(/[,\s]/g, '')))) {
+      numberCount++;
+    }
+  }
+  
+  const total = nonEmptyValues.length;
+  
+  // Determine type based on majority (>= 70% threshold)
+  if (dateCount / total >= 0.7) {
+    // Determine date format
+    const firstDateValue = nonEmptyValues.find(v => {
+      const s = String(v).trim();
+      return s.match(/^\d{4}-\d{2}-\d{2}$/) || s.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/) || s.match(/^\d{1,2}-\d{1,2}-\d{4}$/);
+    });
+    
+    if (firstDateValue) {
+      const s = String(firstDateValue).trim();
+      if (s.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return { type: 'date', dateFormat: 'yyyy-mm-dd' };
+      } else if (s.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+        return { type: 'date', dateFormat: 'mm-dd-yyyy' };
+      } else if (s.match(/^\d{1,2}-\d{1,2}-\d{4}$/)) {
+        return { type: 'date', dateFormat: 'dd-mm-yyyy' };
+      }
+    }
+    return { type: 'date', dateFormat: 'yyyy-mm-dd' };
+  }
+  
+  if (currencyCount / total >= 0.7) {
+    return { type: 'currency' };
+  }
+  
+  if (percentageCount / total >= 0.7) {
+    return { type: 'percentage' };
+  }
+  
+  if (numberCount / total >= 0.7) {
+    return { type: 'number' };
+  }
+  
+  return { type: 'text' };
+};
+
+// Enhanced column mapping with auto-detection
+export const buildDimensionMappingWithAutoDetection = async (
   mappings: ColumnMapping[],
   headers: string[],
+  sampleDataRows: any[][],
   userId: string,
   reportId: string,
   dataSourceId: string,
@@ -275,7 +438,7 @@ export const buildDimensionMapping = async (
   const visibleMappings = mappings.filter(m => m.visible);
   let createdCount = 0;
   
-  console.log(`[SYNC] Processing ${visibleMappings.length} visible column mappings`);
+  console.log(`[SYNC] Processing ${visibleMappings.length} visible column mappings with auto-detection`);
   
   // Create normalized header map for case-insensitive matching
   const normalizedHeaderMap = new Map<string, number>();
@@ -288,7 +451,7 @@ export const buildDimensionMapping = async (
     }
   });
 
-  // Process each mapping
+  // Process each mapping with auto-detection
   for (const mapping of visibleMappings) {
     // Find column index
     let colIndex = headers.indexOf(mapping.column);
@@ -298,8 +461,24 @@ export const buildDimensionMapping = async (
     }
     
     if (colIndex !== -1) {
+      // Get sample values for this column
+      const sampleValues = sampleDataRows.map(row => row && row[colIndex]).filter(v => v !== null && v !== undefined);
+      
+      // Auto-detect type if not properly set or if it's create_new
+      let finalMapping = { ...mapping };
+      if (mapping.dimensionId === 'create_new' || !mapping.dimensionType || mapping.dimensionType === 'text') {
+        const detected = autoDetectColumnType(sampleValues);
+        console.log(`[SYNC] Auto-detected type for column "${mapping.column}": ${detected.type}${detected.dateFormat ? ` (${detected.dateFormat})` : ''}`);
+        
+        finalMapping.newDimensionType = detected.type;
+        finalMapping.dimensionType = detected.type;
+        if (detected.dateFormat) {
+          finalMapping.dateFormat = detected.dateFormat;
+        }
+      }
+      
       // Get or create dimension
-      const dimensionId = await createOrGetDimension(mapping, userId, reportId, dataSourceId);
+      const dimensionId = await createOrGetDimension(finalMapping, userId, reportId, dataSourceId);
       
       if (dimensionId) {
         dimensionIdMap[mapping.column] = dimensionId;
@@ -315,6 +494,19 @@ export const buildDimensionMapping = async (
   
   console.log(`[SYNC] Successfully mapped ${Object.keys(dimensionIdMap).length} columns to dimensions`);
   return { dimensionIdMap, columnIndexMap, createdCount };
+};
+
+// Build dimension mapping (legacy function for compatibility)
+export const buildDimensionMapping = async (
+  mappings: ColumnMapping[],
+  headers: string[],
+  userId: string,
+  reportId: string,
+  dataSourceId: string,
+  recreateDimensions: boolean = false
+): Promise<{ dimensionIdMap: Record<string, string>; columnIndexMap: Record<string, number>; createdCount: number }> => {
+  // Use the enhanced version with empty sample data
+  return buildDimensionMappingWithAutoDetection(mappings, headers, [], userId, reportId, dataSourceId, recreateDimensions);
 };
 
 // Transform data rows
@@ -346,6 +538,13 @@ export const transformDataRows = (
         
         if (value !== null) {
           dimensionValues[dimensionIdMap[mapping.column]] = value;
+          
+          // Debug logging for date and currency values
+          if (index < 3) { // Log first 3 rows
+            if (dimensionType === 'date' || dimensionType === 'currency') {
+              console.log(`[SYNC] Row ${index + 1} - ${mapping.column} (${dimensionType}): "${rawValue}" -> "${value}"`);
+            }
+          }
         }
       }
     });
@@ -481,6 +680,59 @@ export const detectNewColumns = async (
   return { newColumns, updatedMappings };
 };
 
+// Fix problematic column mappings (remove create_new, none, etc.)
+export const fixColumnMappings = async (dataSourceId: string): Promise<void> => {
+  console.log(`[SYNC] Fixing problematic column mappings for data source: ${dataSourceId}`);
+  
+  const { data: dataSource, error: fetchError } = await supabase
+    .from('data_sources')
+    .select('column_mappings')
+    .eq('id', dataSourceId)
+    .single();
+    
+  if (fetchError || !dataSource) {
+    console.warn(`[SYNC] Could not fetch data source for mapping fix:`, fetchError);
+    return;
+  }
+  
+  const mappings = dataSource.column_mappings || [];
+  let hasChanges = false;
+  
+  const fixedMappings = mappings.map((mapping: any) => {
+    let fixed = { ...mapping };
+    
+    // Fix create_new mappings that weren't properly resolved
+    if (mapping.dimensionId === 'create_new') {
+      console.log(`[SYNC] Fixing create_new mapping for column: ${mapping.column}`);
+      fixed.dimensionId = 'none'; // Will be auto-detected during sync
+      fixed.newDimensionName = undefined;
+      fixed.newDimensionType = undefined;
+      hasChanges = true;
+    }
+    
+    // Fix null dimensionId
+    if (mapping.dimensionId === null) {
+      fixed.dimensionId = 'none';
+      hasChanges = true;
+    }
+    
+    return fixed;
+  });
+  
+  if (hasChanges) {
+    const { error: updateError } = await supabase
+      .from('data_sources')
+      .update({ column_mappings: fixedMappings })
+      .eq('id', dataSourceId);
+      
+    if (updateError) {
+      console.warn(`[SYNC] Could not update fixed mappings:`, updateError);
+    } else {
+      console.log(`[SYNC] Fixed column mappings for data source: ${dataSourceId}`);
+    }
+  }
+};
+
 // Main sync function
 export const syncDataSource = async (
   dataSource: DataSource,
@@ -513,7 +765,10 @@ export const syncDataSource = async (
 
     console.log(`[SYNC] Starting sync for data source: ${dataSource.name}`);
     
-    // Step 1: Delete existing data if requested
+    // Step 1: Fix problematic column mappings
+    await fixColumnMappings(dataSource.id);
+    
+    // Step 2: Delete existing data if requested
     if (shouldDeleteData) {
       await deleteExistingData(dataSource.id);
       
@@ -522,7 +777,7 @@ export const syncDataSource = async (
       }
     }
 
-    // Step 2: Fetch headers
+    // Step 3: Fetch headers
     const headerRange = `A${dataSource.header_row}:Z${dataSource.header_row}`;
     const headerData = await fetchGoogleSheetsData(
       dataSource.spreadsheet_id,
@@ -534,7 +789,7 @@ export const syncDataSource = async (
       h === null || h === undefined ? '' : String(h).trim()
     );
 
-    // Step 3: Fetch all data
+    // Step 4: Fetch all data
     const dataRange = `A${dataSource.header_row + 1}:Z`;
     const allData = await fetchGoogleSheetsData(
       dataSource.spreadsheet_id,
@@ -542,17 +797,21 @@ export const syncDataSource = async (
       dataRange
     );
 
-    // Step 4: Build dimension mapping
-    const { dimensionIdMap, columnIndexMap, createdCount } = await buildDimensionMapping(
+    // Step 5: Build dimension mapping with auto-detection
+    // Use first 10 rows as sample data for auto-detection
+    const sampleData = allData.slice(0, 10);
+    
+    const { dimensionIdMap, columnIndexMap, createdCount } = await buildDimensionMappingWithAutoDetection(
       dataSource.column_mappings || [],
       headers,
+      sampleData,
       user.id,
       reportId,
       dataSource.id,
       recreateDimensions
     );
 
-    // Step 5: Transform data
+    // Step 6: Transform data
     const rowsToInsert = transformDataRows(
       allData,
       dataSource.column_mappings || [],
@@ -562,10 +821,10 @@ export const syncDataSource = async (
       dataSource.id
     );
 
-    // Step 6: Insert data
+    // Step 7: Insert data
     await insertDataInBatches(rowsToInsert, onProgress);
 
-    // Step 7: Update column mappings if dimensions were created
+    // Step 8: Update column mappings if dimensions were created
     if (createdCount > 0) {
       await updateColumnMappings(dataSource.id, dataSource.column_mappings || [], dimensionIdMap);
     }

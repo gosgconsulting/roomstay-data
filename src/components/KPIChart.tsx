@@ -234,8 +234,8 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
         console.log('[CHART] Date dimension:', dateDimension);
 
         // Implement more efficient data fetching - LOAD LATEST DATA FIRST
-        const CHUNK_SIZE = 1000; // Optimized chunk size
-        const MAX_ROWS = 15000; // Limit to prevent performance issues
+                  const CHUNK_SIZE = 2000; // Larger chunk size to reduce number of requests
+        const MAX_ROWS = 50000; // Balanced limit to prevent timeouts while handling large datasets
         let allDimensionData: DimensionData[] = [];
         let offset = 0;
         let hasMore = true;

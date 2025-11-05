@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.77.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -26,8 +27,16 @@ interface PerformanceDataRequest {
 }
 
 Deno.serve(async (req) => {
+  // Handle CORS preflight requests immediately - MUST be first
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    console.log('[CORS] Handling OPTIONS preflight request');
+    return new Response('ok', { 
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        'Content-Length': '2'
+      }
+    });
   }
 
   try {
@@ -375,6 +384,27 @@ Deno.serve(async (req) => {
       // Helper function to format date based on granularity
       const formatDateByGranularity = (dateStr: string, granularity: string): { key: string; display: string } => {
         try {
+          // Handle year-only values (like "2023")
+          if (/^\d{4}$/.test(String(dateStr).trim())) {
+            const year = parseInt(String(dateStr));
+            if (year >= 1900 && year <= 2100) {
+              // Create a date for the year (January 1st)
+              const date = new Date(year, 0, 1);
+              
+              switch (granularity) {
+                case 'day':
+                  return { key: `${year}-01-01`, display: `January 1, ${year}` };
+                case 'week':
+                  return { key: `${year}-W01`, display: `Week 1, ${year}` };
+                case 'month':
+                  return { key: `${year}-01`, display: `January ${year}` };
+                case 'year':
+                default:
+                  return { key: String(year), display: String(year) };
+              }
+            }
+          }
+          
           // Parse date using helper function
           const date = parseDateValue(dateStr);
           if (!date) {
@@ -422,11 +452,14 @@ Deno.serve(async (req) => {
 
     // Group data by the first group dimension
     const groupDimId = groupByDims[0];
+    const breakdownDims = breakdownByDims || [];
+    const thenByDims = thenByDims || [];
+    
     if (!groupDimId) {
       return new Response(
         JSON.stringify({
-          rows: [],
-          totalCount: 0,
+          data: [],
+          total: 0,
           hasMore: false,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -885,17 +918,17 @@ Deno.serve(async (req) => {
     }
 
     const response = {
-      rows: groupedArray,
+      data: groupedArray,
+      total: filteredData.length,
       totalData,
       totalCompareData: Object.keys(totalCompareData).length > 0 ? totalCompareData : undefined,
       totalChangeData: Object.keys(totalChangeData).length > 0 ? totalChangeData : undefined,
-      totalCount: filteredData.length,
       hasMore: offset + limit < filteredData.length,
     };
 
     console.log('get-performance-data: Response prepared', {
       rowCount: groupedArray.length,
-      totalCount: filteredData.length,
+      total: filteredData.length,
       hasMore: response.hasMore,
     });
 

@@ -9,6 +9,7 @@ import ReportDashboard from "./pages/ReportDashboard";
 import Auth from "./pages/Auth";
 import SharedReport from "./pages/SharedReport";
 import NotFound from "./pages/NotFound";
+import AllReports from "./pages/AllReports";
 
 const queryClient = new QueryClient();
 
@@ -19,7 +20,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Landing />} />
+          <Route path="/" element={<AllReports />} />
+          <Route path="/landing" element={<Landing />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/tools/report" element={<ReportTool />} />
           <Route path="/tools/report/:accountId" element={<ReportDashboard />} />

@@ -54,9 +54,10 @@ interface DashboardHeaderProps {
   session?: Session | null;
   onSignOut?: () => Promise<void>;
   isSharedView?: boolean;
+  title?: string; // Custom title for consolidated views
 }
 
-export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSync, onRefreshData, onVisibilityChange }: DashboardHeaderProps) => {
+export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSync, onRefreshData, onVisibilityChange, session, onSignOut, isSharedView, title }: DashboardHeaderProps) => {
   const { toast } = useToast();
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
@@ -607,12 +608,15 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
     <>
       <header className="border-b bg-card px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-2">
-                {currentReport?.name || "Select Report"} <ChevronDown className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
+          {title ? (
+            <h1 className="text-2xl font-bold text-foreground">{title}</h1>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  {currentReport?.name || "Select Report"} <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-80 bg-background z-50">
               {reports.map((report) => (
                 <DropdownMenuItem 
@@ -678,6 +682,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          )}
 
           <Button
             variant="outline"

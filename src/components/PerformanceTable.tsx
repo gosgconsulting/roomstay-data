@@ -206,6 +206,26 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     }
   }, [reportId, dimensions.length]);
 
+  // Auto-select Date dimension if no grouping is set and dimensions are loaded
+  useEffect(() => {
+    if (dimensions.length > 0 && groupByDimensions.length === 0 && !isLoadingDimensions && tableViews.length > 0) {
+      console.log('[testing] Auto-selecting default grouping dimension');
+      const dateDimension = dimensions.find(d => d.type === 'date');
+      const textDimension = dimensions.find(d => d.type === 'text');
+      
+      if (dateDimension) {
+        setGroupByDimensions([dateDimension.id]);
+        console.log('[testing] Auto-selected Date dimension for grouping:', dateDimension.name);
+      } else if (textDimension) {
+        setGroupByDimensions([textDimension.id]);
+        console.log('[testing] Auto-selected text dimension for grouping:', textDimension.name);
+      } else if (dimensions.length > 0) {
+        setGroupByDimensions([dimensions[0].id]);
+        console.log('[testing] Auto-selected first dimension for grouping:', dimensions[0].name);
+      }
+    }
+  }, [dimensions.length, groupByDimensions.length, isLoadingDimensions, tableViews.length]);
+
   // Re-check data sources when refresh is triggered (after sync completes)
   useEffect(() => {
     if (reportId && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
@@ -430,15 +450,24 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     // Load saved settings
     let groupDimensions = view.group_by_dimensions || [];
     
-    // If no grouping dimension is set and dimensions are available, set a default
-    if (groupDimensions.length === 0 && dimensions.length > 0) {
-      // Find a suitable text dimension for grouping (like Hotel, Channel, etc.)
-      const textDimension = dimensions.find(d => d.type === 'text');
-      if (textDimension) {
-        groupDimensions = [textDimension.id];
-        console.log('Auto-selected grouping dimension:', textDimension.name);
+          // If no grouping dimension is set and dimensions are available, set a default
+      if (groupDimensions.length === 0 && dimensions.length > 0) {
+        // Find a suitable dimension for grouping - prefer Date first, then text dimensions
+        const dateDimension = dimensions.find(d => d.type === 'date');
+        const textDimension = dimensions.find(d => d.type === 'text');
+        
+        if (dateDimension) {
+          groupDimensions = [dateDimension.id];
+          console.log('Auto-selected Date dimension for grouping:', dateDimension.name);
+        } else if (textDimension) {
+          groupDimensions = [textDimension.id];
+          console.log('Auto-selected text dimension for grouping:', textDimension.name);
+        } else {
+          // Fallback to first available dimension
+          groupDimensions = [dimensions[0].id];
+          console.log('Auto-selected first available dimension for grouping:', dimensions[0].name);
+        }
       }
-    }
     
     setGroupByDimensions(groupDimensions);
     setBreakdownByDimensions(view.breakdown_by_dimensions || []);
@@ -1008,29 +1037,109 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         },
       });
 
-      if (error) {
-        console.error('[testing] Error loading performance data:', error);
-        toast({
-          title: "Error loading data",
-          description: "Failed to load performance table data.",
-          variant: "destructive",
-        });
-        return;
-      }
+              if (error) {
+          console.error('[testing] Error loading performance data:', error);
+          console.error('[testing] Error details:', {
+            message: error.message,
+            status: error.status,
+            details: error.details
+          });
+          toast({
+            title: "Error loading data",
+            description: `Failed to load performance table data: ${error.message || 'Unknown error'}`,
+            variant: "destructive",
+          });
+          return;
+        }
 
       console.log('[testing] Performance data response:', {
         hasData: !!data,
-        rowsCount: data?.rows?.length || 0,
-        totalData: !!data?.totalData,
+        rowsCount: data?.data?.length || 0,
+        total: data?.total || 0,
+        hasMore: data?.hasMore,
         error: error
       });
 
-      setTableData(data.rows || []);
-      setTotalData(data.totalData || {});
-      setTotalCompareData(data.totalCompareData || {});
-      setTotalChangeData(data.totalChangeData || {});
+      // The edge function returns { data: [...], total: ..., totalData: {...}, hasMore: ... }
+      const rows = data?.data || [];
+      setTableData(rows);
+      
+      // Use totalData from edge function if available (more efficient than recalculating)
+      const finalTotalData = data?.totalData || (() => {
+        // Fallback: Calculate total data from all rows if edge function doesn't provide it
+        const calculatedTotalData: Record<string, any> = {};
+        if (rows.length > 0 && dimensions.length > 0) {
+          rows.forEach((row: any) => {
+            if (row.data) {
+              Object.keys(row.data).forEach((dimName: string) => {
+                const dim = dimensions.find(d => d.name === dimName);
+                if (dim && (dim.type === 'number' || dim.type === 'currency')) {
+                  calculatedTotalData[dimName] = (calculatedTotalData[dimName] || 0) + (parseFloat(row.data[dimName]) || 0);
+                }
+              });
+            }
+          });
+        }
+        return calculatedTotalData;
+      })();
+      setTotalData(finalTotalData);
+      
+      // Use totalCompareData from edge function if available
+      const finalCompareData = data?.totalCompareData || (() => {
+        // Fallback: Calculate comparison totals from rows if not provided
+        const calculatedCompareData: Record<string, any> = {};
+        if (rows.length > 0 && dimensions.length > 0) {
+          rows.forEach((row: any) => {
+            if (row.compareData) {
+              Object.keys(row.compareData).forEach((dimName: string) => {
+                const dim = dimensions.find(d => d.name === dimName);
+                if (dim && (dim.type === 'number' || dim.type === 'currency')) {
+                  calculatedCompareData[dimName] = (calculatedCompareData[dimName] || 0) + (parseFloat(row.compareData[dimName]) || 0);
+                }
+              });
+            }
+          });
+        }
+        return calculatedCompareData;
+      })();
+      setTotalCompareData(finalCompareData);
+      
+      // Use totalChangeData from edge function if available
+      const finalChangeData = data?.totalChangeData || (() => {
+        // Fallback: Calculate change data from totals
+        const calculatedChangeData: Record<string, any> = {};
+        
+        // Use all dimensions to ensure we calculate change for all metrics
+        const allDimNames = new Set<string>();
+        Object.keys(finalTotalData).forEach(k => allDimNames.add(k));
+        Object.keys(finalCompareData).forEach(k => allDimNames.add(k));
+        
+        allDimNames.forEach((dimName: string) => {
+          const current = finalTotalData[dimName] || 0;
+          const previous = finalCompareData[dimName] || 0;
+          if (previous !== 0) {
+            calculatedChangeData[dimName] = ((current - previous) / previous) * 100;
+          } else if (current !== 0) {
+            calculatedChangeData[dimName] = current > 0 ? 100 : -100;
+          } else {
+            calculatedChangeData[dimName] = 0;
+          }
+        });
+        return calculatedChangeData;
+      })();
+      setTotalChangeData(finalChangeData);
     } catch (error) {
-      console.error('Error loading performance data:', error);
+      console.error('[testing] Error loading performance data:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast({
+        title: "Error loading data",
+        description: `Failed to load performance table data: ${errorMessage}`,
+        variant: "destructive",
+      });
+      setTableData([]);
+      setTotalData({});
+      setTotalCompareData({});
+      setTotalChangeData({});
     } finally {
       setIsLoadingData(false);
       onLoadingComplete?.();
