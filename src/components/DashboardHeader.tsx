@@ -615,13 +615,11 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
         <div className="flex items-center gap-3">
           {title && !isAllReportsPage ? (
             <h1 className="text-2xl font-bold text-foreground">{title}</h1>
-          ) : isAllReportsPage ? (
-            <h1 className="text-2xl font-bold text-foreground">All Reports</h1>
           ) : (
             <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="gap-2">
-                  {currentReport?.name || (isAllReportsPage ? "All Reports" : "Select Report")} <ChevronDown className="h-4 w-4" />
+                  {isAllReportsPage ? "All Reports" : (currentReport?.name || "Select Report")} <ChevronDown className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-80 bg-background z-50">
