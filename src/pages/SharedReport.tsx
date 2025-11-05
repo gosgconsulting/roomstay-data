@@ -119,7 +119,8 @@ export default function SharedReport() {
   const initializeReport = async (linkData: any) => {
     console.log('[testing] SharedReport - Initializing report with data:', linkData);
     
-    // Set the first report ID from the shared link
+    // For shared links with multiple reports, set reportId to null to show "All Reports" view
+    // For single report links, set the specific reportId
     if (linkData.report_ids && linkData.report_ids.length > 0) {
       // Cancel previous loading by incrementing generation
       setLoadingGeneration(prev => prev + 1);
@@ -128,12 +129,17 @@ export default function SharedReport() {
       setLoadingComponents(new Set());
       setIsDataLoading(false);
       
-      // Mark components as loading
-      markComponentLoading('metrics');
-      markComponentLoading('chart');
-      markComponentLoading('table');
-      
-      setReportId(linkData.report_ids[0]);
+      if (linkData.report_ids.length === 1) {
+        // Single report - show traditional view
+        markComponentLoading('metrics');
+        markComponentLoading('chart');
+        markComponentLoading('table');
+        setReportId(linkData.report_ids[0]);
+      } else {
+        // Multiple reports - show "All Reports" view
+        console.log('[testing] SharedReport - Multiple reports shared, showing All Reports view');
+        setReportId(null); // null reportId triggers All Reports view in DashboardHeader
+      }
       
       // Load account information if account_id is available
       if (linkData.account_id) {
@@ -248,13 +254,13 @@ export default function SharedReport() {
     );
   }
 
-  // If authenticated but no report loaded yet, show loading
-  if (!reportId) {
+  // If authenticated but no account loaded yet (for multi-report shares), show loading
+  if (authenticated && !account && shareLink?.account_id) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          <p className="text-sm text-muted-foreground">Loading report...</p>
+          <p className="text-sm text-muted-foreground">Loading reports...</p>
         </div>
       </div>
     );

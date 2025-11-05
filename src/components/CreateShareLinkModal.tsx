@@ -5,8 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface CreateShareLinkModalProps {
   open: boolean;
@@ -41,20 +39,18 @@ export const CreateShareLinkModal = ({
 
   useEffect(() => {
     if (open) {
-      loadReports();
+      loadReportsAndAutoSelect();
       if (editingLink) {
         setSlug(editingLink.slug);
-        setSelectedReports(editingLink.report_ids);
         setPassword(""); // Don't show existing password
       } else {
         setSlug("");
         setPassword("");
-        setSelectedReports([]);
       }
     }
   }, [open, editingLink, accountId]);
 
-  const loadReports = async () => {
+  const loadReportsAndAutoSelect = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -70,11 +66,17 @@ export const CreateShareLinkModal = ({
     let allReports: Report[] = [];
 
     if (isMaster) {
-      // Master account: Load ALL reports
-      const { data, error } = await supabase
+      // Master account: Load ALL reports for the account
+      let query = supabase
         .from("reports")
-        .select("id, name")
-        .order("name");
+        .select("id, name");
+
+      // Filter by account if provided
+      if (accountId) {
+        query = query.eq("account_id", accountId);
+      }
+
+      const { data, error } = await query.order("name");
 
       if (error) {
         console.error("Error loading reports:", error);
@@ -83,14 +85,13 @@ export const CreateShareLinkModal = ({
 
       allReports = data || [];
     } else {
-      // Regular user: Load own reports and shared reports for this account
-      // Get own reports for this account
+      // Regular user: Load own reports for this account only
       let query = supabase
         .from("reports")
         .select("id, name")
         .eq("user_id", user.id);
 
-      // Filter by account if provided
+      // Filter by account if provided (required for regular users)
       if (accountId) {
         query = query.eq("account_id", accountId);
       }
@@ -102,41 +103,19 @@ export const CreateShareLinkModal = ({
         return;
       }
 
-      // Get shared reports for this account
-      let sharedQuery = supabase
-        .from("report_shares")
-        .select("report_id, reports!inner(id, name)")
-        .eq("shared_with_email", profile?.email || "");
-
-      // Filter by account if provided
-      if (accountId) {
-        sharedQuery = sharedQuery.eq("reports.account_id", accountId);
-      }
-
-      const { data: sharedReports, error: sharedError } = await sharedQuery;
-
-      if (sharedError) {
-        console.error("Error loading shared reports:", sharedError);
-      }
-
-      // Combine and deduplicate
-      const ownReportsList = ownReports || [];
-      const sharedReportsList = sharedReports?.map(sr => ({
-        id: sr.reports.id,
-        name: sr.reports.name,
-      })) || [];
-
-      const reportMap = new Map<string, Report>();
-      [...ownReportsList, ...sharedReportsList].forEach(report => {
-        reportMap.set(report.id, report);
-      });
-
-      allReports = Array.from(reportMap.values()).sort((a, b) => 
-        a.name.localeCompare(b.name)
-      );
+      allReports = ownReports || [];
     }
 
     setReports(allReports);
+    
+    // Automatically select all reports from this account
+    const allReportIds = allReports.map(r => r.id);
+    setSelectedReports(allReportIds);
+    
+    console.log('[SHARE] Auto-selected all reports for account:', {
+      accountId,
+      reportCount: allReportIds.length
+    });
   };
 
   const validateSlug = (value: string) => {
@@ -150,13 +129,7 @@ export const CreateShareLinkModal = ({
     }
   };
 
-  const toggleReport = (reportId: string) => {
-    setSelectedReports(prev => 
-      prev.includes(reportId)
-        ? prev.filter(id => id !== reportId)
-        : [...prev, reportId]
-    );
-  };
+
 
   const handleSubmit = async () => {
     if (!slug.trim()) {
@@ -197,8 +170,8 @@ export const CreateShareLinkModal = ({
 
     if (selectedReports.length === 0) {
       toast({
-        title: "No reports selected",
-        description: "Please select at least one report",
+        title: "No reports available",
+        description: "No reports found for this account. Please create a report first.",
         variant: "destructive",
       });
       return;
@@ -292,8 +265,8 @@ export const CreateShareLinkModal = ({
           </DialogTitle>
           <DialogDescription>
             {editingLink 
-              ? "Update the reports and password for this share link"
-              : "Create a password-protected link to share your reports publicly"
+              ? "Update the password for this share link. All reports from this account will be shared."
+              : "Create a password-protected link to share all reports from this account publicly"
             }
           </DialogDescription>
         </DialogHeader>
@@ -334,31 +307,27 @@ export const CreateShareLinkModal = ({
           </div>
 
           <div className="space-y-2">
-            <Label>Select Reports</Label>
-            <ScrollArea className="h-[200px] rounded-md border p-4">
-              <div className="space-y-3">
-                {reports.map((report) => (
-                  <div key={report.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={report.id}
-                      checked={selectedReports.includes(report.id)}
-                      onCheckedChange={() => toggleReport(report.id)}
-                    />
-                    <label
-                      htmlFor={report.id}
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                    >
-                      {report.name}
-                    </label>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-            {reports.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No reports available
+            <Label>Reports to Share</Label>
+            <div className="rounded-md border p-4 bg-muted/50">
+              <p className="text-sm text-muted-foreground mb-2">
+                All reports from this account will be shared automatically:
               </p>
-            )}
+              <ul className="text-sm space-y-1">
+                {reports.length > 0 ? (
+                  reports.map((report) => (
+                    <li key={report.id} className="flex items-center gap-2">
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary"></span>
+                      {report.name}
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-muted-foreground">No reports available for this account</li>
+                )}
+              </ul>
+              <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">
+                💡 This includes the "All Reports" view
+              </p>
+            </div>
           </div>
 
           <Button 
