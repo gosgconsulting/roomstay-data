@@ -531,17 +531,35 @@ export const buildDimensionMapping = async (
 };
 
 // Transform data rows
-export const transformDataRows = (
+export const transformDataRows = async (
   dataRows: any[][],
   mappings: ColumnMapping[],
   dimensionIdMap: Record<string, string>,
   columnIndexMap: Record<string, number>,
   reportId: string,
   dataSourceId: string
-): any[] => {
+): Promise<any[]> => {
   console.log(`[SYNC] Transforming ${dataRows.length} data rows...`);
   
   const visibleMappings = mappings.filter(m => m.visible);
+  
+  // Load dimension types from database for all mapped dimensions
+  const dimensionTypeMap: Record<string, string> = {};
+  const dimensionIds = Object.values(dimensionIdMap).filter(id => id !== 'none' && id !== 'create_new');
+  
+  if (dimensionIds.length > 0) {
+    const { data: dimensionsData, error: dimError } = await supabase
+      .from('dimensions')
+      .select('id, type')
+      .in('id', dimensionIds);
+    
+    if (!dimError && dimensionsData) {
+      dimensionsData.forEach((dim: any) => {
+        dimensionTypeMap[dim.id] = dim.type;
+      });
+      console.log('[SYNC] Loaded dimension types from database:', dimensionTypeMap);
+    }
+  }
   
   const rowsToInsert = dataRows.map((row, index) => {
     const dimensionValues: Record<string, any> = {};
@@ -553,7 +571,9 @@ export const transformDataRows = (
       
       if (colIndex !== undefined && colIndex >= 0 && dimensionIdMap[mapping.column] && colIndex < row.length) {
         const rawValue = row[colIndex];
-        const dimensionType = mapping.newDimensionType || mapping.dimensionType || 'text';
+        const dimensionId = dimensionIdMap[mapping.column];
+        // Priority: mapping types > dimension type from DB > default to text
+        const dimensionType = mapping.newDimensionType || mapping.dimensionType || dimensionTypeMap[dimensionId] || 'text';
         const dateFormat = mapping.dateFormat;
         const value = parseValue(rawValue, dimensionType, dateFormat);
         
@@ -833,7 +853,7 @@ export const syncDataSource = async (
     );
 
     // Step 6: Transform data
-    const rowsToInsert = transformDataRows(
+    const rowsToInsert = await transformDataRows(
       allData,
       dataSource.column_mappings || [],
       dimensionIdMap,
