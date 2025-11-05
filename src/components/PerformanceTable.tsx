@@ -1125,6 +1125,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       setTotalData({});
       setTotalCompareData({});
       setTotalChangeData({});
+      onLoadingComplete?.(); // Mark as complete even when skipping load
       return;
     }
 
