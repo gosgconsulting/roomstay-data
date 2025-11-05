@@ -199,9 +199,10 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to fetch dimensions: ${dimError.message || 'Unknown error'}`);
     }
 
-    // Filter dimensions for this specific report (include global + custom for this report)
+    // Filter dimensions for this specific report (include account + global + custom for this report)
     const dimensions = (allDimensions || []).filter((d: any) => 
       d.scope === 'global' || 
+      d.scope === 'account' || // Include account-scoped dimensions
       (d.scope === 'custom' && d.user_id === userId && (d.report_id === null || d.report_id === reportId))
     );
 
