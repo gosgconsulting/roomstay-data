@@ -62,9 +62,9 @@ export const DimensionsListModal = ({
   accountId,
   onVisibilityChange,
 }: DimensionsListModalProps) => {
-  const [globalDimensions, setGlobalDimensions] = useState<Dimension[]>([]);
-  const [customDimensions, setCustomDimensions] = useState<Dimension[]>([]);
-  const [accountDimensions, setAccountDimensions] = useState<Dimension[]>([]);
+  const [textDimensions, setTextDimensions] = useState<Dimension[]>([]);
+  const [valueDimensions, setValueDimensions] = useState<Dimension[]>([]);
+  const [allDimensions, setAllDimensions] = useState<Dimension[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [mappedDimensionIds, setMappedDimensionIds] = useState<Set<string>>(new Set());
   const [visibleDimensions, setVisibleDimensions] = useState<Set<string> | null>(null); // null = not loaded yet
@@ -89,16 +89,14 @@ export const DimensionsListModal = ({
     if (visibleDimensions.size === 0) {
       const allDimensionIds = new Set<string>();
 
-      globalDimensions.forEach(d => allDimensionIds.add(d.id));
-      accountDimensions.forEach(d => allDimensionIds.add(d.id));
-      customDimensions.forEach(d => allDimensionIds.add(d.id));
+      allDimensions.forEach(d => allDimensionIds.add(d.id));
 
       if (allDimensionIds.size > 0) {
         console.log('[testing] No saved visibility settings, initializing all', allDimensionIds.size, 'dimensions as visible');
         setVisibleDimensions(allDimensionIds);
       }
     }
-  }, [isLoading, visibleDimensions]);
+  }, [isLoading, visibleDimensions, allDimensions]);
 
   const loadVisibleDimensions = async () => {
     try {
@@ -193,9 +191,6 @@ export const DimensionsListModal = ({
 
       const visibilityArray = visibleDimensions ? Array.from(visibleDimensions) : [];
 
-      // Get all dimensions to sync with other visibility systems
-      const allDimensions = [...globalDimensions, ...accountDimensions, ...customDimensions];
-      
       // Create synchronized visibility settings
       const visibleDimensionNames = allDimensions
         .filter(d => visibleDimensions?.has(d.id))
@@ -401,24 +396,15 @@ export const DimensionsListModal = ({
         accountData = (data || []) as Dimension[];
       }
 
-      // Load custom dimensions for this user (both global custom and report-specific)
-      let customData: Dimension[] = [];
-      const { data, error: customError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("scope", "custom")
-        .or(`report_id.is.null,report_id.eq.${reportId}`) // Include both global custom (report_id=null) and report-specific
-        .order("created_at", { ascending: false });
+      console.log('[testing] Loaded dimensions - Total:', accountData?.length || 0);
 
-      if (customError) throw customError;
-      customData = (data || []) as Dimension[];
+      // Separate into text and value dimensions
+      const textDims = accountData.filter(d => d.type === 'text');
+      const valueDims = accountData.filter(d => d.type !== 'text'); // number, currency, percentage, date
 
-      console.log('[testing] Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0);
-
-      setGlobalDimensions((globalData || []) as Dimension[]);
-      setAccountDimensions(accountData);
-      setCustomDimensions(customData);
+      setTextDimensions(textDims);
+      setValueDimensions(valueDims);
+      setAllDimensions(accountData);
     } catch (error) {
       console.error("Error loading dimensions:", error);
       toast({
@@ -452,18 +438,8 @@ export const DimensionsListModal = ({
       return;
     }
 
-    // Prevent deletion of global dimensions
-    if (dimension.scope === 'global') {
-      toast({
-        title: "Cannot delete global dimension",
-        description: `"${name}" is a global dimension and can only be deleted by administrators`,
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
-      console.log('[testing] Deleting custom dimension:', name);
+      console.log('[testing] Deleting dimension:', name);
       const { error } = await supabase
         .from("dimensions")
         .delete()
@@ -471,7 +447,10 @@ export const DimensionsListModal = ({
 
       if (error) throw error;
 
-      setCustomDimensions(customDimensions.filter((d) => d.id !== id));
+      // Remove from appropriate list
+      setTextDimensions(textDimensions.filter((d) => d.id !== id));
+      setValueDimensions(valueDimensions.filter((d) => d.id !== id));
+      setAllDimensions(allDimensions.filter((d) => d.id !== id));
       toast({
         title: "Dimension deleted",
         description: `Deleted "${name}"`,
@@ -549,7 +528,7 @@ export const DimensionsListModal = ({
                     >
                       <Pencil className="h-4 w-4" data-testid="edit-icon" />
                     </Button>
-                    {dimension.scope === 'custom' && !isSystemDimension(dimension) && (
+                    {!isSystemDimension(dimension) && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -559,13 +538,6 @@ export const DimensionsListModal = ({
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    )}
-                    {dimension.scope === 'global' && (
-                      <div className="h-8 w-8 flex items-center justify-center">
-                        <span className="text-xs text-muted-foreground font-semibold" title="Global dimension">
-                          GLOBAL
-                        </span>
-                      </div>
                     )}
                     {isSystemDimension(dimension) && (
                       <div className="h-8 w-8 flex items-center justify-center">
@@ -589,7 +561,7 @@ export const DimensionsListModal = ({
       <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            Dimensions ({globalDimensions.length + accountDimensions.length + customDimensions.length})
+            Dimensions ({allDimensions.length})
           </DialogTitle>
         </DialogHeader>
 
@@ -599,33 +571,22 @@ export const DimensionsListModal = ({
               Loading dimensions...
             </div>
           ) : (
-            <Tabs defaultValue="global" className="w-full">
-              <TabsList className={`grid w-full ${accountDimensions.length > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                <TabsTrigger value="global">
-                  Global ({globalDimensions.length})
+            <Tabs defaultValue="text" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="text">
+                  Text ({textDimensions.length})
                 </TabsTrigger>
-                {accountDimensions.length > 0 && (
-                  <TabsTrigger value="account">
-                    Account ({accountDimensions.length})
-                  </TabsTrigger>
-                )}
-                <TabsTrigger value="custom">
-                  Custom ({customDimensions.length})
+                <TabsTrigger value="values">
+                  Values ({valueDimensions.length})
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="global" className="mt-4">
-                <DimensionTable dimensions={globalDimensions} showActions={true} />
+              <TabsContent value="text" className="mt-4">
+                <DimensionTable dimensions={textDimensions} showActions={true} />
               </TabsContent>
 
-              {accountDimensions.length > 0 && (
-                <TabsContent value="account" className="mt-4">
-                  <DimensionTable dimensions={accountDimensions} showActions={true} />
-                </TabsContent>
-              )}
-
-              <TabsContent value="custom" className="mt-4">
-                <DimensionTable dimensions={customDimensions} showActions={true} />
+              <TabsContent value="values" className="mt-4">
+                <DimensionTable dimensions={valueDimensions} showActions={true} />
               </TabsContent>
             </Tabs>
           )}
