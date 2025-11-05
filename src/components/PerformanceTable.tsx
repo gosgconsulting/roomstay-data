@@ -881,70 +881,39 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
 
       console.log('[testing] PerformanceTable - Loading dimensions for user:', user.id, 'account:', accountId);
 
-      // Load global dimensions (available to all users)
-      const { data: globalData, error: globalError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("scope", "global")
-        .order("created_at", { ascending: false });
-
-      if (globalError) throw globalError;
-
-      // Load account-specific dimensions if accountId is provided
-      let accountData: any[] = [];
-      if (accountId) {
-        const { data: accData, error: accountError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("scope", "account")
-          .eq("account_id", accountId)
-          .order("created_at", { ascending: false });
-
-        if (accountError) throw accountError;
-        accountData = accData || [];
+      // Load only account-scoped dimensions (including custom which are now under account scope)
+      if (!accountId) {
+        console.error('[testing] No accountId provided, cannot load dimensions');
+        return;
       }
 
-      // Load user's custom dimensions
-      const { data: customData, error: customError } = await supabase
+      const { data: accountData, error: accountError } = await supabase
         .from("dimensions")
         .select("*")
-        .eq("scope", "custom")
-        .eq("user_id", user.id)
+        .eq("scope", "account")
+        .eq("account_id", accountId)
         .order("created_at", { ascending: false });
 
-      if (customError) throw customError;
+      if (accountError) throw accountError;
 
-      // Combine all dimensions and remove duplicates by name (keep the most specific scope)
-      // Priority: account-specific > custom > global (templates)
-      const allDimensions = [
-        ...(accountData || []),   // Account-specific dimensions (highest priority)
-        ...(customData || []),    // Custom dimensions
-        ...(globalData || [])     // Global dimensions (templates/fallback)
-      ];
+      const allDimensions = accountData || [];
 
-      // Remove duplicates by name, keeping the first occurrence (most specific scope)
-      const uniqueDimensions = allDimensions.filter((dim, index, arr) => 
-        arr.findIndex(d => d.name === dim.name) === index
-      );
-
-      console.log('[testing] PerformanceTable - Loaded dimensions:', {
-        global: globalData?.length || 0,
-        account: accountData?.length || 0,
-        custom: customData?.length || 0,
-        total: uniqueDimensions.length
+      console.log('[testing] PerformanceTable - Loaded account dimensions:', {
+        account: allDimensions.length,
+        accountId
       });
 
       // Set all dimensions (needed for Group by/Breakdown by selectors)
-      setDimensions(uniqueDimensions);
+      setDimensions(allDimensions);
       
       // Check data availability for dimensions
-      if (reportId && uniqueDimensions.length > 0) {
-        checkDataAvailability(uniqueDimensions.map(d => d.id), reportId);
+      if (reportId && allDimensions.length > 0) {
+        checkDataAvailability(allDimensions.map(d => d.id), reportId);
       }
       
       // Initialize column order if not set (only for numeric dimensions)
       if (columnOrder.length === 0) {
-        const numericDimensions = uniqueDimensions.filter(d => 
+        const numericDimensions = allDimensions.filter(d => 
           d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
         );
         const orderIds = numericDimensions.map(d => d.id);
@@ -955,7 +924,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       // Set default visibility only if no saved view exists (only for numeric dimensions)
       // This will be overridden by loadViewSettings if a saved view exists
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
-      const numericDimensions = uniqueDimensions.filter(d => 
+      const numericDimensions = allDimensions.filter(d => 
         d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
       );
       const defaultVisible = new Set<string>(
