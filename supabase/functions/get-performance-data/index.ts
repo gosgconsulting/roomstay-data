@@ -89,11 +89,12 @@ Deno.serve(async (req) => {
         if (!stringValue) return null;
         
         // Try YYYY-MM-DD format (ISO format, what we store)
+        // Parse as UTC to avoid timezone issues
         if (stringValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
           const parts = stringValue.split('-');
           if (parts.length === 3) {
             const [year, month, day] = parts;
-            const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+            const date = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
             if (!isNaN(date.getTime())) return date;
           }
         }
@@ -291,16 +292,19 @@ Deno.serve(async (req) => {
             const dateFromObj = dateFrom ? new Date(dateFrom) : null;
             const dateToObj = dateTo ? new Date(dateTo) : null;
             
+            // Normalize both dates to UTC for consistent comparison
             if (dateFromObj && !isNaN(dateFromObj.getTime())) {
-              const rowDateStart = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate());
-              const fromDateStart = new Date(dateFromObj.getFullYear(), dateFromObj.getMonth(), dateFromObj.getDate());
-              if (rowDateStart < fromDateStart) return false;
+              const rowDateUTC = Date.UTC(rowDate.getUTCFullYear(), rowDate.getUTCMonth(), rowDate.getUTCDate());
+              const fromDateUTC = Date.UTC(dateFromObj.getUTCFullYear(), dateFromObj.getUTCMonth(), dateFromObj.getUTCDate());
+              console.log(`Date comparison (from): row=${new Date(rowDateUTC).toISOString()}, filter=${new Date(fromDateUTC).toISOString()}`);
+              if (rowDateUTC < fromDateUTC) return false;
             }
             
             if (dateToObj && !isNaN(dateToObj.getTime())) {
-              const rowDateEnd = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate(), 23, 59, 59);
-              const toDateEnd = new Date(dateToObj.getFullYear(), dateToObj.getMonth(), dateToObj.getDate(), 23, 59, 59);
-              if (rowDateEnd > toDateEnd) return false;
+              const rowDateUTC = Date.UTC(rowDate.getUTCFullYear(), rowDate.getUTCMonth(), rowDate.getUTCDate());
+              const toDateUTC = Date.UTC(dateToObj.getUTCFullYear(), dateToObj.getUTCMonth(), dateToObj.getUTCDate());
+              console.log(`Date comparison (to): row=${new Date(rowDateUTC).toISOString()}, filter=${new Date(toDateUTC).toISOString()}`);
+              if (rowDateUTC > toDateUTC) return false;
             }
             
             return true;
