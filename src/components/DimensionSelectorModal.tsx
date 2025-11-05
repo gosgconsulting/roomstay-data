@@ -75,7 +75,35 @@ export const DimensionSelectorModal = ({
 
       console.log('[testing] DimensionSelectorModal - Loading dimensions for user:', user.id);
 
-      // Load global dimensions (available to all users)
+      // Load account-specific dimensions first (if reportId is provided, we can get accountId)
+      let accountData: any[] | null = null;
+      let accountId: string | null = null;
+      
+      if (reportId) {
+        // Get the account_id from the report
+        const { data: reportData } = await supabase
+          .from('reports')
+          .select('account_id')
+          .eq('id', reportId)
+          .single();
+        
+        accountId = reportData?.account_id;
+        
+        if (accountId) {
+          const { data: accData, error: accountError } = await supabase
+            .from("dimensions")
+            .select("*")
+            .eq("scope", "account")
+            .eq("account_id", accountId)
+            .order("created_at", { ascending: false });
+
+          if (accountError) throw accountError;
+          accountData = accData;
+          console.log('[testing] DimensionSelectorModal - Loaded account-specific dimensions:', accData?.length || 0);
+        }
+      }
+
+      // Load global dimensions as fallback (templates)
       const { data: globalData, error: globalError } = await supabase
         .from("dimensions")
         .select("*")
@@ -83,15 +111,6 @@ export const DimensionSelectorModal = ({
         .order("created_at", { ascending: false });
 
       if (globalError) throw globalError;
-
-      // Load account-specific dimensions (we don't have accountId here, so load all account dimensions)
-      const { data: accountData, error: accountError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("scope", "account")
-        .order("created_at", { ascending: false });
-
-      if (accountError) throw accountError;
 
       // Load user's custom dimensions
       const { data: customData, error: customError } = await supabase
@@ -104,10 +123,11 @@ export const DimensionSelectorModal = ({
       if (customError) throw customError;
 
       // Combine all dimensions and remove duplicates by name (keep the most specific scope)
+      // Priority: account-specific > custom > global (templates)
       const allDimensions = [
-        ...(customData || []),    // Custom dimensions take precedence
-        ...(accountData || []),   // Then account dimensions
-        ...(globalData || [])     // Finally global dimensions
+        ...(accountData || []),   // Account-specific dimensions (highest priority)
+        ...(customData || []),    // Custom dimensions
+        ...(globalData || [])     // Global dimensions (templates/fallback)
       ];
 
       // Remove duplicates by name, keeping the first occurrence (most specific scope)

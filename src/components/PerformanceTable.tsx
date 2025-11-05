@@ -805,10 +805,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       if (customError) throw customError;
 
       // Combine all dimensions and remove duplicates by name (keep the most specific scope)
+      // Priority: account-specific > custom > global (templates)
       const allDimensions = [
-        ...(customData || []),    // Custom dimensions take precedence
-        ...(accountData || []),   // Then account dimensions
-        ...(globalData || [])     // Finally global dimensions
+        ...(accountData || []),   // Account-specific dimensions (highest priority)
+        ...(customData || []),    // Custom dimensions
+        ...(globalData || [])     // Global dimensions (templates/fallback)
       ];
 
       // Remove duplicates by name, keeping the first occurrence (most specific scope)

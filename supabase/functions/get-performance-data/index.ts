@@ -171,15 +171,19 @@ Deno.serve(async (req) => {
       return await queryFn();
     };
 
-    // Fetch dimensions (global + custom for the user) with retry
+    // Fetch dimensions (account-specific + custom for the user + global templates) with retry
     const dimensionsResult = await retryQuery(async () => {
       let query = supabase
         .from('dimensions')
-        .select('id, name, type, formula, scope, user_id, report_id');
+        .select('id, name, type, formula, scope, user_id, report_id, account_id');
       
-      // Load global dimensions and custom dimensions for the user
-      if (userId) {
-        query = query.or(`scope.eq.global,and(scope.eq.custom,user_id.eq.${userId})`);
+      // Load account-specific, custom, and global dimensions
+      if (userId && accountId) {
+        // Load: account-specific (for this account) + custom (for this user) + global (templates)
+        query = query.or(`and(scope.eq.account,account_id.eq.${accountId}),and(scope.eq.custom,user_id.eq.${userId}),scope.eq.global`);
+      } else if (userId) {
+        // No accountId: load custom + global only
+        query = query.or(`and(scope.eq.custom,user_id.eq.${userId}),scope.eq.global`);
       } else {
         // If no userId, only load global dimensions
         query = query.eq('scope', 'global');
