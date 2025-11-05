@@ -270,9 +270,13 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   useEffect(() => {
     console.log('[testing] PerformanceTable data loading check:', {
       reportId: !!reportId,
+      reportIdValue: reportId,
       groupByDimensions: groupByDimensions.length,
+      groupByDimensionsValue: groupByDimensions,
       dimensions: dimensions.length,
-      groupByDims: groupByDimensions
+      isLoadingDimensions,
+      activeViewId,
+      tableViewsCount: tableViews.length
     });
     
     // Try to load data if we have reportId, groupByDimensions, and dimensions
@@ -283,8 +287,10 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     } else {
       console.log('[testing] Not loading data - conditions not met:', {
         reportId: !!reportId,
+        reportIdValue: reportId,
         groupByDimensions: groupByDimensions.length,
-        dimensions: dimensions.length
+        dimensions: dimensions.length,
+        reason: !reportId ? 'no reportId' : groupByDimensions.length === 0 ? 'no groupByDimensions' : 'no dimensions'
       });
     }
   }, [reportId, groupByDimensions, breakdownByDimensions, thenByDimensions, dimensions.length, dateOrder, debouncedFilters, visibilityRefreshTrigger]);
