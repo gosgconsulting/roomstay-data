@@ -15,7 +15,8 @@ export interface DataSource {
 
 export interface ColumnMapping {
   column: string;
-  dimensionId: string | null;
+  dimensionId?: string | null; // Optional, kept for backward compatibility
+  dimensionName?: string | null; // Primary identifier for mapping (stable across accounts)
   visible: boolean;
   newDimensionName?: string;
   newDimensionType?: string;
@@ -304,69 +305,168 @@ export const deleteCustomDimensions = async (dataSourceId: string): Promise<void
   }
 };
 
+// Resolve dimension name to ID based on account context
+export const resolveDimensionNameToId = async (
+  dimensionName: string | null | undefined,
+  accountId: string | null | undefined,
+  reportId: string,
+  userId: string
+): Promise<string | null> => {
+  if (!dimensionName || dimensionName === 'none' || dimensionName === 'create_new') {
+    return null;
+  }
+
+  // Priority: account-specific > custom (user-specific) > global
+  let query = supabase
+    .from('dimensions')
+    .select('id, scope, account_id')
+    .eq('name', dimensionName)
+    .order('created_at', { ascending: false });
+
+  // If accountId is provided, prioritize account-specific dimensions
+  if (accountId) {
+    // First try account-specific
+    const { data: accountDim, error: accountError } = await supabase
+      .from('dimensions')
+      .select('id')
+      .eq('name', dimensionName)
+      .eq('scope', 'account')
+      .eq('account_id', accountId)
+      .maybeSingle();
+
+    if (!accountError && accountDim) {
+      console.log(`[SYNC] Resolved dimension "${dimensionName}" to account-specific ID: ${accountDim.id}`);
+      return accountDim.id;
+    }
+
+    // Then try custom dimensions for this user/report
+    const { data: customDim, error: customError } = await supabase
+      .from('dimensions')
+      .select('id')
+      .eq('name', dimensionName)
+      .eq('scope', 'custom')
+      .eq('user_id', userId)
+      .or(`report_id.eq.${reportId},report_id.is.null`)
+      .maybeSingle();
+
+    if (!customError && customDim) {
+      console.log(`[SYNC] Resolved dimension "${dimensionName}" to custom ID: ${customDim.id}`);
+      return customDim.id;
+    }
+
+    // Finally try global (but only if no account-specific or custom found)
+    const { data: globalDim, error: globalError } = await supabase
+      .from('dimensions')
+      .select('id')
+      .eq('name', dimensionName)
+      .eq('scope', 'global')
+      .maybeSingle();
+
+    if (!globalError && globalDim) {
+      console.log(`[SYNC] Resolved dimension "${dimensionName}" to global ID: ${globalDim.id}`);
+      return globalDim.id;
+    }
+  } else {
+    // No accountId: try custom first, then global
+    const { data: customDim, error: customError } = await supabase
+      .from('dimensions')
+      .select('id')
+      .eq('name', dimensionName)
+      .eq('scope', 'custom')
+      .eq('user_id', userId)
+      .or(`report_id.eq.${reportId},report_id.is.null`)
+      .maybeSingle();
+
+    if (!customError && customDim) {
+      console.log(`[SYNC] Resolved dimension "${dimensionName}" to custom ID: ${customDim.id}`);
+      return customDim.id;
+    }
+
+    const { data: globalDim, error: globalError } = await supabase
+      .from('dimensions')
+      .select('id')
+      .eq('name', dimensionName)
+      .eq('scope', 'global')
+      .maybeSingle();
+
+    if (!globalError && globalDim) {
+      console.log(`[SYNC] Resolved dimension "${dimensionName}" to global ID: ${globalDim.id}`);
+      return globalDim.id;
+    }
+  }
+
+  console.warn(`[SYNC] Could not resolve dimension name "${dimensionName}" to any ID`);
+  return null;
+};
+
 // Create or get dimension
 export const createOrGetDimension = async (
   mapping: ColumnMapping,
   userId: string,
   reportId: string,
-  dataSourceId: string
+  dataSourceId: string,
+  accountId?: string | null
 ): Promise<string | null> => {
-  if (!mapping.dimensionId || mapping.dimensionId === 'none') {
-    return null;
+  // If creating a new dimension
+  if (mapping.newDimensionName) {
+    const dimensionName = mapping.newDimensionName;
+    const dimensionType = mapping.newDimensionType || mapping.dimensionType || 'text';
+    
+    console.log(`[SYNC] Creating/checking custom dimension: ${dimensionName} (${dimensionType})`);
+    
+    // Check if a dimension with this name already exists for this report
+    const { data: existingDim, error: checkError } = await supabase
+      .from('dimensions')
+      .select('id')
+      .eq('name', dimensionName)
+      .eq('report_id', reportId)
+      .eq('scope', 'custom')
+      .maybeSingle();
+
+    if (checkError) {
+      console.error(`[SYNC] Error checking existing dimension:`, checkError);
+      throw checkError;
+    }
+
+    if (existingDim) {
+      console.log(`[SYNC] Using existing dimension ${dimensionName} with ID: ${existingDim.id}`);
+      return existingDim.id;
+    }
+
+    // Create new dimension
+    const { data: newDimension, error: createError } = await supabase
+      .from('dimensions')
+      .insert({
+        user_id: userId,
+        report_id: reportId,
+        data_source_id: dataSourceId,
+        name: dimensionName,
+        type: dimensionType,
+        scope: 'custom',
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      console.error(`[SYNC] Error creating dimension ${dimensionName}:`, createError);
+      throw createError;
+    }
+    
+    console.log(`[SYNC] Created new dimension ${dimensionName} with ID: ${newDimension.id}`);
+    return newDimension.id;
   }
 
-  // If it's an existing dimension (not create_new), return the ID
-  if (mapping.dimensionId !== 'create_new' && !mapping.newDimensionName) {
+  // If dimensionName is provided, resolve it to ID
+  if (mapping.dimensionName) {
+    return await resolveDimensionNameToId(mapping.dimensionName, accountId || null, reportId, userId);
+  }
+
+  // Fallback to dimensionId for backward compatibility
+  if (mapping.dimensionId && mapping.dimensionId !== 'none' && mapping.dimensionId !== 'create_new') {
     return mapping.dimensionId;
   }
 
-  // Create new custom dimension
-  const dimensionName = mapping.newDimensionName || mapping.column;
-  const dimensionType = mapping.newDimensionType || mapping.dimensionType || 'text';
-  
-  console.log(`[SYNC] Creating/checking custom dimension: ${dimensionName} (${dimensionType})`);
-  
-  // Check if a dimension with this name already exists for this report
-  const { data: existingDim, error: checkError } = await supabase
-    .from('dimensions')
-    .select('id')
-    .eq('name', dimensionName)
-    .eq('report_id', reportId)
-    .eq('scope', 'custom')
-    .maybeSingle();
-
-  if (checkError) {
-    console.error(`[SYNC] Error checking existing dimension:`, checkError);
-    throw checkError;
-  }
-
-  if (existingDim) {
-    // Use existing dimension
-    console.log(`[SYNC] Using existing dimension ${dimensionName} with ID: ${existingDim.id}`);
-    return existingDim.id;
-  }
-
-  // Create new dimension
-  const { data: newDimension, error: createError } = await supabase
-    .from('dimensions')
-    .insert({
-      user_id: userId,
-      report_id: reportId,
-      data_source_id: dataSourceId,
-      name: dimensionName,
-      type: dimensionType,
-      scope: 'custom',
-    })
-    .select()
-    .single();
-
-  if (createError) {
-    console.error(`[SYNC] Error creating dimension ${dimensionName}:`, createError);
-    throw createError;
-  }
-  
-  console.log(`[SYNC] Created new dimension ${dimensionName} with ID: ${newDimension.id}`);
-  return newDimension.id;
+  return null;
 };
 
 // Auto-detect data type and format from sample values

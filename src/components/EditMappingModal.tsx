@@ -36,18 +36,47 @@ export const EditMappingModal = ({
   onOpenChange,
   dataSource,
   onSuccess,
-  accountId
+  accountId: propAccountId
 }: EditMappingModalProps) => {
   const [headers, setHeaders] = useState<string[]>([]);
   const [sampleDataRows, setSampleDataRows] = useState<any[][]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingHeaders, setIsFetchingHeaders] = useState(false);
+  const [accountId, setAccountId] = useState<string | undefined>(propAccountId);
 
   useEffect(() => {
     if (open && dataSource) {
+      fetchAccountId();
       fetchHeaders();
     }
-  }, [open, dataSource]);
+  }, [open, dataSource, propAccountId]);
+
+  // Fetch accountId from report if not provided
+  const fetchAccountId = async () => {
+    if (propAccountId) {
+      setAccountId(propAccountId);
+      return;
+    }
+
+    if (!dataSource?.report_id) {
+      setAccountId(undefined);
+      return;
+    }
+
+    try {
+      const { data: reportData, error } = await supabase
+        .from('reports')
+        .select('account_id')
+        .eq('id', dataSource.report_id)
+        .maybeSingle();
+
+      if (error) throw error;
+      setAccountId(reportData?.account_id || undefined);
+    } catch (error) {
+      console.error('Error fetching account ID:', error);
+      setAccountId(undefined);
+    }
+  };
 
   const fetchHeaders = async () => {
     if (!dataSource) return;
