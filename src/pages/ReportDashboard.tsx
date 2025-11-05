@@ -172,17 +172,17 @@ export default function ReportDashboard() {
           ? reportIdFromUrl
           : reports[0].id;
         
-        // Resync all dimension-related data before setting the report ID
-        console.log('[RESYNC] Starting dimension resync for report:', selectedReportId);
-        try {
-          await resyncAllDimensions(selectedReportId, accountId);
-          console.log('[RESYNC] Dimension resync completed successfully');
-        } catch (error) {
-          console.error('[RESYNC] Error resyncing dimensions:', error);
-          // Continue anyway - the resync is best-effort
-        }
-        
         setReportId(selectedReportId);
+        
+        // Resync dimensions in the background (non-blocking)
+        resyncAllDimensions(selectedReportId, accountId)
+          .then(() => {
+            console.log('[RESYNC] Dimension resync completed successfully');
+          })
+          .catch((error) => {
+            console.error('[RESYNC] Error resyncing dimensions:', error);
+            // Silently fail - resync is best-effort
+          });
       }
       
       setIsLoading(false);
