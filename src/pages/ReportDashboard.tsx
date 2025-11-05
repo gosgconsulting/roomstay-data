@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 import { Settings, ArrowLeft } from "lucide-react";
+import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
 
 interface Account {
   id: string;
@@ -167,11 +168,21 @@ export default function ReportDashboard() {
       // If user has reports for this account, select the first one or the one from URL params
       if (reports && reports.length > 0) {
         const reportIdFromUrl = searchParams.get('reportId');
-        if (reportIdFromUrl && reports.find(r => r.id === reportIdFromUrl)) {
-          setReportId(reportIdFromUrl);
-        } else {
-          setReportId(reports[0].id);
+        const selectedReportId = reportIdFromUrl && reports.find(r => r.id === reportIdFromUrl)
+          ? reportIdFromUrl
+          : reports[0].id;
+        
+        // Resync all dimension-related data before setting the report ID
+        console.log('[RESYNC] Starting dimension resync for report:', selectedReportId);
+        try {
+          await resyncAllDimensions(selectedReportId, accountId);
+          console.log('[RESYNC] Dimension resync completed successfully');
+        } catch (error) {
+          console.error('[RESYNC] Error resyncing dimensions:', error);
+          // Continue anyway - the resync is best-effort
         }
+        
+        setReportId(selectedReportId);
       }
       
       setIsLoading(false);

@@ -47,7 +47,7 @@ export async function resyncReportViews(
     // Get all report_views for this report
     const { data: reportViews, error: viewsError } = await supabase
       .from("report_views")
-      .select("id, visible_dimensions, name")
+      .select("id, visible_dimensions, visible_columns, visible_kpis, name")
       .eq("report_id", reportId);
 
     if (viewsError) throw viewsError;

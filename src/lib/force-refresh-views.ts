@@ -3,7 +3,7 @@
  * This triggers a visibility refresh to reload views with updated dimension mappings
  */
 
-import { supabase } from "./supabase";
+import { supabase } from "@/integrations/supabase/client";
 
 export async function forceRefreshReportViews(reportId: string): Promise<void> {
   try {

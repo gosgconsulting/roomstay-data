@@ -68,7 +68,7 @@ export async function resyncColumnMappings(
     console.log(`[RESYNC] Found ${dimensionsMap.size} account-scoped dimensions`);
 
     // Update column mappings
-    const currentMappings = (dataSource.column_mappings || []) as ColumnMapping[];
+    const currentMappings = (dataSource.column_mappings as any || []) as ColumnMapping[];
     const updatedMappings: ColumnMapping[] = currentMappings.map((mapping) => {
       // If dimensionName exists, use it to find the correct dimension ID
       if (mapping.dimensionName) {
@@ -172,7 +172,7 @@ export async function resyncColumnMappings(
     // Update the data source with new mappings
     const { error: updateError } = await supabase
       .from("data_sources")
-      .update({ column_mappings: updatedMappings })
+      .update({ column_mappings: updatedMappings as any })
       .eq("id", dataSourceId);
 
     if (updateError) throw updateError;
