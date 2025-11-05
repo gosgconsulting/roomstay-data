@@ -752,20 +752,26 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
               Last update: {lastUpdateDate}
             </span>
           )}
-          <Button 
-            variant="outline" 
-            className="gap-2"
-            onClick={() => {
-              if (onRefreshData) {
-                onRefreshData();
-              }
-            }}
-            disabled={!currentReport}
-            title="Refresh report data"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Reload
-          </Button>
+                  <Button 
+          variant="outline" 
+          className="gap-2"
+          onClick={() => {
+            if (onRefreshData) {
+              onRefreshData();
+            }
+            // Also trigger a hard refresh by reloading the page for problematic reports
+            if (currentReport?.name?.includes('Social')) {
+              setTimeout(() => {
+                window.location.reload();
+              }, 1000);
+            }
+          }}
+          disabled={!currentReport}
+          title="Refresh report data"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Reload
+        </Button>
           <Button 
             variant="outline" 
             className="gap-2"

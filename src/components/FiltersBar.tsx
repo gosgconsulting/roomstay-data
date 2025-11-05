@@ -92,8 +92,11 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
   }, [activeDimensions, reportId]);
 
   // Apply default date range on mount - default to this month
+  // Only apply if no reportId yet (initial mount)
   useEffect(() => {
-    applyDatePreset("this_month");
+    if (!reportId) {
+      applyDatePreset("this_month");
+    }
   }, []);
 
   // Save filter settings whenever they change
@@ -177,15 +180,15 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
         const preset = data.date_range_preset || "this_month";
         setDatePreset(preset);
         applyDatePreset(preset);
-              } else {
-          // No saved view for this report, apply defaults
-          applyDatePreset("this_month");
-        }
-          } catch (error) {
-        console.error("Error loading filter settings:", error);
-        // On error, apply defaults
+      } else {
+        // No saved view for this report, apply defaults
         applyDatePreset("this_month");
       }
+    } catch (error) {
+      console.error("Error loading filter settings:", error);
+      // On error, apply defaults
+      applyDatePreset("this_month");
+    }
   };
 
   const saveFilterSettings = async () => {
@@ -308,13 +311,14 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     setDatePreset(preset);
   };
 
-  // Check if any filters are currently applied
+  // Check if any filters are currently applied (excluding default "this_month")
   const hasActiveFilters = () => {
     // Check if any dimension has selected filter values
     const hasDimensionFilters = Object.keys(selectedFilters).some(
       dimensionId => selectedFilters[dimensionId] && selectedFilters[dimensionId].length > 0
     );
-    const hasDateFilter = datePreset !== "this_month" || dateRange !== undefined;
+    // Only consider date filter active if it's NOT the default "this_month"
+    const hasDateFilter = datePreset !== "this_month";
     const hasCompareFilter = compareEnabled;
     return hasDimensionFilters || hasDateFilter || hasCompareFilter;
   };
@@ -330,8 +334,8 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
       }
     });
     
-    // Count date filter if not default
-    if (datePreset !== "this_month" || dateRange !== undefined) {
+    // Only count date filter if it's NOT the default "this_month"
+    if (datePreset !== "this_month") {
       count += 1;
     }
     
@@ -347,8 +351,8 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     // Keep the active dimensions but clear their selected values
     // setActiveDimensions([]); // DON'T remove dimensions from filter bar
     setSelectedFilters({}); // Clear all filter values
-    setDateRange(undefined);
-    setDatePreset("this_month");
+    // Reset to default "this_month" date filter
+    applyDatePreset("this_month");
     setCompareEnabled(false);
     setCompareType("previous_period");
     setCompareDateRange(undefined);
@@ -356,7 +360,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     
     toast({
       title: "Filters reset",
-      description: "Filter values cleared. Dimensions remain available for filtering.",
+      description: "All filters reset to default values. Date filter set to 'This Month'.",
     });
   };
 
