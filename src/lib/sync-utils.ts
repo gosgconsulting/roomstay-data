@@ -615,7 +615,7 @@ export const updateColumnMappings = async (
 
   const { error: updateError } = await supabase
     .from('data_sources')
-    .update({ column_mappings: updatedMappings })
+    .update({ column_mappings: updatedMappings as any })
     .eq('id', dataSourceId);
 
   if (updateError) {
@@ -667,7 +667,7 @@ export const detectNewColumns = async (
     // Update data source with new mappings
     const { error: updateError } = await supabase
       .from('data_sources')
-      .update({ column_mappings: updatedMappings })
+      .update({ column_mappings: updatedMappings as any })
       .eq('id', dataSource.id);
 
     if (updateError) {
@@ -695,7 +695,7 @@ export const fixColumnMappings = async (dataSourceId: string): Promise<void> => 
     return;
   }
   
-  const mappings = dataSource.column_mappings || [];
+  const mappings = (dataSource.column_mappings as any[]) || [];
   let hasChanges = false;
   
   const fixedMappings = mappings.map((mapping: any) => {
