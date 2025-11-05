@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
-import { X, Plus } from "lucide-react";
+import { X, Plus, CheckCircle2, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Select,
@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { checkDimensionsHaveData } from "@/lib/dimensionUtils";
 
 interface Dimension {
   id: string;
@@ -49,12 +50,22 @@ export const DimensionSelectorModal = ({
   const [showAddSelector, setShowAddSelector] = useState(false);
   const [selectedToAdd, setSelectedToAdd] = useState<string>("");
   const [dimensionGranularities, setDimensionGranularities] = useState<Record<string, string>>({});
+  const [dimensionHasData, setDimensionHasData] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (open) {
       loadDimensions();
     }
   }, [open]);
+
+  // Re-check data availability when reportId changes
+  useEffect(() => {
+    if (open && reportId && dimensions.length > 0) {
+      const dimensionIds = dimensions.map(d => d.id);
+      checkDataAvailability(dimensionIds, reportId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportId, open, dimensions.length]);
 
   const loadDimensions = async () => {
     setIsLoading(true);
@@ -112,6 +123,11 @@ export const DimensionSelectorModal = ({
       });
 
       setDimensions(uniqueDimensions);
+
+      // Check data availability for dimensions if reportId is provided
+      if (reportId && uniqueDimensions.length > 0) {
+        checkDataAvailability(uniqueDimensions.map(d => d.id), reportId);
+      }
     } catch (error) {
       console.error("Error loading dimensions:", error);
     } finally {
@@ -175,6 +191,15 @@ export const DimensionSelectorModal = ({
   const availableDimensions = dimensions.filter(
     (d) => !selectedDimensions.includes(d.id)
   );
+
+  const checkDataAvailability = async (dimensionIds: string[], reportId: string) => {
+    try {
+      const hasDataMap = await checkDimensionsHaveData(dimensionIds, reportId);
+      setDimensionHasData(hasDataMap);
+    } catch (error) {
+      console.error('[testing] Error checking dimension data availability:', error);
+    }
+  };
 
   const saveDimensionSettings = async (dimensions: string[]) => {
     if (!reportId) return;
@@ -319,11 +344,27 @@ export const DimensionSelectorModal = ({
                             No more dimensions available
                           </div>
                         ) : (
-                          availableDimensions.map((dimension) => (
-                            <SelectItem key={dimension.id} value={dimension.id}>
-                              {dimension.name}
-                            </SelectItem>
-                          ))
+                          availableDimensions.map((dimension) => {
+                            const hasData = reportId ? dimensionHasData[dimension.id] : undefined;
+                            return (
+                              <SelectItem key={dimension.id} value={dimension.id}>
+                                <div className="flex items-center gap-2">
+                                  {reportId && (
+                                    hasData !== undefined ? (
+                                      hasData ? (
+                                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                      ) : (
+                                        <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                                      )
+                                    ) : (
+                                      <div className="h-3.5 w-3.5" /> // Placeholder for loading
+                                    )
+                                  )}
+                                  <span>{dimension.name}</span>
+                                </div>
+                              </SelectItem>
+                            );
+                          })
                         )}
                       </SelectContent>
                     </Select>

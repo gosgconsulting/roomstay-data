@@ -193,17 +193,36 @@ export const parseValue = (value: any, dimensionType: string, dateFormat?: strin
       }
     }
     
-    // Handle currency values (like "$1.64", "$16.47", "€123.45")
-    if (/^[$€£¥₹₽¢]/.test(stringValue) || stringValue.includes('$')) {
-      const cleanedValue = stringValue.replace(/[$€£¥₹₽¢,\s]/g, '');
+    // Handle currency values (like "$1.64", "$16.47", "$33.10", "€123.45")
+    // Check for common currency symbols: $, €, £, ¥, ₹, ₽, ₩, ₦, etc.
+    // Also handle cases where currency symbol appears anywhere in the string
+    // This handles both explicitly currency-typed dimensions AND number dimensions that contain currency formatting
+    const currencySymbolsRegex = /[$€£¥₹₽¢₩₦₨₫₪₭₮₯₰₱₲₳₴₵₶₷₸₹₺₻₼₽₾₿]/g;
+    const hasCurrencySymbol = currencySymbolsRegex.test(stringValue) || stringValue.includes('$');
+    
+    if (hasCurrencySymbol) {
+      // Remove all currency symbols, commas, spaces, and other non-numeric characters except decimal point and minus sign
+      const cleanedValue = stringValue
+        .replace(currencySymbolsRegex, '') // Remove currency symbols
+        .replace(/[,\s]/g, '') // Remove commas and spaces
+        .replace(/[^\d.-]/g, ''); // Remove any other non-numeric characters except digits, dots, and minus
+      
       const numValue = parseFloat(cleanedValue);
-      return isNaN(numValue) ? null : numValue;
+      if (!isNaN(numValue) && isFinite(numValue)) {
+        console.log(`[SYNC] Parsed currency value: "${stringValue}" -> ${numValue}`);
+        return numValue;
+      }
     }
     
     // Handle regular numbers with commas (like "1,234.56")
+    // Also handle negative numbers and decimals
     const cleanedValue = stringValue.replace(/[,\s]/g, '');
     const numValue = parseFloat(cleanedValue);
-    return isNaN(numValue) ? null : numValue;
+    if (!isNaN(numValue)) {
+      return numValue;
+    }
+    
+    return null;
   }
   
   // For other types, return as-is
@@ -371,8 +390,10 @@ export const autoDetectColumnType = (sampleValues: any[]): { type: string; dateF
     } else if (stringValue.match(/^\d{1,2}-\d{1,2}-\d{4}$/)) {
       dateCount++;
     }
-    // Check for currency patterns
-    else if (/^[$€£¥₹₽¢]/.test(stringValue) || stringValue.includes('$')) {
+    // Check for currency patterns - look for currency symbols anywhere in the string
+    // Match the same pattern used in parseValue for consistency
+    const currencySymbolsRegex = /[$€£¥₹₽¢₩₦₨₫₪₭₮₯₰₱₲₳₴₵₶₷₸₹₺₻₼₽₾₿]/g;
+    if (currencySymbolsRegex.test(stringValue) || stringValue.includes('$')) {
       currencyCount++;
     }
     // Check for percentage patterns

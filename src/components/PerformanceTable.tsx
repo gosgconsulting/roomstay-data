@@ -28,7 +28,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { ChevronDown, ChevronRight, Columns3, Copy, Trash2, Plus, ArrowUp, ArrowDown, Minus, GripVertical, Save, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Columns3, Copy, Trash2, Plus, ArrowUp, ArrowDown, Minus, GripVertical, Save, X, CheckCircle2, AlertCircle } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
@@ -39,6 +39,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
 import { format, startOfWeek, startOfMonth, startOfYear } from "date-fns";
 import { FilterState } from "./FiltersBar";
+import { checkDimensionsHaveData } from "@/lib/dimensionUtils";
 import { TableVirtuoso } from "react-virtuoso";
 import {
   DndContext,
@@ -140,6 +141,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   const [selectedKPI, setSelectedKPI] = useState("");
   const [currentSelector, setCurrentSelector] = useState<"group" | "breakdown" | "then">("group");
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
+  const [dimensionHasData, setDimensionHasData] = useState<Record<string, boolean>>({});
   const [hasDataSources, setHasDataSources] = useState<boolean>(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set());
   const [initialVisibleColumns, setInitialVisibleColumns] = useState<Set<string>>(new Set());
@@ -746,6 +748,15 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     setEditingTabName("");
   };
 
+  const checkDataAvailability = async (dimensionIds: string[], reportId: string) => {
+    try {
+      const hasDataMap = await checkDimensionsHaveData(dimensionIds, reportId);
+      setDimensionHasData(hasDataMap);
+    } catch (error) {
+      console.error('[testing] Error checking dimension data availability:', error);
+    }
+  };
+
   const loadDimensions = async () => {
     if (!reportId) return;
     
@@ -814,6 +825,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
 
       // Set all dimensions (needed for Group by/Breakdown by selectors)
       setDimensions(uniqueDimensions);
+      
+      // Check data availability for dimensions
+      if (reportId && uniqueDimensions.length > 0) {
+        checkDataAvailability(uniqueDimensions.map(d => d.id), reportId);
+      }
       
       // Initialize column order if not set (only for numeric dimensions)
       if (columnOrder.length === 0) {
@@ -1653,9 +1669,23 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                       <SelectContent className="bg-background z-50">
                         {groupByDimensions.map((dimId) => {
                           const dim = dimensions.find(d => d.id === dimId);
+                          const hasData = reportId ? dimensionHasData[dimId] : undefined;
                           return dim ? (
                             <SelectItem key={dim.id} value={dim.id}>
-                              {dim.name}
+                              <div className="flex items-center gap-2">
+                                {reportId && (
+                                  hasData !== undefined ? (
+                                    hasData ? (
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                    ) : (
+                                      <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                                    )
+                                  ) : (
+                                    <div className="h-3.5 w-3.5" />
+                                  )
+                                )}
+                                <span>{dim.name}</span>
+                              </div>
                             </SelectItem>
                           ) : null;
                         })}
@@ -1691,9 +1721,23 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                       <SelectContent className="bg-background z-50">
                         {breakdownByDimensions.map((dimId) => {
                           const dim = dimensions.find(d => d.id === dimId);
+                          const hasData = reportId ? dimensionHasData[dimId] : undefined;
                           return dim ? (
                             <SelectItem key={dim.id} value={dim.id}>
-                              {dim.name}
+                              <div className="flex items-center gap-2">
+                                {reportId && (
+                                  hasData !== undefined ? (
+                                    hasData ? (
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                    ) : (
+                                      <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                                    )
+                                  ) : (
+                                    <div className="h-3.5 w-3.5" />
+                                  )
+                                )}
+                                <span>{dim.name}</span>
+                              </div>
                             </SelectItem>
                           ) : null;
                         })}
@@ -1718,9 +1762,23 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                       <SelectContent className="bg-background z-50">
                         {thenByDimensions.map((dimId) => {
                           const dim = dimensions.find(d => d.id === dimId);
+                          const hasData = reportId ? dimensionHasData[dimId] : undefined;
                           return dim ? (
                             <SelectItem key={dim.id} value={dim.id}>
-                              {dim.name}
+                              <div className="flex items-center gap-2">
+                                {reportId && (
+                                  hasData !== undefined ? (
+                                    hasData ? (
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                    ) : (
+                                      <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                                    )
+                                  ) : (
+                                    <div className="h-3.5 w-3.5" />
+                                  )
+                                )}
+                                <span>{dim.name}</span>
+                              </div>
                             </SelectItem>
                           ) : null;
                         })}
