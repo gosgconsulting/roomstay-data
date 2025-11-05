@@ -79,64 +79,24 @@ export const ColumnMappingStep = ({
 
       if (!user) return;
 
-      // Get all dimensions accessible to the user
+      if (!accountId) {
+        console.warn("No accountId provided, cannot load dimensions");
+        setDimensions([]);
+        return;
+      }
+
+      // ONLY load account-scoped dimensions
+      // Global scope is removed - everything is account-based now
       const { data, error } = await supabase
         .from("dimensions")
         .select("*")
+        .eq('scope', 'account')
+        .eq('account_id', accountId)
         .order("name", { ascending: true });
 
       if (error) throw error;
 
-      // Filter and prioritize dimensions:
-      // 1. Account-specific dimensions (if accountId provided) - REQUIRED when accountId exists
-      // 2. Custom report dimensions (if reportId provided)
-      // 3. Global dimensions (fallback ONLY if no accountId)
-      const dimensionsByName: Record<string, Dimension> = {};
-
-      // Helper function to normalize dimension name for deduplication (case-insensitive)
-      const normalizeKey = (name: string) => name.toLowerCase().trim();
-
-      if (accountId) {
-        // When accountId is provided, ONLY use account-specific and custom dimensions
-        // Do NOT include global dimensions to prevent wrong mappings
-        
-        // First pass: add account-specific dimensions
-        (data || [])
-          .filter((d: any) => d.scope === 'account' && d.account_id === accountId)
-          .forEach((d: any) => {
-            dimensionsByName[normalizeKey(d.name)] = d;
-          });
-
-        // Second pass: add custom dimensions (highest priority, can override account-specific)
-        (data || [])
-          .filter((d: any) => 
-            d.scope === 'custom' && 
-            d.user_id === user.id &&
-            (d.report_id === null || d.report_id === reportId)
-          )
-          .forEach((d: any) => {
-            dimensionsByName[normalizeKey(d.name)] = d; // Override with custom version
-          });
-      } else {
-        // No accountId: use global dimensions as fallback
-        // First pass: add global dimensions as base
-        (data || []).filter((d: any) => d.scope === 'global').forEach((d: any) => {
-          dimensionsByName[normalizeKey(d.name)] = d;
-        });
-
-        // Second pass: add custom dimensions (highest priority)
-        (data || [])
-          .filter((d: any) => 
-            d.scope === 'custom' && 
-            d.user_id === user.id &&
-            (d.report_id === null || d.report_id === reportId)
-          )
-          .forEach((d: any) => {
-            dimensionsByName[normalizeKey(d.name)] = d; // Override with custom version
-          });
-      }
-
-      setDimensions(Object.values(dimensionsByName));
+      setDimensions(data || []);
     } catch (error) {
       console.error("Error loading dimensions:", error);
     } finally {
@@ -179,74 +139,80 @@ export const ColumnMappingStep = ({
   };
 
   const initializeMappings = () => {
-    // Validate if a dimension ID is valid (exists in loaded dimensions)
+    // Validate if a dimension ID is valid (exists in loaded account-scoped dimensions)
     const isValidDimensionId = (dimensionId: string | null | undefined): boolean => {
       if (!dimensionId || dimensionId === 'none' || dimensionId === 'create_new') {
         return false;
       }
-      // Check if the dimension exists in the loaded dimensions list
-      // This ensures we only use account-specific dimensions (or custom/global if no account)
+      // Check if the dimension exists in the loaded account-scoped dimensions list
       return dimensions.some(d => d.id === dimensionId);
     };
 
-    // If we have existing mappings, use them but validate dimension IDs
+    // If we have existing mappings, validate them against account-scoped dimensions
+    // Clear any mappings that reference old global/custom dimensions
     if (existingMappings && existingMappings.length > 0) {
-      // Match existing mappings with current headers
       const updatedMappings: ColumnMapping[] = headers.map((header, index) => {
         const existingMapping = existingMappings.find(m => m.column === header);
         if (existingMapping) {
-          // Priority: Use dimensionName if available, otherwise fall back to dimensionId
           let dimensionId: string | null = "none";
-          let dimensionName: string | null = existingMapping.dimensionName || null;
+          let dimensionName: string | null = null;
           
-          if (dimensionName) {
-            // Find dimension by name in the loaded dimensions (account-specific)
-            const dimension = dimensions.find(d => d.name === dimensionName);
+          // First try to match by dimension name (more stable across accounts)
+          if (existingMapping.dimensionName) {
+            const dimension = dimensions.find(d => d.name === existingMapping.dimensionName);
             if (dimension) {
               dimensionId = dimension.id;
-            } else {
-              // Dimension name not found in account-specific dimensions, clear it
-              dimensionName = null;
-              dimensionId = "none";
-            }
-          } else if (existingMapping.dimensionId) {
-            // Fallback: Validate dimension ID - if it's invalid (global or wrong account), set to "none"
-            const isValid = isValidDimensionId(existingMapping.dimensionId);
-            dimensionId = isValid ? existingMapping.dimensionId : "none";
-            
-            // If dimensionId is valid, look up the name
-            if (isValid && dimensionId && dimensionId !== 'none') {
-              const dimension = dimensions.find(d => d.id === dimensionId);
-              dimensionName = dimension?.name || null;
+              dimensionName = dimension.name;
             }
           }
           
+          // If no name match, try by dimension ID (only if it's valid for this account)
+          if (dimensionId === "none" && existingMapping.dimensionId) {
+            const isValid = isValidDimensionId(existingMapping.dimensionId);
+            if (isValid) {
+              const dimension = dimensions.find(d => d.id === existingMapping.dimensionId);
+              if (dimension) {
+                dimensionId = dimension.id;
+                dimensionName = dimension.name;
+              }
+            }
+          }
+          
+          // If still no match, this mapping references an old dimension - unmap it
+          if (dimensionId === "none") {
+            console.log(`Unmapping column "${header}" - old dimension not found in account scope`);
+          }
+          
           return {
-            ...existingMapping,
+            column: header,
             dimensionId: dimensionId,
-            dimensionName: dimensionName, // Store name for stable mapping
-            dateFormat: existingMapping.dateFormat || 'yyyy-mm-dd', // Default date format
+            dimensionName: dimensionName,
+            visible: existingMapping.visible ?? true,
+            dateFormat: dimensionId !== "none" && isDateDimension(dimensionId) 
+              ? (existingMapping.dateFormat || 'yyyy-mm-dd') 
+              : undefined,
           };
         }
-        // For new columns not in existing mappings, try smart matching
+        
+        // For new columns, try smart matching with account dimensions
         const matchedDimension = findBestMatch(header, dimensions);
         return {
           column: header,
           dimensionId: matchedDimension?.id || "none",
-          dimensionName: matchedDimension?.name || null, // Store name for stable mapping
+          dimensionName: matchedDimension?.name || null,
           visible: true,
           dateFormat: matchedDimension?.type === 'date' ? 'yyyy-mm-dd' : undefined,
         };
       });
       setMappings(updatedMappings);
     } else {
-      // No existing mappings, use smart matching
+      // No existing mappings, use smart matching with account dimensions
       const initialMappings: ColumnMapping[] = headers.map((header, index) => {
         const matchedDimension = findBestMatch(header, dimensions);
         return {
           column: header,
           dimensionId: matchedDimension?.id || "none",
-          dimensionName: matchedDimension?.name || null, // Store name for stable mapping
+          dimensionName: matchedDimension?.name || null,
           visible: true,
           dateFormat: matchedDimension?.type === 'date' ? 'yyyy-mm-dd' : undefined,
         };
@@ -409,15 +375,19 @@ export const ColumnMappingStep = ({
           return;
         }
 
-        // Create new dimension
+        // Create new dimension with account scope
+        if (!accountId) {
+          throw new Error("Account ID is required to create dimensions");
+        }
+
         const { data: newDimension, error: createError } = await supabase
           .from('dimensions')
           .insert({
             user_id: user.id,
-            report_id: reportId,
+            account_id: accountId,
             name: normalizedName,
             type: mapping.newDimensionType || 'text',
-            scope: 'custom',
+            scope: 'account',
           })
           .select()
           .single();
