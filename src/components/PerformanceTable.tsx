@@ -1037,20 +1037,26 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         },
       });
 
-              if (error) {
-          console.error('[testing] Error loading performance data:', error);
-          console.error('[testing] Error details:', {
-            message: error.message,
-            status: error.status,
-            details: error.details
-          });
-          toast({
-            title: "Error loading data",
-            description: `Failed to load performance table data: ${error.message || 'Unknown error'}`,
-            variant: "destructive",
-          });
-          return;
-        }
+      if (error) {
+        console.error('[testing] Error loading performance data:', error);
+        console.error('[testing] Error details:', {
+          message: error.message,
+          status: error.status,
+          details: error.details
+        });
+        toast({
+          title: "Error loading data",
+          description: `Failed to load performance table data: ${error.message || 'Unknown error'}`,
+          variant: "destructive",
+        });
+        setTableData([]);
+        setTotalData({});
+        setTotalCompareData({});
+        setTotalChangeData({});
+        setIsLoadingData(false);
+        onLoadingComplete?.();
+        return;
+      }
 
       console.log('[testing] Performance data response:', {
         hasData: !!data,
