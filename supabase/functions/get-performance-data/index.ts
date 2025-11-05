@@ -282,28 +282,21 @@ Deno.serve(async (req) => {
           filteredData = filteredData.filter((row) => {
             const dimValues = row.dimension_values as Record<string, any>;
             const dateValue = dimValues[dateDim.id];
-            if (!dateValue) return false; // Exclude rows without date values
+            if (!dateValue) return false;
 
-            // Parse date using helper function
             const rowDate = parseDateValue(dateValue);
-            if (!rowDate) {
-              console.warn(`Invalid date value: ${dateValue}`);
-              return false;
-            }
+            if (!rowDate) return false;
             
-            // Compare dates (ignore time component)
             const dateFromObj = dateFrom ? new Date(dateFrom) : null;
             const dateToObj = dateTo ? new Date(dateTo) : null;
             
             if (dateFromObj && !isNaN(dateFromObj.getTime())) {
-              // Compare dates at start of day
               const rowDateStart = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate());
               const fromDateStart = new Date(dateFromObj.getFullYear(), dateFromObj.getMonth(), dateFromObj.getDate());
               if (rowDateStart < fromDateStart) return false;
             }
             
             if (dateToObj && !isNaN(dateToObj.getTime())) {
-              // Compare dates at end of day
               const rowDateEnd = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate(), 23, 59, 59);
               const toDateEnd = new Date(dateToObj.getFullYear(), dateToObj.getMonth(), dateToObj.getDate(), 23, 59, 59);
               if (rowDateEnd > toDateEnd) return false;
@@ -312,8 +305,6 @@ Deno.serve(async (req) => {
             return true;
           });
           console.log(`After date filters: ${filteredData.length} rows (from ${beforeDateCount})`);
-        } else {
-          console.warn('Date filter requested but no date dimension found');
         }
       }
 
