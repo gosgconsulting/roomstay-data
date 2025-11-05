@@ -41,7 +41,7 @@ export default function ReportDashboard() {
   const [filters, setFilters] = useState<FilterState>({
     dimensionFilters: {},
     dateRange: undefined,
-    datePreset: "last_7_days",
+    datePreset: "this_month",
     compareEnabled: false,
     compareType: "previous_period",
     compareDateRange: undefined,
@@ -85,14 +85,14 @@ export default function ReportDashboard() {
       markComponentLoading('chart');
       markComponentLoading('table');
       
-      setFilters({
-        dimensionFilters: {},
-        dateRange: undefined,
-        datePreset: "last_30_days",
-        compareEnabled: false,
-        compareType: "previous_period",
-        compareDateRange: undefined,
-      });
+        setFilters({
+          dimensionFilters: {},
+          dateRange: undefined,
+          datePreset: "this_month",
+          compareEnabled: false,
+          compareType: "previous_period",
+          compareDateRange: undefined,
+        });
     }
   }, [reportId]);
   

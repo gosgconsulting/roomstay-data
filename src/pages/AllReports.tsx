@@ -55,7 +55,7 @@ export default function AllReports() {
   const getDefaultFilters = (): FilterState => ({
     dimensionFilters: {},
     dateRange: undefined,
-    datePreset: "last_7_days",
+    datePreset: "this_month",
     compareEnabled: false,
     compareType: "previous_period",
     compareDateRange: undefined,
@@ -68,11 +68,15 @@ export default function AllReports() {
 
   const checkAuth = async () => {
     try {
+      // Mark reports as loading
+      markComponentLoading('reports');
+      
       const { data: { session }, error } = await supabase.auth.getSession();
       
       if (error) throw error;
       
       if (!session) {
+        markComponentLoaded('reports');
         navigate('/auth');
         return;
       }
@@ -90,6 +94,7 @@ export default function AllReports() {
         
         if (accountError) {
           console.error('Error loading account:', accountError);
+          markComponentLoaded('reports');
           toast({
             title: "Error",
             description: "Account not found. Redirecting...",
@@ -146,6 +151,7 @@ export default function AllReports() {
       });
     } finally {
       setIsLoading(false);
+      markComponentLoaded('reports');
     }
   };
 

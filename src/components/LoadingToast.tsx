@@ -39,9 +39,10 @@ export const LoadingToast = ({ isVisible, loadingComponents, onDismiss }: Loadin
       return;
     }
 
-    const totalComponents = 3; // metrics, chart, table
-    const loadedComponents = totalComponents - loadingComponents.size;
-    const targetProgress = (loadedComponents / totalComponents) * 100;
+    // For progress calculation, we animate toward 90% when loading
+    // and complete to 100% when done (handled by auto-hide)
+    // This provides visual feedback without needing to know total components
+    const targetProgress = loadingComponents.size === 0 ? 100 : 90;
 
     // Smooth progress animation
     const timer = setInterval(() => {

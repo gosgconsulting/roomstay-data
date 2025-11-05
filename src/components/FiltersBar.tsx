@@ -49,7 +49,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
-  const [datePreset, setDatePreset] = useState<string>("last_7_days");
+  const [datePreset, setDatePreset] = useState<string>("this_month");
   const [showDimensionSelector, setShowDimensionSelector] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingFilters, setIsLoadingFilters] = useState(false);
@@ -66,7 +66,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
       setActiveDimensions([]);
       setSelectedFilters({});
       setDateRange(undefined);
-      setDatePreset("last_7_days");
+      setDatePreset("this_month");
       setCompareEnabled(false);
       setCompareType("previous_period");
       setCompareDateRange(undefined);
@@ -91,9 +91,9 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     }
   }, [activeDimensions, reportId]);
 
-  // Apply default date range on mount - use last 7 days for better performance with large datasets
+  // Apply default date range on mount - default to this month
   useEffect(() => {
-    applyDatePreset("last_7_days");
+    applyDatePreset("this_month");
   }, []);
 
   // Save filter settings whenever they change
@@ -173,18 +173,18 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
           });
           setSelectedFilters(normalizedFilters);
         }
-        // Always apply date preset if saved, or default to "last_7_days"
-        const preset = data.date_range_preset || "last_7_days";
+        // Always apply date preset if saved, or default to "this_month"
+        const preset = data.date_range_preset || "this_month";
         setDatePreset(preset);
         applyDatePreset(preset);
               } else {
           // No saved view for this report, apply defaults
-          applyDatePreset("last_7_days");
+          applyDatePreset("this_month");
         }
           } catch (error) {
         console.error("Error loading filter settings:", error);
         // On error, apply defaults
-        applyDatePreset("last_7_days");
+        applyDatePreset("this_month");
       }
   };
 
@@ -314,7 +314,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     const hasDimensionFilters = Object.keys(selectedFilters).some(
       dimensionId => selectedFilters[dimensionId] && selectedFilters[dimensionId].length > 0
     );
-    const hasDateFilter = datePreset !== "last_7_days" || dateRange !== undefined;
+    const hasDateFilter = datePreset !== "this_month" || dateRange !== undefined;
     const hasCompareFilter = compareEnabled;
     return hasDimensionFilters || hasDateFilter || hasCompareFilter;
   };
@@ -331,7 +331,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     });
     
     // Count date filter if not default
-    if (datePreset !== "last_7_days" || dateRange !== undefined) {
+    if (datePreset !== "this_month" || dateRange !== undefined) {
       count += 1;
     }
     
@@ -348,7 +348,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     // setActiveDimensions([]); // DON'T remove dimensions from filter bar
     setSelectedFilters({}); // Clear all filter values
     setDateRange(undefined);
-    setDatePreset("last_7_days");
+    setDatePreset("this_month");
     setCompareEnabled(false);
     setCompareType("previous_period");
     setCompareDateRange(undefined);

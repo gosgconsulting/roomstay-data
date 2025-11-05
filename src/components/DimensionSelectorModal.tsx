@@ -200,7 +200,7 @@ export const DimensionSelectorModal = ({
         filter_values: existingView?.filter_values || {},
         date_range_start: existingView?.date_range_start || null,
         date_range_end: existingView?.date_range_end || null,
-        date_range_preset: existingView?.date_range_preset || "last_7_days",
+        date_range_preset: existingView?.date_range_preset || "this_month",
       };
 
       if (existingView) {
