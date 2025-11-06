@@ -296,14 +296,12 @@ Deno.serve(async (req) => {
             if (dateFromObj && !isNaN(dateFromObj.getTime())) {
               const rowDateUTC = Date.UTC(rowDate.getUTCFullYear(), rowDate.getUTCMonth(), rowDate.getUTCDate());
               const fromDateUTC = Date.UTC(dateFromObj.getUTCFullYear(), dateFromObj.getUTCMonth(), dateFromObj.getUTCDate());
-              console.log(`Date comparison (from): row=${new Date(rowDateUTC).toISOString()}, filter=${new Date(fromDateUTC).toISOString()}`);
               if (rowDateUTC < fromDateUTC) return false;
             }
             
             if (dateToObj && !isNaN(dateToObj.getTime())) {
               const rowDateUTC = Date.UTC(rowDate.getUTCFullYear(), rowDate.getUTCMonth(), rowDate.getUTCDate());
               const toDateUTC = Date.UTC(dateToObj.getUTCFullYear(), dateToObj.getUTCMonth(), dateToObj.getUTCDate());
-              console.log(`Date comparison (to): row=${new Date(rowDateUTC).toISOString()}, filter=${new Date(toDateUTC).toISOString()}`);
               if (rowDateUTC > toDateUTC) return false;
             }
             
