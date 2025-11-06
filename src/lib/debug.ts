@@ -47,8 +47,15 @@ export const filterDimensionsByVisibility = async (
         });
       }
       
+      // Always include date dimensions (critical for charts and date-based filtering)
+      dimensions.forEach(dim => {
+        if (dim.type === 'date') {
+          visibleSet.add(dim.id);
+        }
+      });
+      
       const filtered = dimensions.filter(d => visibleSet.has(d.id));
-      console.log("[DEBUG] Filtered dimensions by visibility (including filter dimensions):", filtered.length, "of", dimensions.length);
+      console.log("[DEBUG] Filtered dimensions by visibility (including filter and date dimensions):", filtered.length, "of", dimensions.length);
       console.log("[DEBUG] Filter dimensions included:", viewSettings.filter_dimensions);
       return filtered;
     }
