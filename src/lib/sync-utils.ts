@@ -107,8 +107,10 @@ export const parseDate = (value: any, dateFormat: string = 'auto-detect'): Date 
     }
     
     // Handle Excel serial dates (numbers like 44927 for 2023-01-01)
+    // Excel dates for 2000+ start at ~36526, so only consider values >= 30000
+    // This prevents small numbers like "9" from being parsed as 1900-01-09
     const numValue = parseFloat(stringValue);
-    if (!isNaN(numValue) && numValue > 1 && numValue < 100000) {
+    if (!isNaN(numValue) && numValue >= 30000 && numValue < 100000) {
       // Excel serial date (days since 1900-01-01, but Excel treats 1900 as leap year)
       const excelEpoch = new Date(1899, 11, 30); // December 30, 1899
       const date = new Date(excelEpoch.getTime() + numValue * 24 * 60 * 60 * 1000);
