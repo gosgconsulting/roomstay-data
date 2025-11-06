@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       accountId,
       userId,
       visibleDimensionIds = [],
-      limit = 5000,
+      limit = 1000, // Reduced from 5000 to prevent CPU timeout
       offset = 0,
       compareEnabled = false,
       compareDateFrom,

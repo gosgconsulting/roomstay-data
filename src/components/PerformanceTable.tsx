@@ -1198,7 +1198,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
           accountId, // Pass accountId to edge function
           userId: user?.id, // Pass userId for custom dimensions
           visibleDimensionIds: Array.from(visibleColumns),
-          limit: 10000, // Reasonable limit to prevent timeouts
+          limit: 1000, // Reduced to prevent CPU timeout in edge function
           offset: 0,
           compareEnabled: filters.compareEnabled || false,
           compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
