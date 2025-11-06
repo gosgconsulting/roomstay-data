@@ -304,14 +304,33 @@ export const EditDataSourceModal = ({
     setIsResyncing(true);
     
     try {
-      // Convert to sync-utils format
+      const spreadsheetId = extractSpreadsheetId(url);
+      if (!spreadsheetId) {
+        throw new Error("Invalid Google Sheets URL");
+      }
+
+      // First update the data source with current form values
+      const { error: updateError } = await supabase
+        .from('data_sources')
+        .update({
+          name: dataName,
+          google_sheets_url: url,
+          spreadsheet_id: spreadsheetId,
+          tab_name: selectedTab,
+          header_row: parseInt(headerRow),
+        })
+        .eq('id', dataSource.id);
+
+      if (updateError) throw updateError;
+
+      // Convert to sync-utils format with updated values
       const syncDataSourceObj: SyncDataSource = {
         id: dataSource.id,
-        name: dataSource.name,
-        google_sheets_url: url || dataSource.google_sheets_url,
-        spreadsheet_id: extractSpreadsheetId(url) || dataSource.spreadsheet_id,
-        tab_name: selectedTab || dataSource.tab_name,
-        header_row: parseInt(headerRow) || dataSource.header_row,
+        name: dataName,
+        google_sheets_url: url,
+        spreadsheet_id: spreadsheetId,
+        tab_name: selectedTab,
+        header_row: parseInt(headerRow),
         column_mappings: dataSource.column_mappings,
         report_id: dataSource.report_id,
       };
@@ -338,7 +357,7 @@ export const EditDataSourceModal = ({
         
         onSuccess();
       } else {
-        throw new Error(result.error || "Unknown sync error");
+        throw new Error(result.error || "Sync failed - check console for details");
       }
     } catch (error) {
       console.error("Error resyncing data source:", error);
