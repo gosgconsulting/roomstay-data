@@ -50,3 +50,34 @@ export function sortKPIsByDefaultOrder(kpiNames: string[]): string[] {
   
   return [...sortedFirst, ...sortedMiddle, ...sortedLast];
 }
+
+/**
+ * Returns account-specific default KPI visibility and order
+ * For Roomstay account: specific order of KPIs
+ * For other accounts: uses sortKPIsByDefaultOrder
+ */
+export function getAccountDefaultKPIs(accountName: string | undefined, availableKPIs: string[]): string[] {
+  // Roomstay account specific order
+  if (accountName?.toLowerCase() === 'roomstay') {
+    const roomstayOrder = [
+      'Impressions',
+      'Clicks',
+      'CTR',
+      'Bookings',
+      'Conversion Rate',
+      'CPC',
+      'Cost',
+      'Revenue',
+      'ROAS',
+      'Cost of sale'
+    ];
+    
+    // Return only KPIs that exist in availableKPIs, in the specified order
+    return roomstayOrder.filter(kpi => 
+      availableKPIs.some(available => available.toLowerCase() === kpi.toLowerCase())
+    );
+  }
+  
+  // Default ordering for other accounts
+  return sortKPIsByDefaultOrder(availableKPIs);
+}

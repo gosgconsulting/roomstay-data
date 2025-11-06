@@ -33,7 +33,7 @@ import { ChevronDown, ChevronRight, Columns3, Copy, Trash2, Plus, ArrowUp, Arrow
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
-import { cn, sortKPIsByDefaultOrder } from "@/lib/utils";
+import { cn, sortKPIsByDefaultOrder, getAccountDefaultKPIs } from "@/lib/utils";
 import { ColumnFilterModal } from "./ColumnFilterModal";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { supabase } from "@/integrations/supabase/client";
@@ -176,6 +176,33 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   // Tab editing state
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingTabName, setEditingTabName] = useState("");
+  const [accountName, setAccountName] = useState<string | undefined>(undefined);
+
+  // Load account name when accountId changes
+  useEffect(() => {
+    const loadAccountName = async () => {
+      if (!accountId) {
+        setAccountName(undefined);
+        return;
+      }
+      
+      try {
+        const { data, error } = await supabase
+          .from('accounts')
+          .select('name')
+          .eq('id', accountId)
+          .single();
+        
+        if (!error && data) {
+          setAccountName(data.name);
+        }
+      } catch (error) {
+        console.error('Error loading account name:', error);
+      }
+    };
+    
+    loadAccountName();
+  }, [accountId]);
 
   useEffect(() => {
     if (reportId) {
@@ -355,6 +382,45 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       console.log('Found views:', views?.length || 0);
 
       if (views && views.length > 0) {
+        // Update default views for Roomstay account if needed
+        if (accountName?.toLowerCase() === 'roomstay' && !isSharedView && user) {
+          const roomstayKPIs = [
+            'Impressions',
+            'Clicks',
+            'CTR',
+            'Bookings',
+            'Conversion Rate',
+            'CPC',
+            'Cost',
+            'Revenue',
+            'ROAS',
+            'Cost of sale'
+          ];
+          
+          // Update default view if it doesn't have the right KPI order
+          const defaultView = views.find(v => v.is_default);
+          if (defaultView) {
+            const currentKPIs = defaultView.visible_kpis || [];
+            const needsUpdate = JSON.stringify(currentKPIs) !== JSON.stringify(roomstayKPIs);
+            
+            if (needsUpdate) {
+              console.log('Updating Roomstay default view KPI order');
+              await supabase
+                .from('report_views')
+                .update({
+                  visible_kpis: roomstayKPIs,
+                  kpi_order: roomstayKPIs,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', defaultView.id);
+              
+              // Update local state
+              defaultView.visible_kpis = roomstayKPIs;
+              defaultView.kpi_order = roomstayKPIs;
+            }
+          }
+        }
+        
         setTableViews(views);
         // Set the first view as active (default view)
         const defaultView = views.find(v => v.is_default) || views[0];
@@ -403,8 +469,9 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula)
         .map(d => d.id);
 
-        // Set default KPI settings - all numeric/currency dimensions visible
-        const defaultKPIs = sortKPIsByDefaultOrder(
+        // Set default KPI settings - use account-specific defaults
+        const defaultKPIs = getAccountDefaultKPIs(
+          accountName,
           dimensions
             .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage')
             .map(d => d.name)
