@@ -255,6 +255,7 @@ export default function Index() {
               onFiltersChange={setFilters}
               key={`table-${dataRefreshKey}-${loadingGeneration}`}
               onLoadingComplete={() => markComponentLoaded('table')}
+              visibilityRefreshTrigger={visibilityRefreshTrigger}
             />
           </main>
           
