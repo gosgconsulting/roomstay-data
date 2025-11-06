@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       accountId,
       userId,
       visibleDimensionIds = [],
-      limit = 1000, // Reduced from 5000 to prevent CPU timeout
+      limit = 100000, // High limit to fetch all data - no artificial restriction
       offset = 0,
       compareEnabled = false,
       compareDateFrom,
@@ -222,10 +222,13 @@ Deno.serve(async (req) => {
       .select('dimension_values, row_number')
       .eq('report_id', reportId)
       .order('row_number', { ascending: false })
-      .abortSignal(AbortSignal.timeout(60000)); // 60 second timeout
+      .abortSignal(AbortSignal.timeout(120000)); // 120 second timeout for large datasets
 
-    // Fetch data with limit and offset
-    query = query.range(offset, offset + limit - 1);
+    // Only apply range if offset > 0 or limit is explicitly small
+    // This allows fetching all data when needed
+    if (offset > 0 || limit < 100000) {
+      query = query.range(offset, offset + limit - 1);
+    }
 
     const rawDataResult = await retryQuery(async () => await query);
     const { data: rawData, error: dataError } = rawDataResult;
