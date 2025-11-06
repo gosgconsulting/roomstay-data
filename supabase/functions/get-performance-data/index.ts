@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       accountId,
       userId,
       visibleDimensionIds = [],
-      limit = 100000, // High limit to fetch all data - no artificial restriction
+      limit = 300000, // Supabase max limit - fetches all available rows up to 300k
       offset = 0,
       compareEnabled = false,
       compareDateFrom,
@@ -222,13 +222,8 @@ Deno.serve(async (req) => {
       .select('dimension_values, row_number')
       .eq('report_id', reportId)
       .order('row_number', { ascending: false })
+      .range(offset, offset + limit - 1) // Fetches only available rows (won't error if fewer rows exist)
       .abortSignal(AbortSignal.timeout(120000)); // 120 second timeout for large datasets
-
-    // Only apply range if offset > 0 or limit is explicitly small
-    // This allows fetching all data when needed
-    if (offset > 0 || limit < 100000) {
-      query = query.range(offset, offset + limit - 1);
-    }
 
     const rawDataResult = await retryQuery(async () => await query);
     const { data: rawData, error: dataError } = rawDataResult;
