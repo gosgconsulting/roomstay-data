@@ -220,20 +220,27 @@ Deno.serve(async (req) => {
     let query = supabase
       .from('dimension_data')
       .select('dimension_values, row_number')
-      .eq('report_id', reportId)
-      .order('row_number', { ascending: false })
-      .abortSignal(AbortSignal.timeout(60000)); // 60 second timeout
+      .eq('report_id', reportId);
 
-    // Apply date filters if provided
-    if (dateFrom || dateTo) {
-      const dateDim = dimensions?.find(d => d.type === 'date');
-      if (dateDim) {
-        // We'll filter client-side since JSONB queries are complex
+    // Apply date filters at SQL level if provided for better performance
+    const dateDim = dimensions?.find(d => d.type === 'date');
+    if ((dateFrom || dateTo) && dateDim) {
+      // Apply JSONB filter for date range to reduce data fetched
+      if (dateFrom && dateTo) {
+        // Filter for dates within range
+        query = query.gte(`dimension_values->${dateDim.id}`, dateFrom)
+                     .lte(`dimension_values->${dateDim.id}`, dateTo);
+      } else if (dateFrom) {
+        query = query.gte(`dimension_values->${dateDim.id}`, dateFrom);
+      } else if (dateTo) {
+        query = query.lte(`dimension_values->${dateDim.id}`, dateTo);
       }
     }
 
-    // Fetch data with limit and offset with retry
-    query = query.range(offset, offset + limit - 1);
+    // Order and apply pagination
+    query = query.order('row_number', { ascending: false })
+                 .range(offset, offset + limit - 1)
+                 .abortSignal(AbortSignal.timeout(60000)); // 60 second timeout
 
     const rawDataResult = await retryQuery(async () => await query);
     const { data: rawData, error: dataError } = rawDataResult;
