@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       accountId,
       userId,
       visibleDimensionIds = [],
-      limit = 300000, // Supabase max limit - fetches all available rows up to 300k
+      limit = 50000, // Reasonable limit for performance
       offset = 0,
       compareEnabled = false,
       compareDateFrom,
@@ -72,7 +72,18 @@ Deno.serve(async (req) => {
       compareEnabled,
       dateFrom,
       dateTo,
-      dateGranularity
+      dateGranularity,
+      timestamp: new Date().toISOString()
+    });
+    
+    console.log('get-performance-data: Date filter analysis:', {
+      hasDateFrom: !!dateFrom,
+      hasDateTo: !!dateTo,
+      dateFromValue: dateFrom,
+      dateToValue: dateTo,
+      dateFromType: typeof dateFrom,
+      dateToType: typeof dateTo,
+      willApplyDateFilter: !!(dateFrom || dateTo)
     });
 
     // Helper function to parse dates in various formats
@@ -217,12 +228,13 @@ Deno.serve(async (req) => {
     console.log(`Loaded ${dimensions?.length || 0} dimensions for aggregation`);
 
     // Build filter for the main query with optimized settings
+    // Fetch ALL data first, then apply date filtering in memory for better performance
     let query = supabase
       .from('dimension_data')
       .select('dimension_values, row_number')
       .eq('report_id', reportId)
       .order('row_number', { ascending: false })
-      .range(offset, offset + limit - 1) // Fetches only available rows (won't error if fewer rows exist)
+      .limit(limit) // Use limit instead of range for better performance
       .abortSignal(AbortSignal.timeout(120000)); // 120 second timeout for large datasets
 
     const rawDataResult = await retryQuery(async () => await query);
@@ -269,6 +281,18 @@ Deno.serve(async (req) => {
       // Filter by date range (after dimension filters)
       if ((dateFrom || dateTo) && dimensions) {
         const dateDim = dimensions.find(d => d.type === 'date');
+              console.log('get-performance-data: Applying date filter', {
+        dateDimension: dateDim ? { id: dateDim.id, name: dateDim.name } : null,
+        dateFrom,
+        dateTo,
+        dateFromParsed: dateFrom ? new Date(dateFrom).toISOString() : null,
+        dateToParsed: dateTo ? new Date(dateTo).toISOString() : null,
+        beforeFilterCount: filteredData.length,
+        sampleRowDates: filteredData.slice(0, 3).map(row => ({
+          rowNumber: row.row_number,
+          dateValue: row.dimension_values[dateDim?.id || '']
+        }))
+      });
         if (dateDim) {
           const beforeDateCount = filteredData.length;
           filteredData = filteredData.filter((row) => {
@@ -298,6 +322,69 @@ Deno.serve(async (req) => {
             return true;
           });
           console.log(`After date filters: ${filteredData.length} rows (from ${beforeDateCount})`);
+        
+        // Debug: Check if November 1st data is still present
+        const nov1Data = filteredData.filter(row => {
+          const dateValue = row.dimension_values[dateDim.id];
+          return dateValue && dateValue.includes('2025-11-01');
+        });
+        
+        if (nov1Data.length > 0) {
+          console.log('🚨 ISSUE: November 1st data still present after filtering:', {
+            nov1RowCount: nov1Data.length,
+            sampleNov1Data: nov1Data.slice(0, 2).map(row => ({
+              rowNumber: row.row_number,
+              dateValue: row.dimension_values[dateDim.id],
+              parsedDate: parseDateValue(row.dimension_values[dateDim.id])?.toISOString()
+            }))
+          });
+        } else {
+          console.log('✅ November 1st data correctly filtered out');
+        }
+        
+        // Debug: Show sample dates that passed the filter
+        if (filteredData.length > 0) {
+          const sampleDates = filteredData.slice(0, 5).map(row => ({
+            rowNumber: row.row_number,
+            dateValue: row.dimension_values[dateDim.id],
+            parsedDate: parseDateValue(row.dimension_values[dateDim.id])?.toISOString()
+          }));
+          console.log('Sample dates that passed filter:', sampleDates);
+        }
+        
+        // Debug: Show sample dates that were filtered out
+        const filteredOutSample = (rawData || []).filter(row => {
+          const dimValues = row.dimension_values;
+          const dateValue = dimValues[dateDim.id];
+          if (!dateValue) return false;
+          const rowDate = parseDateValue(dateValue);
+          if (!rowDate) return false;
+          
+          const dateFromObj = dateFrom ? new Date(dateFrom) : null;
+          const dateToObj = dateTo ? new Date(dateTo) : null;
+          
+          if (dateFromObj && !isNaN(dateFromObj.getTime())) {
+            const rowDateUTC = Date.UTC(rowDate.getUTCFullYear(), rowDate.getUTCMonth(), rowDate.getUTCDate());
+            const fromDateUTC = Date.UTC(dateFromObj.getUTCFullYear(), dateFromObj.getUTCMonth(), dateFromObj.getUTCDate());
+            if (rowDateUTC < fromDateUTC) return true;
+          }
+          if (dateToObj && !isNaN(dateToObj.getTime())) {
+            const rowDateUTC = Date.UTC(rowDate.getUTCFullYear(), rowDate.getUTCMonth(), rowDate.getUTCDate());
+            const toDateUTC = Date.UTC(dateToObj.getUTCFullYear(), dateToObj.getUTCMonth(), dateToObj.getUTCDate());
+            if (rowDateUTC > toDateUTC) return true;
+          }
+          return false;
+        }).slice(0, 5);
+        
+        if (filteredOutSample.length > 0) {
+          const filteredOutDates = filteredOutSample.map(row => ({
+            rowNumber: row.row_number,
+            dateValue: row.dimension_values[dateDim.id],
+            parsedDate: parseDateValue(row.dimension_values[dateDim.id])?.toISOString(),
+            reason: 'outside date range'
+          }));
+          console.log('Sample dates that were filtered OUT:', filteredOutDates);
+        }
         }
       }
 
@@ -834,6 +921,33 @@ Deno.serve(async (req) => {
     }
 
     console.log(`Built ${groupedArray.length} grouped rows`);
+    
+    // Debug: Check what dates are in the final grouped data
+    if (groupedArray.length > 0) {
+      const groupedDates = groupedArray.map(group => ({
+        name: group.name,
+        sortKey: group.sortKey,
+        id: group.id
+      }));
+      console.log('Final grouped dates:', groupedDates);
+      
+      // Specifically check for November dates
+      const novemberGroups = groupedArray.filter(group => 
+        group.name.includes('November') || 
+        group.sortKey?.includes('2025-11') ||
+        group.name.includes('2025-11')
+      );
+      
+      if (novemberGroups.length > 0) {
+        console.log('🚨 ISSUE: November dates found in final grouped data:', novemberGroups.map(g => ({
+          name: g.name,
+          sortKey: g.sortKey,
+          dataKeys: Object.keys(g.data)
+        })));
+      } else {
+        console.log('✅ No November dates in final grouped data');
+      }
+    }
 
     // Calculate total for all visible metric columns
     const totalData: Record<string, any> = {};

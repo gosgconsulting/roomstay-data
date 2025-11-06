@@ -165,13 +165,13 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   const [breakdownByDimensions, setBreakdownByDimensions] = useState<string[]>([]);
   const [thenByDimensions, setThenByDimensions] = useState<string[]>([]);
   
-  // State for date granularity - default to 'none'
-  const [dateGranularity, setDateGranularity] = useState<'none' | 'day' | 'week' | 'month' | 'year'>('none');
+  // State for date granularity - default to 'day' for better user experience
+  const [dateGranularity, setDateGranularity] = useState<'none' | 'day' | 'week' | 'month' | 'year'>('day');
   const [dateOrder, setDateOrder] = useState<'asc' | 'desc'>('desc');
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 50; // Show more rows per page
   
   // Tab editing state
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
@@ -275,7 +275,16 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   // Create a stable reference for filters to prevent unnecessary re-renders
   const debouncedFilters = useMemo(() => {
     console.log('[testing] PerformanceTable - Creating stable filters reference:', filters);
-    return {
+    console.log('[testing] PerformanceTable - Date range details:', {
+      dateRange: filters.dateRange,
+      from: filters.dateRange?.from?.toISOString(),
+      to: filters.dateRange?.to?.toISOString(),
+      preset: filters.datePreset,
+      filtersObjectId: Object.keys(filters).join(','),
+      timestamp: new Date().toISOString()
+    });
+    
+    const result = {
       dimensionFilters: filters.dimensionFilters,
       dateRange: filters.dateRange,
       datePreset: filters.datePreset,
@@ -283,6 +292,9 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       compareType: filters.compareType,
       compareDateRange: filters.compareDateRange,
     };
+    
+    console.log('[testing] PerformanceTable - Debounced filters result:', result);
+    return result;
   }, [
     JSON.stringify(filters.dimensionFilters),
     filters.dateRange?.from?.toISOString(),
@@ -294,33 +306,47 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     filters.compareDateRange?.to?.toISOString(),
   ]);
 
+  // Load performance data when filters change (simplified approach like KPIChart)
   useEffect(() => {
-    console.log('[testing] PerformanceTable data loading check:', {
+    console.log('[testing] PerformanceTable useEffect triggered:', {
       reportId: !!reportId,
       reportIdValue: reportId,
       groupByDimensions: groupByDimensions.length,
       groupByDimensionsValue: groupByDimensions,
       dimensions: dimensions.length,
-      isLoadingDimensions,
-      activeViewId,
-      tableViewsCount: tableViews.length
+      debouncedFilters,
+      dateRange: debouncedFilters.dateRange,
+      dateFrom: debouncedFilters.dateRange?.from?.toISOString(),
+      dateTo: debouncedFilters.dateRange?.to?.toISOString(),
+      timestamp: new Date().toISOString()
     });
     
-    // Try to load data if we have reportId, groupByDimensions, and dimensions
-    // Don't block on hasDataSources - let the load attempt determine if data exists
-    if (reportId && groupByDimensions.length > 0 && dimensions.length > 0) {
-      console.log('[testing] All conditions met, loading performance data');
+    // Always attempt to load data if we have a reportId - let the function handle conditions
+    if (reportId) {
+      console.log('[testing] ✓ reportId exists, calling loadPerformanceData with filters:', {
+        dateFrom: debouncedFilters.dateRange?.from ? format(debouncedFilters.dateRange.from, 'yyyy-MM-dd') : undefined,
+        dateTo: debouncedFilters.dateRange?.to ? format(debouncedFilters.dateRange.to, 'yyyy-MM-dd') : undefined,
+        preset: debouncedFilters.datePreset
+      });
+      
+      // Reset to first page when filters change
+      setCurrentPage(1);
+      
+      // Immediately show loading state
+      setIsLoadingData(true);
+      
+      // Load data (the function will handle its own loading state)
       loadPerformanceData();
     } else {
-      console.log('[testing] Not loading data - conditions not met:', {
-        reportId: !!reportId,
-        reportIdValue: reportId,
-        groupByDimensions: groupByDimensions.length,
-        dimensions: dimensions.length,
-        reason: !reportId ? 'no reportId' : groupByDimensions.length === 0 ? 'no groupByDimensions' : 'no dimensions'
-      });
+      console.log('[testing] ✗ No reportId, skipping data load');
+      // Clear data when no reportId
+      setTableData([]);
+      setTotalData({});
+      setTotalCompareData({});
+      setTotalChangeData({});
+      setIsLoadingData(false);
     }
-  }, [reportId, groupByDimensions, breakdownByDimensions, thenByDimensions, dimensions.length, dateOrder, debouncedFilters, visibilityRefreshTrigger]);
+  }, [reportId, debouncedFilters, groupByDimensions, breakdownByDimensions, thenByDimensions, dateOrder, visibilityRefreshTrigger]);
 
   // Save view settings whenever they change (with debounce to prevent excessive saves)
   useEffect(() => {
@@ -491,7 +517,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
           column_order: defaultColumnOrder,
           visible_kpis: defaultKPIs,
           kpi_order: defaultKPIs,
-          date_granularity: isDateGrouping ? 'day' : 'none',
+          date_granularity: isDateGrouping ? 'day' : 'day', // Always default to day
           date_order: 'desc',
         })
         .select()
@@ -812,7 +838,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
           column_order: activeView.column_order || [],
           visible_kpis: activeView.visible_kpis || [],
           kpi_order: activeView.kpi_order || [],
-          date_granularity: activeView.date_granularity || 'none',
+          date_granularity: activeView.date_granularity || 'day',
           date_order: activeView.date_order || 'desc',
         })
         .select()
@@ -1155,57 +1181,74 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
 
   // Load performance data using the new edge function
   const loadPerformanceData = async () => {
+    // Loading state is already set in useEffect, but ensure it's set here too for direct calls
+    
+    const dateFromFormatted = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined;
+    const dateToFormatted = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined;
+    
     console.log('[testing] loadPerformanceData called with:', {
       reportId,
       groupByDimensions: groupByDimensions.length,
       dimensions: dimensions.length,
-      groupByDims: groupByDimensions
+      groupByDims: groupByDimensions,
+      dateFilters: {
+        dateFrom: dateFromFormatted,
+        dateTo: dateToFormatted,
+        preset: filters.datePreset,
+        rawDateRange: filters.dateRange
+      }
     });
 
+    // Check conditions after setting loading state
     if (!reportId || groupByDimensions.length === 0) {
       console.log('[testing] No data loading - missing reportId or groupByDimensions');
       setTableData([]);
       setTotalData({});
       setTotalCompareData({});
       setTotalChangeData({});
+      setIsLoadingData(false);
       onLoadingComplete?.(); // Mark as complete even when skipping load
       return;
     }
-
-    setIsLoadingData(true);
 
     try {
       // Get current user for custom dimensions
       const { data: { user } } = await supabase.auth.getUser();
       
-      console.log('[testing] Calling get-performance-data with:', {
+      const requestBody = {
         reportId,
         groupByDims: groupByDimensions,
         breakdownDims: breakdownByDimensions,
         thenByDims: thenByDimensions,
-        userId: user?.id
+        dimensionFilters: filters.dimensionFilters,
+        dateFrom: dateFromFormatted,
+        dateTo: dateToFormatted,
+        accountId, // Pass accountId to edge function
+        userId: user?.id, // Pass userId for custom dimensions
+        visibleDimensionIds: Array.from(visibleColumns),
+                  limit: 50000, // Increased to get more data for pagination
+        offset: 0,
+        compareEnabled: filters.compareEnabled || false,
+        compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
+        compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined,
+        dateGranularity: dateGranularity,
+        dateOrder: dateOrder,
+      };
+      
+      console.log('[testing] Calling get-performance-data with request body:', requestBody);
+      console.log('[testing] Date filter details being sent:', {
+        dateFrom: requestBody.dateFrom,
+        dateTo: requestBody.dateTo,
+        hasDateFrom: !!requestBody.dateFrom,
+        hasDateTo: !!requestBody.dateTo,
+        originalDateRange: filters.dateRange,
+        originalFrom: filters.dateRange?.from?.toISOString(),
+        originalTo: filters.dateRange?.to?.toISOString(),
+        timestamp: new Date().toISOString()
       });
 
       const { data, error } = await supabase.functions.invoke('get-performance-data', {
-        body: {
-          reportId,
-          groupByDims: groupByDimensions,
-          breakdownDims: breakdownByDimensions,
-          thenByDims: thenByDimensions,
-          dimensionFilters: filters.dimensionFilters,
-          dateFrom: filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined,
-          dateTo: filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined,
-          accountId, // Pass accountId to edge function
-          userId: user?.id, // Pass userId for custom dimensions
-          visibleDimensionIds: Array.from(visibleColumns),
-          limit: 1000, // Reduced to prevent CPU timeout in edge function
-          offset: 0,
-          compareEnabled: filters.compareEnabled || false,
-          compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
-          compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined,
-          dateGranularity: dateGranularity,
-          dateOrder: dateOrder,
-        },
+        body: requestBody,
       });
 
       if (error) {
@@ -2148,8 +2191,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                 <div className="mt-4 flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">
                     Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
-                    {Math.min(currentPage * itemsPerPage, tableData.length)} of{" "}
-                    {tableData.length} rows
+                    {Math.min(currentPage * itemsPerPage, filteredTableData.length)} of{" "}
+                    {filteredTableData.length} rows
                   </div>
                   <Pagination>
                     <PaginationContent>

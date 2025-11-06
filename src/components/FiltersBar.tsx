@@ -117,6 +117,13 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
   // Notify parent of filter changes
   useEffect(() => {
     console.log('[testing] FiltersBar - Filter state changed, notifying parent');
+    console.log('[testing] FiltersBar - Date range change details:', {
+      dateRange,
+      from: dateRange?.from?.toISOString(),
+      to: dateRange?.to?.toISOString(),
+      preset: datePreset,
+      timestamp: new Date().toISOString()
+    });
     if (onFiltersChange) {
       const newFilters = {
         dimensionFilters: selectedFilters,
@@ -291,10 +298,25 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
       case "last_30_days":
         from = subDays(now, 30);
         break;
-      case "last_month":
-        from = startOfMonth(subMonths(now, 1));
-        to = endOfMonth(subMonths(now, 1));
+      case "last_month": {
+        // Calculate last month using UTC to avoid timezone issues
+        const lastMonthDate = subMonths(now, 1);
+        // Create UTC dates for the first and last day of last month
+        from = new Date(Date.UTC(lastMonthDate.getFullYear(), lastMonthDate.getMonth(), 1, 0, 0, 0, 0));
+        to = new Date(Date.UTC(lastMonthDate.getFullYear(), lastMonthDate.getMonth() + 1, 0, 23, 59, 59, 999));
+        console.log('[testing] FiltersBar - Last month date range calculated:', {
+          from: from.toISOString(),
+          to: to.toISOString(),
+          fromFormatted: from.toISOString().split('T')[0],
+          toFormatted: to.toISOString().split('T')[0],
+          currentDate: now.toISOString(),
+          lastMonthYear: lastMonthDate.getFullYear(),
+          lastMonthMonth: lastMonthDate.getMonth() + 1,
+          displayFrom: format(from, "MMM d"),
+          displayTo: format(to, "MMM d, yyyy")
+        });
         break;
+      }
       case "this_year":
         from = startOfYear(now);
         to = endOfYear(now);
@@ -712,10 +734,18 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
                       {datePreset === "all_time" ? (
                         "All Time"
                       ) : dateRange?.from ? (
-                        dateRange.to ? (
+                                                dateRange.to ? (
                           <>
                             {format(dateRange.from, "MMM d")} -{" "}
-                            {format(dateRange.to, "MMM d, yyyy")}
+                            {(() => {
+                              // Format the 'to' date properly to avoid timezone issues
+                              const toDate = new Date(dateRange.to);
+                              // If it's near end of day (23:59:59), use the date as-is
+                              if (toDate.getUTCHours() === 23 && toDate.getUTCMinutes() === 59) {
+                                return format(new Date(toDate.getUTCFullYear(), toDate.getUTCMonth(), toDate.getUTCDate()), "MMM d, yyyy");
+                              }
+                              return format(toDate, "MMM d, yyyy");
+                            })()}
                           </>
                         ) : (
                           format(dateRange.from, "MMM d, yyyy")

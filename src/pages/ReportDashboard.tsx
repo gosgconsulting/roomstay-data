@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { startOfMonth, endOfMonth } from "date-fns";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
@@ -38,21 +39,52 @@ export default function ReportDashboard() {
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   
-  // Filter state - default to last 7 days for better performance with large datasets
-  const [filters, setFilters] = useState<FilterState>({
-    dimensionFilters: {},
-    dateRange: undefined,
-    datePreset: "this_month",
-    compareEnabled: false,
-    compareType: "previous_period",
-    compareDateRange: undefined,
+  // Filter state - default to this month with proper date range
+  const [filters, setFilters] = useState<FilterState>(() => {
+    const now = new Date();
+    const from = startOfMonth(now);
+    const to = endOfMonth(now);
+    
+    console.log('[testing] ReportDashboard - Initializing with date range:', {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      preset: "this_month"
+    });
+    
+    return {
+      dimensionFilters: {},
+      dateRange: { from, to },
+      datePreset: "this_month",
+      compareEnabled: false,
+      compareType: "previous_period",
+      compareDateRange: undefined,
+    };
   });
+
+  // Track filter changes
+  useEffect(() => {
+    console.log('[testing] ReportDashboard - Filter state updated:', {
+      dateRange: filters.dateRange,
+      dateFrom: filters.dateRange?.from?.toISOString(),
+      dateTo: filters.dateRange?.to?.toISOString(),
+      preset: filters.datePreset,
+      timestamp: new Date().toISOString()
+    });
+  }, [filters]);
 
   // Stabilize the onFiltersChange callback to prevent unnecessary re-renders
   const handleFiltersChange = useCallback((newFilters: FilterState) => {
     console.log('[testing] ReportDashboard - Filters changing:', newFilters);
+    console.log('[testing] ReportDashboard - Date filter change details:', {
+      oldDateRange: filters.dateRange,
+      newDateRange: newFilters.dateRange,
+      oldPreset: filters.datePreset,
+      newPreset: newFilters.datePreset,
+      dateRangeChanged: JSON.stringify(filters.dateRange) !== JSON.stringify(newFilters.dateRange),
+      timestamp: new Date().toISOString()
+    });
     setFilters(newFilters);
-  }, []);
+  }, [filters.dateRange, filters.datePreset]);
   
   // Track component loading states
   const markComponentLoading = (component: string) => {

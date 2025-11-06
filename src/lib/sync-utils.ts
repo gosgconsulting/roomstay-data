@@ -62,7 +62,8 @@ export const parseDate = (value: any, dateFormat: string = 'auto-detect'): Date 
         const parts = stringValue.split('-');
         if (parts.length === 3) {
           const [year, month, day] = parts;
-          const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          // Use UTC to avoid timezone issues
+          const date = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
           if (!isNaN(date.getTime())) {
             console.log(`[SYNC] Auto-detected YYYY-MM-DD format: ${stringValue} -> ${date.toISOString().split('T')[0]}`);
             return date;
@@ -75,7 +76,8 @@ export const parseDate = (value: any, dateFormat: string = 'auto-detect'): Date 
         const parts = stringValue.split('/');
         if (parts.length === 3) {
           const [month, day, year] = parts;
-          const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          // Use UTC to avoid timezone issues
+          const date = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
           if (!isNaN(date.getTime())) {
             console.log(`[SYNC] Auto-detected MM/DD/YYYY format: ${stringValue} -> ${date.toISOString().split('T')[0]}`);
             return date;
@@ -90,7 +92,8 @@ export const parseDate = (value: any, dateFormat: string = 'auto-detect'): Date 
           const [day, month, year] = parts;
           // Only try this if day > 12 (to distinguish from MM/DD/YYYY)
           if (parseInt(day) > 12) {
-            const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+            // Use UTC to avoid timezone issues
+            const date = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
             if (!isNaN(date.getTime())) {
               console.log(`[SYNC] Auto-detected DD/MM/YYYY format: ${stringValue} -> ${date.toISOString().split('T')[0]}`);
               return date;
@@ -125,7 +128,8 @@ export const parseDate = (value: any, dateFormat: string = 'auto-detect'): Date 
       const year = parseInt(stringValue);
       if (year >= 1900 && year <= 2100) {
         console.log(`[SYNC] Converting year-only value ${year} to ${year}-01-01`);
-        return new Date(year, 0, 1); // January 1st of that year
+        // Use UTC to avoid timezone issues
+        return new Date(Date.UTC(year, 0, 1)); // January 1st of that year
       }
     }
     
@@ -137,21 +141,24 @@ export const parseDate = (value: any, dateFormat: string = 'auto-detect'): Date 
         parts = stringValue.split(/[-/]/);
         if (parts.length === 3 && parts[0].length === 4) {
           const [year, month, day] = parts;
-          return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          // Use UTC to avoid timezone issues
+          return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
         }
       } else if (dateFormat === 'dd-mm-yyyy') {
         // Try DD-MM-YYYY or DD/MM/YYYY
         parts = stringValue.split(/[-/]/);
         if (parts.length === 3 && parts[2].length === 4) {
           const [day, month, year] = parts;
-          return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          // Use UTC to avoid timezone issues
+          return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
         }
       } else if (dateFormat === 'mm-dd-yyyy') {
         // Try MM-DD-YYYY or MM/DD/YYYY
         parts = stringValue.split(/[-/]/);
         if (parts.length === 3 && parts[2].length === 4) {
           const [month, day, year] = parts;
-          return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          // Use UTC to avoid timezone issues
+          return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
         }
       }
     }
