@@ -1054,7 +1054,26 @@ export const syncDataSource = async (
 
   } catch (error) {
     console.error(`[SYNC] Error syncing data source:`, error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown sync error";
+    
+    // Enhanced error message extraction
+    let errorMessage = "Failed to sync data";
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    } else if (error && typeof error === 'object') {
+      // Try to extract error message from various error object structures
+      const err = error as any;
+      errorMessage = err.message || err.msg || err.error || err.details || JSON.stringify(error);
+    }
+    
+    // Log full error for debugging
+    console.error(`[SYNC] Error details:`, {
+      message: errorMessage,
+      type: typeof error,
+      error: error,
+    });
     
     return {
       success: false,
