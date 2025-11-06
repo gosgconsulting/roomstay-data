@@ -278,7 +278,13 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
 
       // Helper to filter and aggregate data for a date range
       const aggregateForPeriod = (fromDate?: Date, toDate?: Date) => {
-        console.log('[KPI-DEBUG] Aggregating period data with filters:', stableFilters.dimensionFilters);
+        console.log('[KPI-DEBUG] ==========================================');
+        console.log('[KPI-DEBUG] aggregateForPeriod called with:');
+        console.log('[KPI-DEBUG] fromDate:', fromDate?.toISOString());
+        console.log('[KPI-DEBUG] toDate:', toDate?.toISOString());
+        console.log('[KPI-DEBUG] dimensionFilters:', stableFilters.dimensionFilters);
+        console.log('[KPI-DEBUG] ==========================================');
+        
         const filteredData = allDimensionData.filter((row) => {
           const dimensionValues = row.dimension_values as Record<string, any>;
           
@@ -297,13 +303,25 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
           if (fromDate || toDate) {
             const dateDimension = dimensions.find(d => d.type === 'date');
             if (dateDimension && dimensionValues[dateDimension.id]) {
-              const rowDate = new Date(dimensionValues[dateDimension.id]);
+              const rowDateStr = dimensionValues[dateDimension.id];
+              const rowDate = new Date(rowDateStr);
+              
+              console.log('[KPI-DEBUG] Checking date:', rowDateStr, 'parsed as:', rowDate.toISOString(), 'against range:', fromDate?.toISOString(), '-', toDate?.toISOString());
+              
               if (fromDate && rowDate < fromDate) {
+                console.log('[KPI-DEBUG] Row EXCLUDED: date before fromDate');
                 return false;
               }
-              if (toDate && rowDate > toDate) {
-                return false;
+              if (toDate) {
+                // Add one day to include the end date
+                const adjustedToDate = new Date(toDate);
+                adjustedToDate.setDate(adjustedToDate.getDate() + 1);
+                if (rowDate >= adjustedToDate) {
+                  console.log('[KPI-DEBUG] Row EXCLUDED: date after toDate');
+                  return false;
+                }
               }
+              console.log('[KPI-DEBUG] Row INCLUDED in date range');
             }
           }
           
@@ -311,6 +329,19 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
         });
 
         console.log('[KPI-DEBUG] Filtered data count:', filteredData.length, 'from', allDimensionData.length, 'total rows');
+        
+        // Log first few rows for debugging
+        if (filteredData.length > 0) {
+          console.log('[KPI-DEBUG] First 3 filtered rows:');
+          filteredData.slice(0, 3).forEach((row, idx) => {
+            const dateDimension = dimensions.find(d => d.type === 'date');
+            console.log(`[KPI-DEBUG]   Row ${idx}:`, {
+              date: dateDimension ? row.dimension_values[dateDimension.id] : 'N/A',
+              sampleValues: Object.keys(row.dimension_values).slice(0, 3)
+            });
+          });
+        }
+
 
         // Calculate aggregated values for each dimension
         const aggregatedValues: Record<string, number> = {};

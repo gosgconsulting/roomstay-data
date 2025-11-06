@@ -433,6 +433,14 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
         };
         
         // Filter and process main period data
+        console.log('[CHART-DEBUG] ========== FILTERING MAIN PERIOD DATA ==========');
+        console.log('[CHART-DEBUG] Date range:', {
+          from: stableFilters.dateRange?.from?.toISOString(),
+          to: stableFilters.dateRange?.to?.toISOString()
+        });
+        console.log('[CHART-DEBUG] Dimension filters:', stableFilters.dimensionFilters);
+        console.log('[CHART-DEBUG] Total rows to filter:', allDimensionData.length);
+        
         const mainPeriodData = allDimensionData.filter((row) => {
           const dimensionValues = row.dimension_values as Record<string, string>;
           
@@ -491,6 +499,15 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
           
           return true;
         });
+        
+        console.log('[CHART-DEBUG] Main period filtered data:', mainPeriodData.length, 'rows');
+        if (mainPeriodData.length > 0) {
+          const sample = mainPeriodData.slice(0, 3).map(row => ({
+            date: row.dimension_values[dateDimension.id],
+            sampleValue: extractKpiValue(row.dimension_values)
+          }));
+          console.log('[CHART-DEBUG] First 3 rows sample:', sample);
+        }
         
         // Group main period data by date
         const mainPeriodByDate = new Map<string, number>();
