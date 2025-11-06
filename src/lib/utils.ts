@@ -64,6 +64,7 @@ export function getAccountDefaultKPIs(accountName: string | undefined, available
       'Clicks',
       'CTR',
       'Bookings',
+      'Conversions',
       'Conversion Rate',
       'CPC',
       'Cost',
