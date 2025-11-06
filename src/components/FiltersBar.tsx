@@ -41,6 +41,7 @@ interface Dimension {
   id: string;
   name: string;
   type: string;
+  scope?: 'global' | 'account' | 'custom';
 }
 
 export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, accountId, refreshTrigger }: FiltersBarProps) => {
@@ -423,15 +424,22 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
         (d) => d.type === "text" || d.type === "date"
       );
       
-      // Deduplicate dimensions by name (keep first occurrence)
-      const seenNames = new Set<string>();
-      const uniqueDimensions = filterableDimensions.filter(dim => {
-        if (seenNames.has(dim.name)) {
-          return false;
+      // Deduplicate dimensions by name, prioritizing account-scoped > custom > global
+      const dimensionsByName = new Map<string, Dimension>();
+      filterableDimensions.forEach(dim => {
+        const existing = dimensionsByName.get(dim.name);
+        if (!existing) {
+          dimensionsByName.set(dim.name, dim);
+        } else {
+          // Replace if current dimension has higher priority
+          const currentPriority = dim.scope === 'account' ? 3 : dim.scope === 'custom' ? 2 : 1;
+          const existingPriority = existing.scope === 'account' ? 3 : existing.scope === 'custom' ? 2 : 1;
+          if (currentPriority > existingPriority) {
+            dimensionsByName.set(dim.name, dim);
+          }
         }
-        seenNames.add(dim.name);
-        return true;
       });
+      const uniqueDimensions = Array.from(dimensionsByName.values());
 
       // Filter dimensions by visibility settings
       let finalDimensions = uniqueDimensions;
