@@ -1193,16 +1193,16 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
           breakdownDims: breakdownByDimensions,
           thenByDims: thenByDimensions,
           dimensionFilters: filters.dimensionFilters,
-          dateFrom: filters.dateRange?.from?.toISOString(),
-          dateTo: filters.dateRange?.to?.toISOString(),
+          dateFrom: filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined,
+          dateTo: filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined,
           accountId, // Pass accountId to edge function
           userId: user?.id, // Pass userId for custom dimensions
           visibleDimensionIds: Array.from(visibleColumns),
           limit: 10000, // Reasonable limit to prevent timeouts
           offset: 0,
           compareEnabled: filters.compareEnabled || false,
-          compareDateFrom: filters.compareDateRange?.from?.toISOString(),
-          compareDateTo: filters.compareDateRange?.to?.toISOString(),
+          compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
+          compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined,
           dateGranularity: dateGranularity,
           dateOrder: dateOrder,
         },
