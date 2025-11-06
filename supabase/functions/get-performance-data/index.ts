@@ -313,11 +313,12 @@ Deno.serve(async (req) => {
               if (rowDateUTC < fromDateUTC) return false;
             }
             
-            if (dateToObj && !isNaN(dateToObj.getTime())) {
-              const rowDateUTC = Date.UTC(rowDate.getUTCFullYear(), rowDate.getUTCMonth(), rowDate.getUTCDate());
-              const toDateUTC = Date.UTC(dateToObj.getUTCFullYear(), dateToObj.getUTCMonth(), dateToObj.getUTCDate());
-              if (rowDateUTC > toDateUTC) return false;
-            }
+                      if (dateToObj && !isNaN(dateToObj.getTime())) {
+            const rowDateUTC = Date.UTC(rowDate.getUTCFullYear(), rowDate.getUTCMonth(), rowDate.getUTCDate());
+            const toDateUTC = Date.UTC(dateToObj.getUTCFullYear(), dateToObj.getUTCMonth(), dateToObj.getUTCDate());
+            // Include the end date: row date must be <= end date
+            if (rowDateUTC > toDateUTC) return false;
+          }
             
             return true;
           });

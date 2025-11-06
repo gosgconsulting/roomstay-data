@@ -39,13 +39,23 @@ export default function ReportDashboard() {
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   
-  // Filter state - default to this month with proper date range
+  // Filter state - default to this month with timezone-free date range
   const [filters, setFilters] = useState<FilterState>(() => {
     const now = new Date();
-    const from = startOfMonth(now);
-    const to = endOfMonth(now);
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     
-    console.log('[testing] ReportDashboard - Initializing with date range:', {
+    // Create timezone-free dates
+    const fromDateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
+    const toDateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
+    
+    const from = new Date(fromDateString);
+    const to = new Date(toDateString);
+    
+    console.log('[testing] ReportDashboard - Initializing with timezone-free date range:', {
+      fromDateString,
+      toDateString,
       from: from.toISOString(),
       to: to.toISOString(),
       preset: "this_month"

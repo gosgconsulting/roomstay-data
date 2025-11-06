@@ -49,7 +49,10 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
   const [activeDimensions, setActiveDimensions] = useState<string[]>([]);
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
-  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    console.log('[testing] FiltersBar - Initial dateRange state set to undefined');
+    return undefined;
+  });
   const [datePreset, setDatePreset] = useState<string>("this_month");
   const [showDimensionSelector, setShowDimensionSelector] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -92,13 +95,25 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     }
   }, [activeDimensions, reportId]);
 
-  // Apply default date range on mount - default to this month
-  // Only apply if no reportId yet (initial mount)
+  // Track dateRange changes
   useEffect(() => {
+    console.log('[testing] FiltersBar - dateRange state changed:', {
+      dateRange,
+      from: dateRange?.from?.toISOString(),
+      to: dateRange?.to?.toISOString(),
+      hasDateRange: !!dateRange,
+      timestamp: new Date().toISOString()
+    });
+  }, [dateRange]);
+
+  // Apply default date range on mount when no reportId
+  useEffect(() => {
+    console.log('[testing] FiltersBar - Initial mount effect');
     if (!reportId) {
+      console.log('[testing] FiltersBar - No reportId on mount, applying this_month preset');
       applyDatePreset("this_month");
     }
-  }, []);
+  }, []); // Only run on mount
 
   // Save filter settings whenever they change
   useEffect(() => {
@@ -291,29 +306,63 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
       case "last_7_days":
         from = subDays(now, 7);
         break;
-      case "this_month":
-        from = startOfMonth(now);
-        to = endOfMonth(now);
+      case "this_month": {
+        // Timezone-free this month calculation
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+        const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        
+        const fromDateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
+        const toDateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
+        
+        from = new Date(fromDateString);
+        to = new Date(toDateString);
+        
+        console.log('[testing] FiltersBar - This month calculated:', {
+          fromDateString,
+          toDateString,
+          from: from.toISOString(),
+          to: to.toISOString()
+        });
         break;
+      }
       case "last_30_days":
         from = subDays(now, 30);
         break;
       case "last_month": {
-        // Calculate last month using UTC to avoid timezone issues
-        const lastMonthDate = subMonths(now, 1);
-        // Create UTC dates for the first and last day of last month
-        from = new Date(Date.UTC(lastMonthDate.getFullYear(), lastMonthDate.getMonth(), 1, 0, 0, 0, 0));
-        to = new Date(Date.UTC(lastMonthDate.getFullYear(), lastMonthDate.getMonth() + 1, 0, 23, 59, 59, 999));
-        console.log('[testing] FiltersBar - Last month date range calculated:', {
+        // Calculate last month using pure date math - no timezone handling
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth(); // 0-based (0 = January)
+        
+        // Calculate last month year and month
+        let lastMonthYear = currentYear;
+        let lastMonth = currentMonth - 1;
+        if (lastMonth < 0) {
+          lastMonth = 11; // December
+          lastMonthYear = currentYear - 1;
+        }
+        
+        // Get last day of the month
+        const lastDayOfMonth = new Date(lastMonthYear, lastMonth + 1, 0).getDate();
+        
+        // Create date strings and then convert to Date objects for display only
+        const fromDateString = `${lastMonthYear}-${String(lastMonth + 1).padStart(2, '0')}-01`;
+        const toDateString = `${lastMonthYear}-${String(lastMonth + 1).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
+        
+        // Create Date objects - use local timezone for UI display to match calendar expectations
+        from = new Date(fromDateString);
+        to = new Date(toDateString);
+        
+        console.log('[testing] FiltersBar - Last month date range (timezone-free):', {
+          fromDateString,
+          toDateString,
           from: from.toISOString(),
           to: to.toISOString(),
-          fromFormatted: from.toISOString().split('T')[0],
-          toFormatted: to.toISOString().split('T')[0],
-          currentDate: now.toISOString(),
-          lastMonthYear: lastMonthDate.getFullYear(),
-          lastMonthMonth: lastMonthDate.getMonth() + 1,
-          displayFrom: format(from, "MMM d"),
-          displayTo: format(to, "MMM d, yyyy")
+          fromFormatted: fromDateString,
+          toFormatted: toDateString,
+          lastMonthYear,
+          lastMonth: lastMonth + 1,
+          lastDayOfMonth
         });
         break;
       }
@@ -330,6 +379,14 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
         to = endOfMonth(now);
     }
 
+    console.log('[testing] FiltersBar - Setting date range:', {
+      preset,
+      from: from?.toISOString(),
+      to: to?.toISOString(),
+      fromDefined: !!from,
+      toDefined: !!to
+    });
+    
     setDateRange({ from, to });
     setDatePreset(preset);
   };
