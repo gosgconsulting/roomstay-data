@@ -4,11 +4,13 @@ import { TrendingUp, TrendingDown, Eye, MousePointer, ShoppingCart, DollarSign, 
 import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff } from "@/lib/debug";
 import { loadReportData, calculateKPIMetrics, getCurrentMonthDateRange, Dimension } from "@/lib/data-loading-fix";
+import { cn } from "@/lib/utils";
 
 interface KPIMetric {
   label: string;
   value: string | number;
   change?: number;
+  compareValue?: string | number;
   icon: React.ComponentType<any>;
   color: string;
 }
@@ -219,6 +221,7 @@ export function KPIMetricsCards({
         if (value === undefined || value === null) return;
 
         let formattedValue: string | number = value;
+        let formattedCompareValue: string | number | undefined = undefined;
         let icon = Target;
         let color = "text-blue-600";
         let change: number | undefined = undefined;
@@ -237,17 +240,26 @@ export function KPIMetricsCards({
         switch (kpiName) {
           case "Impressions":
             formattedValue = formatNumber(value);
+            if (stableFilters.compareEnabled && comparisonMetrics[kpiName] !== undefined) {
+              formattedCompareValue = formatNumber(comparisonMetrics[kpiName]);
+            }
             icon = Eye;
             color = "text-pink-600";
             break;
           case "Clicks":
             formattedValue = formatNumber(value);
+            if (stableFilters.compareEnabled && comparisonMetrics[kpiName] !== undefined) {
+              formattedCompareValue = formatNumber(comparisonMetrics[kpiName]);
+            }
             icon = MousePointer;
             color = "text-purple-600";
             break;
           case "Conversions":
           case "Bookings":
             formattedValue = formatNumber(value);
+            if (stableFilters.compareEnabled && comparisonMetrics[kpiName] !== undefined) {
+              formattedCompareValue = formatNumber(comparisonMetrics[kpiName]);
+            }
             icon = ShoppingCart;
             color = "text-orange-600";
             break;
@@ -256,6 +268,9 @@ export function KPIMetricsCards({
           case "Cost of sale":
           case "Impression Share":
             formattedValue = formatPercentage(value);
+            if (stableFilters.compareEnabled && comparisonMetrics[kpiName] !== undefined) {
+              formattedCompareValue = formatPercentage(comparisonMetrics[kpiName]);
+            }
             icon = Percent;
             color = "text-purple-600";
             break;
@@ -264,22 +279,32 @@ export function KPIMetricsCards({
           case "CPM":
           case "Revenue":
             formattedValue = formatCurrency(value);
+            if (stableFilters.compareEnabled && comparisonMetrics[kpiName] !== undefined) {
+              formattedCompareValue = formatCurrency(comparisonMetrics[kpiName]);
+            }
             icon = DollarSign;
             color = kpiName === "Revenue" ? "text-cyan-600" : "text-blue-600";
             break;
           case "ROAS":
             formattedValue = formatDecimal(value);
+            if (stableFilters.compareEnabled && comparisonMetrics[kpiName] !== undefined) {
+              formattedCompareValue = formatDecimal(comparisonMetrics[kpiName]);
+            }
             icon = TrendingUp;
             color = "text-green-600";
             break;
           default:
             formattedValue = formatDecimal(value);
+            if (stableFilters.compareEnabled && comparisonMetrics[kpiName] !== undefined) {
+              formattedCompareValue = formatDecimal(comparisonMetrics[kpiName]);
+            }
         }
 
         displayMetrics.push({
           label: kpiName,
           value: formattedValue,
           change,
+          compareValue: formattedCompareValue,
           icon,
           color
         });
@@ -388,14 +413,17 @@ export function KPIMetricsCards({
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{metric.value}</div>
-                {metric.change !== undefined && (
-                  <p className={`text-xs ${metric.change >= 0 ? 'text-green-600' : 'text-red-600'} flex items-center`}>
+                {metric.change !== undefined && metric.compareValue !== undefined && (
+                  <p className={cn(
+                    "text-xs flex items-center gap-1",
+                    metric.change >= 0 ? 'text-green-600' : 'text-red-600'
+                  )}>
                     {metric.change >= 0 ? (
-                      <TrendingUp className="h-3 w-3 mr-1" />
+                      <TrendingUp className="h-3 w-3" />
                     ) : (
-                      <TrendingDown className="h-3 w-3 mr-1" />
+                      <TrendingDown className="h-3 w-3" />
                     )}
-                    {Math.abs(metric.change)}% from last period
+                    {metric.change >= 0 ? '+' : ''}{metric.change.toFixed(1)}% vs {metric.compareValue}
                   </p>
                 )}
               </CardContent>
