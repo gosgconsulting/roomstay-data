@@ -4,9 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
-import { ArrowLeft, Plus, Edit2, Trash2, LogOut } from "lucide-react";
+import { ArrowLeft, Plus, Edit2, Trash2, LogOut, RefreshCw } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { CreateAccountModal } from "@/components/CreateAccountModal";
+import { migrateAllAccountsToAccountDimensions } from "@/lib/migrate-to-account-dimensions";
 import { EditAccountModal } from "@/components/EditAccountModal";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
 
@@ -48,6 +49,7 @@ export default function ReportTool() {
       setIsLoading(false);
     } catch (error) {
       console.error('Error checking auth:', error);
+      setIsLoading(false); // Ensure loading is stopped on error
       toast({
         title: "Authentication Error",
         description: "Please sign in again.",

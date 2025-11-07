@@ -39,6 +39,7 @@ export default function Landing() {
       setIsLoading(false);
     } catch (error) {
       console.error('Error checking auth:', error);
+      setIsLoading(false); // Ensure loading is stopped on error
       toast({
         title: "Authentication Error",
         description: "Please sign in again.",

@@ -516,7 +516,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
             name: dateConfig.name,
             is_default: dateConfig.isDefault,
             group_by_dimensions: defaultGroupDimension ? [defaultGroupDimension.id] : [],
-            breakdown_by_dimensions: dimensions.find(d => d.type === 'date') ? [dimensions.find(d => d.type === 'date')!.id] : [], // Always include Date in breakdown with mandatory date
+            breakdown_by_dimensions: dimensions && dimensions.find(d => d.type === 'date') ? [dimensions.find(d => d.type === 'date')!.id] : [], // Always include Date in breakdown with mandatory date
             then_by_dimensions: [],
             visible_columns: defaultVisibleIds,
             column_order: defaultColumnOrder,
@@ -928,6 +928,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       
       if (!user) {
         console.error("User not authenticated");
+        setIsLoadingDimensions(false);
         return;
       }
 
@@ -969,24 +970,24 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       if (customError) throw customError;
       customData = (data || []);
 
-      // Combine all dimensions - prioritize account > custom > global
+      // Combine all dimensions with proper priority: account > custom > global
       const combinedDimensions = [
-        ...accountData,
-        ...customData,
+        ...(accountData || []),
+        ...(customData || []),
         ...(globalData || [])
       ];
 
       // Deduplicate dimensions by name (keep first occurrence, which prioritizes account-scoped)
       const seenNames = new Set<string>();
       const allDimensions = combinedDimensions.filter(dim => {
-        if (seenNames.has(dim.name)) {
+        if (!dim || !dim.name || seenNames.has(dim.name)) {
           return false;
         }
         seenNames.add(dim.name);
         return true;
       });
 
-      console.log('[testing] PerformanceTable - Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0, 'Final:', allDimensions.length);
+      console.log('[testing] PerformanceTable - Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0, 'Final:', allDimensions?.length || 0);
 
       // Check if budgets exist for this account/report
       let budgetDimension = null;
@@ -1022,10 +1023,12 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         : allDimensions;
 
       // Set all dimensions (needed for Group by/Breakdown by selectors)
-      setDimensions(finalDimensions);
+      const safeDimensions = finalDimensions || [];
+      console.log('[testing] PerformanceTable - Setting dimensions:', safeDimensions.length);
+      setDimensions(safeDimensions);
       
       // Check data availability for dimensions
-      if (reportId && finalDimensions.length > 0) {
+      if (reportId && finalDimensions && finalDimensions.length > 0) {
         checkDataAvailability(finalDimensions.map(d => d.id), reportId);
       }
       

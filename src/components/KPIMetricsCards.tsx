@@ -183,10 +183,10 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
           // Combine all dimensions - prioritize account-scoped over global
           // Order: account (highest priority) > custom > global (lowest priority)
           const allDimensions = [
-            ...accountData,
-            ...customData,
-            ...(globalData || [])
-          ];
+                          ...accountData,
+              ...customData,
+              ...(globalData || [])
+            ];
 
           console.log('[testing] KPIMetricsCards - Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0);
 
