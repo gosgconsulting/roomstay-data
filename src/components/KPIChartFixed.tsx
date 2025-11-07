@@ -313,9 +313,9 @@ export function KPIChart({ reportId, accountId, filters }: KPIChartProps) {
               <Line 
                 type="monotone" 
                 dataKey={`${selectedMetric}_previous`} 
-                stroke="#fbbf24" 
+                stroke="#eab308" 
                 strokeWidth={3}
-                dot={{ fill: '#fbbf24', strokeWidth: 2, r: 4 }}
+                dot={{ fill: '#eab308', strokeWidth: 2, r: 4 }}
                 activeDot={{ r: 6 }}
                 name="Previous Period"
                 strokeDasharray="5 5"

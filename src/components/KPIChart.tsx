@@ -811,8 +811,8 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
                   <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="compareGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--secondary))" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="hsl(var(--secondary))" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#eab308" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#eab308" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
@@ -859,7 +859,7 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
                   type="monotone"
                   dataKey="compareValue"
                   name="compareValue"
-                  stroke="hsl(var(--secondary))"
+                  stroke="#eab308"
                   strokeWidth={2}
                   strokeDasharray="5 5"
                   fill="url(#compareGradient)"
@@ -874,7 +874,7 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
                         <span>Current Period</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-secondary rounded-full"></div>
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#eab308' }}></div>
                         <span>Previous Period</span>
                       </div>
                     </div>
