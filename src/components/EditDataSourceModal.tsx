@@ -307,6 +307,59 @@ export const EditDataSourceModal = ({
     }
   };
 
+  const handleSaveSettings = async () => {
+    if (!dataSource) return;
+
+    const spreadsheetId = extractSpreadsheetId(url);
+    if (!spreadsheetId) {
+      toast({
+        title: "Invalid URL",
+        description: "Please provide a valid Google Sheets URL",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      const { error: updateError } = await supabase
+        .from('data_sources')
+        .update({
+          name: dataName,
+          google_sheets_url: url,
+          spreadsheet_id: spreadsheetId,
+          tab_name: selectedTab,
+          header_row: parseInt(headerRow),
+          sync_frequency: syncFrequency,
+          sync_time: syncTime,
+          sync_timezone: syncTimezone,
+        })
+        .eq('id', dataSource.id);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "Settings saved",
+        description: "Auto-sync settings have been updated successfully",
+      });
+      
+      onSuccess();
+      onOpenChange(false);
+      resetForm();
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to save settings";
+      toast({
+        title: "Save failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleResync = async () => {
     if (!dataSource) return;
 
@@ -500,7 +553,14 @@ export const EditDataSourceModal = ({
 
                 {dataSource && (
                   <div className="space-y-3 pt-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
+                      <Button
+                        onClick={handleSaveSettings}
+                        disabled={isResyncing || isLoading}
+                        className="gap-2"
+                      >
+                        Save Settings
+                      </Button>
                       <Button
                         variant="outline"
                         onClick={handleResync}
@@ -508,12 +568,12 @@ export const EditDataSourceModal = ({
                         className="gap-2"
                       >
                         <RefreshCw className={`h-4 w-4 ${isResyncing ? 'animate-spin' : ''}`} />
-                        {isResyncing ? 'Resyncing from scratch...' : 'Resync from Scratch'}
+                        {isResyncing ? 'Resyncing...' : 'Resync from Scratch'}
                       </Button>
-                      <span className="text-sm text-muted-foreground">
-                        Completely replaces all data and recreates dimensions from current mappings
-                      </span>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      <strong>Save Settings:</strong> Updates auto-sync and other settings without changing data. <strong>Resync:</strong> Replaces all data and recreates dimensions.
+                    </p>
                     {(syncedRowsCount !== null || syncedColumnsCount !== null) && (
                       <div className="flex items-center gap-4 text-sm text-muted-foreground border-t pt-3">
                         <div className="flex items-center gap-2">
