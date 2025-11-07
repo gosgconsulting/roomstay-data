@@ -7,11 +7,16 @@ import { LoadingToast } from "@/components/LoadingToast";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import { KPIChart } from "@/components/KPIChart";
 import { MasterFilter } from "@/components/MasterFilter";
+import { CombinedKPIMetricsCards } from "@/components/CombinedKPIMetricsCards";
+import { CombinedPerformanceTable } from "@/components/CombinedPerformanceTable";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { BarChart3, List } from "lucide-react";
+import { getCombinedAnalytics, MasterFilterState, CombinedAnalyticsData } from "@/lib/combined-analytics";
 
 interface Report {
   id: string;
@@ -44,6 +49,13 @@ export default function AllReports() {
   // Master filter state
   const [masterFilterDimension, setMasterFilterDimension] = useState<string | null>(null);
   const [masterFilterValues, setMasterFilterValues] = useState<string[]>([]);
+  
+  // View mode: individual or combined
+  const [viewMode, setViewMode] = useState<'individual' | 'combined'>('individual');
+  
+  // Combined analytics data
+  const [combinedData, setCombinedData] = useState<CombinedAnalyticsData | null>(null);
+  const [isCombinedLoading, setIsCombinedLoading] = useState(false);
   
   // Loading state management
   const [isDataLoading, setIsDataLoading] = useState(false);
@@ -221,14 +233,66 @@ export default function AllReports() {
         title: "Master Filter Applied",
         description: `Filtering all reports by ${dimension}: ${values.join(', ')}`,
       });
+      
+      // If in combined mode, refresh combined analytics
+      if (viewMode === 'combined') {
+        loadCombinedAnalytics(dimension, values);
+      }
     } else if (!dimension) {
       setLoadingGeneration(prev => prev + 1);
       toast({
         title: "Master Filter Cleared",
         description: "All reports are now showing unfiltered data",
       });
+      
+      // Clear combined data
+      if (viewMode === 'combined') {
+        setCombinedData(null);
+      }
     }
   };
+
+  const loadCombinedAnalytics = async (
+    dimension: string | null = masterFilterDimension, 
+    values: string[] = masterFilterValues
+  ) => {
+    if (reports.length === 0) return;
+    
+    setIsCombinedLoading(true);
+    try {
+      const reportIds = reports.map(r => r.id);
+      const masterFilter: MasterFilterState = {
+        mode: 'combined',
+        dimension,
+        values,
+        aggregationMethod: 'sum'
+      };
+      
+      const data = await getCombinedAnalytics(reportIds, masterFilter, 'day');
+      setCombinedData(data);
+      
+      toast({
+        title: "Combined Analytics Loaded",
+        description: `Showing aggregated data from ${reports.length} reports`,
+      });
+    } catch (error) {
+      console.error('[COMBINED-ANALYTICS] Error loading combined analytics:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load combined analytics",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCombinedLoading(false);
+    }
+  };
+
+  // Load combined analytics when switching to combined mode
+  useEffect(() => {
+    if (viewMode === 'combined' && reports.length > 0) {
+      loadCombinedAnalytics();
+    }
+  }, [viewMode, reports]);
 
   // Get combined filters for a report (report filters + master filter)
   const getCombinedFilters = (reportId: string): FilterState => {
@@ -314,63 +378,122 @@ export default function AllReports() {
             selectedValues={masterFilterValues}
           />
           
-          {reports.map((report) => {
-            const reportDataSources = dataSources[report.id] || [];
-            const activeDataSourceId = activeDataSources[report.id];
-            
-            return (
-              <Card key={report.id} className="p-6 space-y-4">
-                {/* Report Title */}
-                <div className="border-b pb-2">
-                  <h2 className="text-2xl font-bold text-foreground">{report.name}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Last updated: {new Date(report.updated_at).toLocaleDateString()}
-                  </p>
-                </div>
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-2 justify-center">
+            <Button
+              variant={viewMode === 'individual' ? 'default' : 'outline'}
+              onClick={() => setViewMode('individual')}
+              className="gap-2"
+            >
+              <List className="h-4 w-4" />
+              Individual Reports
+            </Button>
+            <Button
+              variant={viewMode === 'combined' ? 'default' : 'outline'}
+              onClick={() => setViewMode('combined')}
+              className="gap-2"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Combined Analytics
+            </Button>
+          </div>
+          
+          {viewMode === 'combined' ? (
+            /* Combined Analytics View */
+            <div className="space-y-6">
+              {isCombinedLoading ? (
+                <Card className="p-12">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                    <p className="text-muted-foreground">Loading combined analytics...</p>
+                  </div>
+                </Card>
+              ) : combinedData ? (
+                <>
+                  <CombinedKPIMetricsCards 
+                    metrics={combinedData.metrics} 
+                    reportCount={reports.length}
+                  />
+                  <CombinedPerformanceTable 
+                    data={combinedData.tableData}
+                  />
+                </>
+              ) : (
+                <Card className="p-12">
+                  <div className="text-center">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                    <h3 className="text-lg font-semibold mb-2">No Data Available</h3>
+                    <p className="text-muted-foreground">
+                      {masterFilterDimension 
+                        ? "No data matches the selected filters"
+                        : "Select a master filter to view combined analytics"}
+                    </p>
+                  </div>
+                </Card>
+              )}
+            </div>
+          ) : (
+            /* Individual Reports View */
+            <>
+              {reports.map((report) => {
+                const reportDataSources = dataSources[report.id] || [];
+                const activeDataSourceId = activeDataSources[report.id];
                 
-                {/* Filters for this report */}
-                <FiltersBar 
-                  reportId={report.id} 
-                  onFiltersChange={(filters) => handleFiltersChange(report.id, filters)}
-                  isSharedView={false} 
-                  accountId={accountId || report.account_id || undefined}
-                  refreshTrigger={loadingGeneration} 
-                />
-                
-                {/* KPI Metrics Cards */}
-                <KPIMetricsCards
-                  reportId={report.id}
-                  filters={getCombinedFilters(report.id)}
-                  accountId={accountId || report.account_id || undefined}
-                  visibilityRefreshTrigger={loadingGeneration}
-                  key={`metrics-${report.id}-${loadingGeneration}`}
-                  onLoadingComplete={() => markComponentLoaded(`metrics-${report.id}`)}
-                />
-                
-                {/* KPI Chart */}
-                <KPIChart
-                  reportId={report.id}
-                  filters={getCombinedFilters(report.id)}
-                  accountId={accountId || report.account_id || undefined}
-                  visibilityRefreshTrigger={loadingGeneration}
-                  key={`chart-${report.id}-${loadingGeneration}`}
-                  onLoadingComplete={() => markComponentLoaded(`chart-${report.id}`)}
-                />
-                
-                {/* Performance Table - shows all data sources */}
-                <PerformanceTable 
-                  reportId={report.id} 
-                  filters={getCombinedFilters(report.id)} 
-                  isSharedView={false}
-                  accountId={accountId || report.account_id || undefined}
-                  onFiltersChange={(filters) => handleFiltersChange(report.id, filters)}
-                  key={`table-${report.id}-${loadingGeneration}`}
-                  onLoadingComplete={() => markComponentLoaded(`table-${report.id}`)}
-                  visibilityRefreshTrigger={loadingGeneration}
-                />
-              </Card>
-            );
-          })}
+                return (
+                  <Card key={report.id} className="p-6 space-y-4">
+                    {/* Report Title */}
+                    <div className="border-b pb-2">
+                      <h2 className="text-2xl font-bold text-foreground">{report.name}</h2>
+                      <p className="text-sm text-muted-foreground">
+                        Last updated: {new Date(report.updated_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    
+                    {/* Filters for this report */}
+                    <FiltersBar 
+                      reportId={report.id} 
+                      onFiltersChange={(filters) => handleFiltersChange(report.id, filters)}
+                      isSharedView={false} 
+                      accountId={accountId || report.account_id || undefined}
+                      refreshTrigger={loadingGeneration} 
+                    />
+                    
+                    {/* KPI Metrics Cards */}
+                    <KPIMetricsCards
+                      reportId={report.id}
+                      filters={getCombinedFilters(report.id)}
+                      accountId={accountId || report.account_id || undefined}
+                      visibilityRefreshTrigger={loadingGeneration}
+                      key={`metrics-${report.id}-${loadingGeneration}`}
+                      onLoadingComplete={() => markComponentLoaded(`metrics-${report.id}`)}
+                    />
+                    
+                    {/* KPI Chart */}
+                    <KPIChart
+                      reportId={report.id}
+                      filters={getCombinedFilters(report.id)}
+                      accountId={accountId || report.account_id || undefined}
+                      visibilityRefreshTrigger={loadingGeneration}
+                      key={`chart-${report.id}-${loadingGeneration}`}
+                      onLoadingComplete={() => markComponentLoaded(`chart-${report.id}`)}
+                    />
+                    
+                    {/* Performance Table - shows all data sources */}
+                    <PerformanceTable 
+                      reportId={report.id} 
+                      filters={getCombinedFilters(report.id)} 
+                      isSharedView={false}
+                      accountId={accountId || report.account_id || undefined}
+                      onFiltersChange={(filters) => handleFiltersChange(report.id, filters)}
+                      key={`table-${report.id}-${loadingGeneration}`}
+                      onLoadingComplete={() => markComponentLoaded(`table-${report.id}`)}
+                      visibilityRefreshTrigger={loadingGeneration}
+                    />
+                  </Card>
+                );
+              })}
+            </>
+          )}
         </main>
       ) : (
         <main className="container mx-auto px-6 py-6">
