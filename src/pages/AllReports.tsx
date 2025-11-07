@@ -11,6 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
 import { BarChart3 } from "lucide-react";
 import { getCombinedAnalytics, MasterFilterState, CombinedAnalyticsData } from "@/lib/combined-analytics";
+import { DateRange } from "react-day-picker";
 
 interface Report {
   id: string;
@@ -31,7 +32,7 @@ export default function AllReports() {
   // Master filter state
   const [masterFilterDimension, setMasterFilterDimension] = useState<string | null>(null);
   const [masterFilterValues, setMasterFilterValues] = useState<string[]>([]);
-  const [masterFilterDateRange, setMasterFilterDateRange] = useState<{ from: Date; to: Date } | undefined>(undefined);
+  const [masterFilterDateRange, setMasterFilterDateRange] = useState<DateRange | undefined>(undefined);
   const [masterFilterReportIds, setMasterFilterReportIds] = useState<string[]>([]);
   
   // Combined analytics data
@@ -131,10 +132,15 @@ export default function AllReports() {
   const handleMasterFilterChange = (
     dimension: string | null, 
     values: string[],
-    dateRange?: { from: Date; to: Date },
-    reportIds?: string[]
+    dateRange?: DateRange,
+    reportIds?: string[],
+    compareEnabled?: boolean,
+    compareType?: string,
+    compareDateRange?: DateRange
   ) => {
-    console.log('[MASTER-FILTER] Master filter changed:', { dimension, values, dateRange, reportIds });
+    console.log('[MASTER-FILTER] Master filter changed:', { 
+      dimension, values, dateRange, reportIds, compareEnabled, compareType, compareDateRange 
+    });
     setMasterFilterDimension(dimension);
     setMasterFilterValues(values);
     setMasterFilterDateRange(dateRange);
@@ -147,7 +153,7 @@ export default function AllReports() {
   const loadCombinedAnalytics = async (
     dimension: string | null = masterFilterDimension, 
     values: string[] = masterFilterValues,
-    dateRange?: { from: Date; to: Date },
+    dateRange?: DateRange,
     filterReportIds?: string[]
   ) => {
     if (reports.length === 0) return;
@@ -157,12 +163,26 @@ export default function AllReports() {
       const reportIds = filterReportIds && filterReportIds.length > 0 
         ? filterReportIds 
         : reports.map(r => r.id);
+      
+      console.log('[ALL-REPORTS] Loading combined analytics:', {
+        reportIds: reportIds.length,
+        dimension,
+        values,
+        dateRange,
+        hasDateRange: !!dateRange
+      });
         
       const masterFilter: MasterFilterState = {
         mode: 'combined',
         dimension,
         values,
-        dateRange: dateRange || masterFilterDateRange,
+        dateRange: dateRange && dateRange.from && dateRange.to ? {
+          from: dateRange.from,
+          to: dateRange.to
+        } : masterFilterDateRange && masterFilterDateRange.from && masterFilterDateRange.to ? {
+          from: masterFilterDateRange.from,
+          to: masterFilterDateRange.to
+        } : undefined,
         reportIds,
         aggregationMethod: 'sum'
       };

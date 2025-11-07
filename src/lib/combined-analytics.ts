@@ -99,24 +99,47 @@ export async function getCombinedAnalytics(
     );
 
     // Load dimensions to find metric dimension IDs
+    // Try both account-scoped and report-specific dimensions
     const { data: dimensions } = await supabase
       .from('dimensions')
-      .select('id, name, type, report_id')
-      .in('report_id', reportIds)
+      .select('id, name, type, report_id, account_id, scope')
+      .or(`report_id.in.(${reportIds.join(',')}),scope.eq.account`)
       .in('name', [
         'Impressions', 'Clicks', 'Conversions', 'Cost', 'Revenue',
         'Date', 'Week', 'Month', 'Year'
       ]);
 
+    console.log('[COMBINED-ANALYTICS] Loaded dimensions:', dimensions?.length || 0);
+
     // Create dimension maps by report
+    // Prioritize report-specific dimensions over account-scoped ones
     const dimensionMaps = new Map<string, Map<string, string>>();
     (dimensions || []).forEach(dim => {
-      if (!dim.report_id) return;
-      if (!dimensionMaps.has(dim.report_id)) {
-        dimensionMaps.set(dim.report_id, new Map());
+      // For account-scoped dimensions, add to all reports
+      if (dim.scope === 'account' || dim.scope === 'global') {
+        reportIds.forEach(reportId => {
+          if (!dimensionMaps.has(reportId)) {
+            dimensionMaps.set(reportId, new Map());
+          }
+          const dimMap = dimensionMaps.get(reportId)!;
+          // Only add if not already present (report-specific takes precedence)
+          if (!dimMap.has(dim.name)) {
+            dimMap.set(dim.name, dim.id);
+          }
+        });
       }
-      dimensionMaps.get(dim.report_id)!.set(dim.name, dim.id);
+      
+      // For report-specific dimensions
+      if (dim.report_id) {
+        if (!dimensionMaps.has(dim.report_id)) {
+          dimensionMaps.set(dim.report_id, new Map());
+        }
+        // Report-specific dimensions override account-scoped
+        dimensionMaps.get(dim.report_id)!.set(dim.name, dim.id);
+      }
     });
+
+    console.log('[COMBINED-ANALYTICS] Created dimension maps for reports:', Array.from(dimensionMaps.keys()));
 
     // Filter by date range if present
     if (masterFilter.dateRange) {
@@ -190,9 +213,14 @@ function aggregateMetrics(
   let totalRevenue = 0;
   let rowCount = 0;
 
-  data.forEach(row => {
+  console.log('[COMBINED-ANALYTICS] Aggregating metrics from rows:', data.length);
+
+  data.forEach((row, index) => {
     const dimMap = dimensionMaps.get(row.report_id);
-    if (!dimMap) return;
+    if (!dimMap) {
+      if (index < 3) console.log('[COMBINED-ANALYTICS] No dimension map for report:', row.report_id);
+      return;
+    }
 
     const impressions = parseFloat(row.dimension_values[dimMap.get('Impressions')] || 0);
     const clicks = parseFloat(row.dimension_values[dimMap.get('Clicks')] || 0);
@@ -200,12 +228,23 @@ function aggregateMetrics(
     const cost = parseFloat(row.dimension_values[dimMap.get('Cost')] || 0);
     const revenue = parseFloat(row.dimension_values[dimMap.get('Revenue')] || 0);
 
+    if (index < 3) {
+      console.log('[COMBINED-ANALYTICS] Row', index, ':', {
+        impressions, clicks, conversions, cost, revenue,
+        dimMap: Array.from(dimMap.entries())
+      });
+    }
+
     totalImpressions += impressions;
     totalClicks += clicks;
     totalConversions += conversions;
     totalCost += cost;
     totalRevenue += revenue;
     rowCount++;
+  });
+
+  console.log('[COMBINED-ANALYTICS] Totals:', {
+    totalImpressions, totalClicks, totalConversions, totalCost, totalRevenue, rowCount
   });
 
   // For average method, divide by row count

@@ -260,6 +260,118 @@ export type Database = {
           },
         ]
       }
+      forecasts: {
+        Row: {
+          conversion_rate: number | null
+          cost_of_sell: number | null
+          created_at: string | null
+          id: string
+          name: string
+          paid_revenue_share: number | null
+          report_id: string | null
+          revenue_per_month: number | null
+          target_average_order_value: number | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          conversion_rate?: number | null
+          cost_of_sell?: number | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          paid_revenue_share?: number | null
+          report_id?: string | null
+          revenue_per_month?: number | null
+          target_average_order_value?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          conversion_rate?: number | null
+          cost_of_sell?: number | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          paid_revenue_share?: number | null
+          report_id?: string | null
+          revenue_per_month?: number | null
+          target_average_order_value?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forecasts_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      master_filter_settings: {
+        Row: {
+          account_id: string | null
+          compare_date_from: string | null
+          compare_date_to: string | null
+          compare_enabled: boolean | null
+          compare_type: string | null
+          created_at: string | null
+          date_preset: string | null
+          date_range_from: string | null
+          date_range_to: string | null
+          id: string
+          selected_dimension_id: string | null
+          selected_dimension_values: string[] | null
+          selected_report_ids: string[] | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          compare_date_from?: string | null
+          compare_date_to?: string | null
+          compare_enabled?: boolean | null
+          compare_type?: string | null
+          created_at?: string | null
+          date_preset?: string | null
+          date_range_from?: string | null
+          date_range_to?: string | null
+          id?: string
+          selected_dimension_id?: string | null
+          selected_dimension_values?: string[] | null
+          selected_report_ids?: string[] | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          compare_date_from?: string | null
+          compare_date_to?: string | null
+          compare_enabled?: boolean | null
+          compare_type?: string | null
+          created_at?: string | null
+          date_preset?: string | null
+          date_range_from?: string | null
+          date_range_to?: string | null
+          id?: string
+          selected_dimension_id?: string | null
+          selected_dimension_values?: string[] | null
+          selected_report_ids?: string[] | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "master_filter_settings_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       monthly_dimension_data: {
         Row: {
           aggregated_metrics: Json

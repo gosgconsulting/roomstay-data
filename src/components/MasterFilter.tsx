@@ -71,6 +71,7 @@ export const MasterFilter = ({
   const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
   const [reportSearchTerm, setReportSearchTerm] = useState("");
 
+  // Load settings and dimensions
   useEffect(() => {
     loadDimensions();
   }, [accountId]);
@@ -81,11 +82,145 @@ export const MasterFilter = ({
     }
   }, [selectedDimension]);
 
+  // Load saved settings after reports are available
+  useEffect(() => {
+    if (reports.length > 0 && accountId) {
+      loadSavedSettings();
+    }
+  }, [reports, accountId]);
+
   useEffect(() => {
     if (compareEnabled && localDateRange?.from && localDateRange?.to) {
       calculateCompareDateRange();
     }
   }, [compareEnabled, compareType, localDateRange]);
+
+  // Auto-save settings when they change (debounced)
+  useEffect(() => {
+    if (!accountId) return;
+    
+    const timeoutId = setTimeout(() => {
+      saveSettings();
+    }, 1000); // Debounce for 1 second
+    
+    return () => clearTimeout(timeoutId);
+  }, [
+    selectedDimension,
+    selectedValues,
+    localDateRange,
+    localReportIds,
+    datePreset,
+    compareEnabled,
+    compareType,
+    compareDateRange,
+    accountId
+  ]);
+
+  const loadSavedSettings = async () => {
+    if (!accountId) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('master_filter_settings')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('account_id', accountId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('[MASTER-FILTER] Error loading settings:', error);
+        return;
+      }
+
+      if (data) {
+        console.log('[MASTER-FILTER] Loaded saved settings:', data);
+        
+        // Restore date range
+        if (data.date_range_from && data.date_range_to) {
+          setLocalDateRange({
+            from: new Date(data.date_range_from),
+            to: new Date(data.date_range_to)
+          });
+        }
+        
+        // Restore preset
+        if (data.date_preset) {
+          setDatePreset(data.date_preset);
+        }
+        
+        // Restore report selection
+        if (data.selected_report_ids && data.selected_report_ids.length > 0) {
+          setLocalReportIds(data.selected_report_ids);
+        }
+        
+        // Restore comparison
+        setCompareEnabled(data.compare_enabled || false);
+        setCompareType(data.compare_type || 'previous_period');
+        if (data.compare_date_from && data.compare_date_to) {
+          setCompareDateRange({
+            from: new Date(data.compare_date_from),
+            to: new Date(data.compare_date_to)
+          });
+        }
+        
+        // Trigger filter change with restored settings
+        handleFilterUpdate(
+          data.selected_dimension_id || null,
+          data.selected_dimension_values || [],
+          data.date_range_from && data.date_range_to ? {
+            from: new Date(data.date_range_from),
+            to: new Date(data.date_range_to)
+          } : undefined,
+          data.selected_report_ids && data.selected_report_ids.length > 0 
+            ? data.selected_report_ids 
+            : reports.map(r => r.id)
+        );
+      }
+    } catch (error) {
+      console.error('[MASTER-FILTER] Error in loadSavedSettings:', error);
+    }
+  };
+
+  const saveSettings = async () => {
+    if (!accountId) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const settings = {
+        user_id: user.id,
+        account_id: accountId,
+        selected_dimension_id: selectedDimension,
+        selected_dimension_values: selectedValues,
+        selected_report_ids: localReportIds,
+        date_range_from: localDateRange?.from?.toISOString().split('T')[0] || null,
+        date_range_to: localDateRange?.to?.toISOString().split('T')[0] || null,
+        date_preset: datePreset,
+        compare_enabled: compareEnabled,
+        compare_type: compareType,
+        compare_date_from: compareDateRange?.from?.toISOString().split('T')[0] || null,
+        compare_date_to: compareDateRange?.to?.toISOString().split('T')[0] || null
+      };
+
+      const { error } = await supabase
+        .from('master_filter_settings')
+        .upsert(settings, {
+          onConflict: 'user_id,account_id'
+        });
+
+      if (error) {
+        console.error('[MASTER-FILTER] Error saving settings:', error);
+      } else {
+        console.log('[MASTER-FILTER] Settings saved successfully');
+      }
+    } catch (error) {
+      console.error('[MASTER-FILTER] Error in saveSettings:', error);
+    }
+  };
 
   const loadDimensions = async () => {
     try {
