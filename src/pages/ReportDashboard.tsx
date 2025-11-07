@@ -181,7 +181,7 @@ export default function ReportDashboard() {
       });
       loadAccount();
     }
-  }, [session, accountId, loadAccount, isAccountLoading]);
+  }, [session, accountId, isAccountLoading]);
 
   const checkAuth = useCallback(async () => {
     if (isAuthChecking) {
