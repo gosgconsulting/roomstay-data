@@ -446,7 +446,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         const defaultView = views.find(v => v.is_default) || views[0];
         setActiveViewId(defaultView.id);
         // Load settings directly from the view data instead of searching state
-        loadViewSettingsFromData(defaultView);
+        await loadViewSettingsFromData(defaultView);
       } else if (!isSharedView) {
         // Only create a default view if not a shared view and no views exist
         console.log('No views found, creating default views');
@@ -544,7 +544,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         const defaultView = createdViews.find(v => v.is_default) || createdViews[0];
         setActiveViewId(defaultView.id);
         // Load settings directly from the default view
-        loadViewSettingsFromData(defaultView);
+        await loadViewSettingsFromData(defaultView);
       }
     } catch (error) {
       console.error("Error creating default view:", error);
@@ -552,7 +552,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   };
 
   // Helper to load view settings from view data directly
-  const loadViewSettingsFromData = (view: any) => {
+  const loadViewSettingsFromData = async (view: any) => {
     if (!view) {
       console.error("No view data provided");
       return;
@@ -612,35 +612,31 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     };
     
     // Load saved settings - map dimension IDs asynchronously
-    const loadDimensionsAsync = async () => {
-      const groupDimensions = await mapDimensionIds(view.group_by_dimensions || []);
-      
-      // If no grouping dimension is set and dimensions are available, set a default
-      let finalGroupDimensions = groupDimensions;
-      if (groupDimensions.length === 0 && dimensions.length > 0) {
-        // Find a suitable dimension for grouping - prefer Date first, then text dimensions
-        const dateDimension = dimensions.find(d => d.type === 'date');
-        const textDimension = dimensions.find(d => d.type === 'text');
-        
-        if (dateDimension) {
-          finalGroupDimensions = [dateDimension.id];
-          console.log('Auto-selected Date dimension for grouping:', dateDimension.name);
-        } else if (textDimension) {
-          finalGroupDimensions = [textDimension.id];
-          console.log('Auto-selected text dimension for grouping:', textDimension.name);
-        } else {
-          // Fallback to first available dimension
-          finalGroupDimensions = [dimensions[0].id];
-          console.log('Auto-selected first available dimension for grouping:', dimensions[0].name);
-        }
-      }
-      
-      setGroupByDimensions(finalGroupDimensions);
-      setBreakdownByDimensions(await mapDimensionIds(view.breakdown_by_dimensions || []));
-      setThenByDimensions(await mapDimensionIds(view.then_by_dimensions || []));
-    };
+    const groupDimensions = await mapDimensionIds(view.group_by_dimensions || []);
     
-    loadDimensionsAsync();
+    // If no grouping dimension is set and dimensions are available, set a default
+    let finalGroupDimensions = groupDimensions;
+    if (groupDimensions.length === 0 && dimensions.length > 0) {
+      // Find a suitable dimension for grouping - prefer Date first, then text dimensions
+      const dateDimension = dimensions.find(d => d.type === 'date');
+      const textDimension = dimensions.find(d => d.type === 'text');
+      
+      if (dateDimension) {
+        finalGroupDimensions = [dateDimension.id];
+        console.log('Auto-selected Date dimension for grouping:', dateDimension.name);
+      } else if (textDimension) {
+        finalGroupDimensions = [textDimension.id];
+        console.log('Auto-selected text dimension for grouping:', textDimension.name);
+      } else {
+        // Fallback to first available dimension
+        finalGroupDimensions = [dimensions[0].id];
+        console.log('Auto-selected first available dimension for grouping:', dimensions[0].name);
+      }
+    }
+    
+    setGroupByDimensions(finalGroupDimensions);
+    setBreakdownByDimensions(await mapDimensionIds(view.breakdown_by_dimensions || []));
+    setThenByDimensions(await mapDimensionIds(view.then_by_dimensions || []));
     
     if (view.visible_columns && view.visible_columns.length > 0) {
       console.log('[testing] Loading visible columns from view:', view.visible_columns.length, 'columns');
@@ -840,7 +836,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
           const nextView = remainingViews[0];
           setActiveViewId(nextView.id);
           // Load settings directly from the next view
-          loadViewSettingsFromData(nextView);
+          await loadViewSettingsFromData(nextView);
         }
       }
 
