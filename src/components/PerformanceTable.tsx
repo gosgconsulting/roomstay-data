@@ -241,8 +241,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   useEffect(() => {
     if (dimensions.length > 0 && groupByDimensions.length === 0 && !isLoadingDimensions && tableViews.length > 0) {
       console.log('[testing] Auto-selecting default grouping dimension');
-      const dateDimension = dimensions.find(d => d.type === 'date');
-      const textDimension = dimensions.find(d => d.type === 'text');
+      const dateDimension = dimensions.find(d => d && d.type === 'date');
+      const textDimension = dimensions.find(d => d && d.type === 'text');
       
       if (dateDimension) {
         setGroupByDimensions([dateDimension.id]);
@@ -473,7 +473,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       }
 
       // Find date dimension first, fallback to text dimension for default grouping
-      const defaultGroupDimension = dimensions.find(d => d.type === 'date') || dimensions.find(d => d.type === 'text');
+      const defaultGroupDimension = dimensions.find(d => d && d.type === 'date') || dimensions.find(d => d && d.type === 'text');
       const isDateGrouping = defaultGroupDimension?.type === 'date';
       
       console.log('Creating default view for report:', reportId, 'with dimension:', defaultGroupDimension?.name, 'type:', defaultGroupDimension?.type);
@@ -516,7 +516,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
             name: dateConfig.name,
             is_default: dateConfig.isDefault,
             group_by_dimensions: defaultGroupDimension ? [defaultGroupDimension.id] : [],
-            breakdown_by_dimensions: dimensions && dimensions.find(d => d.type === 'date') ? [dimensions.find(d => d.type === 'date')!.id] : [], // Always include Date in breakdown with mandatory date
+            breakdown_by_dimensions: dimensions && dimensions.find(d => d && d.type === 'date') ? [dimensions.find(d => d && d.type === 'date')!.id] : [], // Always include Date in breakdown with mandatory date
             then_by_dimensions: [],
             visible_columns: defaultVisibleIds,
             column_order: defaultColumnOrder,
@@ -569,7 +569,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       
       // First, find dimensions that are already valid
       for (const dimId of dimIds) {
-        const dimension = dimensions.find(d => d.id === dimId);
+        const dimension = dimensions.find(d => d && d.id === dimId);
         if (dimension) {
           mapped.push(dimension.id);
         } else {
@@ -618,8 +618,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     let finalGroupDimensions = groupDimensions;
     if (groupDimensions.length === 0 && dimensions.length > 0) {
       // Find a suitable dimension for grouping - prefer Date first, then text dimensions
-      const dateDimension = dimensions.find(d => d.type === 'date');
-      const textDimension = dimensions.find(d => d.type === 'text');
+      const dateDimension = dimensions.find(d => d && d.type === 'date');
+      const textDimension = dimensions.find(d => d && d.type === 'text');
       
       if (dateDimension) {
         finalGroupDimensions = [dateDimension.id];
@@ -655,7 +655,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         
         // First, collect all unmapped IDs to query them in one batch
         const idsToCheck = view.visible_columns.filter((id: string) => 
-          !dimensions.find(d => d.id === id)
+          !dimensions.find(d => d && d.id === id)
         );
         
         // If we have unmapped IDs, query them to get their names and map to account-scoped dimensions
@@ -686,7 +686,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         
         // Add all valid dimension IDs (those that already exist in loaded dimensions)
         view.visible_columns.forEach((colDimId: string) => {
-          const dimension = dimensions.find(d => d.id === colDimId);
+          const dimension = dimensions.find(d => d && d.id === colDimId);
           if (dimension && !mappedVisibleColumns.includes(dimension.id)) {
             mappedVisibleColumns.push(dimension.id);
           }
@@ -1133,7 +1133,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     
     if (!dimId) return name;
     
-    const dimension = dimensions.find(d => d.id === dimId);
+    const dimension = dimensions.find(d => d && d.id === dimId);
     
     // If it's a date dimension, format it according to the active tab
     if (dimension?.type === 'date') {
@@ -1215,7 +1215,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     // Use fallback if groupByDimensions is empty - find Date dimension as default
     let effectiveGroupByDims = groupByDimensions;
     if (effectiveGroupByDims.length === 0) {
-      const dateDimension = dimensions.find(d => d.name === 'Date');
+      const dateDimension = dimensions.find(d => d && d.name === 'Date');
       if (dateDimension) {
         effectiveGroupByDims = [dateDimension.id];
         console.log('[PERF-TABLE] Using fallback Date dimension for grouping:', dateDimension.id);
@@ -1371,7 +1371,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
           rows.forEach((row: any) => {
             if (row.data) {
               Object.keys(row.data).forEach((dimName: string) => {
-                const dim = dimensions.find(d => d.name === dimName);
+                const dim = dimensions.find(d => d && d.name === dimName);
                 if (dim && (dim.type === 'number' || dim.type === 'currency')) {
                   calculatedTotalData[dimName] = (calculatedTotalData[dimName] || 0) + (parseFloat(row.data[dimName]) || 0);
                 }
@@ -1391,7 +1391,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
           rows.forEach((row: any) => {
             if (row.compareData) {
               Object.keys(row.compareData).forEach((dimName: string) => {
-                const dim = dimensions.find(d => d.name === dimName);
+                const dim = dimensions.find(d => d && d.name === dimName);
                 if (dim && (dim.type === 'number' || dim.type === 'currency')) {
                   calculatedCompareData[dimName] = (calculatedCompareData[dimName] || 0) + (parseFloat(row.compareData[dimName]) || 0);
                 }
@@ -1590,7 +1590,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     e.preventDefault();
     // If kpi is "name", it's the group dimension column
     if (kpi === "name" && groupByDimensions[0]) {
-      const groupDim = dimensions.find(d => d.id === groupByDimensions[0]);
+      const groupDim = dimensions.find(d => d && d.id === groupByDimensions[0]);
       setSelectedKPI(groupDim?.name || "name");
     } else {
       setSelectedKPI(kpi);
@@ -1682,7 +1682,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       for (const [dimId, filterValues] of Object.entries(filters.dimensionFilters)) {
         if (!filterValues || filterValues.length === 0) continue;
 
-        const dimension = dimensions.find(d => d.id === dimId);
+        const dimension = dimensions.find(d => d && d.id === dimId);
         if (!dimension) {
           console.log('[testing] Dimension not found for filter:', dimId);
           continue;
@@ -1989,7 +1989,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                       </SelectTrigger>
                       <SelectContent className="bg-background z-50">
                         {groupByDimensions.map((dimId) => {
-                          const dim = dimensions.find(d => d.id === dimId);
+                          const dim = dimensions.find(d => d && d.id === dimId);
                           const hasData = reportId ? dimensionHasData[dimId] : undefined;
                           return dim ? (
                             <SelectItem key={dim.id} value={dim.id}>
@@ -2041,7 +2041,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                       </SelectTrigger>
                       <SelectContent className="bg-background z-50">
                         {breakdownByDimensions.map((dimId) => {
-                          const dim = dimensions.find(d => d.id === dimId);
+                          const dim = dimensions.find(d => d && d.id === dimId);
                           const hasData = reportId ? dimensionHasData[dimId] : undefined;
                           return dim ? (
                             <SelectItem key={dim.id} value={dim.id}>
@@ -2082,7 +2082,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                       </SelectTrigger>
                       <SelectContent className="bg-background z-50">
                         {thenByDimensions.map((dimId) => {
-                          const dim = dimensions.find(d => d.id === dimId);
+                          const dim = dimensions.find(d => d && d.id === dimId);
                           const hasData = reportId ? dimensionHasData[dimId] : undefined;
                           return dim ? (
                             <SelectItem key={dim.id} value={dim.id}>
@@ -2233,7 +2233,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                         onContextMenu={(e) => handleContextMenu(e, "name")}
                       >
                       {groupByDimensions[0] 
-                        ? dimensions.find(d => d.id === groupByDimensions[0])?.name || "Name"
+                        ? dimensions.find(d => d && d.id === groupByDimensions[0])?.name || "Name"
                         : "Name"}
                     </th>
                       {getOrderedDimensions()
@@ -2351,8 +2351,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         columnName={selectedKPI}
         dimension={
           selectedKPI === "name" && groupByDimensions[0]
-            ? dimensions.find(d => d.id === groupByDimensions[0])
-            : dimensions.find(d => d.name === selectedKPI)
+            ? dimensions.find(d => d && d.id === groupByDimensions[0])
+            : dimensions.find(d => d && d.name === selectedKPI)
         }
         currentFilters={filters}
         onFiltersChange={onFiltersChange}
