@@ -83,22 +83,65 @@ export const DimensionModal = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get dimensions for the current report
-      let query = supabase.from("dimensions").select("*");
+      console.log('[testing] Loading available dimensions for formula - accountId:', accountId, 'reportId:', reportId);
 
-      if (reportId) {
-        query = query.eq("report_id", reportId);
+      // Load account-scoped dimensions first (highest priority)
+      let accountData: Dimension[] = [];
+      if (accountId) {
+        const { data, error } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("scope", "account")
+          .eq("account_id", accountId)
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        accountData = (data || []) as Dimension[];
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
+      // Load custom dimensions for this user
+      const { data: customData, error: customError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("scope", "custom")
+        .order("created_at", { ascending: false });
 
-      // Filter out the current dimension (if editing) and exclude the dimension we're currently editing
-      const filtered = (data || []).filter((d: any) =>
-        !dimension || d.id !== dimension.id
-      );
+      if (customError) throw customError;
 
-      setAvailableDimensions(filtered as Dimension[]);
+      // Load global dimensions
+      const { data: globalData, error: globalError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("scope", "global")
+        .order("created_at", { ascending: false });
+
+      if (globalError) throw globalError;
+
+      // Combine dimensions with priority: account > custom > global
+      const allDimensions = [
+        ...accountData,
+        ...(customData || []),
+        ...(globalData || [])
+      ] as Dimension[];
+
+      // Deduplicate by name (keep first occurrence = highest priority)
+      const seenNames = new Set<string>();
+      const uniqueDimensions = allDimensions.filter(dim => {
+        if (dimension && dim.id === dimension.id) return false; // Exclude current dimension
+        if (seenNames.has(dim.name)) return false;
+        seenNames.add(dim.name);
+        return true;
+      });
+
+      console.log('[testing] Loaded dimensions for formula:', {
+        account: accountData.length,
+        custom: customData?.length || 0,
+        global: globalData?.length || 0,
+        unique: uniqueDimensions.length
+      });
+
+      setAvailableDimensions(uniqueDimensions);
     } catch (error) {
       console.error("Error loading available dimensions:", error);
     }
