@@ -1201,16 +1201,15 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     return value;
   };
 
-  // Load performance data using the new edge function
+  // Load performance data using the edge function
   const loadPerformanceData = async () => {
-    // Loading state is already set in useEffect, but ensure it's set here too for direct calls
-    
     const dateFromFormatted = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined;
     const dateToFormatted = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined;
     
     console.log('[PERF-TABLE] loadPerformanceData called with filters:', {
       reportId,
       groupByDimensions: groupByDimensions.length,
+      groupByDimensionIds: groupByDimensions,
       compareEnabled: filters.compareEnabled,
       compareType: filters.compareType,
       hasCompareDateRange: !!filters.compareDateRange,
@@ -1218,15 +1217,19 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined
     });
 
-    // Check conditions after setting loading state
+    // Check conditions before loading
     if (!reportId || groupByDimensions.length === 0) {
-      console.log('[testing] No data loading - missing reportId or groupByDimensions');
+      console.log('[PERF-TABLE] No data loading - missing reportId or groupByDimensions:', {
+        reportId: !!reportId,
+        groupByDimensionsLength: groupByDimensions.length,
+        groupByDimensions
+      });
       setTableData([]);
       setTotalData({});
       setTotalCompareData({});
       setTotalChangeData({});
       setIsLoadingData(false);
-      onLoadingComplete?.(); // Mark as complete even when skipping load
+      onLoadingComplete?.();
       return;
     }
 
@@ -1242,10 +1245,10 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         dimensionFilters: filters.dimensionFilters,
         dateFrom: dateFromFormatted,
         dateTo: dateToFormatted,
-        accountId, // Pass accountId to edge function
-        userId: user?.id, // Pass userId for custom dimensions
+        accountId,
+        userId: user?.id,
         visibleDimensionIds: Array.from(visibleColumns),
-                  limit: 50000, // Increased to get more data for pagination
+        limit: 50000,
         offset: 0,
         compareEnabled: filters.compareEnabled || false,
         compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
@@ -1254,29 +1257,14 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         dateOrder: dateOrder,
       };
       
-      console.log('[testing] Calling get-performance-data with request body:', requestBody);
-      console.log('[testing] Date filter details being sent:', {
-        dateFrom: requestBody.dateFrom,
-        dateTo: requestBody.dateTo,
-        hasDateFrom: !!requestBody.dateFrom,
-        hasDateTo: !!requestBody.dateTo,
-        originalDateRange: filters.dateRange,
-        originalFrom: filters.dateRange?.from?.toISOString(),
-        originalTo: filters.dateRange?.to?.toISOString(),
-        timestamp: new Date().toISOString()
-      });
+      console.log('[PERF-TABLE] Calling get-performance-data with request body:', requestBody);
 
       const { data, error } = await supabase.functions.invoke('get-performance-data', {
         body: requestBody,
       });
 
       if (error) {
-        console.error('[testing] Error loading performance data:', error);
-        console.error('[testing] Error details:', {
-          message: error.message,
-          status: error.status,
-          details: error.details
-        });
+        console.error('[PERF-TABLE] Error loading performance data:', error);
         toast({
           title: "Error loading data",
           description: `Failed to load performance table data: ${error.message || 'Unknown error'}`,
@@ -1291,15 +1279,13 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         return;
       }
 
-      console.log('[testing] Performance data response:', {
+      console.log('[PERF-TABLE] Performance data response:', {
         hasData: !!data,
         rowsCount: data?.data?.length || 0,
         total: data?.total || 0,
-        hasMore: data?.hasMore,
-        error: error
+        hasMore: data?.hasMore
       });
 
-      // The edge function returns { data: [...], total: ..., totalData: {...}, hasMore: ... }
       const rows = data?.data || [];
       setTableData(rows);
       
