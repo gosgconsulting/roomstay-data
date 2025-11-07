@@ -19,6 +19,9 @@ interface KPIMetricsCardsProps {
   filters: {
     dimensionFilters: Record<string, string[]>;
     dateRange?: { from: Date; to?: Date };
+    compareEnabled?: boolean;
+    compareType?: string;
+    compareDateRange?: { from: Date; to?: Date };
   };
   onLoadingComplete?: () => void;
   visibilityRefreshTrigger?: number;
@@ -42,11 +45,18 @@ export function KPIMetricsCards({
     return {
       dimensionFilters: filters.dimensionFilters,
       dateRange: filters.dateRange,
+      compareEnabled: filters.compareEnabled,
+      compareType: filters.compareType,
+      compareDateRange: filters.compareDateRange,
     };
   }, [
     JSON.stringify(filters.dimensionFilters),
     filters.dateRange?.from?.toISOString(),
     filters.dateRange?.to?.toISOString(),
+    filters.compareEnabled,
+    filters.compareType,
+    filters.compareDateRange?.from?.toISOString(),
+    filters.compareDateRange?.to?.toISOString(),
   ]);
 
   useEffect(() => {
