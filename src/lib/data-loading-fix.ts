@@ -279,10 +279,12 @@ function validateDataStructure(data: any[], dimensions: Dimension[]): any {
 /**
  * Calculate KPI metrics from filtered data
  */
-export function calculateKPIMetrics(
+export async function calculateKPIMetrics(
   data: any[],
-  dimensions: Dimension[]
-): Record<string, number> {
+  dimensions: Dimension[],
+  reportId?: string,
+  accountId?: string
+): Promise<Record<string, number>> {
   const metrics: Record<string, number> = {};
 
   // Initialize base metrics
@@ -298,6 +300,14 @@ export function calculateKPIMetrics(
     }
   });
 
+  // Calculate budget if available
+  if (reportId || accountId) {
+    const budgetMetric = await calculateBudgetMetric(data, dimensions, reportId, accountId);
+    if (budgetMetric !== null) {
+      metrics['Budget'] = budgetMetric;
+    }
+  }
+
   // Calculate derived metrics with formulas
   const derivedDimensions = dimensions.filter(d => d.formula);
   derivedDimensions.forEach(dimension => {
@@ -310,6 +320,81 @@ export function calculateKPIMetrics(
   });
 
   return metrics;
+}
+
+/**
+ * Calculate budget metric (Budget - Cost)
+ */
+async function calculateBudgetMetric(
+  data: any[],
+  dimensions: Dimension[],
+  reportId?: string,
+  accountId?: string
+): Promise<number | null> {
+  try {
+    // Load budgets
+    const { data: budgets, error } = await supabase
+      .from('budgets')
+      .select('*')
+      .or(`report_id.eq.${reportId},account_id.eq.${accountId}`);
+
+    if (error || !budgets || budgets.length === 0) {
+      return null;
+    }
+
+    // Find date dimension
+    const dateDimension = dimensions.find(d => d.type === 'date');
+    if (!dateDimension) return null;
+
+    // Find cost dimension
+    const costDimension = dimensions.find(d => d.name === 'Cost');
+    if (!costDimension) return null;
+
+    let totalBudget = 0;
+    let totalCost = 0;
+
+    // Group data by month/year and dimension item
+    const dataByMonthAndItem = new Map<string, { cost: number; budget: number }>();
+
+    data.forEach(row => {
+      const dateValue = row.dimension_values[dateDimension.id];
+      if (!dateValue) return;
+
+      const date = new Date(dateValue);
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1;
+      const cost = typeof row.dimension_values[costDimension.id] === 'number' 
+        ? row.dimension_values[costDimension.id]
+        : parseFloat(row.dimension_values[costDimension.id]) || 0;
+
+      // Find matching budget
+      budgets.forEach(budget => {
+        const budgetDimension = dimensions.find(d => d.name === budget.dimension_name);
+        if (!budgetDimension) return;
+
+        const itemValue = row.dimension_values[budgetDimension.id];
+        if (itemValue === budget.dimension_item) {
+          const monthlyBudget = budget.budget_data?.[year.toString()]?.[month.toString()] || 0;
+          const key = `${year}-${month}-${budget.dimension_item}`;
+          
+          const existing = dataByMonthAndItem.get(key) || { cost: 0, budget: monthlyBudget };
+          existing.cost += cost;
+          dataByMonthAndItem.set(key, existing);
+        }
+      });
+    });
+
+    // Calculate total budget remaining
+    dataByMonthAndItem.forEach(({ cost, budget }) => {
+      totalBudget += budget;
+      totalCost += cost;
+    });
+
+    return totalBudget > 0 ? totalBudget - totalCost : null;
+  } catch (error) {
+    console.warn('[BUDGET] Error calculating budget metric:', error);
+    return null;
+  }
 }
 
 /**

@@ -227,6 +227,24 @@ Deno.serve(async (req) => {
 
     console.log(`Loaded ${dimensions?.length || 0} dimensions for aggregation`);
 
+    // Load budgets for budget calculation
+    const budgetsResult = await retryQuery(async () => {
+      let query = supabase
+        .from('budgets')
+        .select('*');
+      
+      if (reportId) {
+        query = query.eq('report_id', reportId);
+      } else if (accountId) {
+        query = query.eq('account_id', accountId);
+      }
+      
+      return query;
+    });
+
+    const budgets = budgetsResult.data || [];
+    console.log(`Loaded ${budgets.length} budgets for report/account`);
+
     // Build filter for the main query with optimized settings
     // Fetch ALL data first, then apply date filtering in memory for better performance
     let query = supabase
@@ -727,6 +745,48 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Calculate budget if budgets exist
+      if (budgets.length > 0 && dimensions) {
+        const dateDim = dimensions.find(d => d.type === 'date');
+        const costDim = dimensions.find(d => d.name === 'Cost');
+        
+        if (dateDim && costDim && group.rawRows.length > 0) {
+          let budgetTotal = 0;
+          let costTotal = group.data['Cost'] || 0;
+          
+          // Extract year/month from the first row in the group
+          const firstRow = group.rawRows[0];
+          const dateValue = firstRow.dimension_values[dateDim.id];
+          
+          if (dateValue) {
+            const date = new Date(dateValue);
+            const year = date.getFullYear();
+            const month = date.getMonth() + 1;
+            
+            // Find matching budgets for this group
+            budgets.forEach(budget => {
+              const budgetDim = dimensions.find(d => d.name === budget.dimension_name);
+              if (!budgetDim) return;
+              
+              // Check if any row in this group matches the budget dimension item
+              const hasMatchingItem = group.rawRows.some((row: any) => 
+                row.dimension_values[budgetDim.id] === budget.dimension_item
+              );
+              
+              if (hasMatchingItem) {
+                const monthlyBudget = budget.budget_data?.[year.toString()]?.[month.toString()] || 0;
+                budgetTotal += monthlyBudget;
+              }
+            });
+            
+            // Add Budget dimension if we found budget data
+            if (budgetTotal > 0) {
+              group.data['Budget'] = budgetTotal - costTotal;
+            }
+          }
+        }
+      }
+
       // Add comparison data and percentage changes if available
       if (compareGrouped.size > 0) {
         const compareGroup = compareGrouped.get(group.name);
@@ -837,6 +897,44 @@ Deno.serve(async (req) => {
               breakdownItem.data[dim.name] = calculatedValue;
             }
           }
+
+          // Calculate budget for breakdown items
+          if (budgets.length > 0 && dimensions) {
+            const dateDim = dimensions.find(d => d.type === 'date');
+            const costDim = dimensions.find(d => d.name === 'Cost');
+            
+            if (dateDim && costDim && breakdownItem.rawRows.length > 0) {
+              let budgetTotal = 0;
+              let costTotal = breakdownItem.data['Cost'] || 0;
+              
+              const firstRow = breakdownItem.rawRows[0];
+              const dateValue = firstRow.dimension_values[dateDim.id];
+              
+              if (dateValue) {
+                const date = new Date(dateValue);
+                const year = date.getFullYear();
+                const month = date.getMonth() + 1;
+                
+                budgets.forEach(budget => {
+                  const budgetDim = dimensions.find(d => d.name === budget.dimension_name);
+                  if (!budgetDim) return;
+                  
+                  const hasMatchingItem = breakdownItem.rawRows.some((row: any) => 
+                    row.dimension_values[budgetDim.id] === budget.dimension_item
+                  );
+                  
+                  if (hasMatchingItem) {
+                    const monthlyBudget = budget.budget_data?.[year.toString()]?.[month.toString()] || 0;
+                    budgetTotal += monthlyBudget;
+                  }
+                });
+                
+                if (budgetTotal > 0) {
+                  breakdownItem.data['Budget'] = budgetTotal - costTotal;
+                }
+              }
+            }
+          }
           
           // Build third level if "then by" dimension exists (use index 2)
           if (thenByDims.length > 2 && thenByDims[2] && breakdownItem.rawRows.length > 0) {
@@ -915,6 +1013,62 @@ Deno.serve(async (req) => {
                 if (dim.formula) {
                   const calculatedValue = calculateFormula(dim.formula, thenByItem.data);
                   thenByItem.data[dim.name] = calculatedValue;
+                }
+              }
+
+              // Calculate budget for thenBy items
+              if (budgets.length > 0 && dimensions) {
+                const dateDim = dimensions.find(d => d.type === 'date');
+                const costDim = dimensions.find(d => d.name === 'Cost');
+                
+                if (dateDim && costDim && thenByItem.data['Cost'] !== undefined) {
+                  let budgetTotal = 0;
+                  let costTotal = thenByItem.data['Cost'] || 0;
+                  
+                  // Get date from thenByItem's name or data
+                  let dateValue = thenByItem.data[dateDim.name];
+                  if (!dateValue) {
+                    // Try to parse from the group's raw data
+                    const parentRows = breakdownItem.rawRows.filter((row: any) => {
+                      const dimValues = row.dimension_values as Record<string, any>;
+                      const rowValue = dimValues[thenByDimId];
+                      return rowValue === thenByItem.sortKey || rowValue === thenByItem.name;
+                    });
+                    if (parentRows.length > 0) {
+                      dateValue = parentRows[0].dimension_values[dateDim.id];
+                    }
+                  }
+                  
+                  if (dateValue) {
+                    const date = new Date(dateValue);
+                    const year = date.getFullYear();
+                    const month = date.getMonth() + 1;
+                    
+                    budgets.forEach(budget => {
+                      const budgetDim = dimensions.find(d => d.name === budget.dimension_name);
+                      if (!budgetDim) return;
+                      
+                      // Check if any parent row matches the budget dimension item
+                      const parentRows = breakdownItem.rawRows.filter((row: any) => {
+                        const dimValues = row.dimension_values as Record<string, any>;
+                        const rowValue = dimValues[thenByDimId];
+                        return rowValue === thenByItem.sortKey || rowValue === thenByItem.name;
+                      });
+                      
+                      const hasMatchingItem = parentRows.some((row: any) =>
+                        row.dimension_values[budgetDim.id] === budget.dimension_item
+                      );
+                      
+                      if (hasMatchingItem) {
+                        const monthlyBudget = budget.budget_data?.[year.toString()]?.[month.toString()] || 0;
+                        budgetTotal += monthlyBudget;
+                      }
+                    });
+                    
+                    if (budgetTotal > 0) {
+                      thenByItem.data['Budget'] = budgetTotal - costTotal;
+                    }
+                  }
                 }
               }
             }

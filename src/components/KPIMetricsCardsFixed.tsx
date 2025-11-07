@@ -171,7 +171,7 @@ export function KPIMetricsCards({
 
         const comparisonResult = await loadReportData(reportId, accountId, user.id, comparisonFilters);
         if (comparisonResult.success) {
-          comparisonMetrics = calculateKPIMetrics(comparisonResult.data, dimensions);
+          comparisonMetrics = await calculateKPIMetrics(comparisonResult.data, dimensions, reportId, accountId);
           console.log('[KPI-FIXED] Comparison metrics calculated:', comparisonMetrics);
         }
       } else {
@@ -200,7 +200,7 @@ export function KPIMetricsCards({
       }
 
       // Calculate KPI metrics using the utility function
-      const calculatedMetrics = calculateKPIMetrics(filteredData, dimensions);
+      const calculatedMetrics = await calculateKPIMetrics(filteredData, dimensions, reportId, accountId);
       console.log('[KPI-FIXED] Calculated metrics:', calculatedMetrics);
 
       // Create display metrics based on visibility settings
@@ -278,12 +278,13 @@ export function KPIMetricsCards({
           case "CPC":
           case "CPM":
           case "Revenue":
+          case "Budget":
             formattedValue = formatCurrency(value);
             if (stableFilters.compareEnabled && comparisonMetrics[kpiName] !== undefined) {
               formattedCompareValue = formatCurrency(comparisonMetrics[kpiName]);
             }
             icon = DollarSign;
-            color = kpiName === "Revenue" ? "text-cyan-600" : "text-blue-600";
+            color = kpiName === "Revenue" ? "text-cyan-600" : kpiName === "Budget" ? "text-green-600" : "text-blue-600";
             break;
           case "ROAS":
             formattedValue = formatDecimal(value);
