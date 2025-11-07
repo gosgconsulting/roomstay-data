@@ -149,6 +149,33 @@ export function KPIMetricsCards({
 
       const { data: filteredData, dimensions } = result;
 
+      // Load comparison period data if comparison is enabled
+      let comparisonMetrics: Record<string, number> = {};
+      if (stableFilters.compareEnabled) {
+        console.log('[KPI-FIXED] Comparison enabled, loading comparison period data');
+        
+        const currentPeriod = filters.dateRange;
+        const daysDiff = Math.ceil((currentPeriod.to.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
+        
+        const previousPeriodEnd = new Date(currentPeriod.from);
+        previousPeriodEnd.setDate(previousPeriodEnd.getDate() - 1);
+        const previousPeriodStart = new Date(previousPeriodEnd);
+        previousPeriodStart.setDate(previousPeriodStart.getDate() - daysDiff + 1);
+
+        const comparisonFilters = {
+          dateRange: { from: previousPeriodStart, to: previousPeriodEnd },
+          dimensionFilters: stableFilters.dimensionFilters
+        };
+
+        const comparisonResult = await loadReportData(reportId, accountId, user.id, comparisonFilters);
+        if (comparisonResult.success) {
+          comparisonMetrics = calculateKPIMetrics(comparisonResult.data, dimensions);
+          console.log('[KPI-FIXED] Comparison metrics calculated:', comparisonMetrics);
+        }
+      } else {
+        console.log('[KPI-FIXED] Comparison disabled');
+      }
+
       console.log('[KPI-FIXED] ========== DATA LOADING SUMMARY ==========');
       console.log('[KPI-FIXED] Total dimension_data rows loaded:', result.totalRows);
       console.log('[KPI-FIXED] Filtered rows:', result.filteredRows);
@@ -194,6 +221,17 @@ export function KPIMetricsCards({
         let formattedValue: string | number = value;
         let icon = Target;
         let color = "text-blue-600";
+        let change: number | undefined = undefined;
+
+        // Calculate change percentage if comparison is enabled
+        if (stableFilters.compareEnabled && comparisonMetrics[kpiName] !== undefined && comparisonMetrics[kpiName] !== null) {
+          const comparisonValue = comparisonMetrics[kpiName];
+          if (comparisonValue !== 0) {
+            change = ((value - comparisonValue) / comparisonValue) * 100;
+          } else if (value !== 0) {
+            change = 100; // If previous was 0 and current is not, it's a 100% increase
+          }
+        }
 
         // Format values and set icons based on KPI type
         switch (kpiName) {
@@ -241,6 +279,7 @@ export function KPIMetricsCards({
         displayMetrics.push({
           label: kpiName,
           value: formattedValue,
+          change,
           icon,
           color
         });

@@ -13,6 +13,9 @@ interface KPIChartProps {
   filters: {
     dimensionFilters: Record<string, string[]>;
     dateRange?: { from: Date; to?: Date };
+    compareEnabled?: boolean;
+    compareType?: string;
+    compareDateRange?: { from: Date; to?: Date };
   };
   visibilityRefreshTrigger?: number;
   onLoadingComplete?: () => void;
@@ -31,11 +34,18 @@ export function KPIChart({ reportId, accountId, filters }: KPIChartProps) {
     return {
       dimensionFilters: filters.dimensionFilters,
       dateRange: filters.dateRange,
+      compareEnabled: filters.compareEnabled,
+      compareType: filters.compareType,
+      compareDateRange: filters.compareDateRange,
     };
   }, [
     JSON.stringify(filters.dimensionFilters),
     filters.dateRange?.from?.toISOString(),
     filters.dateRange?.to?.toISOString(),
+    filters.compareEnabled,
+    filters.compareType,
+    filters.compareDateRange?.from?.toISOString(),
+    filters.compareDateRange?.to?.toISOString(),
   ]);
 
   useEffect(() => {
@@ -118,83 +128,100 @@ export function KPIChart({ reportId, accountId, filters }: KPIChartProps) {
         return;
       }
 
-             // Calculate date ranges for current and previous periods
-       const currentPeriod = dataFilters.dateRange;
-       const daysDiff = Math.ceil((currentPeriod.to.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
-       
-       const previousPeriodEnd = new Date(currentPeriod.from);
-       previousPeriodEnd.setDate(previousPeriodEnd.getDate() - 1);
-       const previousPeriodStart = new Date(previousPeriodEnd);
-       previousPeriodStart.setDate(previousPeriodStart.getDate() - daysDiff + 1);
+      // Group current period data by date
+      const currentDateGroups = new Map<string, number>();
+      filteredData.forEach(row => {
+        const dimensionValues = row.dimension_values;
+        const dateStr = dimensionValues[dateDimension.id];
+        const metricValue = dimensionValues[metricDimension.id];
 
-       console.log('[CHART-FIXED] Period comparison:', {
-         current: { from: currentPeriod.from.toISOString(), to: currentPeriod.to.toISOString() },
-         previous: { from: previousPeriodStart.toISOString(), to: previousPeriodEnd.toISOString() },
-         daysDiff
-       });
+        if (dateStr && metricValue !== undefined && metricValue !== null) {
+          const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(metricValue) || 0;
+          const currentTotal = currentDateGroups.get(dateStr) || 0;
+          currentDateGroups.set(dateStr, currentTotal + numericValue);
+        }
+      });
 
-       // Load previous period data
-       const previousPeriodFilters = {
-         dateRange: { from: previousPeriodStart, to: previousPeriodEnd },
-         dimensionFilters: dataFilters.dimensionFilters
-       };
+      // Only load previous period data if comparison is enabled
+      let previousDateGroups = new Map<string, number>();
+      
+      if (stableFilters.compareEnabled) {
+        console.log('[CHART-FIXED] Comparison enabled, loading previous period data');
+        
+        // Calculate date ranges for current and previous periods
+        const currentPeriod = dataFilters.dateRange;
+        const daysDiff = Math.ceil((currentPeriod.to.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
+        
+        const previousPeriodEnd = new Date(currentPeriod.from);
+        previousPeriodEnd.setDate(previousPeriodEnd.getDate() - 1);
+        const previousPeriodStart = new Date(previousPeriodEnd);
+        previousPeriodStart.setDate(previousPeriodStart.getDate() - daysDiff + 1);
 
-       const previousResult = await loadReportData(reportId, accountId, user.id, previousPeriodFilters);
-       const previousData = previousResult.success ? previousResult.data : [];
+        console.log('[CHART-FIXED] Period comparison:', {
+          current: { from: currentPeriod.from.toISOString(), to: currentPeriod.to.toISOString() },
+          previous: { from: previousPeriodStart.toISOString(), to: previousPeriodEnd.toISOString() },
+          daysDiff
+        });
 
-       // Group current period data by date
-       const currentDateGroups = new Map<string, number>();
-       filteredData.forEach(row => {
-         const dimensionValues = row.dimension_values;
-         const dateStr = dimensionValues[dateDimension.id];
-         const metricValue = dimensionValues[metricDimension.id];
+        // Load previous period data
+        const previousPeriodFilters = {
+          dateRange: { from: previousPeriodStart, to: previousPeriodEnd },
+          dimensionFilters: dataFilters.dimensionFilters
+        };
 
-         if (dateStr && metricValue !== undefined && metricValue !== null) {
-           const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(metricValue) || 0;
-           const currentTotal = currentDateGroups.get(dateStr) || 0;
-           currentDateGroups.set(dateStr, currentTotal + numericValue);
-         }
-       });
+        const previousResult = await loadReportData(reportId, accountId, user.id, previousPeriodFilters);
+        const previousData = previousResult.success ? previousResult.data : [];
 
-       // Group previous period data by date (offset by the period difference)
-       const previousDateGroups = new Map<string, number>();
-       previousData.forEach(row => {
-         const dimensionValues = row.dimension_values;
-         const dateStr = dimensionValues[dateDimension.id];
-         const metricValue = dimensionValues[metricDimension.id];
+        // Group previous period data by date (offset by the period difference)
+        previousData.forEach(row => {
+          const dimensionValues = row.dimension_values;
+          const dateStr = dimensionValues[dateDimension.id];
+          const metricValue = dimensionValues[metricDimension.id];
 
-         if (dateStr && metricValue !== undefined && metricValue !== null) {
-           const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(metricValue) || 0;
-           
-           // Calculate the corresponding date in the current period
-           const originalDate = parseISO(dateStr);
-           const offsetDate = new Date(originalDate);
-           offsetDate.setDate(offsetDate.getDate() + daysDiff + 1);
-           const offsetDateStr = offsetDate.toISOString().split('T')[0];
-           
-           const currentTotal = previousDateGroups.get(offsetDateStr) || 0;
-           previousDateGroups.set(offsetDateStr, currentTotal + numericValue);
-         }
-       });
+          if (dateStr && metricValue !== undefined && metricValue !== null) {
+            const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(metricValue) || 0;
+            
+            // Calculate the corresponding date in the current period
+            const originalDate = parseISO(dateStr);
+            const offsetDate = new Date(originalDate);
+            offsetDate.setDate(offsetDate.getDate() + daysDiff + 1);
+            const offsetDateStr = offsetDate.toISOString().split('T')[0];
+            
+            const currentTotal = previousDateGroups.get(offsetDateStr) || 0;
+            previousDateGroups.set(offsetDateStr, currentTotal + numericValue);
+          }
+        });
+      } else {
+        console.log('[CHART-FIXED] Comparison disabled, skipping previous period data');
+      }
 
-       // Create combined chart data
-       const allDates = new Set([...currentDateGroups.keys(), ...previousDateGroups.keys()]);
-       const chartDataArray = Array.from(allDates)
-         .map(dateStr => ({
-           date: dateStr,
-           formattedDate: format(parseISO(dateStr), 'MMM dd'),
-           [selectedMetric]: currentDateGroups.get(dateStr) || 0,
-           [`${selectedMetric}_previous`]: previousDateGroups.get(dateStr) || 0
-         }))
-         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      // Create chart data
+      const allDates = new Set([...currentDateGroups.keys(), ...previousDateGroups.keys()]);
+      const chartDataArray = Array.from(allDates)
+        .map(dateStr => {
+          const dataPoint: any = {
+            date: dateStr,
+            formattedDate: format(parseISO(dateStr), 'MMM dd'),
+            [selectedMetric]: currentDateGroups.get(dateStr) || 0,
+          };
+          
+          // Only add previous period data if comparison is enabled
+          if (stableFilters.compareEnabled) {
+            dataPoint[`${selectedMetric}_previous`] = previousDateGroups.get(dateStr) || 0;
+          }
+          
+          return dataPoint;
+        })
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-             console.log('[CHART-FIXED] Chart data prepared:', {
-         dataPoints: chartDataArray.length,
-         metric: selectedMetric,
-         currentPeriodPoints: Array.from(currentDateGroups.keys()).length,
-         previousPeriodPoints: Array.from(previousDateGroups.keys()).length,
-         sampleData: chartDataArray.slice(0, 3)
-       });
+      console.log('[CHART-FIXED] Chart data prepared:', {
+        dataPoints: chartDataArray.length,
+        metric: selectedMetric,
+        compareEnabled: stableFilters.compareEnabled,
+        currentPeriodPoints: Array.from(currentDateGroups.keys()).length,
+        previousPeriodPoints: Array.from(previousDateGroups.keys()).length,
+        sampleData: chartDataArray.slice(0, 3)
+      });
 
       setChartData(chartDataArray);
 
@@ -310,16 +337,18 @@ export function KPIChart({ reportId, accountId, filters }: KPIChartProps) {
                 activeDot={{ r: 6 }}
                 name="Current Period"
               />
-              <Line 
-                type="monotone" 
-                dataKey={`${selectedMetric}_previous`} 
-                stroke="#eab308" 
-                strokeWidth={3}
-                dot={{ fill: '#eab308', strokeWidth: 2, r: 4 }}
-                activeDot={{ r: 6 }}
-                name="Previous Period"
-                strokeDasharray="5 5"
-              />
+              {stableFilters.compareEnabled && (
+                <Line 
+                  type="monotone" 
+                  dataKey={`${selectedMetric}_previous`} 
+                  stroke="#eab308" 
+                  strokeWidth={3}
+                  dot={{ fill: '#eab308', strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6 }}
+                  name="Previous Period"
+                  strokeDasharray="5 5"
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </div>
