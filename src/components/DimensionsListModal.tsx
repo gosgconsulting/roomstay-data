@@ -373,16 +373,7 @@ export const DimensionsListModal = ({
 
       console.log('[testing] Loading dimensions for user:', user.id, 'report:', reportId, 'account:', accountId);
 
-      // Load global dimensions (available to all users)
-      const { data: globalData, error: globalError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("scope", "global")
-        .order("created_at", { ascending: false });
-
-      if (globalError) throw globalError;
-
-      // Load account-specific dimensions if accountId is provided
+      // Load account-specific dimensions first (highest priority)
       let accountData: Dimension[] = [];
       if (accountId) {
         const { data, error: accountError } = await supabase
@@ -396,15 +387,53 @@ export const DimensionsListModal = ({
         accountData = (data || []) as Dimension[];
       }
 
-      console.log('[testing] Loaded dimensions - Total:', accountData?.length || 0);
+      // Load custom dimensions for this user
+      let customData: Dimension[] = [];
+      const { data, error: customError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("scope", "custom")
+        .order("created_at", { ascending: false });
+
+      if (customError) throw customError;
+      customData = (data || []) as Dimension[];
+
+      // Load global dimensions (lowest priority, fallback)
+      const { data: globalData, error: globalError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("scope", "global")
+        .order("created_at", { ascending: false });
+
+      if (globalError) throw globalError;
+
+      // Combine all dimensions with proper priority: account > custom > global
+      const allDimensions = [
+        ...accountData,
+        ...customData,
+        ...(globalData || [])
+      ] as Dimension[];
+
+      // Deduplicate by name, keeping highest priority (first occurrence)
+      const seenNames = new Set<string>();
+      const uniqueDimensions = allDimensions.filter(dim => {
+        if (seenNames.has(dim.name)) {
+          return false;
+        }
+        seenNames.add(dim.name);
+        return true;
+      });
+
+      console.log('[testing] Loaded dimensions - Account:', accountData?.length || 0, 'Custom:', customData?.length || 0, 'Global:', globalData?.length || 0, 'Unique:', uniqueDimensions.length);
 
       // Separate into text and value dimensions
-      const textDims = accountData.filter(d => d.type === 'text');
-      const valueDims = accountData.filter(d => d.type !== 'text'); // number, currency, percentage, date
+      const textDims = uniqueDimensions.filter(d => d.type === 'text');
+      const valueDims = uniqueDimensions.filter(d => d.type !== 'text'); // number, currency, percentage, date
 
       setTextDimensions(textDims);
       setValueDimensions(valueDims);
-      setAllDimensions(accountData);
+      setAllDimensions(uniqueDimensions);
     } catch (error) {
       console.error("Error loading dimensions:", error);
       toast({

@@ -203,7 +203,10 @@ function applyDataFilters(
 
     // Apply date filter
     if (filters.dateRange) {
-      const dateDimension = dimensions.find(d => d.type === 'date');
+      // Prioritize account-scoped date dimension over global/custom
+      const dateDimension = dimensions.find(d => d.type === 'date' && d.scope === 'account') 
+        || dimensions.find(d => d.type === 'date' && d.scope === 'custom')
+        || dimensions.find(d => d.type === 'date');
       if (dateDimension) {
         const rowDateStr = dimensionValues[dateDimension.id];
         if (rowDateStr) {

@@ -453,16 +453,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
 
       console.log('[testing] FiltersBar - Loading dimensions for user:', user.id, 'report:', reportId, 'account:', accountId);
 
-      // Load global dimensions (available to all users)
-      const { data: globalData, error: globalError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("scope", "global")
-        .order("created_at", { ascending: false });
-
-      if (globalError) throw globalError;
-
-      // Load account-specific dimensions if accountId is provided
+      // Load account-specific dimensions first (highest priority)
       let accountData: Dimension[] = [];
       if (accountId) {
         const { data, error: accountError } = await supabase
@@ -489,41 +480,43 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
       if (customError) throw customError;
       customData = (data || []) as Dimension[];
 
-      // Combine all dimensions
+      // Load global dimensions (lowest priority, fallback)
+      const { data: globalData, error: globalError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("scope", "global")
+        .order("created_at", { ascending: false });
+
+      if (globalError) throw globalError;
+
+      // Combine all dimensions with proper priority: account > custom > global
       const allDimensions = [
-        ...(globalData || []),
         ...accountData,
-        ...customData
+        ...customData,
+        ...(globalData || [])
       ] as Dimension[];
 
-      console.log('[testing] FiltersBar - Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0);
-
-      // Filter only attribute dimensions (text type) that can be used for filtering
-      const filterableDimensions = allDimensions.filter(
-        (d) => d.type === "text" || d.type === "date"
-      );
-      
-      // Deduplicate dimensions by name, prioritizing account-scoped > custom > global
-      const dimensionsByName = new Map<string, Dimension>();
-      filterableDimensions.forEach(dim => {
-        const existing = dimensionsByName.get(dim.name);
-        if (!existing) {
-          dimensionsByName.set(dim.name, dim);
-        } else {
-          // Replace if current dimension has higher priority
-          const currentPriority = dim.scope === 'account' ? 3 : dim.scope === 'custom' ? 2 : 1;
-          const existingPriority = existing.scope === 'account' ? 3 : existing.scope === 'custom' ? 2 : 1;
-          if (currentPriority > existingPriority) {
-            dimensionsByName.set(dim.name, dim);
-          }
+      // Deduplicate by name, keeping highest priority (first occurrence)
+      const seenNames = new Set<string>();
+      const uniqueDimensions = allDimensions.filter(dim => {
+        if (seenNames.has(dim.name)) {
+          return false;
         }
+        seenNames.add(dim.name);
+        return true;
       });
-      const uniqueDimensions = Array.from(dimensionsByName.values());
+
+      console.log('[testing] FiltersBar - Loaded dimensions - Account:', accountData?.length || 0, 'Custom:', customData?.length || 0, 'Global:', globalData?.length || 0, 'Unique:', uniqueDimensions.length);
+
+      // Filter to only text and date dimensions (for filtering)
+      const filterableDimensions = uniqueDimensions.filter(d => 
+        d.type === 'text' || d.type === 'date'
+      );
 
       // Filter dimensions by visibility settings
-      let finalDimensions = uniqueDimensions;
+      let finalDimensions = filterableDimensions;
       if (user && reportId) {
-        finalDimensions = await filterDimensionsByVisibility(uniqueDimensions, reportId, user.id, supabase);
+        finalDimensions = await filterDimensionsByVisibility(filterableDimensions, reportId, user.id, supabase);
       }
 
       console.log('[testing] FiltersBar - Final filterable dimensions:', finalDimensions.length);
