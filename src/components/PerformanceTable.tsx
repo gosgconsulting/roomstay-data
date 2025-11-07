@@ -582,7 +582,9 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         try {
           const dimensionNameToIdMap = new Map<string, string>();
           dimensions.forEach(dim => {
-            dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
+            if (dim && dim.name && dim.id) {
+              dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
+            }
           });
           
           const { data: oldDimensions } = await supabase
@@ -647,7 +649,9 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         // Create a map of dimension name to account-scoped dimension ID
         const dimensionNameToIdMap = new Map<string, string>();
         dimensions.forEach(dim => {
-          dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
+          if (dim && dim.name && dim.id) {
+            dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
+          }
         });
         
         // Validate and map visible_columns
@@ -1030,7 +1034,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       
       // Check data availability for dimensions
       if (reportId && finalDimensions && finalDimensions.length > 0) {
-        checkDataAvailability(finalDimensions.map(d => d.id), reportId);
+        checkDataAvailability(finalDimensions.filter(d => d && d.id).map(d => d.id), reportId);
       }
       
       // Initialize column order if not set (only for numeric dimensions)
@@ -1768,6 +1772,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     // Only sum leaf nodes (rows without children) to avoid double-counting
     const filteredTotals: Record<string, any> = {};
     for (const dim of dimensions) {
+      if (!dim || !dim.name || !dim.type) continue; // Safety check
       if (dim.formula) continue;
       if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
         let sum = 0;
@@ -1794,10 +1799,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     
     // Calculate formula totals
     for (const dim of dimensions) {
+      if (!dim || !dim.name || !dim.formula) continue; // Safety check
       if (dim.formula) {
         try {
           let expression = dim.formula;
-          const dimensionNames = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
+          const dimensionNames = dimensions.filter(d => d && d.name).map(d => d.name).sort((a, b) => b.length - a.length);
           for (const dimName of dimensionNames) {
             const value = filteredTotals[dimName] || 0;
             const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1824,6 +1830,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     // Calculate comparison totals from filtered data
     const filteredCompareTotals: Record<string, any> = {};
     for (const dim of dimensions) {
+      if (!dim || !dim.name || !dim.type) continue; // Safety check
       if (dim.formula) continue;
       if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
         let sum = 0;
@@ -1848,10 +1855,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
 
     // Calculate formula comparison totals
     for (const dim of dimensions) {
+      if (!dim || !dim.name || !dim.formula) continue; // Safety check
       if (dim.formula) {
         try {
           let expression = dim.formula;
-          const dimensionNames = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
+          const dimensionNames = dimensions.filter(d => d && d.name).map(d => d.name).sort((a, b) => b.length - a.length);
           for (const dimName of dimensionNames) {
             const value = filteredCompareTotals[dimName] || 0;
             const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
