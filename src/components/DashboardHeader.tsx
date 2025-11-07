@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, ChevronDown, Pencil, Database, Grid3x3, Wallet, RefreshCw } from "lucide-react";
 import { DataSourceModal } from "./DataSourceModal";
+import { DataSourceSelectionModal } from "./DataSourceSelectionModal";
 import { DataSourcesListModal } from "./DataSourcesListModal";
 import { DimensionsListModal } from "./DimensionsListModal";
 import { DimensionModal } from "./DimensionModal";
@@ -64,6 +65,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const location = useLocation();
   const isAllReportsPage = location.pathname.startsWith('/all-reports');
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
+  const [showDataSourceSelectionModal, setShowDataSourceSelectionModal] = useState(false);
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
   const [showDimensionModal, setShowDimensionModal] = useState(false);
@@ -793,9 +795,33 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
             accountId={accountId}
             onAddNew={() => {
               setShowDataSourcesListModal(false);
-              setShowDataSourceModal(true);
+              setShowDataSourceSelectionModal(true);
             }}
             onDataSync={onDataSync}
+          />
+          
+          <DataSourceSelectionModal
+            open={showDataSourceSelectionModal}
+            onOpenChange={(open) => {
+              setShowDataSourceSelectionModal(open);
+              if (!open) {
+                setShowDataSourcesListModal(true);
+              }
+            }}
+            onSelectGoogleSheets={() => {
+              setShowDataSourceSelectionModal(false);
+              setShowDataSourceModal(true);
+            }}
+            onSelectCSV={() => {
+              // Coming soon
+              setShowDataSourceSelectionModal(false);
+              setShowDataSourcesListModal(true);
+            }}
+            onSelectAPI={() => {
+              // Coming soon
+              setShowDataSourceSelectionModal(false);
+              setShowDataSourcesListModal(true);
+            }}
           />
           
           <DataSourceModal
