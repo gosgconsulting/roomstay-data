@@ -41,6 +41,57 @@ export type Database = {
         }
         Relationships: []
       }
+      budgets: {
+        Row: {
+          account_id: string | null
+          budget_data: Json
+          created_at: string | null
+          dimension_item: string
+          dimension_name: string
+          id: string
+          report_id: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          budget_data?: Json
+          created_at?: string | null
+          dimension_item: string
+          dimension_name: string
+          id?: string
+          report_id?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          budget_data?: Json
+          created_at?: string | null
+          dimension_item?: string
+          dimension_name?: string
+          id?: string
+          report_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budgets_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budgets_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       data_sources: {
         Row: {
           column_mappings: Json | null
@@ -48,9 +99,13 @@ export type Database = {
           google_sheets_url: string
           header_row: number
           id: string
+          last_synced_at: string | null
           name: string
           report_id: string
           spreadsheet_id: string
+          sync_frequency: string | null
+          sync_time: string | null
+          sync_timezone: string | null
           tab_name: string
           updated_at: string
         }
@@ -60,9 +115,13 @@ export type Database = {
           google_sheets_url: string
           header_row?: number
           id?: string
+          last_synced_at?: string | null
           name: string
           report_id: string
           spreadsheet_id: string
+          sync_frequency?: string | null
+          sync_time?: string | null
+          sync_timezone?: string | null
           tab_name: string
           updated_at?: string
         }
@@ -72,9 +131,13 @@ export type Database = {
           google_sheets_url?: string
           header_row?: number
           id?: string
+          last_synced_at?: string | null
           name?: string
           report_id?: string
           spreadsheet_id?: string
+          sync_frequency?: string | null
+          sync_time?: string | null
+          sync_timezone?: string | null
           tab_name?: string
           updated_at?: string
         }
@@ -190,6 +253,66 @@ export type Database = {
           },
           {
             foreignKeyName: "dimensions_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      monthly_dimension_data: {
+        Row: {
+          aggregated_metrics: Json
+          created_at: string | null
+          data_source_id: string
+          date_range_end: string | null
+          date_range_start: string | null
+          dimension_values: Json
+          id: string
+          month: number
+          report_id: string
+          row_count: number
+          updated_at: string | null
+          year: number
+        }
+        Insert: {
+          aggregated_metrics?: Json
+          created_at?: string | null
+          data_source_id: string
+          date_range_end?: string | null
+          date_range_start?: string | null
+          dimension_values?: Json
+          id?: string
+          month: number
+          report_id: string
+          row_count?: number
+          updated_at?: string | null
+          year: number
+        }
+        Update: {
+          aggregated_metrics?: Json
+          created_at?: string | null
+          data_source_id?: string
+          date_range_end?: string | null
+          date_range_start?: string | null
+          dimension_values?: Json
+          id?: string
+          month?: number
+          report_id?: string
+          row_count?: number
+          updated_at?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_dimension_data_data_source_id_fkey"
+            columns: ["data_source_id"]
+            isOneToOne: false
+            referencedRelation: "data_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_dimension_data_report_id_fkey"
             columns: ["report_id"]
             isOneToOne: false
             referencedRelation: "reports"
@@ -466,6 +589,16 @@ export type Database = {
           dimension_values: Json
           group_key: string
           row_count: number
+        }[]
+      }
+      get_monthly_data_stats: {
+        Args: { p_report_id: string }
+        Returns: {
+          first_date: string
+          last_date: string
+          month: number
+          row_count: number
+          year: number
         }[]
       }
       has_report_access: {

@@ -1,0 +1,190 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.77.0';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+interface DataSource {
+  id: string;
+  name: string;
+  google_sheets_url: string;
+  spreadsheet_id: string;
+  tab_name: string;
+  header_row: number;
+  column_mappings: any[];
+  report_id: string;
+  sync_frequency: string;
+  sync_time: string;
+  sync_timezone: string;
+}
+
+Deno.serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    console.log('[AUTO-SYNC] Starting auto-sync check...');
+
+    // Get current time in UTC
+    const now = new Date();
+    const currentHour = now.getUTCHours();
+    const currentMinute = now.getUTCMinutes();
+    const currentDay = now.getUTCDay(); // 0 = Sunday, 6 = Saturday
+    const currentDate = now.getUTCDate();
+
+    console.log(`[AUTO-SYNC] Current UTC time: ${currentHour}:${currentMinute}, Day: ${currentDay}, Date: ${currentDate}`);
+
+    // Get all data sources that need syncing
+    const { data: dataSources, error: fetchError } = await supabase
+      .from('data_sources')
+      .select('*')
+      .neq('sync_frequency', 'manual');
+
+    if (fetchError) {
+      console.error('[AUTO-SYNC] Error fetching data sources:', fetchError);
+      throw fetchError;
+    }
+
+    if (!dataSources || dataSources.length === 0) {
+      console.log('[AUTO-SYNC] No data sources configured for auto-sync');
+      return new Response(
+        JSON.stringify({ message: 'No data sources to sync' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`[AUTO-SYNC] Found ${dataSources.length} data sources with auto-sync enabled`);
+
+    const syncResults = [];
+
+    for (const ds of dataSources as DataSource[]) {
+      try {
+        // Convert sync time to UTC based on timezone
+        const [syncHour, syncMinute] = ds.sync_time.split(':').map(Number);
+        
+        // Calculate if sync should run based on frequency
+        let shouldSync = false;
+        
+        if (ds.sync_frequency === 'daily') {
+          // Daily: check if current time matches sync time (within 15-minute window)
+          shouldSync = currentHour === syncHour && Math.abs(currentMinute - syncMinute) < 15;
+        } else if (ds.sync_frequency === 'weekly') {
+          // Weekly: Sunday at sync time
+          shouldSync = currentDay === 0 && currentHour === syncHour && Math.abs(currentMinute - syncMinute) < 15;
+        } else if (ds.sync_frequency === 'monthly') {
+          // Monthly: 1st of month at sync time
+          shouldSync = currentDate === 1 && currentHour === syncHour && Math.abs(currentMinute - syncMinute) < 15;
+        }
+
+        if (!shouldSync) {
+          console.log(`[AUTO-SYNC] Skipping ${ds.name} - not scheduled for this time`);
+          continue;
+        }
+
+        console.log(`[AUTO-SYNC] Syncing ${ds.name}...`);
+
+        // Fetch data from Google Sheets
+        const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
+          body: {
+            spreadsheetId: ds.spreadsheet_id,
+            tabName: ds.tab_name,
+            range: `${ds.header_row}:1000000`,
+          },
+        });
+
+        if (sheetsError) throw sheetsError;
+
+        if (!sheetsData?.values || sheetsData.values.length === 0) {
+          console.log(`[AUTO-SYNC] No data found for ${ds.name}`);
+          continue;
+        }
+
+        const headers = sheetsData.values[0];
+        const dataRows = sheetsData.values.slice(1);
+
+        // Delete existing data for this data source
+        const { error: deleteError } = await supabase
+          .from('dimension_data')
+          .delete()
+          .eq('data_source_id', ds.id);
+
+        if (deleteError) throw deleteError;
+
+        // Process and insert data
+        const columnMappings = ds.column_mappings || [];
+        const visibleMappings = columnMappings.filter((m: any) => m.visible !== false);
+        
+        let rowsInserted = 0;
+        const batchSize = 500;
+
+        for (let i = 0; i < dataRows.length; i += batchSize) {
+          const batch = dataRows.slice(i, i + batchSize);
+          const rowsToInsert = batch.map((row: any[]) => {
+            const dimensionValues: any = {};
+
+            visibleMappings.forEach((mapping: any) => {
+              const colIndex = headers.indexOf(mapping.sourceColumn);
+              if (colIndex !== -1) {
+                const rawValue = row[colIndex];
+                dimensionValues[mapping.dimensionId] = rawValue || '';
+              }
+            });
+
+            return {
+              report_id: ds.report_id,
+              data_source_id: ds.id,
+              dimension_values: dimensionValues,
+            };
+          });
+
+          const { error: insertError } = await supabase
+            .from('dimension_data')
+            .insert(rowsToInsert);
+
+          if (insertError) throw insertError;
+          rowsInserted += rowsToInsert.length;
+        }
+
+        // Update last_synced_at timestamp
+        await supabase
+          .from('data_sources')
+          .update({ last_synced_at: now.toISOString() })
+          .eq('id', ds.id);
+
+        console.log(`[AUTO-SYNC] Successfully synced ${ds.name}: ${rowsInserted} rows`);
+        syncResults.push({ name: ds.name, success: true, rows: rowsInserted });
+
+      } catch (error) {
+        console.error(`[AUTO-SYNC] Error syncing ${ds.name}:`, error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        syncResults.push({ name: ds.name, success: false, error: errorMessage });
+      }
+    }
+
+    return new Response(
+      JSON.stringify({ 
+        message: 'Auto-sync completed',
+        results: syncResults
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error) {
+    console.error('[AUTO-SYNC] Fatal error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
+  }
+});

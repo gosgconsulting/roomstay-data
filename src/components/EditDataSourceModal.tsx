@@ -66,6 +66,9 @@ export const EditDataSourceModal = ({
   const [isResyncing, setIsResyncing] = useState(false);
   const [syncedRowsCount, setSyncedRowsCount] = useState<number | null>(null);
   const [syncedColumnsCount, setSyncedColumnsCount] = useState<number | null>(null);
+  const [syncFrequency, setSyncFrequency] = useState("manual");
+  const [syncTime, setSyncTime] = useState("09:00");
+  const [syncTimezone, setSyncTimezone] = useState("Asia/Singapore");
 
   // Fetch sync statistics
   const fetchSyncStatistics = useCallback(async () => {
@@ -99,6 +102,9 @@ export const EditDataSourceModal = ({
       setUrl(dataSource.google_sheets_url || "");
       setSelectedTab(dataSource.tab_name || "");
       setHeaderRow(String(dataSource.header_row || 1));
+      setSyncFrequency((dataSource as any).sync_frequency || "manual");
+      setSyncTime((dataSource as any).sync_time?.substring(0, 5) || "09:00");
+      setSyncTimezone((dataSource as any).sync_timezone || "Asia/Singapore");
       setStep(1);
       setHeaders([]);
       setAvailableTabs([]);
@@ -272,6 +278,9 @@ export const EditDataSourceModal = ({
           tab_name: selectedTab,
           header_row: parseInt(headerRow),
           column_mappings: mappings,
+          sync_frequency: syncFrequency,
+          sync_time: syncTime,
+          sync_timezone: syncTimezone,
         })
         .eq('id', dataSource.id);
 
@@ -318,6 +327,9 @@ export const EditDataSourceModal = ({
           spreadsheet_id: spreadsheetId,
           tab_name: selectedTab,
           header_row: parseInt(headerRow),
+          sync_frequency: syncFrequency,
+          sync_time: syncTime,
+          sync_timezone: syncTimezone,
         })
         .eq('id', dataSource.id);
 
@@ -427,6 +439,63 @@ export const EditDataSourceModal = ({
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                 />
+              </div>
+
+              <div className="space-y-4 border-t pt-4">
+                <h3 className="text-sm font-semibold">Auto-Sync Settings</h3>
+                
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="syncFrequency">Sync Frequency</Label>
+                    <Select value={syncFrequency} onValueChange={setSyncFrequency}>
+                      <SelectTrigger id="syncFrequency" className="bg-background">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background z-50">
+                        <SelectItem value="manual">Manual</SelectItem>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="weekly">Weekly (Sundays)</SelectItem>
+                        <SelectItem value="monthly">Monthly (1st)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="syncTime">Sync Time (UTC)</Label>
+                    <Input
+                      id="syncTime"
+                      type="time"
+                      value={syncTime}
+                      onChange={(e) => setSyncTime(e.target.value)}
+                      disabled={syncFrequency === 'manual'}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="syncTimezone">Timezone</Label>
+                    <Select value={syncTimezone} onValueChange={setSyncTimezone} disabled={syncFrequency === 'manual'}>
+                      <SelectTrigger id="syncTimezone" className="bg-background">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background z-50">
+                        <SelectItem value="Asia/Singapore">SGT (Singapore)</SelectItem>
+                        <SelectItem value="America/New_York">EST (New York)</SelectItem>
+                        <SelectItem value="America/Los_Angeles">PST (Los Angeles)</SelectItem>
+                        <SelectItem value="Europe/London">GMT (London)</SelectItem>
+                        <SelectItem value="Europe/Paris">CET (Paris)</SelectItem>
+                        <SelectItem value="Asia/Tokyo">JST (Tokyo)</SelectItem>
+                        <SelectItem value="Australia/Sydney">AEST (Sydney)</SelectItem>
+                        <SelectItem value="UTC">UTC</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                
+                {syncFrequency !== 'manual' && (
+                  <p className="text-xs text-muted-foreground">
+                    Data will automatically sync {syncFrequency} at {syncTime} {syncTimezone}
+                  </p>
+                )}
               </div>
 
                 {dataSource && (
