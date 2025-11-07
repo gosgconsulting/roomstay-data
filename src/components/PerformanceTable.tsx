@@ -977,27 +977,60 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
 
       console.log('[testing] PerformanceTable - Loading dimensions for user:', user.id, 'account:', accountId);
 
-      // Load only account-scoped dimensions (including custom which are now under account scope)
-      if (!accountId) {
-        console.error('[testing] No accountId provided, cannot load dimensions');
-        return;
-      }
-
-      const { data: accountData, error: accountError } = await supabase
+      // Load global dimensions (available to all users)
+      const { data: globalData, error: globalError } = await supabase
         .from("dimensions")
         .select("*")
-        .eq("scope", "account")
-        .eq("account_id", accountId)
+        .eq("scope", "global")
         .order("created_at", { ascending: false });
 
-      if (accountError) throw accountError;
+      if (globalError) throw globalError;
 
-      const allDimensions = accountData || [];
+      // Load account-specific dimensions if accountId is provided
+      let accountData: any[] = [];
+      if (accountId) {
+        const { data, error: accountError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("scope", "account")
+          .eq("account_id", accountId)
+          .order("created_at", { ascending: false });
 
-      console.log('[testing] PerformanceTable - Loaded account dimensions:', {
-        account: allDimensions.length,
-        accountId
+        if (accountError) throw accountError;
+        accountData = (data || []);
+      }
+
+      // Load custom dimensions for this user (both global custom and report-specific)
+      let customData: any[] = [];
+      const { data, error: customError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("scope", "custom")
+        .or(`report_id.is.null,report_id.eq.${reportId}`)
+        .order("created_at", { ascending: false });
+
+      if (customError) throw customError;
+      customData = (data || []);
+
+      // Combine all dimensions - prioritize account > custom > global
+      const combinedDimensions = [
+        ...accountData,
+        ...customData,
+        ...(globalData || [])
+      ];
+
+      // Deduplicate dimensions by name (keep first occurrence, which prioritizes account-scoped)
+      const seenNames = new Set<string>();
+      const allDimensions = combinedDimensions.filter(dim => {
+        if (seenNames.has(dim.name)) {
+          return false;
+        }
+        seenNames.add(dim.name);
+        return true;
       });
+
+      console.log('[testing] PerformanceTable - Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0, 'Final:', allDimensions.length);
 
       // Set all dimensions (needed for Group by/Breakdown by selectors)
       setDimensions(allDimensions);
