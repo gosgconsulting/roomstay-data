@@ -119,7 +119,29 @@ export async function loadReportData(
       throw new Error('No dimensions found for account');
     }
 
-    // 2. Load dimension data in chunks for performance
+    // 2. Check if budgets exist and add virtual Budget dimension
+    const { data: budgets, error: budgetError } = await supabase
+      .from('budgets')
+      .select('id')
+      .or(`report_id.eq.${reportId},account_id.eq.${accountId}`)
+      .limit(1);
+
+    if (!budgetError && budgets && budgets.length > 0) {
+      // Add virtual Budget dimension
+      const budgetDimension: Dimension = {
+        id: 'virtual-budget',
+        name: 'Budget',
+        type: 'currency',
+        scope: 'virtual',
+        formula: null,
+        account_id: accountId,
+        report_id: reportId
+      };
+      dimensions.push(budgetDimension);
+      console.log('[DATA-FIX] Added virtual Budget dimension (budgets exist)');
+    }
+
+    // 3. Load dimension data in chunks for performance
     const CHUNK_SIZE = 5000;
     const MAX_ROWS = 50000;
     let offset = 0;

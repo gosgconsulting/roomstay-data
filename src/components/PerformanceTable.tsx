@@ -1032,17 +1032,50 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
 
       console.log('[testing] PerformanceTable - Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0, 'Final:', allDimensions.length);
 
+      // Check if budgets exist for this account/report
+      let budgetDimension = null;
+      if (accountId || reportId) {
+        const { data: budgets, error: budgetError } = await supabase
+          .from('budgets')
+          .select('id')
+          .or(`report_id.eq.${reportId},account_id.eq.${accountId}`)
+          .limit(1);
+
+        if (!budgetError && budgets && budgets.length > 0) {
+          // Create a virtual Budget dimension
+          budgetDimension = {
+            id: 'virtual-budget',
+            name: 'Budget',
+            type: 'currency',
+            scope: 'virtual',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            formula: null,
+            user_id: user.id,
+            account_id: accountId,
+            report_id: reportId,
+            data_source_id: null
+          };
+          console.log('[testing] PerformanceTable - Budget dimension added (budgets exist)');
+        }
+      }
+
+      // Add Budget dimension if it exists
+      const finalDimensions = budgetDimension 
+        ? [...allDimensions, budgetDimension]
+        : allDimensions;
+
       // Set all dimensions (needed for Group by/Breakdown by selectors)
-      setDimensions(allDimensions);
+      setDimensions(finalDimensions);
       
       // Check data availability for dimensions
-      if (reportId && allDimensions.length > 0) {
-        checkDataAvailability(allDimensions.map(d => d.id), reportId);
+      if (reportId && finalDimensions.length > 0) {
+        checkDataAvailability(finalDimensions.map(d => d.id), reportId);
       }
       
       // Initialize column order if not set (only for numeric dimensions)
       if (columnOrder.length === 0) {
-        const numericDimensions = allDimensions.filter(d => 
+        const numericDimensions = finalDimensions.filter(d => 
           d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
         );
         const orderIds = numericDimensions.map(d => d.id);
