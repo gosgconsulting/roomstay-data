@@ -210,8 +210,13 @@ export const DimensionModal = ({
       // Remove any remaining @ symbols
       testFormula = testFormula.replace(/@/g, '');
 
-      // Simple evaluation - only allow basic math operations
-      if (!/^[\d\s+\-*/%().]+$/.test(testFormula)) {
+      // Handle percentage notation (e.g., "15%" becomes "0.15")
+      testFormula = testFormula.replace(/(\d+(?:\.\d+)?)\s*%/g, (match, num) => {
+        return `(${parseFloat(num) / 100})`;
+      });
+
+      // Simple evaluation - allow basic math operations and parentheses
+      if (!/^[\d\s+\-*/.()]+$/.test(testFormula)) {
         throw new Error("Formula contains invalid characters. Only numbers and operators (+, -, *, /, %) are allowed.");
       }
 

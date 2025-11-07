@@ -533,6 +533,11 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
         }
       }
       
+      // Handle percentage notation (e.g., "15%" becomes "0.15")
+      expression = expression.replace(/(\d+(?:\.\d+)?)\s*%/g, (match, num) => {
+        return `(${parseFloat(num) / 100})`;
+      });
+      
       // eslint-disable-next-line no-eval
       const result = eval(expression);
       

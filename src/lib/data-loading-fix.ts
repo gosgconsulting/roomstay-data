@@ -329,6 +329,11 @@ function calculateFormula(
       processedFormula = processedFormula.replace(regex, String(data[key] || 0));
     });
 
+    // Handle percentage notation (e.g., "15%" becomes "0.15")
+    processedFormula = processedFormula.replace(/(\d+(?:\.\d+)?)\s*%/g, (match, num) => {
+      return `(${parseFloat(num) / 100})`;
+    });
+
     // Handle division by zero and other edge cases
     if (processedFormula.includes('/ 0')) {
       return 0;
