@@ -6,6 +6,7 @@ export interface MasterFilterState {
   values: string[];
   dateRange?: { from: Date; to: Date };
   datePreset?: string;
+  reportIds?: string[]; // Filter by specific reports
   aggregationMethod: 'sum' | 'average' | 'weighted';
 }
 
@@ -62,10 +63,9 @@ export async function getCombinedAnalytics(
       .select('dimension_values, report_id')
       .in('report_id', reportIds);
 
-    // Apply master filter if present
-    if (masterFilter.dimension && masterFilter.values.length > 0) {
-      // We need to filter by checking if the dimension value is in the selected values
-      // This is tricky with JSONB, so we'll do it client-side after fetching
+    // Apply date range filter if present
+    if (masterFilter.dateRange) {
+      // We'll filter by date client-side after loading dimension IDs
     }
 
     const { data, error } = await query.limit(50000);
@@ -79,6 +79,8 @@ export async function getCombinedAnalytics(
 
     // Filter data based on master filter (client-side)
     let filteredData = data || [];
+    
+    // Filter by dimension values
     if (masterFilter.dimension && masterFilter.values.length > 0) {
       filteredData = filteredData.filter(row => {
         const value = row.dimension_values[masterFilter.dimension!];
@@ -115,6 +117,25 @@ export async function getCombinedAnalytics(
       }
       dimensionMaps.get(dim.report_id)!.set(dim.name, dim.id);
     });
+
+    // Filter by date range if present
+    if (masterFilter.dateRange) {
+      const fromDate = masterFilter.dateRange.from.toISOString().split('T')[0];
+      const toDate = masterFilter.dateRange.to.toISOString().split('T')[0];
+      
+      filteredData = filteredData.filter(row => {
+        const dimMap = dimensionMaps.get(row.report_id);
+        if (!dimMap) return false;
+        
+        const dateId = dimMap.get('Date');
+        if (!dateId) return false;
+        
+        const dateStr = row.dimension_values[dateId];
+        if (!dateStr) return false;
+        
+        return dateStr >= fromDate && dateStr <= toDate;
+      });
+    }
 
     // Aggregate data
     const aggregatedMetrics = aggregateMetrics(

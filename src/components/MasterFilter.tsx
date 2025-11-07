@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronDown, Settings, X, Filter } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Check, ChevronDown, Settings, X, Filter, CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { format } from "date-fns";
 
 interface Dimension {
   id: string;
@@ -16,25 +18,46 @@ interface Dimension {
   scope: string;
 }
 
+interface Report {
+  id: string;
+  name: string;
+}
+
 interface MasterFilterProps {
   accountId?: string;
-  onFilterChange: (dimension: string | null, values: string[]) => void;
+  reports: Report[];
+  onFilterChange: (
+    dimension: string | null, 
+    values: string[], 
+    dateRange?: { from: Date; to: Date },
+    reportIds?: string[]
+  ) => void;
   selectedDimension: string | null;
   selectedValues: string[];
+  selectedDateRange?: { from: Date; to: Date };
+  selectedReportIds?: string[];
 }
 
 export const MasterFilter = ({ 
-  accountId, 
+  accountId,
+  reports,
   onFilterChange, 
   selectedDimension, 
-  selectedValues 
+  selectedValues,
+  selectedDateRange,
+  selectedReportIds 
 }: MasterFilterProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [showDimensionSelector, setShowDimensionSelector] = useState(false);
   const [showValueSelector, setShowValueSelector] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showReportSelector, setShowReportSelector] = useState(false);
   const [isConfiguring, setIsConfiguring] = useState(false);
+  
+  const [localDateRange, setLocalDateRange] = useState<{ from: Date; to: Date } | undefined>(selectedDateRange);
+  const [localReportIds, setLocalReportIds] = useState<string[]>(selectedReportIds || reports.map(r => r.id));
 
   useEffect(() => {
     loadDimensions();
@@ -139,7 +162,7 @@ export const MasterFilter = ({
 
   const handleDimensionSelect = (dimensionId: string) => {
     console.log('[MASTER-FILTER] Selected dimension:', dimensionId);
-    onFilterChange(dimensionId, []);
+    onFilterChange(dimensionId, [], localDateRange, localReportIds);
     setShowDimensionSelector(false);
     setIsConfiguring(false);
   };
@@ -150,11 +173,27 @@ export const MasterFilter = ({
       : [...selectedValues, value];
     
     console.log('[MASTER-FILTER] Updated values:', newValues);
-    onFilterChange(selectedDimension, newValues);
+    onFilterChange(selectedDimension, newValues, localDateRange, localReportIds);
+  };
+
+  const handleDateRangeChange = (range: { from: Date; to: Date } | undefined) => {
+    setLocalDateRange(range);
+    onFilterChange(selectedDimension, selectedValues, range, localReportIds);
+  };
+
+  const handleReportToggle = (reportId: string) => {
+    const newReportIds = localReportIds.includes(reportId)
+      ? localReportIds.filter(id => id !== reportId)
+      : [...localReportIds, reportId];
+    
+    setLocalReportIds(newReportIds);
+    onFilterChange(selectedDimension, selectedValues, localDateRange, newReportIds);
   };
 
   const handleClearFilter = () => {
-    onFilterChange(null, []);
+    setLocalDateRange(undefined);
+    setLocalReportIds(reports.map(r => r.id));
+    onFilterChange(null, [], undefined, reports.map(r => r.id));
     setIsConfiguring(false);
   };
 
@@ -198,45 +237,84 @@ export const MasterFilter = ({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {!selectedDimension || isConfiguring ? (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Select a dimension to filter all reports by:
-            </p>
-            <Popover open={showDimensionSelector} onOpenChange={setShowDimensionSelector}>
+        <div className="space-y-4">
+          {/* Date Range Filter */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Date Range</label>
+            <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
-                  role="combobox"
-                  aria-expanded={showDimensionSelector}
+                  className="w-full justify-start text-left font-normal"
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {localDateRange?.from ? (
+                    localDateRange.to ? (
+                      <>
+                        {format(localDateRange.from, "LLL dd, y")} -{" "}
+                        {format(localDateRange.to, "LLL dd, y")}
+                      </>
+                    ) : (
+                      format(localDateRange.from, "LLL dd, y")
+                    )
+                  ) : (
+                    <span className="text-muted-foreground">Pick a date range</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  initialFocus
+                  mode="range"
+                  defaultMonth={localDateRange?.from}
+                  selected={{ from: localDateRange?.from, to: localDateRange?.to }}
+                  onSelect={(range) => {
+                    if (range?.from && range?.to) {
+                      handleDateRangeChange({ from: range.from, to: range.to });
+                      setShowDatePicker(false);
+                    }
+                  }}
+                  numberOfMonths={2}
+                  className="pointer-events-auto"
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Report Filter */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Data Sources</label>
+            <Popover open={showReportSelector} onOpenChange={setShowReportSelector}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
                   className="w-full justify-between"
                 >
-                  {selectedDimensionObj ? selectedDimensionObj.name : "Select dimension..."}
+                  {localReportIds.length === reports.length
+                    ? "All reports"
+                    : `${localReportIds.length} of ${reports.length} selected`}
                   <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-full p-0">
                 <Command>
-                  <CommandInput placeholder="Search dimensions..." />
+                  <CommandInput placeholder="Search reports..." />
                   <CommandList>
-                    <CommandEmpty>No dimensions found.</CommandEmpty>
+                    <CommandEmpty>No reports found.</CommandEmpty>
                     <CommandGroup>
-                      {dimensions.map((dimension) => (
+                      {reports.map((report) => (
                         <CommandItem
-                          key={dimension.id}
-                          value={dimension.name}
-                          onSelect={() => handleDimensionSelect(dimension.id)}
+                          key={report.id}
+                          value={report.name}
+                          onSelect={() => handleReportToggle(report.id)}
                         >
                           <Check
                             className={cn(
                               "mr-2 h-4 w-4",
-                              selectedDimension === dimension.id ? "opacity-100" : "opacity-0"
+                              localReportIds.includes(report.id) ? "opacity-100" : "opacity-0"
                             )}
                           />
-                          {dimension.name}
-                          <Badge variant="secondary" className="ml-auto">
-                            {dimension.scope}
-                          </Badge>
+                          {report.name}
                         </CommandItem>
                       ))}
                     </CommandGroup>
@@ -244,99 +322,149 @@ export const MasterFilter = ({
                 </Command>
               </PopoverContent>
             </Popover>
-            {selectedDimension && (
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsConfiguring(false)}
-                >
-                  Done
-                </Button>
+          </div>
+
+          {/* Dimension Filter */}
+          {!selectedDimension || isConfiguring ? (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Dimension Filter (Optional)</label>
+              <Popover open={showDimensionSelector} onOpenChange={setShowDimensionSelector}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={showDimensionSelector}
+                    className="w-full justify-between"
+                  >
+                    {selectedDimensionObj ? selectedDimensionObj.name : "Select dimension..."}
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0">
+                  <Command>
+                    <CommandInput placeholder="Search dimensions..." />
+                    <CommandList>
+                      <CommandEmpty>No dimensions found.</CommandEmpty>
+                      <CommandGroup>
+                        {dimensions.map((dimension) => (
+                          <CommandItem
+                            key={dimension.id}
+                            value={dimension.name}
+                            onSelect={() => handleDimensionSelect(dimension.id)}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedDimension === dimension.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {dimension.name}
+                            <Badge variant="secondary" className="ml-auto">
+                              {dimension.scope}
+                            </Badge>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {selectedDimension && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsConfiguring(false)}
+                  >
+                    Done
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearFilter}
+                  >
+                    Clear All
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">
+                  {selectedDimensionObj?.name}
+                </label>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleClearFilter}
+                  onClick={() => {
+                    onFilterChange(null, [], localDateRange, localReportIds);
+                  }}
+                  className="h-6 w-6 p-0"
                 >
-                  Clear Filter
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">
-                Filtering by: {selectedDimensionObj?.name}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClearFilter}
-                className="h-6 w-6 p-0"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            
-            <Popover open={showValueSelector} onOpenChange={setShowValueSelector}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-between"
-                >
-                  {selectedValues.length > 0 
-                    ? `${selectedValues.length} selected`
-                    : "Select values..."}
-                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-full p-0">
-                <Command>
-                  <CommandInput placeholder="Search values..." />
-                  <CommandList>
-                    <CommandEmpty>No values found.</CommandEmpty>
-                    <CommandGroup>
-                      {availableValues.map((value) => (
-                        <CommandItem
-                          key={value}
-                          value={value}
-                          onSelect={() => handleValueToggle(value)}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              selectedValues.includes(value) ? "opacity-100" : "opacity-0"
-                            )}
-                          />
-                          {value}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+              
+              <Popover open={showValueSelector} onOpenChange={setShowValueSelector}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-between"
+                  >
+                    {selectedValues.length > 0 
+                      ? `${selectedValues.length} selected`
+                      : "Select values..."}
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0">
+                  <Command>
+                    <CommandInput placeholder="Search values..." />
+                    <CommandList>
+                      <CommandEmpty>No values found.</CommandEmpty>
+                      <CommandGroup>
+                        {availableValues.map((value) => (
+                          <CommandItem
+                            key={value}
+                            value={value}
+                            onSelect={() => handleValueToggle(value)}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedValues.includes(value) ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {value}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
 
-            {selectedValues.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {selectedValues.map((value) => (
-                  <Badge key={value} variant="secondary" className="text-xs">
-                    {value}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleValueToggle(value)}
-                      className="h-4 w-4 p-0 ml-1 hover:bg-transparent"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+              {selectedValues.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {selectedValues.map((value) => (
+                    <Badge key={value} variant="secondary" className="text-xs">
+                      {value}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleValueToggle(value)}
+                        className="h-4 w-4 p-0 ml-1 hover:bg-transparent"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
