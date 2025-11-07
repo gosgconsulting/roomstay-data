@@ -280,7 +280,10 @@ Deno.serve(async (req) => {
 
       // Filter by date range (after dimension filters)
       if ((dateFrom || dateTo) && dimensions) {
-        const dateDim = dimensions.find(d => d.type === 'date');
+        // Prioritize account-scoped date dimension over global/custom to ensure each account uses its own date dimension
+        const dateDim = dimensions.find(d => d.type === 'date' && d.scope === 'account') 
+          || dimensions.find(d => d.type === 'date' && d.scope === 'custom')
+          || dimensions.find(d => d.type === 'date');
               console.log('get-performance-data: Applying date filter', {
         dateDimension: dateDim ? { id: dateDim.id, name: dateDim.name } : null,
         dateFrom,
@@ -394,7 +397,10 @@ Deno.serve(async (req) => {
     // Fetch and filter comparison period data if enabled
     let compareFilteredData: any[] = [];
     if (compareEnabled && compareDateFrom && compareDateTo && dimensions) {
-      const dateDim = dimensions.find(d => d.type === 'date');
+      // Prioritize account-scoped date dimension over global/custom
+      const dateDim = dimensions.find(d => d.type === 'date' && d.scope === 'account') 
+        || dimensions.find(d => d.type === 'date' && d.scope === 'custom')
+        || dimensions.find(d => d.type === 'date');
       if (dateDim) {
         // Filter the same rawData for comparison period
         let compareData = rawData || [];
