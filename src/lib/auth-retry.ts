@@ -1,12 +1,34 @@
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Retry authentication with exponential backoff
+ * Check database connection health
+ */
+async function checkDatabaseConnection(): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('profiles').select('id').limit(1);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Retry authentication with exponential backoff and connection health checks
  */
 export async function retryAuth(maxRetries = 3) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`[AUTH-RETRY] Attempt ${attempt}/${maxRetries}`);
+      
+      // Check database connection first
+      const isConnected = await checkDatabaseConnection();
+      if (!isConnected && attempt < maxRetries) {
+        console.warn(`[AUTH-RETRY] Database connection check failed on attempt ${attempt}`);
+        const delay = Math.min(2000 * Math.pow(2, attempt - 1), 10000);
+        console.log(`[AUTH-RETRY] Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
       
       const { data: { session }, error } = await supabase.auth.getSession();
       
@@ -17,13 +39,11 @@ export async function retryAuth(maxRetries = 3) {
       
       console.warn(`[AUTH-RETRY] Error on attempt ${attempt}:`, error);
       
-      // If this is the last attempt, throw the error
       if (attempt === maxRetries) {
         return { data: { session: null }, error };
       }
       
-      // Wait before retrying (exponential backoff)
-      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+      const delay = Math.min(2000 * Math.pow(2, attempt - 1), 10000);
       console.log(`[AUTH-RETRY] Waiting ${delay}ms before retry...`);
       await new Promise(resolve => setTimeout(resolve, delay));
       
@@ -33,12 +53,11 @@ export async function retryAuth(maxRetries = 3) {
       if (attempt === maxRetries) {
         return { 
           data: { session: null }, 
-          error: { message: `Authentication failed after ${maxRetries} attempts: ${err}` }
+          error: { message: `Authentication failed after ${maxRetries} attempts. Please check your connection and try again.` }
         };
       }
       
-      // Wait before retrying
-      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+      const delay = Math.min(2000 * Math.pow(2, attempt - 1), 10000);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
@@ -68,15 +87,30 @@ export async function retrySupabaseQuery<T>(
         return result;
       }
       
+      // Check if it's a connection timeout error
+      const isTimeout = result.error?.message?.includes('timeout') || 
+                       result.error?.message?.includes('544') ||
+                       result.error?.code === 'PGRST301';
+      
       console.warn(`[SUPABASE-RETRY] ${operation} - Error on attempt ${attempt}:`, result.error);
       
-      // If this is the last attempt, return the error
       if (attempt === maxRetries) {
+        if (isTimeout) {
+          return { 
+            data: null, 
+            error: { 
+              ...result.error,
+              message: 'Database connection timeout. Please try again or contact support if the issue persists.' 
+            }
+          };
+        }
         return result;
       }
       
-      // Wait before retrying (exponential backoff)
-      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+      // Longer delay for timeout errors
+      const delay = isTimeout 
+        ? Math.min(3000 * Math.pow(2, attempt - 1), 15000)
+        : Math.min(1000 * Math.pow(2, attempt - 1), 5000);
       console.log(`[SUPABASE-RETRY] ${operation} - Waiting ${delay}ms before retry...`);
       await new Promise(resolve => setTimeout(resolve, delay));
       
@@ -86,12 +120,11 @@ export async function retrySupabaseQuery<T>(
       if (attempt === maxRetries) {
         return { 
           data: null, 
-          error: { message: `${operation} failed after ${maxRetries} attempts: ${err}` }
+          error: { message: `${operation} failed after ${maxRetries} attempts. Please check your connection.` }
         };
       }
       
-      // Wait before retrying
-      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+      const delay = Math.min(2000 * Math.pow(2, attempt - 1), 10000);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
