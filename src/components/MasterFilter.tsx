@@ -5,11 +5,15 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Calendar } from "@/components/ui/calendar";
-import { Check, ChevronDown, Settings, X, Filter, CalendarIcon } from "lucide-react";
+import { Check, ChevronDown, X, Filter, CalendarIcon, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth, startOfWeek, subDays, startOfYear, endOfYear, differenceInDays, subYears } from "date-fns";
+import { DateRange } from "react-day-picker";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Dimension {
   id: string;
@@ -29,12 +33,15 @@ interface MasterFilterProps {
   onFilterChange: (
     dimension: string | null, 
     values: string[], 
-    dateRange?: { from: Date; to: Date },
-    reportIds?: string[]
+    dateRange?: DateRange,
+    reportIds?: string[],
+    compareEnabled?: boolean,
+    compareType?: string,
+    compareDateRange?: DateRange
   ) => void;
   selectedDimension: string | null;
   selectedValues: string[];
-  selectedDateRange?: { from: Date; to: Date };
+  selectedDateRange?: DateRange;
   selectedReportIds?: string[];
 }
 
@@ -54,10 +61,15 @@ export const MasterFilter = ({
   const [showValueSelector, setShowValueSelector] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showReportSelector, setShowReportSelector] = useState(false);
-  const [isConfiguring, setIsConfiguring] = useState(false);
   
-  const [localDateRange, setLocalDateRange] = useState<{ from: Date; to: Date } | undefined>(selectedDateRange);
+  const [localDateRange, setLocalDateRange] = useState<DateRange | undefined>(selectedDateRange);
   const [localReportIds, setLocalReportIds] = useState<string[]>(selectedReportIds || reports.map(r => r.id));
+  const [datePreset, setDatePreset] = useState<string>("this_month");
+  const [compareEnabled, setCompareEnabled] = useState(false);
+  const [compareType, setCompareType] = useState<string>("previous_period");
+  const [compareDateRange, setCompareDateRange] = useState<DateRange | undefined>();
+  const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
+  const [reportSearchTerm, setReportSearchTerm] = useState("");
 
   useEffect(() => {
     loadDimensions();
@@ -69,6 +81,12 @@ export const MasterFilter = ({
     }
   }, [selectedDimension]);
 
+  useEffect(() => {
+    if (compareEnabled && localDateRange?.from && localDateRange?.to) {
+      calculateCompareDateRange();
+    }
+  }, [compareEnabled, compareType, localDateRange]);
+
   const loadDimensions = async () => {
     try {
       setIsLoading(true);
@@ -77,11 +95,10 @@ export const MasterFilter = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load dimensions that can be used as master filters (text type only)
       let query = supabase
         .from('dimensions')
         .select('id, name, type, scope')
-        .eq('type', 'text') // Only text dimensions can be used as master filters
+        .eq('type', 'text')
         .in('scope', ['global', 'account']);
 
       if (accountId) {
@@ -97,10 +114,8 @@ export const MasterFilter = ({
         return;
       }
 
-      // Deduplicate dimensions by name, prioritizing account > global
       const dimensionMap = new Map<string, Dimension>();
       (data || []).forEach(dim => {
-        // Safety check: ensure dimension object has required properties
         if (!dim || typeof dim !== 'object' || !dim.id || !dim.name || !dim.type || !dim.scope) {
           return;
         }
@@ -127,14 +142,12 @@ export const MasterFilter = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get unique values for this dimension across all reports
       let query = supabase
         .from('dimension_data')
         .select('dimension_values')
         .not('dimension_values', 'is', null);
 
       if (accountId) {
-        // Filter by account if specified
         const { data: reports } = await supabase
           .from('reports')
           .select('id')
@@ -153,7 +166,6 @@ export const MasterFilter = ({
         return;
       }
 
-      // Extract unique values for the selected dimension
       const uniqueValues = new Set<string>();
       data?.forEach(row => {
         const value = row.dimension_values[dimensionId];
@@ -174,11 +186,129 @@ export const MasterFilter = ({
     }
   };
 
+  const applyDatePreset = (preset: string) => {
+    const now = new Date();
+    let from: Date;
+    let to: Date = now;
+
+    switch (preset) {
+      case "today":
+        from = now;
+        break;
+      case "yesterday":
+        from = subDays(now, 1);
+        to = subDays(now, 1);
+        break;
+      case "this_week":
+        from = startOfWeek(now);
+        break;
+      case "last_7_days":
+        from = subDays(now, 7);
+        break;
+      case "this_month": {
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+        const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        
+        const fromDateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
+        const toDateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
+        
+        from = new Date(fromDateString);
+        to = new Date(toDateString);
+        break;
+      }
+      case "last_30_days":
+        from = subDays(now, 30);
+        break;
+      case "last_month": {
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+        
+        let lastMonthYear = currentYear;
+        let lastMonth = currentMonth - 1;
+        if (lastMonth < 0) {
+          lastMonth = 11;
+          lastMonthYear = currentYear - 1;
+        }
+        
+        const lastDayOfMonth = new Date(lastMonthYear, lastMonth + 1, 0).getDate();
+        const fromDateString = `${lastMonthYear}-${String(lastMonth + 1).padStart(2, '0')}-01`;
+        const toDateString = `${lastMonthYear}-${String(lastMonth + 1).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
+        
+        from = new Date(fromDateString);
+        to = new Date(toDateString);
+        break;
+      }
+      case "this_year":
+        from = startOfYear(now);
+        to = endOfYear(now);
+        break;
+      case "all_time":
+        setLocalDateRange(undefined);
+        setDatePreset(preset);
+        handleFilterUpdate(selectedDimension, selectedValues, undefined, localReportIds);
+        return;
+      default:
+        from = startOfMonth(now);
+        to = endOfMonth(now);
+    }
+    
+    const newRange = { from, to };
+    setLocalDateRange(newRange);
+    setDatePreset(preset);
+    handleFilterUpdate(selectedDimension, selectedValues, newRange, localReportIds);
+  };
+
+  const calculateCompareDateRange = () => {
+    if (!localDateRange?.from || !localDateRange?.to) return;
+
+    const from = localDateRange.from;
+    const to = localDateRange.to;
+    const daysDiff = differenceInDays(to, from);
+
+    let compareFrom: Date;
+    let compareTo: Date;
+
+    switch (compareType) {
+      case "previous_period":
+        compareTo = subDays(from, 1);
+        compareFrom = subDays(compareTo, daysDiff);
+        break;
+      case "previous_year":
+        compareFrom = subYears(from, 1);
+        compareTo = subYears(to, 1);
+        break;
+      case "custom":
+        return;
+      default:
+        compareTo = subDays(from, 1);
+        compareFrom = subDays(compareTo, daysDiff);
+    }
+
+    setCompareDateRange({ from: compareFrom, to: compareTo });
+  };
+
+  const handleFilterUpdate = (
+    dimension: string | null,
+    values: string[],
+    dateRange?: DateRange,
+    reportIds?: string[]
+  ) => {
+    onFilterChange(
+      dimension,
+      values,
+      dateRange,
+      reportIds,
+      compareEnabled,
+      compareType,
+      compareEnabled ? compareDateRange : undefined
+    );
+  };
+
   const handleDimensionSelect = (dimensionId: string) => {
     console.log('[MASTER-FILTER] Selected dimension:', dimensionId);
-    onFilterChange(dimensionId, [], localDateRange, localReportIds);
+    handleFilterUpdate(dimensionId, [], localDateRange, localReportIds);
     setShowDimensionSelector(false);
-    setIsConfiguring(false);
   };
 
   const handleValueToggle = (value: string) => {
@@ -187,12 +317,18 @@ export const MasterFilter = ({
       : [...selectedValues, value];
     
     console.log('[MASTER-FILTER] Updated values:', newValues);
-    onFilterChange(selectedDimension, newValues, localDateRange, localReportIds);
+    handleFilterUpdate(selectedDimension, newValues, localDateRange, localReportIds);
   };
 
-  const handleDateRangeChange = (range: { from: Date; to: Date } | undefined) => {
-    setLocalDateRange(range);
-    onFilterChange(selectedDimension, selectedValues, range, localReportIds);
+  const handleSelectAllValues = () => {
+    if (selectedDimension) {
+      const allValues = dimensionValues[selectedDimension] || [];
+      handleFilterUpdate(selectedDimension, allValues, localDateRange, localReportIds);
+    }
+  };
+
+  const handleDeselectAllValues = () => {
+    handleFilterUpdate(selectedDimension, [], localDateRange, localReportIds);
   };
 
   const handleReportToggle = (reportId: string) => {
@@ -201,14 +337,43 @@ export const MasterFilter = ({
       : [...localReportIds, reportId];
     
     setLocalReportIds(newReportIds);
-    onFilterChange(selectedDimension, selectedValues, localDateRange, newReportIds);
+    handleFilterUpdate(selectedDimension, selectedValues, localDateRange, newReportIds);
+  };
+
+  const handleSelectAllReports = () => {
+    const allReportIds = reports.map(r => r.id);
+    setLocalReportIds(allReportIds);
+    handleFilterUpdate(selectedDimension, selectedValues, localDateRange, allReportIds);
+  };
+
+  const handleDeselectAllReports = () => {
+    setLocalReportIds([]);
+    handleFilterUpdate(selectedDimension, selectedValues, localDateRange, []);
   };
 
   const handleClearFilter = () => {
     setLocalDateRange(undefined);
     setLocalReportIds(reports.map(r => r.id));
-    onFilterChange(null, [], undefined, reports.map(r => r.id));
-    setIsConfiguring(false);
+    setDatePreset("all_time");
+    setCompareEnabled(false);
+    setCompareDateRange(undefined);
+    handleFilterUpdate(null, [], undefined, reports.map(r => r.id));
+  };
+
+  const getFilteredValues = (dimensionId: string) => {
+    const values = dimensionValues[dimensionId] || [];
+    const searchTerm = searchTerms[dimensionId] || "";
+    if (!searchTerm) return values;
+    return values.filter(value => 
+      value.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  };
+
+  const getFilteredReports = () => {
+    if (!reportSearchTerm) return reports;
+    return reports.filter(report =>
+      report.name.toLowerCase().includes(reportSearchTerm.toLowerCase())
+    );
   };
 
   const selectedDimensionObj = dimensions.find(d => d.id === selectedDimension);
@@ -240,121 +405,297 @@ export const MasterFilter = ({
             <Filter className="h-5 w-5" />
             Master Filter
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsConfiguring(!isConfiguring)}
-            className="h-8 w-8 p-0"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
+          {selectedDimension && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearFilter}
+              className="h-8 px-3 text-xs"
+            >
+              Clear All
+            </Button>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
+        <div className="flex items-start gap-3">
           {/* Date Range Filter */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Date Range</label>
+          <div className="flex flex-col gap-1 min-w-[200px]">
+            <label className="text-xs text-muted-foreground">Date Range</label>
             <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
-                  className="w-full justify-start text-left font-normal"
+                  className={cn(
+                    "w-full justify-start text-left font-normal bg-background",
+                    !localDateRange?.from && datePreset !== "all_time" && "text-muted-foreground"
+                  )}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {localDateRange?.from ? (
+                  {datePreset === "all_time" ? (
+                    "All Time"
+                  ) : localDateRange?.from ? (
                     localDateRange.to ? (
                       <>
-                        {format(localDateRange.from, "LLL dd, y")} -{" "}
-                        {format(localDateRange.to, "LLL dd, y")}
+                        {format(localDateRange.from, "MMM d")} - {format(localDateRange.to, "MMM d, yyyy")}
                       </>
                     ) : (
-                      format(localDateRange.from, "LLL dd, y")
+                      format(localDateRange.from, "MMM d, yyyy")
                     )
                   ) : (
-                    <span className="text-muted-foreground">Pick a date range</span>
+                    <span>This Month</span>
                   )}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
+              <PopoverContent className="w-auto p-0 bg-background z-50" align="start">
+                <div className="p-2 border-b">
+                  <div className="grid grid-cols-3 gap-1">
+                    <Button
+                      variant={datePreset === "today" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => applyDatePreset("today")}
+                      className="text-xs h-7 px-2"
+                    >
+                      Today
+                    </Button>
+                    <Button
+                      variant={datePreset === "yesterday" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => applyDatePreset("yesterday")}
+                      className="text-xs h-7 px-2"
+                    >
+                      Yesterday
+                    </Button>
+                    <Button
+                      variant={datePreset === "this_week" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => applyDatePreset("this_week")}
+                      className="text-xs h-7 px-2"
+                    >
+                      This Week
+                    </Button>
+                    <Button
+                      variant={datePreset === "last_7_days" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => applyDatePreset("last_7_days")}
+                      className="text-xs h-7 px-2 font-medium"
+                    >
+                      Last 7 Days
+                    </Button>
+                    <Button
+                      variant={datePreset === "last_30_days" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => applyDatePreset("last_30_days")}
+                      className="text-xs h-7 px-2"
+                    >
+                      Last 30 Days
+                    </Button>
+                    <Button
+                      variant={datePreset === "this_month" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => applyDatePreset("this_month")}
+                      className="text-xs h-7 px-2"
+                    >
+                      This Month
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 mt-1">
+                    <Button
+                      variant={datePreset === "last_month" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => applyDatePreset("last_month")}
+                      className="text-xs h-7 px-2"
+                    >
+                      Last Month
+                    </Button>
+                    <Button
+                      variant={datePreset === "this_year" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => applyDatePreset("this_year")}
+                      className="text-xs h-7 px-2"
+                    >
+                      This Year
+                    </Button>
+                  </div>
+                  <Button
+                    variant={datePreset === "all_time" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => applyDatePreset("all_time")}
+                    className="text-xs h-7 w-full mt-1"
+                  >
+                    All Time
+                  </Button>
+                </div>
+                
+                {compareEnabled && (
+                  <div className="p-3 border-b space-y-2">
+                    <Label className="text-xs font-medium">Compare to:</Label>
+                    <div className="space-y-1">
+                      <div 
+                        className={cn(
+                          "flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-accent",
+                          compareType === "previous_period" && "bg-accent"
+                        )}
+                        onClick={() => setCompareType("previous_period")}
+                      >
+                        <div className={cn(
+                          "w-4 h-4 rounded-full border-2 flex items-center justify-center",
+                          compareType === "previous_period" ? "border-primary" : "border-muted-foreground"
+                        )}>
+                          {compareType === "previous_period" && (
+                            <div className="w-2 h-2 rounded-full bg-primary" />
+                          )}
+                        </div>
+                        <span className="text-sm">Previous period</span>
+                      </div>
+                      <div 
+                        className={cn(
+                          "flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-accent",
+                          compareType === "previous_year" && "bg-accent"
+                        )}
+                        onClick={() => setCompareType("previous_year")}
+                      >
+                        <div className={cn(
+                          "w-4 h-4 rounded-full border-2 flex items-center justify-center",
+                          compareType === "previous_year" ? "border-primary" : "border-muted-foreground"
+                        )}>
+                          {compareType === "previous_year" && (
+                            <div className="w-2 h-2 rounded-full bg-primary" />
+                          )}
+                        </div>
+                        <span className="text-sm">Previous year</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 <Calendar
-                  initialFocus
                   mode="range"
-                  defaultMonth={localDateRange?.from}
-                  selected={{ from: localDateRange?.from, to: localDateRange?.to }}
+                  selected={localDateRange}
                   onSelect={(range) => {
+                    setLocalDateRange(range);
+                    setDatePreset("custom");
                     if (range?.from && range?.to) {
-                      handleDateRangeChange({ from: range.from, to: range.to });
-                      setShowDatePicker(false);
+                      handleFilterUpdate(selectedDimension, selectedValues, range, localReportIds);
                     }
                   }}
                   numberOfMonths={2}
-                  className="pointer-events-auto"
+                  className={cn("p-3 pointer-events-auto")}
                 />
+                
+                <div className="p-3 border-t flex items-center justify-end gap-2">
+                  <Label htmlFor="compare-toggle" className="text-sm cursor-pointer">
+                    Compare:
+                  </Label>
+                  <Switch
+                    id="compare-toggle"
+                    checked={compareEnabled}
+                    onCheckedChange={setCompareEnabled}
+                  />
+                </div>
               </PopoverContent>
             </Popover>
           </div>
 
           {/* Report Filter */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Data Sources</label>
-            <Popover open={showReportSelector} onOpenChange={setShowReportSelector}>
+          <div className="flex flex-col gap-1 min-w-[200px]">
+            <label className="text-xs text-muted-foreground">Data Sources</label>
+            <Popover open={showReportSelector} onOpenChange={(open) => {
+              setShowReportSelector(open);
+              if (!open) setReportSearchTerm("");
+            }}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
-                  className="w-full justify-between"
+                  className="w-full justify-between bg-background"
                 >
-                  {localReportIds.length === reports.length
+                  {localReportIds.length === 0
+                    ? "No reports"
+                    : localReportIds.length === reports.length
                     ? "All reports"
-                    : `${localReportIds.length} of ${reports.length} selected`}
+                    : `${localReportIds.length} selected`}
                   <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-full p-0">
-                <Command>
-                  <CommandInput placeholder="Search reports..." />
-                  <CommandList>
-                    <CommandEmpty>No reports found.</CommandEmpty>
-                    <CommandGroup>
-                      {reports.map((report) => (
-                        <CommandItem
+              <PopoverContent className="w-[250px] p-0 bg-background z-50" align="start">
+                <div className="flex flex-col">
+                  {/* Search input */}
+                  <div className="p-2 border-b">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search reports..."
+                        value={reportSearchTerm}
+                        onChange={(e) => setReportSearchTerm(e.target.value)}
+                        className="pl-8"
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Select All / Deselect All */}
+                  <div className="flex gap-1 p-2 border-b">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="flex-1 h-8 text-xs"
+                      onClick={handleSelectAllReports}
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="flex-1 h-8 text-xs"
+                      onClick={handleDeselectAllReports}
+                    >
+                      Deselect All
+                    </Button>
+                  </div>
+                  
+                  {/* Report list */}
+                  <ScrollArea className="max-h-[300px]">
+                    <div className="p-2">
+                      {getFilteredReports().map((report) => (
+                        <div
                           key={report.id}
-                          value={report.name}
-                          onSelect={() => handleReportToggle(report.id)}
+                          className="flex items-center gap-2 p-2 rounded hover:bg-accent cursor-pointer"
+                          onClick={() => handleReportToggle(report.id)}
                         >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              localReportIds.includes(report.id) ? "opacity-100" : "opacity-0"
+                          <div className={cn(
+                            "w-4 h-4 border-2 rounded flex items-center justify-center",
+                            localReportIds.includes(report.id) ? "bg-primary border-primary" : "border-muted-foreground"
+                          )}>
+                            {localReportIds.includes(report.id) && (
+                              <Check className="h-3 w-3 text-primary-foreground" />
                             )}
-                          />
-                          {report.name}
-                        </CommandItem>
+                          </div>
+                          <span className="text-sm">{report.name}</span>
+                        </div>
                       ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
+                    </div>
+                  </ScrollArea>
+                </div>
               </PopoverContent>
             </Popover>
           </div>
 
           {/* Dimension Filter */}
-          {!selectedDimension || isConfiguring ? (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Dimension Filter (Optional)</label>
+          {!selectedDimension ? (
+            <div className="flex flex-col gap-1 min-w-[200px]">
+              <label className="text-xs text-muted-foreground">Dimension Filter (Optional)</label>
               <Popover open={showDimensionSelector} onOpenChange={setShowDimensionSelector}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     role="combobox"
                     aria-expanded={showDimensionSelector}
-                    className="w-full justify-between"
+                    className="w-full justify-between bg-background"
                   >
-                    {selectedDimensionObj ? selectedDimensionObj.name : "Select dimension..."}
+                    <span className="text-muted-foreground">Select dimension...</span>
                     <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-full p-0">
+                <PopoverContent className="w-[250px] p-0 bg-background z-50" align="start">
                   <Command>
                     <CommandInput placeholder="Search dimensions..." />
                     <CommandList>
@@ -373,7 +714,7 @@ export const MasterFilter = ({
                               )}
                             />
                             {dimension.name}
-                            <Badge variant="secondary" className="ml-auto">
+                            <Badge variant="secondary" className="ml-auto text-xs">
                               {dimension.scope}
                             </Badge>
                           </CommandItem>
@@ -383,85 +724,94 @@ export const MasterFilter = ({
                   </Command>
                 </PopoverContent>
               </Popover>
-              {selectedDimension && (
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsConfiguring(false)}
-                  >
-                    Done
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleClearFilter}
-                  >
-                    Clear All
-                  </Button>
-                </div>
-              )}
             </div>
           ) : (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">
-                  {selectedDimensionObj?.name}
-                </label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    onFilterChange(null, [], localDateRange, localReportIds);
-                  }}
-                  className="h-6 w-6 p-0"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+            <div className="flex flex-col gap-1 min-w-[200px]">
+              <label className="text-xs text-muted-foreground">{selectedDimensionObj?.name}</label>
               
-              <Popover open={showValueSelector} onOpenChange={setShowValueSelector}>
+              <Popover open={showValueSelector} onOpenChange={(open) => {
+                setShowValueSelector(open);
+                if (!open && selectedDimension) {
+                  setSearchTerms({ ...searchTerms, [selectedDimension]: "" });
+                }
+              }}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    className="w-full justify-between"
+                    className="w-full justify-between bg-background"
                   >
-                    {selectedValues.length > 0 
-                      ? `${selectedValues.length} selected`
-                      : "Select values..."}
+                    {selectedValues.length === 0 
+                      ? `All ${selectedDimensionObj?.name || 'values'}`
+                      : selectedValues.length === 1
+                      ? selectedValues[0]
+                      : `${selectedValues.length} selected`}
                     <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-full p-0">
-                  <Command>
-                    <CommandInput placeholder="Search values..." />
-                    <CommandList>
-                      <CommandEmpty>No values found.</CommandEmpty>
-                      <CommandGroup>
-                        {availableValues.map((value) => (
-                          <CommandItem
+                <PopoverContent className="w-[250px] p-0 bg-background z-50" align="start">
+                  <div className="flex flex-col">
+                    {/* Search input */}
+                    <div className="p-2 border-b">
+                      <div className="relative">
+                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder={`Search ${selectedDimensionObj?.name.toLowerCase()}...`}
+                          value={selectedDimension ? (searchTerms[selectedDimension] || "") : ""}
+                          onChange={(e) => selectedDimension && setSearchTerms({ ...searchTerms, [selectedDimension]: e.target.value })}
+                          className="pl-8"
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Select All / Deselect All */}
+                    <div className="flex gap-1 p-2 border-b">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 h-8 text-xs"
+                        onClick={handleSelectAllValues}
+                      >
+                        Select All
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 h-8 text-xs"
+                        onClick={handleDeselectAllValues}
+                      >
+                        Deselect All
+                      </Button>
+                    </div>
+                    
+                    {/* Value list */}
+                    <ScrollArea className="max-h-[300px]">
+                      <div className="p-2">
+                        {selectedDimension && getFilteredValues(selectedDimension).map((value) => (
+                          <div
                             key={value}
-                            value={value}
-                            onSelect={() => handleValueToggle(value)}
+                            className="flex items-center gap-2 p-2 rounded hover:bg-accent cursor-pointer"
+                            onClick={() => handleValueToggle(value)}
                           >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                selectedValues.includes(value) ? "opacity-100" : "opacity-0"
+                            <div className={cn(
+                              "w-4 h-4 border-2 rounded flex items-center justify-center",
+                              selectedValues.includes(value) ? "bg-primary border-primary" : "border-muted-foreground"
+                            )}>
+                              {selectedValues.includes(value) && (
+                                <Check className="h-3 w-3 text-primary-foreground" />
                               )}
-                            />
-                            {value}
-                          </CommandItem>
+                            </div>
+                            <span className="text-sm">{value}</span>
+                          </div>
                         ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
+                      </div>
+                    </ScrollArea>
+                  </div>
                 </PopoverContent>
               </Popover>
 
               {selectedValues.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {selectedValues.map((value) => (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {selectedValues.slice(0, 3).map((value) => (
                     <Badge key={value} variant="secondary" className="text-xs">
                       {value}
                       <Button
@@ -474,6 +824,11 @@ export const MasterFilter = ({
                       </Button>
                     </Badge>
                   ))}
+                  {selectedValues.length > 3 && (
+                    <Badge variant="outline" className="text-xs">
+                      +{selectedValues.length - 3} more
+                    </Badge>
+                  )}
                 </div>
               )}
             </div>
