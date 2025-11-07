@@ -116,35 +116,83 @@ export function KPIChart({ reportId, accountId, filters }: KPIChartProps) {
         return;
       }
 
-      // Group data by date and aggregate the selected metric
-      const dateGroups = new Map<string, number>();
+             // Calculate date ranges for current and previous periods
+       const currentPeriod = dataFilters.dateRange;
+       const daysDiff = Math.ceil((currentPeriod.to.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
+       
+       const previousPeriodEnd = new Date(currentPeriod.from);
+       previousPeriodEnd.setDate(previousPeriodEnd.getDate() - 1);
+       const previousPeriodStart = new Date(previousPeriodEnd);
+       previousPeriodStart.setDate(previousPeriodStart.getDate() - daysDiff + 1);
 
-      filteredData.forEach(row => {
-        const dimensionValues = row.dimension_values;
-        const dateStr = dimensionValues[dateDimension.id];
-        const metricValue = dimensionValues[metricDimension.id];
+       console.log('[CHART-FIXED] Period comparison:', {
+         current: { from: currentPeriod.from.toISOString(), to: currentPeriod.to.toISOString() },
+         previous: { from: previousPeriodStart.toISOString(), to: previousPeriodEnd.toISOString() },
+         daysDiff
+       });
 
-        if (dateStr && metricValue !== undefined && metricValue !== null) {
-          const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(metricValue) || 0;
-          const currentTotal = dateGroups.get(dateStr) || 0;
-          dateGroups.set(dateStr, currentTotal + numericValue);
-        }
-      });
+       // Load previous period data
+       const previousPeriodFilters = {
+         dateRange: { from: previousPeriodStart, to: previousPeriodEnd },
+         dimensionFilters: dataFilters.dimensionFilters
+       };
 
-      // Convert to chart data format and sort by date
-      const chartDataArray = Array.from(dateGroups.entries())
-        .map(([dateStr, value]) => ({
-          date: dateStr,
-          formattedDate: format(parseISO(dateStr), 'MMM dd'),
-          [selectedMetric]: value
-        }))
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+       const previousResult = await loadReportData(reportId, accountId, user.id, previousPeriodFilters);
+       const previousData = previousResult.success ? previousResult.data : [];
 
-      console.log('[CHART-FIXED] Chart data prepared:', {
-        dataPoints: chartDataArray.length,
-        metric: selectedMetric,
-        sampleData: chartDataArray.slice(0, 3)
-      });
+       // Group current period data by date
+       const currentDateGroups = new Map<string, number>();
+       filteredData.forEach(row => {
+         const dimensionValues = row.dimension_values;
+         const dateStr = dimensionValues[dateDimension.id];
+         const metricValue = dimensionValues[metricDimension.id];
+
+         if (dateStr && metricValue !== undefined && metricValue !== null) {
+           const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(metricValue) || 0;
+           const currentTotal = currentDateGroups.get(dateStr) || 0;
+           currentDateGroups.set(dateStr, currentTotal + numericValue);
+         }
+       });
+
+       // Group previous period data by date (offset by the period difference)
+       const previousDateGroups = new Map<string, number>();
+       previousData.forEach(row => {
+         const dimensionValues = row.dimension_values;
+         const dateStr = dimensionValues[dateDimension.id];
+         const metricValue = dimensionValues[metricDimension.id];
+
+         if (dateStr && metricValue !== undefined && metricValue !== null) {
+           const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(metricValue) || 0;
+           
+           // Calculate the corresponding date in the current period
+           const originalDate = parseISO(dateStr);
+           const offsetDate = new Date(originalDate);
+           offsetDate.setDate(offsetDate.getDate() + daysDiff + 1);
+           const offsetDateStr = offsetDate.toISOString().split('T')[0];
+           
+           const currentTotal = previousDateGroups.get(offsetDateStr) || 0;
+           previousDateGroups.set(offsetDateStr, currentTotal + numericValue);
+         }
+       });
+
+       // Create combined chart data
+       const allDates = new Set([...currentDateGroups.keys(), ...previousDateGroups.keys()]);
+       const chartDataArray = Array.from(allDates)
+         .map(dateStr => ({
+           date: dateStr,
+           formattedDate: format(parseISO(dateStr), 'MMM dd'),
+           [selectedMetric]: currentDateGroups.get(dateStr) || 0,
+           [`${selectedMetric}_previous`]: previousDateGroups.get(dateStr) || 0
+         }))
+         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+             console.log('[CHART-FIXED] Chart data prepared:', {
+         dataPoints: chartDataArray.length,
+         metric: selectedMetric,
+         currentPeriodPoints: Array.from(currentDateGroups.keys()).length,
+         previousPeriodPoints: Array.from(previousDateGroups.keys()).length,
+         sampleData: chartDataArray.slice(0, 3)
+       });
 
       setChartData(chartDataArray);
 
@@ -156,15 +204,18 @@ export function KPIChart({ reportId, accountId, filters }: KPIChartProps) {
     }
   };
 
-  const formatTooltipValue = (value: number, name: string) => {
-    if (name.includes('Rate') || name.includes('CTR') || name.includes('Cost of sale')) {
-      return `${value.toFixed(2)}%`;
-    } else if (name.includes('Cost') || name.includes('Revenue') || name.includes('CPC') || name.includes('CPM')) {
-      return `$${value.toLocaleString()}`;
-    } else {
-      return value.toLocaleString();
-    }
-  };
+     const formatTooltipValue = (value: number, name: string) => {
+     // Clean the metric name for formatting (remove _previous suffix)
+     const cleanName = name.replace('_previous', '');
+     
+     if (cleanName.includes('Rate') || cleanName.includes('CTR') || cleanName.includes('Cost of sale')) {
+       return `${value.toFixed(2)}%`;
+     } else if (cleanName.includes('Cost') || cleanName.includes('Revenue') || cleanName.includes('CPC') || cleanName.includes('CPM')) {
+       return `$${value.toLocaleString()}`;
+     } else {
+       return value.toLocaleString();
+     }
+   };
 
   if (isLoading) {
     return (
@@ -251,10 +302,21 @@ export function KPIChart({ reportId, accountId, filters }: KPIChartProps) {
               <Line 
                 type="monotone" 
                 dataKey={selectedMetric} 
-                stroke="#8884d8" 
-                strokeWidth={2}
-                dot={{ fill: '#8884d8', strokeWidth: 2, r: 4 }}
+                stroke="#e91e63" 
+                strokeWidth={3}
+                dot={{ fill: '#e91e63', strokeWidth: 2, r: 4 }}
                 activeDot={{ r: 6 }}
+                name="Current Period"
+              />
+              <Line 
+                type="monotone" 
+                dataKey={`${selectedMetric}_previous`} 
+                stroke="#2196f3" 
+                strokeWidth={3}
+                dot={{ fill: '#2196f3', strokeWidth: 2, r: 4 }}
+                activeDot={{ r: 6 }}
+                name="Previous Period"
+                strokeDasharray="5 5"
               />
             </LineChart>
           </ResponsiveContainer>
