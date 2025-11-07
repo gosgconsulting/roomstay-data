@@ -177,7 +177,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingTabName, setEditingTabName] = useState("");
   const [accountName, setAccountName] = useState<string | undefined>(undefined);
-  const [visibleDimensionIds, setVisibleDimensionIds] = useState<string[] | null>(null); // Track which dimensions are visible in Dimensions modal
+  
 
   // Load account name when accountId changes
   useEffect(() => {
@@ -701,15 +701,6 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       setInitialVisibleColumns(new Set(defaultVisible));
     }
     
-    // Load visible_dimensions (for filtering Column Visibility panel)
-    if (view.visible_dimensions && view.visible_dimensions.length > 0) {
-      console.log('[testing] Loading visible_dimensions:', view.visible_dimensions);
-      setVisibleDimensionIds(view.visible_dimensions);
-    } else {
-      // If no visible_dimensions saved, show all dimensions
-      console.log('[testing] No saved visible_dimensions, showing all dimensions');
-      setVisibleDimensionIds(null);
-    }
     
     // Load column order if available
     if (view.column_order && view.column_order.length > 0) {
@@ -1468,19 +1459,6 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     return ordered;
   };
   
-  // Get dimensions filtered by visibility (for Column Visibility panel)
-  const getVisibleOrderedDimensions = (): Dimension[] => {
-    const orderedDims = getOrderedDimensions();
-    
-    // If visibleDimensionIds is null, show all dimensions (no filter saved)
-    if (visibleDimensionIds === null) {
-      return orderedDims;
-    }
-    
-    // Filter to only show dimensions marked as visible in the Dimensions modal
-    return orderedDims.filter(d => visibleDimensionIds.includes(d.id));
-  };
-  
   const handleColumnReorder = (event: DragEndEvent) => {
     const { active, over } = event;
     
@@ -2116,11 +2094,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                               onDragEnd={handleColumnReorder}
                             >
                               <SortableContext
-                                items={getVisibleOrderedDimensions().map(d => d.id)}
+                                items={getOrderedDimensions().map(d => d.id)}
                                 strategy={verticalListSortingStrategy}
                               >
                                 <div className="space-y-2">
-                                  {getVisibleOrderedDimensions().map((dimension) => (
+                                  {getOrderedDimensions().map((dimension) => (
                                     <SortableColumnItem
                                       key={dimension.id}
                                       dimension={dimension}

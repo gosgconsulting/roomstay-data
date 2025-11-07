@@ -41,23 +41,13 @@ interface DimensionValue {
   [key: string]: string | number;
 }
 
-const kpiOptions = [
-  { value: "Revenue", label: "Revenue" },
-  { value: "Cost", label: "Cost" },
-  { value: "Clicks", label: "Clicks" },
-  { value: "Impressions", label: "Impressions" },
-  { value: "Conversions", label: "Conversions" },
-  { value: "CTR", label: "CTR" },
-  { value: "CPC", label: "CPC" },
-  { value: "ROAS", label: "ROAS" },
-  { value: "Cost of sale", label: "Cost of sale" },
-];
 
 export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visibilityRefreshTrigger }: KPIChartProps) => {
   const [selectedKPI, setSelectedKPI] = useState("Revenue");
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [availableKPIs, setAvailableKPIs] = useState<Array<{ value: string; label: string }>>([]);
 
   // Create a stable reference for filters to prevent unnecessary re-renders
   const stableFilters = useMemo(() => {
@@ -223,6 +213,17 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
           dimensions = await filterDimensionsByVisibility(dimensions, reportId, user.id, supabase);
           console.log('[CHART] Dimensions after visibility filter:', dimensions?.length);
         }
+
+        // Build available KPIs list from metric dimensions (number, currency, percentage)
+        const metricDimensions = dimensions.filter(d => 
+          ['number', 'currency', 'percentage'].includes(d.type)
+        );
+        const kpiOptions = metricDimensions.map(d => ({
+          value: d.name,
+          label: d.name
+        }));
+        setAvailableKPIs(kpiOptions);
+        console.log('[CHART] Available KPIs:', kpiOptions.length, kpiOptions.map(k => k.label));
 
         // Find the date dimension
         const dateDimension = dimensions.find((d: Dimension) => d.type === 'date');
@@ -776,7 +777,7 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
             <SelectValue placeholder="Select metric" />
           </SelectTrigger>
           <SelectContent className="bg-card border-border z-50">
-            {kpiOptions.map((option) => (
+            {availableKPIs.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
               </SelectItem>
