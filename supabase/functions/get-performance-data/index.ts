@@ -631,6 +631,11 @@ Deno.serve(async (req) => {
           }
         }
         
+        // Handle percentage notation (e.g., "15%" becomes "0.15")
+        expression = expression.replace(/(\d+(?:\.\d+)?)\s*%/g, (match, num) => {
+          return `(${parseFloat(num) / 100})`;
+        });
+        
         // Evaluate the expression
         const result = eval(expression);
         return typeof result === 'number' && !isNaN(result) && isFinite(result) ? result : 0;
