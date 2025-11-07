@@ -12,8 +12,10 @@ interface KPIChartProps {
   accountId: string | null;
   filters: {
     dimensionFilters: Record<string, string[]>;
-    dateRange?: { from: Date; to: Date };
+    dateRange?: { from: Date; to?: Date };
   };
+  visibilityRefreshTrigger?: number;
+  onLoadingComplete?: () => void;
 }
 
 export function KPIChart({ reportId, accountId, filters }: KPIChartProps) {
@@ -311,9 +313,9 @@ export function KPIChart({ reportId, accountId, filters }: KPIChartProps) {
               <Line 
                 type="monotone" 
                 dataKey={`${selectedMetric}_previous`} 
-                stroke="#2196f3" 
+                stroke="#fbbf24" 
                 strokeWidth={3}
-                dot={{ fill: '#2196f3', strokeWidth: 2, r: 4 }}
+                dot={{ fill: '#fbbf24', strokeWidth: 2, r: 4 }}
                 activeDot={{ r: 6 }}
                 name="Previous Period"
                 strokeDasharray="5 5"

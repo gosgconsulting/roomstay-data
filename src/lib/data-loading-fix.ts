@@ -105,7 +105,7 @@ export async function loadReportData(
   accountId: string,
   userId: string,
   filters?: {
-    dateRange?: { from: Date; to: Date };
+    dateRange?: { from: Date; to?: Date };
     dimensionFilters?: Record<string, string[]>;
   }
 ): Promise<DataLoadingResult> {
@@ -192,7 +192,7 @@ function applyDataFilters(
   data: any[],
   dimensions: Dimension[],
   filters?: {
-    dateRange?: { from: Date; to: Date };
+    dateRange?: { from: Date; to?: Date };
     dimensionFilters?: Record<string, string[]>;
   }
 ): any[] {

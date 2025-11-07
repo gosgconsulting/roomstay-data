@@ -18,7 +18,7 @@ interface KPIMetricsCardsProps {
   accountId: string | null;
   filters: {
     dimensionFilters: Record<string, string[]>;
-    dateRange?: { from: Date; to: Date };
+    dateRange?: { from: Date; to?: Date };
   };
   onLoadingComplete?: () => void;
   visibilityRefreshTrigger?: number;
