@@ -251,82 +251,45 @@ export const DimensionModal = ({
       if (mode === 'edit' && dimension) {
         console.log('[testing] Updating dimension:', dimension.id);
 
-        // If editing a global dimension in an account context, create an account-specific copy instead
-        if (dimension.scope === 'global' && accountId) {
-          console.log('[testing] Creating account-specific copy of global dimension:', dimension.id);
+        // Update the dimension directly
+        const updateData = {
+          name: name.trim(),
+          type,
+          formula: formula.trim() || null,
+        };
 
-          const { data, error } = await supabase
-            .from("dimensions")
-            .insert({
-              name: name.trim(),
-              type,
-              formula: formula.trim() || null,
-              account_id: accountId,
-              scope: 'account',
-            })
-            .select()
-            .single();
+        console.log('[testing] Updating dimension with data:', updateData);
 
-          if (error) throw error;
+        const { error } = await supabase
+          .from("dimensions")
+          .update(updateData)
+          .eq("id", dimension.id);
 
-          toast({
-            title: "Dimension customized",
-            description: `Created account-specific version of "${name}"`,
-          });
-        } else {
-          // For custom or account dimensions, update directly
-          // For system dimensions, only allow formula updates
-          // Handle scope changes for custom dimensions
-          const scopeChanged = !isSystemDimension(dimension) && scope !== dimension.scope;
-          
-          const updateData = isSystemDimension(dimension)
-            ? { formula: formula.trim() || null }
-            : {
-                name: name.trim(),
-                type,
-                formula: formula.trim() || null,
-                scope, // Allow scope changes for custom dimensions
-                report_id: scope === 'custom' ? reportId : null, // Set report_id based on scope
-              };
+        if (error) throw error;
 
-          console.log('[testing] Updating dimension with data:', updateData, 'Scope changed:', scopeChanged);
-
-          const { error } = await supabase
-            .from("dimensions")
-            .update(updateData)
-            .eq("id", dimension.id);
-
-          if (error) throw error;
-
-          const scopeMessage = scopeChanged 
-            ? ` (changed to ${scope === 'global' ? 'global - now available across all reports' : 'individual - now report-specific'})`
-            : '';
-
-          toast({
-            title: "Dimension updated",
-            description: `Updated dimension "${name}"${scopeMessage}`,
-          });
-        }
+        toast({
+          title: "Dimension updated",
+          description: `Updated dimension "${name}"`,
+        });
       } else {
         console.log('[testing] Creating new dimension for report:', reportId);
 
-        // Users can only create custom dimensions (for their specific report)
+        // Create new dimension for the specific report
         if (!reportId) {
           throw new Error("Report ID is required for creating dimensions");
         }
 
-        // Create new dimension with proper scope handling
         const dimensionData = {
           name: name.trim(),
           type,
           formula: formula.trim() || null,
-          scope,
-          user_id: user.id, // Track creator for both global and individual
-          account_id: null, // Not account-specific
-          report_id: scope === 'custom' ? reportId : null, // Only individual dimensions are report-specific
+          scope: 'custom',
+          user_id: user.id,
+          report_id: reportId,
+          account_id: null,
         };
 
-        console.log('[testing] Creating dimension with scope:', scope, dimensionData);
+        console.log('[testing] Creating dimension:', dimensionData);
 
         const { error } = await supabase
           .from("dimensions")
@@ -336,9 +299,7 @@ export const DimensionModal = ({
 
         toast({
           title: "Dimension added",
-          description: scope === 'global' 
-            ? `Created global dimension "${name}" (available across all reports)`
-            : `Created individual dimension "${name}" for this report`,
+          description: `Created dimension "${name}" for this report`,
         });
       }
 
@@ -383,83 +344,13 @@ export const DimensionModal = ({
         <DialogHeader>
           <DialogTitle>
             {mode === 'edit' ? 'Edit Dimension' : 'Add Dimension'}
-            {mode === 'edit' && isSystemDimension(dimension) && (
-              <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                System
-              </span>
-            )}
           </DialogTitle>
           <DialogDescription>
-            {mode === 'edit' && dimension?.scope === 'global' && accountId
-              ? 'Editing this global dimension will create an account-specific version. Only this account will be affected.'
-              : mode === 'edit' && isSystemDimension(dimension) && dimension?.scope !== 'global'
-                ? 'This is a system dimension. Only the formula can be modified.'
-                : mode === 'edit'
-                  ? 'Update the dimension details'
-                  : 'Create a new dimension for your report'
-            }
+            {mode === 'edit' ? 'Update the dimension details' : 'Create a new dimension for your report'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="scope">Scope</Label>
-            
-            {/* Global Option */}
-            <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
-              <input
-                type="radio"
-                id="global"
-                value="global"
-                checked={scope === 'global'}
-                onChange={() => setScope('global')}
-                disabled={mode === 'edit' && isSystemDimension(dimension)}
-              />
-              <label htmlFor="global" className="cursor-pointer flex-1">
-                <div>
-                  <span className="font-medium">Global</span>
-                  <p className="text-xs text-muted-foreground">Available across all reports</p>
-                </div>
-              </label>
-            </div>
-
-            {/* Individual Option */}
-            <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
-              <input
-                type="radio"
-                id="individual"
-                value="custom"
-                checked={scope === 'custom'}
-                onChange={() => setScope('custom')}
-                disabled={mode === 'edit' && isSystemDimension(dimension)}
-              />
-              <label htmlFor="individual" className="cursor-pointer flex-1">
-                <div>
-                  <span className="font-medium">Individual</span>
-                  <p className="text-xs text-muted-foreground">For this report only</p>
-                </div>
-              </label>
-            </div>
-
-            {mode === 'edit' && isSystemDimension(dimension) && (
-              <p className="text-xs text-muted-foreground">
-                System dimension scope cannot be changed
-              </p>
-            )}
-            {mode === 'edit' && !isSystemDimension(dimension) && (
-              <p className="text-xs text-blue-600">
-                You can change the scope to make this dimension {scope === 'global' ? 'individual (report-specific)' : 'global (available across all reports)'}
-              </p>
-            )}
-            
-            <p className="text-xs text-muted-foreground">
-              {scope === 'global' 
-                ? 'Global dimensions will be available in all reports and can be used by all users.'
-                : 'Individual dimensions are specific to this report only.'
-              }
-            </p>
-          </div>
-
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
             <Input
@@ -467,19 +358,7 @@ export const DimensionModal = ({
               placeholder="e.g., Impressions, Clicks, Revenue"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              disabled={mode === 'edit' && isSystemDimension(dimension) && !(dimension?.scope === 'global' && accountId)}
-              className={mode === 'edit' && isSystemDimension(dimension) && !(dimension?.scope === 'global' && accountId) ? 'bg-gray-50' : ''}
             />
-            {mode === 'edit' && isSystemDimension(dimension) && !(dimension?.scope === 'global' && accountId) && (
-              <p className="text-xs text-muted-foreground">
-                System dimension names cannot be changed
-              </p>
-            )}
-            {mode === 'edit' && dimension?.scope === 'global' && accountId && (
-              <p className="text-xs text-blue-600">
-                This will create an account-specific version with the new name
-              </p>
-            )}
           </div>
 
           <div className="space-y-2">
@@ -487,12 +366,8 @@ export const DimensionModal = ({
             <Select
               value={type}
               onValueChange={setType}
-              disabled={mode === 'edit' && isSystemDimension(dimension) && !(dimension?.scope === 'global' && accountId)}
             >
-              <SelectTrigger
-                id="type"
-                className={`bg-background ${mode === 'edit' && isSystemDimension(dimension) && !(dimension?.scope === 'global' && accountId) ? 'bg-gray-50' : ''}`}
-              >
+              <SelectTrigger id="type" className="bg-background">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-background z-50">
@@ -503,16 +378,6 @@ export const DimensionModal = ({
                 <SelectItem value="percentage">Percentage</SelectItem>
               </SelectContent>
             </Select>
-            {mode === 'edit' && isSystemDimension(dimension) && !(dimension?.scope === 'global' && accountId) && (
-              <p className="text-xs text-muted-foreground">
-                System dimension types cannot be changed
-              </p>
-            )}
-            {mode === 'edit' && dimension?.scope === 'global' && accountId && (
-              <p className="text-xs text-blue-600">
-                This will create an account-specific version with the new type
-              </p>
-            )}
           </div>
 
           <div className="space-y-2">
