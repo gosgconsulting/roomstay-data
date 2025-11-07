@@ -59,7 +59,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
         return;
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('forecasts')
         .select('*')
         .eq('report_id', reportId)
@@ -77,7 +77,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
       }
 
       console.log('[testing] Loaded scenarios:', data?.length || 0);
-      setScenarios(data || []);
+      setScenarios((data || []) as ForecastScenario[]);
     } catch (error) {
       console.error('Error in loadScenarios:', error);
     } finally {
@@ -133,7 +133,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
         throw new Error('No user found');
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('forecasts')
         .insert({
           report_id: reportId,
@@ -189,7 +189,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
     try {
       console.log('[testing] Deleting scenario:', scenarioId);
 
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('forecasts')
         .delete()
         .eq('id', scenarioId);
