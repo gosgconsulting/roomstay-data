@@ -1040,7 +1040,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       // Initialize column order if not set (only for numeric dimensions)
       if (columnOrder.length === 0) {
         const numericDimensions = finalDimensions.filter(d => 
-          d && typeof d === 'object' && d.id && d.type && 
+          d && typeof d === 'object' && d.id && d.name && d.type && 
           (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula)
         );
         const orderIds = numericDimensions.map(d => d.id);
@@ -1533,7 +1533,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   // Get dimensions in the custom order
   const getOrderedDimensions = (): Dimension[] => {
     const metricDimensions = dimensions.filter(d => 
-      d && typeof d === 'object' && d.id && d.type &&
+      d && typeof d === 'object' && d.id && d.name && d.type &&
       (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula)
     );
     
@@ -1693,8 +1693,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         if (!filterValues || filterValues.length === 0) continue;
 
         const dimension = dimensions.find(d => d && d.id === dimId);
-        if (!dimension) {
-          console.log('[testing] Dimension not found for filter:', dimId);
+        if (!dimension || !dimension.name) {
+          console.log('[testing] Dimension not found or invalid for filter:', dimId);
           continue;
         }
 
@@ -1939,7 +1939,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
           {getOrderedDimensions()
             .filter(d => visibleColumns.has(d.id))
             .map((dimension) => {
-              if (!row || !row.data) return null; // Safety check
+              if (!row || !row.data || !dimension || !dimension.name) return null; // Safety check
               const value = row.data[dimension.name];
               const change = row.changeData?.[dimension.name];
               const hasComparison = filters.compareEnabled && change !== undefined;
