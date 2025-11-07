@@ -97,8 +97,18 @@ export const MasterFilter = ({
         return;
       }
 
-      console.log('[MASTER-FILTER] Loaded dimensions:', data?.length || 0);
-      setDimensions(data || []);
+      // Deduplicate dimensions by name, prioritizing account > global
+      const dimensionMap = new Map<string, Dimension>();
+      (data || []).forEach(dim => {
+        const existing = dimensionMap.get(dim.name);
+        if (!existing || (dim.scope === 'account' && existing.scope === 'global')) {
+          dimensionMap.set(dim.name, dim);
+        }
+      });
+
+      const uniqueDimensions = Array.from(dimensionMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+      console.log('[MASTER-FILTER] Loaded unique dimensions:', uniqueDimensions.length);
+      setDimensions(uniqueDimensions);
     } catch (error) {
       console.error('[MASTER-FILTER] Error in loadDimensions:', error);
     } finally {
