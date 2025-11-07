@@ -685,8 +685,9 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       };
       
       loadVisibleColumnsAsync();
-    } else if (dimensions.length > 0) {
-      // Set default visibility if not set
+    } else {
+      // No saved visible_columns - set defaults based on dimension type
+      console.log('[testing] No saved visible_columns, setting defaults');
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
       const defaultVisible = new Set<string>(
         dimensions
@@ -694,7 +695,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                       (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula))
           .map(d => d.id)
       );
-      console.log('Setting default visible columns:', Array.from(defaultVisible));
+      console.log('[testing] Setting default visible columns:', Array.from(defaultVisible));
       setVisibleColumns(defaultVisible);
       setInitialVisibleColumns(new Set(defaultVisible));
     }
@@ -1014,19 +1015,9 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         setInitialColumnOrder([...orderIds]);
       }
       
-      // Set default visibility only if no saved view exists (only for numeric dimensions)
-      // This will be overridden by loadViewSettings if a saved view exists
-      const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
-      const numericDimensions = allDimensions.filter(d => 
-        d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
-      );
-      const defaultVisible = new Set<string>(
-        numericDimensions
-          .filter(d => !hiddenColumns.includes(d.name))
-          .map(d => d.id)
-      );
-      setVisibleColumns(defaultVisible);
-      setInitialVisibleColumns(new Set(defaultVisible));
+      // DON'T set default visibility here - let loadAllViews() handle it
+      // If we set defaults here, they will overwrite saved settings from database
+      console.log('[testing] Dimensions loaded, waiting for loadAllViews to set visibility');
     } catch (error) {
       console.error("Error loading dimensions:", error);
     } finally {
