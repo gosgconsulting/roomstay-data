@@ -274,14 +274,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
 
   // Create a stable reference for filters to prevent unnecessary re-renders
   const debouncedFilters = useMemo(() => {
-    console.log('[testing] PerformanceTable - Creating stable filters reference:', filters);
-    console.log('[testing] PerformanceTable - Date range details:', {
-      dateRange: filters.dateRange,
-      from: filters.dateRange?.from?.toISOString(),
-      to: filters.dateRange?.to?.toISOString(),
-      preset: filters.datePreset,
-      filtersObjectId: Object.keys(filters).join(','),
-      timestamp: new Date().toISOString()
+    console.log('[PERF-TABLE] Creating stable filters reference:', {
+      compareEnabled: filters.compareEnabled,
+      compareType: filters.compareType,
+      hasCompareDateRange: !!filters.compareDateRange,
+      compareDateRange: filters.compareDateRange
     });
     
     const result = {
@@ -293,7 +290,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       compareDateRange: filters.compareDateRange,
     };
     
-    console.log('[testing] PerformanceTable - Debounced filters result:', result);
+    console.log('[PERF-TABLE] Debounced filters created:', result);
     return result;
   }, [
     JSON.stringify(filters.dimensionFilters),
@@ -308,16 +305,12 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
 
   // Load performance data when filters change (simplified approach like KPIChart)
   useEffect(() => {
-    console.log('[testing] PerformanceTable useEffect triggered:', {
+    console.log('[PERF-TABLE] useEffect triggered:', {
       reportId: !!reportId,
-      reportIdValue: reportId,
       groupByDimensions: groupByDimensions.length,
-      groupByDimensionsValue: groupByDimensions,
-      dimensions: dimensions.length,
-      debouncedFilters,
-      dateRange: debouncedFilters.dateRange,
-      dateFrom: debouncedFilters.dateRange?.from?.toISOString(),
-      dateTo: debouncedFilters.dateRange?.to?.toISOString(),
+      compareEnabled: debouncedFilters.compareEnabled,
+      compareType: debouncedFilters.compareType,
+      hasCompareDateRange: !!debouncedFilters.compareDateRange,
       timestamp: new Date().toISOString()
     });
     
@@ -1186,17 +1179,14 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     const dateFromFormatted = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined;
     const dateToFormatted = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined;
     
-    console.log('[testing] loadPerformanceData called with:', {
+    console.log('[PERF-TABLE] loadPerformanceData called with filters:', {
       reportId,
       groupByDimensions: groupByDimensions.length,
-      dimensions: dimensions.length,
-      groupByDims: groupByDimensions,
-      dateFilters: {
-        dateFrom: dateFromFormatted,
-        dateTo: dateToFormatted,
-        preset: filters.datePreset,
-        rawDateRange: filters.dateRange
-      }
+      compareEnabled: filters.compareEnabled,
+      compareType: filters.compareType,
+      hasCompareDateRange: !!filters.compareDateRange,
+      compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
+      compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined
     });
 
     // Check conditions after setting loading state
