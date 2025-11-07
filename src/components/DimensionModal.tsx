@@ -210,15 +210,17 @@ export const DimensionModal = ({
       // Remove any remaining @ symbols
       testFormula = testFormula.replace(/@/g, '');
 
+      // Simple evaluation - allow basic math operations, parentheses, and percentage symbol
+      // Check BEFORE converting percentages so the % symbol is allowed
+      const cleanedFormulaForValidation = formula.replace(/@/g, '').replace(/[a-zA-Z_][a-zA-Z0-9_\s]*/g, '100');
+      if (!/^[\d\s+\-*/.()%]+$/.test(cleanedFormulaForValidation)) {
+        throw new Error("Formula contains invalid characters. Only numbers and operators (+, -, *, /, %, parentheses) are allowed.");
+      }
+
       // Handle percentage notation (e.g., "15%" becomes "0.15")
       testFormula = testFormula.replace(/(\d+(?:\.\d+)?)\s*%/g, (match, num) => {
         return `(${parseFloat(num) / 100})`;
       });
-
-      // Simple evaluation - allow basic math operations and parentheses
-      if (!/^[\d\s+\-*/.()]+$/.test(testFormula)) {
-        throw new Error("Formula contains invalid characters. Only numbers and operators (+, -, *, /, %) are allowed.");
-      }
 
       // Evaluate the formula safely
       const result = Function('"use strict"; return (' + testFormula + ')')();
