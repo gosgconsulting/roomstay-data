@@ -723,7 +723,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     } else if (dimensions.length > 0) {
       // Set default order based on dimensions
       const metricDimensions = dimensions.filter(d => 
-        d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
+        d && typeof d === 'object' && d.id && d.type &&
+        (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula)
       );
       const orderIds = metricDimensions.map(d => d.id);
       setColumnOrder(orderIds);
@@ -976,7 +977,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       // Deduplicate dimensions by name (keep first occurrence, which prioritizes account-scoped)
       const seenNames = new Set<string>();
       const allDimensions = combinedDimensions.filter(dim => {
-        if (!dim || !dim.name || seenNames.has(dim.name)) {
+        // Safety check: ensure dimension object has required properties
+        if (!dim || typeof dim !== 'object' || !dim.name || !dim.id || !dim.type) {
+          return false;
+        }
+        if (seenNames.has(dim.name)) {
           return false;
         }
         seenNames.add(dim.name);
@@ -1031,7 +1036,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       // Initialize column order if not set (only for numeric dimensions)
       if (columnOrder.length === 0) {
         const numericDimensions = finalDimensions.filter(d => 
-          d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
+          d && typeof d === 'object' && d.id && d.type && 
+          (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula)
         );
         const orderIds = numericDimensions.map(d => d.id);
         setColumnOrder(orderIds);
@@ -1523,7 +1529,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   // Get dimensions in the custom order
   const getOrderedDimensions = (): Dimension[] => {
     const metricDimensions = dimensions.filter(d => 
-      d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
+      d && typeof d === 'object' && d.id && d.type &&
+      (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula)
     );
     
     if (columnOrder.length === 0) {

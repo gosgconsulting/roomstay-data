@@ -100,6 +100,10 @@ export const MasterFilter = ({
       // Deduplicate dimensions by name, prioritizing account > global
       const dimensionMap = new Map<string, Dimension>();
       (data || []).forEach(dim => {
+        // Safety check: ensure dimension object has required properties
+        if (!dim || typeof dim !== 'object' || !dim.id || !dim.name || !dim.type || !dim.scope) {
+          return;
+        }
         const existing = dimensionMap.get(dim.name);
         if (!existing || (dim.scope === 'account' && existing.scope === 'global')) {
           dimensionMap.set(dim.name, dim);
