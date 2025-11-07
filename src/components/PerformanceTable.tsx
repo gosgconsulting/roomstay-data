@@ -1269,12 +1269,70 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       
       console.log('[PERF-TABLE] Calling get-performance-data with request body:', requestBody);
 
-      const { data, error } = await supabase.functions.invoke('get-performance-data', {
-        body: requestBody,
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000);
       });
+
+      const { data, error } = await Promise.race([
+        supabase.functions.invoke('get-performance-data', {
+          body: requestBody,
+        }),
+        timeoutPromise
+      ]) as any;
 
       if (error) {
         console.error('[PERF-TABLE] Error loading performance data:', error);
+        
+        // If Edge Function fails, try fallback approach like KPIChart
+        console.log('[PERF-TABLE] Attempting fallback data loading approach...');
+        try {
+          const { loadReportData } = await import("@/lib/data-loading-fix");
+          
+          const dataFilters = {
+            dateRange: filters.dateRange,
+            dimensionFilters: filters.dimensionFilters
+          };
+
+          const result = await loadReportData(reportId, accountId, user?.id || '', dataFilters);
+
+          if (result.success && result.data) {
+            console.log('[PERF-TABLE] Fallback data loading successful:', {
+              dataLength: result.data.length,
+              dimensionsCount: result.dimensions?.length || 0
+            });
+
+            // Process the fallback data for table display
+            const processedData = result.data || [];
+            
+            // Calculate totals from the data
+            const totals: Record<string, number> = {};
+            if (processedData.length > 0) {
+              // Get all metric columns (numeric values)
+              const metricColumns = Object.keys(processedData[0]).filter(key => 
+                typeof processedData[0][key] === 'number' && 
+                !key.includes('dimension') && 
+                key !== 'id'
+              );
+              
+              // Sum up totals for each metric
+              metricColumns.forEach(column => {
+                totals[column] = processedData.reduce((sum, row) => sum + (row[column] || 0), 0);
+              });
+            }
+
+            setTableData(processedData);
+            setTotalData(totals);
+            setTotalCompareData({});
+            setTotalChangeData({});
+            setIsLoadingData(false);
+            onLoadingComplete?.();
+            return;
+          }
+        } catch (fallbackError) {
+          console.error('[PERF-TABLE] Fallback data loading also failed:', fallbackError);
+        }
+        
         toast({
           title: "Error loading data",
           description: `Failed to load performance table data: ${error.message || 'Unknown error'}`,

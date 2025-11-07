@@ -34,6 +34,8 @@ export default function ReportDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [loadingComponents, setLoadingComponents] = useState<Set<string>>(new Set());
+  const [isAuthChecking, setIsAuthChecking] = useState(false);
+  const [isAccountLoading, setIsAccountLoading] = useState(false);
   const [isSharedView, setIsSharedView] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
@@ -108,7 +110,7 @@ export default function ReportDashboard() {
   }, [filters.dateRange, filters.datePreset]);
   
   // Track component loading states
-  const markComponentLoading = (component: string) => {
+  const markComponentLoading = useCallback((component: string) => {
     console.log('[LOADING-DEBUG] Component loading:', component);
     setLoadingComponents(prev => {
       const next = new Set(prev).add(component);
@@ -116,9 +118,9 @@ export default function ReportDashboard() {
       return next;
     });
     setIsDataLoading(true);
-  };
+  }, []);
   
-  const markComponentLoaded = (component: string) => {
+  const markComponentLoaded = useCallback((component: string) => {
     console.log('[LOADING-DEBUG] Component loaded:', component);
     setLoadingComponents(prev => {
       const next = new Set(prev);
@@ -130,7 +132,7 @@ export default function ReportDashboard() {
       }
       return next;
     });
-  };
+  }, []);
   
   // Reset filters and mark loading when report changes
   useEffect(() => {
@@ -160,28 +162,51 @@ export default function ReportDashboard() {
   
   useEffect(() => {
     checkAuth();
+    
+    // Safety timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      console.warn('[SAFETY] Loading timeout reached, forcing loading to stop');
+      setIsLoading(false);
+    }, 15000); // 15 seconds timeout
+    
+    return () => clearTimeout(timeout);
   }, []);
 
   useEffect(() => {
-    if (session && accountId) {
+    if (session && accountId && !isAccountLoading) {
+      console.log('[EFFECT] loadAccount useEffect triggered', { 
+        sessionId: session.user?.id, 
+        accountId,
+        timestamp: new Date().toISOString() 
+      });
       loadAccount();
     }
-  }, [session, accountId]);
+  }, [session, accountId, loadAccount, isAccountLoading]);
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
+    if (isAuthChecking) {
+      console.log('[AUTH] Auth check already in progress, skipping...');
+      return;
+    }
+    
+    console.log('[AUTH] Starting authentication check...');
+    setIsAuthChecking(true);
     try {
       const { data: { session }, error } = await supabase.auth.getSession();
       
       if (error) throw error;
       
       if (!session) {
+        console.log('[AUTH] No session found, redirecting to auth');
+        setIsLoading(false);
         navigate('/auth');
         return;
       }
       
+      console.log('[AUTH] Session found, setting session state');
       setSession(session);
     } catch (error) {
-      console.error('Error checking auth:', error);
+      console.error('[AUTH] Error checking auth:', error);
       setIsLoading(false); // Ensure loading is stopped on error
       toast({
         title: "Authentication Error",
@@ -189,12 +214,24 @@ export default function ReportDashboard() {
         variant: "destructive",
       });
       navigate('/auth');
+    } finally {
+      setIsAuthChecking(false);
     }
-  };
+  }, [navigate, isAuthChecking]);
 
-  const loadAccount = async () => {
-    if (!session || !accountId) return;
+  const loadAccount = useCallback(async () => {
+    if (isAccountLoading) {
+      console.log('[ACCOUNT] Account load already in progress, skipping...');
+      return;
+    }
     
+    console.log('[ACCOUNT] Starting account load...', { hasSession: !!session, accountId });
+    if (!session || !accountId) {
+      console.log('[ACCOUNT] Missing session or accountId, skipping load');
+      return;
+    }
+    
+    setIsAccountLoading(true);
     try {
       const { data, error } = await supabase
         .from('accounts')
@@ -229,7 +266,9 @@ export default function ReportDashboard() {
       
       // If user has reports for this account, select the first one or the one from URL params
       if (reports && reports.length > 0) {
-        const reportIdFromUrl = searchParams.get('reportId');
+        // Get current search params to avoid dependency
+        const currentSearchParams = new URLSearchParams(window.location.search);
+        const reportIdFromUrl = currentSearchParams.get('reportId');
         const selectedReportId = reportIdFromUrl && reports.find(r => r.id === reportIdFromUrl)
           ? reportIdFromUrl
           : reports[0].id;
@@ -247,17 +286,21 @@ export default function ReportDashboard() {
           });
       }
       
+      console.log('[ACCOUNT] Account load completed successfully');
       setIsLoading(false);
     } catch (error) {
-      console.error('Error loading account:', error);
+      console.error('[ACCOUNT] Error loading account:', error);
+      setIsLoading(false); // Ensure loading is stopped on error
       toast({
         title: "Error",
         description: "Failed to load account.",
         variant: "destructive",
       });
       navigate('/tools/report');
+    } finally {
+      setIsAccountLoading(false);
     }
-  };
+  }, [session, accountId, navigate, isAccountLoading]);
   
   const handleSignOut = async () => {
     try {
