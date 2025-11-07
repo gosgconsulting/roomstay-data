@@ -38,7 +38,7 @@ import { ColumnFilterModal } from "./ColumnFilterModal";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
-import { format, startOfWeek, startOfMonth, startOfYear } from "date-fns";
+import { format, startOfWeek, startOfMonth, startOfYear, getWeek } from "date-fns";
 import { FilterState } from "./FiltersBar";
 import { checkDimensionsHaveData } from "@/lib/dimensionUtils";
 import { TableVirtuoso } from "react-virtuoso";
@@ -165,8 +165,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   const [breakdownByDimensions, setBreakdownByDimensions] = useState<string[]>([]);
   const [thenByDimensions, setThenByDimensions] = useState<string[]>([]);
   
-  // State for date granularity - default to 'day' for better user experience
-  const [dateGranularity, setDateGranularity] = useState<'none' | 'day' | 'week' | 'month' | 'year'>('day');
+  // State for active date granularity tab
+  const [activeDateTab, setActiveDateTab] = useState<'day' | 'week' | 'month' | 'year'>('day');
   const [dateOrder, setDateOrder] = useState<'asc' | 'desc'>('desc');
   
   // Pagination state
@@ -340,7 +340,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       setTotalChangeData({});
       setIsLoadingData(false);
     }
-  }, [reportId, debouncedFilters, groupByDimensions, breakdownByDimensions, thenByDimensions, dateOrder, visibilityRefreshTrigger]);
+  }, [reportId, debouncedFilters, groupByDimensions, breakdownByDimensions, thenByDimensions, dateOrder, activeDateTab, visibilityRefreshTrigger]);
 
   // Save view settings whenever they change (with debounce to prevent excessive saves)
   useEffect(() => {
@@ -351,7 +351,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       
       return () => clearTimeout(timeoutId);
     }
-  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, columnOrder, dateGranularity, dateOrder, reportId, activeViewId]);
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, columnOrder, activeDateTab, dateOrder, reportId, activeViewId]);
 
   const loadAllViews = async () => {
     if (!reportId) {
@@ -449,8 +449,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         loadViewSettingsFromData(defaultView);
       } else if (!isSharedView) {
         // Only create a default view if not a shared view and no views exist
-        console.log('No views found, creating default view');
-        await createDefaultView();
+        console.log('No views found, creating default views');
+        await createDefaultViews();
       } else {
         console.log('No views found for shared report');
       }
@@ -459,16 +459,16 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     }
   };
 
-  const createDefaultView = async () => {
+  const createDefaultViews = async () => {
     if (!reportId) {
-      console.error("Cannot create default view: No reportId");
+      console.error("Cannot create default views: No reportId");
       return;
     }
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.error("Cannot create default view: No user");
+        console.error("Cannot create default views: No user");
         return;
       }
 
@@ -497,37 +497,54 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
             .map(d => d.name)
         );
 
-      const { data: newView, error } = await supabase
-        .from("report_views")
-        .insert({
-          report_id: reportId,
-          user_id: user.id,
-          name: "Table 1",
-          is_default: true,
-          group_by_dimensions: defaultGroupDimension ? [defaultGroupDimension.id] : [],
-          breakdown_by_dimensions: [],
-          then_by_dimensions: [],
-          visible_columns: defaultVisibleIds,
-          column_order: defaultColumnOrder,
-          visible_kpis: defaultKPIs,
-          kpi_order: defaultKPIs,
-          date_granularity: isDateGrouping ? 'day' : 'day', // Always default to day
-          date_order: 'desc',
-        })
-        .select()
-        .single();
+      // Create four default views for different date granularities
+      const dateGranularities: Array<{name: string, granularity: 'day' | 'week' | 'month' | 'year', isDefault: boolean}> = [
+        { name: "Day", granularity: 'day', isDefault: true },
+        { name: "Week", granularity: 'week', isDefault: false },
+        { name: "Month", granularity: 'month', isDefault: false },
+        { name: "Year", granularity: 'year', isDefault: false }
+      ];
 
-      if (error) {
-        console.error("Error creating default view:", error);
-        throw error;
+      const createdViews = [];
+      
+      for (const dateConfig of dateGranularities) {
+        const { data: newView, error } = await supabase
+          .from("report_views")
+          .insert({
+            report_id: reportId,
+            user_id: user.id,
+            name: dateConfig.name,
+            is_default: dateConfig.isDefault,
+            group_by_dimensions: defaultGroupDimension ? [defaultGroupDimension.id] : [],
+            breakdown_by_dimensions: dimensions.find(d => d.type === 'date') ? [dimensions.find(d => d.type === 'date')!.id] : [], // Always include Date in breakdown with mandatory date
+            then_by_dimensions: [],
+            visible_columns: defaultVisibleIds,
+            column_order: defaultColumnOrder,
+            visible_kpis: defaultKPIs,
+            kpi_order: defaultKPIs,
+            date_granularity: dateConfig.granularity,
+            date_order: 'desc',
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error(`Error creating ${dateConfig.name} view:`, error);
+          continue;
+        }
+
+        if (newView) {
+          createdViews.push(newView);
+        }
       }
 
-      if (newView) {
-        console.log('Default view created successfully:', newView.id);
-        setTableViews([newView]);
-        setActiveViewId(newView.id);
-        // Load settings directly from the created view
-        loadViewSettingsFromData(newView);
+      if (createdViews.length > 0) {
+        console.log(`Created ${createdViews.length} default views successfully`);
+        setTableViews(createdViews);
+        const defaultView = createdViews.find(v => v.is_default) || createdViews[0];
+        setActiveViewId(defaultView.id);
+        // Load settings directly from the default view
+        loadViewSettingsFromData(defaultView);
       }
     } catch (error) {
       console.error("Error creating default view:", error);
@@ -717,10 +734,10 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       setInitialColumnOrder([...orderIds]);
     }
     
-    // Load date granularity if available (default to none)
-    if (view.date_granularity) {
+    // Load date granularity if available (default to day)
+    if (view.date_granularity && view.date_granularity !== 'none') {
       console.log('Loading date granularity:', view.date_granularity);
-      setDateGranularity(view.date_granularity as 'none' | 'day' | 'week' | 'month' | 'year');
+      setActiveDateTab(view.date_granularity as 'day' | 'week' | 'month' | 'year');
     }
     
     // Load date order if available (default to desc)
@@ -773,7 +790,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         then_by_dimensions: thenByDimensions,
         visible_columns: Array.from(visibleColumns),
         column_order: columnOrder,
-        date_granularity: dateGranularity,
+        date_granularity: activeDateTab,
         date_order: dateOrder,
       };
 
@@ -800,68 +817,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     }
   };
 
-  const handleDuplicateView = async () => {
-    if (!reportId || !activeViewId || isSharedView) return;
-    
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
 
-      const activeView = tableViews.find(v => v.id === activeViewId);
-      if (!activeView) return;
-
-      // Find next available number for naming
-      const tableNumbers = tableViews
-        .map(v => {
-          const match = v.name.match(/^Table (\d+)$/);
-          return match ? parseInt(match[1]) : 0;
-        })
-        .filter(n => n > 0);
-      
-      const nextNumber = tableNumbers.length > 0 ? Math.max(...tableNumbers) + 1 : tableViews.length + 1;
-
-      const { data: newView, error } = await supabase
-        .from("report_views")
-        .insert({
-          report_id: reportId,
-          user_id: user.id,
-          name: `Table ${nextNumber}`,
-          is_default: false,
-          group_by_dimensions: activeView.group_by_dimensions || [],
-          breakdown_by_dimensions: activeView.breakdown_by_dimensions || [],
-          then_by_dimensions: activeView.then_by_dimensions || [],
-          visible_columns: activeView.visible_columns || [],
-          column_order: activeView.column_order || [],
-          visible_kpis: activeView.visible_kpis || [],
-          kpi_order: activeView.kpi_order || [],
-          date_granularity: activeView.date_granularity || 'day',
-          date_order: activeView.date_order || 'desc',
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      if (newView) {
-        setTableViews(prev => [...prev, newView]);
-        setActiveViewId(newView.id);
-        // Load settings directly from the created view
-        loadViewSettingsFromData(newView);
-        
-        toast({
-          title: "Table duplicated",
-          description: `Created ${newView.name}`,
-        });
-      }
-    } catch (error) {
-      console.error("Error duplicating view:", error);
-      toast({
-        title: "Error",
-        description: "Failed to duplicate table",
-        variant: "destructive",
-      });
-    }
-  };
 
   const handleDeleteView = async (viewId: string) => {
     if (!reportId || tableViews.length <= 1 || isSharedView) return;
@@ -1135,8 +1091,9 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         case 'day':
           return format(date, 'MMMM d, yyyy'); // October 31, 2025
         case 'week':
-          const weekStart = startOfWeek(date);
-          return format(weekStart, 'MMMM d, yyyy'); // Week starting date
+          const weekNumber = getWeek(date);
+          const year = date.getFullYear();
+          return `Week ${weekNumber}, ${year}`; // Week 45, 2025
         case 'month':
           return format(date, 'MMMM yyyy'); // October 2025
         case 'year':
@@ -1152,6 +1109,13 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   
   // Helper to format row name - check if it's a date
   const formatRowName = (name: string, level: number): string => {
+    // Get all dimension IDs that could contain dates
+    const allDimensionIds = [
+      ...groupByDimensions,
+      ...breakdownByDimensions, 
+      ...thenByDimensions
+    ];
+    
     // Get the dimension for this level
     let dimId: string | undefined;
     if (level === 0) {
@@ -1166,22 +1130,29 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     
     const dimension = dimensions.find(d => d.id === dimId);
     
-    // If it's a date dimension, check if it's already formatted by the backend
+    // If it's a date dimension, format it according to the active tab
     if (dimension?.type === 'date') {
-      // If dateGranularity is not 'none', the backend has already formatted it
-      if (dateGranularity !== 'none' && dateGranularity !== 'day') {
-        // Already formatted by backend (e.g., "October, 2025" or "2025")
-        return name;
-      }
-      
-      // For 'day' or 'none', format the date
       try {
+        // Try to parse the date value
         const date = new Date(name);
         if (!isNaN(date.getTime())) {
-          return format(date, 'MMMM d, yyyy'); // October 29, 2025
+          // Use the formatDate helper with current granularity
+          return formatDate(date, activeDateTab);
         }
       } catch (error) {
         console.error('Error formatting date name:', error);
+      }
+    }
+    
+    // Also check if the name looks like a date (fallback for any date strings)
+    if (typeof name === 'string' && name.match(/^\d{4}-\d{2}-\d{2}/)) {
+      try {
+        const date = new Date(name);
+        if (!isNaN(date.getTime())) {
+          return formatDate(date, activeDateTab);
+        }
+      } catch (error) {
+        console.error('Error formatting date-like name:', error);
       }
     }
     
@@ -1280,7 +1251,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         compareEnabled: filters.compareEnabled || false,
         compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
         compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined,
-        dateGranularity: dateGranularity,
+        dateGranularity: activeDateTab,
         dateOrder: dateOrder,
       };
       
@@ -1930,44 +1901,15 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     <>
       <Card>
         <CardHeader className="pb-3">
-          {/* Table View Tabs */}
-          {tableViews.length > 0 && (
-            <Tabs value={activeViewId || undefined} onValueChange={handleViewChange} className="mb-4">
-              <div className="flex items-center gap-2">
-                <TabsList>
-                  {tableViews.map((view) => (
-                    <TabsTrigger 
-                      key={view.id} 
-                      value={view.id}
-                      onDoubleClick={!isSharedView ? () => handleTabDoubleClick(view.id, view.name) : undefined}
-                      className="relative"
-                    >
-                      {!isSharedView && editingTabId === view.id ? (
-                        <input
-                          type="text"
-                          value={editingTabName}
-                          onChange={(e) => setEditingTabName(e.target.value)}
-                          onBlur={handleTabNameSave}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              handleTabNameSave();
-                            } else if (e.key === 'Escape') {
-                              handleTabNameCancel();
-                            }
-                          }}
-                          className="bg-transparent border-none outline-none text-center w-full px-0"
-                          autoFocus
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      ) : (
-                        view.name
-                      )}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </div>
-            </Tabs>
-          )}
+          {/* Date Granularity Tabs */}
+          <Tabs value={activeDateTab} onValueChange={(value) => setActiveDateTab(value as 'day' | 'week' | 'month' | 'year')} className="mb-4">
+            <TabsList>
+              <TabsTrigger value="day">Day</TabsTrigger>
+              <TabsTrigger value="week">Week</TabsTrigger>
+              <TabsTrigger value="month">Month</TabsTrigger>
+              <TabsTrigger value="year">Year</TabsTrigger>
+            </TabsList>
+          </Tabs>
           
           <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 text-sm">
@@ -2107,29 +2049,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                 )}
               </div>
               
-              {!isSharedView && (
-                <div className="flex items-center gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="icon" 
-                    className="h-9 w-9"
-                    onClick={handleDuplicateView}
-                    title="Duplicate table"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                  
-                  {tableViews.length > 1 && (
-                    <Button 
-                      variant="outline" 
-                      size="icon" 
-                      className="h-9 w-9 text-destructive hover:text-destructive"
-                      onClick={() => activeViewId && handleDeleteView(activeViewId)}
-                      title="Delete table"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
+                              {!isSharedView && (
+                  <div className="flex items-center gap-2">
                   
                   <Sheet onOpenChange={(open) => {
                     if (open) {
@@ -2384,8 +2305,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         title={getSelectorTitle()}
         selectedDimensions={getCurrentDimensions()}
         onDimensionsChange={handleDimensionsChange}
-        onDateGranularityChange={(granularity) => setDateGranularity(granularity as any)}
-        currentDateGranularity={dateGranularity}
+        onDateGranularityChange={(granularity) => setActiveDateTab(granularity as 'day' | 'week' | 'month' | 'year')}
+        currentDateGranularity={activeDateTab}
         reportId={reportId}
       />
     </>
