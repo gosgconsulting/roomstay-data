@@ -2232,25 +2232,10 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                         .filter(d => visibleColumns.has(d.id))
                         .map((dimension) => {
                           const value = totals[dimension.name];
-                          const change = compareTotalsAndChanges.changeData[dimension.name];
-                          const hasComparison = filters.compareEnabled && change !== undefined;
                           
                           return (
                             <td key={dimension.id} className="py-3 px-4 text-right">
-                              <div className="flex flex-col items-end gap-1">
-                                <span>{formatValue(value, dimension)}</span>
-                                {hasComparison && (
-                                  <span className={cn(
-                                    "text-xs flex items-center gap-1",
-                                    change > 0 ? "text-green-600" : change < 0 ? "text-red-600" : "text-muted-foreground"
-                                  )}>
-                                    {change > 0 && <ArrowUp className="h-3 w-3" />}
-                                    {change < 0 && <ArrowDown className="h-3 w-3" />}
-                                    {change === 0 && <Minus className="h-3 w-3" />}
-                                    {Math.abs(change).toFixed(1)}%
-                                  </span>
-                                )}
-                              </div>
+                              <span>{formatValue(value, dimension)}</span>
                             </td>
                           );
                         })}
