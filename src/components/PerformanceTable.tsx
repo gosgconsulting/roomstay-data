@@ -1206,10 +1206,20 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     const dateFromFormatted = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined;
     const dateToFormatted = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined;
     
+    // Use fallback if groupByDimensions is empty - find Date dimension as default
+    let effectiveGroupByDims = groupByDimensions;
+    if (effectiveGroupByDims.length === 0) {
+      const dateDimension = dimensions.find(d => d.name === 'Date');
+      if (dateDimension) {
+        effectiveGroupByDims = [dateDimension.id];
+        console.log('[PERF-TABLE] Using fallback Date dimension for grouping:', dateDimension.id);
+      }
+    }
+    
     console.log('[PERF-TABLE] loadPerformanceData called with filters:', {
       reportId,
-      groupByDimensions: groupByDimensions.length,
-      groupByDimensionIds: groupByDimensions,
+      groupByDimensions: effectiveGroupByDims.length,
+      groupByDimensionIds: effectiveGroupByDims,
       compareEnabled: filters.compareEnabled,
       compareType: filters.compareType,
       hasCompareDateRange: !!filters.compareDateRange,
@@ -1218,11 +1228,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     });
 
     // Check conditions before loading
-    if (!reportId || groupByDimensions.length === 0) {
+    if (!reportId || effectiveGroupByDims.length === 0) {
       console.log('[PERF-TABLE] No data loading - missing reportId or groupByDimensions:', {
         reportId: !!reportId,
-        groupByDimensionsLength: groupByDimensions.length,
-        groupByDimensions
+        groupByDimensionsLength: effectiveGroupByDims.length,
+        groupByDimensions: effectiveGroupByDims
       });
       setTableData([]);
       setTotalData({});
@@ -1239,7 +1249,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       
       const requestBody = {
         reportId,
-        groupByDims: groupByDimensions,
+        groupByDims: effectiveGroupByDims,
         breakdownDims: breakdownByDimensions,
         thenByDims: thenByDimensions,
         dimensionFilters: filters.dimensionFilters,
