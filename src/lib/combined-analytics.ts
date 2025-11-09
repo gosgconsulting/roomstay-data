@@ -47,8 +47,10 @@ export async function getCombinedAnalytics(
   dateGranularity: 'day' | 'week' | 'month' | 'year' = 'day'
 ): Promise<CombinedAnalyticsData> {
   console.log('[COMBINED-ANALYTICS] Fetching data for reports:', reportIds);
+  console.log('[COMBINED-ANALYTICS] Master filter:', masterFilter);
   
   if (reportIds.length === 0) {
+    console.log('[COMBINED-ANALYTICS] No report IDs provided, returning empty data');
     return {
       metrics: getEmptyMetrics(),
       timeSeriesData: [],
@@ -71,14 +73,23 @@ export async function getCombinedAnalytics(
     const { data, error } = await query.limit(50000);
 
     if (error) {
-      console.error('[COMBINED-ANALYTICS] Error fetching data:', error);
-      throw error;
+      console.error('[COMBINED-ANALYTICS] Error fetching dimension data:', error);
+      throw new Error(`Failed to fetch dimension data: ${error.message}`);
     }
 
     console.log('[COMBINED-ANALYTICS] Fetched rows:', data?.length || 0);
 
     // Filter data based on master filter (client-side)
     let filteredData = data || [];
+    
+    if (filteredData.length === 0) {
+      console.warn('[COMBINED-ANALYTICS] No dimension data found for the selected reports');
+      return {
+        metrics: getEmptyMetrics(),
+        timeSeriesData: [],
+        tableData: []
+      };
+    }
     
     // Filter by dimension values
     if (masterFilter.dimension && masterFilter.values.length > 0) {
@@ -194,6 +205,8 @@ export async function getCombinedAnalytics(
 
   } catch (error) {
     console.error('[COMBINED-ANALYTICS] Error in getCombinedAnalytics:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[COMBINED-ANALYTICS] Error details:', errorMessage);
     throw error;
   }
 }

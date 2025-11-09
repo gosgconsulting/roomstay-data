@@ -82,6 +82,15 @@ export const MasterFilter = ({
     }
   }, [selectedDimension]);
 
+  // Initialize localReportIds when reports load
+  useEffect(() => {
+    if (reports.length > 0 && localReportIds.length === 0) {
+      console.log('[MASTER-FILTER] Initializing report IDs:', reports.length);
+      const allReportIds = reports.map(r => r.id);
+      setLocalReportIds(allReportIds);
+    }
+  }, [reports, localReportIds.length]);
+
   // Load saved settings after reports are available
   useEffect(() => {
     if (reports.length > 0 && accountId) {

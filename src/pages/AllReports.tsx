@@ -208,10 +208,11 @@ export default function AllReports() {
 
   // Load combined analytics when reports are loaded
   useEffect(() => {
-    if (reports.length > 0) {
+    if (reports.length > 0 && !isCombinedLoading && !combinedData) {
+      console.log('[ALL-REPORTS] Auto-loading combined analytics on mount');
       loadCombinedAnalytics();
     }
-  }, [reports]);
+  }, [reports.length]);
 
   if (isLoading) {
     return (
