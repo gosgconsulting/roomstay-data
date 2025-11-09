@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { format, startOfWeek, startOfMonth, startOfYear, getWeek } from "date-fns";
 
 export interface MasterFilterState {
   mode: 'individual' | 'combined';
@@ -49,7 +50,8 @@ export interface CombinedAnalyticsData {
 export async function getCombinedAnalytics(
   reportIds: string[],
   masterFilter: MasterFilterState,
-  dateGranularity: 'day' | 'week' | 'month' | 'year' = 'day'
+  dateGranularity: 'day' | 'week' | 'month' | 'year' = 'day',
+  dateOrder: 'asc' | 'desc' = 'desc'
 ): Promise<CombinedAnalyticsData> {
   console.log('[COMBINED-ANALYTICS] Fetching data for reports:', reportIds);
   console.log('[COMBINED-ANALYTICS] Master filter:', masterFilter);
@@ -188,7 +190,8 @@ export async function getCombinedAnalytics(
       filteredData,
       dimensionMaps,
       dateGranularity,
-      masterFilter.aggregationMethod
+      masterFilter.aggregationMethod,
+      dateOrder
     );
 
     // Create table data based on grouping
@@ -214,7 +217,8 @@ export async function getCombinedAnalytics(
         masterFilter.breakdownDimensions || [],
         masterFilter.thenByDimensions || [],
         dateGranularity,
-        masterFilter.aggregationMethod
+        masterFilter.aggregationMethod,
+        dateOrder
       );
     } else {
       // Default grouping by date
@@ -317,7 +321,8 @@ function aggregateByDate(
   data: any[],
   dimensionMaps: Map<string, Map<string, string>>,
   granularity: 'day' | 'week' | 'month' | 'year',
-  method: 'sum' | 'average' | 'weighted'
+  method: 'sum' | 'average' | 'weighted',
+  dateOrder: 'asc' | 'desc' = 'desc'
 ): Array<{ date: string; metrics: CombinedMetrics; reportCount: number }> {
   const dateGroups = new Map<string, any[]>();
 
@@ -347,7 +352,10 @@ function aggregateByDate(
     });
   });
 
-  return result.sort((a, b) => a.date.localeCompare(b.date));
+  return result.sort((a, b) => {
+    const comparison = a.date.localeCompare(b.date);
+    return dateOrder === 'asc' ? comparison : -comparison;
+  });
 }
 
 /**
@@ -371,15 +379,14 @@ function getDateValue(
     
     switch (granularity) {
       case 'day':
-        return dateStr;
+        return format(date, 'yyyy-MM-dd');
       case 'week':
-        const weekStart = new Date(date);
-        weekStart.setDate(date.getDate() - date.getDay());
-        return weekStart.toISOString().split('T')[0];
+        const weekStart = startOfWeek(date, { weekStartsOn: 0 });
+        return `Week ${getWeek(date)}, ${format(date, 'yyyy')}`;
       case 'month':
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        return format(date, 'MMM yyyy');
       case 'year':
-        return String(date.getFullYear());
+        return format(date, 'yyyy');
       default:
         return dateStr;
     }
@@ -429,7 +436,8 @@ function aggregateByDimensions(
   breakdownDims: string[],
   thenByDims: string[],
   dateGranularity: 'day' | 'week' | 'month' | 'year',
-  method: 'sum' | 'average' | 'weighted'
+  method: 'sum' | 'average' | 'weighted',
+  dateOrder: 'asc' | 'desc' = 'desc'
 ): Array<{
   date?: string;
   metrics: CombinedMetrics;
@@ -518,7 +526,8 @@ function aggregateByDimensions(
   // Sort by date if available, otherwise by group key
   return result.sort((a, b) => {
     if (a.date && b.date) {
-      return a.date.localeCompare(b.date);
+      const comparison = a.date.localeCompare(b.date);
+      return dateOrder === 'asc' ? comparison : -comparison;
     }
     return (a.groupKey || '').localeCompare(b.groupKey || '');
   });

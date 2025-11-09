@@ -3,7 +3,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Settings } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Settings, ArrowUpDown } from "lucide-react";
 import { CombinedMetrics } from "@/lib/combined-analytics";
 import { CombinedColumnsConfigModal } from "@/components/CombinedColumnsConfigModal";
 
@@ -22,6 +23,10 @@ interface CombinedPerformanceTableProps {
   breakdownDimensions?: string[];
   thenByDimensions?: string[];
   allDimensions?: Array<{ id: string; name: string }>;
+  activeDateTab?: 'day' | 'week' | 'month' | 'year';
+  onDateTabChange?: (tab: 'day' | 'week' | 'month' | 'year') => void;
+  dateOrder?: 'asc' | 'desc';
+  onDateOrderChange?: (order: 'asc' | 'desc') => void;
 }
 
 export const CombinedPerformanceTable = ({ 
@@ -32,7 +37,11 @@ export const CombinedPerformanceTable = ({
   groupByDimensions = [],
   breakdownDimensions = [],
   thenByDimensions = [],
-  allDimensions = []
+  allDimensions = [],
+  activeDateTab = 'day',
+  onDateTabChange,
+  dateOrder = 'desc',
+  onDateOrderChange
 }: CombinedPerformanceTableProps) => {
   const [showColumnsConfig, setShowColumnsConfig] = useState(false);
   
@@ -58,11 +67,16 @@ export const CombinedPerformanceTable = ({
     return num.toFixed(2);
   };
 
+  const getTableTitle = () => {
+    const tabLabel = activeDateTab.charAt(0).toUpperCase() + activeDateTab.slice(1);
+    return `Combined Performance by ${tabLabel}`;
+  };
+
   if (isLoading) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Combined Performance by Date</CardTitle>
+          <CardTitle>{getTableTitle()}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
@@ -78,18 +92,38 @@ export const CombinedPerformanceTable = ({
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Combined Performance by Date</CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowColumnsConfig(true)}
-            className="h-8 px-3 text-xs"
-          >
-            <Settings className="h-4 w-4 mr-1" />
-            Edit Columns
-          </Button>
+        <div className="flex items-center justify-between mb-4">
+          <CardTitle>{getTableTitle()}</CardTitle>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onDateOrderChange?.(dateOrder === 'asc' ? 'desc' : 'asc')}
+              className="h-8 px-3 text-xs"
+            >
+              <ArrowUpDown className="h-4 w-4 mr-1" />
+              {dateOrder === 'asc' ? 'Ascending' : 'Descending'}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowColumnsConfig(true)}
+              className="h-8 px-3 text-xs"
+            >
+              <Settings className="h-4 w-4 mr-1" />
+              Edit Columns
+            </Button>
+          </div>
         </div>
+        
+        <Tabs value={activeDateTab} onValueChange={(value) => onDateTabChange?.(value as 'day' | 'week' | 'month' | 'year')}>
+          <TabsList>
+            <TabsTrigger value="day">Day</TabsTrigger>
+            <TabsTrigger value="week">Week</TabsTrigger>
+            <TabsTrigger value="month">Month</TabsTrigger>
+            <TabsTrigger value="year">Year</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </CardHeader>
       <CardContent>
         <div className="rounded-md border overflow-auto max-h-[600px]">

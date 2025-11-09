@@ -50,6 +50,10 @@ export default function AllReports() {
   const [thenByDimensions, setThenByDimensions] = useState<string[]>([]);
   const [allDimensions, setAllDimensions] = useState<Array<{ id: string; name: string }>>([]);
   
+  // Date aggregation state
+  const [activeDateTab, setActiveDateTab] = useState<'day' | 'week' | 'month' | 'year'>('day');
+  const [dateOrder, setDateOrder] = useState<'asc' | 'desc'>('desc');
+  
   // Combined analytics data
   const [combinedData, setCombinedData] = useState<CombinedAnalyticsData | null>(null);
   const [isCombinedLoading, setIsCombinedLoading] = useState(false);
@@ -245,7 +249,9 @@ export default function AllReports() {
     filterReportIds?: string[],
     groupBy: string[] = groupByDimensions,
     breakdown: string[] = breakdownDimensions,
-    thenBy: string[] = thenByDimensions
+    thenBy: string[] = thenByDimensions,
+    dateTab: 'day' | 'week' | 'month' | 'year' = activeDateTab,
+    order: 'asc' | 'desc' = dateOrder
   ) => {
     if (reports.length === 0) return;
     
@@ -284,7 +290,7 @@ export default function AllReports() {
         thenByDimensions: thenBy
       };
       
-      const data = await getCombinedAnalytics(reportIds, masterFilter, 'day');
+      const data = await getCombinedAnalytics(reportIds, masterFilter, dateTab, order);
       setCombinedData(data);
       
       toast({
@@ -392,6 +398,16 @@ export default function AllReports() {
                   breakdownDimensions={breakdownDimensions}
                   thenByDimensions={thenByDimensions}
                   allDimensions={allDimensions}
+                  activeDateTab={activeDateTab}
+                  onDateTabChange={(tab) => {
+                    setActiveDateTab(tab);
+                    loadCombinedAnalytics(undefined, undefined, undefined, undefined, undefined, undefined, undefined, tab);
+                  }}
+                  dateOrder={dateOrder}
+                  onDateOrderChange={(order) => {
+                    setDateOrder(order);
+                    loadCombinedAnalytics(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, order);
+                  }}
                 />
               </>
             ) : (
