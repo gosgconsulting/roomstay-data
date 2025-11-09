@@ -237,22 +237,47 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     }
   }, [reportId, dimensions.length]);
 
-  // Auto-select Date dimension if no grouping is set and dimensions are loaded
+  // Auto-select dimensions if no grouping is set and dimensions are loaded
   useEffect(() => {
     if (dimensions.length > 0 && groupByDimensions.length === 0 && !isLoadingDimensions && tableViews.length > 0) {
-      console.log('[testing] Auto-selecting default grouping dimension');
-      const dateDimension = dimensions.find(d => d.type === 'date');
-      const textDimension = dimensions.find(d => d.type === 'text');
+      console.log('[testing] Auto-selecting default dimensions');
       
-      if (dateDimension) {
-        setGroupByDimensions([dateDimension.id]);
-        console.log('[testing] Auto-selected Date dimension for grouping:', dateDimension.name);
-      } else if (textDimension) {
-        setGroupByDimensions([textDimension.id]);
-        console.log('[testing] Auto-selected text dimension for grouping:', textDimension.name);
-      } else if (dimensions.length > 0) {
-        setGroupByDimensions([dimensions[0].id]);
-        console.log('[testing] Auto-selected first dimension for grouping:', dimensions[0].name);
+      // Find Hotel, Channel, and Account dimensions
+      const hotelDim = dimensions.find(d => d.name.toLowerCase().includes('hotel'));
+      const channelDim = dimensions.find(d => d.name.toLowerCase().includes('channel'));
+      const accountDim = dimensions.find(d => d.name.toLowerCase().includes('account'));
+      
+      // Set up the hierarchy: Hotel -> Channel -> Account
+      if (hotelDim) {
+        setGroupByDimensions([hotelDim.id]);
+        console.log('[testing] Auto-selected Hotel dimension for grouping:', hotelDim.name);
+      }
+      
+      if (channelDim) {
+        setBreakdownByDimensions([channelDim.id]);
+        console.log('[testing] Auto-selected Channel dimension for breakdown:', channelDim.name);
+      }
+      
+      if (accountDim) {
+        setThenByDimensions([accountDim.id]);
+        console.log('[testing] Auto-selected Account dimension for then-by:', accountDim.name);
+      }
+      
+      // Fallback to date or first available dimension if Hotel not found
+      if (!hotelDim) {
+        const dateDimension = dimensions.find(d => d.type === 'date');
+        const textDimension = dimensions.find(d => d.type === 'text');
+        
+        if (dateDimension) {
+          setGroupByDimensions([dateDimension.id]);
+          console.log('[testing] Fallback: Auto-selected Date dimension for grouping:', dateDimension.name);
+        } else if (textDimension) {
+          setGroupByDimensions([textDimension.id]);
+          console.log('[testing] Fallback: Auto-selected text dimension for grouping:', textDimension.name);
+        } else if (dimensions.length > 0) {
+          setGroupByDimensions([dimensions[0].id]);
+          console.log('[testing] Fallback: Auto-selected first dimension for grouping:', dimensions[0].name);
+        }
       }
     }
   }, [dimensions.length, groupByDimensions.length, isLoadingDimensions, tableViews.length]);
@@ -1582,10 +1607,14 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     newDimensions[targetIndex] = value;
     newDimensions[currentIndex] = temp;
     
-    // Sync across all dimension arrays
-    setGroupByDimensions(newDimensions);
-    setBreakdownByDimensions(newDimensions);
-    setThenByDimensions(newDimensions);
+    // Only update the specific array being modified
+    if (currentSelector === "group") {
+      setGroupByDimensions(newDimensions);
+    } else if (currentSelector === "breakdown") {
+      setBreakdownByDimensions(newDimensions);
+    } else if (currentSelector === "then") {
+      setThenByDimensions(newDimensions);
+    }
   };
 
   const getSelectorTitle = () => {
@@ -1604,11 +1633,14 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   };
 
   const handleDimensionsChange = (dimensions: string[]) => {
-    // Auto-sync dimensions across all dropdowns based on selection count
-    // The same dimensions are available in all dropdowns
-    setGroupByDimensions(dimensions);
-    setBreakdownByDimensions(dimensions);
-    setThenByDimensions(dimensions);
+    // Each selector should handle its own dimensions independently
+    if (currentSelector === "group") {
+      setGroupByDimensions(dimensions);
+    } else if (currentSelector === "breakdown") {
+      setBreakdownByDimensions(dimensions);
+    } else if (currentSelector === "then") {
+      setThenByDimensions(dimensions);
+    }
     setCurrentPage(1); // Reset to first page when grouping changes
   };
 

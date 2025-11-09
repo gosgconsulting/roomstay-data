@@ -816,9 +816,9 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Build children if breakdown dimension exists (use index 1, not 0)
-      if (breakdownDims.length > 1 && breakdownDims[1] && group.rawRows.length > 0) {
-        const breakdownDimId = breakdownDims[1]; // Use second dimension for breakdown
+      // Build children if breakdown dimension exists (use index 0, not 1)
+      if (breakdownDims.length > 0 && breakdownDims[0] && group.rawRows.length > 0) {
+        const breakdownDimId = breakdownDims[0]; // Use first dimension for breakdown
         const breakdownDimension = dimensions?.find(d => d.id === breakdownDimId);
         const isBreakdownDateGrouping = breakdownDimension?.type === 'date' && dateGranularity !== 'none';
         const breakdownGrouped = new Map<string, any>();
@@ -936,9 +936,9 @@ Deno.serve(async (req) => {
             }
           }
           
-          // Build third level if "then by" dimension exists (use index 2)
-          if (thenByDims.length > 2 && thenByDims[2] && breakdownItem.rawRows.length > 0) {
-            const thenByDimId = thenByDims[2]; // Use third dimension for "then by"
+          // Build third level if "then by" dimension exists (use index 0)
+          if (thenByDims.length > 0 && thenByDims[0] && breakdownItem.rawRows.length > 0) {
+            const thenByDimId = thenByDims[0]; // Use first dimension for "then by"
             const thenByDimension = dimensions?.find(d => d.id === thenByDimId);
             const isThenByDateGrouping = thenByDimension?.type === 'date' && dateGranularity !== 'none';
             const thenByGrouped = new Map<string, any>();
