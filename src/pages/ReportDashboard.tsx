@@ -141,6 +141,11 @@ export default function ReportDashboard() {
       return next;
     });
   }, []);
+
+  // Memoized loading handlers to prevent re-render loops
+  const handleMetricsLoaded = useCallback(() => markComponentLoaded('metrics'), [markComponentLoaded]);
+  const handleChartLoaded = useCallback(() => markComponentLoaded('chart'), [markComponentLoaded]);
+  const handleTableLoaded = useCallback(() => markComponentLoaded('table'), [markComponentLoaded]);
   
   // Reset filters and mark loading when report changes
   useEffect(() => {
@@ -469,7 +474,7 @@ export default function ReportDashboard() {
                   accountId={accountId}
                   visibilityRefreshTrigger={visibilityRefreshTrigger}
                   key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
-                  onLoadingComplete={() => markComponentLoaded('metrics')}
+                  onLoadingComplete={handleMetricsLoaded}
                 />
                 <KPIChart
                   reportId={reportId}
@@ -477,7 +482,7 @@ export default function ReportDashboard() {
                   accountId={accountId}
                   visibilityRefreshTrigger={visibilityRefreshTrigger}
                   key={`charts-${dataRefreshKey}-${loadingGeneration}`}
-                  onLoadingComplete={() => markComponentLoaded('chart')}
+                  onLoadingComplete={handleChartLoaded}
                 />
                 <PerformanceTable 
                   reportId={reportId} 
@@ -486,7 +491,7 @@ export default function ReportDashboard() {
                   accountId={accountId} 
                   visibilityRefreshTrigger={visibilityRefreshTrigger}
                   key={`table-${dataRefreshKey}-${loadingGeneration}`}
-                  onLoadingComplete={() => markComponentLoaded('table')}
+                  onLoadingComplete={handleTableLoaded}
                 />
               </TabsContent>
 
