@@ -5,7 +5,7 @@ import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCardsFixed";
 import { KPIChart } from "@/components/KPIChartFixed";
-import { PerformanceTable } from "@/components/PerformanceTableFixed";
+import { PerformanceTable } from "@/components/PerformanceTable";
 import { ForecastingPage } from "@/pages/ForecastingPage";
 import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
