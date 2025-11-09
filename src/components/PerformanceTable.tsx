@@ -1300,7 +1300,12 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       // Update dimensions from result if available (they might be more up-to-date)
       if (result.dimensions && result.dimensions.length > 0) {
         console.log('[PERF-TABLE] Updating dimensions from data result:', result.dimensions.length);
-        setDimensions(result.dimensions);
+        // Map the dimensions to match the component's Dimension interface
+        const mappedDimensions = result.dimensions.map(d => ({
+          ...d,
+          formula: d.formula || null
+        }));
+        setDimensions(mappedDimensions);
       }
       
       // Use dimensions from result or component state
@@ -1840,38 +1845,15 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     value: string,
     selector: "group" | "breakdown" | "then"
   ) => {
-    let targetIndex = 0;
+    // Set the dimension for the specific selector
     if (selector === "group") {
-      targetIndex = 0;
+      setGroupByDimensions([value]);
     } else if (selector === "breakdown") {
-      targetIndex = 1;
+      setBreakdownByDimensions([value]);
     } else {
-      targetIndex = 2;
+      setThenByDimensions([value]);
     }
-    
-    // Find the current index of the selected dimension
-    const currentIndex = groupByDimensions.indexOf(value);
-    
-    if (currentIndex === -1) {
-      // Dimension not found, shouldn't happen but handle gracefully
-      return;
-    }
-    
-    // If clicking on the same dimension that's already at this position, do nothing
-    if (currentIndex === targetIndex) {
-      return;
-    }
-    
-    // Swap the dimensions - reorder the array
-    const newDimensions = [...groupByDimensions];
-    const temp = newDimensions[targetIndex];
-    newDimensions[targetIndex] = value;
-    newDimensions[currentIndex] = temp;
-    
-    // Sync across all dimension arrays
-    setGroupByDimensions(newDimensions);
-    setBreakdownByDimensions(newDimensions);
-    setThenByDimensions(newDimensions);
+    setCurrentPage(1); // Reset to first page when grouping changes
   };
 
   const getSelectorTitle = () => {
@@ -1890,11 +1872,14 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   };
 
   const handleDimensionsChange = (dimensions: string[]) => {
-    // Auto-sync dimensions across all dropdowns based on selection count
-    // The same dimensions are available in all dropdowns
-    setGroupByDimensions(dimensions);
-    setBreakdownByDimensions(dimensions);
-    setThenByDimensions(dimensions);
+    // Update the dimension array for the current selector
+    if (currentSelector === "group") {
+      setGroupByDimensions(dimensions.length > 0 ? [dimensions[0]] : []);
+    } else if (currentSelector === "breakdown") {
+      setBreakdownByDimensions(dimensions.length > 0 ? [dimensions[0]] : []);
+    } else {
+      setThenByDimensions(dimensions.length > 0 ? [dimensions[0]] : []);
+    }
     setCurrentPage(1); // Reset to first page when grouping changes
   };
 
@@ -2227,13 +2212,14 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                         className="w-40 bg-background"
                         onContextMenu={!isSharedView ? (e) => handleDimensionSelectorOpen(e as any, "group") : undefined}
                       >
-                        <SelectValue />
+                        <SelectValue>
+                          {dimensions.find(d => d.id === groupByDimensions[0])?.name || "Select"}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent className="bg-background z-50">
-                        {groupByDimensions.map((dimId) => {
-                          const dim = dimensions.find(d => d && d.id === dimId);
-                          const hasData = reportId ? dimensionHasData[dimId] : undefined;
-                          return dim ? (
+                        {dimensions.filter(d => d.type === 'text' || d.type === 'date').map((dim) => {
+                          const hasData = reportId ? dimensionHasData[dim.id] : undefined;
+                          return (
                             <SelectItem key={dim.id} value={dim.id}>
                               <div className="flex items-center gap-2">
                                 {reportId && (
@@ -2250,7 +2236,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                                 <span>{dim.name}</span>
                               </div>
                             </SelectItem>
-                          ) : null;
+                          );
                         })}
                       </SelectContent>
                     </Select>
@@ -2258,95 +2244,144 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                     <Button
                       variant="outline"
                       className="w-40 justify-start"
-                      onContextMenu={(e) => handleDimensionSelectorOpen(e, "group")}
                       onClick={(e) => handleDimensionSelectorOpen(e as any, "group")}
                     >
-                      <span className="text-muted-foreground">Right-click to select</span>
+                      <span className="text-muted-foreground">Select</span>
                     </Button>
                   ) : (
                     <span className="text-sm text-muted-foreground">-</span>
                   )}
                 </div>
-                {/* Breakdown by - shown only if 2+ dimensions selected */}
-                {groupByDimensions.length >= 2 && (
+                {/* Breakdown by - shown when there's a groupBy dimension */}
+                {groupByDimensions.length > 0 && (
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Breakdown by:</span>
-                    <Select
-                      value={breakdownByDimensions[1] || ""}
-                      onValueChange={(value) => handleDimensionChange(value, "breakdown")}
-                    >
-                      <SelectTrigger 
-                        className="w-40 bg-background"
-                        onContextMenu={!isSharedView ? (e) => handleDimensionSelectorOpen(e as any, "breakdown") : undefined}
+                    {breakdownByDimensions.length > 0 ? (
+                      <div className="flex items-center gap-1">
+                        <Select
+                          value={breakdownByDimensions[0] || ""}
+                          onValueChange={(value) => handleDimensionChange(value, "breakdown")}
+                        >
+                          <SelectTrigger 
+                            className="w-40 bg-background"
+                            onContextMenu={!isSharedView ? (e) => handleDimensionSelectorOpen(e as any, "breakdown") : undefined}
+                          >
+                            <SelectValue>
+                              {dimensions.find(d => d.id === breakdownByDimensions[0])?.name || "Select"}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent className="bg-background z-50">
+                            {dimensions.filter(d => d.type === 'text' || d.type === 'date').map((dim) => {
+                              const hasData = reportId ? dimensionHasData[dim.id] : undefined;
+                              return (
+                                <SelectItem key={dim.id} value={dim.id}>
+                                  <div className="flex items-center gap-2">
+                                    {reportId && (
+                                      hasData !== undefined ? (
+                                        hasData ? (
+                                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                        ) : (
+                                          <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                                        )
+                                      ) : (
+                                        <div className="h-3.5 w-3.5" />
+                                      )
+                                    )}
+                                    <span>{dim.name}</span>
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                        {!isSharedView && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setBreakdownByDimensions([])}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ) : !isSharedView ? (
+                      <Button
+                        variant="outline"
+                        className="w-40 justify-start"
+                        onClick={(e) => handleDimensionSelectorOpen(e as any, "breakdown")}
                       >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-background z-50">
-                        {breakdownByDimensions.map((dimId) => {
-                          const dim = dimensions.find(d => d && d.id === dimId);
-                          const hasData = reportId ? dimensionHasData[dimId] : undefined;
-                          return dim ? (
-                            <SelectItem key={dim.id} value={dim.id}>
-                              <div className="flex items-center gap-2">
-                                {reportId && (
-                                  hasData !== undefined ? (
-                                    hasData ? (
-                                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                                    ) : (
-                                      <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                                    )
-                                  ) : (
-                                    <div className="h-3.5 w-3.5" />
-                                  )
-                                )}
-                                <span>{dim.name}</span>
-                              </div>
-                            </SelectItem>
-                          ) : null;
-                        })}
-                      </SelectContent>
-                    </Select>
+                        <span className="text-muted-foreground">Select</span>
+                      </Button>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">-</span>
+                    )}
                   </div>
                 )}
-                {/* Then by - shown only if 3+ dimensions selected */}
-                {groupByDimensions.length >= 3 && (
+                {/* Then by - shown when there's a breakdown dimension */}
+                {breakdownByDimensions.length > 0 && (
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Then by:</span>
-                    <Select
-                      value={thenByDimensions[2] || ""}
-                      onValueChange={(value) => handleDimensionChange(value, "then")}
-                    >
-                      <SelectTrigger 
-                        className="w-40 bg-background"
-                        onContextMenu={!isSharedView ? (e) => handleDimensionSelectorOpen(e as any, "then") : undefined}
+                    {thenByDimensions.length > 0 ? (
+                      <div className="flex items-center gap-1">
+                        <Select
+                          value={thenByDimensions[0] || ""}
+                          onValueChange={(value) => handleDimensionChange(value, "then")}
+                        >
+                          <SelectTrigger 
+                            className="w-40 bg-background"
+                            onContextMenu={!isSharedView ? (e) => handleDimensionSelectorOpen(e as any, "then") : undefined}
+                          >
+                            <SelectValue>
+                              {dimensions.find(d => d.id === thenByDimensions[0])?.name || "Select"}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent className="bg-background z-50">
+                            {dimensions.filter(d => d.type === 'text' || d.type === 'date').map((dim) => {
+                              const hasData = reportId ? dimensionHasData[dim.id] : undefined;
+                              return (
+                                <SelectItem key={dim.id} value={dim.id}>
+                                  <div className="flex items-center gap-2">
+                                    {reportId && (
+                                      hasData !== undefined ? (
+                                        hasData ? (
+                                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                        ) : (
+                                          <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                                        )
+                                      ) : (
+                                        <div className="h-3.5 w-3.5" />
+                                      )
+                                    )}
+                                    <span>{dim.name}</span>
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                        {!isSharedView && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setThenByDimensions([])}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ) : !isSharedView ? (
+                      <Button
+                        variant="outline"
+                        className="w-40 justify-start"
+                        onClick={(e) => handleDimensionSelectorOpen(e as any, "then")}
                       >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-background z-50">
-                        {thenByDimensions.map((dimId) => {
-                          const dim = dimensions.find(d => d && d.id === dimId);
-                          const hasData = reportId ? dimensionHasData[dimId] : undefined;
-                          return dim ? (
-                            <SelectItem key={dim.id} value={dim.id}>
-                              <div className="flex items-center gap-2">
-                                {reportId && (
-                                  hasData !== undefined ? (
-                                    hasData ? (
-                                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                                    ) : (
-                                      <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                                    )
-                                  ) : (
-                                    <div className="h-3.5 w-3.5" />
-                                  )
-                                )}
-                                <span>{dim.name}</span>
-                              </div>
-                            </SelectItem>
-                          ) : null;
-                        })}
-                      </SelectContent>
-                    </Select>
+                        <span className="text-muted-foreground">Select</span>
+                      </Button>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">-</span>
+                    )}
                   </div>
                 )}
               </div>
