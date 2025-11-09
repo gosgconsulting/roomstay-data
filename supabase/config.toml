@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.auto-sync-data-sources]
 verify_jwt = false
+
+[functions.get-performance-data]
+verify_jwt = true
