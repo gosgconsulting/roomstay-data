@@ -21,7 +21,7 @@ interface KPIChartProps {
   onLoadingComplete?: () => void;
 }
 
-export function KPIChart({ reportId, accountId, filters }: KPIChartProps) {
+export function KPIChart({ reportId, accountId, filters, onLoadingComplete }: KPIChartProps) {
   const [chartData, setChartData] = useState<any[]>([]);
   const [selectedMetric, setSelectedMetric] = useState<string>("Revenue");
   const [isLoading, setIsLoading] = useState(true);
@@ -53,6 +53,7 @@ export function KPIChart({ reportId, accountId, filters }: KPIChartProps) {
       loadChartData();
     } else {
       setIsLoading(false);
+      onLoadingComplete?.();
     }
   }, [reportId, accountId, stableFilters, selectedMetric]);
 
@@ -230,6 +231,7 @@ export function KPIChart({ reportId, accountId, filters }: KPIChartProps) {
       setChartData([]);
     } finally {
       setIsLoading(false);
+      onLoadingComplete?.();
     }
   };
 

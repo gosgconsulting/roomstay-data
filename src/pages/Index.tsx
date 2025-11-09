@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 import { Settings } from "lucide-react";
+import { fallbackAuth, clearAuthAndReload, checkCORSIssues } from "@/lib/auth-fallback";
 
 export default function Index() {
   const navigate = useNavigate();
@@ -84,25 +85,77 @@ export default function Index() {
 
   const checkAuth = async () => {
     try {
-      const { data: { session }, error } = await supabase.auth.getSession();
+      console.log('[AUTH] Starting authentication check...');
       
-      if (error) throw error;
+      // Check for CORS issues first
+      const corsCheck = checkCORSIssues();
+      if (corsCheck.hasCORSIssue) {
+        console.warn('[AUTH] Potential CORS issue detected:', corsCheck);
+      }
+      
+      // Try primary authentication method
+      let session, error;
+      try {
+        const result = await supabase.auth.getSession();
+        session = result.data.session;
+        error = result.error;
+      } catch (networkError) {
+        console.error('[AUTH] Network error, trying fallback:', networkError);
+        const fallbackResult = await fallbackAuth();
+        session = fallbackResult.session;
+        error = fallbackResult.error;
+      }
+      
+      if (error) {
+        console.error('[AUTH] Session error:', error);
+        
+        // If it's a CORS or network error, provide specific guidance
+        if (error.message?.includes('CORS') || error.message?.includes('fetch')) {
+          toast({
+            title: "Connection Error",
+            description: "Please check your internet connection and try refreshing the page. If the issue persists, the Supabase configuration may need updating.",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+        
+        throw error;
+      }
       
       if (!session) {
+        console.log('[AUTH] No session found, redirecting to auth');
+        setIsLoading(false);
         navigate('/auth');
         return;
       }
       
+      console.log('[AUTH] Session found, loading reports...');
       setSession(session);
       
-      // Load user's reports
-      const { data: reports, error: reportsError } = await supabase
+      // Load user's reports with timeout
+      const reportsPromise = supabase
         .from('reports')
         .select('*')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: false });
 
-      if (reportsError) throw reportsError;
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Reports loading timeout')), 10000)
+      );
+
+      const { data: reports, error: reportsError } = await Promise.race([
+        reportsPromise,
+        timeoutPromise
+      ]) as any;
+
+      if (reportsError) {
+        console.error('[AUTH] Reports error:', reportsError);
+        throw reportsError;
+      }
+
+      console.log('[AUTH] Loaded reports:', reports?.length || 0);
 
       if (reports && reports.length > 0) {
         // Check if there's a reportId in the URL
@@ -111,27 +164,41 @@ export default function Index() {
         
         if (urlReportId && reports.find(r => r.id === urlReportId)) {
           setReportId(urlReportId);
+          console.log('[AUTH] Set reportId from URL:', urlReportId);
         } else {
           setReportId(reports[0].id);
+          console.log('[AUTH] Set reportId to first report:', reports[0].id);
         }
         
         // Load account ID for the selected report
         const selectedReport = reports.find(r => r.id === (urlReportId || reports[0].id));
         if (selectedReport?.account_id) {
           setAccountId(selectedReport.account_id);
+          console.log('[AUTH] Set accountId:', selectedReport.account_id);
         }
       }
       
+      console.log('[AUTH] Authentication check completed successfully');
       setIsLoading(false);
     } catch (error) {
-      console.error('Error checking auth:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load user session",
-        variant: "destructive",
-      });
-    }
-  };
+      console.error('[AUTH] Error in checkAuth:', error);
+      setIsLoading(false); // Ensure loading is stopped on error
+      
+      if (error.message === 'Reports loading timeout') {
+        toast({
+          title: "Loading Timeout",
+          description: "Reports are taking too long to load. Please refresh the page.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load user session",
+          variant: "destructive",
+        });
+             }
+     }
+   };
   
   const handleSignOut = async () => {
     try {
@@ -175,6 +242,22 @@ export default function Index() {
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
           <p className="text-muted-foreground">Loading your workspace...</p>
+          <div className="flex gap-2 mt-4">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => window.location.reload()}
+            >
+              Refresh Page
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={clearAuthAndReload}
+            >
+              Clear Cache & Reload
+            </Button>
+          </div>
         </div>
       </div>
     );

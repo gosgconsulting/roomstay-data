@@ -85,6 +85,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const [totalRows, setTotalRows] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [isCreatingDimensions, setIsCreatingDimensions] = useState(false);
 
   // Load reports on mount and when accountId changes
   useEffect(() => {
@@ -165,9 +166,18 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   };
 
   const createDefaultDimensions = async () => {
+    if (isCreatingDimensions) {
+      console.log('[DIMENSIONS] Already creating dimensions, skipping...');
+      return;
+    }
+    
     try {
+      setIsCreatingDimensions(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !reportId) return;
+      if (!user || !reportId) {
+        console.log('[DIMENSIONS] Skipping default dimensions - no user or reportId');
+        return;
+      }
 
       console.log('[testing] Creating default dimensions for report:', reportId);
 
@@ -226,6 +236,8 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
       }
     } catch (error) {
       console.error("Error creating default dimensions:", error);
+    } finally {
+      setIsCreatingDimensions(false);
     }
   };
 

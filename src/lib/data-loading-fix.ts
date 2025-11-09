@@ -354,6 +354,8 @@ async function calculateBudgetMetric(
   accountId?: string
 ): Promise<number | null> {
   try {
+    console.log('[BUDGET-DEBUG] Starting budget calculation for:', { reportId, accountId });
+    
     // Load budgets
     const { data: budgets, error } = await supabase
       .from('budgets')
@@ -361,8 +363,15 @@ async function calculateBudgetMetric(
       .or(`report_id.eq.${reportId},account_id.eq.${accountId}`);
 
     if (error || !budgets || budgets.length === 0) {
+      console.log('[BUDGET-DEBUG] No budgets found:', { error, budgetsLength: budgets?.length });
       return null;
     }
+    
+    console.log('[BUDGET-DEBUG] Found budgets:', budgets.map(b => ({ 
+      dimension_name: b.dimension_name, 
+      dimension_item: b.dimension_item,
+      budget_data: b.budget_data 
+    })));
 
     // Find date dimension
     const dateDimension = dimensions.find(d => d.type === 'date');
@@ -385,6 +394,8 @@ async function calculateBudgetMetric(
       const date = new Date(dateValue);
       const year = date.getFullYear();
       const month = date.getMonth() + 1;
+      
+      console.log('[BUDGET-DEBUG] Processing date:', { dateValue, year, month });
       const cost = typeof row.dimension_values[costDimension.id] === 'number' 
         ? row.dimension_values[costDimension.id]
         : parseFloat(row.dimension_values[costDimension.id]) || 0;
@@ -395,13 +406,49 @@ async function calculateBudgetMetric(
         if (!budgetDimension) return;
 
         const itemValue = row.dimension_values[budgetDimension.id];
-        if (itemValue === budget.dimension_item) {
+        
+        // Debug log to see what values we're trying to match
+        if (budget.dimension_name === 'Account') {
+          console.log('[BUDGET-DEBUG] Trying to match:', {
+            itemValue,
+            budgetItem: budget.dimension_item,
+            cost,
+            year,
+            month
+          });
+        }
+        
+        // More flexible matching for budget items
+        let isMatch = false;
+        if (typeof itemValue === 'string' && typeof budget.dimension_item === 'string') {
+          // Exact match first
+          if (itemValue === budget.dimension_item) {
+            isMatch = true;
+          }
+          // Partial match (case insensitive) - check if budget item is contained in the data value
+          else if (itemValue.toLowerCase().includes(budget.dimension_item.toLowerCase()) ||
+                   budget.dimension_item.toLowerCase().includes(itemValue.toLowerCase())) {
+            isMatch = true;
+          }
+        } else if (itemValue === budget.dimension_item) {
+          isMatch = true;
+        }
+        
+        if (isMatch) {
           const monthlyBudget = budget.budget_data?.[year.toString()]?.[month.toString()] || 0;
           const key = `${year}-${month}-${budget.dimension_item}`;
           
           const existing = dataByMonthAndItem.get(key) || { cost: 0, budget: monthlyBudget };
           existing.cost += cost;
           dataByMonthAndItem.set(key, existing);
+          
+          console.log('[BUDGET-DEBUG] Matched budget:', {
+            itemValue,
+            budgetItem: budget.dimension_item,
+            monthlyBudget,
+            cost,
+            key
+          });
         }
       });
     });
@@ -412,7 +459,16 @@ async function calculateBudgetMetric(
       totalCost += cost;
     });
 
-    return totalBudget > 0 ? totalBudget - totalCost : null;
+    const budgetRemaining = totalBudget > 0 ? totalBudget - totalCost : null;
+    
+    console.log('[BUDGET-DEBUG] Final calculation:', {
+      totalBudget,
+      totalCost,
+      budgetRemaining,
+      dataByMonthAndItemSize: dataByMonthAndItem.size
+    });
+
+    return budgetRemaining;
   } catch (error) {
     console.warn('[BUDGET] Error calculating budget metric:', error);
     return null;

@@ -6,13 +6,15 @@ import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCardsFixed";
 import { KPIChart } from "@/components/KPIChartFixed";
 import { PerformanceTable } from "@/components/PerformanceTable";
+import { ForecastingPage } from "@/pages/ForecastingPage";
 import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { Settings, ArrowLeft } from "lucide-react";
+import { Settings, ArrowLeft, BarChart3, TrendingUp } from "lucide-react";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
 
 interface Account {
@@ -38,6 +40,15 @@ export default function ReportDashboard() {
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
+  const [activeTab, setActiveTab] = useState("performance");
+
+  // Clear loading state when switching to forecasting tab
+  useEffect(() => {
+    if (activeTab === "forecasting") {
+      setLoadingComponents(new Set());
+      setIsDataLoading(false);
+    }
+  }, [activeTab]);
   
   // Filter state - default to this month with timezone-free date range
   const [filters, setFilters] = useState<FilterState>(() => {
@@ -98,15 +109,23 @@ export default function ReportDashboard() {
   
   // Track component loading states
   const markComponentLoading = (component: string) => {
-    setLoadingComponents(prev => new Set(prev).add(component));
+    console.log('[LOADING-DEBUG] Component loading:', component);
+    setLoadingComponents(prev => {
+      const next = new Set(prev).add(component);
+      console.log('[LOADING-DEBUG] Loading components:', Array.from(next));
+      return next;
+    });
     setIsDataLoading(true);
   };
   
   const markComponentLoaded = (component: string) => {
+    console.log('[LOADING-DEBUG] Component loaded:', component);
     setLoadingComponents(prev => {
       const next = new Set(prev);
       next.delete(component);
+      console.log('[LOADING-DEBUG] Remaining components:', Array.from(next));
       if (next.size === 0) {
+        console.log('[LOADING-DEBUG] All components loaded, hiding loading toast');
         setIsDataLoading(false);
       }
       return next;
@@ -163,6 +182,7 @@ export default function ReportDashboard() {
       setSession(session);
     } catch (error) {
       console.error('Error checking auth:', error);
+      setIsLoading(false); // Ensure loading is stopped on error
       toast({
         title: "Authentication Error",
         description: "Please sign in again.",
@@ -329,46 +349,68 @@ export default function ReportDashboard() {
         <>
           <FiltersBar reportId={reportId} onFiltersChange={handleFiltersChange} isSharedView={isSharedView} accountId={accountId} refreshTrigger={loadingGeneration} />
           <main className="container mx-auto px-6 py-6 space-y-6">
-            <div className="relative">
-              <div className="absolute right-0 -top-2 z-10">
+
+
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="performance" className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  Performance
+                </TabsTrigger>
+                <TabsTrigger value="forecasting" className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" />
+                  Forecasting
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="performance" className="space-y-6">
                 {!isSharedView && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setKpiSettingsOpen(true)}
-                    className="gap-2"
-                  >
-                    <Settings className="h-4 w-4" />
-                    KPI Settings
-                  </Button>
+                  <div className="flex justify-end mb-4">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setKpiSettingsOpen(true)}
+                      className="gap-2"
+                    >
+                      <Settings className="h-4 w-4" />
+                      KPI Settings
+                    </Button>
+                  </div>
                 )}
-              </div>
-              <KPIMetricsCards
-                reportId={reportId}
-                filters={filters}
-                accountId={accountId}
-                visibilityRefreshTrigger={visibilityRefreshTrigger}
-                key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
-                onLoadingComplete={() => markComponentLoaded('metrics')}
-              />
-            </div>
-            <KPIChart
-              reportId={reportId}
-              filters={filters}
-              accountId={accountId}
-              visibilityRefreshTrigger={visibilityRefreshTrigger}
-              key={`charts-${dataRefreshKey}-${loadingGeneration}`}
-              onLoadingComplete={() => markComponentLoaded('chart')}
-            />
-            <PerformanceTable 
-              reportId={reportId} 
-              filters={filters} 
-              isSharedView={isSharedView} 
-              accountId={accountId} 
-              visibilityRefreshTrigger={visibilityRefreshTrigger}
-              key={`table-${dataRefreshKey}-${loadingGeneration}`}
-              onLoadingComplete={() => markComponentLoaded('table')}
-            />
+                <KPIMetricsCards
+                  reportId={reportId}
+                  filters={filters}
+                  accountId={accountId}
+                  visibilityRefreshTrigger={visibilityRefreshTrigger}
+                  key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
+                  onLoadingComplete={() => markComponentLoaded('metrics')}
+                />
+                <KPIChart
+                  reportId={reportId}
+                  filters={filters}
+                  accountId={accountId}
+                  visibilityRefreshTrigger={visibilityRefreshTrigger}
+                  key={`charts-${dataRefreshKey}-${loadingGeneration}`}
+                  onLoadingComplete={() => markComponentLoaded('chart')}
+                />
+                <PerformanceTable 
+                  reportId={reportId} 
+                  filters={filters} 
+                  isSharedView={isSharedView} 
+                  accountId={accountId} 
+                  visibilityRefreshTrigger={visibilityRefreshTrigger}
+                  key={`table-${dataRefreshKey}-${loadingGeneration}`}
+                  onLoadingComplete={() => markComponentLoaded('table')}
+                />
+              </TabsContent>
+
+              <TabsContent value="forecasting">
+                <ForecastingPage 
+                  reportId={reportId} 
+                  accountId={accountId}
+                />
+              </TabsContent>
+            </Tabs>
           </main>
           
           <KPISettingsModal

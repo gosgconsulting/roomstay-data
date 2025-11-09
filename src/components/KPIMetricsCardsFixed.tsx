@@ -139,6 +139,11 @@ export function KPIMetricsCards({
       };
 
       console.log('[KPI-FIXED] Loading data with filters:', filters);
+      console.log('[KPI-FIXED] Date range being used:', {
+        from: filters.dateRange?.from,
+        to: filters.dateRange?.to,
+        isCurrentMonth: !stableFilters.dateRange
+      });
 
       // Load data using the standardized approach
       const result = await loadReportData(reportId, accountId, user.id, filters);

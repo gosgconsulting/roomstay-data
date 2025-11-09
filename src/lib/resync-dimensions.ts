@@ -120,7 +120,7 @@ export async function resyncColumnMappings(
             dimensionName: dimension.name,
           };
         } else {
-          // Dimension ID is invalid (old global dimension or wrong account)
+          // Dimension ID is invalid (wrong account or missing dimension)
           console.warn(
             `[RESYNC] Dimension ID "${mapping.dimensionId}" not found in account-scoped dimensions for column "${mapping.column}"`
           );
