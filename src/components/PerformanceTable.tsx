@@ -156,7 +156,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   const [totalData, setTotalData] = useState<Record<string, any>>({});
   const [totalCompareData, setTotalCompareData] = useState<Record<string, any>>({});
   const [totalChangeData, setTotalChangeData] = useState<Record<string, number>>({});
-  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
   
   // Multiple table views state
   const [tableViews, setTableViews] = useState<any[]>([]);
