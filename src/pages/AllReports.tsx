@@ -5,7 +5,6 @@ import { LoadingToast } from "@/components/LoadingToast";
 import { MasterFilter } from "@/components/MasterFilter";
 import { CombinedKPIMetricsCards } from "@/components/CombinedKPIMetricsCards";
 import { CombinedPerformanceTable } from "@/components/CombinedPerformanceTable";
-import { CombinedGroupingControls } from "@/components/CombinedGroupingControls";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
@@ -41,7 +40,7 @@ export default function AllReports() {
     "impressions", "clicks", "ctr", "conversions", "conversionRate", "cpc", "cost", "revenue", "roas", "costOfSale"
   ]);
   const [visibleColumns, setVisibleColumns] = useState<string[]>([
-    "date", "impressions", "clicks", "ctr", "conversions", "conversionRate", "cost", "revenue", "roas", "sources"
+    "date", "impressions", "clicks", "ctr", "conversions", "conversionRate", "cost", "revenue", "roas"
   ]);
   
   // Grouping state
@@ -363,16 +362,6 @@ export default function AllReports() {
             selectedReportIds={masterFilterReportIds}
           />
           
-          {/* Grouping Controls */}
-          <CombinedGroupingControls
-            accountId={accountId}
-            reportIds={reports.map(r => r.id)}
-            onGroupingChange={handleGroupingChange}
-            groupByDimensions={groupByDimensions}
-            breakdownDimensions={breakdownDimensions}
-            thenByDimensions={thenByDimensions}
-          />
-          
           {/* Combined Analytics View */}
           <div className="space-y-6">
             {isCombinedLoading ? (
@@ -408,6 +397,9 @@ export default function AllReports() {
                     setDateOrder(order);
                     loadCombinedAnalytics(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, order);
                   }}
+                  accountId={accountId}
+                  reportIds={reports.map(r => r.id)}
+                  onGroupingChange={handleGroupingChange}
                 />
               </>
             ) : (

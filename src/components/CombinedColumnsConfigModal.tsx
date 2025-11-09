@@ -17,8 +17,7 @@ const ALL_COLUMNS = [
   { id: "cost", label: "Cost" },
   { id: "revenue", label: "Revenue" },
   { id: "roas", label: "ROAS" },
-  { id: "costOfSale", label: "Cost of Sale" },
-  { id: "sources", label: "Sources", fixed: true }
+  { id: "costOfSale", label: "Cost of Sale" }
 ];
 
 interface CombinedColumnsConfigModalProps {

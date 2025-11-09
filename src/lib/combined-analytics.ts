@@ -467,9 +467,16 @@ function aggregateByDimensions(
     } else {
       // Add all grouping dimensions to key
       allDimensions.forEach(dimId => {
-        const value = row.dimension_values[dimId] || 'Unknown';
-        keyParts.push(value);
-        dimensionValues[dimId] = value;
+        // Special handling for Data Source dimension
+        if (dimId === '__data_source__') {
+          const reportName = reportNamesMap.get(row.report_id) || 'Unknown';
+          keyParts.push(reportName);
+          dimensionValues[dimId] = reportName;
+        } else {
+          const value = row.dimension_values[dimId] || 'Unknown';
+          keyParts.push(value);
+          dimensionValues[dimId] = value;
+        }
       });
       
       // Also include date for time-based grouping
@@ -509,7 +516,11 @@ function aggregateByDimensions(
     const dimensionValues: Record<string, string> = {};
     
     allDimensions.forEach(dimId => {
-      dimensionValues[dimId] = firstRow.dimension_values[dimId] || 'Unknown';
+      if (dimId === '__data_source__') {
+        dimensionValues[dimId] = reportNamesMap.get(firstRow.report_id) || 'Unknown';
+      } else {
+        dimensionValues[dimId] = firstRow.dimension_values[dimId] || 'Unknown';
+      }
     });
 
     const dateValue = dimMap ? getDateValue(firstRow, dimMap, dateGranularity) : undefined;
