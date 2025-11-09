@@ -8,6 +8,9 @@ export interface MasterFilterState {
   datePreset?: string;
   reportIds?: string[]; // Filter by specific reports
   aggregationMethod: 'sum' | 'average' | 'weighted';
+  groupByDimensions?: string[];
+  breakdownDimensions?: string[];
+  thenByDimensions?: string[];
 }
 
 export interface CombinedMetrics {
@@ -32,9 +35,11 @@ export interface CombinedAnalyticsData {
     reportCount: number;
   }>;
   tableData: Array<{
-    date: string;
+    date?: string;
     metrics: CombinedMetrics;
     reportSources: string[];
+    dimensionValues?: Record<string, string>;
+    groupKey?: string;
   }>;
 }
 
@@ -186,16 +191,43 @@ export async function getCombinedAnalytics(
       masterFilter.aggregationMethod
     );
 
-    // Create table data
-    const tableData = timeSeriesData.map(ts => ({
-      date: ts.date,
-      metrics: ts.metrics,
-      reportSources: Array.from(new Set(
-        filteredData
-          .filter(row => getDateValue(row, dimensionMaps.get(row.report_id), dateGranularity) === ts.date)
-          .map(row => reportNamesMap.get(row.report_id) || 'Unknown')
-      ))
-    }));
+    // Create table data based on grouping
+    let tableData: Array<{
+      date?: string;
+      metrics: CombinedMetrics;
+      reportSources: string[];
+      dimensionValues?: Record<string, string>;
+      groupKey?: string;
+    }>;
+
+    const hasGrouping = (masterFilter.groupByDimensions && masterFilter.groupByDimensions.length > 0) ||
+                        (masterFilter.breakdownDimensions && masterFilter.breakdownDimensions.length > 0) ||
+                        (masterFilter.thenByDimensions && masterFilter.thenByDimensions.length > 0);
+
+    if (hasGrouping) {
+      // Group by dimensions
+      tableData = aggregateByDimensions(
+        filteredData,
+        dimensionMaps,
+        reportNamesMap,
+        masterFilter.groupByDimensions || [],
+        masterFilter.breakdownDimensions || [],
+        masterFilter.thenByDimensions || [],
+        dateGranularity,
+        masterFilter.aggregationMethod
+      );
+    } else {
+      // Default grouping by date
+      tableData = timeSeriesData.map(ts => ({
+        date: ts.date,
+        metrics: ts.metrics,
+        reportSources: Array.from(new Set(
+          filteredData
+            .filter(row => getDateValue(row, dimensionMaps.get(row.report_id), dateGranularity) === ts.date)
+            .map(row => reportNamesMap.get(row.report_id) || 'Unknown')
+        ))
+      }));
+    }
 
     return {
       metrics: aggregatedMetrics,
@@ -384,6 +416,112 @@ function calculateDerivedMetrics(base: {
     roas,
     costOfSale
   };
+}
+
+/**
+ * Aggregate data by dimensions with grouping and breakdown
+ */
+function aggregateByDimensions(
+  data: any[],
+  dimensionMaps: Map<string, Map<string, string>>,
+  reportNamesMap: Map<string, string>,
+  groupByDims: string[],
+  breakdownDims: string[],
+  thenByDims: string[],
+  dateGranularity: 'day' | 'week' | 'month' | 'year',
+  method: 'sum' | 'average' | 'weighted'
+): Array<{
+  date?: string;
+  metrics: CombinedMetrics;
+  reportSources: string[];
+  dimensionValues?: Record<string, string>;
+  groupKey?: string;
+}> {
+  const allDimensions = [...groupByDims, ...breakdownDims, ...thenByDims];
+  const groups = new Map<string, any[]>();
+
+  // Group data by all selected dimensions
+  data.forEach(row => {
+    const dimMap = dimensionMaps.get(row.report_id);
+    if (!dimMap) return;
+
+    // Build group key from dimension values
+    const keyParts: string[] = [];
+    const dimensionValues: Record<string, string> = {};
+
+    // Add date if no grouping dimensions
+    if (allDimensions.length === 0) {
+      const dateValue = getDateValue(row, dimMap, dateGranularity);
+      if (dateValue) {
+        keyParts.push(dateValue);
+        dimensionValues['Date'] = dateValue;
+      }
+    } else {
+      // Add all grouping dimensions to key
+      allDimensions.forEach(dimId => {
+        const value = row.dimension_values[dimId] || 'Unknown';
+        keyParts.push(value);
+        dimensionValues[dimId] = value;
+      });
+      
+      // Also include date for time-based grouping
+      const dateValue = getDateValue(row, dimMap, dateGranularity);
+      if (dateValue) {
+        keyParts.push(dateValue);
+        dimensionValues['Date'] = dateValue;
+      }
+    }
+
+    const groupKey = keyParts.join('||');
+    
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, []);
+    }
+    groups.get(groupKey)!.push(row);
+  });
+
+  // Aggregate metrics for each group
+  const result: Array<{
+    date?: string;
+    metrics: CombinedMetrics;
+    reportSources: string[];
+    dimensionValues?: Record<string, string>;
+    groupKey?: string;
+  }> = [];
+
+  groups.forEach((rows, groupKey) => {
+    const metrics = aggregateMetrics(rows, dimensionMaps, method);
+    const reportSources = Array.from(new Set(
+      rows.map(r => reportNamesMap.get(r.report_id) || 'Unknown')
+    ));
+
+    // Extract dimension values from first row
+    const firstRow = rows[0];
+    const dimMap = dimensionMaps.get(firstRow.report_id);
+    const dimensionValues: Record<string, string> = {};
+    
+    allDimensions.forEach(dimId => {
+      dimensionValues[dimId] = firstRow.dimension_values[dimId] || 'Unknown';
+    });
+
+    const dateValue = dimMap ? getDateValue(firstRow, dimMap, dateGranularity) : undefined;
+
+    result.push({
+      date: dateValue || undefined,
+      metrics,
+      reportSources,
+      dimensionValues,
+      groupKey
+    });
+  });
+
+  // Sort by date if available, otherwise by group key
+  return result.sort((a, b) => {
+    if (a.date && b.date) {
+      return a.date.localeCompare(b.date);
+    }
+    return (a.groupKey || '').localeCompare(b.groupKey || '');
+  });
 }
 
 /**

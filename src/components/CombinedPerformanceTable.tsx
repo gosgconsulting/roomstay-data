@@ -9,22 +9,39 @@ import { CombinedColumnsConfigModal } from "@/components/CombinedColumnsConfigMo
 
 interface CombinedPerformanceTableProps {
   data: Array<{
-    date: string;
+    date?: string;
     metrics: CombinedMetrics;
     reportSources: string[];
+    dimensionValues?: Record<string, string>;
+    groupKey?: string;
   }>;
   isLoading?: boolean;
   visibleColumns?: string[];
   onVisibleColumnsChange?: (columns: string[]) => void;
+  groupByDimensions?: string[];
+  breakdownDimensions?: string[];
+  thenByDimensions?: string[];
+  allDimensions?: Array<{ id: string; name: string }>;
 }
 
 export const CombinedPerformanceTable = ({ 
   data, 
   isLoading = false,
   visibleColumns = ["date", "impressions", "clicks", "ctr", "conversions", "conversionRate", "cost", "revenue", "roas", "sources"],
-  onVisibleColumnsChange
+  onVisibleColumnsChange,
+  groupByDimensions = [],
+  breakdownDimensions = [],
+  thenByDimensions = [],
+  allDimensions = []
 }: CombinedPerformanceTableProps) => {
   const [showColumnsConfig, setShowColumnsConfig] = useState(false);
+  
+  const getDimensionName = (dimId: string) => {
+    return allDimensions.find(d => d.id === dimId)?.name || dimId;
+  };
+  
+  const allGroupingDims = [...groupByDimensions, ...breakdownDimensions, ...thenByDimensions];
+  const hasGrouping = allGroupingDims.length > 0;
   const formatNumber = (num: number): string => {
     return num.toLocaleString('en-US', { maximumFractionDigits: 0 });
   };
@@ -79,7 +96,12 @@ export const CombinedPerformanceTable = ({
           <Table>
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
-                {visibleColumns.includes("date") && <TableHead className="font-semibold">Date</TableHead>}
+                {/* Show grouping dimension columns */}
+                {hasGrouping && allGroupingDims.map(dimId => (
+                  <TableHead key={dimId} className="font-semibold">{getDimensionName(dimId)}</TableHead>
+                ))}
+                {/* Show date if no grouping or if visible */}
+                {(!hasGrouping || visibleColumns.includes("date")) && <TableHead className="font-semibold">Date</TableHead>}
                 {visibleColumns.includes("impressions") && <TableHead className="font-semibold text-right">Impressions</TableHead>}
                 {visibleColumns.includes("clicks") && <TableHead className="font-semibold text-right">Clicks</TableHead>}
                 {visibleColumns.includes("ctr") && <TableHead className="font-semibold text-right">CTR</TableHead>}
@@ -96,14 +118,21 @@ export const CombinedPerformanceTable = ({
             <TableBody>
               {data.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={visibleColumns.length} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={visibleColumns.length + allGroupingDims.length} className="text-center text-muted-foreground py-8">
                     No data available for the selected filters
                   </TableCell>
                 </TableRow>
               ) : (
                 data.map((row, index) => (
                   <TableRow key={index} className="hover:bg-muted/50">
-                    {visibleColumns.includes("date") && <TableCell className="font-medium">{row.date}</TableCell>}
+                    {/* Show grouping dimension values */}
+                    {hasGrouping && allGroupingDims.map(dimId => (
+                      <TableCell key={dimId} className="font-medium">
+                        {row.dimensionValues?.[dimId] || 'Unknown'}
+                      </TableCell>
+                    ))}
+                    {/* Show date */}
+                    {(!hasGrouping || visibleColumns.includes("date")) && <TableCell className="font-medium">{row.date || 'N/A'}</TableCell>}
                     {visibleColumns.includes("impressions") && <TableCell className="text-right">{formatNumber(row.metrics.impressions)}</TableCell>}
                     {visibleColumns.includes("clicks") && <TableCell className="text-right">{formatNumber(row.metrics.clicks)}</TableCell>}
                     {visibleColumns.includes("ctr") && <TableCell className="text-right">{formatPercentage(row.metrics.ctr)}</TableCell>}

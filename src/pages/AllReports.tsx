@@ -5,6 +5,7 @@ import { LoadingToast } from "@/components/LoadingToast";
 import { MasterFilter } from "@/components/MasterFilter";
 import { CombinedKPIMetricsCards } from "@/components/CombinedKPIMetricsCards";
 import { CombinedPerformanceTable } from "@/components/CombinedPerformanceTable";
+import { CombinedGroupingControls } from "@/components/CombinedGroupingControls";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
@@ -42,6 +43,12 @@ export default function AllReports() {
   const [visibleColumns, setVisibleColumns] = useState<string[]>([
     "date", "impressions", "clicks", "ctr", "conversions", "conversionRate", "cost", "revenue", "roas", "sources"
   ]);
+  
+  // Grouping state
+  const [groupByDimensions, setGroupByDimensions] = useState<string[]>([]);
+  const [breakdownDimensions, setBreakdownDimensions] = useState<string[]>([]);
+  const [thenByDimensions, setThenByDimensions] = useState<string[]>([]);
+  const [allDimensions, setAllDimensions] = useState<Array<{ id: string; name: string }>>([]);
   
   // Combined analytics data
   const [combinedData, setCombinedData] = useState<CombinedAnalyticsData | null>(null);
@@ -128,6 +135,57 @@ export default function AllReports() {
     }
   };
 
+  // Load dimensions for grouping controls
+  useEffect(() => {
+    if (reports.length > 0) {
+      loadDimensions();
+    }
+  }, [reports.length, accountId]);
+
+  const loadDimensions = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const reportIds = reports.map(r => r.id);
+      let query = supabase
+        .from('dimensions')
+        .select('id, name, type, scope')
+        .eq('type', 'text');
+
+      if (accountId) {
+        query = query.or(`account_id.eq.${accountId},scope.eq.global,report_id.in.(${reportIds.join(',')})`);
+      } else if (reportIds.length > 0) {
+        query = query.or(`scope.eq.global,report_id.in.(${reportIds.join(',')})`);
+      }
+
+      const { data, error } = await query.order('name');
+
+      if (error) {
+        console.error('[ALL-REPORTS] Error loading dimensions:', error);
+        return;
+      }
+
+      const dimensionMap = new Map<string, { id: string; name: string }>();
+      (data || []).forEach(dim => {
+        if (!dim || !dim.id || !dim.name) return;
+        const existing = dimensionMap.get(dim.name);
+        if (!existing || 
+            (dim.scope === 'account' && existing.id !== dim.id)) {
+          dimensionMap.set(dim.name, { id: dim.id, name: dim.name });
+        }
+      });
+
+      const uniqueDimensions = Array.from(dimensionMap.values())
+        .filter(d => !['Impressions', 'Clicks', 'Conversions', 'Cost', 'Revenue', 'CTR', 'Conversion rate', 'CPC', 'ROAS', 'Cost of sale'].includes(d.name))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      setAllDimensions(uniqueDimensions);
+    } catch (error) {
+      console.error('[ALL-REPORTS] Error in loadDimensions:', error);
+    }
+  };
+
   const handleSignOut = async () => {
     try {
       await supabase.auth.signOut();
@@ -158,11 +216,36 @@ export default function AllReports() {
     loadCombinedAnalytics(dimension, values, dateRange, reportIds);
   };
 
+  const handleGroupingChange = (
+    groupBy: string[],
+    breakdown: string[],
+    thenBy: string[]
+  ) => {
+    console.log('[COMBINED-GROUPING] Grouping changed:', { groupBy, breakdown, thenBy });
+    setGroupByDimensions(groupBy);
+    setBreakdownDimensions(breakdown);
+    setThenByDimensions(thenBy);
+    
+    // Refresh combined analytics with new grouping
+    loadCombinedAnalytics(
+      masterFilterDimension,
+      masterFilterValues,
+      masterFilterDateRange,
+      masterFilterReportIds,
+      groupBy,
+      breakdown,
+      thenBy
+    );
+  };
+
   const loadCombinedAnalytics = async (
     dimension: string | null = masterFilterDimension, 
     values: string[] = masterFilterValues,
     dateRange?: DateRange,
-    filterReportIds?: string[]
+    filterReportIds?: string[],
+    groupBy: string[] = groupByDimensions,
+    breakdown: string[] = breakdownDimensions,
+    thenBy: string[] = thenByDimensions
   ) => {
     if (reports.length === 0) return;
     
@@ -177,7 +260,10 @@ export default function AllReports() {
         dimension,
         values,
         dateRange,
-        hasDateRange: !!dateRange
+        hasDateRange: !!dateRange,
+        groupBy,
+        breakdown,
+        thenBy
       });
         
       const masterFilter: MasterFilterState = {
@@ -192,7 +278,10 @@ export default function AllReports() {
           to: masterFilterDateRange.to
         } : undefined,
         reportIds,
-        aggregationMethod: 'sum'
+        aggregationMethod: 'sum',
+        groupByDimensions: groupBy,
+        breakdownDimensions: breakdown,
+        thenByDimensions: thenBy
       };
       
       const data = await getCombinedAnalytics(reportIds, masterFilter, 'day');
@@ -268,6 +357,16 @@ export default function AllReports() {
             selectedReportIds={masterFilterReportIds}
           />
           
+          {/* Grouping Controls */}
+          <CombinedGroupingControls
+            accountId={accountId}
+            reportIds={reports.map(r => r.id)}
+            onGroupingChange={handleGroupingChange}
+            groupByDimensions={groupByDimensions}
+            breakdownDimensions={breakdownDimensions}
+            thenByDimensions={thenByDimensions}
+          />
+          
           {/* Combined Analytics View */}
           <div className="space-y-6">
             {isCombinedLoading ? (
@@ -289,6 +388,10 @@ export default function AllReports() {
                   data={combinedData.tableData}
                   visibleColumns={visibleColumns}
                   onVisibleColumnsChange={setVisibleColumns}
+                  groupByDimensions={groupByDimensions}
+                  breakdownDimensions={breakdownDimensions}
+                  thenByDimensions={thenByDimensions}
+                  allDimensions={allDimensions}
                 />
               </>
             ) : (
