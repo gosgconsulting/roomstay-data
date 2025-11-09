@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
+import { MasterFilter } from "@/components/MasterFilter";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 import { PerformanceTable } from "@/components/PerformanceTable";
 import { startOfMonth, endOfMonth } from "date-fns";
+import { DateRange } from "react-day-picker";
 
 interface Report {
   id: string;
@@ -23,6 +25,12 @@ export default function AllReports() {
   const [reports, setReports] = useState<Report[]>([]);
   const [account, setAccount] = useState<{ id: string; name: string } | null>(null);
   const [reportId, setReportId] = useState<string | null>(null);
+  
+  // Master filter state
+  const [masterFilterDimension, setMasterFilterDimension] = useState<string | null>(null);
+  const [masterFilterValues, setMasterFilterValues] = useState<string[]>([]);
+  const [masterFilterDateRange, setMasterFilterDateRange] = useState<DateRange | undefined>(undefined);
+  const [masterFilterReportIds, setMasterFilterReportIds] = useState<string[]>([]);
   
   // Filter state for PerformanceTable
   const [filters, setFilters] = useState({
@@ -134,6 +142,58 @@ export default function AllReports() {
     setFilters(newFilters);
   };
 
+  const handleMasterFilterChange = (
+    dimension: string | null, 
+    values: string[],
+    dateRange?: DateRange,
+    reportIds?: string[],
+    compareEnabled?: boolean,
+    compareType?: string,
+    compareDateRange?: DateRange
+  ) => {
+    console.log('[MASTER-FILTER] Master filter changed:', { 
+      dimension, values, dateRange, reportIds, compareEnabled, compareType, compareDateRange 
+    });
+    setMasterFilterDimension(dimension);
+    setMasterFilterValues(values);
+    setMasterFilterDateRange(dateRange);
+    setMasterFilterReportIds(reportIds || reports.map(r => r.id));
+    
+    // Update filters for PerformanceTable
+    const newFilters: any = { ...filters };
+    
+    // Update date range if provided
+    if (dateRange?.from && dateRange?.to) {
+      newFilters.dateRange = dateRange;
+    }
+    
+    // Update dimension filters if provided
+    if (dimension && values.length > 0) {
+      newFilters.dimensionFilters = {
+        ...newFilters.dimensionFilters,
+        [dimension]: values
+      };
+    }
+    
+    // Update comparison settings if provided
+    if (compareEnabled !== undefined) {
+      newFilters.compareEnabled = compareEnabled;
+    }
+    if (compareType) {
+      newFilters.compareType = compareType;
+    }
+    if (compareDateRange) {
+      newFilters.compareDateRange = compareDateRange;
+    }
+    
+    setFilters(newFilters);
+    
+    // Update reportId if reportIds filter changed
+    if (reportIds && reportIds.length > 0) {
+      setReportId(reportIds[0]);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
@@ -163,6 +223,18 @@ export default function AllReports() {
       
       {reports.length > 0 && reportId ? (
         <main className="container mx-auto px-6 py-6 space-y-8">
+          {/* Master Filter */}
+          <MasterFilter
+            accountId={accountId}
+            reports={reports}
+            onFilterChange={handleMasterFilterChange}
+            selectedDimension={masterFilterDimension}
+            selectedValues={masterFilterValues}
+            selectedDateRange={masterFilterDateRange}
+            selectedReportIds={masterFilterReportIds}
+          />
+          
+          {/* Performance Table */}
           <PerformanceTable
             reportId={reportId}
             accountId={accountId}
