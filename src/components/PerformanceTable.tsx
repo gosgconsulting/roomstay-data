@@ -1215,7 +1215,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     return value;
   };
 
-  // Load performance data using the edge function
+  // Load performance data using the unified approach (prioritize loadReportData)
   const loadPerformanceData = async () => {
     const dateFromFormatted = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined;
     const dateToFormatted = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined;
@@ -1223,7 +1223,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     // Use fallback if groupByDimensions is empty - find Date dimension as default
     let effectiveGroupByDims = groupByDimensions;
     if (effectiveGroupByDims.length === 0) {
-      const dateDimension = dimensions.find(d => d && d.name === 'Date');
+      const dateDimension = dimensions.find(d => d && d.name === 'Date' || d?.type === 'date');
       if (dateDimension) {
         effectiveGroupByDims = [dateDimension.id];
         console.log('[PERF-TABLE] Using fallback Date dimension for grouping:', dateDimension.id);
@@ -1253,7 +1253,6 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       setTotalCompareData({});
       setTotalChangeData({});
       setIsLoadingData(false);
-      // Always call onLoadingComplete on early return - this IS a completion (nothing to load)
       onLoadingComplete?.();
       return;
     }
@@ -1261,96 +1260,29 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     try {
       // Get current user for custom dimensions
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('[PERF-TABLE] No authenticated user');
+        setIsLoadingData(false);
+        onLoadingComplete?.();
+        return;
+      }
+
+      // Use unified data loading approach (same as KPI components)
+      console.log('[PERF-TABLE] Loading data using unified approach...');
+      const { loadReportData } = await import("@/lib/data-loading-fix");
       
-      const requestBody = {
-        reportId,
-        groupByDims: effectiveGroupByDims,
-        breakdownDims: breakdownByDimensions,
-        thenByDims: thenByDimensions,
-        dimensionFilters: filters.dimensionFilters,
-        dateFrom: dateFromFormatted,
-        dateTo: dateToFormatted,
-        accountId,
-        userId: user?.id,
-        visibleDimensionIds: Array.from(visibleColumns),
-        limit: 50000,
-        offset: 0,
-        compareEnabled: filters.compareEnabled || false,
-        compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
-        compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined,
-        dateGranularity: activeDateTab.charAt(0).toUpperCase() + activeDateTab.slice(1), // Capitalize for edge function
-        dateOrder: dateOrder,
+      const dataFilters = {
+        dateRange: filters.dateRange,
+        dimensionFilters: filters.dimensionFilters
       };
-      
-      console.log('[PERF-TABLE] Calling get-performance-data with request body:', requestBody);
 
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000);
-      });
+      const result = await loadReportData(reportId, accountId, user.id, dataFilters);
 
-      const { data, error } = await Promise.race([
-        supabase.functions.invoke('get-performance-data', {
-          body: requestBody,
-        }),
-        timeoutPromise
-      ]) as any;
-
-      if (error) {
-        console.error('[PERF-TABLE] Error loading performance data:', error);
-        
-        // If Edge Function fails, try fallback approach like KPIChart
-        console.log('[PERF-TABLE] Attempting fallback data loading approach...');
-        try {
-          const { loadReportData } = await import("@/lib/data-loading-fix");
-          
-          const dataFilters = {
-            dateRange: filters.dateRange,
-            dimensionFilters: filters.dimensionFilters
-          };
-
-          const result = await loadReportData(reportId, accountId, user?.id || '', dataFilters);
-
-          if (result.success && result.data) {
-            console.log('[PERF-TABLE] Fallback data loading successful:', {
-              dataLength: result.data.length,
-              dimensionsCount: result.dimensions?.length || 0
-            });
-
-            // Process the fallback data for table display
-            const processedData = result.data || [];
-            
-            // Calculate totals from the data
-            const totals: Record<string, number> = {};
-            if (processedData.length > 0) {
-              // Get all metric columns (numeric values)
-              const metricColumns = Object.keys(processedData[0]).filter(key => 
-                typeof processedData[0][key] === 'number' && 
-                !key.includes('dimension') && 
-                key !== 'id'
-              );
-              
-              // Sum up totals for each metric
-              metricColumns.forEach(column => {
-                totals[column] = processedData.reduce((sum, row) => sum + (row[column] || 0), 0);
-              });
-            }
-
-            setTableData(processedData);
-            setTotalData(totals);
-            setTotalCompareData({});
-            setTotalChangeData({});
-            setIsLoadingData(false);
-            onLoadingComplete?.();
-            return;
-          }
-        } catch (fallbackError) {
-          console.error('[PERF-TABLE] Fallback data loading also failed:', fallbackError);
-        }
-        
+      if (!result.success) {
+        console.error('[PERF-TABLE] Failed to load report data:', result.error);
         toast({
           title: "Error loading data",
-          description: `Failed to load performance table data: ${error.message || 'Unknown error'}`,
+          description: `Failed to load performance table data: ${result.error || 'Unknown error'}`,
           variant: "destructive",
         });
         setTableData([]);
@@ -1362,80 +1294,368 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         return;
       }
 
-      console.log('[PERF-TABLE] Performance data response:', {
-        hasData: !!data,
-        rowsCount: data?.data?.length || 0,
-        total: data?.total || 0,
-        hasMore: data?.hasMore
+      // Process the data for table display
+      const processedData = result.data || [];
+      
+      // Update dimensions from result if available (they might be more up-to-date)
+      if (result.dimensions && result.dimensions.length > 0) {
+        console.log('[PERF-TABLE] Updating dimensions from data result:', result.dimensions.length);
+        setDimensions(result.dimensions);
+      }
+      
+      // Use dimensions from result or component state
+      const effectiveDimensions = result.dimensions && result.dimensions.length > 0 
+        ? result.dimensions 
+        : dimensions;
+      
+      // Map dimension IDs to match those in dimension_values
+      // This handles cases where stored dimension IDs don't match the IDs in the data
+      const mapDimensionIdToDataId = (dimId: string, sampleDimensionValues: Record<string, any>): string | null => {
+        if (!dimId) return null;
+        
+        // First, check if the ID exists directly
+        if (sampleDimensionValues[dimId] !== undefined) {
+          return dimId;
+        }
+        
+        // Find the dimension by ID to get its name
+        const dimension = effectiveDimensions.find(d => d && d.id === dimId);
+        if (!dimension || !dimension.name) {
+          return null;
+        }
+        
+        // Try to find a dimension ID in dimension_values that matches this dimension's name
+        // Check all available keys in dimension_values
+        for (const key in sampleDimensionValues) {
+          const matchingDim = effectiveDimensions.find(d => d && d.id === key);
+          if (matchingDim && matchingDim.name === dimension.name) {
+            console.log('[PERF-TABLE] Mapped dimension ID:', {
+              from: dimId,
+              to: key,
+              dimensionName: dimension.name
+            });
+            return key;
+          }
+        }
+        
+        return null;
+      };
+      
+      // Map dimension IDs to match those in dimension_values
+      // Initialize with current values, then map if needed
+      let effectiveBreakdownDims = breakdownByDimensions.length > 0 ? [...breakdownByDimensions] : [];
+      let effectiveThenByDims = thenByDimensions.length > 0 ? [...thenByDimensions] : [];
+      
+      // Log dimension ID matching for debugging and map IDs
+      if (processedData.length > 0 && processedData[0]?.dimension_values) {
+        const sampleDimensionValues = processedData[0].dimension_values;
+        const dimensionValueKeys = Object.keys(sampleDimensionValues);
+        
+        // Map dimension IDs to match data structure (use local copies)
+        const mappedGroupByDim = effectiveGroupByDims[0] 
+          ? (mapDimensionIdToDataId(effectiveGroupByDims[0], sampleDimensionValues) || effectiveGroupByDims[0])
+          : effectiveGroupByDims[0];
+        const mappedBreakdownDim = breakdownByDimensions[0]
+          ? (mapDimensionIdToDataId(breakdownByDimensions[0], sampleDimensionValues) || breakdownByDimensions[0])
+          : breakdownByDimensions[0];
+        const mappedThenByDim = thenByDimensions[0]
+          ? (mapDimensionIdToDataId(thenByDimensions[0], sampleDimensionValues) || thenByDimensions[0])
+          : thenByDimensions[0];
+        
+        // Update effective dimensions for use in data processing
+        if (mappedGroupByDim && mappedGroupByDim !== effectiveGroupByDims[0]) {
+          effectiveGroupByDims = [mappedGroupByDim];
+          console.log('[PERF-TABLE] Mapped groupBy dimension ID:', {
+            from: groupByDimensions[0],
+            to: mappedGroupByDim
+          });
+        }
+        
+        // Update effective breakdown and thenBy dimensions
+        if (mappedBreakdownDim) {
+          effectiveBreakdownDims = [mappedBreakdownDim];
+          if (mappedBreakdownDim !== breakdownByDimensions[0]) {
+            console.log('[PERF-TABLE] Mapped breakdownBy dimension ID:', {
+              from: breakdownByDimensions[0],
+              to: mappedBreakdownDim
+            });
+          }
+        }
+        if (mappedThenByDim) {
+          effectiveThenByDims = [mappedThenByDim];
+          if (mappedThenByDim !== thenByDimensions[0]) {
+            console.log('[PERF-TABLE] Mapped thenBy dimension ID:', {
+              from: thenByDimensions[0],
+              to: mappedThenByDim
+            });
+          }
+        }
+        
+        console.log('[PERF-TABLE] Dimension ID matching check:', {
+          groupByDimensionId: effectiveGroupByDims[0],
+          groupByDimensionName: effectiveDimensions.find(d => d && d.id === effectiveGroupByDims[0])?.name,
+          breakdownByDimensionId: effectiveBreakdownDims[0],
+          breakdownByDimensionName: effectiveBreakdownDims[0] ? effectiveDimensions.find(d => d && d.id === effectiveBreakdownDims[0])?.name : null,
+          thenByDimensionId: effectiveThenByDims[0],
+          thenByDimensionName: effectiveThenByDims[0] ? effectiveDimensions.find(d => d && d.id === effectiveThenByDims[0])?.name : null,
+          availableDimensionValueKeys: dimensionValueKeys.slice(0, 10),
+          dimensionValueKeysCount: dimensionValueKeys.length,
+          hasGroupByInData: effectiveGroupByDims[0] ? sampleDimensionValues[effectiveGroupByDims[0]] !== undefined : false
+        });
+        
+        // Check if groupBy dimension ID exists in dimension_values
+        if (effectiveGroupByDims[0] && sampleDimensionValues[effectiveGroupByDims[0]] === undefined) {
+          console.warn('[PERF-TABLE] Group by dimension ID still not found in dimension_values after mapping!', {
+            lookingFor: effectiveGroupByDims[0],
+            dimensionName: effectiveDimensions.find(d => d && d.id === effectiveGroupByDims[0])?.name,
+            availableKeys: dimensionValueKeys,
+            sampleValues: Object.fromEntries(Object.entries(sampleDimensionValues).slice(0, 5))
+          });
+        }
+      }
+      
+      console.log('[PERF-TABLE] Processing data for table:', {
+        dataLength: processedData.length,
+        dimensionsCount: effectiveDimensions.length,
+        sampleRow: processedData[0] ? {
+          hasDimensionValues: !!processedData[0].dimension_values,
+          dimensionValueKeys: processedData[0].dimension_values ? Object.keys(processedData[0].dimension_values).slice(0, 5) : [],
+          groupByDimensions: effectiveGroupByDims
+        } : null
       });
 
-      const rows = data?.data || [];
-      setTableData(rows);
+      // Group data by selected dimensions and calculate totals
+      // For now, use a simplified approach - the original complex grouping
+      // can be enhanced later if needed
+      const rows: TableRow[] = [];
+      const totals: Record<string, any> = {};
       
-      // Use totalData from edge function if available (more efficient than recalculating)
-      const finalTotalData = data?.totalData || (() => {
-        // Fallback: Calculate total data from all rows if edge function doesn't provide it
-        const calculatedTotalData: Record<string, any> = {};
-        if (rows.length > 0 && dimensions.length > 0) {
-          rows.forEach((row: any) => {
-            if (row.data) {
-              Object.keys(row.data).forEach((dimName: string) => {
-                const dim = dimensions.find(d => d && d.name === dimName);
-                if (dim && (dim.type === 'number' || dim.type === 'currency')) {
-                  calculatedTotalData[dimName] = (calculatedTotalData[dimName] || 0) + (parseFloat(row.data[dimName]) || 0);
-                }
-              });
-            }
-          });
-        }
-        return calculatedTotalData;
-      })();
-      setTotalData(finalTotalData);
-      
-      // Use totalCompareData from edge function if available
-      const finalCompareData = data?.totalCompareData || (() => {
-        // Fallback: Calculate comparison totals from rows if not provided
-        const calculatedCompareData: Record<string, any> = {};
-        if (rows.length > 0 && dimensions.length > 0) {
-          rows.forEach((row: any) => {
-            if (row.compareData) {
-              Object.keys(row.compareData).forEach((dimName: string) => {
-                const dim = dimensions.find(d => d && d.name === dimName);
-                if (dim && (dim.type === 'number' || dim.type === 'currency')) {
-                  calculatedCompareData[dimName] = (calculatedCompareData[dimName] || 0) + (parseFloat(row.compareData[dimName]) || 0);
-                }
-              });
-            }
-          });
-        }
-        return calculatedCompareData;
-      })();
-      setTotalCompareData(finalCompareData);
-      
-      // Use totalChangeData from edge function if available
-      const finalChangeData = data?.totalChangeData || (() => {
-        // Fallback: Calculate change data from totals
-        const calculatedChangeData: Record<string, any> = {};
+      if (processedData.length > 0) {
+        // Create hierarchical structure with 3 levels:
+        // Level 0: Group by dimension
+        // Level 1: Breakdown by dimension (children of Level 0)
+        // Level 2: Then by dimension (children of Level 1)
         
-        // Use all dimensions to ensure we calculate change for all metrics
-        const allDimNames = new Set<string>();
-        Object.keys(finalTotalData).forEach(k => allDimNames.add(k));
-        Object.keys(finalCompareData).forEach(k => allDimNames.add(k));
+        const level0Map = new Map<string, any[]>(); // Group by dimension
+        const level1Map = new Map<string, any[]>(); // Breakdown by dimension
+        const level2Map = new Map<string, any[]>(); // Then by dimension
         
-        allDimNames.forEach((dimName: string) => {
-          const current = finalTotalData[dimName] || 0;
-          const previous = finalCompareData[dimName] || 0;
-          if (previous !== 0) {
-            calculatedChangeData[dimName] = ((current - previous) / previous) * 100;
-          } else if (current !== 0) {
-            calculatedChangeData[dimName] = current > 0 ? 100 : -100;
-          } else {
-            calculatedChangeData[dimName] = 0;
+        // Helper to get dimension value and format it
+        const getDimensionValue = (dimId: string, dimensionValues: Record<string, any>): string => {
+          // First try direct lookup
+          let value = dimensionValues[dimId];
+          
+          // If not found, try to find dimension by name and use its ID
+          if ((value === null || value === undefined || value === '') && dimId) {
+            const dimension = effectiveDimensions.find(d => d && d.id === dimId);
+            if (dimension) {
+              // Try finding by dimension name (some data might use names as keys)
+              const valueByName = dimensionValues[dimension.name];
+              if (valueByName !== null && valueByName !== undefined && valueByName !== '') {
+                value = valueByName;
+              } else {
+                // Try to find dimension by matching name in dimension_values keys
+                // This handles cases where dimension_values uses different ID format
+                const matchingKey = Object.keys(dimensionValues).find(key => {
+                  const dim = effectiveDimensions.find(d => d && d.id === key);
+                  return dim && dim.name === dimension.name;
+                });
+                if (matchingKey) {
+                  value = dimensionValues[matchingKey];
+                }
+              }
+            }
           }
+          
+          if (value === null || value === undefined || value === '') {
+            console.warn('[PERF-TABLE] Dimension value not found:', {
+              dimId,
+              dimensionName: effectiveDimensions.find(d => d && d.id === dimId)?.name,
+              availableKeys: Object.keys(dimensionValues).slice(0, 10),
+              sampleDimensionValues: Object.fromEntries(Object.entries(dimensionValues).slice(0, 5))
+            });
+            return 'Unknown';
+          }
+          
+          const dimension = effectiveDimensions.find(d => d && d.id === dimId);
+          if (dimension?.type === 'date' && value) {
+            try {
+              const date = new Date(value);
+              if (!isNaN(date.getTime())) {
+                return formatDate(date, activeDateTab);
+              }
+            } catch (e) {
+              // If date parsing fails, return as string
+            }
+          }
+          return String(value);
+        };
+        
+        // Helper to aggregate data for a group of rows
+        const aggregateRows = (groupRows: any[]): Record<string, any> => {
+          const aggregatedData: Record<string, any> = {};
+          
+          if (groupRows.length === 0) return aggregatedData;
+          
+          effectiveDimensions.forEach(dimension => {
+            if (!dimension || !dimension.id) return;
+            
+            const dimId = dimension.id;
+            const dimName = dimension.name;
+            
+            const values = groupRows.map(r => {
+              const dimValues = r.dimension_values || {};
+              return dimValues[dimId];
+            }).filter(v => v !== null && v !== undefined);
+            
+            if (values.length === 0) {
+              aggregatedData[dimName] = null;
+              return;
+            }
+            
+            if (dimension.type === 'number' || dimension.type === 'currency' || dimension.type === 'percentage') {
+              const sum = values.reduce((acc, val) => {
+                const numVal = typeof val === 'number' ? val : parseFloat(val) || 0;
+                return acc + numVal;
+              }, 0);
+              aggregatedData[dimName] = sum;
+            } else {
+              aggregatedData[dimName] = values[0];
+            }
+          });
+          
+          return aggregatedData;
+        };
+        
+        // First pass: Group by Level 0 (Group by dimension)
+        processedData.forEach((row: any) => {
+          const dimensionValues = row.dimension_values || {};
+          const level0DimId = effectiveGroupByDims[0];
+          
+          if (!level0DimId) return;
+          
+          const level0Key = getDimensionValue(level0DimId, dimensionValues);
+          
+          if (!level0Map.has(level0Key)) {
+            level0Map.set(level0Key, []);
+          }
+          level0Map.get(level0Key)!.push(row);
         });
-        return calculatedChangeData;
-      })();
-      setTotalChangeData(finalChangeData);
+        
+        // Second pass: Create hierarchical structure
+        let rowIdCounter = 0;
+        
+        level0Map.forEach((level0Rows, level0Key) => {
+          const level0Id = `level0-${rowIdCounter++}`;
+          const level0Data = aggregateRows(level0Rows);
+          const level0Children: TableRow[] = [];
+          
+          // Group Level 0 rows by Level 1 (Breakdown by dimension)
+          if (effectiveBreakdownDims.length > 0 && effectiveBreakdownDims[0]) {
+            const level1DimId = effectiveBreakdownDims[0];
+            const level1Grouped = new Map<string, any[]>();
+            
+            level0Rows.forEach(row => {
+              const dimensionValues = row.dimension_values || {};
+              const level1Key = getDimensionValue(level1DimId, dimensionValues);
+              
+              if (!level1Grouped.has(level1Key)) {
+                level1Grouped.set(level1Key, []);
+              }
+              level1Grouped.get(level1Key)!.push(row);
+            });
+            
+            // Create Level 1 rows
+            level1Grouped.forEach((level1Rows, level1Key) => {
+              const level1Id = `level1-${rowIdCounter++}`;
+              const level1Data = aggregateRows(level1Rows);
+              const level1Children: TableRow[] = [];
+              
+              // Group Level 1 rows by Level 2 (Then by dimension)
+              if (effectiveThenByDims.length > 0 && effectiveThenByDims[0]) {
+                const level2DimId = effectiveThenByDims[0];
+                const level2Grouped = new Map<string, any[]>();
+                
+                level1Rows.forEach(row => {
+                  const dimensionValues = row.dimension_values || {};
+                  const level2Key = getDimensionValue(level2DimId, dimensionValues);
+                  
+                  if (!level2Grouped.has(level2Key)) {
+                    level2Grouped.set(level2Key, []);
+                  }
+                  level2Grouped.get(level2Key)!.push(row);
+                });
+                
+                // Create Level 2 rows (leaf nodes)
+                level2Grouped.forEach((level2Rows, level2Key) => {
+                  const level2Id = `level2-${rowIdCounter++}`;
+                  const level2Data = aggregateRows(level2Rows);
+                  
+                  level1Children.push({
+                    id: level2Id,
+                    name: level2Key,
+                    level: 2,
+                    parentId: level1Id,
+                    data: level2Data
+                  });
+                });
+              } else {
+                // No Level 2, so Level 1 row itself is a leaf node (already aggregated)
+                // No children needed - the level1Data is already aggregated from all level1Rows
+              }
+              
+              level0Children.push({
+                id: level1Id,
+                name: level1Key,
+                level: 1,
+                parentId: level0Id,
+                data: level1Data,
+                children: level1Children.length > 0 ? level1Children : undefined
+              });
+            });
+          } else {
+            // No Level 1, so Level 0 row itself is a leaf node (already aggregated)
+            // No children needed - the level0Data is already aggregated from all level0Rows
+          }
+          
+          rows.push({
+            id: level0Id,
+            name: level0Key,
+            level: 0,
+            data: level0Data,
+            children: level0Children.length > 0 ? level0Children : undefined
+          });
+        });
+        
+        // Calculate totals from leaf nodes only
+        const calculateTotalsFromRows = (rowList: TableRow[]) => {
+          rowList.forEach(row => {
+            if (row.children && row.children.length > 0) {
+              calculateTotalsFromRows(row.children);
+            } else {
+              // Leaf node - add to totals
+              Object.keys(row.data || {}).forEach(dimName => {
+                const dimension = effectiveDimensions.find(d => d && d.name === dimName);
+                if (dimension && (dimension.type === 'number' || dimension.type === 'currency' || dimension.type === 'percentage')) {
+                  const value = row.data[dimName];
+                  if (typeof value === 'number') {
+                    totals[dimName] = (totals[dimName] || 0) + value;
+                  }
+                }
+              });
+            }
+          });
+        };
+        
+        calculateTotalsFromRows(rows);
+      }
+
+      setTableData(rows);
+      setTotalData(totals);
+      setTotalCompareData({});
+      
+      // Calculate change data if comparison is enabled (simplified for now)
+      setTotalChangeData({});
     } catch (error) {
       console.error('[testing] Error loading performance data:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
