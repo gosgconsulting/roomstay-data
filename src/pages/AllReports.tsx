@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { MasterFilter } from "@/components/MasterFilter";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,6 +20,7 @@ interface Report {
 export default function AllReports() {
   const navigate = useNavigate();
   const { accountId } = useParams<{ accountId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reports, setReports] = useState<Report[]>([]);
@@ -106,8 +107,17 @@ export default function AllReports() {
 
       if (reports && reports.length > 0) {
         setReports(reports);
-        // Set the first report as default
-        setReportId(reports[0].id);
+        
+        // Check if there's a reportId in URL query params
+        const urlReportId = searchParams.get('reportId');
+        if (urlReportId && reports.find(r => r.id === urlReportId)) {
+          // Use reportId from URL if valid
+          setReportId(urlReportId);
+        } else {
+          // Set the first report as default and update URL
+          setReportId(reports[0].id);
+          setSearchParams({ reportId: reports[0].id });
+        }
       } else if (accountId && reports && reports.length === 0) {
         // If accountId is provided but no reports found, show message
         toast({
@@ -190,7 +200,10 @@ export default function AllReports() {
     
     // Update reportId if reportIds filter changed
     if (reportIds && reportIds.length > 0) {
-      setReportId(reportIds[0]);
+      const newReportId = reportIds[0];
+      setReportId(newReportId);
+      // Update URL to reflect the selected report
+      setSearchParams({ reportId: newReportId });
     }
   };
 
@@ -211,7 +224,10 @@ export default function AllReports() {
         reportId={reportId}
         accountId={accountId || undefined}
         onReportChange={(selectedReportId) => {
+          console.log('[ALL-REPORTS] Report changed to:', selectedReportId);
           setReportId(selectedReportId);
+          // Update URL to reflect the selected report
+          setSearchParams({ reportId: selectedReportId });
         }}
         session={session}
         onSignOut={handleSignOut}
