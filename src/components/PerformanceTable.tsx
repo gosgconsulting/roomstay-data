@@ -157,7 +157,6 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   const [totalCompareData, setTotalCompareData] = useState<Record<string, any>>({});
   const [totalChangeData, setTotalChangeData] = useState<Record<string, number>>({});
   const [isLoadingData, setIsLoadingData] = useState(true);
-  const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
   
   // Multiple table views state
   const [tableViews, setTableViews] = useState<any[]>([]);
@@ -229,7 +228,6 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       setTableData([]);
       setTotalData({});
       setHasDataSources(false); // Reset data sources check
-      setHasAttemptedLoad(false); // Reset loading attempt flag
     }
   }, [reportId]);
 
@@ -1255,17 +1253,12 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       setTotalCompareData({});
       setTotalChangeData({});
       setIsLoadingData(false);
-      // Only call onLoadingComplete if we've attempted to load before
-      if (hasAttemptedLoad) {
-        onLoadingComplete?.();
-      }
+      // Always call onLoadingComplete on early return - this IS a completion (nothing to load)
+      onLoadingComplete?.();
       return;
     }
 
     try {
-      // Mark that we've attempted to load data
-      setHasAttemptedLoad(true);
-      
       // Get current user for custom dimensions
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -1348,9 +1341,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
             setTotalCompareData({});
             setTotalChangeData({});
             setIsLoadingData(false);
-            if (hasAttemptedLoad) {
-              onLoadingComplete?.();
-            }
+            onLoadingComplete?.();
             return;
           }
         } catch (fallbackError) {
@@ -1367,9 +1358,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         setTotalCompareData({});
         setTotalChangeData({});
         setIsLoadingData(false);
-        if (hasAttemptedLoad) {
-          onLoadingComplete?.();
-        }
+        onLoadingComplete?.();
         return;
       }
 
@@ -1461,9 +1450,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       setTotalChangeData({});
     } finally {
       setIsLoadingData(false);
-      if (hasAttemptedLoad) {
-        onLoadingComplete?.();
-      }
+      onLoadingComplete?.();
     }
   };
 
