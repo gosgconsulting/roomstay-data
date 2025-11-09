@@ -35,6 +35,14 @@ export default function AllReports() {
   const [masterFilterDateRange, setMasterFilterDateRange] = useState<DateRange | undefined>(undefined);
   const [masterFilterReportIds, setMasterFilterReportIds] = useState<string[]>([]);
   
+  // Visibility settings
+  const [visibleKPIs, setVisibleKPIs] = useState<string[]>([
+    "impressions", "clicks", "ctr", "conversions", "conversionRate", "cpc", "cost", "revenue", "roas", "costOfSale"
+  ]);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>([
+    "date", "impressions", "clicks", "ctr", "conversions", "conversionRate", "cost", "revenue", "roas", "sources"
+  ]);
+  
   // Combined analytics data
   const [combinedData, setCombinedData] = useState<CombinedAnalyticsData | null>(null);
   const [isCombinedLoading, setIsCombinedLoading] = useState(false);
@@ -274,9 +282,13 @@ export default function AllReports() {
                 <CombinedKPIMetricsCards 
                   metrics={combinedData.metrics} 
                   reportCount={masterFilterReportIds.length || reports.length}
+                  visibleKPIs={visibleKPIs}
+                  onVisibleKPIsChange={setVisibleKPIs}
                 />
                 <CombinedPerformanceTable 
                   data={combinedData.tableData}
+                  visibleColumns={visibleColumns}
+                  onVisibleColumnsChange={setVisibleColumns}
                 />
               </>
             ) : (

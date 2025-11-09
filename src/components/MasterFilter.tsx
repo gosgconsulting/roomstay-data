@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Calendar } from "@/components/ui/calendar";
-import { Check, ChevronDown, X, Filter, CalendarIcon, Search } from "lucide-react";
+import { Check, ChevronDown, X, Filter, CalendarIcon, Search, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth, endOfMonth, startOfWeek, subDays, startOfYear, endOfYear, differenceInDays, subYears } from "date-fns";
@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { MasterDimensionConfigModal } from "@/components/MasterDimensionConfigModal";
 
 interface Dimension {
   id: string;
@@ -70,6 +71,7 @@ export const MasterFilter = ({
   const [compareDateRange, setCompareDateRange] = useState<DateRange | undefined>();
   const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
   const [reportSearchTerm, setReportSearchTerm] = useState("");
+  const [showMasterDimConfig, setShowMasterDimConfig] = useState(false);
 
   // Load settings and dimensions
   useEffect(() => {
@@ -549,16 +551,27 @@ export const MasterFilter = ({
             <Filter className="h-5 w-5" />
             Master Filter
           </div>
-          {selectedDimension && (
+          <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleClearFilter}
+              onClick={() => setShowMasterDimConfig(true)}
               className="h-8 px-3 text-xs"
             >
-              Clear All
+              <Settings className="h-4 w-4 mr-1" />
+              Configure
             </Button>
-          )}
+            {selectedDimension && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearFilter}
+                className="h-8 px-3 text-xs"
+              >
+                Clear All
+              </Button>
+            )}
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -979,6 +992,20 @@ export const MasterFilter = ({
           )}
         </div>
       </CardContent>
+      
+      <MasterDimensionConfigModal
+        open={showMasterDimConfig}
+        onOpenChange={setShowMasterDimConfig}
+        accountId={accountId}
+        currentMasterDimension={selectedDimension}
+        onSave={(dimensionId) => {
+          if (dimensionId) {
+            handleDimensionSelect(dimensionId);
+          } else {
+            handleFilterUpdate(null, [], localDateRange, localReportIds);
+          }
+        }}
+      />
     </Card>
   );
 };

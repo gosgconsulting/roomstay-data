@@ -1,18 +1,26 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, MousePointer, Eye, DollarSign, Target, Percent } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { TrendingUp, TrendingDown, MousePointer, Eye, DollarSign, Target, Percent, Settings } from "lucide-react";
 import { CombinedMetrics } from "@/lib/combined-analytics";
+import { useState } from "react";
+import { CombinedKPIConfigModal } from "@/components/CombinedKPIConfigModal";
 
 interface CombinedKPIMetricsCardsProps {
   metrics: CombinedMetrics;
   reportCount: number;
   isLoading?: boolean;
+  visibleKPIs?: string[];
+  onVisibleKPIsChange?: (kpis: string[]) => void;
 }
 
 export const CombinedKPIMetricsCards = ({ 
   metrics, 
   reportCount,
-  isLoading = false 
+  isLoading = false,
+  visibleKPIs = ["impressions", "clicks", "ctr", "conversions", "conversionRate", "cpc", "cost", "revenue", "roas", "costOfSale"],
+  onVisibleKPIsChange
 }: CombinedKPIMetricsCardsProps) => {
+  const [showKPIConfig, setShowKPIConfig] = useState(false);
   const formatNumber = (num: number): string => {
     if (num >= 1000000) {
       return `${(num / 1000000).toFixed(2)}M`;
@@ -36,66 +44,76 @@ export const CombinedKPIMetricsCards = ({
 
   const kpiCards = [
     {
+      id: "impressions",
       title: "Impressions",
       value: formatNumber(metrics.impressions),
       icon: Eye,
       color: "text-blue-600"
     },
     {
+      id: "clicks",
       title: "Clicks",
       value: formatNumber(metrics.clicks),
       icon: MousePointer,
       color: "text-purple-600"
     },
     {
+      id: "ctr",
       title: "CTR",
       value: formatPercentage(metrics.ctr),
       icon: Percent,
       color: "text-cyan-600"
     },
     {
+      id: "conversions",
       title: "Conversions",
       value: formatNumber(metrics.conversions),
       icon: Target,
       color: "text-orange-600"
     },
     {
+      id: "conversionRate",
       title: "Conversion Rate",
       value: formatPercentage(metrics.conversionRate),
       icon: TrendingUp,
       color: "text-green-600"
     },
     {
+      id: "cpc",
       title: "CPC",
       value: formatCurrency(metrics.cpc),
       icon: DollarSign,
       color: "text-yellow-600"
     },
     {
+      id: "cost",
       title: "Cost",
       value: formatCurrency(metrics.cost),
       icon: DollarSign,
       color: "text-red-600"
     },
     {
+      id: "revenue",
       title: "Revenue",
       value: formatCurrency(metrics.revenue),
       icon: DollarSign,
       color: "text-emerald-600"
     },
     {
+      id: "roas",
       title: "ROAS",
       value: formatDecimal(metrics.roas),
       icon: TrendingUp,
       color: "text-green-600"
     },
     {
+      id: "costOfSale",
       title: "Cost of Sale",
       value: formatPercentage(metrics.costOfSale),
       icon: Percent,
       color: "text-amber-600"
     }
-  ];
+  ].filter(card => visibleKPIs.includes(card.id));
 
   if (isLoading) {
     return (
@@ -118,9 +136,20 @@ export const CombinedKPIMetricsCards = ({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">Combined Analytics</h3>
-        <span className="text-sm text-muted-foreground">
-          {reportCount} report{reportCount !== 1 ? 's' : ''} combined
-        </span>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowKPIConfig(true)}
+            className="h-8 px-3 text-xs"
+          >
+            <Settings className="h-4 w-4 mr-1" />
+            Edit KPIs
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {reportCount} report{reportCount !== 1 ? 's' : ''} combined
+          </span>
+        </div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {kpiCards.map((card, index) => {
@@ -144,6 +173,13 @@ export const CombinedKPIMetricsCards = ({
           );
         })}
       </div>
+      
+      <CombinedKPIConfigModal
+        open={showKPIConfig}
+        onOpenChange={setShowKPIConfig}
+        visibleKPIs={visibleKPIs}
+        onSave={(kpis) => onVisibleKPIsChange?.(kpis)}
+      />
     </div>
   );
 };
