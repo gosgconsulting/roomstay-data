@@ -4,13 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
-import { ArrowLeft, Plus, Edit2, Trash2, LogOut, RefreshCw } from "lucide-react";
+import { ArrowLeft, Plus, Edit2, Trash2, LogOut } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { CreateAccountModal } from "@/components/CreateAccountModal";
-import { migrateAllAccountsToAccountDimensions } from "@/lib/migrate-to-account-dimensions";
 import { EditAccountModal } from "@/components/EditAccountModal";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
-import { AuthDebugInfo } from "@/components/AuthDebugInfo";
 
 interface Account {
   id: string;
@@ -36,34 +34,20 @@ export default function ReportTool() {
 
   const checkAuth = async () => {
     try {
-      console.log('[REPORT-TOOL] Checking authentication...');
-      
       const { data: { session }, error } = await supabase.auth.getSession();
       
-      console.log('[REPORT-TOOL] Session check result:', { 
-        hasSession: !!session, 
-        error: error?.message,
-        userId: session?.user?.id 
-      });
-      
-      if (error) {
-        console.error('[REPORT-TOOL] Session error:', error);
-        throw error;
-      }
+      if (error) throw error;
       
       if (!session) {
-        console.log('[REPORT-TOOL] No session found, redirecting to auth');
         navigate('/auth');
         return;
       }
       
-      console.log('[REPORT-TOOL] Session valid, setting session and loading accounts');
       setSession(session);
       await loadAccounts(session.user.id);
       setIsLoading(false);
     } catch (error) {
       console.error('Error checking auth:', error);
-      setIsLoading(false); // Ensure loading is stopped on error
       toast({
         title: "Authentication Error",
         description: "Please sign in again.",
@@ -75,104 +59,20 @@ export default function ReportTool() {
 
   const loadAccounts = async (userId: string) => {
     try {
-      console.log('[REPORT-TOOL] Loading accounts for user:', userId);
-      
-      // First, let's verify the user session is still valid
-      let user = null;
-      let userError = null;
-      
-      try {
-        const { data: { user: fetchedUser }, error: fetchError } = await supabase.auth.getUser();
-        user = fetchedUser;
-        userError = fetchError;
-      } catch (err) {
-        console.log('[REPORT-TOOL] getUser() failed, trying session fallback:', err);
-        
-        // Fallback: get user from current session
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          console.log('[REPORT-TOOL] Using session user as fallback');
-          user = session.user;
-          userError = null;
-        } else {
-          console.error('[REPORT-TOOL] No session user available');
-          userError = err;
-        }
-      }
-      
-      if (userError && !user) {
-        console.error('[REPORT-TOOL] User session error:', userError);
-        throw new Error('Session expired. Please sign in again.');
-      }
-      
-      if (!user) {
-        console.error('[REPORT-TOOL] No user found in session');
-        throw new Error('Not authenticated. Please sign in again.');
-      }
-      
-      console.log('[REPORT-TOOL] User session valid, loading accounts...');
-      
       const { data, error } = await supabase
         .from('accounts')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
       
-      console.log('[REPORT-TOOL] Accounts query result:', { 
-        data: data?.length || 0, 
-        error: error?.message,
-        userId 
-      });
-      
-      if (error) {
-        console.error('[REPORT-TOOL] Database error:', error);
-        throw error;
-      }
+      if (error) throw error;
       
       setAccounts(data || []);
-      console.log('[REPORT-TOOL] Successfully loaded', data?.length || 0, 'accounts');
-      
     } catch (error) {
-      console.error('[REPORT-TOOL] Error loading accounts:', error);
-      
-      // More specific error handling
-      let errorMessage = "Failed to load accounts.";
-      let shouldRetry = false;
-      
-      if (error instanceof Error) {
-        if (error.message.includes('session') || error.message.includes('authenticated')) {
-          errorMessage = "Session expired. Please sign in again.";
-          setTimeout(() => navigate('/auth'), 2000);
-        } else if (error.message.includes('JWT') || error.message.includes('token')) {
-          errorMessage = "Authentication token invalid. Please sign in again.";
-          setTimeout(() => navigate('/auth'), 2000);
-        } else if (error.message.includes('row-level security') || error.message.includes('RLS')) {
-          errorMessage = "Authentication issue detected. Refreshing session...";
-          shouldRetry = true;
-        }
-      }
-      
-      // If it's an RLS/auth issue, try refreshing the session once
-      if (shouldRetry) {
-        try {
-          console.log('[REPORT-TOOL] Attempting session refresh...');
-          const { error: refreshError } = await supabase.auth.refreshSession();
-          if (!refreshError) {
-            console.log('[REPORT-TOOL] Session refreshed, retrying account load...');
-            // Retry loading accounts after refresh
-            setTimeout(() => loadAccounts(userId), 1000);
-            return;
-          }
-        } catch (refreshErr) {
-          console.error('[REPORT-TOOL] Session refresh failed:', refreshErr);
-          errorMessage = "Session refresh failed. Please sign in again.";
-          setTimeout(() => navigate('/auth'), 2000);
-        }
-      }
-      
+      console.error('Error loading accounts:', error);
       toast({
         title: "Error",
-        description: errorMessage,
+        description: "Failed to load accounts.",
         variant: "destructive",
       });
     }
@@ -375,32 +275,16 @@ export default function ReportTool() {
       {/* Main Content */}
       <main className="container mx-auto px-6 py-12">
         <div className="max-w-6xl mx-auto">
-          {/* Temporary auth debug info */}
-          <AuthDebugInfo />
-          
           {/* Section Header */}
           <div className="mb-8 flex items-center justify-between">
             <div>
               <h2 className="text-3xl font-bold mb-2">Accounts</h2>
               <p className="text-muted-foreground">Manage your report accounts</p>
             </div>
-            <div className="flex gap-2">
-              <Button 
-                onClick={() => {
-                  setIsLoading(true);
-                  checkAuth();
-                }} 
-                variant="outline" 
-                className="gap-2"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Refresh
-              </Button>
-              <Button onClick={() => setShowCreateModal(true)} className="gap-2">
-                <Plus className="h-4 w-4" />
-                New Account
-              </Button>
-            </div>
+            <Button onClick={() => setShowCreateModal(true)} className="gap-2">
+              <Plus className="h-4 w-4" />
+              New Account
+            </Button>
           </div>
 
           {/* Accounts Grid */}

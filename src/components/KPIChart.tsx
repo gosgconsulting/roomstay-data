@@ -168,11 +168,11 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
 
             // Combine all dimensions - prioritize account-scoped over global
             // Order: account (highest priority) > custom > global (lowest priority)
-                          const allDimensions = [
-                ...accountData,
-                ...customData,
-                ...(globalData || [])
-              ] as Dimension[];
+            const allDimensions = [
+              ...accountData,
+              ...customData,
+              ...(globalData || [])
+            ] as Dimension[];
 
             console.log('[CHART] Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0);
 

@@ -44,33 +44,21 @@ export function KPIMetricsCards({
   // Create a stable reference for filters to prevent unnecessary re-renders
   const stableFilters = useMemo(() => {
     console.log('[KPI-FIXED] Creating stable filters reference:', filters);
-    
-    // Ensure dates are proper Date objects, not wrapped objects
-    const normalizedDateRange = filters.dateRange ? {
-      from: filters.dateRange.from instanceof Date ? filters.dateRange.from : new Date(filters.dateRange.from),
-      to: filters.dateRange.to ? (filters.dateRange.to instanceof Date ? filters.dateRange.to : new Date(filters.dateRange.to)) : undefined
-    } : undefined;
-    
-    const normalizedCompareDateRange = filters.compareDateRange ? {
-      from: filters.compareDateRange.from instanceof Date ? filters.compareDateRange.from : new Date(filters.compareDateRange.from),
-      to: filters.compareDateRange.to ? (filters.compareDateRange.to instanceof Date ? filters.compareDateRange.to : new Date(filters.compareDateRange.to)) : undefined
-    } : undefined;
-    
     return {
       dimensionFilters: filters.dimensionFilters,
-      dateRange: normalizedDateRange,
+      dateRange: filters.dateRange,
       compareEnabled: filters.compareEnabled,
       compareType: filters.compareType,
-      compareDateRange: normalizedCompareDateRange,
+      compareDateRange: filters.compareDateRange,
     };
   }, [
     JSON.stringify(filters.dimensionFilters),
-    filters.dateRange?.from?.toString(),
-    filters.dateRange?.to?.toString(),
+    filters.dateRange?.from?.toISOString(),
+    filters.dateRange?.to?.toISOString(),
     filters.compareEnabled,
     filters.compareType,
-    filters.compareDateRange?.from?.toString(),
-    filters.compareDateRange?.to?.toString(),
+    filters.compareDateRange?.from?.toISOString(),
+    filters.compareDateRange?.to?.toISOString(),
   ]);
 
   useEffect(() => {
@@ -83,9 +71,8 @@ export function KPIMetricsCards({
       console.log('[KPI-FIXED] ✓ reportId and accountId exist, calling loadMetrics...');
       loadMetrics();
     } else {
-      console.log('[KPI-FIXED] ✗ Missing reportId or accountId, skipping loadMetrics', { reportId: !!reportId, accountId: !!accountId });
+      console.log('[KPI-FIXED] ✗ Missing reportId or accountId, skipping loadMetrics');
       setIsLoading(false);
-      onLoadingComplete?.();
     }
   }, [reportId, accountId, stableFilters]);
 
@@ -100,32 +87,14 @@ export function KPIMetricsCards({
   const loadMetrics = async () => {
     console.log('[KPI-FIXED] loadMetrics - Starting data fetch for reportId:', reportId);
     setIsLoading(true);
-    
     try {
-      // Get the current user with fallback
-      let user = null;
-      
-      try {
-        const { data: { user: fetchedUser } } = await supabase.auth.getUser();
-        user = fetchedUser;
-      } catch (err) {
-        console.log('[KPI-FIXED] getUser() failed, trying session fallback:', err);
-        
-        // Fallback: get user from current session
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          console.log('[KPI-FIXED] Using session user as fallback');
-          user = session.user;
-        }
-      }
-      
+      // Get the current user
+      const { data: { user } } = await supabase.auth.getUser();
       console.log('[KPI-FIXED] loadMetrics - User:', user?.id);
       
       if (!user || !reportId || !accountId) {
         console.error('[KPI-FIXED] Missing required data:', { user: !!user, reportId, accountId });
         setMetrics([]);
-        setIsLoading(false);
-        onLoadingComplete?.();
         return;
       }
 
@@ -170,11 +139,6 @@ export function KPIMetricsCards({
       };
 
       console.log('[KPI-FIXED] Loading data with filters:', filters);
-      console.log('[KPI-FIXED] Date range being used:', {
-        from: filters.dateRange?.from,
-        to: filters.dateRange?.to,
-        isCurrentMonth: !stableFilters.dateRange
-      });
 
       // Load data using the standardized approach
       const result = await loadReportData(reportId, accountId, user.id, filters);
@@ -232,8 +196,6 @@ export function KPIMetricsCards({
       if (filteredData.length === 0) {
         console.error('[KPI-FIXED] ✗ NO DATA LOADED - Cannot calculate metrics!');
         setMetrics([]);
-        setIsLoading(false);
-        onLoadingComplete?.();
         return;
       }
 
@@ -355,16 +317,14 @@ export function KPIMetricsCards({
       console.log('[KPI-FIXED] ==========================================');
       
       setMetrics(displayMetrics);
-      setIsLoading(false);
-      onLoadingComplete?.();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
       console.error('[KPI-FIXED] Error in loadMetrics:', errorMessage);
       setMetrics([]);
+    } finally {
+      console.log('[KPI-FIXED] loadMetrics - Setting isLoading to false');
       setIsLoading(false);
       onLoadingComplete?.();
-    } finally {
-      console.log('[KPI-FIXED] loadMetrics - Complete');
     }
   };
 

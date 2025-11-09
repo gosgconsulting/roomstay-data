@@ -85,7 +85,6 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const [totalRows, setTotalRows] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [isCreatingDimensions, setIsCreatingDimensions] = useState(false);
 
   // Load reports on mount and when accountId changes
   useEffect(() => {
@@ -166,18 +165,9 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   };
 
   const createDefaultDimensions = async () => {
-    if (isCreatingDimensions) {
-      console.log('[DIMENSIONS] Already creating dimensions, skipping...');
-      return;
-    }
-    
     try {
-      setIsCreatingDimensions(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !reportId) {
-        console.log('[DIMENSIONS] Skipping default dimensions - no user or reportId');
-        return;
-      }
+      if (!user || !reportId) return;
 
       console.log('[testing] Creating default dimensions for report:', reportId);
 
@@ -236,8 +226,6 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
       }
     } catch (error) {
       console.error("Error creating default dimensions:", error);
-    } finally {
-      setIsCreatingDimensions(false);
     }
   };
 
@@ -656,15 +644,22 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
                 <DropdownMenuItem 
                   key={report.id}
                   className={`justify-between group ${report.is_shared ? 'flex-col items-start' : ''} ${reportId === report.id ? 'bg-accent' : ''}`}
-                  onSelect={() => {
-                    console.log('[REPORT-SWITCH] Switching to report:', report.id, report.name);
+                  onSelect={(e) => {
+                    e.preventDefault();
                     setCurrentReport(report);
                     onReportChange(report.id);
                     setDropdownOpen(false);
                   }}
                 >
                   <div className="flex items-center justify-between w-full">
-                    <span className="flex-1">
+                    <span 
+                      className="flex-1 cursor-pointer"
+                      onClick={() => {
+                        setCurrentReport(report);
+                        onReportChange(report.id);
+                        setDropdownOpen(false);
+                      }}
+                    >
                       {report.name}
                     </span>
                     {!report.is_shared && (

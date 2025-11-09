@@ -38,7 +38,7 @@ import { ColumnFilterModal } from "./ColumnFilterModal";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
-import { format, startOfWeek, startOfMonth, startOfYear, getWeek } from "date-fns";
+import { format, startOfWeek, startOfMonth, startOfYear } from "date-fns";
 import { FilterState } from "./FiltersBar";
 import { checkDimensionsHaveData } from "@/lib/dimensionUtils";
 import { TableVirtuoso } from "react-virtuoso";
@@ -136,8 +136,6 @@ function SortableColumnItem({
 }
 
 export const PerformanceTable = ({ reportId, filters, isSharedView = false, accountId, visibilityRefreshTrigger, onLoadingComplete, onFiltersChange }: PerformanceTableProps) => {
-  console.log('[PERF-TABLE] Component mounted/rendered:', { reportId, accountId, hasFilters: !!filters });
-  
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [dimensionSelectorOpen, setDimensionSelectorOpen] = useState(false);
@@ -167,8 +165,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   const [breakdownByDimensions, setBreakdownByDimensions] = useState<string[]>([]);
   const [thenByDimensions, setThenByDimensions] = useState<string[]>([]);
   
-  // State for active date granularity tab
-  const [activeDateTab, setActiveDateTab] = useState<'day' | 'week' | 'month' | 'year'>('day');
+  // State for date granularity - default to 'day' for better user experience
+  const [dateGranularity, setDateGranularity] = useState<'none' | 'day' | 'week' | 'month' | 'year'>('day');
   const [dateOrder, setDateOrder] = useState<'asc' | 'desc'>('desc');
   
   // Pagination state
@@ -243,8 +241,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   useEffect(() => {
     if (dimensions.length > 0 && groupByDimensions.length === 0 && !isLoadingDimensions && tableViews.length > 0) {
       console.log('[testing] Auto-selecting default grouping dimension');
-      const dateDimension = dimensions.find(d => d && d.type === 'date');
-      const textDimension = dimensions.find(d => d && d.type === 'text');
+      const dateDimension = dimensions.find(d => d.type === 'date');
+      const textDimension = dimensions.find(d => d.type === 'text');
       
       if (dateDimension) {
         setGroupByDimensions([dateDimension.id]);
@@ -311,7 +309,6 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     console.log('[PERF-TABLE] useEffect triggered:', {
       reportId: !!reportId,
       groupByDimensions: groupByDimensions.length,
-      groupByDimensionIds: groupByDimensions,
       compareEnabled: debouncedFilters.compareEnabled,
       compareType: debouncedFilters.compareType,
       hasCompareDateRange: !!debouncedFilters.compareDateRange,
@@ -320,7 +317,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     
     // Always attempt to load data if we have a reportId - let the function handle conditions
     if (reportId) {
-      console.log('[PERF-TABLE] ✓ reportId exists, calling loadPerformanceData with filters:', {
+      console.log('[testing] ✓ reportId exists, calling loadPerformanceData with filters:', {
         dateFrom: debouncedFilters.dateRange?.from ? format(debouncedFilters.dateRange.from, 'yyyy-MM-dd') : undefined,
         dateTo: debouncedFilters.dateRange?.to ? format(debouncedFilters.dateRange.to, 'yyyy-MM-dd') : undefined,
         preset: debouncedFilters.datePreset
@@ -335,16 +332,15 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       // Load data (the function will handle its own loading state)
       loadPerformanceData();
     } else {
-      console.log('[PERF-TABLE] ✗ No reportId, skipping data load');
+      console.log('[testing] ✗ No reportId, skipping data load');
       // Clear data when no reportId
       setTableData([]);
       setTotalData({});
       setTotalCompareData({});
       setTotalChangeData({});
       setIsLoadingData(false);
-      onLoadingComplete?.();
     }
-  }, [reportId, debouncedFilters, groupByDimensions, breakdownByDimensions, thenByDimensions, dateOrder, activeDateTab, visibilityRefreshTrigger]);
+  }, [reportId, debouncedFilters, groupByDimensions, breakdownByDimensions, thenByDimensions, dateOrder, visibilityRefreshTrigger]);
 
   // Save view settings whenever they change (with debounce to prevent excessive saves)
   useEffect(() => {
@@ -355,7 +351,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       
       return () => clearTimeout(timeoutId);
     }
-  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, columnOrder, activeDateTab, dateOrder, reportId, activeViewId]);
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, columnOrder, dateGranularity, dateOrder, reportId, activeViewId]);
 
   const loadAllViews = async () => {
     if (!reportId) {
@@ -450,11 +446,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         const defaultView = views.find(v => v.is_default) || views[0];
         setActiveViewId(defaultView.id);
         // Load settings directly from the view data instead of searching state
-        await loadViewSettingsFromData(defaultView);
+        loadViewSettingsFromData(defaultView);
       } else if (!isSharedView) {
         // Only create a default view if not a shared view and no views exist
-        console.log('No views found, creating default views');
-        await createDefaultViews();
+        console.log('No views found, creating default view');
+        await createDefaultView();
       } else {
         console.log('No views found for shared report');
       }
@@ -463,21 +459,21 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     }
   };
 
-  const createDefaultViews = async () => {
+  const createDefaultView = async () => {
     if (!reportId) {
-      console.error("Cannot create default views: No reportId");
+      console.error("Cannot create default view: No reportId");
       return;
     }
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.error("Cannot create default views: No user");
+        console.error("Cannot create default view: No user");
         return;
       }
 
       // Find date dimension first, fallback to text dimension for default grouping
-      const defaultGroupDimension = dimensions.find(d => d && d.type === 'date') || dimensions.find(d => d && d.type === 'text');
+      const defaultGroupDimension = dimensions.find(d => d.type === 'date') || dimensions.find(d => d.type === 'text');
       const isDateGrouping = defaultGroupDimension?.type === 'date';
       
       console.log('Creating default view for report:', reportId, 'with dimension:', defaultGroupDimension?.name, 'type:', defaultGroupDimension?.type);
@@ -501,54 +497,37 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
             .map(d => d.name)
         );
 
-      // Create four default views for different date granularities
-      const dateGranularities: Array<{name: string, granularity: 'day' | 'week' | 'month' | 'year', isDefault: boolean}> = [
-        { name: "Day", granularity: 'day', isDefault: true },
-        { name: "Week", granularity: 'week', isDefault: false },
-        { name: "Month", granularity: 'month', isDefault: false },
-        { name: "Year", granularity: 'year', isDefault: false }
-      ];
+      const { data: newView, error } = await supabase
+        .from("report_views")
+        .insert({
+          report_id: reportId,
+          user_id: user.id,
+          name: "Table 1",
+          is_default: true,
+          group_by_dimensions: defaultGroupDimension ? [defaultGroupDimension.id] : [],
+          breakdown_by_dimensions: [],
+          then_by_dimensions: [],
+          visible_columns: defaultVisibleIds,
+          column_order: defaultColumnOrder,
+          visible_kpis: defaultKPIs,
+          kpi_order: defaultKPIs,
+          date_granularity: isDateGrouping ? 'day' : 'day', // Always default to day
+          date_order: 'desc',
+        })
+        .select()
+        .single();
 
-      const createdViews = [];
-      
-      for (const dateConfig of dateGranularities) {
-        const { data: newView, error } = await supabase
-          .from("report_views")
-          .insert({
-            report_id: reportId,
-            user_id: user.id,
-            name: dateConfig.name,
-            is_default: dateConfig.isDefault,
-            group_by_dimensions: defaultGroupDimension ? [defaultGroupDimension.id] : [],
-            breakdown_by_dimensions: dimensions && dimensions.find(d => d && d.type === 'date') ? [dimensions.find(d => d && d.type === 'date')!.id] : [], // Always include Date in breakdown with mandatory date
-            then_by_dimensions: [],
-            visible_columns: defaultVisibleIds,
-            column_order: defaultColumnOrder,
-            visible_kpis: defaultKPIs,
-            kpi_order: defaultKPIs,
-            date_granularity: dateConfig.granularity,
-            date_order: 'desc',
-          })
-          .select()
-          .single();
-
-        if (error) {
-          console.error(`Error creating ${dateConfig.name} view:`, error);
-          continue;
-        }
-
-        if (newView) {
-          createdViews.push(newView);
-        }
+      if (error) {
+        console.error("Error creating default view:", error);
+        throw error;
       }
 
-      if (createdViews.length > 0) {
-        console.log(`Created ${createdViews.length} default views successfully`);
-        setTableViews(createdViews);
-        const defaultView = createdViews.find(v => v.is_default) || createdViews[0];
-        setActiveViewId(defaultView.id);
-        // Load settings directly from the default view
-        await loadViewSettingsFromData(defaultView);
+      if (newView) {
+        console.log('Default view created successfully:', newView.id);
+        setTableViews([newView]);
+        setActiveViewId(newView.id);
+        // Load settings directly from the created view
+        loadViewSettingsFromData(newView);
       }
     } catch (error) {
       console.error("Error creating default view:", error);
@@ -556,7 +535,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   };
 
   // Helper to load view settings from view data directly
-  const loadViewSettingsFromData = async (view: any) => {
+  const loadViewSettingsFromData = (view: any) => {
     if (!view) {
       console.error("No view data provided");
       return;
@@ -573,7 +552,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       
       // First, find dimensions that are already valid
       for (const dimId of dimIds) {
-        const dimension = dimensions.find(d => d && d.id === dimId);
+        const dimension = dimensions.find(d => d.id === dimId);
         if (dimension) {
           mapped.push(dimension.id);
         } else {
@@ -586,9 +565,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         try {
           const dimensionNameToIdMap = new Map<string, string>();
           dimensions.forEach(dim => {
-            if (dim && dim.name && dim.id) {
-              dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
-            }
+            dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
           });
           
           const { data: oldDimensions } = await supabase
@@ -618,31 +595,35 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     };
     
     // Load saved settings - map dimension IDs asynchronously
-    const groupDimensions = await mapDimensionIds(view.group_by_dimensions || []);
-    
-    // If no grouping dimension is set and dimensions are available, set a default
-    let finalGroupDimensions = groupDimensions;
-    if (groupDimensions.length === 0 && dimensions.length > 0) {
-      // Find a suitable dimension for grouping - prefer Date first, then text dimensions
-      const dateDimension = dimensions.find(d => d && d.type === 'date');
-      const textDimension = dimensions.find(d => d && d.type === 'text');
+    const loadDimensionsAsync = async () => {
+      const groupDimensions = await mapDimensionIds(view.group_by_dimensions || []);
       
-      if (dateDimension) {
-        finalGroupDimensions = [dateDimension.id];
-        console.log('Auto-selected Date dimension for grouping:', dateDimension.name);
-      } else if (textDimension) {
-        finalGroupDimensions = [textDimension.id];
-        console.log('Auto-selected text dimension for grouping:', textDimension.name);
-      } else {
-        // Fallback to first available dimension
-        finalGroupDimensions = [dimensions[0].id];
-        console.log('Auto-selected first available dimension for grouping:', dimensions[0].name);
+      // If no grouping dimension is set and dimensions are available, set a default
+      let finalGroupDimensions = groupDimensions;
+      if (groupDimensions.length === 0 && dimensions.length > 0) {
+        // Find a suitable dimension for grouping - prefer Date first, then text dimensions
+        const dateDimension = dimensions.find(d => d.type === 'date');
+        const textDimension = dimensions.find(d => d.type === 'text');
+        
+        if (dateDimension) {
+          finalGroupDimensions = [dateDimension.id];
+          console.log('Auto-selected Date dimension for grouping:', dateDimension.name);
+        } else if (textDimension) {
+          finalGroupDimensions = [textDimension.id];
+          console.log('Auto-selected text dimension for grouping:', textDimension.name);
+        } else {
+          // Fallback to first available dimension
+          finalGroupDimensions = [dimensions[0].id];
+          console.log('Auto-selected first available dimension for grouping:', dimensions[0].name);
+        }
       }
-    }
+      
+      setGroupByDimensions(finalGroupDimensions);
+      setBreakdownByDimensions(await mapDimensionIds(view.breakdown_by_dimensions || []));
+      setThenByDimensions(await mapDimensionIds(view.then_by_dimensions || []));
+    };
     
-    setGroupByDimensions(finalGroupDimensions);
-    setBreakdownByDimensions(await mapDimensionIds(view.breakdown_by_dimensions || []));
-    setThenByDimensions(await mapDimensionIds(view.then_by_dimensions || []));
+    loadDimensionsAsync();
     
     if (view.visible_columns && view.visible_columns.length > 0) {
       console.log('[testing] Loading visible columns from view:', view.visible_columns.length, 'columns');
@@ -653,9 +634,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         // Create a map of dimension name to account-scoped dimension ID
         const dimensionNameToIdMap = new Map<string, string>();
         dimensions.forEach(dim => {
-          if (dim && dim.name && dim.id) {
-            dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
-          }
+          dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
         });
         
         // Validate and map visible_columns
@@ -663,7 +642,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         
         // First, collect all unmapped IDs to query them in one batch
         const idsToCheck = view.visible_columns.filter((id: string) => 
-          !dimensions.find(d => d && d.id === id)
+          !dimensions.find(d => d.id === id)
         );
         
         // If we have unmapped IDs, query them to get their names and map to account-scoped dimensions
@@ -694,7 +673,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         
         // Add all valid dimension IDs (those that already exist in loaded dimensions)
         view.visible_columns.forEach((colDimId: string) => {
-          const dimension = dimensions.find(d => d && d.id === colDimId);
+          const dimension = dimensions.find(d => d.id === colDimId);
           if (dimension && !mappedVisibleColumns.includes(dimension.id)) {
             mappedVisibleColumns.push(dimension.id);
           }
@@ -731,18 +710,17 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     } else if (dimensions.length > 0) {
       // Set default order based on dimensions
       const metricDimensions = dimensions.filter(d => 
-        d && typeof d === 'object' && d.id && d.type &&
-        (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula)
+        d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
       );
       const orderIds = metricDimensions.map(d => d.id);
       setColumnOrder(orderIds);
       setInitialColumnOrder([...orderIds]);
     }
     
-    // Load date granularity if available (default to day)
-    if (view.date_granularity && view.date_granularity !== 'none') {
+    // Load date granularity if available (default to none)
+    if (view.date_granularity) {
       console.log('Loading date granularity:', view.date_granularity);
-      setActiveDateTab(view.date_granularity as 'day' | 'week' | 'month' | 'year');
+      setDateGranularity(view.date_granularity as 'none' | 'day' | 'week' | 'month' | 'year');
     }
     
     // Load date order if available (default to desc)
@@ -795,7 +773,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         then_by_dimensions: thenByDimensions,
         visible_columns: Array.from(visibleColumns),
         column_order: columnOrder,
-        date_granularity: activeDateTab,
+        date_granularity: dateGranularity,
         date_order: dateOrder,
       };
 
@@ -822,7 +800,68 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     }
   };
 
+  const handleDuplicateView = async () => {
+    if (!reportId || !activeViewId || isSharedView) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
+      const activeView = tableViews.find(v => v.id === activeViewId);
+      if (!activeView) return;
+
+      // Find next available number for naming
+      const tableNumbers = tableViews
+        .map(v => {
+          const match = v.name.match(/^Table (\d+)$/);
+          return match ? parseInt(match[1]) : 0;
+        })
+        .filter(n => n > 0);
+      
+      const nextNumber = tableNumbers.length > 0 ? Math.max(...tableNumbers) + 1 : tableViews.length + 1;
+
+      const { data: newView, error } = await supabase
+        .from("report_views")
+        .insert({
+          report_id: reportId,
+          user_id: user.id,
+          name: `Table ${nextNumber}`,
+          is_default: false,
+          group_by_dimensions: activeView.group_by_dimensions || [],
+          breakdown_by_dimensions: activeView.breakdown_by_dimensions || [],
+          then_by_dimensions: activeView.then_by_dimensions || [],
+          visible_columns: activeView.visible_columns || [],
+          column_order: activeView.column_order || [],
+          visible_kpis: activeView.visible_kpis || [],
+          kpi_order: activeView.kpi_order || [],
+          date_granularity: activeView.date_granularity || 'day',
+          date_order: activeView.date_order || 'desc',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (newView) {
+        setTableViews(prev => [...prev, newView]);
+        setActiveViewId(newView.id);
+        // Load settings directly from the created view
+        loadViewSettingsFromData(newView);
+        
+        toast({
+          title: "Table duplicated",
+          description: `Created ${newView.name}`,
+        });
+      }
+    } catch (error) {
+      console.error("Error duplicating view:", error);
+      toast({
+        title: "Error",
+        description: "Failed to duplicate table",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleDeleteView = async (viewId: string) => {
     if (!reportId || tableViews.length <= 1 || isSharedView) return;
@@ -845,7 +884,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
           const nextView = remainingViews[0];
           setActiveViewId(nextView.id);
           // Load settings directly from the next view
-          await loadViewSettingsFromData(nextView);
+          loadViewSettingsFromData(nextView);
         }
       }
 
@@ -933,7 +972,6 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       
       if (!user) {
         console.error("User not authenticated");
-        setIsLoadingDimensions(false);
         return;
       }
 
@@ -975,20 +1013,16 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       if (customError) throw customError;
       customData = (data || []);
 
-      // Combine all dimensions with proper priority: account > custom > global
+      // Combine all dimensions - prioritize account > custom > global
       const combinedDimensions = [
-        ...(accountData || []),
-        ...(customData || []),
+        ...accountData,
+        ...customData,
         ...(globalData || [])
       ];
 
       // Deduplicate dimensions by name (keep first occurrence, which prioritizes account-scoped)
       const seenNames = new Set<string>();
       const allDimensions = combinedDimensions.filter(dim => {
-        // Safety check: ensure dimension object has required properties
-        if (!dim || typeof dim !== 'object' || !dim.name || !dim.id || !dim.type) {
-          return false;
-        }
         if (seenNames.has(dim.name)) {
           return false;
         }
@@ -996,7 +1030,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         return true;
       });
 
-      console.log('[testing] PerformanceTable - Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0, 'Final:', allDimensions?.length || 0);
+      console.log('[testing] PerformanceTable - Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0, 'Final:', allDimensions.length);
 
       // Check if budgets exist for this account/report
       let budgetDimension = null;
@@ -1032,20 +1066,17 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         : allDimensions;
 
       // Set all dimensions (needed for Group by/Breakdown by selectors)
-      const safeDimensions = finalDimensions || [];
-      console.log('[testing] PerformanceTable - Setting dimensions:', safeDimensions.length);
-      setDimensions(safeDimensions);
+      setDimensions(finalDimensions);
       
       // Check data availability for dimensions
-      if (reportId && finalDimensions && finalDimensions.length > 0) {
-        checkDataAvailability(finalDimensions.filter(d => d && d.id).map(d => d.id), reportId);
+      if (reportId && finalDimensions.length > 0) {
+        checkDataAvailability(finalDimensions.map(d => d.id), reportId);
       }
       
       // Initialize column order if not set (only for numeric dimensions)
       if (columnOrder.length === 0) {
         const numericDimensions = finalDimensions.filter(d => 
-          d && typeof d === 'object' && d.id && d.name && d.type && 
-          (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula)
+          d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
         );
         const orderIds = numericDimensions.map(d => d.id);
         setColumnOrder(orderIds);
@@ -1104,9 +1135,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         case 'day':
           return format(date, 'MMMM d, yyyy'); // October 31, 2025
         case 'week':
-          const weekNumber = getWeek(date);
-          const year = date.getFullYear();
-          return `Week ${weekNumber}, ${year}`; // Week 45, 2025
+          const weekStart = startOfWeek(date);
+          return format(weekStart, 'MMMM d, yyyy'); // Week starting date
         case 'month':
           return format(date, 'MMMM yyyy'); // October 2025
         case 'year':
@@ -1122,13 +1152,6 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   
   // Helper to format row name - check if it's a date
   const formatRowName = (name: string, level: number): string => {
-    // Get all dimension IDs that could contain dates
-    const allDimensionIds = [
-      ...groupByDimensions,
-      ...breakdownByDimensions, 
-      ...thenByDimensions
-    ];
-    
     // Get the dimension for this level
     let dimId: string | undefined;
     if (level === 0) {
@@ -1141,31 +1164,24 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     
     if (!dimId) return name;
     
-    const dimension = dimensions.find(d => d && d.id === dimId);
+    const dimension = dimensions.find(d => d.id === dimId);
     
-    // If it's a date dimension, format it according to the active tab
+    // If it's a date dimension, check if it's already formatted by the backend
     if (dimension?.type === 'date') {
+      // If dateGranularity is not 'none', the backend has already formatted it
+      if (dateGranularity !== 'none' && dateGranularity !== 'day') {
+        // Already formatted by backend (e.g., "October, 2025" or "2025")
+        return name;
+      }
+      
+      // For 'day' or 'none', format the date
       try {
-        // Try to parse the date value
         const date = new Date(name);
         if (!isNaN(date.getTime())) {
-          // Use the formatDate helper with current granularity
-          return formatDate(date, activeDateTab);
+          return format(date, 'MMMM d, yyyy'); // October 29, 2025
         }
       } catch (error) {
         console.error('Error formatting date name:', error);
-      }
-    }
-    
-    // Also check if the name looks like a date (fallback for any date strings)
-    if (typeof name === 'string' && name.match(/^\d{4}-\d{2}-\d{2}/)) {
-      try {
-        const date = new Date(name);
-        if (!isNaN(date.getTime())) {
-          return formatDate(date, activeDateTab);
-        }
-      } catch (error) {
-        console.error('Error formatting date-like name:', error);
       }
     }
     
@@ -1215,25 +1231,16 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     return value;
   };
 
-  // Load performance data using the unified approach (prioritize loadReportData)
+  // Load performance data using the new edge function
   const loadPerformanceData = async () => {
+    // Loading state is already set in useEffect, but ensure it's set here too for direct calls
+    
     const dateFromFormatted = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined;
     const dateToFormatted = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined;
     
-    // Use fallback if groupByDimensions is empty - find Date dimension as default
-    let effectiveGroupByDims = groupByDimensions;
-    if (effectiveGroupByDims.length === 0) {
-      const dateDimension = dimensions.find(d => d && d.name === 'Date' || d?.type === 'date');
-      if (dateDimension) {
-        effectiveGroupByDims = [dateDimension.id];
-        console.log('[PERF-TABLE] Using fallback Date dimension for grouping:', dateDimension.id);
-      }
-    }
-    
     console.log('[PERF-TABLE] loadPerformanceData called with filters:', {
       reportId,
-      groupByDimensions: effectiveGroupByDims.length,
-      groupByDimensionIds: effectiveGroupByDims,
+      groupByDimensions: groupByDimensions.length,
       compareEnabled: filters.compareEnabled,
       compareType: filters.compareType,
       hasCompareDateRange: !!filters.compareDateRange,
@@ -1241,48 +1248,68 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined
     });
 
-    // Check conditions before loading
-    if (!reportId || effectiveGroupByDims.length === 0) {
-      console.log('[PERF-TABLE] No data loading - missing reportId or groupByDimensions:', {
-        reportId: !!reportId,
-        groupByDimensionsLength: effectiveGroupByDims.length,
-        groupByDimensions: effectiveGroupByDims
-      });
+    // Check conditions after setting loading state
+    if (!reportId || groupByDimensions.length === 0) {
+      console.log('[testing] No data loading - missing reportId or groupByDimensions');
       setTableData([]);
       setTotalData({});
       setTotalCompareData({});
       setTotalChangeData({});
       setIsLoadingData(false);
-      onLoadingComplete?.();
+      onLoadingComplete?.(); // Mark as complete even when skipping load
       return;
     }
 
     try {
       // Get current user for custom dimensions
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('[PERF-TABLE] No authenticated user');
-        setIsLoadingData(false);
-        onLoadingComplete?.();
-        return;
-      }
-
-      // Use unified data loading approach (same as KPI components)
-      console.log('[PERF-TABLE] Loading data using unified approach...');
-      const { loadReportData } = await import("@/lib/data-loading-fix");
       
-      const dataFilters = {
-        dateRange: filters.dateRange,
-        dimensionFilters: filters.dimensionFilters
+      const requestBody = {
+        reportId,
+        groupByDims: groupByDimensions,
+        breakdownDims: breakdownByDimensions,
+        thenByDims: thenByDimensions,
+        dimensionFilters: filters.dimensionFilters,
+        dateFrom: dateFromFormatted,
+        dateTo: dateToFormatted,
+        accountId, // Pass accountId to edge function
+        userId: user?.id, // Pass userId for custom dimensions
+        visibleDimensionIds: Array.from(visibleColumns),
+                  limit: 50000, // Increased to get more data for pagination
+        offset: 0,
+        compareEnabled: filters.compareEnabled || false,
+        compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
+        compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined,
+        dateGranularity: dateGranularity,
+        dateOrder: dateOrder,
       };
+      
+      console.log('[testing] Calling get-performance-data with request body:', requestBody);
+      console.log('[testing] Date filter details being sent:', {
+        dateFrom: requestBody.dateFrom,
+        dateTo: requestBody.dateTo,
+        hasDateFrom: !!requestBody.dateFrom,
+        hasDateTo: !!requestBody.dateTo,
+        originalDateRange: filters.dateRange,
+        originalFrom: filters.dateRange?.from?.toISOString(),
+        originalTo: filters.dateRange?.to?.toISOString(),
+        timestamp: new Date().toISOString()
+      });
 
-      const result = await loadReportData(reportId, accountId, user.id, dataFilters);
+      const { data, error } = await supabase.functions.invoke('get-performance-data', {
+        body: requestBody,
+      });
 
-      if (!result.success) {
-        console.error('[PERF-TABLE] Failed to load report data:', result.error);
+      if (error) {
+        console.error('[testing] Error loading performance data:', error);
+        console.error('[testing] Error details:', {
+          message: error.message,
+          status: error.status,
+          details: error.details
+        });
         toast({
           title: "Error loading data",
-          description: `Failed to load performance table data: ${result.error || 'Unknown error'}`,
+          description: `Failed to load performance table data: ${error.message || 'Unknown error'}`,
           variant: "destructive",
         });
         setTableData([]);
@@ -1294,373 +1321,82 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         return;
       }
 
-      // Process the data for table display
-      const processedData = result.data || [];
-      
-      // Update dimensions from result if available (they might be more up-to-date)
-      if (result.dimensions && result.dimensions.length > 0) {
-        console.log('[PERF-TABLE] Updating dimensions from data result:', result.dimensions.length);
-        // Map the dimensions to match the component's Dimension interface
-        const mappedDimensions = result.dimensions.map(d => ({
-          ...d,
-          formula: d.formula || null
-        }));
-        setDimensions(mappedDimensions);
-      }
-      
-      // Use dimensions from result or component state
-      const effectiveDimensions = result.dimensions && result.dimensions.length > 0 
-        ? result.dimensions 
-        : dimensions;
-      
-      // Map dimension IDs to match those in dimension_values
-      // This handles cases where stored dimension IDs don't match the IDs in the data
-      const mapDimensionIdToDataId = (dimId: string, sampleDimensionValues: Record<string, any>): string | null => {
-        if (!dimId) return null;
-        
-        // First, check if the ID exists directly
-        if (sampleDimensionValues[dimId] !== undefined) {
-          return dimId;
-        }
-        
-        // Find the dimension by ID to get its name
-        const dimension = effectiveDimensions.find(d => d && d.id === dimId);
-        if (!dimension || !dimension.name) {
-          return null;
-        }
-        
-        // Try to find a dimension ID in dimension_values that matches this dimension's name
-        // Check all available keys in dimension_values
-        for (const key in sampleDimensionValues) {
-          const matchingDim = effectiveDimensions.find(d => d && d.id === key);
-          if (matchingDim && matchingDim.name === dimension.name) {
-            console.log('[PERF-TABLE] Mapped dimension ID:', {
-              from: dimId,
-              to: key,
-              dimensionName: dimension.name
-            });
-            return key;
-          }
-        }
-        
-        return null;
-      };
-      
-      // Map dimension IDs to match those in dimension_values
-      // Initialize with current values, then map if needed
-      let effectiveBreakdownDims = breakdownByDimensions.length > 0 ? [...breakdownByDimensions] : [];
-      let effectiveThenByDims = thenByDimensions.length > 0 ? [...thenByDimensions] : [];
-      
-      // Log dimension ID matching for debugging and map IDs
-      if (processedData.length > 0 && processedData[0]?.dimension_values) {
-        const sampleDimensionValues = processedData[0].dimension_values;
-        const dimensionValueKeys = Object.keys(sampleDimensionValues);
-        
-        // Map dimension IDs to match data structure (use local copies)
-        const mappedGroupByDim = effectiveGroupByDims[0] 
-          ? (mapDimensionIdToDataId(effectiveGroupByDims[0], sampleDimensionValues) || effectiveGroupByDims[0])
-          : effectiveGroupByDims[0];
-        const mappedBreakdownDim = breakdownByDimensions[0]
-          ? (mapDimensionIdToDataId(breakdownByDimensions[0], sampleDimensionValues) || breakdownByDimensions[0])
-          : breakdownByDimensions[0];
-        const mappedThenByDim = thenByDimensions[0]
-          ? (mapDimensionIdToDataId(thenByDimensions[0], sampleDimensionValues) || thenByDimensions[0])
-          : thenByDimensions[0];
-        
-        // Update effective dimensions for use in data processing
-        if (mappedGroupByDim && mappedGroupByDim !== effectiveGroupByDims[0]) {
-          effectiveGroupByDims = [mappedGroupByDim];
-          console.log('[PERF-TABLE] Mapped groupBy dimension ID:', {
-            from: groupByDimensions[0],
-            to: mappedGroupByDim
-          });
-        }
-        
-        // Update effective breakdown and thenBy dimensions
-        if (mappedBreakdownDim) {
-          effectiveBreakdownDims = [mappedBreakdownDim];
-          if (mappedBreakdownDim !== breakdownByDimensions[0]) {
-            console.log('[PERF-TABLE] Mapped breakdownBy dimension ID:', {
-              from: breakdownByDimensions[0],
-              to: mappedBreakdownDim
-            });
-          }
-        }
-        if (mappedThenByDim) {
-          effectiveThenByDims = [mappedThenByDim];
-          if (mappedThenByDim !== thenByDimensions[0]) {
-            console.log('[PERF-TABLE] Mapped thenBy dimension ID:', {
-              from: thenByDimensions[0],
-              to: mappedThenByDim
-            });
-          }
-        }
-        
-        console.log('[PERF-TABLE] Dimension ID matching check:', {
-          groupByDimensionId: effectiveGroupByDims[0],
-          groupByDimensionName: effectiveDimensions.find(d => d && d.id === effectiveGroupByDims[0])?.name,
-          breakdownByDimensionId: effectiveBreakdownDims[0],
-          breakdownByDimensionName: effectiveBreakdownDims[0] ? effectiveDimensions.find(d => d && d.id === effectiveBreakdownDims[0])?.name : null,
-          thenByDimensionId: effectiveThenByDims[0],
-          thenByDimensionName: effectiveThenByDims[0] ? effectiveDimensions.find(d => d && d.id === effectiveThenByDims[0])?.name : null,
-          availableDimensionValueKeys: dimensionValueKeys.slice(0, 10),
-          dimensionValueKeysCount: dimensionValueKeys.length,
-          hasGroupByInData: effectiveGroupByDims[0] ? sampleDimensionValues[effectiveGroupByDims[0]] !== undefined : false
-        });
-        
-        // Check if groupBy dimension ID exists in dimension_values
-        if (effectiveGroupByDims[0] && sampleDimensionValues[effectiveGroupByDims[0]] === undefined) {
-          console.warn('[PERF-TABLE] Group by dimension ID still not found in dimension_values after mapping!', {
-            lookingFor: effectiveGroupByDims[0],
-            dimensionName: effectiveDimensions.find(d => d && d.id === effectiveGroupByDims[0])?.name,
-            availableKeys: dimensionValueKeys,
-            sampleValues: Object.fromEntries(Object.entries(sampleDimensionValues).slice(0, 5))
-          });
-        }
-      }
-      
-      console.log('[PERF-TABLE] Processing data for table:', {
-        dataLength: processedData.length,
-        dimensionsCount: effectiveDimensions.length,
-        sampleRow: processedData[0] ? {
-          hasDimensionValues: !!processedData[0].dimension_values,
-          dimensionValueKeys: processedData[0].dimension_values ? Object.keys(processedData[0].dimension_values).slice(0, 5) : [],
-          groupByDimensions: effectiveGroupByDims
-        } : null
+      console.log('[testing] Performance data response:', {
+        hasData: !!data,
+        rowsCount: data?.data?.length || 0,
+        total: data?.total || 0,
+        hasMore: data?.hasMore,
+        error: error
       });
 
-      // Group data by selected dimensions and calculate totals
-      // For now, use a simplified approach - the original complex grouping
-      // can be enhanced later if needed
-      const rows: TableRow[] = [];
-      const totals: Record<string, any> = {};
-      
-      if (processedData.length > 0) {
-        // Create hierarchical structure with 3 levels:
-        // Level 0: Group by dimension
-        // Level 1: Breakdown by dimension (children of Level 0)
-        // Level 2: Then by dimension (children of Level 1)
-        
-        const level0Map = new Map<string, any[]>(); // Group by dimension
-        const level1Map = new Map<string, any[]>(); // Breakdown by dimension
-        const level2Map = new Map<string, any[]>(); // Then by dimension
-        
-        // Helper to get dimension value and format it
-        const getDimensionValue = (dimId: string, dimensionValues: Record<string, any>): string => {
-          // First try direct lookup
-          let value = dimensionValues[dimId];
-          
-          // If not found, try to find dimension by name and use its ID
-          if ((value === null || value === undefined || value === '') && dimId) {
-            const dimension = effectiveDimensions.find(d => d && d.id === dimId);
-            if (dimension) {
-              // Try finding by dimension name (some data might use names as keys)
-              const valueByName = dimensionValues[dimension.name];
-              if (valueByName !== null && valueByName !== undefined && valueByName !== '') {
-                value = valueByName;
-              } else {
-                // Try to find dimension by matching name in dimension_values keys
-                // This handles cases where dimension_values uses different ID format
-                const matchingKey = Object.keys(dimensionValues).find(key => {
-                  const dim = effectiveDimensions.find(d => d && d.id === key);
-                  return dim && dim.name === dimension.name;
-                });
-                if (matchingKey) {
-                  value = dimensionValues[matchingKey];
-                }
-              }
-            }
-          }
-          
-          if (value === null || value === undefined || value === '') {
-            console.warn('[PERF-TABLE] Dimension value not found:', {
-              dimId,
-              dimensionName: effectiveDimensions.find(d => d && d.id === dimId)?.name,
-              availableKeys: Object.keys(dimensionValues).slice(0, 10),
-              sampleDimensionValues: Object.fromEntries(Object.entries(dimensionValues).slice(0, 5))
-            });
-            return 'Unknown';
-          }
-          
-          const dimension = effectiveDimensions.find(d => d && d.id === dimId);
-          if (dimension?.type === 'date' && value) {
-            try {
-              const date = new Date(value);
-              if (!isNaN(date.getTime())) {
-                return formatDate(date, activeDateTab);
-              }
-            } catch (e) {
-              // If date parsing fails, return as string
-            }
-          }
-          return String(value);
-        };
-        
-        // Helper to aggregate data for a group of rows
-        const aggregateRows = (groupRows: any[]): Record<string, any> => {
-          const aggregatedData: Record<string, any> = {};
-          
-          if (groupRows.length === 0) return aggregatedData;
-          
-          effectiveDimensions.forEach(dimension => {
-            if (!dimension || !dimension.id) return;
-            
-            const dimId = dimension.id;
-            const dimName = dimension.name;
-            
-            const values = groupRows.map(r => {
-              const dimValues = r.dimension_values || {};
-              return dimValues[dimId];
-            }).filter(v => v !== null && v !== undefined);
-            
-            if (values.length === 0) {
-              aggregatedData[dimName] = null;
-              return;
-            }
-            
-            if (dimension.type === 'number' || dimension.type === 'currency' || dimension.type === 'percentage') {
-              const sum = values.reduce((acc, val) => {
-                const numVal = typeof val === 'number' ? val : parseFloat(val) || 0;
-                return acc + numVal;
-              }, 0);
-              aggregatedData[dimName] = sum;
-            } else {
-              aggregatedData[dimName] = values[0];
-            }
-          });
-          
-          return aggregatedData;
-        };
-        
-        // First pass: Group by Level 0 (Group by dimension)
-        processedData.forEach((row: any) => {
-          const dimensionValues = row.dimension_values || {};
-          const level0DimId = effectiveGroupByDims[0];
-          
-          if (!level0DimId) return;
-          
-          const level0Key = getDimensionValue(level0DimId, dimensionValues);
-          
-          if (!level0Map.has(level0Key)) {
-            level0Map.set(level0Key, []);
-          }
-          level0Map.get(level0Key)!.push(row);
-        });
-        
-        // Second pass: Create hierarchical structure
-        let rowIdCounter = 0;
-        
-        level0Map.forEach((level0Rows, level0Key) => {
-          const level0Id = `level0-${rowIdCounter++}`;
-          const level0Data = aggregateRows(level0Rows);
-          const level0Children: TableRow[] = [];
-          
-          // Group Level 0 rows by Level 1 (Breakdown by dimension)
-          if (effectiveBreakdownDims.length > 0 && effectiveBreakdownDims[0]) {
-            const level1DimId = effectiveBreakdownDims[0];
-            const level1Grouped = new Map<string, any[]>();
-            
-            level0Rows.forEach(row => {
-              const dimensionValues = row.dimension_values || {};
-              const level1Key = getDimensionValue(level1DimId, dimensionValues);
-              
-              if (!level1Grouped.has(level1Key)) {
-                level1Grouped.set(level1Key, []);
-              }
-              level1Grouped.get(level1Key)!.push(row);
-            });
-            
-            // Create Level 1 rows
-            level1Grouped.forEach((level1Rows, level1Key) => {
-              const level1Id = `level1-${rowIdCounter++}`;
-              const level1Data = aggregateRows(level1Rows);
-              const level1Children: TableRow[] = [];
-              
-              // Group Level 1 rows by Level 2 (Then by dimension)
-              if (effectiveThenByDims.length > 0 && effectiveThenByDims[0]) {
-                const level2DimId = effectiveThenByDims[0];
-                const level2Grouped = new Map<string, any[]>();
-                
-                level1Rows.forEach(row => {
-                  const dimensionValues = row.dimension_values || {};
-                  const level2Key = getDimensionValue(level2DimId, dimensionValues);
-                  
-                  if (!level2Grouped.has(level2Key)) {
-                    level2Grouped.set(level2Key, []);
-                  }
-                  level2Grouped.get(level2Key)!.push(row);
-                });
-                
-                // Create Level 2 rows (leaf nodes)
-                level2Grouped.forEach((level2Rows, level2Key) => {
-                  const level2Id = `level2-${rowIdCounter++}`;
-                  const level2Data = aggregateRows(level2Rows);
-                  
-                  level1Children.push({
-                    id: level2Id,
-                    name: level2Key,
-                    level: 2,
-                    parentId: level1Id,
-                    data: level2Data
-                  });
-                });
-              } else {
-                // No Level 2, so Level 1 row itself is a leaf node (already aggregated)
-                // No children needed - the level1Data is already aggregated from all level1Rows
-              }
-              
-              level0Children.push({
-                id: level1Id,
-                name: level1Key,
-                level: 1,
-                parentId: level0Id,
-                data: level1Data,
-                children: level1Children.length > 0 ? level1Children : undefined
-              });
-            });
-          } else {
-            // No Level 1, so Level 0 row itself is a leaf node (already aggregated)
-            // No children needed - the level0Data is already aggregated from all level0Rows
-          }
-          
-          rows.push({
-            id: level0Id,
-            name: level0Key,
-            level: 0,
-            data: level0Data,
-            children: level0Children.length > 0 ? level0Children : undefined
-          });
-        });
-        
-        // Calculate totals from leaf nodes only
-        const calculateTotalsFromRows = (rowList: TableRow[]) => {
-          rowList.forEach(row => {
-            if (row.children && row.children.length > 0) {
-              calculateTotalsFromRows(row.children);
-            } else {
-              // Leaf node - add to totals
-              Object.keys(row.data || {}).forEach(dimName => {
-                const dimension = effectiveDimensions.find(d => d && d.name === dimName);
-                if (dimension && (dimension.type === 'number' || dimension.type === 'currency' || dimension.type === 'percentage')) {
-                  const value = row.data[dimName];
-                  if (typeof value === 'number') {
-                    totals[dimName] = (totals[dimName] || 0) + value;
-                  }
-                }
-              });
-            }
-          });
-        };
-        
-        calculateTotalsFromRows(rows);
-      }
-
+      // The edge function returns { data: [...], total: ..., totalData: {...}, hasMore: ... }
+      const rows = data?.data || [];
       setTableData(rows);
-      setTotalData(totals);
-      setTotalCompareData({});
       
-      // Calculate change data if comparison is enabled (simplified for now)
-      setTotalChangeData({});
+      // Use totalData from edge function if available (more efficient than recalculating)
+      const finalTotalData = data?.totalData || (() => {
+        // Fallback: Calculate total data from all rows if edge function doesn't provide it
+        const calculatedTotalData: Record<string, any> = {};
+        if (rows.length > 0 && dimensions.length > 0) {
+          rows.forEach((row: any) => {
+            if (row.data) {
+              Object.keys(row.data).forEach((dimName: string) => {
+                const dim = dimensions.find(d => d.name === dimName);
+                if (dim && (dim.type === 'number' || dim.type === 'currency')) {
+                  calculatedTotalData[dimName] = (calculatedTotalData[dimName] || 0) + (parseFloat(row.data[dimName]) || 0);
+                }
+              });
+            }
+          });
+        }
+        return calculatedTotalData;
+      })();
+      setTotalData(finalTotalData);
+      
+      // Use totalCompareData from edge function if available
+      const finalCompareData = data?.totalCompareData || (() => {
+        // Fallback: Calculate comparison totals from rows if not provided
+        const calculatedCompareData: Record<string, any> = {};
+        if (rows.length > 0 && dimensions.length > 0) {
+          rows.forEach((row: any) => {
+            if (row.compareData) {
+              Object.keys(row.compareData).forEach((dimName: string) => {
+                const dim = dimensions.find(d => d.name === dimName);
+                if (dim && (dim.type === 'number' || dim.type === 'currency')) {
+                  calculatedCompareData[dimName] = (calculatedCompareData[dimName] || 0) + (parseFloat(row.compareData[dimName]) || 0);
+                }
+              });
+            }
+          });
+        }
+        return calculatedCompareData;
+      })();
+      setTotalCompareData(finalCompareData);
+      
+      // Use totalChangeData from edge function if available
+      const finalChangeData = data?.totalChangeData || (() => {
+        // Fallback: Calculate change data from totals
+        const calculatedChangeData: Record<string, any> = {};
+        
+        // Use all dimensions to ensure we calculate change for all metrics
+        const allDimNames = new Set<string>();
+        Object.keys(finalTotalData).forEach(k => allDimNames.add(k));
+        Object.keys(finalCompareData).forEach(k => allDimNames.add(k));
+        
+        allDimNames.forEach((dimName: string) => {
+          const current = finalTotalData[dimName] || 0;
+          const previous = finalCompareData[dimName] || 0;
+          if (previous !== 0) {
+            calculatedChangeData[dimName] = ((current - previous) / previous) * 100;
+          } else if (current !== 0) {
+            calculatedChangeData[dimName] = current > 0 ? 100 : -100;
+          } else {
+            calculatedChangeData[dimName] = 0;
+          }
+        });
+        return calculatedChangeData;
+      })();
+      setTotalChangeData(finalChangeData);
     } catch (error) {
       console.error('[testing] Error loading performance data:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -1763,8 +1499,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   // Get dimensions in the custom order
   const getOrderedDimensions = (): Dimension[] => {
     const metricDimensions = dimensions.filter(d => 
-      d && typeof d === 'object' && d.id && d.name && d.type &&
-      (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula)
+      d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula
     );
     
     if (columnOrder.length === 0) {
@@ -1824,7 +1559,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     e.preventDefault();
     // If kpi is "name", it's the group dimension column
     if (kpi === "name" && groupByDimensions[0]) {
-      const groupDim = dimensions.find(d => d && d.id === groupByDimensions[0]);
+      const groupDim = dimensions.find(d => d.id === groupByDimensions[0]);
       setSelectedKPI(groupDim?.name || "name");
     } else {
       setSelectedKPI(kpi);
@@ -1845,15 +1580,38 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     value: string,
     selector: "group" | "breakdown" | "then"
   ) => {
-    // Set the dimension for the specific selector
+    let targetIndex = 0;
     if (selector === "group") {
-      setGroupByDimensions([value]);
+      targetIndex = 0;
     } else if (selector === "breakdown") {
-      setBreakdownByDimensions([value]);
+      targetIndex = 1;
     } else {
-      setThenByDimensions([value]);
+      targetIndex = 2;
     }
-    setCurrentPage(1); // Reset to first page when grouping changes
+    
+    // Find the current index of the selected dimension
+    const currentIndex = groupByDimensions.indexOf(value);
+    
+    if (currentIndex === -1) {
+      // Dimension not found, shouldn't happen but handle gracefully
+      return;
+    }
+    
+    // If clicking on the same dimension that's already at this position, do nothing
+    if (currentIndex === targetIndex) {
+      return;
+    }
+    
+    // Swap the dimensions - reorder the array
+    const newDimensions = [...groupByDimensions];
+    const temp = newDimensions[targetIndex];
+    newDimensions[targetIndex] = value;
+    newDimensions[currentIndex] = temp;
+    
+    // Sync across all dimension arrays
+    setGroupByDimensions(newDimensions);
+    setBreakdownByDimensions(newDimensions);
+    setThenByDimensions(newDimensions);
   };
 
   const getSelectorTitle = () => {
@@ -1872,14 +1630,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   };
 
   const handleDimensionsChange = (dimensions: string[]) => {
-    // Update the dimension array for the current selector
-    if (currentSelector === "group") {
-      setGroupByDimensions(dimensions.length > 0 ? [dimensions[0]] : []);
-    } else if (currentSelector === "breakdown") {
-      setBreakdownByDimensions(dimensions.length > 0 ? [dimensions[0]] : []);
-    } else {
-      setThenByDimensions(dimensions.length > 0 ? [dimensions[0]] : []);
-    }
+    // Auto-sync dimensions across all dropdowns based on selection count
+    // The same dimensions are available in all dropdowns
+    setGroupByDimensions(dimensions);
+    setBreakdownByDimensions(dimensions);
+    setThenByDimensions(dimensions);
     setCurrentPage(1); // Reset to first page when grouping changes
   };
 
@@ -1892,19 +1647,13 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     console.log('[testing] Applying filters:', filters.dimensionFilters);
 
     return tableData.filter((row) => {
-      // Safety check for row and row.data
-      if (!row || !row.data) {
-        console.warn('[testing] Row or row.data is undefined, skipping');
-        return false;
-      }
-      
       // Check each dimension filter
       for (const [dimId, filterValues] of Object.entries(filters.dimensionFilters)) {
         if (!filterValues || filterValues.length === 0) continue;
 
-        const dimension = dimensions.find(d => d && d.id === dimId);
-        if (!dimension || !dimension.name) {
-          console.log('[testing] Dimension not found or invalid for filter:', dimId);
+        const dimension = dimensions.find(d => d.id === dimId);
+        if (!dimension) {
+          console.log('[testing] Dimension not found for filter:', dimId);
           continue;
         }
 
@@ -1988,16 +1737,14 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     // Only sum leaf nodes (rows without children) to avoid double-counting
     const filteredTotals: Record<string, any> = {};
     for (const dim of dimensions) {
-      if (!dim || !dim.name || !dim.type) continue; // Safety check
       if (dim.formula) continue;
       if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
         let sum = 0;
         const calculateRowTotal = (rows: TableRow[]) => {
           rows.forEach(row => {
-            if (!row) return; // Safety check
             // Only sum values from leaf nodes (rows without children)
             const hasChildren = row.children && row.children.length > 0;
-            if (!hasChildren && row.data) {
+            if (!hasChildren) {
               const value = row.data[dim.name];
               if (value !== undefined && value !== null) {
                 sum += parseFloat(value) || 0;
@@ -2016,11 +1763,10 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     
     // Calculate formula totals
     for (const dim of dimensions) {
-      if (!dim || !dim.name || !dim.formula) continue; // Safety check
       if (dim.formula) {
         try {
           let expression = dim.formula;
-          const dimensionNames = dimensions.filter(d => d && d.name).map(d => d.name).sort((a, b) => b.length - a.length);
+          const dimensionNames = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
           for (const dimName of dimensionNames) {
             const value = filteredTotals[dimName] || 0;
             const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -2047,13 +1793,11 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     // Calculate comparison totals from filtered data
     const filteredCompareTotals: Record<string, any> = {};
     for (const dim of dimensions) {
-      if (!dim || !dim.name || !dim.type) continue; // Safety check
       if (dim.formula) continue;
       if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
         let sum = 0;
         const calculateRowTotal = (rows: TableRow[]) => {
           rows.forEach(row => {
-            if (!row) return; // Safety check
             const hasChildren = row.children && row.children.length > 0;
             if (!hasChildren && row.compareData) {
               const value = row.compareData[dim.name];
@@ -2073,11 +1817,10 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
 
     // Calculate formula comparison totals
     for (const dim of dimensions) {
-      if (!dim || !dim.name || !dim.formula) continue; // Safety check
       if (dim.formula) {
         try {
           let expression = dim.formula;
-          const dimensionNames = dimensions.filter(d => d && d.name).map(d => d.name).sort((a, b) => b.length - a.length);
+          const dimensionNames = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
           for (const dimName of dimensionNames) {
             const value = filteredCompareTotals[dimName] || 0;
             const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -2149,7 +1892,6 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
           {getOrderedDimensions()
             .filter(d => visibleColumns.has(d.id))
             .map((dimension) => {
-              if (!row || !row.data || !dimension || !dimension.name) return null; // Safety check
               const value = row.data[dimension.name];
               const change = row.changeData?.[dimension.name];
               const hasComparison = filters.compareEnabled && change !== undefined;
@@ -2188,15 +1930,44 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     <>
       <Card>
         <CardHeader className="pb-3">
-          {/* Date Granularity Tabs */}
-          <Tabs value={activeDateTab} onValueChange={(value) => setActiveDateTab(value as 'day' | 'week' | 'month' | 'year')} className="mb-4">
-            <TabsList>
-              <TabsTrigger value="day">Day</TabsTrigger>
-              <TabsTrigger value="week">Week</TabsTrigger>
-              <TabsTrigger value="month">Month</TabsTrigger>
-              <TabsTrigger value="year">Year</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {/* Table View Tabs */}
+          {tableViews.length > 0 && (
+            <Tabs value={activeViewId || undefined} onValueChange={handleViewChange} className="mb-4">
+              <div className="flex items-center gap-2">
+                <TabsList>
+                  {tableViews.map((view) => (
+                    <TabsTrigger 
+                      key={view.id} 
+                      value={view.id}
+                      onDoubleClick={!isSharedView ? () => handleTabDoubleClick(view.id, view.name) : undefined}
+                      className="relative"
+                    >
+                      {!isSharedView && editingTabId === view.id ? (
+                        <input
+                          type="text"
+                          value={editingTabName}
+                          onChange={(e) => setEditingTabName(e.target.value)}
+                          onBlur={handleTabNameSave}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleTabNameSave();
+                            } else if (e.key === 'Escape') {
+                              handleTabNameCancel();
+                            }
+                          }}
+                          className="bg-transparent border-none outline-none text-center w-full px-0"
+                          autoFocus
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        view.name
+                      )}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+            </Tabs>
+          )}
           
           <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 text-sm">
@@ -2212,14 +1983,13 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                         className="w-40 bg-background"
                         onContextMenu={!isSharedView ? (e) => handleDimensionSelectorOpen(e as any, "group") : undefined}
                       >
-                        <SelectValue>
-                          {dimensions.find(d => d.id === groupByDimensions[0])?.name || "Select"}
-                        </SelectValue>
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="bg-background z-50">
-                        {dimensions.filter(d => d.type === 'text' || d.type === 'date').map((dim) => {
-                          const hasData = reportId ? dimensionHasData[dim.id] : undefined;
-                          return (
+                        {groupByDimensions.map((dimId) => {
+                          const dim = dimensions.find(d => d.id === dimId);
+                          const hasData = reportId ? dimensionHasData[dimId] : undefined;
+                          return dim ? (
                             <SelectItem key={dim.id} value={dim.id}>
                               <div className="flex items-center gap-2">
                                 {reportId && (
@@ -2236,7 +2006,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                                 <span>{dim.name}</span>
                               </div>
                             </SelectItem>
-                          );
+                          ) : null;
                         })}
                       </SelectContent>
                     </Select>
@@ -2244,150 +2014,122 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                     <Button
                       variant="outline"
                       className="w-40 justify-start"
+                      onContextMenu={(e) => handleDimensionSelectorOpen(e, "group")}
                       onClick={(e) => handleDimensionSelectorOpen(e as any, "group")}
                     >
-                      <span className="text-muted-foreground">Select</span>
+                      <span className="text-muted-foreground">Right-click to select</span>
                     </Button>
                   ) : (
                     <span className="text-sm text-muted-foreground">-</span>
                   )}
                 </div>
-                {/* Breakdown by - shown when there's a groupBy dimension */}
-                {groupByDimensions.length > 0 && (
+                {/* Breakdown by - shown only if 2+ dimensions selected */}
+                {groupByDimensions.length >= 2 && (
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Breakdown by:</span>
-                    {breakdownByDimensions.length > 0 ? (
-                      <div className="flex items-center gap-1">
-                        <Select
-                          value={breakdownByDimensions[0] || ""}
-                          onValueChange={(value) => handleDimensionChange(value, "breakdown")}
-                        >
-                          <SelectTrigger 
-                            className="w-40 bg-background"
-                            onContextMenu={!isSharedView ? (e) => handleDimensionSelectorOpen(e as any, "breakdown") : undefined}
-                          >
-                            <SelectValue>
-                              {dimensions.find(d => d.id === breakdownByDimensions[0])?.name || "Select"}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent className="bg-background z-50">
-                            {dimensions.filter(d => d.type === 'text' || d.type === 'date').map((dim) => {
-                              const hasData = reportId ? dimensionHasData[dim.id] : undefined;
-                              return (
-                                <SelectItem key={dim.id} value={dim.id}>
-                                  <div className="flex items-center gap-2">
-                                    {reportId && (
-                                      hasData !== undefined ? (
-                                        hasData ? (
-                                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                                        ) : (
-                                          <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                                        )
-                                      ) : (
-                                        <div className="h-3.5 w-3.5" />
-                                      )
-                                    )}
-                                    <span>{dim.name}</span>
-                                  </div>
-                                </SelectItem>
-                              );
-                            })}
-                          </SelectContent>
-                        </Select>
-                        {!isSharedView && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => setBreakdownByDimensions([])}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    ) : !isSharedView ? (
-                      <Button
-                        variant="outline"
-                        className="w-40 justify-start"
-                        onClick={(e) => handleDimensionSelectorOpen(e as any, "breakdown")}
+                    <Select
+                      value={breakdownByDimensions[1] || ""}
+                      onValueChange={(value) => handleDimensionChange(value, "breakdown")}
+                    >
+                      <SelectTrigger 
+                        className="w-40 bg-background"
+                        onContextMenu={!isSharedView ? (e) => handleDimensionSelectorOpen(e as any, "breakdown") : undefined}
                       >
-                        <span className="text-muted-foreground">Select</span>
-                      </Button>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">-</span>
-                    )}
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background z-50">
+                        {breakdownByDimensions.map((dimId) => {
+                          const dim = dimensions.find(d => d.id === dimId);
+                          const hasData = reportId ? dimensionHasData[dimId] : undefined;
+                          return dim ? (
+                            <SelectItem key={dim.id} value={dim.id}>
+                              <div className="flex items-center gap-2">
+                                {reportId && (
+                                  hasData !== undefined ? (
+                                    hasData ? (
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                    ) : (
+                                      <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                                    )
+                                  ) : (
+                                    <div className="h-3.5 w-3.5" />
+                                  )
+                                )}
+                                <span>{dim.name}</span>
+                              </div>
+                            </SelectItem>
+                          ) : null;
+                        })}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
-                {/* Then by - shown when there's a breakdown dimension */}
-                {breakdownByDimensions.length > 0 && (
+                {/* Then by - shown only if 3+ dimensions selected */}
+                {groupByDimensions.length >= 3 && (
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Then by:</span>
-                    {thenByDimensions.length > 0 ? (
-                      <div className="flex items-center gap-1">
-                        <Select
-                          value={thenByDimensions[0] || ""}
-                          onValueChange={(value) => handleDimensionChange(value, "then")}
-                        >
-                          <SelectTrigger 
-                            className="w-40 bg-background"
-                            onContextMenu={!isSharedView ? (e) => handleDimensionSelectorOpen(e as any, "then") : undefined}
-                          >
-                            <SelectValue>
-                              {dimensions.find(d => d.id === thenByDimensions[0])?.name || "Select"}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent className="bg-background z-50">
-                            {dimensions.filter(d => d.type === 'text' || d.type === 'date').map((dim) => {
-                              const hasData = reportId ? dimensionHasData[dim.id] : undefined;
-                              return (
-                                <SelectItem key={dim.id} value={dim.id}>
-                                  <div className="flex items-center gap-2">
-                                    {reportId && (
-                                      hasData !== undefined ? (
-                                        hasData ? (
-                                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                                        ) : (
-                                          <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                                        )
-                                      ) : (
-                                        <div className="h-3.5 w-3.5" />
-                                      )
-                                    )}
-                                    <span>{dim.name}</span>
-                                  </div>
-                                </SelectItem>
-                              );
-                            })}
-                          </SelectContent>
-                        </Select>
-                        {!isSharedView && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => setThenByDimensions([])}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    ) : !isSharedView ? (
-                      <Button
-                        variant="outline"
-                        className="w-40 justify-start"
-                        onClick={(e) => handleDimensionSelectorOpen(e as any, "then")}
+                    <Select
+                      value={thenByDimensions[2] || ""}
+                      onValueChange={(value) => handleDimensionChange(value, "then")}
+                    >
+                      <SelectTrigger 
+                        className="w-40 bg-background"
+                        onContextMenu={!isSharedView ? (e) => handleDimensionSelectorOpen(e as any, "then") : undefined}
                       >
-                        <span className="text-muted-foreground">Select</span>
-                      </Button>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">-</span>
-                    )}
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background z-50">
+                        {thenByDimensions.map((dimId) => {
+                          const dim = dimensions.find(d => d.id === dimId);
+                          const hasData = reportId ? dimensionHasData[dimId] : undefined;
+                          return dim ? (
+                            <SelectItem key={dim.id} value={dim.id}>
+                              <div className="flex items-center gap-2">
+                                {reportId && (
+                                  hasData !== undefined ? (
+                                    hasData ? (
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                    ) : (
+                                      <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                                    )
+                                  ) : (
+                                    <div className="h-3.5 w-3.5" />
+                                  )
+                                )}
+                                <span>{dim.name}</span>
+                              </div>
+                            </SelectItem>
+                          ) : null;
+                        })}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
               </div>
               
-                              {!isSharedView && (
-                  <div className="flex items-center gap-2">
+              {!isSharedView && (
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    className="h-9 w-9"
+                    onClick={handleDuplicateView}
+                    title="Duplicate table"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                  
+                  {tableViews.length > 1 && (
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="h-9 w-9 text-destructive hover:text-destructive"
+                      onClick={() => activeViewId && handleDeleteView(activeViewId)}
+                      title="Delete table"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                   
                   <Sheet onOpenChange={(open) => {
                     if (open) {
@@ -2510,7 +2252,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                         onContextMenu={(e) => handleContextMenu(e, "name")}
                       >
                       {groupByDimensions[0] 
-                        ? dimensions.find(d => d && d.id === groupByDimensions[0])?.name || "Name"
+                        ? dimensions.find(d => d.id === groupByDimensions[0])?.name || "Name"
                         : "Name"}
                     </th>
                       {getOrderedDimensions()
@@ -2628,8 +2370,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         columnName={selectedKPI}
         dimension={
           selectedKPI === "name" && groupByDimensions[0]
-            ? dimensions.find(d => d && d.id === groupByDimensions[0])
-            : dimensions.find(d => d && d.name === selectedKPI)
+            ? dimensions.find(d => d.id === groupByDimensions[0])
+            : dimensions.find(d => d.name === selectedKPI)
         }
         currentFilters={filters}
         onFiltersChange={onFiltersChange}
@@ -2642,8 +2384,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         title={getSelectorTitle()}
         selectedDimensions={getCurrentDimensions()}
         onDimensionsChange={handleDimensionsChange}
-        onDateGranularityChange={(granularity) => setActiveDateTab(granularity as 'day' | 'week' | 'month' | 'year')}
-        currentDateGranularity={activeDateTab}
+        onDateGranularityChange={(granularity) => setDateGranularity(granularity as any)}
+        currentDateGranularity={dateGranularity}
         reportId={reportId}
       />
     </>

@@ -508,9 +508,9 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
 
       console.log('[testing] FiltersBar - Loaded dimensions - Account:', accountData?.length || 0, 'Custom:', customData?.length || 0, 'Global:', globalData?.length || 0, 'Unique:', uniqueDimensions.length);
 
-      // Filter to only text dimensions (for filtering) - date filtering is handled by date range picker
+      // Filter to only text and date dimensions (for filtering)
       const filterableDimensions = uniqueDimensions.filter(d => 
-        d.type === 'text'
+        d.type === 'text' || d.type === 'date'
       );
 
       // Filter dimensions by visibility settings

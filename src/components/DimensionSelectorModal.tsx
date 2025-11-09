@@ -208,22 +208,8 @@ export const DimensionSelectorModal = ({
     setDimensionGranularities(granularities);
   }, [selectedDimensions, dimensions, currentDateGranularity]);
 
-  // Remove any date dimensions from selected dimensions since we have date range picker
-  useEffect(() => {
-    if (dimensions.length > 0 && selectedDimensions.length > 0) {
-      const dateDimensions = dimensions.filter(d => d.type === 'date').map(d => d.id);
-      const hasDateDimensions = selectedDimensions.some(id => dateDimensions.includes(id));
-      
-      if (hasDateDimensions) {
-        const filteredDimensions = selectedDimensions.filter(id => !dateDimensions.includes(id));
-        console.log('[DIMENSION-SELECTOR] Removing date dimensions from filter dimensions:', dateDimensions);
-        onDimensionsChange(filteredDimensions);
-      }
-    }
-  }, [dimensions, selectedDimensions, onDimensionsChange]);
-
   const availableDimensions = dimensions.filter(
-    (d) => !selectedDimensions.includes(d.id) && d.type !== 'date'
+    (d) => !selectedDimensions.includes(d.id)
   );
 
   const checkDataAvailability = async (dimensionIds: string[], reportId: string) => {
@@ -423,22 +409,15 @@ export const DimensionSelectorModal = ({
                     </div>
                   </div>
                 ) : (
-                                    <div>
-                    <Button
-                      variant="outline"
-                      className="w-full gap-2"
-                      onClick={() => setShowAddSelector(true)}
-                      disabled={availableDimensions.length === 0}
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add dimension
-                    </Button>
-                    {availableDimensions.length === 0 && (
-                      <p className="text-xs text-muted-foreground mt-2 text-center">
-                        No additional dimensions available. Date filtering is handled by the date range picker above.
-                      </p>
-                    )}
-                  </div>
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={() => setShowAddSelector(true)}
+                    disabled={availableDimensions.length === 0}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add dimension
+                  </Button>
                 )}
               </div>
             </>

@@ -6,17 +6,14 @@ import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCardsFixed";
 import { KPIChart } from "@/components/KPIChartFixed";
 import { PerformanceTable } from "@/components/PerformanceTable";
-import { ForecastingPage } from "@/pages/ForecastingPage";
 import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { Settings, ArrowLeft, BarChart3, TrendingUp } from "lucide-react";
+import { Settings, ArrowLeft } from "lucide-react";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
-import { AccountDebugInfo } from "@/components/AccountDebugInfo";
 
 interface Account {
   id: string;
@@ -30,35 +27,17 @@ export default function ReportDashboard() {
   const navigate = useNavigate();
   const { accountId } = useParams<{ accountId: string }>();
   const [searchParams] = useSearchParams();
-  
-  // Debug current URL and parameters
-  console.log('[DASHBOARD] Component initialized with:', { 
-    accountId, 
-    currentPath: window.location.pathname,
-    searchParams: Object.fromEntries(searchParams.entries())
-  });
   const [session, setSession] = useState<Session | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [loadingComponents, setLoadingComponents] = useState<Set<string>>(new Set());
-  const [isAuthChecking, setIsAuthChecking] = useState(false);
-  const [isAccountLoading, setIsAccountLoading] = useState(false);
   const [isSharedView, setIsSharedView] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
-  const [activeTab, setActiveTab] = useState("performance");
-
-  // Clear loading state when switching to forecasting tab
-  useEffect(() => {
-    if (activeTab === "forecasting") {
-      setLoadingComponents(new Set());
-      setIsDataLoading(false);
-    }
-  }, [activeTab]);
   
   // Filter state - default to this month with timezone-free date range
   const [filters, setFilters] = useState<FilterState>(() => {
@@ -118,34 +97,21 @@ export default function ReportDashboard() {
   }, [filters.dateRange, filters.datePreset]);
   
   // Track component loading states
-  const markComponentLoading = useCallback((component: string) => {
-    console.log('[LOADING-DEBUG] Component loading:', component);
-    setLoadingComponents(prev => {
-      const next = new Set(prev).add(component);
-      console.log('[LOADING-DEBUG] Loading components:', Array.from(next));
-      return next;
-    });
+  const markComponentLoading = (component: string) => {
+    setLoadingComponents(prev => new Set(prev).add(component));
     setIsDataLoading(true);
-  }, []);
+  };
   
-  const markComponentLoaded = useCallback((component: string) => {
-    console.log('[LOADING-DEBUG] Component loaded:', component);
+  const markComponentLoaded = (component: string) => {
     setLoadingComponents(prev => {
       const next = new Set(prev);
       next.delete(component);
-      console.log('[LOADING-DEBUG] Remaining components:', Array.from(next));
       if (next.size === 0) {
-        console.log('[LOADING-DEBUG] All components loaded, hiding loading toast');
         setIsDataLoading(false);
       }
       return next;
     });
-  }, []);
-
-  // Memoized loading handlers to prevent re-render loops
-  const handleMetricsLoaded = useCallback(() => markComponentLoaded('metrics'), [markComponentLoaded]);
-  const handleChartLoaded = useCallback(() => markComponentLoaded('chart'), [markComponentLoaded]);
-  const handleTableLoaded = useCallback(() => markComponentLoaded('table'), [markComponentLoaded]);
+  };
   
   // Reset filters and mark loading when report changes
   useEffect(() => {
@@ -175,83 +141,41 @@ export default function ReportDashboard() {
   
   useEffect(() => {
     checkAuth();
-    
-    // Safety timeout to prevent infinite loading
-    const timeout = setTimeout(() => {
-      console.warn('[SAFETY] Loading timeout reached, forcing loading to stop');
-      setIsLoading(false);
-    }, 15000); // 15 seconds timeout
-    
-    return () => clearTimeout(timeout);
   }, []);
 
   useEffect(() => {
-    if (session && accountId && !isAccountLoading && !account) {
-      console.log('[EFFECT] loadAccount useEffect triggered', { 
-        sessionId: session.user?.id, 
-        accountId,
-        timestamp: new Date().toISOString() 
-      });
+    if (session && accountId) {
       loadAccount();
-    } else if (session && !accountId) {
-      console.log('[EFFECT] No accountId in URL, redirecting to account selection');
-      navigate('/tools/report');
     }
   }, [session, accountId]);
 
-  const checkAuth = useCallback(async () => {
-    if (isAuthChecking) {
-      console.log('[AUTH] Auth check already in progress, skipping...');
-      return;
-    }
-    
-    console.log('[AUTH] Starting authentication check...');
-    setIsAuthChecking(true);
+  const checkAuth = async () => {
     try {
       const { data: { session }, error } = await supabase.auth.getSession();
       
       if (error) throw error;
       
       if (!session) {
-        console.log('[AUTH] No session found, redirecting to auth');
-        setIsLoading(false);
         navigate('/auth');
         return;
       }
       
-      console.log('[AUTH] Session found, setting session state');
       setSession(session);
     } catch (error) {
-      console.error('[AUTH] Error checking auth:', error);
-      setIsLoading(false); // Ensure loading is stopped on error
+      console.error('Error checking auth:', error);
       toast({
         title: "Authentication Error",
         description: "Please sign in again.",
         variant: "destructive",
       });
       navigate('/auth');
-    } finally {
-      setIsAuthChecking(false);
     }
-  }, [navigate, isAuthChecking]);
+  };
 
   const loadAccount = async () => {
-    if (isAccountLoading) {
-      console.log('[ACCOUNT] Account load already in progress, skipping...');
-      return;
-    }
+    if (!session || !accountId) return;
     
-    console.log('[ACCOUNT] Starting account load...', { hasSession: !!session, accountId, userId: session?.user?.id });
-    if (!session || !accountId) {
-      console.log('[ACCOUNT] Missing session or accountId, skipping load', { hasSession: !!session, accountId });
-      setIsLoading(false);
-      return;
-    }
-    
-    setIsAccountLoading(true);
     try {
-      console.log('[ACCOUNT] Querying account with:', { accountId, userId: session.user.id });
-      
       const { data, error } = await supabase
         .from('accounts')
         .select('*')
@@ -259,42 +183,15 @@ export default function ReportDashboard() {
         .eq('user_id', session.user.id)
         .single();
       
-      console.log('[ACCOUNT] Query result:', { data: !!data, error: error?.message, accountName: data?.name });
-      
-      if (error) {
-        console.error('[ACCOUNT] Database error:', error);
-        throw error;
-      }
+      if (error) throw error;
       
       if (!data) {
-        console.error('[ACCOUNT] No account found with ID:', accountId, 'for user:', session.user.id);
-        setIsAccountLoading(false);
-        setIsLoading(false);
-        
-        // List available accounts for this user
-        const { data: userAccounts } = await supabase
-          .from('accounts')
-          .select('id, name')
-          .eq('user_id', session.user.id);
-        
-        console.log('[ACCOUNT] Available accounts for user:', userAccounts);
-        
-        // If user has other accounts, redirect to the first one
-        if (userAccounts && userAccounts.length > 0) {
-          console.log('[ACCOUNT] Redirecting to first available account:', userAccounts[0].name);
-          toast({
-            title: "Account Not Found",
-            description: `Switched to: ${userAccounts[0].name}`,
-          });
-          navigate(`/tools/report/${userAccounts[0].id}`, { replace: true });
-          return;
-        }
-        
         toast({
-          title: "No Accounts Found",
-          description: "Please create an account to continue.",
+          title: "Account Not Found",
+          description: "This account does not exist or you don't have access to it.",
+          variant: "destructive",
         });
-        navigate('/tools/report', { replace: true });
+        navigate('/tools/report');
         return;
       }
       
@@ -312,9 +209,7 @@ export default function ReportDashboard() {
       
       // If user has reports for this account, select the first one or the one from URL params
       if (reports && reports.length > 0) {
-        // Get current search params to avoid dependency
-        const currentSearchParams = new URLSearchParams(window.location.search);
-        const reportIdFromUrl = currentSearchParams.get('reportId');
+        const reportIdFromUrl = searchParams.get('reportId');
         const selectedReportId = reportIdFromUrl && reports.find(r => r.id === reportIdFromUrl)
           ? reportIdFromUrl
           : reports[0].id;
@@ -332,19 +227,15 @@ export default function ReportDashboard() {
           });
       }
       
-      console.log('[ACCOUNT] Account load completed successfully');
       setIsLoading(false);
     } catch (error) {
-      console.error('[ACCOUNT] Error loading account:', error);
-      setIsLoading(false); // Ensure loading is stopped on error
+      console.error('Error loading account:', error);
       toast({
         title: "Error",
         description: "Failed to load account.",
         variant: "destructive",
       });
       navigate('/tools/report');
-    } finally {
-      setIsAccountLoading(false);
     }
   };
   
@@ -438,70 +329,46 @@ export default function ReportDashboard() {
         <>
           <FiltersBar reportId={reportId} onFiltersChange={handleFiltersChange} isSharedView={isSharedView} accountId={accountId} refreshTrigger={loadingGeneration} />
           <main className="container mx-auto px-6 py-6 space-y-6">
-            {/* Temporary debug info */}
-            <AccountDebugInfo />
-
-
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="performance" className="flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4" />
-                  Performance
-                </TabsTrigger>
-                <TabsTrigger value="forecasting" className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" />
-                  Forecasting
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="performance" className="space-y-6">
+            <div className="relative">
+              <div className="absolute right-0 -top-2 z-10">
                 {!isSharedView && (
-                  <div className="flex justify-end mb-4">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setKpiSettingsOpen(true)}
-                      className="gap-2"
-                    >
-                      <Settings className="h-4 w-4" />
-                      KPI Settings
-                    </Button>
-                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setKpiSettingsOpen(true)}
+                    className="gap-2"
+                  >
+                    <Settings className="h-4 w-4" />
+                    KPI Settings
+                  </Button>
                 )}
-                <KPIMetricsCards
-                  reportId={reportId}
-                  filters={filters}
-                  accountId={accountId}
-                  visibilityRefreshTrigger={visibilityRefreshTrigger}
-                  key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
-                  onLoadingComplete={handleMetricsLoaded}
-                />
-                <KPIChart
-                  reportId={reportId}
-                  filters={filters}
-                  accountId={accountId}
-                  visibilityRefreshTrigger={visibilityRefreshTrigger}
-                  key={`charts-${dataRefreshKey}-${loadingGeneration}`}
-                  onLoadingComplete={handleChartLoaded}
-                />
-                <PerformanceTable 
-                  reportId={reportId} 
-                  filters={filters} 
-                  isSharedView={isSharedView} 
-                  accountId={accountId} 
-                  visibilityRefreshTrigger={visibilityRefreshTrigger}
-                  key={`table-${dataRefreshKey}-${loadingGeneration}`}
-                  onLoadingComplete={handleTableLoaded}
-                />
-              </TabsContent>
-
-              <TabsContent value="forecasting">
-                <ForecastingPage 
-                  reportId={reportId} 
-                  accountId={accountId}
-                />
-              </TabsContent>
-            </Tabs>
+              </div>
+              <KPIMetricsCards
+                reportId={reportId}
+                filters={filters}
+                accountId={accountId}
+                visibilityRefreshTrigger={visibilityRefreshTrigger}
+                key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
+                onLoadingComplete={() => markComponentLoaded('metrics')}
+              />
+            </div>
+            <KPIChart
+              reportId={reportId}
+              filters={filters}
+              accountId={accountId}
+              visibilityRefreshTrigger={visibilityRefreshTrigger}
+              key={`charts-${dataRefreshKey}-${loadingGeneration}`}
+              onLoadingComplete={() => markComponentLoaded('chart')}
+            />
+            <PerformanceTable 
+              reportId={reportId} 
+              filters={filters} 
+              isSharedView={isSharedView} 
+              accountId={accountId} 
+              visibilityRefreshTrigger={visibilityRefreshTrigger}
+              key={`table-${dataRefreshKey}-${loadingGeneration}`}
+              onLoadingComplete={() => markComponentLoaded('table')}
+            />
           </main>
           
           <KPISettingsModal

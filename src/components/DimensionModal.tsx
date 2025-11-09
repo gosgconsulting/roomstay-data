@@ -52,7 +52,7 @@ export const DimensionModal = ({
   const [name, setName] = useState("");
   const [type, setType] = useState("number");
   const [formula, setFormula] = useState("");
-  const [scope, setScope] = useState<'global' | 'custom' | 'account'>('account');
+  const [scope, setScope] = useState<'global' | 'custom' | 'account'>('custom');
   const [isLoading, setIsLoading] = useState(false);
 
   const [availableDimensions, setAvailableDimensions] = useState<Dimension[]>([]);
@@ -109,10 +109,20 @@ export const DimensionModal = ({
 
       if (customError) throw customError;
 
-      // Combine dimensions with priority: account > custom
+      // Load global dimensions
+      const { data: globalData, error: globalError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("scope", "global")
+        .order("created_at", { ascending: false });
+
+      if (globalError) throw globalError;
+
+      // Combine dimensions with priority: account > custom > global
       const allDimensions = [
         ...accountData,
-        ...(customData || [])
+        ...(customData || []),
+        ...(globalData || [])
       ] as Dimension[];
 
       // Deduplicate by name (keep first occurrence = highest priority)
@@ -127,6 +137,7 @@ export const DimensionModal = ({
       console.log('[testing] Loaded dimensions for formula:', {
         account: accountData.length,
         custom: customData?.length || 0,
+        global: globalData?.length || 0,
         unique: uniqueDimensions.length
       });
 
@@ -150,8 +161,8 @@ export const DimensionModal = ({
       setName("");
       setType("number");
       setFormula("");
-      // Default to account scope for new dimensions
-      setScope('account');
+      // Default to individual (custom) scope for new dimensions
+      setScope('custom');
     }
   }, [open, mode, dimension]);
 
