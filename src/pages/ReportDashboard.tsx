@@ -5,7 +5,7 @@ import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCardsFixed";
 import { KPIChart } from "@/components/KPIChartFixed";
-import { PerformanceTable } from "@/components/PerformanceTable";
+import { PerformanceTable } from "@/components/PerformanceTableFixed";
 import { ForecastingPage } from "@/pages/ForecastingPage";
 import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
@@ -16,6 +16,7 @@ import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 import { Settings, ArrowLeft, BarChart3, TrendingUp } from "lucide-react";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
+import { AccountDebugInfo } from "@/components/AccountDebugInfo";
 
 interface Account {
   id: string;
@@ -29,6 +30,13 @@ export default function ReportDashboard() {
   const navigate = useNavigate();
   const { accountId } = useParams<{ accountId: string }>();
   const [searchParams] = useSearchParams();
+  
+  // Debug current URL and parameters
+  console.log('[DASHBOARD] Component initialized with:', { 
+    accountId, 
+    currentPath: window.location.pathname,
+    searchParams: Object.fromEntries(searchParams.entries())
+  });
   const [session, setSession] = useState<Session | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -173,7 +181,13 @@ export default function ReportDashboard() {
   }, []);
 
   useEffect(() => {
-    if (session && accountId && !isAccountLoading) {
+    if (session && !isAccountLoading) {
+      if (!accountId) {
+        console.log('[EFFECT] No accountId in URL, redirecting to account selection');
+        navigate('/tools/report');
+        return;
+      }
+      
       console.log('[EFFECT] loadAccount useEffect triggered', { 
         sessionId: session.user?.id, 
         accountId,
@@ -225,14 +239,16 @@ export default function ReportDashboard() {
       return;
     }
     
-    console.log('[ACCOUNT] Starting account load...', { hasSession: !!session, accountId });
+    console.log('[ACCOUNT] Starting account load...', { hasSession: !!session, accountId, userId: session?.user?.id });
     if (!session || !accountId) {
-      console.log('[ACCOUNT] Missing session or accountId, skipping load');
+      console.log('[ACCOUNT] Missing session or accountId, skipping load', { hasSession: !!session, accountId });
       return;
     }
     
     setIsAccountLoading(true);
     try {
+      console.log('[ACCOUNT] Querying account with:', { accountId, userId: session.user.id });
+      
       const { data, error } = await supabase
         .from('accounts')
         .select('*')
@@ -240,9 +256,48 @@ export default function ReportDashboard() {
         .eq('user_id', session.user.id)
         .single();
       
-      if (error) throw error;
+      console.log('[ACCOUNT] Query result:', { data: !!data, error: error?.message, accountName: data?.name });
+      
+      if (error) {
+        console.error('[ACCOUNT] Database error:', error);
+        throw error;
+      }
       
       if (!data) {
+        console.error('[ACCOUNT] No account found with ID:', accountId, 'for user:', session.user.id);
+        
+        // Let's also check if the account exists for any user
+        const { data: anyAccount, error: anyError } = await supabase
+          .from('accounts')
+          .select('id, name, user_id')
+          .eq('id', accountId)
+          .single();
+        
+        if (anyAccount) {
+          console.error('[ACCOUNT] Account exists but belongs to different user:', anyAccount.user_id);
+        } else {
+          console.error('[ACCOUNT] Account does not exist at all');
+        }
+        
+        // List available accounts for this user
+        const { data: userAccounts } = await supabase
+          .from('accounts')
+          .select('id, name')
+          .eq('user_id', session.user.id);
+        
+        console.log('[ACCOUNT] Available accounts for user:', userAccounts);
+        
+        // If user has other accounts, redirect to the first one
+        if (userAccounts && userAccounts.length > 0) {
+          console.log('[ACCOUNT] Redirecting to first available account:', userAccounts[0].name);
+          toast({
+            title: "Account Redirected",
+            description: `Redirected to your account: ${userAccounts[0].name}`,
+          });
+          navigate(`/tools/report/${userAccounts[0].id}`);
+          return;
+        }
+        
         toast({
           title: "Account Not Found",
           description: "This account does not exist or you don't have access to it.",
@@ -392,6 +447,8 @@ export default function ReportDashboard() {
         <>
           <FiltersBar reportId={reportId} onFiltersChange={handleFiltersChange} isSharedView={isSharedView} accountId={accountId} refreshTrigger={loadingGeneration} />
           <main className="container mx-auto px-6 py-6 space-y-6">
+            {/* Temporary debug info */}
+            <AccountDebugInfo />
 
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">

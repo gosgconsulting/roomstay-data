@@ -102,8 +102,23 @@ export function KPIMetricsCards({
     setIsLoading(true);
     
     try {
-      // Get the current user
-      const { data: { user } } = await supabase.auth.getUser();
+      // Get the current user with fallback
+      let user = null;
+      
+      try {
+        const { data: { user: fetchedUser } } = await supabase.auth.getUser();
+        user = fetchedUser;
+      } catch (err) {
+        console.log('[KPI-FIXED] getUser() failed, trying session fallback:', err);
+        
+        // Fallback: get user from current session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          console.log('[KPI-FIXED] Using session user as fallback');
+          user = session.user;
+        }
+      }
+      
       console.log('[KPI-FIXED] loadMetrics - User:', user?.id);
       
       if (!user || !reportId || !accountId) {
