@@ -181,21 +181,18 @@ export default function ReportDashboard() {
   }, []);
 
   useEffect(() => {
-    if (session && !isAccountLoading) {
-      if (!accountId) {
-        console.log('[EFFECT] No accountId in URL, redirecting to account selection');
-        navigate('/tools/report');
-        return;
-      }
-      
+    if (session && accountId && !isAccountLoading && !account) {
       console.log('[EFFECT] loadAccount useEffect triggered', { 
         sessionId: session.user?.id, 
         accountId,
         timestamp: new Date().toISOString() 
       });
       loadAccount();
+    } else if (session && !accountId) {
+      console.log('[EFFECT] No accountId in URL, redirecting to account selection');
+      navigate('/tools/report');
     }
-  }, [session, accountId, isAccountLoading]);
+  }, [session, accountId]);
 
   const checkAuth = useCallback(async () => {
     if (isAuthChecking) {
@@ -233,7 +230,7 @@ export default function ReportDashboard() {
     }
   }, [navigate, isAuthChecking]);
 
-  const loadAccount = useCallback(async () => {
+  const loadAccount = async () => {
     if (isAccountLoading) {
       console.log('[ACCOUNT] Account load already in progress, skipping...');
       return;
@@ -242,6 +239,7 @@ export default function ReportDashboard() {
     console.log('[ACCOUNT] Starting account load...', { hasSession: !!session, accountId, userId: session?.user?.id });
     if (!session || !accountId) {
       console.log('[ACCOUNT] Missing session or accountId, skipping load', { hasSession: !!session, accountId });
+      setIsLoading(false);
       return;
     }
     
@@ -265,19 +263,8 @@ export default function ReportDashboard() {
       
       if (!data) {
         console.error('[ACCOUNT] No account found with ID:', accountId, 'for user:', session.user.id);
-        
-        // Let's also check if the account exists for any user
-        const { data: anyAccount, error: anyError } = await supabase
-          .from('accounts')
-          .select('id, name, user_id')
-          .eq('id', accountId)
-          .single();
-        
-        if (anyAccount) {
-          console.error('[ACCOUNT] Account exists but belongs to different user:', anyAccount.user_id);
-        } else {
-          console.error('[ACCOUNT] Account does not exist at all');
-        }
+        setIsAccountLoading(false);
+        setIsLoading(false);
         
         // List available accounts for this user
         const { data: userAccounts } = await supabase
@@ -291,19 +278,18 @@ export default function ReportDashboard() {
         if (userAccounts && userAccounts.length > 0) {
           console.log('[ACCOUNT] Redirecting to first available account:', userAccounts[0].name);
           toast({
-            title: "Account Redirected",
-            description: `Redirected to your account: ${userAccounts[0].name}`,
+            title: "Account Not Found",
+            description: `Switched to: ${userAccounts[0].name}`,
           });
-          navigate(`/tools/report/${userAccounts[0].id}`);
+          navigate(`/tools/report/${userAccounts[0].id}`, { replace: true });
           return;
         }
         
         toast({
-          title: "Account Not Found",
-          description: "This account does not exist or you don't have access to it.",
-          variant: "destructive",
+          title: "No Accounts Found",
+          description: "Please create an account to continue.",
         });
-        navigate('/tools/report');
+        navigate('/tools/report', { replace: true });
         return;
       }
       
@@ -355,7 +341,7 @@ export default function ReportDashboard() {
     } finally {
       setIsAccountLoading(false);
     }
-  }, [session, accountId, navigate, isAccountLoading]);
+  };
   
   const handleSignOut = async () => {
     try {
