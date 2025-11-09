@@ -656,22 +656,15 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
                 <DropdownMenuItem 
                   key={report.id}
                   className={`justify-between group ${report.is_shared ? 'flex-col items-start' : ''} ${reportId === report.id ? 'bg-accent' : ''}`}
-                  onSelect={(e) => {
-                    e.preventDefault();
+                  onSelect={() => {
+                    console.log('[REPORT-SWITCH] Switching to report:', report.id, report.name);
                     setCurrentReport(report);
                     onReportChange(report.id);
                     setDropdownOpen(false);
                   }}
                 >
                   <div className="flex items-center justify-between w-full">
-                    <span 
-                      className="flex-1 cursor-pointer"
-                      onClick={() => {
-                        setCurrentReport(report);
-                        onReportChange(report.id);
-                        setDropdownOpen(false);
-                      }}
-                    >
+                    <span className="flex-1">
                       {report.name}
                     </span>
                     {!report.is_shared && (
