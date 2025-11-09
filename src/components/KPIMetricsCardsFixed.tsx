@@ -355,6 +355,8 @@ export function KPIMetricsCards({
       console.log('[KPI-FIXED] ==========================================');
       
       setMetrics(displayMetrics);
+      setIsLoading(false);
+      onLoadingComplete?.();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
       console.error('[KPI-FIXED] Error in loadMetrics:', errorMessage);
