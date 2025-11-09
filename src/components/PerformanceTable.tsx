@@ -136,6 +136,8 @@ function SortableColumnItem({
 }
 
 export const PerformanceTable = ({ reportId, filters, isSharedView = false, accountId, visibilityRefreshTrigger, onLoadingComplete, onFiltersChange }: PerformanceTableProps) => {
+  console.log('[PERF-TABLE] Component mounted/rendered:', { reportId, accountId, hasFilters: !!filters });
+  
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [dimensionSelectorOpen, setDimensionSelectorOpen] = useState(false);
@@ -309,6 +311,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     console.log('[PERF-TABLE] useEffect triggered:', {
       reportId: !!reportId,
       groupByDimensions: groupByDimensions.length,
+      groupByDimensionIds: groupByDimensions,
       compareEnabled: debouncedFilters.compareEnabled,
       compareType: debouncedFilters.compareType,
       hasCompareDateRange: !!debouncedFilters.compareDateRange,
@@ -317,7 +320,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
     
     // Always attempt to load data if we have a reportId - let the function handle conditions
     if (reportId) {
-      console.log('[testing] ✓ reportId exists, calling loadPerformanceData with filters:', {
+      console.log('[PERF-TABLE] ✓ reportId exists, calling loadPerformanceData with filters:', {
         dateFrom: debouncedFilters.dateRange?.from ? format(debouncedFilters.dateRange.from, 'yyyy-MM-dd') : undefined,
         dateTo: debouncedFilters.dateRange?.to ? format(debouncedFilters.dateRange.to, 'yyyy-MM-dd') : undefined,
         preset: debouncedFilters.datePreset
@@ -332,13 +335,14 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       // Load data (the function will handle its own loading state)
       loadPerformanceData();
     } else {
-      console.log('[testing] ✗ No reportId, skipping data load');
+      console.log('[PERF-TABLE] ✗ No reportId, skipping data load');
       // Clear data when no reportId
       setTableData([]);
       setTotalData({});
       setTotalCompareData({});
       setTotalChangeData({});
       setIsLoadingData(false);
+      onLoadingComplete?.();
     }
   }, [reportId, debouncedFilters, groupByDimensions, breakdownByDimensions, thenByDimensions, dateOrder, activeDateTab, visibilityRefreshTrigger]);
 
@@ -1273,7 +1277,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         compareEnabled: filters.compareEnabled || false,
         compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
         compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined,
-        dateGranularity: activeDateTab,
+        dateGranularity: activeDateTab.charAt(0).toUpperCase() + activeDateTab.slice(1), // Capitalize for edge function
         dateOrder: dateOrder,
       };
       
