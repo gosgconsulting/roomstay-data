@@ -31,21 +31,32 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete }: KP
 
   // Create a stable reference for filters to prevent unnecessary re-renders
   const stableFilters = useMemo(() => {
+    // Ensure dates are proper Date objects, not wrapped objects
+    const normalizedDateRange = filters.dateRange ? {
+      from: filters.dateRange.from instanceof Date ? filters.dateRange.from : new Date(filters.dateRange.from),
+      to: filters.dateRange.to ? (filters.dateRange.to instanceof Date ? filters.dateRange.to : new Date(filters.dateRange.to)) : undefined
+    } : undefined;
+    
+    const normalizedCompareDateRange = filters.compareDateRange ? {
+      from: filters.compareDateRange.from instanceof Date ? filters.compareDateRange.from : new Date(filters.compareDateRange.from),
+      to: filters.compareDateRange.to ? (filters.compareDateRange.to instanceof Date ? filters.compareDateRange.to : new Date(filters.compareDateRange.to)) : undefined
+    } : undefined;
+    
     return {
       dimensionFilters: filters.dimensionFilters,
-      dateRange: filters.dateRange,
+      dateRange: normalizedDateRange,
       compareEnabled: filters.compareEnabled,
       compareType: filters.compareType,
-      compareDateRange: filters.compareDateRange,
+      compareDateRange: normalizedCompareDateRange,
     };
   }, [
     JSON.stringify(filters.dimensionFilters),
-    filters.dateRange?.from?.toISOString(),
-    filters.dateRange?.to?.toISOString(),
+    filters.dateRange?.from?.toString(),
+    filters.dateRange?.to?.toString(),
     filters.compareEnabled,
     filters.compareType,
-    filters.compareDateRange?.from?.toISOString(),
-    filters.compareDateRange?.to?.toISOString(),
+    filters.compareDateRange?.from?.toString(),
+    filters.compareDateRange?.to?.toString(),
   ]);
 
   useEffect(() => {
@@ -67,6 +78,8 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete }: KP
       if (!user || !reportId || !accountId) {
         console.error('[CHART-FIXED] Missing required data:', { user: !!user, reportId, accountId });
         setChartData([]);
+        setIsLoading(false);
+        onLoadingComplete?.();
         return;
       }
 
@@ -87,6 +100,8 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete }: KP
       if (!result.success) {
         console.error('[CHART-FIXED] Failed to load report data:', result.error);
         setChartData([]);
+        setIsLoading(false);
+        onLoadingComplete?.();
         return;
       }
 

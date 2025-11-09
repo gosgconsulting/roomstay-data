@@ -44,21 +44,33 @@ export function KPIMetricsCards({
   // Create a stable reference for filters to prevent unnecessary re-renders
   const stableFilters = useMemo(() => {
     console.log('[KPI-FIXED] Creating stable filters reference:', filters);
+    
+    // Ensure dates are proper Date objects, not wrapped objects
+    const normalizedDateRange = filters.dateRange ? {
+      from: filters.dateRange.from instanceof Date ? filters.dateRange.from : new Date(filters.dateRange.from),
+      to: filters.dateRange.to ? (filters.dateRange.to instanceof Date ? filters.dateRange.to : new Date(filters.dateRange.to)) : undefined
+    } : undefined;
+    
+    const normalizedCompareDateRange = filters.compareDateRange ? {
+      from: filters.compareDateRange.from instanceof Date ? filters.compareDateRange.from : new Date(filters.compareDateRange.from),
+      to: filters.compareDateRange.to ? (filters.compareDateRange.to instanceof Date ? filters.compareDateRange.to : new Date(filters.compareDateRange.to)) : undefined
+    } : undefined;
+    
     return {
       dimensionFilters: filters.dimensionFilters,
-      dateRange: filters.dateRange,
+      dateRange: normalizedDateRange,
       compareEnabled: filters.compareEnabled,
       compareType: filters.compareType,
-      compareDateRange: filters.compareDateRange,
+      compareDateRange: normalizedCompareDateRange,
     };
   }, [
     JSON.stringify(filters.dimensionFilters),
-    filters.dateRange?.from?.toISOString(),
-    filters.dateRange?.to?.toISOString(),
+    filters.dateRange?.from?.toString(),
+    filters.dateRange?.to?.toString(),
     filters.compareEnabled,
     filters.compareType,
-    filters.compareDateRange?.from?.toISOString(),
-    filters.compareDateRange?.to?.toISOString(),
+    filters.compareDateRange?.from?.toString(),
+    filters.compareDateRange?.to?.toString(),
   ]);
 
   useEffect(() => {
@@ -71,8 +83,9 @@ export function KPIMetricsCards({
       console.log('[KPI-FIXED] ✓ reportId and accountId exist, calling loadMetrics...');
       loadMetrics();
     } else {
-      console.log('[KPI-FIXED] ✗ Missing reportId or accountId, skipping loadMetrics');
+      console.log('[KPI-FIXED] ✗ Missing reportId or accountId, skipping loadMetrics', { reportId: !!reportId, accountId: !!accountId });
       setIsLoading(false);
+      onLoadingComplete?.();
     }
   }, [reportId, accountId, stableFilters]);
 
@@ -87,6 +100,7 @@ export function KPIMetricsCards({
   const loadMetrics = async () => {
     console.log('[KPI-FIXED] loadMetrics - Starting data fetch for reportId:', reportId);
     setIsLoading(true);
+    
     try {
       // Get the current user
       const { data: { user } } = await supabase.auth.getUser();
@@ -95,6 +109,8 @@ export function KPIMetricsCards({
       if (!user || !reportId || !accountId) {
         console.error('[KPI-FIXED] Missing required data:', { user: !!user, reportId, accountId });
         setMetrics([]);
+        setIsLoading(false);
+        onLoadingComplete?.();
         return;
       }
 
@@ -201,6 +217,8 @@ export function KPIMetricsCards({
       if (filteredData.length === 0) {
         console.error('[KPI-FIXED] ✗ NO DATA LOADED - Cannot calculate metrics!');
         setMetrics([]);
+        setIsLoading(false);
+        onLoadingComplete?.();
         return;
       }
 
@@ -326,10 +344,10 @@ export function KPIMetricsCards({
       const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
       console.error('[KPI-FIXED] Error in loadMetrics:', errorMessage);
       setMetrics([]);
-    } finally {
-      console.log('[KPI-FIXED] loadMetrics - Setting isLoading to false');
       setIsLoading(false);
       onLoadingComplete?.();
+    } finally {
+      console.log('[KPI-FIXED] loadMetrics - Complete');
     }
   };
 
