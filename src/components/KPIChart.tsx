@@ -244,18 +244,20 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
         console.log('[CHART] Date dimension:', dateDimension);
 
         // Implement more efficient data fetching - LOAD LATEST DATA FIRST
-                  const CHUNK_SIZE = 2000; // Larger chunk size to reduce number of requests
-        const MAX_ROWS = 50000; // Balanced limit to prevent timeouts while handling large datasets
+        const CHUNK_SIZE = 2000; // Larger chunk size to reduce number of requests
+        // REMOVED: MAX_ROWS limit to ensure ALL data is fetched regardless of size
         let allDimensionData: DimensionData[] = [];
         let offset = 0;
         let hasMore = true;
-        let timeoutCount = 0;
-        const MAX_TIMEOUTS = 3;
         
+        // Enhanced timeout handling for large datasets
+        const MAX_TIMEOUTS = 5; // Increased from 3 for large datasets
+        let timeoutCount = 0;
+
         console.log('[CHART] Fetching dimension_data for report (LATEST FIRST):', reportId);
         
         try {
-          while (hasMore && offset < MAX_ROWS && timeoutCount < MAX_TIMEOUTS) {
+          while (hasMore && timeoutCount < MAX_TIMEOUTS) {
             console.log(`[CHART] Fetching chunk at offset ${offset} (timeouts: ${timeoutCount})`);
             
             try {
@@ -292,7 +294,7 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
                 timeoutCount = 0;
                 
                 // Add progressive loading feedback for large datasets
-                if (allDimensionData.length > 5000 && allDimensionData.length % 5000 === 0) {
+                if (allDimensionData.length > 5000 && allDimensionData.length % 10000 === 0) {
                   console.log(`[CHART] Progress: ${allDimensionData.length} rows loaded...`);
                 }
               } else {
@@ -323,9 +325,7 @@ export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visi
             }
           }
           
-          if (offset >= MAX_ROWS) {
-            console.warn(`[CHART] Reached maximum row limit (${MAX_ROWS}), using available data for chart display`);
-          }
+          console.log(`[CHART] Data loading complete. Total rows: ${allDimensionData.length}`);
           
         } catch (chunkError) {
           console.error('[CHART] Error during chunk fetching:', chunkError);

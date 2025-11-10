@@ -219,42 +219,91 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
       }
 
       // Fetch dimension_data efficiently - LOAD LATEST DATA FIRST
-              const CHUNK_SIZE = 3000; // Larger chunk size to reduce number of requests
-      const MAX_ROWS = 50000; // Balanced limit to prevent timeouts while handling large datasets
+      const CHUNK_SIZE = 3000; // Larger chunk size to reduce number of requests
+      // REMOVED: MAX_ROWS limit to ensure ALL data is fetched regardless of size
       let allDimensionData: any[] = [];
       let offset = 0;
       let hasMore = true;
+      
+      // Enhanced timeout handling for large datasets
+      const MAX_TIMEOUTS = 5; // Increased for large datasets
+      let timeoutCount = 0;
 
-      console.log('[testing] KPIMetricsCards - Loading data (LATEST FIRST) for report:', reportId);
+      console.log('[METRICS] Fetching dimension_data for report (LATEST FIRST):', reportId);
+      
+      try {
+        while (hasMore && timeoutCount < MAX_TIMEOUTS) {
+          console.log(`[METRICS] Fetching chunk at offset ${offset} (timeouts: ${timeoutCount})`);
+          
+          try {
+            const chunkData = await retryWithBackoff(
+              async () => {
+                const { data, error } = await supabase
+                  .from("dimension_data")
+                  .select("id, row_number, dimension_values")
+                  .eq("report_id", reportId)
+                  .order('row_number', { ascending: false }) // LATEST DATA FIRST
+                  .range(offset, offset + CHUNK_SIZE - 1);
 
-      while (hasMore && offset < MAX_ROWS) {
-        const chunkData = await retryWithBackoff(
-          async () => {
-            const { data, error } = await supabase
-              .from("dimension_data")
-              .select("id, row_number, report_id, dimension_values") // Added report_id
-              .eq("report_id", reportId)
-              .order('row_number', { ascending: false }) // LATEST DATA FIRST
-              .range(offset, offset + CHUNK_SIZE - 1);
+                if (error) {
+                  console.error(`[METRICS] Database error at offset ${offset}:`, error);
+                  // Check if it's a timeout error
+                  if (error.message && error.message.includes('timeout')) {
+                    throw new Error(`Database timeout at offset ${offset}`);
+                  }
+                  throw error;
+                }
+                return data;
+              },
+              3, // max attempts
+              1000 // delay between retries
+            );
 
-            if (error) throw error;
-            return data;
-          },
-          3,
-          500
-        );
-
-        if (chunkData && chunkData.length > 0) {
-          allDimensionData = [...allDimensionData, ...chunkData];
-          offset += CHUNK_SIZE;
-          hasMore = chunkData.length === CHUNK_SIZE;
-        } else {
-          hasMore = false;
+            if (chunkData && chunkData.length > 0) {
+              allDimensionData = [...allDimensionData, ...chunkData];
+              offset += CHUNK_SIZE;
+              hasMore = chunkData.length === CHUNK_SIZE;
+              console.log(`[METRICS] Loaded ${chunkData.length} rows, total: ${allDimensionData.length}`);
+              
+              // Reset timeout count on successful fetch
+              timeoutCount = 0;
+              
+              // Add progressive loading feedback for large datasets
+              if (allDimensionData.length > 5000 && allDimensionData.length % 15000 === 0) {
+                console.log(`[METRICS] Progress: ${allDimensionData.length} rows loaded...`);
+              }
+            } else {
+              hasMore = false;
+              console.log('[METRICS] No more data to fetch');
+            }
+          } catch (chunkError) {
+            console.error(`[METRICS] Error fetching chunk at offset ${offset}:`, chunkError);
+            
+            // Handle timeout errors gracefully
+            if (chunkError instanceof Error && chunkError.message.includes('timeout')) {
+              timeoutCount++;
+              console.warn(`[METRICS] Timeout ${timeoutCount}/${MAX_TIMEOUTS} at offset ${offset}, continuing with available data`);
+              
+              if (timeoutCount >= MAX_TIMEOUTS) {
+                console.warn('[METRICS] Max timeouts reached, using available data');
+                hasMore = false;
+              } else {
+                // Skip this chunk and try the next one
+                offset += CHUNK_SIZE;
+                continue;
+              }
+            } else {
+              // For non-timeout errors, stop fetching but continue with available data
+              console.warn('[METRICS] Non-timeout error, stopping fetch but continuing with available data:', chunkError);
+              hasMore = false;
+            }
+          }
         }
-      }
-
-      if (offset >= MAX_ROWS) {
-        console.warn(`[testing] KPIMetricsCards - Reached maximum row limit (${MAX_ROWS}), using available data for calculations`);
+        
+        console.log(`[METRICS] Data loading complete. Total rows: ${allDimensionData.length}`);
+      } catch (error) {
+        console.error('[METRICS] Error fetching dimension_data:', error);
+        allDimensionData = []; // Ensure empty array on error
       }
 
       console.log('[KPI-DEBUG] ========== DATA LOADING SUMMARY ==========');

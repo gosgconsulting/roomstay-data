@@ -122,7 +122,19 @@ Deno.serve(async (req) => {
         const visibleMappings = columnMappings.filter((m: any) => m.visible !== false);
         
         let rowsInserted = 0;
-        const batchSize = 500;
+        // Adaptive batch sizing based on dataset size to prevent statement timeouts
+        let batchSize: number;
+        if (dataRows.length > 100000) {
+          batchSize = 250; // Very large datasets: smaller batches
+        } else if (dataRows.length > 50000) {
+          batchSize = 400; // Large datasets: medium batches
+        } else if (dataRows.length > 10000) {
+          batchSize = 600; // Medium datasets: larger batches
+        } else {
+          batchSize = 1000; // Small datasets: standard batches
+        }
+
+        console.log(`[AUTO-SYNC] Using adaptive batch size: ${batchSize} for ${dataRows.length} rows`);
 
         for (let i = 0; i < dataRows.length; i += batchSize) {
           const batch = dataRows.slice(i, i + batchSize);

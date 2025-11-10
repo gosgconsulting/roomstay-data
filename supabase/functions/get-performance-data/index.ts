@@ -254,7 +254,7 @@ Deno.serve(async (req) => {
       .eq('report_id', reportId)
       .order('row_number', { ascending: false })
       .limit(limit) // Use limit instead of range for better performance
-      .abortSignal(AbortSignal.timeout(120000)); // 120 second timeout for large datasets
+      .abortSignal(AbortSignal.timeout(300000)); // Increased to 300 seconds (5 minutes) for very large datasets
 
     const rawDataResult = await retryQuery(async () => await query);
     const { data: rawData, error: dataError } = rawDataResult;

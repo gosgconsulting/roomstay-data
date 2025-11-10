@@ -769,8 +769,22 @@ export const insertDataInBatches = async (
 ): Promise<void> => {
   console.log(`[SYNC] Inserting ${rowsToInsert.length} rows in batches...`);
   
-  const batchSize = 1000;
+  // Adaptive batch sizing based on dataset size to prevent statement timeouts
+  let batchSize: number;
+  if (rowsToInsert.length > 100000) {
+    batchSize = 250; // Very large datasets: smaller batches
+  } else if (rowsToInsert.length > 50000) {
+    batchSize = 500; // Large datasets: medium batches
+  } else if (rowsToInsert.length > 10000) {
+    batchSize = 750; // Medium datasets: larger batches
+  } else {
+    batchSize = 1000; // Small datasets: standard batches
+  }
+  
+  console.log(`[SYNC] Using adaptive batch size: ${batchSize} (total rows: ${rowsToInsert.length})`);
+  
   const totalBatches = Math.ceil(rowsToInsert.length / batchSize);
+  let successfulBatches = 0;
   
   for (let i = 0; i < rowsToInsert.length; i += batchSize) {
     const batch = rowsToInsert.slice(i, i + batchSize);
@@ -783,17 +797,59 @@ export const insertDataInBatches = async (
       onProgress(progressMessage);
     }
     
-    const { error: insertError } = await supabase
-      .from('dimension_data')
-      .insert(batch);
+    try {
+      // Add retry logic for individual batches
+      const maxRetries = 3;
+      let retryCount = 0;
+      let batchSuccess = false;
+      
+      while (!batchSuccess && retryCount < maxRetries) {
+        try {
+          const { error: insertError } = await supabase
+            .from('dimension_data')
+            .insert(batch);
 
-    if (insertError) {
-      console.error(`[SYNC] Error inserting batch ${currentBatch}:`, insertError);
-      throw new Error(`Failed at batch ${currentBatch}/${totalBatches}: ${insertError.message}`);
+          if (insertError) {
+            throw insertError;
+          }
+          
+          batchSuccess = true;
+          successfulBatches++;
+          
+          // Add small delay between batches for large datasets to prevent overwhelming the database
+          if (rowsToInsert.length > 50000 && currentBatch % 10 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 100)); // 100ms pause every 10 batches
+          }
+          
+        } catch (batchError: any) {
+          retryCount++;
+          console.warn(`[SYNC] Batch ${currentBatch} attempt ${retryCount} failed:`, batchError.message);
+          
+          if (retryCount < maxRetries) {
+            // Exponential backoff for retries
+            const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 5000);
+            console.log(`[SYNC] Retrying batch ${currentBatch} in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          } else {
+            console.error(`[SYNC] Batch ${currentBatch} failed after ${maxRetries} attempts:`, batchError);
+            throw new Error(`Failed at batch ${currentBatch}/${totalBatches}: ${batchError.message}`);
+          }
+        }
+      }
+      
+      // Progress feedback for large datasets
+      if (rowsToInsert.length > 10000 && currentBatch % 20 === 0) {
+        const progress = Math.round((successfulBatches / totalBatches) * 100);
+        console.log(`[SYNC] Progress: ${progress}% complete (${successfulBatches}/${totalBatches} batches)`);
+      }
+      
+    } catch (error) {
+      console.error(`[SYNC] Critical error in batch ${currentBatch}:`, error);
+      throw error;
     }
   }
   
-  console.log(`[SYNC] Successfully inserted all ${rowsToInsert.length} rows`);
+  console.log(`[SYNC] Successfully inserted all ${rowsToInsert.length} rows in ${successfulBatches} batches`);
 };
 
 // Update column mappings with new dimension IDs
@@ -1026,22 +1082,94 @@ export const syncDataSource = async (
       h === null || h === undefined ? '' : String(h).trim()
     );
 
-    // Step 4: Fetch all data
-    const dataRange = `A${dataSource.header_row + 1}:Z`;
-    const allData = await fetchGoogleSheetsData(
+    // Step 4: Fetch all data in chunks for large datasets
+    console.log(`[SYNC] Fetching data from Google Sheets...`);
+    
+    // First, try to get an estimate of total rows by fetching a small sample
+    const sampleRange = `A${dataSource.header_row + 1}:A${dataSource.header_row + 100}`;
+    const sampleData = await fetchGoogleSheetsData(
       dataSource.spreadsheet_id,
       dataSource.tab_name,
-      dataRange
+      sampleRange
     );
+    
+    // Determine if we need chunked fetching based on sample size and available data
+    const SHEET_CHUNK_SIZE = 25000; // Fetch 25K rows at a time to prevent timeouts
+    let allData: any[] = [];
+    
+    // Try to fetch all data first, with fallback to chunked approach
+    try {
+      console.log(`[SYNC] Attempting to fetch all data at once...`);
+      const dataRange = `A${dataSource.header_row + 1}:Z`;
+      const initialData = await fetchGoogleSheetsData(
+        dataSource.spreadsheet_id,
+        dataSource.tab_name,
+        dataRange
+      );
+      
+      if (initialData && initialData.length > 0) {
+        allData = initialData;
+        console.log(`[SYNC] Successfully fetched ${allData.length} rows in single request`);
+      }
+    } catch (fetchError) {
+      console.warn(`[SYNC] Single fetch failed, switching to chunked approach:`, fetchError);
+      
+      // Fallback to chunked fetching for very large datasets
+      let startRow = dataSource.header_row + 1;
+      let hasMoreData = true;
+      let chunkCount = 0;
+      
+      while (hasMoreData) {
+        const endRow = startRow + SHEET_CHUNK_SIZE - 1;
+        const chunkRange = `A${startRow}:Z${endRow}`;
+        
+        console.log(`[SYNC] Fetching chunk ${++chunkCount}: rows ${startRow}-${endRow}`);
+        
+        try {
+          const chunkData = await fetchGoogleSheetsData(
+            dataSource.spreadsheet_id,
+            dataSource.tab_name,
+            chunkRange
+          );
+          
+          if (chunkData && chunkData.length > 0) {
+            allData = [...allData, ...chunkData];
+            console.log(`[SYNC] Chunk ${chunkCount}: ${chunkData.length} rows, total: ${allData.length}`);
+            
+            // If we got less than the chunk size, we've reached the end
+            if (chunkData.length < SHEET_CHUNK_SIZE) {
+              hasMoreData = false;
+              console.log(`[SYNC] Reached end of data at chunk ${chunkCount}`);
+            } else {
+              startRow = endRow + 1;
+            }
+          } else {
+            hasMoreData = false;
+            console.log(`[SYNC] No more data found at chunk ${chunkCount}`);
+          }
+        } catch (chunkError) {
+          console.error(`[SYNC] Error fetching chunk ${chunkCount}:`, chunkError);
+          // Continue with data we have so far
+          hasMoreData = false;
+        }
+        
+        // Add progress feedback for large datasets
+        if (allData.length > 0 && allData.length % 50000 === 0) {
+          console.log(`[SYNC] Progress: ${allData.length} rows fetched from Google Sheets...`);
+        }
+      }
+      
+      console.log(`[SYNC] Chunked fetch complete: ${allData.length} total rows in ${chunkCount} chunks`);
+    }
 
     // Step 5: Build dimension mapping with auto-detection
     // Use first 10 rows as sample data for auto-detection
-    const sampleData = allData.slice(0, 10);
+    const sampleDataForAutoDetection = allData.slice(0, 10);
     
     const { dimensionIdMap, columnIndexMap, createdCount } = await buildDimensionMappingWithAutoDetection(
       dataSource.column_mappings || [],
       headers,
-      sampleData,
+      sampleDataForAutoDetection,
       user.id,
       reportId,
       dataSource.id,
