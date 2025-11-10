@@ -1,15 +1,39 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// Base CORS headers
+const getCorsHeaders = (req?: Request) => {
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  };
+
+  // For preflight requests, echo back the requested headers
+  if (req) {
+    const requestedHeaders = req.headers.get('Access-Control-Request-Headers');
+    if (requestedHeaders) {
+      headers['Access-Control-Allow-Headers'] = requestedHeaders;
+    } else {
+      // Default headers if none requested
+      headers['Access-Control-Allow-Headers'] = 'authorization, x-client-info, apikey, content-type, x-supabase-client-info';
+    }
+  } else {
+    // For regular responses, include common headers
+    headers['Access-Control-Allow-Headers'] = 'authorization, x-client-info, apikey, content-type, x-supabase-client-info';
+  }
+
+  return headers;
 };
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { 
+      status: 204, 
+      headers: getCorsHeaders(req) 
+    });
   }
+
+  const corsHeaders = getCorsHeaders();
 
   try {
     // Parse request body with better error handling
