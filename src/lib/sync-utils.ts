@@ -245,6 +245,8 @@ export const fetchGoogleSheetsData = async (
   tabName: string,
   range: string
 ): Promise<any[][]> => {
+  console.log(`[SYNC] Fetching Google Sheets data:`, { spreadsheetId, tabName, range });
+  
   const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
     body: {
       spreadsheetId,
@@ -253,11 +255,25 @@ export const fetchGoogleSheetsData = async (
     },
   });
 
-  if (sheetsError) throw sheetsError;
-  if (!sheetsData?.values || sheetsData.values.length === 0) {
-    throw new Error("No data found in the specified range");
+  // Check for invocation error
+  if (sheetsError) {
+    console.error('[SYNC] Edge function invocation error:', sheetsError);
+    throw new Error(`Failed to fetch Google Sheets data: ${sheetsError.message || JSON.stringify(sheetsError)}`);
   }
 
+  // Check if edge function returned an error in the response body
+  if (sheetsData?.error) {
+    console.error('[SYNC] Edge function returned error:', sheetsData.error);
+    throw new Error(`Google Sheets error: ${sheetsData.error}`);
+  }
+
+  // Check if we have data
+  if (!sheetsData?.values || sheetsData.values.length === 0) {
+    console.warn('[SYNC] No data found in range:', { spreadsheetId, tabName, range });
+    throw new Error(`No data found in the specified range: ${tabName}!${range}`);
+  }
+
+  console.log(`[SYNC] Successfully fetched ${sheetsData.values.length} rows from Google Sheets`);
   return sheetsData.values;
 };
 
