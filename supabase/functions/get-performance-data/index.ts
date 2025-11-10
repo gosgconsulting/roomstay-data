@@ -554,12 +554,36 @@ Deno.serve(async (req) => {
     // Group data by the first group dimension
     const groupDimId = groupByDims[0];
     
+    // If no grouping is requested, return raw filtered data
     if (!groupDimId) {
+      console.log('No grouping requested, returning raw filtered data');
+      
+      // Transform raw data to include both dimension_values and individual dimension properties
+      const rawDataWithDimensions = filteredData.map((row, index) => {
+        const transformedRow: any = {
+          row_number: row.row_number,
+          dimension_values: row.dimension_values,
+        };
+        
+        // Add individual dimension properties for easier access
+        if (dimensions) {
+          for (const dim of dimensions) {
+            const value = (row.dimension_values as Record<string, any>)[dim.id];
+            if (value !== undefined) {
+              transformedRow[dim.name] = value;
+            }
+          }
+        }
+        
+        return transformedRow;
+      });
+      
       return new Response(
         JSON.stringify({
-          data: [],
-          total: 0,
-          hasMore: false,
+          data: rawDataWithDimensions.slice(offset, offset + limit),
+          total: filteredData.length,
+          totalCount: filteredData.length,
+          hasMore: offset + limit < filteredData.length,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

@@ -98,7 +98,7 @@ export async function loadAccountDimensions(accountId: string, userId: string): 
 }
 
 /**
- * Load and filter dimension data with proper date handling
+ * Load and filter dimension data using the edge function
  */
 export async function loadReportData(
   reportId: string,
@@ -109,7 +109,7 @@ export async function loadReportData(
     dimensionFilters?: Record<string, string[]>;
   }
 ): Promise<DataLoadingResult> {
-  console.log('[DATA-FIX] Loading report data:', { reportId, accountId, filters });
+  console.log('[DATA-FIX] Loading report data via edge function:', { reportId, accountId, filters });
   
   try {
     // 1. Load dimensions first
@@ -141,55 +141,74 @@ export async function loadReportData(
       console.log('[DATA-FIX] Added virtual Budget dimension (budgets exist)');
     }
 
-    // 3. Load dimension data in chunks for performance
-    const CHUNK_SIZE = 5000;
-    const MAX_ROWS = 50000;
-    let offset = 0;
-    let hasMore = true;
-    let allData: any[] = [];
-
-    while (hasMore && offset < MAX_ROWS) {
-      const { data: chunkData, error } = await supabase
-        .from("dimension_data")
-        .select("id, row_number, dimension_values")
-        .eq("report_id", reportId)
-        .order('row_number', { ascending: false }) // Latest data first
-        .range(offset, offset + CHUNK_SIZE - 1);
-
-      if (error) throw error;
-
-      if (!chunkData || chunkData.length === 0) {
-        hasMore = false;
-        break;
-      }
-
-      allData = allData.concat(chunkData);
-      offset += CHUNK_SIZE;
-
-      if (chunkData.length < CHUNK_SIZE) {
-        hasMore = false;
+    // 3. Call edge function to get performance data
+    const dateFrom = filters?.dateRange?.from?.toISOString().split('T')[0];
+    const dateTo = filters?.dateRange?.to?.toISOString().split('T')[0];
+    
+    // Convert dimension filters to the format expected by edge function
+    const dimensionFilters: Record<string, string | string[]> = {};
+    if (filters?.dimensionFilters) {
+      for (const [key, values] of Object.entries(filters.dimensionFilters)) {
+        dimensionFilters[key] = values.length === 1 ? values[0] : values;
       }
     }
 
+    console.log('[DATA-FIX] Calling edge function with params:', {
+      reportId,
+      accountId,
+      userId,
+      dateFrom,
+      dateTo,
+      dimensionFilters,
+      visibleDimensionIds: dimensions.map(d => d.id)
+    });
+
+    const { data: edgeData, error: edgeError } = await supabase.functions.invoke('get-performance-data', {
+      body: {
+        reportId,
+        accountId,
+        userId,
+        dateFrom,
+        dateTo,
+        dimensionFilters,
+        groupByDims: [], // No grouping for raw data
+        breakdownDims: [],
+        visibleDimensionIds: dimensions.map(d => d.id),
+        limit: 50000,
+        offset: 0
+      }
+    });
+
+    if (edgeError) {
+      console.error('[DATA-FIX] Edge function error:', edgeError);
+      throw edgeError;
+    }
+
+    if (!edgeData) {
+      throw new Error('No data returned from edge function');
+    }
+
+    console.log('[DATA-FIX] Edge function returned data:', {
+      totalCount: edgeData.totalCount,
+      dataLength: edgeData.data?.length
+    });
+
+    const allData = edgeData.data || [];
+
     console.log('[DATA-FIX] Loaded raw data rows:', allData.length);
 
-    // 3. Apply filters
-    const filteredData = applyDataFilters(allData, dimensions, filters);
-
-    console.log('[DATA-FIX] Filtered data rows:', filteredData.length);
-
     // 4. Validate data structure
-    const validationResult = validateDataStructure(filteredData, dimensions);
+    const validationResult = validateDataStructure(allData, dimensions);
     
     return {
       success: true,
-      data: filteredData,
+      data: allData,
       dimensions,
-      totalRows: allData.length,
-      filteredRows: filteredData.length,
+      totalRows: edgeData.totalCount || allData.length,
+      filteredRows: allData.length,
       debugInfo: {
         validation: validationResult,
-        sampleRow: filteredData[0]?.dimension_values,
+        sampleRow: allData[0]?.dimension_values,
         dimensionIds: dimensions.map(d => ({ id: d.id, name: d.name }))
       }
     };
