@@ -5,9 +5,11 @@ import { toast } from "@/hooks/use-toast";
 export interface DataSource {
   id: string;
   name: string;
-  google_sheets_url: string;
-  spreadsheet_id: string;
-  tab_name: string;
+  google_sheets_url?: string | null;
+  spreadsheet_id?: string | null;
+  tab_name?: string | null;
+  csv_url?: string | null;
+  source_type?: 'google_sheets' | 'csv_url';
   header_row: number;
   column_mappings: ColumnMapping[] | null;
   report_id?: string;
@@ -275,6 +277,40 @@ export const fetchGoogleSheetsData = async (
 
   console.log(`[SYNC] Successfully fetched ${sheetsData.values.length} rows from Google Sheets`);
   return sheetsData.values;
+};
+
+// Fetch data from CSV URL
+export const fetchCSVUrlData = async (
+  csvUrl: string
+): Promise<any[][]> => {
+  console.log(`[SYNC] Fetching CSV URL data:`, { csvUrl });
+  
+  const { data: csvData, error: csvError } = await supabase.functions.invoke('fetch-csv-url', {
+    body: {
+      csvUrl,
+    },
+  });
+
+  // Check for invocation error
+  if (csvError) {
+    console.error('[SYNC] Edge function invocation error:', csvError);
+    throw new Error(`Failed to fetch CSV URL data: ${csvError.message || JSON.stringify(csvError)}`);
+  }
+
+  // Check if edge function returned an error in the response body
+  if (csvData?.error) {
+    console.error('[SYNC] Edge function returned error:', csvData.error);
+    throw new Error(`CSV URL error: ${csvData.error}`);
+  }
+
+  // Check if we have data
+  if (!csvData?.values || csvData.values.length === 0) {
+    console.warn('[SYNC] No data found in CSV:', { csvUrl });
+    throw new Error(`No data found in the CSV file`);
+  }
+
+  console.log(`[SYNC] Successfully fetched ${csvData.values.length} rows from CSV URL`);
+  return csvData.values;
 };
 
 // Delete existing dimension data
@@ -1070,96 +1106,134 @@ export const syncDataSource = async (
       }
     }
 
-    // Step 3: Fetch headers
-    const headerRange = `A${dataSource.header_row}:Z${dataSource.header_row}`;
-    const headerData = await fetchGoogleSheetsData(
-      dataSource.spreadsheet_id,
-      dataSource.tab_name,
-      headerRange
-    );
-    
-    const headers = headerData[0].map((h: any) => 
-      h === null || h === undefined ? '' : String(h).trim()
-    );
-
-    // Step 4: Fetch all data in chunks for large datasets
-    console.log(`[SYNC] Fetching data from Google Sheets...`);
-    
-    // First, try to get an estimate of total rows by fetching a small sample
-    const sampleRange = `A${dataSource.header_row + 1}:A${dataSource.header_row + 100}`;
-    const sampleData = await fetchGoogleSheetsData(
-      dataSource.spreadsheet_id,
-      dataSource.tab_name,
-      sampleRange
-    );
-    
-    // Determine if we need chunked fetching based on sample size and available data
-    const SHEET_CHUNK_SIZE = 25000; // Fetch 25K rows at a time to prevent timeouts
+    // Step 3: Determine source type and fetch headers/data
+    const sourceType = dataSource.source_type || 'google_sheets'; // Default to google_sheets for backward compatibility
+    let headers: string[] = [];
     let allData: any[] = [];
     
-    // Try to fetch all data first, with fallback to chunked approach
-    try {
-      console.log(`[SYNC] Attempting to fetch all data at once...`);
-      const dataRange = `A${dataSource.header_row + 1}:Z`;
-      const initialData = await fetchGoogleSheetsData(
-        dataSource.spreadsheet_id,
-        dataSource.tab_name,
-        dataRange
+    if (sourceType === 'csv_url') {
+      // CSV URL source
+      if (!dataSource.csv_url) {
+        throw new Error('CSV URL is required for CSV data source');
+      }
+      
+      console.log(`[SYNC] Fetching data from CSV URL...`);
+      const csvData = await fetchCSVUrlData(dataSource.csv_url);
+      
+      if (csvData.length === 0) {
+        throw new Error('No data found in CSV file');
+      }
+      
+      // Extract headers from the specified header row
+      const headerRowNum = dataSource.header_row || 1;
+      if (headerRowNum < 1 || headerRowNum > csvData.length) {
+        throw new Error(`Header row ${headerRowNum} is out of range. CSV has ${csvData.length} rows.`);
+      }
+      
+      headers = csvData[headerRowNum - 1].map((h: any) => 
+        h === null || h === undefined ? '' : String(h).trim()
       );
       
-      if (initialData && initialData.length > 0) {
-        allData = initialData;
-        console.log(`[SYNC] Successfully fetched ${allData.length} rows in single request`);
+      // Get all data rows (skip header row)
+      allData = csvData.slice(headerRowNum);
+      
+      console.log(`[SYNC] Successfully fetched ${allData.length} rows from CSV URL`);
+    } else {
+      // Google Sheets source
+      if (!dataSource.spreadsheet_id || !dataSource.tab_name) {
+        throw new Error('Spreadsheet ID and tab name are required for Google Sheets data source');
       }
-    } catch (fetchError) {
-      console.warn(`[SYNC] Single fetch failed, switching to chunked approach:`, fetchError);
       
-      // Fallback to chunked fetching for very large datasets
-      let startRow = dataSource.header_row + 1;
-      let hasMoreData = true;
-      let chunkCount = 0;
+      // Fetch headers
+      const headerRange = `A${dataSource.header_row}:Z${dataSource.header_row}`;
+      const headerData = await fetchGoogleSheetsData(
+        dataSource.spreadsheet_id,
+        dataSource.tab_name,
+        headerRange
+      );
       
-      while (hasMoreData) {
-        const endRow = startRow + SHEET_CHUNK_SIZE - 1;
-        const chunkRange = `A${startRow}:Z${endRow}`;
+      headers = headerData[0].map((h: any) => 
+        h === null || h === undefined ? '' : String(h).trim()
+      );
+
+      // Step 4: Fetch all data in chunks for large datasets
+      console.log(`[SYNC] Fetching data from Google Sheets...`);
+      
+      // First, try to get an estimate of total rows by fetching a small sample
+      const sampleRange = `A${dataSource.header_row + 1}:A${dataSource.header_row + 100}`;
+      const sampleData = await fetchGoogleSheetsData(
+        dataSource.spreadsheet_id,
+        dataSource.tab_name,
+        sampleRange
+      );
+      
+      // Determine if we need chunked fetching based on sample size and available data
+      const SHEET_CHUNK_SIZE = 25000; // Fetch 25K rows at a time to prevent timeouts
+      
+      // Try to fetch all data first, with fallback to chunked approach
+      try {
+        console.log(`[SYNC] Attempting to fetch all data at once...`);
+        const dataRange = `A${dataSource.header_row + 1}:Z`;
+        const initialData = await fetchGoogleSheetsData(
+          dataSource.spreadsheet_id,
+          dataSource.tab_name,
+          dataRange
+        );
         
-        console.log(`[SYNC] Fetching chunk ${++chunkCount}: rows ${startRow}-${endRow}`);
+        if (initialData && initialData.length > 0) {
+          allData = initialData;
+          console.log(`[SYNC] Successfully fetched ${allData.length} rows in single request`);
+        }
+      } catch (fetchError) {
+        console.warn(`[SYNC] Single fetch failed, switching to chunked approach:`, fetchError);
         
-        try {
-          const chunkData = await fetchGoogleSheetsData(
-            dataSource.spreadsheet_id,
-            dataSource.tab_name,
-            chunkRange
-          );
+        // Fallback to chunked fetching for very large datasets
+        let startRow = dataSource.header_row + 1;
+        let hasMoreData = true;
+        let chunkCount = 0;
+        
+        while (hasMoreData) {
+          const endRow = startRow + SHEET_CHUNK_SIZE - 1;
+          const chunkRange = `A${startRow}:Z${endRow}`;
           
-          if (chunkData && chunkData.length > 0) {
-            allData = [...allData, ...chunkData];
-            console.log(`[SYNC] Chunk ${chunkCount}: ${chunkData.length} rows, total: ${allData.length}`);
+          console.log(`[SYNC] Fetching chunk ${++chunkCount}: rows ${startRow}-${endRow}`);
+          
+          try {
+            const chunkData = await fetchGoogleSheetsData(
+              dataSource.spreadsheet_id,
+              dataSource.tab_name,
+              chunkRange
+            );
             
-            // If we got less than the chunk size, we've reached the end
-            if (chunkData.length < SHEET_CHUNK_SIZE) {
-              hasMoreData = false;
-              console.log(`[SYNC] Reached end of data at chunk ${chunkCount}`);
+            if (chunkData && chunkData.length > 0) {
+              allData = [...allData, ...chunkData];
+              console.log(`[SYNC] Chunk ${chunkCount}: ${chunkData.length} rows, total: ${allData.length}`);
+              
+              // If we got less than the chunk size, we've reached the end
+              if (chunkData.length < SHEET_CHUNK_SIZE) {
+                hasMoreData = false;
+                console.log(`[SYNC] Reached end of data at chunk ${chunkCount}`);
+              } else {
+                startRow = endRow + 1;
+              }
             } else {
-              startRow = endRow + 1;
+              hasMoreData = false;
+              console.log(`[SYNC] No more data found at chunk ${chunkCount}`);
             }
-          } else {
+          } catch (chunkError) {
+            console.error(`[SYNC] Error fetching chunk ${chunkCount}:`, chunkError);
+            // Continue with data we have so far
             hasMoreData = false;
-            console.log(`[SYNC] No more data found at chunk ${chunkCount}`);
           }
-        } catch (chunkError) {
-          console.error(`[SYNC] Error fetching chunk ${chunkCount}:`, chunkError);
-          // Continue with data we have so far
-          hasMoreData = false;
+          
+          // Add progress feedback for large datasets
+          if (allData.length > 0 && allData.length % 50000 === 0) {
+            console.log(`[SYNC] Progress: ${allData.length} rows fetched from Google Sheets...`);
+          }
         }
         
-        // Add progress feedback for large datasets
-        if (allData.length > 0 && allData.length % 50000 === 0) {
-          console.log(`[SYNC] Progress: ${allData.length} rows fetched from Google Sheets...`);
-        }
+        console.log(`[SYNC] Chunked fetch complete: ${allData.length} total rows in ${chunkCount} chunks`);
       }
-      
-      console.log(`[SYNC] Chunked fetch complete: ${allData.length} total rows in ${chunkCount} chunks`);
     }
 
     // Step 5: Build dimension mapping with auto-detection

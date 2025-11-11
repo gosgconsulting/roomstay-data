@@ -5,6 +5,8 @@ import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, Chevr
 import { DataSourceModal } from "./DataSourceModal";
 import { DataSourceSelectionModal } from "./DataSourceSelectionModal";
 import { DataSourcesListModal } from "./DataSourcesListModal";
+import { CSVImportChoiceModal } from "./CSVImportChoiceModal";
+import { CSVDataSourceModal } from "./CSVDataSourceModal";
 import { DimensionsListModal } from "./DimensionsListModal";
 import { DimensionModal } from "./DimensionModal";
 import { ReportModal } from "./ReportModal";
@@ -67,6 +69,8 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
   const [showDataSourceSelectionModal, setShowDataSourceSelectionModal] = useState(false);
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
+  const [showCSVImportChoiceModal, setShowCSVImportChoiceModal] = useState(false);
+  const [showCSVDataSourceModal, setShowCSVDataSourceModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
   const [showDimensionModal, setShowDimensionModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -825,9 +829,8 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
               setShowDataSourceModal(true);
             }}
             onSelectCSV={() => {
-              // Coming soon
               setShowDataSourceSelectionModal(false);
-              setShowDataSourcesListModal(true);
+              setShowCSVImportChoiceModal(true);
             }}
             onSelectAPI={() => {
               // Coming soon
@@ -842,6 +845,41 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
               setShowDataSourceModal(open);
               if (!open) {
                 // Reopen the list modal when closing the add modal
+                setShowDataSourcesListModal(true);
+              }
+            }}
+            reportId={currentReport.id}
+            accountId={accountId}
+          />
+          
+          <CSVImportChoiceModal
+            open={showCSVImportChoiceModal}
+            onOpenChange={(open) => {
+              setShowCSVImportChoiceModal(open);
+              if (!open) {
+                setShowDataSourcesListModal(true);
+              }
+            }}
+            onSelectUpload={() => {
+              // Coming soon - for now just show a message
+              toast({
+                title: "Coming soon",
+                description: "CSV file upload will be available soon",
+              });
+              setShowCSVImportChoiceModal(false);
+              setShowDataSourcesListModal(true);
+            }}
+            onSelectURL={() => {
+              setShowCSVImportChoiceModal(false);
+              setShowCSVDataSourceModal(true);
+            }}
+          />
+          
+          <CSVDataSourceModal
+            open={showCSVDataSourceModal}
+            onOpenChange={(open) => {
+              setShowCSVDataSourceModal(open);
+              if (!open) {
                 setShowDataSourcesListModal(true);
               }
             }}

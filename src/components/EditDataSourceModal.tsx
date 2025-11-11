@@ -31,9 +31,11 @@ import {
 interface DataSource {
   id: string;
   name: string;
-  google_sheets_url: string;
-  spreadsheet_id: string;
-  tab_name: string;
+  google_sheets_url?: string | null;
+  spreadsheet_id?: string | null;
+  tab_name?: string | null;
+  csv_url?: string | null;
+  source_type?: 'google_sheets' | 'csv_url';
   header_row: number;
   column_mappings: any[] | null;
   report_id?: string;
@@ -99,7 +101,8 @@ export const EditDataSourceModal = ({
   useEffect(() => {
     if (open && dataSource) {
       setDataName(dataSource.name || "");
-      setUrl(dataSource.google_sheets_url || "");
+      const sourceType = dataSource.source_type || 'google_sheets';
+      setUrl(sourceType === 'csv_url' ? (dataSource.csv_url || "") : (dataSource.google_sheets_url || ""));
       setSelectedTab(dataSource.tab_name || "");
       setHeaderRow(String(dataSource.header_row || 1));
       setSyncFrequency((dataSource as any).sync_frequency || "manual");
@@ -124,6 +127,27 @@ export const EditDataSourceModal = ({
       return;
     }
 
+    const sourceType = dataSource?.source_type || 'google_sheets';
+
+    if (sourceType === 'csv_url') {
+      // For CSV, validate URL and skip to header loading
+      try {
+        new URL(url);
+      } catch {
+        toast({
+          title: "Invalid URL",
+          description: "Please provide a valid HTTP or HTTPS URL",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Skip tab selection for CSV, go directly to header loading
+      await handleLoadHeaders();
+      return;
+    }
+
+    // Google Sheets flow
     const spreadsheetId = extractSpreadsheetId(url);
     if (!spreadsheetId) {
       toast({
@@ -175,53 +199,88 @@ export const EditDataSourceModal = ({
   };
 
   const handleLoadHeaders = async () => {
-    if (!selectedTab) {
-      toast({
-        title: "Missing tab",
-        description: "Please select a tab",
-        variant: "destructive",
-      });
-      return;
-    }
+    const sourceType = dataSource?.source_type || 'google_sheets';
 
-    const spreadsheetId = extractSpreadsheetId(url);
-    if (!spreadsheetId) return;
+    if (sourceType === 'google_sheets') {
+      if (!selectedTab) {
+        toast({
+          title: "Missing tab",
+          description: "Please select a tab",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const spreadsheetId = extractSpreadsheetId(url);
+      if (!spreadsheetId) return;
+    }
 
     setIsLoading(true);
     
     try {
-      // Use A1 notation for header row
-      // Fetch header row + sample data rows (up to 100 rows for samples)
-      const headerRowNum = parseInt(headerRow) || 1;
-      const sampleRange = `${headerRowNum}:${headerRowNum + 100}`;
-      
-      const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
-        body: {
-          spreadsheetId,
-          tabName: selectedTab,
-          range: sampleRange,
-        },
-      });
+      let fetchedHeaders: any[] = [];
+      let sampleRows: any[][] = [];
 
-      if (sheetsError) throw sheetsError;
+      if (sourceType === 'csv_url') {
+        // Fetch CSV data
+        const { data: csvData, error: csvError } = await supabase.functions.invoke('fetch-csv-url', {
+          body: {
+            csvUrl: url,
+          },
+        });
 
-      if (!sheetsData?.values || sheetsData.values.length === 0) {
-        throw new Error("No data found in the specified range");
+        if (csvError) throw csvError;
+
+        if (!csvData?.values || csvData.values.length === 0) {
+          throw new Error("No data found in the CSV file");
+        }
+
+        const headerRowNum = parseInt(headerRow) || 1;
+        if (headerRowNum < 1 || headerRowNum > csvData.values.length) {
+          throw new Error(`Header row ${headerRowNum} is out of range. CSV has ${csvData.values.length} rows.`);
+        }
+
+        fetchedHeaders = csvData.values[headerRowNum - 1] || [];
+        sampleRows = csvData.values.slice(headerRowNum, headerRowNum + 5); // Get next 5 rows as samples
+      } else {
+        // Google Sheets flow
+        const spreadsheetId = extractSpreadsheetId(url);
+        if (!spreadsheetId) return;
+
+        // Use A1 notation for header row
+        // Fetch header row + sample data rows (up to 100 rows for samples)
+        const headerRowNum = parseInt(headerRow) || 1;
+        const sampleRange = `${headerRowNum}:${headerRowNum + 100}`;
+        
+        const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
+          body: {
+            spreadsheetId,
+            tabName: selectedTab,
+            range: sampleRange,
+          },
+        });
+
+        if (sheetsError) throw sheetsError;
+
+        if (!sheetsData?.values || sheetsData.values.length === 0) {
+          throw new Error("No data found in the specified range");
+        }
+
+        fetchedHeaders = sheetsData.values[0] || [];
+        sampleRows = sheetsData.values.slice(1, 6); // Get first 5 data rows as samples
       }
 
-      const fetchedHeaders = sheetsData.values[0] || [];
       // Normalize headers
       const normalizedHeaders = fetchedHeaders.map((h: any) => 
         h === null || h === undefined ? '' : String(h).trim()
       );
-      const sampleRows = sheetsData.values.slice(1, 6); // Get first 5 data rows as samples
       
       setHeaders(normalizedHeaders);
       setSampleDataRows(sampleRows);
       setStep(3); // Move to mapping step
     } catch (error) {
-      console.error("Error fetching sheet data:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to fetch sheet data";
+      console.error("Error fetching data:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to fetch data";
       toast({
         title: "Fetch failed",
         description: errorMessage,
@@ -236,11 +295,12 @@ export const EditDataSourceModal = ({
     setStep(1);
     if (dataSource) {
       setDataName(dataSource.name || "");
-      setUrl(dataSource.google_sheets_url || "");
+      const sourceType = dataSource.source_type || 'google_sheets';
+      setUrl(sourceType === 'csv_url' ? (dataSource.csv_url || "") : (dataSource.google_sheets_url || ""));
       setSelectedTab(dataSource.tab_name || "");
-        setHeaderRow(String(dataSource.header_row || 1));
-      }
-      setAvailableTabs([]);
+      setHeaderRow(String(dataSource.header_row || 1));
+    }
+    setAvailableTabs([]);
     setHeaders([]);
     setSampleDataRows([]);
   };
@@ -258,8 +318,27 @@ export const EditDataSourceModal = ({
   const handleSaveMappings = async (mappings: any[]) => {
     if (!dataSource) return;
 
-    const spreadsheetId = extractSpreadsheetId(url);
-    if (!spreadsheetId) return;
+    const sourceType = dataSource.source_type || 'google_sheets';
+    const updateData: any = {
+      name: dataName,
+      header_row: parseInt(headerRow),
+      column_mappings: mappings,
+      sync_frequency: syncFrequency,
+      sync_time: syncTime,
+      sync_timezone: syncTimezone,
+    };
+
+    if (sourceType === 'csv_url') {
+      updateData.csv_url = url;
+      updateData.source_type = 'csv_url';
+    } else {
+      const spreadsheetId = extractSpreadsheetId(url);
+      if (!spreadsheetId) return;
+      updateData.google_sheets_url = url;
+      updateData.spreadsheet_id = spreadsheetId;
+      updateData.tab_name = selectedTab;
+      updateData.source_type = 'google_sheets';
+    }
 
     setIsLoading(true);
     
@@ -271,17 +350,7 @@ export const EditDataSourceModal = ({
       // Update data source metadata
       const { error: updateError } = await supabase
         .from('data_sources')
-        .update({
-          name: dataName,
-          google_sheets_url: url,
-          spreadsheet_id: spreadsheetId,
-          tab_name: selectedTab,
-          header_row: parseInt(headerRow),
-          column_mappings: mappings,
-          sync_frequency: syncFrequency,
-          sync_time: syncTime,
-          sync_timezone: syncTimezone,
-        })
+        .update(updateData)
         .eq('id', dataSource.id);
 
       if (updateError) throw updateError;
@@ -310,14 +379,42 @@ export const EditDataSourceModal = ({
   const handleSaveSettings = async () => {
     if (!dataSource) return;
 
-    const spreadsheetId = extractSpreadsheetId(url);
-    if (!spreadsheetId) {
-      toast({
-        title: "Invalid URL",
-        description: "Please provide a valid Google Sheets URL",
-        variant: "destructive",
-      });
-      return;
+    const sourceType = dataSource.source_type || 'google_sheets';
+    const updateData: any = {
+      name: dataName,
+      header_row: parseInt(headerRow),
+      sync_frequency: syncFrequency,
+      sync_time: syncTime,
+      sync_timezone: syncTimezone,
+    };
+
+    if (sourceType === 'csv_url') {
+      try {
+        new URL(url);
+      } catch {
+        toast({
+          title: "Invalid URL",
+          description: "Please provide a valid HTTP or HTTPS URL",
+          variant: "destructive",
+        });
+        return;
+      }
+      updateData.csv_url = url;
+      updateData.source_type = 'csv_url';
+    } else {
+      const spreadsheetId = extractSpreadsheetId(url);
+      if (!spreadsheetId) {
+        toast({
+          title: "Invalid URL",
+          description: "Please provide a valid Google Sheets URL",
+          variant: "destructive",
+        });
+        return;
+      }
+      updateData.google_sheets_url = url;
+      updateData.spreadsheet_id = spreadsheetId;
+      updateData.tab_name = selectedTab;
+      updateData.source_type = 'google_sheets';
     }
 
     setIsLoading(true);
@@ -325,16 +422,7 @@ export const EditDataSourceModal = ({
     try {
       const { error: updateError } = await supabase
         .from('data_sources')
-        .update({
-          name: dataName,
-          google_sheets_url: url,
-          spreadsheet_id: spreadsheetId,
-          tab_name: selectedTab,
-          header_row: parseInt(headerRow),
-          sync_frequency: syncFrequency,
-          sync_time: syncTime,
-          sync_timezone: syncTimezone,
-        })
+        .update(updateData)
         .eq('id', dataSource.id);
 
       if (updateError) throw updateError;
@@ -366,24 +454,38 @@ export const EditDataSourceModal = ({
     setIsResyncing(true);
     
     try {
-      const spreadsheetId = extractSpreadsheetId(url);
-      if (!spreadsheetId) {
-        throw new Error("Invalid Google Sheets URL");
+      const sourceType = dataSource.source_type || 'google_sheets';
+      const updateData: any = {
+        name: dataName,
+        header_row: parseInt(headerRow),
+        sync_frequency: syncFrequency,
+        sync_time: syncTime,
+        sync_timezone: syncTimezone,
+      };
+
+      if (sourceType === 'csv_url') {
+        try {
+          new URL(url);
+        } catch {
+          throw new Error("Invalid CSV URL");
+        }
+        updateData.csv_url = url;
+        updateData.source_type = 'csv_url';
+      } else {
+        const spreadsheetId = extractSpreadsheetId(url);
+        if (!spreadsheetId) {
+          throw new Error("Invalid Google Sheets URL");
+        }
+        updateData.google_sheets_url = url;
+        updateData.spreadsheet_id = spreadsheetId;
+        updateData.tab_name = selectedTab;
+        updateData.source_type = 'google_sheets';
       }
 
       // First update the data source with current form values
       const { error: updateError } = await supabase
         .from('data_sources')
-        .update({
-          name: dataName,
-          google_sheets_url: url,
-          spreadsheet_id: spreadsheetId,
-          tab_name: selectedTab,
-          header_row: parseInt(headerRow),
-          sync_frequency: syncFrequency,
-          sync_time: syncTime,
-          sync_timezone: syncTimezone,
-        })
+        .update(updateData)
         .eq('id', dataSource.id);
 
       if (updateError) throw updateError;
@@ -392,13 +494,21 @@ export const EditDataSourceModal = ({
       const syncDataSourceObj: SyncDataSource = {
         id: dataSource.id,
         name: dataName,
-        google_sheets_url: url,
-        spreadsheet_id: spreadsheetId,
-        tab_name: selectedTab,
         header_row: parseInt(headerRow),
         column_mappings: dataSource.column_mappings,
         report_id: dataSource.report_id,
+        source_type: sourceType,
       };
+
+      if (sourceType === 'csv_url') {
+        syncDataSourceObj.csv_url = url;
+      } else {
+        const spreadsheetId = extractSpreadsheetId(url);
+        if (!spreadsheetId) throw new Error("Invalid Google Sheets URL");
+        syncDataSourceObj.google_sheets_url = url;
+        syncDataSourceObj.spreadsheet_id = spreadsheetId;
+        syncDataSourceObj.tab_name = selectedTab;
+      }
 
       const options: SyncOptions = {
         deleteExistingData: true,
@@ -459,11 +569,13 @@ export const EditDataSourceModal = ({
               </Button>
             )}
             <FileSpreadsheet className="h-5 w-5 text-primary" />
-            Edit Google Sheets Data Source
+            {dataSource?.source_type === 'csv_url' ? 'Edit CSV URL Data Source' : 'Edit Google Sheets Data Source'}
           </DialogTitle>
           <DialogDescription>
             {step === 1 
-              ? "Update your Google Sheets URL, name, and other settings"
+              ? dataSource?.source_type === 'csv_url' 
+                ? "Update your CSV URL, name, and other settings"
+                : "Update your Google Sheets URL, name, and other settings"
               : step === 2
               ? "Select the tab and specify the header row"
               : "Map your columns to dimensions"
@@ -485,10 +597,14 @@ export const EditDataSourceModal = ({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="url">Google Sheets URL *</Label>
+                <Label htmlFor="url">
+                  {dataSource?.source_type === 'csv_url' ? 'CSV URL *' : 'Google Sheets URL *'}
+                </Label>
                 <Input
                   id="url"
-                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                  placeholder={dataSource?.source_type === 'csv_url' 
+                    ? "https://example.com/data.csv" 
+                    : "https://docs.google.com/spreadsheets/d/..."}
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                 />
@@ -595,21 +711,23 @@ export const EditDataSourceModal = ({
             </>
           ) : step === 2 ? (
             <>
-              <div className="space-y-2">
-                <Label htmlFor="tabName">Select Tab *</Label>
-                <Select value={selectedTab} onValueChange={setSelectedTab}>
-                  <SelectTrigger id="tabName" className="bg-background">
-                    <SelectValue placeholder="Select a tab" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-background z-50">
-                    {availableTabs.map((tab) => (
-                      <SelectItem key={tab} value={tab}>
-                        {tab}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {dataSource?.source_type !== 'csv_url' && (
+                <div className="space-y-2">
+                  <Label htmlFor="tabName">Select Tab *</Label>
+                  <Select value={selectedTab} onValueChange={setSelectedTab}>
+                    <SelectTrigger id="tabName" className="bg-background">
+                      <SelectValue placeholder="Select a tab" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background z-50">
+                      {availableTabs.map((tab) => (
+                        <SelectItem key={tab} value={tab}>
+                          {tab}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="headerRow">Header Row Number</Label>
@@ -620,6 +738,11 @@ export const EditDataSourceModal = ({
                   value={headerRow}
                   onChange={(e) => setHeaderRow(e.target.value)}
                 />
+                {dataSource?.source_type === 'csv_url' && (
+                  <p className="text-xs text-muted-foreground">
+                    The row number (starting from 1) that contains the column headers
+                  </p>
+                )}
               </div>
             </>
           ) : (

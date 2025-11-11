@@ -144,6 +144,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [dimensionHasData, setDimensionHasData] = useState<Record<string, boolean>>({});
   const [hasDataSources, setHasDataSources] = useState<boolean>(false);
+  const [hasCSVSource, setHasCSVSource] = useState<boolean>(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set());
   const [initialVisibleColumns, setInitialVisibleColumns] = useState<Set<string>>(new Set());
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
@@ -289,6 +290,13 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       checkDataSources();
     }
   }, [visibilityRefreshTrigger, reportId]);
+
+  // Check CSV source when activeViewId exists and isSharedView is false
+  useEffect(() => {
+    if (activeViewId && !isSharedView && reportId) {
+      checkDataSources();
+    }
+  }, [activeViewId, isSharedView, reportId]);
 
   // Refresh view settings when dimension visibility changes from DimensionsListModal
   useEffect(() => {
@@ -1080,6 +1088,7 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   const checkDataSources = async () => {
     if (!reportId) {
       setHasDataSources(false);
+      setHasCSVSource(false);
       return;
     }
     
@@ -1088,22 +1097,34 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       
       const { data: dataSources, error } = await supabase
         .from('data_sources')
-        .select('id')
-        .eq('report_id', reportId)
-        .limit(1);
+        .select('id, source_type')
+        .eq('report_id', reportId);
       
       if (error) {
         console.error('Error checking data sources:', error);
         setHasDataSources(false);
+        setHasCSVSource(false);
         return;
       }
       
       const hasData = dataSources && dataSources.length > 0;
+      const hasCSV = dataSources?.some(ds => ds.source_type === 'csv_url') || false;
+      
       console.log('[testing] Data sources found:', hasData ? 'Yes' : 'No');
+      console.log('[testing] CSV source found:', hasCSV ? 'Yes' : 'No');
+      
       setHasDataSources(hasData);
+      setHasCSVSource(hasCSV);
+      
+      // Check CSV source when activeViewId exists and isSharedView is false
+      if (hasCSV && activeViewId && !isSharedView) {
+        console.log('[testing] CSV source detected with activeViewId and non-shared view');
+        // Add any CSV-specific handling here if needed
+      }
     } catch (error) {
       console.error('Error checking data sources:', error);
       setHasDataSources(false);
+      setHasCSVSource(false);
     }
   };
 

@@ -49,7 +49,7 @@ export const DataSourceSelectionModal = ({
           </Card>
 
           <Card 
-            className="cursor-pointer hover:border-primary transition-colors opacity-50"
+            className="cursor-pointer hover:border-primary transition-colors"
             onClick={onSelectCSV}
           >
             <CardHeader className="text-center pb-4">
@@ -60,11 +60,11 @@ export const DataSourceSelectionModal = ({
               </div>
               <CardTitle className="text-lg">CSV Import</CardTitle>
               <CardDescription className="text-sm">
-                Upload CSV files
+                Import data from a CSV file
               </CardDescription>
             </CardHeader>
             <CardContent className="text-center text-xs text-muted-foreground">
-              Coming soon
+              Upload or Connect to a CSV file
             </CardContent>
           </Card>
 

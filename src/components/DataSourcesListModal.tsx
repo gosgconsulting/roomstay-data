@@ -150,86 +150,136 @@ export const DataSourcesListModal = ({
       try {
         console.log(`[REFRESH] Starting refresh for data source: ${dataSource.name}`);
         
-        // Validate required fields
-        if (!dataSource.spreadsheet_id || dataSource.spreadsheet_id.trim() === '') {
-          throw new Error('Spreadsheet ID is missing');
+        // Determine source type and validate accordingly
+        const sourceType = dataSource.source_type || 'google_sheets'; // Default to google_sheets for backward compatibility
+        
+        if (sourceType === 'csv_url') {
+          // Validate CSV URL source
+          if (!dataSource.csv_url || dataSource.csv_url.trim() === '') {
+            throw new Error('CSV URL is missing');
+          }
+        } else {
+          // Validate Google Sheets source
+          if (!dataSource.spreadsheet_id || dataSource.spreadsheet_id.trim() === '') {
+            throw new Error('Spreadsheet ID is missing');
+          }
         }
         
         if (!dataSource.header_row || dataSource.header_row < 1) {
           throw new Error('Header row must be at least 1');
         }
         
-        // First, fetch just the header to validate the sheet
-        // Use A1 notation: A{row}:Z{row} for header row (Z is column 26, should be enough for headers)
-        // If more columns needed, we can expand later
-        const headerRange = `A${dataSource.header_row}:Z${dataSource.header_row}`;
-        const { data: headerData, error: headerError } = await supabase.functions.invoke('fetch-google-sheets', {
-          body: {
-            spreadsheetId: dataSource.spreadsheet_id.trim(),
-            tabName: dataSource.tab_name?.trim() || undefined, // Use undefined if empty/null
-            range: headerRange,
-          },
-        });
+        let sheetHeaders: string[] = [];
+        let dataRows: any[][] = [];
 
-      if (headerError) {
-        console.error('[REFRESH] Header fetch error:', headerError);
-        console.error('[REFRESH] Error details:', {
-          spreadsheetId: dataSource.spreadsheet_id,
-          tabName: dataSource.tab_name,
-          headerRow: dataSource.header_row,
-          headerRange
-        });
-        throw new Error(headerError.message || `Failed to fetch sheet headers: ${headerError}`);
-      }
-      if (!headerData?.values || headerData.values.length === 0) {
-        throw new Error("Could not read sheet headers");
-      }
+        if (sourceType === 'csv_url') {
+          // CSV URL source
+          toast({
+            title: "Syncing...",
+            description: "Fetching data from CSV URL...",
+          });
 
-        let sheetHeaders = headerData.values[0];
-        console.log(`[REFRESH] Found ${sheetHeaders.length} columns in sheet:`, sheetHeaders);
-        
-        // Normalize headers - convert to strings and handle empty values
-        // Keep original length for index matching with data rows
-        sheetHeaders = sheetHeaders.map((header: any) => 
-          header === null || header === undefined ? '' : String(header).trim()
-        );
+          const { data: csvData, error: csvError } = await supabase.functions.invoke('fetch-csv-url', {
+            body: {
+              csvUrl: dataSource.csv_url,
+            },
+          });
 
-        // Detect new columns and update column_mappings using utility
-        const { newColumns, updatedMappings } = await detectNewColumns(sheetHeaders, dataSource);
-        
-        // Update local dataSource object if new columns were found
-        if (newColumns.length > 0) {
-          dataSource.column_mappings = updatedMappings;
+          if (csvError) {
+            console.error('[REFRESH] CSV fetch error:', csvError);
+            throw new Error(csvError.message || 'Failed to fetch CSV data');
+          }
+
+          if (!csvData?.values || csvData.values.length === 0) {
+            throw new Error("No data found in CSV file");
+          }
+
+          // Extract headers from the specified header row
+          const headerRowNum = dataSource.header_row || 1;
+          if (headerRowNum < 1 || headerRowNum > csvData.values.length) {
+            throw new Error(`Header row ${headerRowNum} is out of range. CSV has ${csvData.values.length} rows.`);
+          }
+
+          sheetHeaders = csvData.values[headerRowNum - 1].map((h: any) => 
+            h === null || h === undefined ? '' : String(h).trim()
+          );
+          dataRows = csvData.values.slice(headerRowNum);
+
+          console.log(`[REFRESH] Found ${sheetHeaders.length} columns in CSV:`, sheetHeaders);
+        } else {
+          // Google Sheets source
+          // First, fetch just the header to validate the sheet
+          // Use A1 notation: A{row}:Z{row} for header row (Z is column 26, should be enough for headers)
+          // If more columns needed, we can expand later
+          const headerRange = `A${dataSource.header_row}:Z${dataSource.header_row}`;
+          const { data: headerData, error: headerError } = await supabase.functions.invoke('fetch-google-sheets', {
+            body: {
+              spreadsheetId: dataSource.spreadsheet_id.trim(),
+              tabName: dataSource.tab_name?.trim() || undefined, // Use undefined if empty/null
+              range: headerRange,
+            },
+          });
+
+          if (headerError) {
+            console.error('[REFRESH] Header fetch error:', headerError);
+            console.error('[REFRESH] Error details:', {
+              spreadsheetId: dataSource.spreadsheet_id,
+              tabName: dataSource.tab_name,
+              headerRow: dataSource.header_row,
+              headerRange
+            });
+            throw new Error(headerError.message || `Failed to fetch sheet headers: ${headerError}`);
+          }
+          if (!headerData?.values || headerData.values.length === 0) {
+            throw new Error("Could not read sheet headers");
+          }
+
+          sheetHeaders = headerData.values[0];
+          console.log(`[REFRESH] Found ${sheetHeaders.length} columns in sheet:`, sheetHeaders);
+          
+          // Normalize headers - convert to strings and handle empty values
+          // Keep original length for index matching with data rows
+          sheetHeaders = sheetHeaders.map((header: any) => 
+            header === null || header === undefined ? '' : String(header).trim()
+          );
+
+          // Detect new columns and update column_mappings using utility
+          const { newColumns, updatedMappings } = await detectNewColumns(sheetHeaders, dataSource);
+          
+          // Update local dataSource object if new columns were found
+          if (newColumns.length > 0) {
+            dataSource.column_mappings = updatedMappings;
+          }
+
+          // Fetch all data rows - no limit, fetch all available data
+          // Use A1 notation: A{startRow}:Z for data rows (Google Sheets API supports up to 10 million rows)
+          const startRow = dataSource.header_row + 1;
+          const dataRange = `A${startRow}:Z`;
+          
+          toast({
+            title: "Syncing...",
+            description: "Fetching data from Google Sheets...",
+          });
+
+          const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
+            body: {
+              spreadsheetId: dataSource.spreadsheet_id.trim(),
+              tabName: dataSource.tab_name?.trim() || undefined, // Use undefined if empty/null
+              range: dataRange,
+            },
+          });
+
+          if (sheetsError) {
+            console.error('[REFRESH] Data fetch error:', sheetsError);
+            throw new Error(sheetsError.message || 'Failed to fetch sheet data');
+          }
+
+          if (!sheetsData?.values || sheetsData.values.length === 0) {
+            throw new Error("No data rows found in the sheet");
+          }
+
+          dataRows = sheetsData.values;
         }
-
-        // Fetch all data rows - no limit, fetch all available data
-        // Use A1 notation: A{startRow}:Z for data rows (Google Sheets API supports up to 10 million rows)
-        const startRow = dataSource.header_row + 1;
-        const dataRange = `A${startRow}:Z`;
-        
-        toast({
-          title: "Syncing...",
-          description: "Fetching data from Google Sheets...",
-        });
-
-        const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
-          body: {
-            spreadsheetId: dataSource.spreadsheet_id.trim(),
-            tabName: dataSource.tab_name?.trim() || undefined, // Use undefined if empty/null
-            range: dataRange,
-          },
-        });
-
-      if (sheetsError) {
-        console.error('[REFRESH] Data fetch error:', sheetsError);
-        throw new Error(sheetsError.message || 'Failed to fetch sheet data');
-      }
-
-      if (!sheetsData?.values || sheetsData.values.length === 0) {
-        throw new Error("No data rows found in the sheet");
-      }
-
-      const dataRows = sheetsData.values;
 
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();

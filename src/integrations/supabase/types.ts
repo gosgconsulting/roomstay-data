@@ -96,49 +96,55 @@ export type Database = {
         Row: {
           column_mappings: Json | null
           created_at: string
-          google_sheets_url: string
+          csv_url: string | null
+          google_sheets_url: string | null
           header_row: number
           id: string
           last_synced_at: string | null
           name: string
           report_id: string
-          spreadsheet_id: string
+          source_type: Database["public"]["Enums"]["data_source_type"]
+          spreadsheet_id: string | null
           sync_frequency: string | null
           sync_time: string | null
           sync_timezone: string | null
-          tab_name: string
+          tab_name: string | null
           updated_at: string
         }
         Insert: {
           column_mappings?: Json | null
           created_at?: string
-          google_sheets_url: string
+          csv_url?: string | null
+          google_sheets_url?: string | null
           header_row?: number
           id?: string
           last_synced_at?: string | null
           name: string
           report_id: string
-          spreadsheet_id: string
+          source_type?: Database["public"]["Enums"]["data_source_type"]
+          spreadsheet_id?: string | null
           sync_frequency?: string | null
           sync_time?: string | null
           sync_timezone?: string | null
-          tab_name: string
+          tab_name?: string | null
           updated_at?: string
         }
         Update: {
           column_mappings?: Json | null
           created_at?: string
-          google_sheets_url?: string
+          csv_url?: string | null
+          google_sheets_url?: string | null
           header_row?: number
           id?: string
           last_synced_at?: string | null
           name?: string
           report_id?: string
-          spreadsheet_id?: string
+          source_type?: Database["public"]["Enums"]["data_source_type"]
+          spreadsheet_id?: string | null
           sync_frequency?: string | null
           sync_time?: string | null
           sync_timezone?: string | null
-          tab_name?: string
+          tab_name?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -612,7 +618,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      data_source_type: 'google_sheets' | 'csv_url'
     }
     CompositeTypes: {
       [_ in never]: never
