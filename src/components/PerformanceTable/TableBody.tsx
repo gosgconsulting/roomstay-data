@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
   Pagination,
@@ -9,6 +9,8 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { Button } from "@/components/ui/button";
+import { ArrowUp, ArrowDown, X } from "lucide-react";
 import { formatValue } from "@/lib/performanceTable/formatters";
 import { TableRow } from "./TableRow";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
@@ -20,14 +22,19 @@ interface TableBodyProps {
   dimensions: Dimension[];
   visibleColumns: Set<string>;
   getOrderedDimensions: () => Dimension[];
-  totals: Record<string, any>;
+  totals: Record<string, number | string>;
   groupByDimensions: string[];
   breakdownByDimensions: string[];
   thenByDimensions: string[];
   activeDateTab: 'day' | 'week' | 'month' | 'year';
   filters: FilterState;
   onContextMenu: (e: React.MouseEvent, kpi: string) => void;
+  onRowClick?: (row: TableRowType) => void;
   itemsPerPage?: number;
+  sortColumn?: string | null;
+  sortDirection?: 'asc' | 'desc' | null;
+  onSort?: (dimensionName: string) => void;
+  onResetSort?: () => void;
 }
 
 /**
@@ -45,10 +52,20 @@ export function TableBody({
   activeDateTab,
   filters,
   onContextMenu,
+  onRowClick,
   itemsPerPage = 50,
+  sortColumn,
+  sortDirection,
+  onSort,
+  onResetSort,
 }: TableBodyProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  // Reset to page 1 when sort changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [sortColumn, sortDirection]);
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => {
@@ -72,6 +89,22 @@ export function TableBody({
 
   return (
     <>
+      {sortColumn && onResetSort && (
+        <div className="mb-2 flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onResetSort}
+            className="h-7 text-xs"
+          >
+            <X className="h-3 w-3 mr-1" />
+            Reset Sort
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Sorted by: {sortColumn} ({sortDirection === 'asc' ? 'Lowest' : 'Highest'})
+          </span>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="border-b bg-muted/30">
@@ -86,15 +119,34 @@ export function TableBody({
               </th>
               {getOrderedDimensions()
                 .filter(d => visibleColumns.has(d.id))
-                .map((dimension) => (
-                  <th
-                    key={dimension.id}
-                    className="py-3 px-4 text-right font-medium text-sm"
-                    onContextMenu={(e) => onContextMenu(e, dimension.name)}
-                  >
-                    {dimension.name}
-                  </th>
-                ))}
+                .map((dimension) => {
+                  const isSorted = sortColumn === dimension.name;
+                  const isAsc = isSorted && sortDirection === 'asc';
+                  const isDesc = isSorted && sortDirection === 'desc';
+                  
+                  return (
+                    <th
+                      key={dimension.id}
+                      className={cn(
+                        "py-3 px-4 text-right font-medium text-sm",
+                        onSort && "cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                      )}
+                      onClick={() => onSort?.(dimension.name)}
+                      onContextMenu={(e) => onContextMenu(e, dimension.name)}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        <span>{dimension.name}</span>
+                        {isDesc && <ArrowDown className="h-4 w-4" />}
+                        {isAsc && <ArrowUp className="h-4 w-4" />}
+                        {!isSorted && onSort && (
+                          <span className="text-muted-foreground opacity-0 group-hover:opacity-100">
+                            <ArrowDown className="h-3 w-3" />
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
             </tr>
           </thead>
           <tbody>
@@ -117,6 +169,9 @@ export function TableBody({
                     thenByDimensions={thenByDimensions}
                     activeDateTab={activeDateTab}
                     filters={filters}
+                    onRowClick={onRowClick}
+                    expandedRows={expandedRows}
+                    onToggleRow={toggleRow}
                   />
                 </Fragment>
               );

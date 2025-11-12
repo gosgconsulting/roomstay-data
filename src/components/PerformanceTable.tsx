@@ -186,9 +186,13 @@ export const PerformanceTable = ({
     onLoadingComplete,
   });
 
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+
   // Filters hook
   const {
-    filteredTableData,
+    filteredTableData: baseFilteredTableData,
     totals,
     compareTotals,
     changeData,
@@ -199,6 +203,47 @@ export const PerformanceTable = ({
     groupByDimensions,
     totalData,
   });
+
+  // Apply sorting to filtered data
+  const filteredTableData = useMemo(() => {
+    if (!sortColumn || !sortDirection) {
+      return baseFilteredTableData;
+    }
+
+    const sorted = [...baseFilteredTableData];
+    const dimension = dimensions.find(d => d.name === sortColumn);
+    
+    if (!dimension) return sorted;
+
+    sorted.sort((a, b) => {
+      const aValue = a.data[sortColumn];
+      const bValue = b.data[sortColumn];
+      
+      // Handle null/undefined values
+      if (aValue == null && bValue == null) return 0;
+      if (aValue == null) return 1;
+      if (bValue == null) return -1;
+
+      // Check if values are numeric
+      const aNum = parseFloat(String(aValue));
+      const bNum = parseFloat(String(bValue));
+      const isNumeric = !isNaN(aNum) && !isNaN(bNum);
+
+      if (isNumeric) {
+        // Numeric comparison
+        const diff = aNum - bNum;
+        return sortDirection === 'asc' ? diff : -diff;
+      } else {
+        // String comparison
+        const aStr = String(aValue).toLowerCase();
+        const bStr = String(bValue).toLowerCase();
+        const diff = aStr.localeCompare(bStr);
+        return sortDirection === 'asc' ? diff : -diff;
+      }
+    });
+
+    return sorted;
+  }, [baseFilteredTableData, sortColumn, sortDirection, dimensions]);
 
   // Load dimensions and check data sources when reportId changes
   useEffect(() => {
@@ -311,8 +356,67 @@ export const PerformanceTable = ({
 
   // Handle dimension change (from dropdown - preserves custom dimensions)
   const handleDimensionChange = useCallback((value: string, selector: "group" | "breakdown" | "then") => {
+    // Prevent selecting the same dimension that's already in all three
+    const groupValue = groupByDimensions[0];
+    const breakdownValue = breakdownByDimensions[0];
+    const thenValue = thenByDimensions[0];
+    
+    // Check if all three are the same and we're trying to select that same value
+    if (groupValue === breakdownValue && breakdownValue === thenValue && groupValue === value) {
+      console.warn('[testing] Cannot select the same dimension for all three selectors');
+      return; // Prevent the change
+    }
+    
+    // If selecting a dimension already used in another selector, swap them
     if (selector === "group") {
-      // Preserve existing dimensions, ensure selected value is first
+      const isUsedInBreakdown = breakdownValue === value;
+      const isUsedInThen = thenValue === value;
+      
+      // Swap with breakdown by if needed
+      if (isUsedInBreakdown) {
+        const oldGroupValue = groupValue;
+        setGroupByDimensions(prev => {
+          const newDims = prev.includes(value) 
+            ? [value, ...prev.filter(d => d !== value)]
+            : [value, ...prev];
+          return newDims;
+        });
+        // Swap breakdown by to the old group value, but only if it's different from then by
+        if (oldGroupValue && oldGroupValue !== thenValue) {
+          setBreakdownByDimensions([oldGroupValue]);
+        } else if (oldGroupValue && oldGroupValue === thenValue && groupByDimensions.length > 1) {
+          // If old group value is same as then by, pick a different dimension
+          const alternative = groupByDimensions.find(d => d !== value && d !== thenValue);
+          if (alternative) {
+            setBreakdownByDimensions([alternative]);
+          }
+        }
+        return;
+      }
+      
+      // Swap with then by if needed
+      if (isUsedInThen) {
+        const oldGroupValue = groupValue;
+        setGroupByDimensions(prev => {
+          const newDims = prev.includes(value) 
+            ? [value, ...prev.filter(d => d !== value)]
+            : [value, ...prev];
+          return newDims;
+        });
+        // Swap then by to the old group value, but only if it's different from breakdown by
+        if (oldGroupValue && oldGroupValue !== breakdownValue) {
+          setThenByDimensions([oldGroupValue]);
+        } else if (oldGroupValue && oldGroupValue === breakdownValue && groupByDimensions.length > 1) {
+          // If old group value is same as breakdown by, pick a different dimension
+          const alternative = groupByDimensions.find(d => d !== value && d !== breakdownValue);
+          if (alternative) {
+            setThenByDimensions([alternative]);
+          }
+        }
+        return;
+      }
+      
+      // Normal case: just update group by
       setGroupByDimensions(prev => {
         const newDims = prev.includes(value) 
           ? [value, ...prev.filter(d => d !== value)]
@@ -320,7 +424,64 @@ export const PerformanceTable = ({
         return newDims;
       });
     } else if (selector === "breakdown") {
-      // Preserve existing dimensions, ensure selected value is first
+      const isUsedInGroup = groupValue === value;
+      const isUsedInThen = thenValue === value;
+      
+      // Swap with group by if needed
+      if (isUsedInGroup) {
+        const oldBreakdownValue = breakdownValue;
+        setBreakdownByDimensions(prev => {
+          const newDims = prev.includes(value) 
+            ? [value, ...prev.filter(d => d !== value)]
+            : [value, ...prev];
+          return newDims;
+        });
+        // Swap group by to the old breakdown value, but only if it's different from then by
+        if (oldBreakdownValue && oldBreakdownValue !== thenValue) {
+          setGroupByDimensions(prev => {
+            const newDims = prev.includes(oldBreakdownValue) 
+              ? [oldBreakdownValue, ...prev.filter(d => d !== oldBreakdownValue)]
+              : [oldBreakdownValue, ...prev];
+            return newDims;
+          });
+        } else if (oldBreakdownValue && oldBreakdownValue === thenValue && groupByDimensions.length > 1) {
+          // If old breakdown value is same as then by, pick a different dimension
+          const alternative = groupByDimensions.find(d => d !== value && d !== thenValue);
+          if (alternative) {
+            setGroupByDimensions(prev => {
+              const newDims = prev.includes(alternative) 
+                ? [alternative, ...prev.filter(d => d !== alternative)]
+                : [alternative, ...prev];
+              return newDims;
+            });
+          }
+        }
+        return;
+      }
+      
+      // Swap with then by if needed
+      if (isUsedInThen) {
+        const oldBreakdownValue = breakdownValue;
+        setBreakdownByDimensions(prev => {
+          const newDims = prev.includes(value) 
+            ? [value, ...prev.filter(d => d !== value)]
+            : [value, ...prev];
+          return newDims;
+        });
+        // Swap then by to the old breakdown value, but only if it's different from group by
+        if (oldBreakdownValue && oldBreakdownValue !== groupValue) {
+          setThenByDimensions([oldBreakdownValue]);
+        } else if (oldBreakdownValue && oldBreakdownValue === groupValue && groupByDimensions.length > 1) {
+          // If old breakdown value is same as group by, pick a different dimension
+          const alternative = groupByDimensions.find(d => d !== value && d !== groupValue);
+          if (alternative) {
+            setThenByDimensions([alternative]);
+          }
+        }
+        return;
+      }
+      
+      // Normal case: just update breakdown by
       setBreakdownByDimensions(prev => {
         const newDims = prev.includes(value) 
           ? [value, ...prev.filter(d => d !== value)]
@@ -328,7 +489,64 @@ export const PerformanceTable = ({
         return newDims;
       });
     } else if (selector === "then") {
-      // Preserve existing dimensions, ensure selected value is first
+      const isUsedInGroup = groupValue === value;
+      const isUsedInBreakdown = breakdownValue === value;
+      
+      // Swap with group by if needed
+      if (isUsedInGroup) {
+        const oldThenValue = thenValue;
+        setThenByDimensions(prev => {
+          const newDims = prev.includes(value) 
+            ? [value, ...prev.filter(d => d !== value)]
+            : [value, ...prev];
+          return newDims;
+        });
+        // Swap group by to the old then value, but only if it's different from breakdown by
+        if (oldThenValue && oldThenValue !== breakdownValue) {
+          setGroupByDimensions(prev => {
+            const newDims = prev.includes(oldThenValue) 
+              ? [oldThenValue, ...prev.filter(d => d !== oldThenValue)]
+              : [oldThenValue, ...prev];
+            return newDims;
+          });
+        } else if (oldThenValue && oldThenValue === breakdownValue && groupByDimensions.length > 1) {
+          // If old then value is same as breakdown by, pick a different dimension
+          const alternative = groupByDimensions.find(d => d !== value && d !== breakdownValue);
+          if (alternative) {
+            setGroupByDimensions(prev => {
+              const newDims = prev.includes(alternative) 
+                ? [alternative, ...prev.filter(d => d !== alternative)]
+                : [alternative, ...prev];
+              return newDims;
+            });
+          }
+        }
+        return;
+      }
+      
+      // Swap with breakdown by if needed
+      if (isUsedInBreakdown) {
+        const oldThenValue = thenValue;
+        setThenByDimensions(prev => {
+          const newDims = prev.includes(value) 
+            ? [value, ...prev.filter(d => d !== value)]
+            : [value, ...prev];
+          return newDims;
+        });
+        // Swap breakdown by to the old then value, but only if it's different from group by
+        if (oldThenValue && oldThenValue !== groupValue) {
+          setBreakdownByDimensions([oldThenValue]);
+        } else if (oldThenValue && oldThenValue === groupValue && groupByDimensions.length > 1) {
+          // If old then value is same as group by, pick a different dimension
+          const alternative = groupByDimensions.find(d => d !== value && d !== groupValue);
+          if (alternative) {
+            setBreakdownByDimensions([alternative]);
+          }
+        }
+        return;
+      }
+      
+      // Normal case: just update then by
       setThenByDimensions(prev => {
         const newDims = prev.includes(value) 
           ? [value, ...prev.filter(d => d !== value)]
@@ -336,7 +554,67 @@ export const PerformanceTable = ({
         return newDims;
       });
     }
-  }, []);
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions]);
+
+  // Auto-fix: Ensure all three dimensions are different
+  useEffect(() => {
+    const groupValue = groupByDimensions[0];
+    const breakdownValue = breakdownByDimensions[0];
+    const thenValue = thenByDimensions[0];
+    
+    // Check if all three are the same
+    if (groupValue && breakdownValue && thenValue && 
+        groupValue === breakdownValue && breakdownValue === thenValue) {
+      console.warn('[testing] All three dimensions are the same, fixing...');
+      
+      // If we have at least 2 dimensions available, fix it
+      if (groupByDimensions.length >= 2) {
+        // Find a different dimension for breakdown by
+        const alternative = groupByDimensions.find(d => d !== groupValue);
+        if (alternative) {
+          setBreakdownByDimensions([alternative]);
+        }
+      } else if (groupByDimensions.length >= 3) {
+        // If we have 3+ dimensions, set breakdown and then to different ones
+        const alternatives = groupByDimensions.filter(d => d !== groupValue);
+        if (alternatives.length >= 1) {
+          setBreakdownByDimensions([alternatives[0]]);
+        }
+        if (alternatives.length >= 2) {
+          setThenByDimensions([alternatives[1]]);
+        }
+      }
+    }
+    // Also check if two are the same (but not all three)
+    else if (groupValue && breakdownValue && groupValue === breakdownValue && groupValue !== thenValue) {
+      // Group and breakdown are same but then is different - this is okay for now
+      // But we should still try to make them different if possible
+      if (groupByDimensions.length >= 2) {
+        const alternative = groupByDimensions.find(d => d !== groupValue && d !== thenValue);
+        if (alternative) {
+          setBreakdownByDimensions([alternative]);
+        }
+      }
+    }
+    else if (groupValue && thenValue && groupValue === thenValue && groupValue !== breakdownValue) {
+      // Group and then are same but breakdown is different
+      if (groupByDimensions.length >= 2) {
+        const alternative = groupByDimensions.find(d => d !== groupValue && d !== breakdownValue);
+        if (alternative) {
+          setThenByDimensions([alternative]);
+        }
+      }
+    }
+    else if (breakdownValue && thenValue && breakdownValue === thenValue && breakdownValue !== groupValue) {
+      // Breakdown and then are same but group is different
+      if (groupByDimensions.length >= 2) {
+        const alternative = groupByDimensions.find(d => d !== breakdownValue && d !== groupValue);
+        if (alternative) {
+          setThenByDimensions([alternative]);
+        }
+      }
+    }
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions]);
 
   // Handle dimension selector open
   const handleDimensionSelectorOpen = useCallback((e: React.MouseEvent, selector: "group" | "breakdown" | "then") => {
@@ -376,6 +654,67 @@ export const PerformanceTable = ({
     setSelectedKPI(kpi);
     setFilterModalOpen(true);
   }, []);
+
+  // Handle column sort
+  const handleSort = useCallback((dimensionName: string) => {
+    if (sortColumn === dimensionName) {
+      // Toggle direction: desc -> asc (highest -> lowest)
+      if (sortDirection === 'desc') {
+        setSortDirection('asc');
+      } else {
+        // If already asc, go back to desc
+        setSortDirection('desc');
+      }
+    } else {
+      // New column: start with desc (highest first)
+      setSortColumn(dimensionName);
+      setSortDirection('desc');
+    }
+  }, [sortColumn, sortDirection]);
+
+  // Handle reset sort
+  const handleResetSort = useCallback(() => {
+    setSortColumn(null);
+    setSortDirection(null);
+  }, []);
+
+  // Handle row click to apply filters, especially for "Then by" rows
+  const handleRowClick = useCallback((row: { level: number; name: string }) => {
+    if (!onFiltersChange) return;
+    
+    // Determine which dimension this row represents based on its level
+    let dimId: string | undefined;
+    if (row.level === 0) {
+      dimId = groupByDimensions[0];
+    } else if (row.level === 1) {
+      dimId = breakdownByDimensions[0];
+    } else if (row.level === 2) {
+      dimId = thenByDimensions[0];
+    }
+    
+    if (!dimId) return;
+    
+    // Get the dimension to find its name
+    const dimension = dimensions.find(d => d.id === dimId);
+    if (!dimension) return;
+    
+    // Apply filter for this dimension with the row's name as the value
+    const currentFilters = filters.dimensionFilters || {};
+    const existingValues = currentFilters[dimId] || [];
+    
+    // Toggle the filter: if already filtered, remove it; otherwise add it
+    const newValues = existingValues.includes(row.name)
+      ? existingValues.filter((v: string) => v !== row.name)
+      : [...existingValues, row.name];
+    
+    onFiltersChange({
+      ...filters,
+      dimensionFilters: {
+        ...currentFilters,
+        [dimId]: newValues.length > 0 ? newValues : undefined,
+      },
+    });
+  }, [onFiltersChange, filters, groupByDimensions, breakdownByDimensions, thenByDimensions, dimensions]);
 
 
   return (
@@ -431,6 +770,11 @@ export const PerformanceTable = ({
               activeDateTab={activeDateTab}
               filters={filters}
               onContextMenu={handleContextMenu}
+              onRowClick={handleRowClick}
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+              onResetSort={handleResetSort}
             />
           )}
         </CardContent>

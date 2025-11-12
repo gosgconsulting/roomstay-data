@@ -19,6 +19,9 @@ interface TableRowProps {
   thenByDimensions: string[];
   activeDateTab: 'day' | 'week' | 'month' | 'year';
   filters: FilterState;
+  onRowClick?: (row: TableRowType) => void;
+  expandedRows?: Set<string>;
+  onToggleRow?: (id: string) => void;
 }
 
 /**
@@ -37,7 +40,18 @@ export function TableRow({
   thenByDimensions,
   activeDateTab,
   filters,
+  onRowClick,
+  expandedRows,
+  onToggleRow,
 }: TableRowProps) {
+  const handleRowClick = () => {
+    if (hasChildren) {
+      onToggle();
+    } else if (onRowClick) {
+      onRowClick(row);
+    }
+  };
+
   return (
     <>
       <tr
@@ -46,7 +60,7 @@ export function TableRow({
           row.level === 1 && "bg-muted/20",
           row.level === 2 && "bg-muted/10"
         )}
-        onClick={hasChildren ? onToggle : undefined}
+        onClick={handleRowClick}
       >
         <td className="py-3 px-4" style={{ paddingLeft: `${row.level * 2 + 1}rem` }}>
           <div className="flex items-center gap-2">
@@ -102,24 +116,31 @@ export function TableRow({
           })}
       </tr>
       {isExpanded &&
-        row.children?.map((child) => (
-          <Fragment key={child.id}>
-            <TableRow
-              row={child}
-              isExpanded={false}
-              hasChildren={!!(child.children && child.children.length > 0)}
-              onToggle={() => {}}
-              dimensions={dimensions}
-              visibleColumns={visibleColumns}
-              getOrderedDimensions={getOrderedDimensions}
-              groupByDimensions={groupByDimensions}
-              breakdownByDimensions={breakdownByDimensions}
-              thenByDimensions={thenByDimensions}
-              activeDateTab={activeDateTab}
-              filters={filters}
-            />
-          </Fragment>
-        ))}
+        row.children?.map((child) => {
+          const childIsExpanded = expandedRows?.has(child.id) ?? false;
+          const childHasChildren = !!(child.children && child.children.length > 0);
+          return (
+            <Fragment key={child.id}>
+              <TableRow
+                row={child}
+                isExpanded={childIsExpanded}
+                hasChildren={childHasChildren}
+                onToggle={() => onToggleRow?.(child.id)}
+                dimensions={dimensions}
+                visibleColumns={visibleColumns}
+                getOrderedDimensions={getOrderedDimensions}
+                groupByDimensions={groupByDimensions}
+                breakdownByDimensions={breakdownByDimensions}
+                thenByDimensions={thenByDimensions}
+                activeDateTab={activeDateTab}
+                filters={filters}
+                onRowClick={onRowClick}
+                expandedRows={expandedRows}
+                onToggleRow={onToggleRow}
+              />
+            </Fragment>
+          );
+        })}
     </>
   );
 }

@@ -2,6 +2,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DimensionSelectorGroup } from "./DimensionSelectorGroup";
 import { ColumnVisibilitySheet } from "./ColumnVisibilitySheet";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
+import type { DragEndEvent } from '@dnd-kit/core';
 
 interface TableHeaderProps {
   activeDateTab: 'day' | 'week' | 'month' | 'year';
@@ -18,7 +19,7 @@ interface TableHeaderProps {
   visibleColumns: Set<string>;
   getOrderedDimensions: () => Dimension[];
   onToggleColumn: (dimensionId: string) => void;
-  onColumnReorder: (event: any) => void;
+  onColumnReorder: (event: DragEndEvent) => void;
   hasUnsavedColumnChanges: boolean;
   isSavingColumnSettings: boolean;
   onApplyColumnSettings: () => void;
@@ -66,18 +67,21 @@ export function TableHeader({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 text-sm">
           {/* Group by - always shown */}
+          {/* Show all dimensions (current selection is included so it displays properly) */}
           <DimensionSelectorGroup
             label="Group by"
             dimensions={groupByDimensions}
+            availableDimensions={groupByDimensions}
             allDimensions={dimensions}
             dimensionHasData={dimensionHasData}
             reportId={reportId}
             isSharedView={isSharedView}
             onValueChange={(value) => onDimensionChange(value, "group")}
-            onContextMenu={(e) => onDimensionSelectorOpen(e as any, "group")}
+            onContextMenu={(e) => onDimensionSelectorOpen(e, "group")}
           />
           
           {/* Breakdown by - shown only if 2+ dimensions selected */}
+          {/* Show all dimensions (current selection is included so it displays properly) */}
           {groupByDimensions.length >= 2 && (
             <DimensionSelectorGroup
               label="Breakdown by"
@@ -88,11 +92,12 @@ export function TableHeader({
               reportId={reportId}
               isSharedView={isSharedView}
               onValueChange={(value) => onDimensionChange(value, "breakdown")}
-              onContextMenu={(e) => onDimensionSelectorOpen(e as any, "breakdown")}
+              onContextMenu={(e) => onDimensionSelectorOpen(e, "breakdown")}
             />
           )}
           
           {/* Then by - shown only if 3+ dimensions selected */}
+          {/* Show all dimensions (current selection is included so it displays properly) */}
           {groupByDimensions.length >= 3 && (
             <DimensionSelectorGroup
               label="Then by"
@@ -103,7 +108,7 @@ export function TableHeader({
               reportId={reportId}
               isSharedView={isSharedView}
               onValueChange={(value) => onDimensionChange(value, "then")}
-              onContextMenu={(e) => onDimensionSelectorOpen(e as any, "then")}
+              onContextMenu={(e) => onDimensionSelectorOpen(e, "then")}
             />
           )}
         </div>

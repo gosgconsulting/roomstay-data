@@ -36,8 +36,12 @@ export function DimensionSelectorGroup({
   onContextMenu,
 }: DimensionSelectorGroupProps) {
   // Use availableDimensions if provided, otherwise fall back to dimensions
-  const options = availableDimensions || dimensions;
+  // Always include the current selection in options so it displays properly
   const currentValue = dimensions[0] || "";
+  const baseOptions = availableDimensions || dimensions;
+  const options = currentValue && !baseOptions.includes(currentValue) 
+    ? [currentValue, ...baseOptions]
+    : baseOptions;
   
   if (options.length > 0) {
     return (

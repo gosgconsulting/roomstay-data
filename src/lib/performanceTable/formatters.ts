@@ -11,7 +11,7 @@ export interface Dimension {
  * Format date based on granularity
  */
 export function formatDate(
-  dateValue: any,
+  dateValue: string | number | Date,
   granularity: 'day' | 'week' | 'month' | 'year'
 ): string {
   if (!dateValue) return "-";
@@ -23,10 +23,11 @@ export function formatDate(
     switch (granularity) {
       case 'day':
         return format(date, 'MMMM d, yyyy'); // October 31, 2025
-      case 'week':
+      case 'week': {
         const weekNumber = getWeek(date);
         const year = date.getFullYear();
         return `Week ${weekNumber}, ${year}`; // Week 45, 2025
+      }
       case 'month':
         return format(date, 'MMMM yyyy'); // October 2025
       case 'year':
@@ -57,9 +58,9 @@ export function formatRowName(
   if (level === 0) {
     dimId = groupByDimensions[0];
   } else if (level === 1) {
-    dimId = groupByDimensions[1];
+    dimId = breakdownByDimensions[0];
   } else if (level === 2) {
-    dimId = groupByDimensions[2];
+    dimId = thenByDimensions[0];
   }
   
   if (!dimId) return name;
@@ -98,11 +99,11 @@ export function formatRowName(
 /**
  * Format values based on dimension type
  */
-export function formatValue(value: any, dimension: Dimension): string {
+export function formatValue(value: string | number | null | undefined, dimension: Dimension): string {
   if (value === null || value === undefined || value === "") return "-";
   
-  const numValue = parseFloat(value);
-  if (isNaN(numValue)) return value;
+  const numValue = typeof value === 'number' ? value : parseFloat(String(value));
+  if (isNaN(numValue)) return String(value);
   
   // Format based on dimension name and type
   const dimName = dimension.name.toLowerCase();
