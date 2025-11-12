@@ -11,7 +11,8 @@ import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDime
 
 interface DimensionSelectorGroupProps {
   label: string;
-  dimensions: string[];
+  dimensions: string[]; // Current selected dimension(s)
+  availableDimensions?: string[]; // Available options (defaults to dimensions if not provided)
   allDimensions: Dimension[];
   dimensionHasData: Record<string, boolean>;
   reportId: string | null;
@@ -26,6 +27,7 @@ interface DimensionSelectorGroupProps {
 export function DimensionSelectorGroup({
   label,
   dimensions,
+  availableDimensions,
   allDimensions,
   dimensionHasData,
   reportId,
@@ -33,12 +35,16 @@ export function DimensionSelectorGroup({
   onValueChange,
   onContextMenu,
 }: DimensionSelectorGroupProps) {
-  if (dimensions.length > 0) {
+  // Use availableDimensions if provided, otherwise fall back to dimensions
+  const options = availableDimensions || dimensions;
+  const currentValue = dimensions[0] || "";
+  
+  if (options.length > 0) {
     return (
       <div className="flex items-center gap-2">
         <span className="text-muted-foreground">{label}:</span>
         <Select
-          value={dimensions[0] || ""}
+          value={currentValue}
           onValueChange={onValueChange}
         >
           <SelectTrigger 
@@ -48,7 +54,7 @@ export function DimensionSelectorGroup({
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-background z-50">
-            {dimensions.map((dimId) => {
+            {options.map((dimId) => {
               const dim = allDimensions.find(d => d.id === dimId);
               const hasData = reportId ? dimensionHasData[dimId] : undefined;
               return dim ? (

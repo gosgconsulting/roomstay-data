@@ -173,8 +173,8 @@ export function usePerformanceTableViews({
     // Load saved settings - map dimension IDs asynchronously
     const loadDimensionsAsync = async () => {
       const groupDimensions = await mapDimensionIds(view.group_by_dimensions || [], dimensions);
-      const breakdownDimensions = await mapDimensionIds(view.breakdown_by_dimensions || [], dimensions);
-      const thenDimensions = await mapDimensionIds(view.then_by_dimensions || [], dimensions);
+      const breakdownDimensions = groupDimensions;
+      const thenDimensions = groupDimensions;
       
       // Find Date dimension
       const dateDimension = dimensions.find(d => d.type === 'date');

@@ -82,6 +82,7 @@ export function TableHeader({
             <DimensionSelectorGroup
               label="Breakdown by"
               dimensions={breakdownByDimensions}
+              availableDimensions={groupByDimensions}
               allDimensions={dimensions}
               dimensionHasData={dimensionHasData}
               reportId={reportId}
@@ -96,6 +97,7 @@ export function TableHeader({
             <DimensionSelectorGroup
               label="Then by"
               dimensions={thenByDimensions}
+              availableDimensions={groupByDimensions}
               allDimensions={dimensions}
               dimensionHasData={dimensionHasData}
               reportId={reportId}
