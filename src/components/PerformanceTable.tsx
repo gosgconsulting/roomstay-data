@@ -309,14 +309,32 @@ export const PerformanceTable = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(groupByDimensions), JSON.stringify(breakdownByDimensions), JSON.stringify(thenByDimensions), JSON.stringify(Array.from(visibleColumns)), JSON.stringify(columnOrder), activeDateTab, dateOrder, reportId, activeViewId]);
 
-  // Handle dimension change
+  // Handle dimension change (from dropdown - preserves custom dimensions)
   const handleDimensionChange = useCallback((value: string, selector: "group" | "breakdown" | "then") => {
     if (selector === "group") {
-      setGroupByDimensions([value]);
+      // Preserve existing dimensions, ensure selected value is first
+      setGroupByDimensions(prev => {
+        const newDims = prev.includes(value) 
+          ? [value, ...prev.filter(d => d !== value)]
+          : [value, ...prev];
+        return newDims;
+      });
     } else if (selector === "breakdown") {
-      setBreakdownByDimensions([value]);
+      // Preserve existing dimensions, ensure selected value is first
+      setBreakdownByDimensions(prev => {
+        const newDims = prev.includes(value) 
+          ? [value, ...prev.filter(d => d !== value)]
+          : [value, ...prev];
+        return newDims;
+      });
     } else if (selector === "then") {
-      setThenByDimensions([value]);
+      // Preserve existing dimensions, ensure selected value is first
+      setThenByDimensions(prev => {
+        const newDims = prev.includes(value) 
+          ? [value, ...prev.filter(d => d !== value)]
+          : [value, ...prev];
+        return newDims;
+      });
     }
   }, []);
 
