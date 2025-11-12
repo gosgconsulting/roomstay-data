@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { useDimensionData } from "./useDimensionData";
 import { useDimensionGranularities } from "./useDimensionGranularities";
 import { useDimensionOperations } from "./useDimensionOperations";
-import { useDimensionFilters } from "./useDimensionFilters";
 
 interface UseDimensionSelectorOptions {
   selectedDimensions: string[];
@@ -46,19 +45,19 @@ export function useDimensionSelector({
   // Handle add/remove operations
   const {
     handleRemoveDimension: baseHandleRemoveDimension,
-    handleAddDimension,
+    handleAddDimension: baseHandleAddDimension,
   } = useDimensionOperations({
     selectedDimensions,
     onDimensionsChange,
     reportId,
   });
 
-  // Filter out date dimensions
-  useDimensionFilters({
-    dimensions,
-    selectedDimensions,
-    onDimensionsChange,
-  });
+  // Enhanced add handler that reloads dimensions to pick up newly created custom dimensions
+  const handleAddDimension = async (dimensionId: string) => {
+    await baseHandleAddDimension(dimensionId);
+    // Reload dimensions to ensure newly created custom dimensions are available
+    await loadDimensions();
+  };
 
   // Enhanced remove handler that also removes granularity
   const handleRemoveDimension = async (dimensionId: string) => {
@@ -66,7 +65,7 @@ export function useDimensionSelector({
     await baseHandleRemoveDimension(dimensionId);
   };
 
-  // Get available dimensions (not selected and not date type)
+  // Get available dimensions (not already selected)
   const availableDimensions = useMemo(
     () => dimensions.filter(
       (d) => !selectedDimensions.includes(d.id),

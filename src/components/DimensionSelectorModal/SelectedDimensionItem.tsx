@@ -39,7 +39,7 @@ export function SelectedDimensionItem({
           <X className="h-4 w-4" />
         </Button>
       </div>
-      {isDateDimension && (
+      {/* {isDateDimension && (
         <div className="pl-3 pr-3">
           <Select
             value={granularity || 'Day'}
@@ -58,7 +58,7 @@ export function SelectedDimensionItem({
             </SelectContent>
           </Select>
         </div>
-      )}
+      )} */}
     </div>
   );
 }
