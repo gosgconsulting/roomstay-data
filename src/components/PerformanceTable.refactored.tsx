@@ -234,8 +234,7 @@ export const PerformanceTable = ({
         setHasCSVSource(hasCSVSource);
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportId, dimensions.length]);
+  }, [reportId, dimensions.length, loadAllViews]);
 
   // Re-check data sources when refresh is triggered
   useEffect(() => {
@@ -254,8 +253,7 @@ export const PerformanceTable = ({
       console.log('[testing] Refreshing view settings due to dimension visibility change');
       loadAllViews();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibilityRefreshTrigger, reportId]);
+  }, [visibilityRefreshTrigger, reportId, loadAllViews]);
 
   // Create a stable reference for filters
   const debouncedFilters = useMemo(() => {
@@ -286,8 +284,7 @@ export const PerformanceTable = ({
     } else {
       setIsLoadingData(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportId, debouncedFilters, JSON.stringify(groupByDimensions), JSON.stringify(breakdownByDimensions), JSON.stringify(thenByDimensions), dateOrder, activeDateTab, visibilityRefreshTrigger]);
+  }, [reportId, debouncedFilters, groupByDimensions, breakdownByDimensions, thenByDimensions, dateOrder, activeDateTab, visibilityRefreshTrigger, loadPerformanceData, setIsLoadingData]);
 
   // Save view settings whenever they change (with debounce)
   useEffect(() => {
@@ -306,8 +303,7 @@ export const PerformanceTable = ({
       
       return () => clearTimeout(timeoutId);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(groupByDimensions), JSON.stringify(breakdownByDimensions), JSON.stringify(thenByDimensions), JSON.stringify(Array.from(visibleColumns)), JSON.stringify(columnOrder), activeDateTab, dateOrder, reportId, activeViewId]);
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, columnOrder, activeDateTab, dateOrder, reportId, activeViewId, saveViewSettings]);
 
   // Handle dimension change
   const handleDimensionChange = useCallback((value: string, selector: "group" | "breakdown" | "then") => {
