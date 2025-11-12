@@ -17,9 +17,11 @@ import { resyncReportViews } from "@/lib/resync-report-views";
 interface DataSource {
   id: string;
   name: string;
-  google_sheets_url: string;
-  spreadsheet_id: string;
-  tab_name: string;
+  source_type?: 'google_sheets' | 'csv_url';
+  google_sheets_url?: string;
+  spreadsheet_id?: string;
+  tab_name?: string;
+  csv_url?: string;
   header_row: number;
   column_mappings: any[] | null;
   report_id?: string;
@@ -130,26 +132,61 @@ export const EditMappingModal = ({
     setIsFetchingHeaders(true);
     
     try {
-      const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
-        body: {
-          spreadsheetId: dataSource.spreadsheet_id,
-          tabName: dataSource.tab_name,
-          range: `${dataSource.header_row}:${dataSource.header_row + 100}`, // Fetch header + 100 rows for sample data
-        },
-      });
+      const sourceType = dataSource.source_type || 'google_sheets';
+      
+      if (sourceType === 'csv_url') {
+        // Handle CSV URL source
+        if (!dataSource.csv_url || dataSource.csv_url.trim() === '') {
+          throw new Error('CSV URL is missing. Please edit the data source settings first.');
+        }
+        
+        const { data: csvData, error: csvError } = await supabase.functions.invoke('fetch-csv-url', {
+          body: {
+            csvUrl: dataSource.csv_url,
+          },
+        });
+        
+        if (csvError) throw csvError;
+        
+        if (!csvData?.values || csvData.values.length === 0) {
+          throw new Error("No data found in CSV file");
+        }
+        
+        // Extract headers based on header_row (1-indexed)
+        const headerRowIndex = (dataSource.header_row || 1) - 1;
+        setHeaders(csvData.values[headerRowIndex] || []);
+        
+        // Get sample rows (next 5 rows after header)
+        const sampleRows = csvData.values.slice(headerRowIndex + 1, headerRowIndex + 6);
+        setSampleDataRows(sampleRows);
+        
+      } else {
+        // Handle Google Sheets source
+        if (!dataSource.spreadsheet_id || dataSource.spreadsheet_id.trim() === '') {
+          throw new Error('Spreadsheet ID is missing. Please edit the data source settings first.');
+        }
+        
+        const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
+          body: {
+            spreadsheetId: dataSource.spreadsheet_id,
+            tabName: dataSource.tab_name,
+            range: `${dataSource.header_row}:${dataSource.header_row + 100}`,
+          },
+        });
 
-      if (sheetsError) throw sheetsError;
+        if (sheetsError) throw sheetsError;
 
-      if (!sheetsData?.values || sheetsData.values.length === 0) {
-        throw new Error("No data found in the specified range");
+        if (!sheetsData?.values || sheetsData.values.length === 0) {
+          throw new Error("No data found in the specified range");
+        }
+
+        setHeaders(sheetsData.values[0]);
+        const sampleRows = sheetsData.values.slice(1, 6);
+        setSampleDataRows(sampleRows);
       }
-
-      setHeaders(sheetsData.values[0]);
-      const sampleRows = sheetsData.values.slice(1, 6); // Get first 5 data rows as samples
-      setSampleDataRows(sampleRows);
     } catch (error) {
       console.error("Error fetching headers:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to fetch sheet headers";
+      const errorMessage = error instanceof Error ? error.message : "Failed to fetch headers";
       toast({
         title: "Fetch failed",
         description: errorMessage,

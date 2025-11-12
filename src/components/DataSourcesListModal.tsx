@@ -27,21 +27,12 @@ import {
   parseDate,
   insertDataInBatches,
   detectNewColumns,
-  type DataSource as SyncDataSource,
+  type DataSource,
   type SyncOptions 
 } from "@/lib/sync-utils";
 import { resyncReportViews } from "@/lib/resync-report-views";
 import { ViewDataModal } from "./ViewDataModal";
 
-interface DataSource {
-  id: string;
-  name: string;
-  google_sheets_url: string;
-  spreadsheet_id: string;
-  tab_name: string;
-  header_row: number;
-  column_mappings: any[] | null;
-}
 
 interface DataSourcesListModalProps {
   open: boolean;
@@ -86,7 +77,7 @@ export const DataSourcesListModal = ({
 
       if (error) throw error;
 
-      setDataSources((data || []) as DataSource[]);
+      setDataSources((data || []) as any);
     } catch (error) {
       console.error("Error loading data sources:", error);
       toast({
@@ -331,6 +322,10 @@ export const DataSourcesListModal = ({
         // Use a map that tracks both original column name and current sheet header index
         const dimensionIdMap: Record<string, string> = {}; // Maps original column name -> dimension ID
         const columnIndexMap: Record<string, number> = {}; // Maps original column name -> current sheet index
+        
+        // Detect new columns that aren't in existing mappings
+        const { newColumns } = await detectNewColumns(sheetHeaders, dataSource);
+        
         const visibleMappings = (dataSource.column_mappings || []).filter((m: any) => m.visible);
         
         console.log(`[REFRESH] Processing ${visibleMappings.length} visible mappings`);

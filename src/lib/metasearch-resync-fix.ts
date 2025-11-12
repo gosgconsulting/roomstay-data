@@ -80,7 +80,7 @@ export async function fixMetasearchDataSource(): Promise<MetasearchFixResult> {
       spreadsheet_id: metasearchDS.spreadsheet_id,
       tab_name: metasearchDS.tab_name,
       header_row: metasearchDS.header_row,
-      column_mappings: metasearchDS.column_mappings,
+      column_mappings: metasearchDS.column_mappings as any,
       report_id: metasearchDS.report_id,
     };
 

@@ -86,6 +86,6 @@ export const fetchDimensionDataBatch: QueryFunction<
     .range(offset, offset + BATCH_SIZE - 1);
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as any;
 };
 

@@ -19,16 +19,7 @@ import { useState, useEffect } from "react";
 import { FileSpreadsheet } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-
-interface DataSource {
-  id: string;
-  name: string;
-  google_sheets_url: string;
-  spreadsheet_id: string;
-  tab_name: string;
-  header_row: number;
-  column_mappings: any[] | null;
-}
+import { type DataSource } from "@/lib/sync-utils";
 
 interface ViewDataModalProps {
   open: boolean;
