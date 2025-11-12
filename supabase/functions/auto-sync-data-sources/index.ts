@@ -90,24 +90,71 @@ Deno.serve(async (req) => {
 
         console.log(`[AUTO-SYNC] Syncing ${ds.name}...`);
 
-        // Fetch data from Google Sheets
-        const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
-          body: {
-            spreadsheetId: ds.spreadsheet_id,
-            tabName: ds.tab_name,
-            range: `${ds.header_row}:1000000`,
-          },
-        });
+        // Determine source type and fetch data accordingly
+        const sourceType = ds.source_type || 'google_sheets'; // Default to google_sheets for backward compatibility
+        let headers: any[] = [];
+        let dataRows: any[][] = [];
 
-        if (sheetsError) throw sheetsError;
+        if (sourceType === 'csv_url') {
+          // Fetch data from CSV URL
+          if (!ds.csv_url) {
+            console.error(`[AUTO-SYNC] CSV URL missing for ${ds.name}`);
+            continue;
+          }
 
-        if (!sheetsData?.values || sheetsData.values.length === 0) {
-          console.log(`[AUTO-SYNC] No data found for ${ds.name}`);
-          continue;
+          const { data: csvData, error: csvError } = await supabase.functions.invoke('fetch-csv-url', {
+            body: {
+              csvUrl: ds.csv_url,
+            },
+          });
+
+          if (csvError) {
+            console.error(`[AUTO-SYNC] Error fetching CSV for ${ds.name}:`, csvError);
+            continue;
+          }
+
+          if (!csvData?.values || csvData.values.length === 0) {
+            console.log(`[AUTO-SYNC] No data found for ${ds.name}`);
+            continue;
+          }
+
+          // Extract headers from the specified header row
+          const headerRowNum = ds.header_row || 1;
+          if (headerRowNum < 1 || headerRowNum > csvData.values.length) {
+            console.error(`[AUTO-SYNC] Header row ${headerRowNum} out of range for ${ds.name}`);
+            continue;
+          }
+
+          headers = csvData.values[headerRowNum - 1];
+          dataRows = csvData.values.slice(headerRowNum);
+        } else {
+          // Fetch data from Google Sheets
+          if (!ds.spreadsheet_id || !ds.tab_name) {
+            console.error(`[AUTO-SYNC] Spreadsheet ID or tab name missing for ${ds.name}`);
+            continue;
+          }
+
+          const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
+            body: {
+              spreadsheetId: ds.spreadsheet_id,
+              tabName: ds.tab_name,
+              range: `${ds.header_row}:1000000`,
+            },
+          });
+
+          if (sheetsError) {
+            console.error(`[AUTO-SYNC] Error fetching Google Sheets for ${ds.name}:`, sheetsError);
+            continue;
+          }
+
+          if (!sheetsData?.values || sheetsData.values.length === 0) {
+            console.log(`[AUTO-SYNC] No data found for ${ds.name}`);
+            continue;
+          }
+
+          headers = sheetsData.values[0];
+          dataRows = sheetsData.values.slice(1);
         }
-
-        const headers = sheetsData.values[0];
-        const dataRows = sheetsData.values.slice(1);
 
         // Delete existing data for this data source
         const { error: deleteError } = await supabase
