@@ -23,9 +23,11 @@
 export interface DataSource {
   id: string;
   name: string;
-  google_sheets_url: string;
-  spreadsheet_id: string;
-  tab_name: string;
+  google_sheets_url?: string | null;
+  spreadsheet_id?: string | null;
+  tab_name?: string | null;
+  csv_url?: string | null;
+  source_type?: 'google_sheets' | 'csv_url';
   header_row: number;
   column_mappings: ColumnMapping[] | null;
   report_id?: string;

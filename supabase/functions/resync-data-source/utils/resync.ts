@@ -1,5 +1,6 @@
 import type { DataSource, ResponseBody } from './types.ts';
 import { fetchGoogleSheetsData } from './google-sheets.ts';
+import { fetchCSVUrlData } from './csv-url.ts';
 import { deleteExistingData, deleteCustomDimensions, fixColumnMappings } from './database.ts';
 import { buildDimensionMappingWithAutoDetection } from './dimensions.ts';
 import { transformDataRows, insertDataInBatches, updateColumnMappings } from './transform.ts';
@@ -96,93 +97,135 @@ export const resyncDataSource = async (
     // Step 3: Delete custom dimensions (always true for resync)
     await deleteCustomDimensions(supabase, dataSource.id);
 
-    // Step 4: Fetch headers
-    const headerRange = `A${dataSource.header_row}:Z${dataSource.header_row}`;
-    const headerData = await fetchGoogleSheetsData(
-      supabaseUrl,
-      supabaseAnonKey,
-      dataSource.spreadsheet_id,
-      dataSource.tab_name,
-      headerRange
-    );
-    
-    const headers = headerData[0].map((h: any) => 
-      h === null || h === undefined ? '' : String(h).trim()
-    );
-
-    // Step 5: Fetch all data in chunks for large datasets
-    console.log(`[RESYNC] Fetching data from Google Sheets...`);
-    
-    const SHEET_CHUNK_SIZE = 25000; // Fetch 25K rows at a time to prevent timeouts
+    // Step 4: Determine source type and fetch headers/data
+    const sourceType = dataSource.source_type || 'google_sheets'; // Default to google_sheets for backward compatibility
+    let headers: string[] = [];
     let allData: any[] = [];
     
-    // Try to fetch all data first, with fallback to chunked approach
-    try {
-      console.log(`[RESYNC] Attempting to fetch all data at once...`);
-      const dataRange = `A${dataSource.header_row + 1}:Z`;
-      const initialData = await fetchGoogleSheetsData(
+    if (sourceType === 'csv_url') {
+      // CSV URL source
+      if (!dataSource.csv_url) {
+        throw new Error('CSV URL is required for CSV data source');
+      }
+      
+      console.log(`[RESYNC] Fetching data from CSV URL...`);
+      const csvData = await fetchCSVUrlData(
+        supabaseUrl,
+        supabaseAnonKey,
+        dataSource.csv_url
+      );
+      
+      if (csvData.length === 0) {
+        throw new Error('No data found in CSV file');
+      }
+      
+      // Extract headers from the specified header row
+      const headerRowNum = dataSource.header_row || 1;
+      if (headerRowNum < 1 || headerRowNum > csvData.length) {
+        throw new Error(`Header row ${headerRowNum} is out of range. CSV has ${csvData.length} rows.`);
+      }
+      
+      headers = csvData[headerRowNum - 1].map((h: any) => 
+        h === null || h === undefined ? '' : String(h).trim()
+      );
+      
+      // Get all data rows (skip header row)
+      allData = csvData.slice(headerRowNum);
+      
+      console.log(`[RESYNC] Successfully fetched ${allData.length} rows from CSV URL`);
+    } else {
+      // Google Sheets source
+      if (!dataSource.spreadsheet_id || !dataSource.tab_name) {
+        throw new Error('Spreadsheet ID and tab name are required for Google Sheets data source');
+      }
+      
+      // Fetch headers
+      const headerRange = `A${dataSource.header_row}:Z${dataSource.header_row}`;
+      const headerData = await fetchGoogleSheetsData(
         supabaseUrl,
         supabaseAnonKey,
         dataSource.spreadsheet_id,
         dataSource.tab_name,
-        dataRange
+        headerRange
       );
       
-      if (initialData && initialData.length > 0) {
-        allData = initialData;
-        console.log(`[RESYNC] Successfully fetched ${allData.length} rows in single request`);
-      }
-    } catch (fetchError) {
-      console.warn(`[RESYNC] Single fetch failed, switching to chunked approach:`, fetchError);
+      headers = headerData[0].map((h: any) => 
+        h === null || h === undefined ? '' : String(h).trim()
+      );
+
+      // Step 5: Fetch all data in chunks for large datasets
+      console.log(`[RESYNC] Fetching data from Google Sheets...`);
       
-      // Fallback to chunked fetching for very large datasets
-      let startRow = dataSource.header_row + 1;
-      let hasMoreData = true;
-      let chunkCount = 0;
+      const SHEET_CHUNK_SIZE = 25000; // Fetch 25K rows at a time to prevent timeouts
       
-      while (hasMoreData) {
-        const endRow = startRow + SHEET_CHUNK_SIZE - 1;
-        const chunkRange = `A${startRow}:Z${endRow}`;
+      // Try to fetch all data first, with fallback to chunked approach
+      try {
+        console.log(`[RESYNC] Attempting to fetch all data at once...`);
+        const dataRange = `A${dataSource.header_row + 1}:Z`;
+        const initialData = await fetchGoogleSheetsData(
+          supabaseUrl,
+          supabaseAnonKey,
+          dataSource.spreadsheet_id,
+          dataSource.tab_name,
+          dataRange
+        );
         
-        console.log(`[RESYNC] Fetching chunk ${++chunkCount}: rows ${startRow}-${endRow}`);
+        if (initialData && initialData.length > 0) {
+          allData = initialData;
+          console.log(`[RESYNC] Successfully fetched ${allData.length} rows in single request`);
+        }
+      } catch (fetchError) {
+        console.warn(`[RESYNC] Single fetch failed, switching to chunked approach:`, fetchError);
         
-        try {
-          const chunkData = await fetchGoogleSheetsData(
-            supabaseUrl,
-            supabaseAnonKey,
-            dataSource.spreadsheet_id,
-            dataSource.tab_name,
-            chunkRange
-          );
+        // Fallback to chunked fetching for very large datasets
+        let startRow = dataSource.header_row + 1;
+        let hasMoreData = true;
+        let chunkCount = 0;
+        
+        while (hasMoreData) {
+          const endRow = startRow + SHEET_CHUNK_SIZE - 1;
+          const chunkRange = `A${startRow}:Z${endRow}`;
           
-          if (chunkData && chunkData.length > 0) {
-            allData = [...allData, ...chunkData];
-            console.log(`[RESYNC] Chunk ${chunkCount}: ${chunkData.length} rows, total: ${allData.length}`);
+          console.log(`[RESYNC] Fetching chunk ${++chunkCount}: rows ${startRow}-${endRow}`);
+          
+          try {
+            const chunkData = await fetchGoogleSheetsData(
+              supabaseUrl,
+              supabaseAnonKey,
+              dataSource.spreadsheet_id,
+              dataSource.tab_name,
+              chunkRange
+            );
             
-            // If we got less than the chunk size, we've reached the end
-            if (chunkData.length < SHEET_CHUNK_SIZE) {
-              hasMoreData = false;
-              console.log(`[RESYNC] Reached end of data at chunk ${chunkCount}`);
+            if (chunkData && chunkData.length > 0) {
+              allData = [...allData, ...chunkData];
+              console.log(`[RESYNC] Chunk ${chunkCount}: ${chunkData.length} rows, total: ${allData.length}`);
+              
+              // If we got less than the chunk size, we've reached the end
+              if (chunkData.length < SHEET_CHUNK_SIZE) {
+                hasMoreData = false;
+                console.log(`[RESYNC] Reached end of data at chunk ${chunkCount}`);
+              } else {
+                startRow = endRow + 1;
+              }
             } else {
-              startRow = endRow + 1;
+              hasMoreData = false;
+              console.log(`[RESYNC] No more data found at chunk ${chunkCount}`);
             }
-          } else {
+          } catch (chunkError) {
+            console.error(`[RESYNC] Error fetching chunk ${chunkCount}:`, chunkError);
+            // Continue with data we have so far
             hasMoreData = false;
-            console.log(`[RESYNC] No more data found at chunk ${chunkCount}`);
           }
-        } catch (chunkError) {
-          console.error(`[RESYNC] Error fetching chunk ${chunkCount}:`, chunkError);
-          // Continue with data we have so far
-          hasMoreData = false;
+          
+          // Add progress feedback for large datasets
+          if (allData.length > 0 && allData.length % 50000 === 0) {
+            console.log(`[RESYNC] Progress: ${allData.length} rows fetched from Google Sheets...`);
+          }
         }
         
-        // Add progress feedback for large datasets
-        if (allData.length > 0 && allData.length % 50000 === 0) {
-          console.log(`[RESYNC] Progress: ${allData.length} rows fetched from Google Sheets...`);
-        }
+        console.log(`[RESYNC] Chunked fetch complete: ${allData.length} total rows in ${chunkCount} chunks`);
       }
-      
-      console.log(`[RESYNC] Chunked fetch complete: ${allData.length} total rows in ${chunkCount} chunks`);
     }
 
     // Step 6: Build dimension mapping with auto-detection
