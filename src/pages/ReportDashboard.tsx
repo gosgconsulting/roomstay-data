@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 import { Settings, ArrowLeft, BarChart3, TrendingUp } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
 
 interface Account {
@@ -28,6 +29,7 @@ interface Account {
 export default function ReportDashboard() {
   const navigate = useNavigate();
   const { accountId } = useParams<{ accountId: string }>();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const [session, setSession] = useState<Session | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
@@ -236,8 +238,8 @@ export default function ReportDashboard() {
         
         setReportId(selectedReportId);
         
-        // Resync dimensions in the background (non-blocking)
-        resyncAllDimensions(selectedReportId, accountId)
+        // Resync dimensions in the background (non-blocking) with react-query cache
+        resyncAllDimensions(queryClient, selectedReportId, accountId)
           .then(() => {
             console.log('[RESYNC] Dimension resync completed successfully');
           })
