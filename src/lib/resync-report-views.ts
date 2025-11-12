@@ -47,7 +47,7 @@ export async function resyncReportViews(
     // Get all report_views for this report
     const { data: reportViews, error: viewsError } = await supabase
       .from("report_views")
-      .select("id, visible_dimensions, visible_columns, visible_kpis, name")
+      .select("id, visible_dimensions, visible_columns, visible_kpis, filter_dimensions, name")
       .eq("report_id", reportId);
 
     if (viewsError) throw viewsError;
@@ -71,10 +71,12 @@ export async function resyncReportViews(
       const oldDimensionIds = (view.visible_dimensions || []) as string[];
       const oldVisibleColumns = (view.visible_columns || []) as string[];
       const oldVisibleKPIs = (view.visible_kpis || []) as string[];
+      const oldFilterDimensions = (view.filter_dimensions || []) as string[];
       const needsUpdate: { 
         visible_dimensions?: string[]; 
         visible_columns?: string[];
         visible_kpis?: string[];
+        filter_dimensions?: string[];
       } = {};
       
       // Update visible_dimensions
@@ -210,6 +212,29 @@ export async function resyncReportViews(
           );
           needsUpdate.visible_kpis = validKPIs;
         }
+      }
+
+      // Update filter_dimensions - include all text-type account dimensions
+      const { data: allTextDimensions } = await supabase
+        .from("dimensions")
+        .select("id, type")
+        .eq("account_id", accountId)
+        .eq("scope", "account")
+        .eq("type", "text");
+
+      const textDimensionIds = (allTextDimensions || []).map(d => d.id);
+      
+      // Merge with existing filter dimensions and remove duplicates
+      const mergedFilterDimensions = Array.from(new Set([
+        ...oldFilterDimensions,
+        ...textDimensionIds
+      ]));
+
+      if (mergedFilterDimensions.length !== oldFilterDimensions.length) {
+        console.log(
+          `[RESYNC-VIEWS] Updating filter_dimensions for view "${view.name}": ${oldFilterDimensions.length} -> ${mergedFilterDimensions.length} dimensions`
+        );
+        needsUpdate.filter_dimensions = mergedFilterDimensions;
       }
 
       // Update the view if needed

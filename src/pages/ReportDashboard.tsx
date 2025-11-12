@@ -17,6 +17,7 @@ import { toast } from "@/hooks/use-toast";
 import { Settings, ArrowLeft, BarChart3, TrendingUp } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
+import { resyncReportViews } from "@/lib/resync-report-views";
 
 interface Account {
   id: string;
@@ -245,6 +246,18 @@ export default function ReportDashboard() {
           })
           .catch((error) => {
             console.error('[RESYNC] Error resyncing dimensions:', error);
+            // Silently fail - resync is best-effort
+          });
+        
+        // Also resync report views to ensure filter_dimensions includes all text dimensions
+        resyncReportViews(selectedReportId, accountId)
+          .then(() => {
+            console.log('[RESYNC] Report views resync completed successfully');
+            // Increment refresh trigger to reload filters with updated dimensions
+            setVisibilityRefreshTrigger(prev => prev + 1);
+          })
+          .catch((error) => {
+            console.error('[RESYNC] Error resyncing report views:', error);
             // Silently fail - resync is best-effort
           });
       }
