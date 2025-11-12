@@ -173,30 +173,51 @@ export function usePerformanceTableViews({
     // Load saved settings - map dimension IDs asynchronously
     const loadDimensionsAsync = async () => {
       const groupDimensions = await mapDimensionIds(view.group_by_dimensions || [], dimensions);
+      const breakdownDimensions = await mapDimensionIds(view.breakdown_by_dimensions || [], dimensions);
+      const thenDimensions = await mapDimensionIds(view.then_by_dimensions || [], dimensions);
+      
+      // Find Date dimension
+      const dateDimension = dimensions.find(d => d.type === 'date');
       
       // If no grouping dimension is set and dimensions are available, set a default
       let finalGroupDimensions = groupDimensions;
       if (groupDimensions.length === 0 && dimensions.length > 0) {
-        // Find a suitable dimension for grouping - prefer Date first, then text dimensions
-        const dateDimension = dimensions.find(d => d.type === 'date');
-        const textDimension = dimensions.find(d => d.type === 'text');
-        
+        // Prefer Date first, then text dimensions
         if (dateDimension) {
           finalGroupDimensions = [dateDimension.id];
           console.log('Auto-selected Date dimension for grouping:', dateDimension.name);
-        } else if (textDimension) {
-          finalGroupDimensions = [textDimension.id];
-          console.log('Auto-selected text dimension for grouping:', textDimension.name);
         } else {
-          // Fallback to first available dimension
-          finalGroupDimensions = [dimensions[0].id];
-          console.log('Auto-selected first available dimension for grouping:', dimensions[0].name);
+          const textDimension = dimensions.find(d => d.type === 'text');
+          if (textDimension) {
+            finalGroupDimensions = [textDimension.id];
+            console.log('Auto-selected text dimension for grouping:', textDimension.name);
+          } else {
+            // Fallback to first available dimension
+            finalGroupDimensions = [dimensions[0].id];
+            console.log('Auto-selected first available dimension for grouping:', dimensions[0].name);
+          }
+        }
+      }
+      
+      // Ensure Date dimension is included in selected dimensions if it exists
+      // Add it to breakdown if not already in group, breakdown, or then
+      let finalBreakdownDimensions = breakdownDimensions;
+      let finalThenDimensions = thenDimensions;
+      
+      if (dateDimension) {
+        const allSelectedIds = [...finalGroupDimensions, ...finalBreakdownDimensions, ...finalThenDimensions];
+        const dateAlreadySelected = allSelectedIds.includes(dateDimension.id);
+        
+        if (!dateAlreadySelected) {
+          // Add Date dimension to breakdown by default if not already selected
+          finalBreakdownDimensions = [dateDimension.id, ...finalBreakdownDimensions];
+          console.log('Auto-added Date dimension to breakdown by default:', dateDimension.name);
         }
       }
       
       onGroupByChange(finalGroupDimensions);
-      onBreakdownByChange(await mapDimensionIds(view.breakdown_by_dimensions || [], dimensions));
-      onThenByChange(await mapDimensionIds(view.then_by_dimensions || [], dimensions));
+      onBreakdownByChange(finalBreakdownDimensions);
+      onThenByChange(finalThenDimensions);
     };
     
     loadDimensionsAsync();
@@ -276,7 +297,8 @@ export function usePerformanceTableViews({
       }
 
       // Find date dimension first, fallback to text dimension for default grouping
-      const defaultGroupDimension = dimensions.find(d => d.type === 'date') || dimensions.find(d => d.type === 'text');
+      const dateDimension = dimensions.find(d => d.type === 'date');
+      const defaultGroupDimension = dateDimension || dimensions.find(d => d.type === 'text');
       const isDateGrouping = defaultGroupDimension?.type === 'date';
       
       console.log('Creating default view for report:', reportId, 'with dimension:', defaultGroupDimension?.name, 'type:', defaultGroupDimension?.type);
@@ -319,7 +341,10 @@ export function usePerformanceTableViews({
             name: dateConfig.name,
             is_default: dateConfig.isDefault,
             group_by_dimensions: defaultGroupDimension ? [defaultGroupDimension.id] : [],
-            breakdown_by_dimensions: dimensions && dimensions.find(d => d.type === 'date') ? [dimensions.find(d => d.type === 'date')!.id] : [],
+            // Always include Date dimension in breakdown if it exists and isn't already in group
+            breakdown_by_dimensions: dateDimension && defaultGroupDimension?.id !== dateDimension.id 
+              ? [dateDimension.id] 
+              : [],
             then_by_dimensions: [],
             visible_columns: defaultVisibleIds,
             column_order: defaultColumnOrder,
