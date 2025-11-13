@@ -138,6 +138,6 @@ export function formatValue(value: string | number | null | undefined, dimension
     return numValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
   
-  return value;
+  return String(value);
 }
 
