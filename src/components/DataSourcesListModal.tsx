@@ -525,14 +525,25 @@ export const DataSourcesListModal = ({
                         </div>
                       </TableCell>
                       <TableCell>
-                        <a
-                          href={dataSource.google_sheets_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline cursor-pointer"
-                        >
-                          Google Sheets
-                        </a>
+                        {(() => {
+                          const sourceType = (dataSource as any).source_type || 'google_sheets';
+                          const isCsv = sourceType === 'csv_url';
+                          const url = isCsv ? (dataSource as any).csv_url : dataSource.google_sheets_url;
+                          const label = isCsv ? 'CSV' : 'Google Sheets';
+                          
+                          return url ? (
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline cursor-pointer"
+                            >
+                              {label}
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">{label}</span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
