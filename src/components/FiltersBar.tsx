@@ -194,8 +194,15 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
           // Convert old single-value filters to array format if needed
           const filterValues = data.filter_values as Record<string, string | string[]>;
           const normalizedFilters: Record<string, string[]> = {};
+          const activeDims = data.filter_dimensions || [];
+          
           Object.entries(filterValues).forEach(([key, value]) => {
-            normalizedFilters[key] = Array.isArray(value) ? value : [value];
+            // Only load filter values for dimensions that are in filter_dimensions
+            if (activeDims.includes(key)) {
+              normalizedFilters[key] = Array.isArray(value) ? value : [value];
+            } else {
+              console.warn(`[FILTER-CLEANUP] Ignoring filter value for inactive dimension: ${key}`);
+            }
           });
           setSelectedFilters(normalizedFilters);
         }
@@ -251,6 +258,19 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
           .eq("id", existingView.id);
 
         if (error) throw error;
+      } else {
+        // Create new view if it doesn't exist
+        const { error } = await supabase
+          .from("report_views")
+          .insert({
+            ...viewData,
+            report_id: reportId,
+            user_id: user.id,
+            is_default: true,
+          });
+
+        if (error) throw error;
+        console.log('[FILTERS-BAR] Created new default view with filter settings');
       }
     } catch (error) {
       console.error("Error saving filter settings:", error);
