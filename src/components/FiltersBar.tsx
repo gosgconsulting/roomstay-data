@@ -642,7 +642,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     );
   };
 
-  const handleDimensionsChange = (dimensionIds: string[]) => {
+  const handleDimensionsChange = async (dimensionIds: string[]) => {
     setActiveDimensions(dimensionIds);
     // Clear filters for removed dimensions
     const newFilters = { ...selectedFilters };
@@ -652,6 +652,50 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
       }
     });
     setSelectedFilters(newFilters);
+    
+    // Save the updated dimensions to the database
+    if (!reportId || isSharedView) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: existingView } = await supabase
+        .from("report_views")
+        .select("id, date_range_start, date_range_end, date_range_preset")
+        .eq("report_id", reportId)
+        .eq("user_id", user.id)
+        .eq("is_default", true)
+        .maybeSingle();
+
+      const viewData = {
+        filter_dimensions: dimensionIds,
+        filter_values: newFilters,
+        date_range_start: existingView?.date_range_start || null,
+        date_range_end: existingView?.date_range_end || null,
+        date_range_preset: existingView?.date_range_preset || "this_month",
+      };
+
+      if (existingView) {
+        await supabase
+          .from("report_views")
+          .update(viewData)
+          .eq("id", existingView.id);
+      } else {
+        await supabase
+          .from("report_views")
+          .insert({
+            ...viewData,
+            report_id: reportId,
+            user_id: user.id,
+            is_default: true,
+          });
+      }
+      
+      console.log('[FILTERS-BAR] Saved dimension configuration changes');
+    } catch (error) {
+      console.error("Error saving dimension changes:", error);
+    }
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
