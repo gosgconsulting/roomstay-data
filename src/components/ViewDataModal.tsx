@@ -66,22 +66,43 @@ export const ViewDataModal = ({
       }
 
       // Fetch dimension details
-      // Get report_id from data source
+      // Get report_id and account_id from data source
       const { data: dsData, error: dsError } = await supabase
         .from('data_sources')
-        .select('report_id')
+        .select('report_id, reports(account_id)')
         .eq('id', dataSource.id)
         .single();
 
       if (dsError) throw dsError;
 
-      const { data: dimensionsData, error: dimError } = await supabase
+      const reportId = dsData.report_id;
+      const accountId = (dsData.reports as any)?.account_id;
+
+      // Fetch dimensions - include both report-scoped and account-scoped dimensions
+      // First, fetch all dimensions with matching IDs (regardless of scope)
+      const { data: allDimensionsData, error: dimError } = await supabase
         .from('dimensions')
         .select('*')
-        .in('id', dimensionIds)
-        .eq('report_id', dsData.report_id);
+        .in('id', dimensionIds);
 
       if (dimError) throw dimError;
+
+      // Filter dimensions to include:
+      // 1. Report-scoped dimensions (report_id matches)
+      // 2. Account-scoped dimensions (account_id matches and report_id is null)
+      // 3. Global dimensions (scope is 'global')
+      const dimensionsData = (allDimensionsData || []).filter((dim: any) => {
+        // If it's a report-scoped dimension, check report_id
+        if (dim.report_id) {
+          return dim.report_id === reportId;
+        }
+        // If it's an account-scoped dimension, check account_id
+        if (dim.account_id) {
+          return dim.account_id === accountId;
+        }
+        // Global dimensions are always included
+        return dim.scope === 'global';
+      });
 
       // Fetch dimension_data for this data source
       const { data, error } = await supabase
@@ -95,12 +116,14 @@ export const ViewDataModal = ({
 
       // Calculate formula dimensions for each row
       const processedData = data?.map(row => {
-        const dimensionValues = { ...(row.dimension_values as Record<string, any>) };
+        // Handle null/undefined dimension_values
+        const rawDimensionValues = row.dimension_values as Record<string, any> | null | undefined;
+        const dimensionValues = rawDimensionValues ? { ...rawDimensionValues } : {};
         
         // Build a map of dimension names to values for formula calculation
         const valuesByName: Record<string, any> = {};
         dimensionsData?.forEach(dim => {
-          if (!dim.formula && dimensionValues[dim.id] !== undefined) {
+          if (!dim.formula && dimensionValues[dim.id] !== undefined && dimensionValues[dim.id] !== null) {
             valuesByName[dim.name] = dimensionValues[dim.id];
           }
         });
@@ -118,6 +141,14 @@ export const ViewDataModal = ({
           dimension_values: dimensionValues
         };
       }) || [];
+
+      // Debug logging
+      console.log('[ViewDataModal] Fetched dimensions:', dimensionsData?.length || 0);
+      console.log('[ViewDataModal] Fetched data rows:', processedData.length);
+      if (processedData.length > 0) {
+        console.log('[ViewDataModal] Sample row dimension_values:', processedData[0].dimension_values);
+        console.log('[ViewDataModal] Sample row dimension_values keys:', Object.keys(processedData[0].dimension_values || {}));
+      }
 
       setDimensions(dimensionsData || []);
       setDimensionData(processedData);
@@ -210,7 +241,7 @@ export const ViewDataModal = ({
                 </TableHeader>
                 <TableBody>
                   {dimensionData.map((row) => {
-                    const dimensionValues = row.dimension_values as Record<string, any>;
+                    const dimensionValues = (row.dimension_values as Record<string, any>) || {};
                     return (
                       <TableRow key={row.id}>
                         <TableCell className="font-medium text-muted-foreground">
@@ -219,18 +250,26 @@ export const ViewDataModal = ({
                         {dimensions.map((dimension) => {
                           const value = dimensionValues[dimension.id];
                           // Format the value based on dimension type
-                          let displayValue = value ?? '-';
+                          let displayValue: string | number = '-';
                           
-                          if (value !== null && value !== undefined) {
-                            if (dimension.type === 'percentage') {
-                              displayValue = `${parseFloat(value).toFixed(2)}%`;
-                            } else if (dimension.type === 'currency') {
-                              displayValue = `$${parseFloat(value).toFixed(2)}`;
-                            } else if (dimension.type === 'number') {
-                              displayValue = parseFloat(value).toLocaleString('en-US', {
-                                minimumFractionDigits: 0,
-                                maximumFractionDigits: 2
-                              });
+                          if (value !== null && value !== undefined && value !== '') {
+                            try {
+                              if (dimension.type === 'percentage') {
+                                displayValue = `${parseFloat(String(value)).toFixed(2)}%`;
+                              } else if (dimension.type === 'currency') {
+                                displayValue = `$${parseFloat(String(value)).toFixed(2)}`;
+                              } else if (dimension.type === 'number') {
+                                displayValue = parseFloat(String(value)).toLocaleString('en-US', {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 2
+                                });
+                              } else {
+                                // For text, date, etc., just convert to string
+                                displayValue = String(value);
+                              }
+                            } catch (error) {
+                              // If parsing fails, just show the raw value as string
+                              displayValue = String(value);
                             }
                           }
                           
