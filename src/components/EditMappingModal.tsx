@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ColumnMappingStep } from "./ColumnMappingStep";
 import { resyncColumnMappings } from "@/lib/resync-dimensions";
 import { resyncReportViews } from "@/lib/resync-report-views";
+import { useDataSourceHeaders } from "@/hooks/useDataSourceHeaders";
 
 interface DataSource {
   id: string;
@@ -42,19 +42,40 @@ export const EditMappingModal = ({
   onSuccess,
   accountId: propAccountId
 }: EditMappingModalProps) => {
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [sampleDataRows, setSampleDataRows] = useState<any[][]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingHeaders, setIsFetchingHeaders] = useState(false);
   const [accountId, setAccountId] = useState<string | undefined>(propAccountId);
+
+  // Use react-query to fetch headers
+  const {
+    data: headersData,
+    isLoading: isFetchingHeaders,
+    error: headersError,
+    refetch: refetchHeaders,
+  } = useDataSourceHeaders(dataSource, open && !!dataSource);
+
+  const headers = headersData?.headers || [];
+  const sampleDataRows = headersData?.sampleDataRows || [];
 
   useEffect(() => {
     if (open && dataSource) {
       fetchAccountId();
-      fetchHeaders();
       resyncMappingsIfNeeded();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, dataSource, propAccountId]);
+
+  // Show error toast when headers fetch fails
+  useEffect(() => {
+    if (headersError && open) {
+      const errorMessage =
+        headersError instanceof Error ? headersError.message : "Failed to fetch headers";
+      toast({
+        title: "Fetch failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
+  }, [headersError, open]);
 
   // Resync column mappings with account-scoped dimensions
   const resyncMappingsIfNeeded = async () => {
@@ -92,7 +113,7 @@ export const EditMappingModal = ({
       }
       
       // Reload headers to get updated mappings
-      await fetchHeaders();
+      await refetchHeaders();
     } catch (error) {
       console.error('[RESYNC] Error resyncing mappings:', error);
       // Don't show error to user, just log it - the edit modal will still work
@@ -126,76 +147,6 @@ export const EditMappingModal = ({
     }
   };
 
-  const fetchHeaders = async () => {
-    if (!dataSource) return;
-    
-    setIsFetchingHeaders(true);
-    
-    try {
-      const sourceType = dataSource.source_type || 'google_sheets';
-      
-      if (sourceType === 'csv_url') {
-        // Handle CSV URL source
-        if (!dataSource.csv_url || dataSource.csv_url.trim() === '') {
-          throw new Error('CSV URL is missing. Please edit the data source settings first.');
-        }
-        
-        const { data: csvData, error: csvError } = await supabase.functions.invoke('fetch-csv-url', {
-          body: {
-            csvUrl: dataSource.csv_url,
-          },
-        });
-        
-        if (csvError) throw csvError;
-        
-        if (!csvData?.values || csvData.values.length === 0) {
-          throw new Error("No data found in CSV file");
-        }
-        
-        // Extract headers based on header_row (1-indexed)
-        const headerRowIndex = (dataSource.header_row || 1) - 1;
-        setHeaders(csvData.values[headerRowIndex] || []);
-        
-        // Get sample rows (next 5 rows after header)
-        const sampleRows = csvData.values.slice(headerRowIndex + 1, headerRowIndex + 6);
-        setSampleDataRows(sampleRows);
-        
-      } else {
-        // Handle Google Sheets source
-        if (!dataSource.spreadsheet_id || dataSource.spreadsheet_id.trim() === '') {
-          throw new Error('Spreadsheet ID is missing. Please edit the data source settings first.');
-        }
-        
-        const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
-          body: {
-            spreadsheetId: dataSource.spreadsheet_id,
-            tabName: dataSource.tab_name,
-            range: `${dataSource.header_row}:${dataSource.header_row + 100}`,
-          },
-        });
-
-        if (sheetsError) throw sheetsError;
-
-        if (!sheetsData?.values || sheetsData.values.length === 0) {
-          throw new Error("No data found in the specified range");
-        }
-
-        setHeaders(sheetsData.values[0]);
-        const sampleRows = sheetsData.values.slice(1, 6);
-        setSampleDataRows(sampleRows);
-      }
-    } catch (error) {
-      console.error("Error fetching headers:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to fetch headers";
-      toast({
-        title: "Fetch failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setIsFetchingHeaders(false);
-    }
-  };
 
   const handleSaveMappings = async (mappings: any[]) => {
     if (!dataSource) return;
