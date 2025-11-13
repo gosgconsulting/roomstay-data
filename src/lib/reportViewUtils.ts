@@ -1,6 +1,27 @@
 import { supabase } from "@/integrations/supabase/client";
 
 /**
+ * Cleans up filter_values to remove any dimension IDs not in filter_dimensions
+ * @param filterDimensions - Array of active dimension IDs
+ * @param filterValues - Current filter values object
+ * @returns Cleaned filter values object
+ */
+export function cleanupFilterValues(
+  filterDimensions: string[],
+  filterValues: Record<string, any>
+): Record<string, any> {
+  const cleaned: Record<string, any> = {};
+  
+  Object.keys(filterValues).forEach(dimensionId => {
+    if (filterDimensions.includes(dimensionId)) {
+      cleaned[dimensionId] = filterValues[dimensionId];
+    }
+  });
+  
+  return cleaned;
+}
+
+/**
  * Saves dimension settings to a report view
  * Creates or updates the default view for a report with the specified dimensions
  * 
@@ -25,10 +46,14 @@ export async function saveDimensionSettings(
       .eq("is_default", true)
       .maybeSingle();
 
+    // Clean up filter_values to only include active dimensions
+    const cleanedFilterValues = existingView?.filter_values 
+      ? cleanupFilterValues(dimensions, existingView.filter_values as Record<string, any>)
+      : {};
+
     const viewData = {
       filter_dimensions: dimensions,
-      // Preserve existing filter settings if they exist
-      filter_values: existingView?.filter_values || {},
+      filter_values: cleanedFilterValues, // Use cleaned values
       date_range_start: existingView?.date_range_start || null,
       date_range_end: existingView?.date_range_end || null,
       date_range_preset: existingView?.date_range_preset || "this_month",
