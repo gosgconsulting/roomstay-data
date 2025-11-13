@@ -61,6 +61,18 @@ Deno.serve(async (req) => {
     }
 
     console.log(`[AUTO-SYNC] Found ${dataSources.length} data sources with auto-sync enabled`);
+    console.log(`[AUTO-SYNC] Data sources details:`, 
+      dataSources.map((ds: DataSource) => ({
+        id: ds.id,
+        name: ds.name,
+        sync_frequency: ds.sync_frequency,
+        sync_time: ds.sync_time,
+        sync_timezone: ds.sync_timezone,
+        source_type: (ds as any).source_type || 'google_sheets',
+        report_id: ds.report_id,
+        last_synced_at: (ds as any).last_synced_at || 'never'
+      }))
+    );
 
     const syncResults = [];
 
