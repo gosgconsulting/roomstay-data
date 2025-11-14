@@ -172,14 +172,19 @@ Deno.serve(async (req) => {
         const dimensionValues = row.dimension_values || {};
 
         for (const [dimId, filterValues] of Object.entries(dimensionFilters)) {
-          if (!filterValues || (filterValues as string[]).length === 0) continue;
+          // Normalize filterValues to always be an array
+          const filterValuesArray = Array.isArray(filterValues) 
+            ? filterValues 
+            : (filterValues ? [filterValues] : []);
+            
+          if (filterValuesArray.length === 0) continue;
 
           const rowValue = dimensionValues[dimId];
           if (rowValue === undefined || rowValue === null) return false;
 
           const rowValueStr = String(rowValue).toLowerCase();
-          const hasMatch = (filterValues as string[]).some((filterValue: string) => {
-            const filterLower = filterValue.toLowerCase();
+          const hasMatch = filterValuesArray.some((filterValue: string) => {
+            const filterLower = String(filterValue).toLowerCase();
             return rowValueStr.includes(filterLower);
           });
 
