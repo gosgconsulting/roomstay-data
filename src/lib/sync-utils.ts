@@ -1060,9 +1060,23 @@ export const syncDataSource = async (
   } = options;
 
   try {
+    // Validate session and get current user
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError || !session) {
+      // Try to refresh the session
+      const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+      
+      if (refreshError || !refreshedSession) {
+        throw new Error("Your session has expired. Please refresh the page and try again.");
+      }
+    }
+    
     // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("User not authenticated");
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error("Authentication failed. Please refresh the page and log in again.");
+    }
 
     // Get report_id and account_id
     let reportId = dataSource.report_id;

@@ -471,6 +471,25 @@ export const EditDataSourceModal = ({
     setIsResyncing(true);
     
     try {
+      // Validate and refresh session before proceeding
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        // Try to refresh the session
+        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+        
+        if (refreshError || !refreshedSession) {
+          throw new Error("Your session has expired. Please refresh the page and try again.");
+        }
+      }
+      
+      // Verify user is authenticated
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error("Authentication failed. Please refresh the page and log in again.");
+      }
+      
+      console.log('[RESYNC] User authenticated:', user.id);
       const sourceType = dataSource.source_type || 'google_sheets';
       const updateData: any = {
         name: dataName,
