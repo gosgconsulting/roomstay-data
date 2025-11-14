@@ -7,13 +7,6 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400',
 };
 
-interface VlookupMapping {
-  source_dimension_id: string;
-  source_value: string;
-  target_dimension_id: string;
-  target_value: string;
-}
-
 interface DimensionMappingRow {
   source_dimension_id: string;
   source_value: string;
@@ -165,9 +158,8 @@ Deno.serve(async (req) => {
       throw new Error('Either reportId or accountId is required');
     }
 
-    console.log(`[VLOOKUP-APPLY] Starting to apply mappings for report: ${reportId}, account: ${accountId}`);
+    console.log(`[VLOOKUP-APPLY] Validating vlookup mappings for report: ${reportId}, account: ${accountId}`);
 
-    // Use service role - no need for user authentication since this is called from backend
     // Get user_id from the report or account
     let userId: string | null = null;
     
@@ -215,12 +207,17 @@ Deno.serve(async (req) => {
     if (!mappings || mappings.length === 0) {
       console.log('[VLOOKUP-APPLY] No mappings found');
       return new Response(
-        JSON.stringify({ success: true, message: 'No mappings to apply', rowsUpdated: 0 }),
+        JSON.stringify({ 
+          success: true, 
+          message: 'No mappings configured',
+          mappingsCount: 0,
+          note: 'Vlookup mappings work like tags/categories and are applied dynamically when filtering and displaying data.'
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`[VLOOKUP-APPLY] Found ${mappings.length} mappings to apply`);
+    console.log(`[VLOOKUP-APPLY] Found ${mappings.length} mappings to validate`);
     
     // Validate that all mappings have source_dimension_id
     const invalidMappings = mappings.filter((m: DimensionMappingRow) => !m.source_dimension_id);
@@ -229,171 +226,61 @@ Deno.serve(async (req) => {
       throw new Error(`${invalidMappings.length} mappings are missing source_dimension_id. Please update your mappings.`);
     }
 
-    // Group mappings by source and target dimension pair
-    const mappingsByDimensionPair = new Map<string, DimensionMappingRow[]>();
+    // Collect unique target dimensions that need to exist
+    const uniqueTargetDims = new Map<string, { id: string; name: string }>();
     for (const mapping of mappings as DimensionMappingRow[]) {
-      const key = `${mapping.source_dimension_id}:${mapping.target_dimension_id}`;
-      if (!mappingsByDimensionPair.has(key)) {
-        mappingsByDimensionPair.set(key, []);
+      if (!uniqueTargetDims.has(mapping.target_dimension_id)) {
+        uniqueTargetDims.set(mapping.target_dimension_id, {
+          id: mapping.target_dimension_id,
+          name: mapping.target_dimension_name
+        });
       }
-      mappingsByDimensionPair.get(key)!.push(mapping);
     }
 
-    console.log(`[VLOOKUP-APPLY] Processing ${mappingsByDimensionPair.size} dimension pairs`);
+    console.log(`[VLOOKUP-APPLY] Validating ${uniqueTargetDims.size} unique target dimensions`);
 
-    let totalUpdated = 0;
-
-    // Process each source-target dimension pair
-    for (const [key, pairMappings] of mappingsByDimensionPair.entries()) {
-      const [sourceDimId, targetDimId] = key.split(':');
-      const targetDimName = pairMappings[0]?.target_dimension_name || '';
-      console.log(`[VLOOKUP-APPLY] Processing dimension pair: ${sourceDimId} -> ${targetDimId} (${targetDimName}) with ${pairMappings.length} mappings`);
-
-      // Get source dimension details
-      const { data: sourceDim, error: sourceDimError } = await supabase
-        .from('dimensions')
-        .select('name, type')
-        .eq('id', sourceDimId)
-        .single();
-
-      if (sourceDimError || !sourceDim) {
-        console.error(`[VLOOKUP-APPLY] Source dimension ${sourceDimId} not found:`, sourceDimError);
-        continue;
-      }
-
-      // Get or create target dimension
+    // Ensure target dimensions exist (create them if needed)
+    let dimensionsCreated = 0;
+    let dimensionsValidated = 0;
+    
+    for (const [targetId, targetInfo] of uniqueTargetDims) {
       const targetDim = await getOrCreateTargetDimension(
         supabase,
-        targetDimId,
-        targetDimName,
+        targetId,
+        targetInfo.name,
         userId,
         reportId,
         accountId
       );
-
-      if (!targetDim) {
-        console.error(`[VLOOKUP-APPLY] Failed to get or create target dimension ${targetDimId}`);
-        continue;
-      }
-
-      console.log(`[VLOOKUP-APPLY] Source: ${sourceDim.name} (${sourceDimId}), Target: ${targetDim.name} (${targetDim.id})`);
-
-      // Load all dimension_data rows that have values for the source dimension
-      const queryBuilder = supabase
-        .from('dimension_data')
-        .select('id, dimension_values');
       
-      if (reportId) {
-        queryBuilder.eq('report_id', reportId);
-      }
-
-      const { data: dimensionDataRows, error: dataError } = await queryBuilder;
-
-      if (dataError) {
-        console.error('[VLOOKUP-APPLY] Error loading dimension_data:', dataError);
-        throw dataError;
-      }
-
-      if (!dimensionDataRows || dimensionDataRows.length === 0) {
-        console.log('[VLOOKUP-APPLY] No dimension_data rows found');
-        continue;
-      }
-
-      // Filter rows that have the source dimension
-      const relevantRows = dimensionDataRows.filter((row: any) => 
-        row.dimension_values && row.dimension_values[sourceDimId] !== undefined
-      );
-
-      console.log(`[VLOOKUP-APPLY] Found ${relevantRows.length} rows with source dimension`);
-
-      // Create a lookup map for efficient matching (case-insensitive)
-      const lookupMap = new Map<string, string>();
-      for (const mapping of pairMappings) {
-        const normalizedSource = mapping.source_value.toLowerCase().trim();
-        lookupMap.set(normalizedSource, mapping.target_value);
-      }
-
-      // Process rows - only update those that need changes
-      let processedCount = 0;
-      let skippedCount = 0;
-      const MAX_UPDATES = 5000; // Limit to prevent timeout
-
-      for (const row of relevantRows) {
-        // Check if we've hit the update limit
-        if (totalUpdated >= MAX_UPDATES) {
-          console.log(`[VLOOKUP-APPLY] Reached maximum update limit (${MAX_UPDATES}), stopping to prevent timeout`);
-          break;
-        }
-
-        const sourceValue = row.dimension_values[sourceDimId];
-        if (!sourceValue) continue;
-
-        const normalizedValue = sourceValue.toString().toLowerCase().trim();
-        const targetValue = lookupMap.get(normalizedValue);
-
-        if (targetValue) {
-          // Check if row already has the correct target value
-          const existingValue = row.dimension_values[targetDim.id];
-          if (existingValue === targetValue) {
-            skippedCount++;
-            continue; // Skip if already correct
-          }
-
-          // Create updated dimension_values with the target dimension value
-          const updatedValues = { ...row.dimension_values };
-          updatedValues[targetDim.id] = targetValue;
-
-          // Update this single row
-          const { error: updateError } = await supabase
-            .from('dimension_data')
-            .update({ dimension_values: updatedValues })
-            .eq('id', row.id);
-
-          if (updateError) {
-            console.error(`[VLOOKUP-APPLY] Error updating row ${row.id}:`, updateError);
-          } else {
-            totalUpdated++;
-          }
-
-          processedCount++;
-
-          // Log progress every 100 updates
-          if (processedCount % 100 === 0) {
-            console.log(`[VLOOKUP-APPLY] Progress: ${processedCount} processed, ${totalUpdated} updated, ${skippedCount} skipped`);
-          }
+      if (targetDim) {
+        if (targetDim.id !== targetId) {
+          dimensionsCreated++;
+        } else {
+          dimensionsValidated++;
         }
       }
-
-      console.log(`[VLOOKUP-APPLY] Dimension pair complete: ${processedCount} processed, ${totalUpdated} updated, ${skippedCount} skipped`);
-
     }
 
-    console.log(`[VLOOKUP-APPLY] Vlookup application complete. Total rows updated: ${totalUpdated}`);
-
-    const responseMessage = totalUpdated >= 5000 
-      ? `Applied vlookup mappings to ${totalUpdated} rows (max limit reached, remaining rows will be mapped at query time)`
-      : `Applied vlookup mappings to ${totalUpdated} rows`;
+    console.log(`[VLOOKUP-APPLY] Validation complete - ${dimensionsValidated} validated, ${dimensionsCreated} created`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: responseMessage,
-        rowsUpdated: totalUpdated,
-        note: 'Vlookup mappings are also applied dynamically at query time in get-performance-data'
+        message: 'Vlookup mappings are ready and will be applied dynamically',
+        mappingsCount: mappings.length,
+        dimensionsValidated: uniqueTargetDims.size,
+        dimensionsCreated,
+        note: 'Mappings work like tags/categories - they are applied on-the-fly when filtering and displaying data. No database updates needed, making data syncing much faster!'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-
   } catch (error) {
-    console.error('[VLOOKUP-APPLY] Unexpected error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    const errorDetails = error instanceof Error ? error.stack : JSON.stringify(error);
-    
+    console.error('[VLOOKUP-APPLY] Error:', error);
     return new Response(
       JSON.stringify({ 
-        success: false, 
-        error: errorMessage,
-        details: errorDetails
+        error: error instanceof Error ? error.message : 'Unknown error',
+        details: error instanceof Error ? error.stack : undefined
       }),
       { 
         status: 500,
