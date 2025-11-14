@@ -68,3 +68,55 @@ export function applyVlookupMappings(
   
   return result;
 }
+
+/**
+ * Get the mapped value for a source value, or return the source if no mapping exists
+ */
+export function getMappedValue(
+  sourceValue: string,
+  mappings: VlookupMapping[],
+  dimensionId: string
+): string {
+  const mapping = mappings.find(
+    m => m.targetDimensionId === dimensionId && 
+         m.sourceValue.toLowerCase() === sourceValue.toLowerCase()
+  );
+  return mapping ? mapping.targetValue : sourceValue;
+}
+
+/**
+ * Get all source values that map to a specific target value
+ */
+export function getSourceValues(
+  targetValue: string,
+  mappings: VlookupMapping[],
+  dimensionId: string
+): string[] {
+  return mappings
+    .filter(
+      m => m.targetDimensionId === dimensionId && 
+           m.targetValue.toLowerCase() === targetValue.toLowerCase()
+    )
+    .map(m => m.sourceValue);
+}
+
+/**
+ * Get all values (both the selected value and any source values that map to it)
+ * This is used for filtering - when a user selects "Brady", we want to match
+ * both "Brady" and all hotels that map to "Brady"
+ */
+export function getAllValuesForFilter(
+  selectedValue: string,
+  mappings: VlookupMapping[],
+  dimensionId: string
+): string[] {
+  const sourceValues = getSourceValues(selectedValue, mappings, dimensionId);
+  
+  // If there are source values, this is a mapped value - return all sources + the mapped value
+  if (sourceValues.length > 0) {
+    return [selectedValue, ...sourceValues];
+  }
+  
+  // Otherwise, return just the value itself (it might be an unmapped original value)
+  return [selectedValue];
+}
