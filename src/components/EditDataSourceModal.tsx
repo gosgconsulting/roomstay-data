@@ -20,7 +20,6 @@ import { FileSpreadsheet, ChevronLeft, RefreshCw } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ColumnMappingStep } from "./ColumnMappingStep";
-import { ResyncProgressModal } from "./ResyncProgressModal";
 import { 
   syncDataSource, 
   extractSpreadsheetId, 
@@ -69,12 +68,6 @@ export const EditDataSourceModal = ({
   const [sampleDataRows, setSampleDataRows] = useState<any[][]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isResyncing, setIsResyncing] = useState(false);
-  const [resyncProgress, setResyncProgress] = useState<Array<{
-    id: string;
-    label: string;
-    status: 'pending' | 'in-progress' | 'completed' | 'error';
-    detail?: string;
-  }>>([]);
   const [syncedRowsCount, setSyncedRowsCount] = useState<number | null>(null);
   const [syncedColumnsCount, setSyncedColumnsCount] = useState<number | null>(null);
   const [syncFrequency, setSyncFrequency] = useState("manual");
@@ -460,14 +453,6 @@ export const EditDataSourceModal = ({
   const handleResync = async () => {
     if (!dataSource) return;
 
-    // Initialize progress steps
-    setResyncProgress([
-      { id: 'fetch', label: 'Fetching data from source', status: 'in-progress', detail: 'Downloading data...' },
-      { id: 'delete', label: 'Clearing existing data', status: 'pending' },
-      { id: 'dimensions', label: 'Creating dimensions', status: 'pending' },
-      { id: 'insert', label: 'Importing data', status: 'pending' },
-    ]);
-    
     setIsResyncing(true);
     
     try {
@@ -526,14 +511,7 @@ export const EditDataSourceModal = ({
 
       if (updateError) throw updateError;
 
-      // Mark fetch as completed
-      setResyncProgress(prev => prev.map(step => 
-        step.id === 'fetch' 
-          ? { ...step, status: 'completed', detail: 'Data fetched successfully' }
-          : step.id === 'delete' 
-          ? { ...step, status: 'in-progress', detail: 'Removing old data...' }
-          : step
-      ));
+      toast({ title: "Resyncing...", description: "Data fetched successfully. Clearing old data..." });
 
       // Convert to sync-utils format with updated values
       const syncDataSourceObj: SyncDataSource = {
@@ -561,45 +539,14 @@ export const EditDataSourceModal = ({
         showProgress: true,
         onProgress: (message) => {
           console.log(`[RESYNC] ${message}`);
-          
-          // Update progress based on messages
-          if (message.includes('Deleting')) {
-            setResyncProgress(prev => prev.map(step => 
-              step.id === 'delete' ? { ...step, status: 'in-progress', detail: message } : step
-            ));
-          } else if (message.includes('Deleted')) {
-            setResyncProgress(prev => prev.map(step => 
-              step.id === 'delete' 
-                ? { ...step, status: 'completed', detail: 'Old data removed' }
-                : step.id === 'dimensions'
-                ? { ...step, status: 'in-progress', detail: 'Setting up dimensions...' }
-                : step
-            ));
-          } else if (message.includes('dimension')) {
-            setResyncProgress(prev => prev.map(step => 
-              step.id === 'dimensions' ? { ...step, status: 'in-progress', detail: message } : step
-            ));
-          } else if (message.includes('Inserting batch')) {
-            setResyncProgress(prev => prev.map(step => 
-              step.id === 'dimensions' && step.status !== 'completed'
-                ? { ...step, status: 'completed', detail: 'Dimensions created' }
-                : step.id === 'insert'
-                ? { ...step, status: 'in-progress', detail: message }
-                : step
-            ));
-          }
+          toast({ title: "Resyncing...", description: message });
         }
       };
 
       const result = await syncDataSource(syncDataSourceObj, options);
 
       if (result.success) {
-        // Mark insert as completed
-        setResyncProgress(prev => prev.map(step => 
-          step.id === 'insert' 
-            ? { ...step, status: 'completed', detail: `${result.rowsProcessed.toLocaleString()} rows imported` }
-            : step
-        ));
+        toast({ title: "Resyncing...", description: `${result.rowsProcessed.toLocaleString()} rows imported` });
 
         // Wait to show completion
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -631,16 +578,6 @@ export const EditDataSourceModal = ({
       console.error("Error resyncing data source:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to resync data";
       
-      // Mark current step as error
-      setResyncProgress(prev => prev.map(step => 
-        step.status === 'in-progress' 
-          ? { ...step, status: 'error', detail: errorMessage }
-          : step
-      ));
-      
-      // Wait to show error
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
       toast({
         title: "Resync failed",
         description: errorMessage,
@@ -648,8 +585,6 @@ export const EditDataSourceModal = ({
       });
     } finally {
       setIsResyncing(false);
-      // Clear progress after a delay
-      setTimeout(() => setResyncProgress([]), 3000);
     }
   };
 
@@ -889,12 +824,6 @@ export const EditDataSourceModal = ({
           </div>
         )}
       </DialogContent>
-      
-      <ResyncProgressModal 
-        open={isResyncing && resyncProgress.length > 0} 
-        steps={resyncProgress}
-      />
     </Dialog>
   );
 };
-
