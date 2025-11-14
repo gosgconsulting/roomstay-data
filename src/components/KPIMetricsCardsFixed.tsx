@@ -27,6 +27,7 @@ interface KPIMetricsCardsProps {
   };
   onLoadingComplete?: () => void;
   visibilityRefreshTrigger?: number;
+  headerAction?: React.ReactNode;
 }
 
 export function KPIMetricsCards({ 
@@ -34,7 +35,8 @@ export function KPIMetricsCards({
   accountId, 
   filters, 
   onLoadingComplete,
-  visibilityRefreshTrigger 
+  visibilityRefreshTrigger,
+  headerAction
 }: KPIMetricsCardsProps) {
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -394,6 +396,7 @@ export function KPIMetricsCards({
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Analytics & Insights</h2>
+          {headerAction}
         </div>
         <div className="text-center py-8 text-gray-500">
           No data available for the selected filters
@@ -407,6 +410,7 @@ export function KPIMetricsCards({
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Analytics & Insights</h2>
+        {headerAction}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {metrics.map((metric, index) => {

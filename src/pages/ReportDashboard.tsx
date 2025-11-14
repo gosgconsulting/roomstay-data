@@ -353,19 +353,6 @@ export default function ReportDashboard() {
         <>
           <FiltersBar reportId={reportId} onFiltersChange={handleFiltersChange} isSharedView={isSharedView} accountId={accountId} refreshTrigger={loadingGeneration} />
           <main className="container mx-auto px-6 py-6 space-y-6">
-            {!isSharedView && (
-              <div className="flex justify-end mb-4">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setKpiSettingsOpen(true)}
-                  className="gap-2"
-                >
-                  <Settings className="h-4 w-4" />
-                  KPI Settings
-                </Button>
-              </div>
-            )}
             <KPIMetricsCards
               reportId={reportId}
               filters={filters}
@@ -373,6 +360,19 @@ export default function ReportDashboard() {
               visibilityRefreshTrigger={visibilityRefreshTrigger}
               key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
               onLoadingComplete={() => markComponentLoaded('metrics')}
+              headerAction={
+                !isSharedView ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setKpiSettingsOpen(true)}
+                    className="gap-2"
+                  >
+                    <Settings className="h-4 w-4" />
+                    KPI Settings
+                  </Button>
+                ) : null
+              }
             />
             <KPIChart
               reportId={reportId}
