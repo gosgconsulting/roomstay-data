@@ -53,8 +53,12 @@ export function usePerformanceTableData({
   const [totalCompareData, setTotalCompareData] = useState<Record<string, any>>({});
   const [totalChangeData, setTotalChangeData] = useState<Record<string, number>>({});
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadPerformanceData = useCallback(async () => {
+    // Reset error state
+    setLoadError(null);
+    
     const dateFromFormatted = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined;
     const dateToFormatted = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined;
     
@@ -136,6 +140,7 @@ export function usePerformanceTableData({
         } catch (error) {
           console.error('[PERF-TABLE] Error in consolidated data:', error);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          setLoadError(errorMessage);
           toast({
             title: "Error loading data",
             description: `Failed to load consolidated data: ${errorMessage}`,
@@ -278,6 +283,7 @@ export function usePerformanceTableData({
       } catch (error) {
         console.error('[testing] Error processing performance data:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        setLoadError(errorMessage);
         toast({
           title: "Error loading data",
           description: `Failed to load performance table data: ${errorMessage}`,
@@ -291,6 +297,7 @@ export function usePerformanceTableData({
     } catch (error) {
       console.error('[testing] Error in loadPerformanceData:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setLoadError(errorMessage);
       toast({
         title: "Error loading data",
         description: `Failed to load performance table data: ${errorMessage}`,
@@ -334,5 +341,6 @@ export function usePerformanceTableData({
     isLoadingData,
     loadPerformanceData,
     setIsLoadingData,
+    loadError,
   };
 }
