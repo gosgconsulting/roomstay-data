@@ -109,6 +109,7 @@ export const FiltersBar = ({
 
   useEffect(() => {
     // Load dimensions when report or account changes
+    console.log('[testing] FiltersBar - useEffect triggered. reportId:', reportId, 'accountId:', accountId);
     if (reportId || accountId) {
       // Reset all filter state when report changes - use last 7 days for performance
       setIsInitialLoad(true);
@@ -120,8 +121,10 @@ export const FiltersBar = ({
       setCompareType("previous_period");
       setCompareDateRange(undefined);
       
+      console.log('[testing] FiltersBar - Starting to load dimensions...');
       // Load dimensions first, then load settings (only if reportId exists)
       loadDimensions().then(() => {
+        console.log('[testing] FiltersBar - Dimensions loaded');
         if (reportId) {
           loadFilterSettings().finally(() => {
             setIsInitialLoad(false);
