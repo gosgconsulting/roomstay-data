@@ -62,8 +62,46 @@ export default function Index() {
   
   // Load user session and reports on mount
   useEffect(() => {
+    // Set a safety timeout to prevent infinite loading
+    const loadingTimeout = setTimeout(() => {
+      if (isLoading) {
+        console.error('[AUTH] Loading timeout reached, forcing stop');
+        setIsLoading(false);
+        toast({
+          title: "Loading Timeout",
+          description: "The page is taking too long to load. Please refresh or try signing in again.",
+          variant: "destructive",
+        });
+      }
+    }, 15000); // 15 second timeout
+    
     checkAuth();
+    
+    return () => clearTimeout(loadingTimeout);
   }, []);
+
+  // Listen for auth state changes
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      console.log('[AUTH] Auth state changed:', event);
+      
+      // Update session when signed in
+      if (event === 'SIGNED_IN' && newSession) {
+        setSession(newSession);
+        // The checkAuth function will handle loading reports
+      }
+      
+      // Clear session when signed out
+      if (event === 'SIGNED_OUT') {
+        setSession(null);
+        setReportId(null);
+        setAccountId(null);
+        navigate('/auth');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
 
   // When reportId changes, refresh all components
   useEffect(() => {
@@ -84,6 +122,7 @@ export default function Index() {
   }, [reportId]);
 
   const checkAuth = async () => {
+    let authCompleted = false;
     try {
       console.log('[AUTH] Starting authentication check...');
       
@@ -101,13 +140,27 @@ export default function Index() {
         error = result.error;
       } catch (networkError) {
         console.error('[AUTH] Network error, trying fallback:', networkError);
-        const fallbackResult = await fallbackAuth();
-        session = fallbackResult.session;
-        error = fallbackResult.error;
+        try {
+          const fallbackResult = await fallbackAuth();
+          session = fallbackResult.session;
+          error = fallbackResult.error;
+        } catch (fallbackError) {
+          console.error('[AUTH] Fallback auth also failed:', fallbackError);
+          setIsLoading(false);
+          authCompleted = true;
+          toast({
+            title: "Connection Error",
+            description: "Unable to connect to authentication service. Please check your connection and try again.",
+            variant: "destructive",
+          });
+          return;
+        }
       }
       
       if (error) {
         console.error('[AUTH] Session error:', error);
+        setIsLoading(false);
+        authCompleted = true;
         
         // If it's a CORS or network error, provide specific guidance
         if (error.message?.includes('CORS') || error.message?.includes('fetch')) {
@@ -116,16 +169,22 @@ export default function Index() {
             description: "Please check your internet connection and try refreshing the page. If the issue persists, the Supabase configuration may need updating.",
             variant: "destructive",
           });
-          setIsLoading(false);
           return;
         }
         
-        throw error;
+        toast({
+          title: "Authentication Error",
+          description: error.message || "Failed to authenticate. Please try signing in again.",
+          variant: "destructive",
+        });
+        navigate('/auth');
+        return;
       }
       
       if (!session) {
         console.log('[AUTH] No session found, redirecting to auth');
         setIsLoading(false);
+        authCompleted = true;
         navigate('/auth');
         return;
       }
@@ -180,9 +239,13 @@ export default function Index() {
       
       console.log('[AUTH] Authentication check completed successfully');
       setIsLoading(false);
+      authCompleted = true;
     } catch (error) {
       console.error('[AUTH] Error in checkAuth:', error);
-      setIsLoading(false); // Ensure loading is stopped on error
+      // Only set loading to false if we haven't already
+      if (!authCompleted) {
+        setIsLoading(false);
+      }
       
       if (error.message === 'Reports loading timeout') {
         toast({
@@ -193,12 +256,13 @@ export default function Index() {
       } else {
         toast({
           title: "Error",
-          description: "Failed to load user session",
+          description: "Failed to load user session. Please try signing in again.",
           variant: "destructive",
         });
-             }
-     }
-   };
+        navigate('/auth');
+      }
+    }
+  };
   
   const handleSignOut = async () => {
     try {
