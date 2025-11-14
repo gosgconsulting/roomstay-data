@@ -795,6 +795,26 @@ export const FiltersBar = ({
               valuesMap[dimId].add(mappedValue);
             }
           }
+          
+          // Also check if any values from OTHER dimensions map TO this dimension
+          // For example, if Hotel values map to Account dimension, add those mapped values to Account
+          Object.entries(dimensionValues).forEach(([sourceDimId, sourceValue]) => {
+            if (sourceDimId !== dimId && sourceValue) {
+              // Check if this source value has a mapping that targets the current dimension
+              const targetMappings = vlookupMappings.filter(
+                m => m.sourceDimensionId === sourceDimId && m.targetDimensionId === dimId
+              );
+              
+              targetMappings.forEach(mapping => {
+                if (mapping.sourceValue.toLowerCase() === String(sourceValue).toLowerCase()) {
+                  if (!valuesMap[dimId]) {
+                    valuesMap[dimId] = new Set();
+                  }
+                  valuesMap[dimId].add(mapping.targetValue);
+                }
+              });
+            }
+          });
         });
       });
 

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 interface VlookupMapping {
   sourceValue: string;
+  sourceDimensionId: string;
   targetDimensionId: string;
   targetValue: string;
 }
@@ -30,6 +31,7 @@ export function useVlookupMappings(reportId?: string, accountId?: string) {
 
       return ((data || []) as any).map((m: any) => ({
         sourceValue: m.source_value,
+        sourceDimensionId: m.source_dimension_id,
         targetDimensionId: m.target_dimension_id,
         targetValue: m.target_value,
       })) as VlookupMapping[];
