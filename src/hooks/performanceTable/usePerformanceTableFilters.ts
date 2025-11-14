@@ -153,18 +153,95 @@ export function usePerformanceTableFilters({
       return filteredData;
     }
 
+    // Helper function to aggregate dates by granularity (matching edge function logic)
+    const aggregateDateByGranularity = (dateStr: string | number | Date): string => {
+      if (!dateStr) return String(dateStr);
+      
+      try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return String(dateStr);
+        
+        switch (activeDateTab) {
+          case 'year':
+            return `${date.getFullYear()}-01-01`;
+          case 'month':
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
+          case 'week': {
+            // Get ISO week start (Monday)
+            const day = date.getDay();
+            const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+            const weekStart = new Date(date);
+            weekStart.setDate(diff);
+            return `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+          }
+          case 'day':
+          default:
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+      } catch (e) {
+        console.error('[DATE-AGGREGATION] Error aggregating date:', e);
+        return String(dateStr);
+      }
+    };
+
+    // Pre-process data to aggregate dates if first dimension is a date
+    const firstDimension = groupDimensions[0];
+    const isFirstDimDate = firstDimension.type === 'date';
+    
+    let processedData = filteredData;
+    if (isFirstDimDate && activeDateTab !== 'day') {
+      // Aggregate rows with same week/month/year + same breakdown combinations
+      const aggregationMap = new Map<string, TableRow>();
+      
+      filteredData.forEach(row => {
+        const dateValue = row.data[firstDimension.name];
+        const aggregatedDate = aggregateDateByGranularity(dateValue);
+        
+        // Create key from aggregated date + all other dimension values for grouping
+        const otherDimValues = groupDimensions.slice(1).map(dim => row.data[dim.name] || '').join('|');
+        const aggregationKey = `${aggregatedDate}|${otherDimValues}`;
+        
+        if (!aggregationMap.has(aggregationKey)) {
+          // Create new aggregated row
+          const newRow: TableRow = {
+            ...row,
+            id: `agg-${aggregationKey}`,
+            name: aggregatedDate,
+            data: {
+              ...row.data,
+              [firstDimension.name]: aggregatedDate
+            },
+            originalDate: aggregatedDate
+          };
+          aggregationMap.set(aggregationKey, newRow);
+        } else {
+          // Aggregate numeric values into existing row
+          const existingRow = aggregationMap.get(aggregationKey)!;
+          Object.keys(row.data).forEach(key => {
+            const dim = dimensions.find(d => d.name === key);
+            if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+              const existingValue = parseFloat(String(existingRow.data[key] || '0'));
+              const newValue = parseFloat(String(row.data[key] || '0'));
+              if (!isNaN(newValue)) {
+                existingRow.data[key] = existingValue + newValue;
+              }
+            }
+          });
+        }
+      });
+      
+      processedData = Array.from(aggregationMap.values());
+      console.log(`[PERF-FILTERS] Aggregated ${filteredData.length} rows into ${processedData.length} ${activeDateTab} groups`);
+    }
+
     // Create a hierarchical structure based on the group by dimensions
     const hierarchicalData: TableRow[] = [];
     const groupMap: Record<string, TableRow> = {};
     const level1Map: Record<string, TableRow> = {};
     const level2Map: Record<string, TableRow> = {};
-
-    // First level grouping
-    const firstDimension = groupDimensions[0];
-    const isFirstDimDate = firstDimension.type === 'date';
     
     // Process each row and group by dimensions
-    filteredData.forEach(row => {
+    processedData.forEach(row => {
       const firstLevelValue = row.data[firstDimension.name];
       if (firstLevelValue === undefined || firstLevelValue === null) return; // Skip rows without the first dimension value
       
