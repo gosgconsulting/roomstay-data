@@ -198,6 +198,8 @@ export const PerformanceTable = ({
     dimensions,
     groupByDimensions,
     totalData,
+    reportId: reportId || undefined,
+    accountId,
   });
 
   // Load dimensions and check data sources when reportId changes
