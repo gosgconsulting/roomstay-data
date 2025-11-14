@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Landing from "./pages/Landing";
 import ReportTool from "./pages/ReportTool";
 import ReportDashboard from "./pages/ReportDashboard";
+import ForecastingTool from "./pages/ForecastingTool";
+import ForecastingDashboard from "./pages/ForecastingDashboard";
 import Auth from "./pages/Auth";
 import SharedReport from "./pages/SharedReport";
 import NotFound from "./pages/NotFound";
@@ -28,6 +30,8 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/tools/report" element={<ReportTool />} />
           <Route path="/tools/report/:accountId" element={<ReportDashboard />} />
+          <Route path="/tools/forecasting" element={<ForecastingTool />} />
+          <Route path="/tools/forecasting/:accountId" element={<ForecastingDashboard />} />
           <Route path="/tools/budget" element={<BudgetPage />} />
           <Route path="/tools/budget/:accountId" element={<BudgetPage />} />
           <Route path="/shared/:slug" element={<SharedReport />} />
