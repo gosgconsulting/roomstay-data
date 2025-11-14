@@ -266,6 +266,41 @@ Deno.serve(async (req) => {
       userId
     );
 
+    // If resync was successful, apply vlookup mappings
+    if (result.success && updatedDataSource.report_id) {
+      console.log('[RESYNC] Applying vlookup mappings after successful resync...');
+      try {
+        const vlookupResponse = await fetch(`${supabaseUrl}/functions/v1/apply-vlookup-mappings`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({
+            reportId: updatedDataSource.report_id,
+            accountId: updatedDataSource.account_id
+          }),
+        });
+
+        const vlookupResult = await vlookupResponse.json();
+        
+        if (vlookupResult.success) {
+          console.log(`[RESYNC] Successfully applied vlookup mappings: ${vlookupResult.rowsUpdated || 0} rows updated`);
+          // Add vlookup info to result
+          result.vlookupApplied = true;
+          result.vlookupRowsUpdated = vlookupResult.rowsUpdated || 0;
+        } else {
+          console.warn('[RESYNC] Failed to apply vlookup mappings:', vlookupResult.error);
+          result.vlookupApplied = false;
+          result.vlookupError = vlookupResult.error;
+        }
+      } catch (vlookupError) {
+        console.error('[RESYNC] Error calling apply-vlookup-mappings:', vlookupError);
+        result.vlookupApplied = false;
+        result.vlookupError = vlookupError instanceof Error ? vlookupError.message : 'Unknown error';
+      }
+    }
+
     // Return response
     const statusCode = result.success ? 200 : 500;
     return new Response(
