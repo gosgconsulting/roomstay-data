@@ -86,6 +86,7 @@ export const FiltersBar = ({
   const [masterDimensionId, setMasterDimensionId] = useState<string | null>(null);
   const [masterDimensionValues, setMasterDimensionValues] = useState<string[]>([]);
   const [masterDimensionOptions, setMasterDimensionOptions] = useState<string[]>([]);
+  const [masterDimensionPopoverOpen, setMasterDimensionPopoverOpen] = useState(false);
   
   // Load vlookup mappings for this report/account
   const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
@@ -834,11 +835,15 @@ export const FiltersBar = ({
                   <label className="text-xs text-muted-foreground">
                     Master Dimension
                   </label>
-                  <Popover>
+                  <Popover open={masterDimensionPopoverOpen} onOpenChange={setMasterDimensionPopoverOpen}>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
                         className="w-[200px] justify-between bg-background"
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setMasterDimensionPopoverOpen(true);
+                        }}
                       >
                         {masterDimensionId 
                           ? dimensions.find(d => d.id === masterDimensionId)?.name || 'Select...'
@@ -856,6 +861,7 @@ export const FiltersBar = ({
                             onClick={() => {
                               setMasterDimensionId(null);
                               setMasterDimensionValues([]);
+                              setMasterDimensionPopoverOpen(false);
                             }}
                           >
                             None (Clear filter)
@@ -869,6 +875,7 @@ export const FiltersBar = ({
                               onClick={() => {
                                 setMasterDimensionId(dim.id);
                                 setMasterDimensionValues([]);
+                                setMasterDimensionPopoverOpen(false);
                               }}
                             >
                               {dim.name}
@@ -1266,7 +1273,7 @@ export const FiltersBar = ({
                 </Popover>
               </div>
 
-              {activeDimensions.length === 0 && !isSharedView && (
+              {activeDimensions.length === 0 && !isSharedView && !showMasterDimensionFilter && (
                 <Button
                   variant="outline"
                   className="gap-2"
