@@ -4,21 +4,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
-import { LogOut, BarChart3, User, TrendingUp } from "lucide-react";
+import { ArrowLeft, LogOut } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { CreateAccountModal } from "@/components/CreateAccountModal";
+import { EditAccountModal } from "@/components/EditAccountModal";
+import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
 
-interface Tool {
+interface Account {
   id: string;
   name: string;
-  description: string;
-  icon: React.ReactNode;
-  path: string;
+  description?: string;
+  created_at: string;
+  user_id: string;
 }
 
-export default function Landing() {
+export default function ForecastingTool() {
   const navigate = useNavigate();
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -36,16 +44,38 @@ export default function Landing() {
       }
       
       setSession(session);
+      await loadAccounts(session.user.id);
       setIsLoading(false);
     } catch (error) {
       console.error('Error checking auth:', error);
-      setIsLoading(false); // Ensure loading is stopped on error
+      setIsLoading(false);
       toast({
         title: "Authentication Error",
         description: "Please sign in again.",
         variant: "destructive",
       });
       navigate('/auth');
+    }
+  };
+
+  const loadAccounts = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('accounts')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      setAccounts(data || []);
+    } catch (error) {
+      console.error('Error loading accounts:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load accounts.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -63,22 +93,9 @@ export default function Landing() {
     }
   };
 
-  const tools: Tool[] = [
-    {
-      id: "report",
-      name: "Report",
-      description: "Analyze your performance metrics and KPIs with detailed analytics and insights",
-      icon: <BarChart3 className="h-12 w-12" />,
-      path: "/tools/report",
-    },
-    {
-      id: "forecasting",
-      name: "Forecasting",
-      description: "Forecast future trends and predict performance with advanced analytics",
-      icon: <TrendingUp className="h-12 w-12" />,
-      path: "/tools/forecasting",
-    },
-  ];
+  const handleAccountClick = (accountId: string) => {
+    navigate(`/tools/forecasting/${accountId}`);
+  };
 
   if (isLoading) {
     return (
@@ -96,9 +113,19 @@ export default function Landing() {
       {/* Header */}
       <header className="border-b">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Dashboard</h1>
-            <p className="text-sm text-muted-foreground">Select a tool to get started</p>
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/')}
+              title="Back to tools"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold">Forecasting</h1>
+              <p className="text-sm text-muted-foreground">Select an account to view forecasts</p>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
@@ -120,61 +147,39 @@ export default function Landing() {
       {/* Main Content */}
       <main className="container mx-auto px-6 py-12">
         <div className="max-w-6xl mx-auto">
-          {/* Welcome Section */}
-          <div className="mb-12">
-            <h2 className="text-3xl font-bold mb-2">Welcome to Analytics</h2>
-            <p className="text-muted-foreground">Choose a tool below to start analyzing your data</p>
-          </div>
-
-          {/* Tools Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {tools.map((tool) => (
-              <Card
-                key={tool.id}
-                className="hover:shadow-lg transition-shadow cursor-pointer group"
-                onClick={() => navigate(tool.path)}
-              >
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="text-primary group-hover:scale-110 transition-transform">
-                      {tool.icon}
-                    </div>
-                  </div>
-                  <CardTitle className="mt-4">{tool.name}</CardTitle>
-                  <CardDescription>{tool.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button className="w-full" onClick={() => navigate(tool.path)}>
-                    Open {tool.name}
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* Coming Soon Section */}
-          <div className="mt-12 pt-12 border-t">
-            <h3 className="text-lg font-semibold mb-4">Coming Soon</h3>
+          {accounts.length === 0 ? (
+            <div className="text-center py-12">
+              <h2 className="text-2xl font-bold mb-4">No Accounts Found</h2>
+              <p className="text-muted-foreground mb-6">
+                Create an account in the Report tool first to use forecasting.
+              </p>
+              <Button onClick={() => navigate('/tools/report')}>
+                Go to Report Tool
+              </Button>
+            </div>
+          ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[
-                { name: "Forecasting", description: "Predict future trends with AI" },
-                { name: "Alerts", description: "Get notified of important changes" },
-                { name: "Custom Reports", description: "Build reports tailored to your needs" },
-              ].map((item) => (
-                <Card key={item.name} className="opacity-50">
+              {accounts.map((account) => (
+                <Card 
+                  key={account.id} 
+                  className="cursor-pointer hover:shadow-lg transition-shadow"
+                  onClick={() => handleAccountClick(account.id)}
+                >
                   <CardHeader>
-                    <CardTitle className="text-lg">{item.name}</CardTitle>
-                    <CardDescription>{item.description}</CardDescription>
+                    <CardTitle>{account.name}</CardTitle>
+                    <CardDescription>
+                      {account.description || "No description"}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button disabled className="w-full">
-                      Coming Soon
-                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      Created {new Date(account.created_at).toLocaleDateString()}
+                    </p>
                   </CardContent>
                 </Card>
               ))}
             </div>
-          </div>
+          )}
         </div>
       </main>
     </div>
