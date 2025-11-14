@@ -59,6 +59,12 @@ export function calculateTotals(
     if (dim.formula) {
       try {
         let expression = dim.formula;
+        
+        // Convert percentage notation (e.g., "15%" to "0.15")
+        expression = expression.replace(/(\d+(?:\.\d+)?)%/g, (match, num) => {
+          return String(parseFloat(num) / 100);
+        });
+        
         const dimensionNames = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
         for (const dimName of dimensionNames) {
           const value = filteredTotals[dimName] || 0;
@@ -69,6 +75,7 @@ export function calculateTotals(
         const result = eval(expression);
         filteredTotals[dim.name] = typeof result === 'number' && !isNaN(result) && isFinite(result) ? result : 0;
       } catch (error) {
+        console.error('Formula evaluation error:', error, 'for dimension:', dim.name);
         filteredTotals[dim.name] = 0;
       }
     }
@@ -120,6 +127,12 @@ export function calculateComparisonTotalsAndChanges(
     if (dim.formula) {
       try {
         let expression = dim.formula;
+        
+        // Convert percentage notation (e.g., "15%" to "0.15")
+        expression = expression.replace(/(\d+(?:\.\d+)?)%/g, (match, num) => {
+          return String(parseFloat(num) / 100);
+        });
+        
         const dimensionNames = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
         for (const dimName of dimensionNames) {
           const value = filteredCompareTotals[dimName] || 0;
@@ -130,6 +143,7 @@ export function calculateComparisonTotalsAndChanges(
         const result = eval(expression);
         filteredCompareTotals[dim.name] = typeof result === 'number' && !isNaN(result) && isFinite(result) ? result : 0;
       } catch (error) {
+        console.error('Formula comparison evaluation error:', error, 'for dimension:', dim.name);
         filteredCompareTotals[dim.name] = 0;
       }
     }
