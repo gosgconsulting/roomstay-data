@@ -96,17 +96,11 @@ export interface RequestBody {
  * @property {number} rowsProcessed - Number of rows processed from Google Sheets
  * @property {number} dimensionsCreated - Number of new dimensions created during the sync
  * @property {string} [error] - Error message if the resync failed
- * @property {boolean} [vlookupApplied] - Whether vlookup mappings were applied after resync
- * @property {number} [vlookupRowsUpdated] - Number of rows updated with vlookup mappings
- * @property {string} [vlookupError] - Error message if vlookup application failed
  */
 export interface ResponseBody {
   success: boolean;
   rowsProcessed: number;
   dimensionsCreated: number;
   error?: string;
-  vlookupApplied?: boolean;
-  vlookupRowsUpdated?: number;
-  vlookupError?: string;
 }
 

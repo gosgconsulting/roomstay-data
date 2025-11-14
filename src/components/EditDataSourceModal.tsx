@@ -606,7 +606,7 @@ export const EditDataSourceModal = ({
 
         toast({
           title: "Resync complete",
-          description: `Successfully resynced ${result.rowsProcessed.toLocaleString()} rows and recreated ${result.dimensionsCreated} dimensions from scratch. Vlookup mappings will be applied automatically when filtering.`,
+          description: `Successfully resynced ${result.rowsProcessed.toLocaleString()} rows and recreated ${result.dimensionsCreated} dimensions from scratch.`,
         });
         
         // Refresh sync statistics

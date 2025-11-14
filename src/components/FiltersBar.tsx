@@ -27,7 +27,7 @@ import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
 import { useToast } from "@/components/ui/use-toast";
-import { useVlookupMappings, getMappedValue, getAllValuesForFilter } from "@/hooks/useVlookupMappings";
+
 
 export interface FilterState {
   dimensionFilters: Record<string, string[]>;
@@ -100,8 +100,6 @@ export const FiltersBar = ({
   const [masterDimensionSettingsOpen, setMasterDimensionSettingsOpen] = useState(false);
   const [masterDimensionValuesLoading, setMasterDimensionValuesLoading] = useState(false);
   
-  // Load vlookup mappings for this report/account
-  const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
 
   // Initialize selected reports to all reports by default
   useEffect(() => {
@@ -768,33 +766,7 @@ export const FiltersBar = ({
             const valueStr = String(value);
             // Add the original value
             valuesMap[dimId].add(valueStr);
-            
-            // Apply vlookup mapping and add the mapped value if different
-            const mappedValue = getMappedValue(valueStr, vlookupMappings, dimId);
-            if (mappedValue !== valueStr) {
-              valuesMap[dimId].add(mappedValue);
-            }
           }
-          
-          // Also check if any values from OTHER dimensions map TO this dimension
-          // For example, if Hotel values map to Account dimension, add those mapped values to Account
-          Object.entries(dimensionValues).forEach(([sourceDimId, sourceValue]) => {
-            if (sourceDimId !== dimId && sourceValue) {
-              // Check if this source value has a mapping that targets the current dimension
-              const targetMappings = vlookupMappings.filter(
-                m => m.sourceDimensionId === sourceDimId && m.targetDimensionId === dimId
-              );
-              
-              targetMappings.forEach(mapping => {
-                if (mapping.sourceValue.toLowerCase() === String(sourceValue).toLowerCase()) {
-                  if (!valuesMap[dimId]) {
-                    valuesMap[dimId] = new Set();
-                  }
-                  valuesMap[dimId].add(mapping.targetValue);
-                }
-              });
-            }
-          });
         });
       });
 
