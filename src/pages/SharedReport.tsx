@@ -39,7 +39,7 @@ export default function SharedReport() {
   const [filters, setFilters] = useState<FilterState>({
     dimensionFilters: {},
     dateRange: undefined,
-    datePreset: "this_month",
+    datePreset: "all_time",
     compareEnabled: false,
     compareType: "previous_period",
     compareDateRange: undefined,

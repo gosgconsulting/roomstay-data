@@ -71,7 +71,7 @@ export default function AllReports() {
   const getDefaultFilters = (): FilterState => ({
     dimensionFilters: {},
     dateRange: undefined,
-    datePreset: "this_month",
+    datePreset: "all_time",
     compareEnabled: false,
     compareType: "previous_period",
     compareDateRange: undefined,
