@@ -184,9 +184,13 @@ export function TableBody({
                 .map((dimension) => {
                   const value = totals[dimension.name];
                   
+                  // Check if value is negative for styling
+                  const numValue = typeof value === 'number' ? value : parseFloat(String(value));
+                  const isNegative = !isNaN(numValue) && numValue < 0;
+                  
                   return (
                     <td key={dimension.id} className="py-3 px-4 text-right">
-                      <span>{formatValue(value, dimension)}</span>
+                      <span className={cn(isNegative && "text-red-600")}>{formatValue(value, dimension)}</span>
                     </td>
                   );
                 })}
