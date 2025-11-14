@@ -15,7 +15,7 @@ export function useVlookupMappings(reportId?: string, accountId?: string) {
       if (!user) return [];
 
       const query = supabase
-        .from('dimension_mappings')
+        .from('dimension_mappings' as any)
         .select('*')
         .eq('user_id', user.id);
 
@@ -28,7 +28,7 @@ export function useVlookupMappings(reportId?: string, accountId?: string) {
       const { data, error } = await query;
       if (error) throw error;
 
-      return (data || []).map(m => ({
+      return ((data || []) as any).map((m: any) => ({
         sourceValue: m.source_value,
         targetDimensionId: m.target_dimension_id,
         targetValue: m.target_value,

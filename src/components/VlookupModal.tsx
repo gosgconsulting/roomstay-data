@@ -47,7 +47,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId }: Vlooku
 
       // Load existing mappings
       const query = supabase
-        .from('dimension_mappings')
+        .from('dimension_mappings' as any)
         .select('*')
         .eq('user_id', user.id);
 
@@ -62,7 +62,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId }: Vlooku
       if (error) throw error;
 
       if (data && data.length > 0) {
-        setMappings(data.map(m => ({
+        setMappings(data.map((m: any) => ({
           id: m.id,
           sourceValue: m.source_value,
           targetDimensionId: m.target_dimension_id,
@@ -111,7 +111,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId }: Vlooku
 
       // Delete existing mappings
       const deleteQuery = supabase
-        .from('dimension_mappings')
+        .from('dimension_mappings' as any)
         .delete()
         .eq('user_id', user.id);
 
@@ -136,7 +136,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId }: Vlooku
         }));
 
         const { error: insertError } = await supabase
-          .from('dimension_mappings')
+          .from('dimension_mappings' as any)
           .insert(insertData);
 
         if (insertError) throw insertError;

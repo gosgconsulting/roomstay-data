@@ -277,12 +277,15 @@ export default function SharedReport() {
 
       <DashboardHeader 
         reportId={reportId}
+        accountId={account?.id}
         onReportChange={setReportId}
         onRefreshData={() => setDataRefreshKey(prev => prev + 1)}
         onVisibilityChange={() => setVisibilityRefreshTrigger(prev => prev + 1)}
         session={null} // No session for shared reports
         onSignOut={async () => {}} // No sign out for shared reports
         isSharedView={true}
+        title={shareLink?.report_ids?.length > 1 ? "All Shared Reports" : undefined}
+        allowedReportIds={shareLink?.report_ids || []}
       />
       
       <FiltersBar 
