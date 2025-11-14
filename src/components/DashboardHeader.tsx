@@ -60,9 +60,10 @@ interface DashboardHeaderProps {
   onSignOut?: () => Promise<void>;
   isSharedView?: boolean;
   title?: string; // Custom title for consolidated views
+  allowedReportIds?: string[]; // For shared views - only show these reports
 }
 
-export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSync, onRefreshData, onVisibilityChange, session, onSignOut, isSharedView, title }: DashboardHeaderProps) => {
+export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSync, onRefreshData, onVisibilityChange, session, onSignOut, isSharedView, title, allowedReportIds }: DashboardHeaderProps) => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -328,10 +329,15 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
         }
       }
 
-      const allReports = [
+      let allReports = [
         ...(ownedReports || []).map(r => ({ ...r, is_shared: false })),
         ...sharedReportsWithOwner,
       ];
+
+      // Filter to only allowed reports if in shared view
+      if (isSharedView && allowedReportIds && allowedReportIds.length > 0) {
+        allReports = allReports.filter(r => allowedReportIds.includes(r.id));
+      }
 
       setReports(allReports);
       if (allReports.length > 0) {

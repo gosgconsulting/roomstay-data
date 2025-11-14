@@ -103,20 +103,20 @@ Deno.serve(async (req) => {
         console.log(`[AUTO-SYNC] Syncing ${ds.name}...`);
 
         // Determine source type and fetch data accordingly
-        const sourceType = ds.source_type || 'google_sheets'; // Default to google_sheets for backward compatibility
+        const sourceType = (ds as any).source_type || 'google_sheets'; // Default to google_sheets for backward compatibility
         let headers: any[] = [];
         let dataRows: any[][] = [];
 
         if (sourceType === 'csv_url') {
           // Fetch data from CSV URL
-          if (!ds.csv_url) {
+          if (!(ds as any).csv_url) {
             console.error(`[AUTO-SYNC] CSV URL missing for ${ds.name}`);
             continue;
           }
 
           const { data: csvData, error: csvError } = await supabase.functions.invoke('fetch-csv-url', {
             body: {
-              csvUrl: ds.csv_url,
+              csvUrl: (ds as any).csv_url,
             },
           });
 
