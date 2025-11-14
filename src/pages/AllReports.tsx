@@ -294,7 +294,7 @@ export default function AllReports() {
             
             {/* Filters */}
             <FiltersBar 
-              reportId="consolidated" 
+              reportId={null}
               onFiltersChange={(filters) => handleFiltersChange('consolidated', filters)}
               isSharedView={false} 
               accountId={accountId}
