@@ -13,6 +13,7 @@ interface VlookupMapping {
   sourceDimensionId: string;
   sourceValue: string;
   targetDimensionId: string;
+  targetDimensionName?: string;
   targetValue: string;
 }
 
@@ -69,6 +70,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
           sourceDimensionId: m.source_dimension_id || '',
           sourceValue: m.source_value,
           targetDimensionId: m.target_dimension_id,
+          targetDimensionName: m.target_dimension_name || '',
           targetValue: m.target_value,
         })));
       } else {
@@ -218,15 +220,19 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
 
       // Insert new mappings
       if (validMappings.length > 0) {
-        const insertData = validMappings.map(m => ({
-          user_id: user.id,
-          report_id: reportId || null,
-          account_id: accountId || null,
-          source_dimension_id: m.sourceDimensionId,
-          source_value: m.sourceValue.trim(),
-          target_dimension_id: m.targetDimensionId,
-          target_value: m.targetValue.trim(),
-        }));
+        const insertData = validMappings.map(m => {
+          const targetDim = dimensions.find(d => d.id === m.targetDimensionId);
+          return {
+            user_id: user.id,
+            report_id: reportId || null,
+            account_id: accountId || null,
+            source_dimension_id: m.sourceDimensionId,
+            source_value: m.sourceValue.trim(),
+            target_dimension_id: m.targetDimensionId,
+            target_dimension_name: targetDim?.name || m.targetDimensionName || '',
+            target_value: m.targetValue.trim(),
+          };
+        });
 
         const { error: insertError } = await supabase
           .from('dimension_mappings' as any)
