@@ -33,7 +33,7 @@ export interface DataLoadingResult {
 /**
  * Load dimensions for an account using the same pattern as Roomstay
  */
-export async function loadAccountDimensions(accountId: string, userId: string): Promise<Dimension[]> {
+export async function loadAccountDimensions(accountId: string, userId?: string): Promise<Dimension[]> {
   console.log('[DATA-FIX] Loading dimensions for account:', accountId, 'user:', userId);
   
   try {
@@ -47,15 +47,19 @@ export async function loadAccountDimensions(accountId: string, userId: string): 
 
     if (accountError) throw accountError;
 
-    // Load custom dimensions for the user
-    const { data: customData, error: customError } = await supabase
-      .from("dimensions")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("scope", "custom")
-      .order("created_at", { ascending: false });
+    // Load custom dimensions for the user (only if userId provided)
+    let customData: Dimension[] = [];
+    if (userId) {
+      const { data, error: customError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("scope", "custom")
+        .order("created_at", { ascending: false });
 
-    if (customError) throw customError;
+      if (customError) throw customError;
+      customData = data || [];
+    }
 
     // Load global dimensions (lowest priority)
     const { data: globalData, error: globalError } = await supabase
@@ -103,7 +107,7 @@ export async function loadAccountDimensions(accountId: string, userId: string): 
 export async function loadReportData(
   reportId: string,
   accountId: string,
-  userId: string,
+  userId?: string,
   filters?: {
     dateRange?: { from: Date; to?: Date };
     dimensionFilters?: Record<string, string[]>;

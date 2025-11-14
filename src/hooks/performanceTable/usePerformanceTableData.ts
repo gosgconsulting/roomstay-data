@@ -84,7 +84,7 @@ export function usePerformanceTableData({
     }
 
     try {
-      // Get current user for custom dimensions
+      // Get current user for custom dimensions (optional for public views)
       const { data: { user } } = await supabase.auth.getUser();
       
       // Use consolidated endpoint if multiple reports
