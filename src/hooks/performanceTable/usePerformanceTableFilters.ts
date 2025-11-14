@@ -415,6 +415,54 @@ export function usePerformanceTableFilters({
       });
     }
 
+    // NEW: Compute formula values for each row based on aggregated numeric data
+    const dimensionNamesSorted = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
+
+    const computeFormulasForRow = (row: TableRow) => {
+      dimensions.forEach(dim => {
+        if (dim.formula) {
+          try {
+            // Prepare expression
+            let expression = dim.formula;
+
+            // Convert percentage notation (e.g., "15%" to "0.15")
+            expression = expression.replace(/(\d+(?:\.\d+)?)%/g, (match, num) => {
+              return String(parseFloat(num) / 100);
+            });
+
+            // Replace dimension names with row values (fallback to 0)
+            dimensionNamesSorted.forEach(dimName => {
+              const rawValue = row.data ? row.data[dimName] : 0;
+              const numValue = rawValue === undefined || rawValue === null
+                ? 0
+                : parseFloat(String(rawValue));
+              const safeValue = isNaN(numValue) ? 0 : numValue;
+
+              const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const regex = new RegExp(`\\b${escapedName}\\b`, 'g');
+              expression = expression.replace(regex, `(${safeValue})`);
+            });
+
+            // Evaluate formula
+            // eslint-disable-next-line no-eval
+            const result = eval(expression);
+            row.data[dim.name] = typeof result === 'number' && isFinite(result) ? result : 0;
+          } catch (error) {
+            // On any error, default to 0 for display stability
+            row.data[dim.name] = 0;
+          }
+        }
+      });
+
+      // Recurse into children
+      if (row.children && row.children.length > 0) {
+        row.children.forEach(child => computeFormulasForRow(child));
+      }
+    };
+
+    // Apply formula computation to the full hierarchy
+    hierarchicalData.forEach(r => computeFormulasForRow(r));
+
     console.log('[PERF-FILTERS] Created hierarchical data with', hierarchicalData.length, 'top-level groups');
     return hierarchicalData;
   }, [filteredData, groupByDimensions, dimensions, dateOrder]);
