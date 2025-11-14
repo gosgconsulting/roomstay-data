@@ -18,6 +18,7 @@ export interface TableRow {
 
 interface UsePerformanceTableDataOptions {
   reportId: string | null;
+  reportIds?: string[]; // For consolidated view with multiple reports
   accountId?: string;
   groupByDimensions: string[];
   breakdownByDimensions: string[];
@@ -35,6 +36,7 @@ interface UsePerformanceTableDataOptions {
  */
 export function usePerformanceTableData({
   reportId,
+  reportIds,
   accountId,
   groupByDimensions,
   breakdownByDimensions,
@@ -67,8 +69,11 @@ export function usePerformanceTableData({
     });
 
     // Check conditions after setting loading state
-    if (!reportId || groupByDimensions.length === 0) {
-      console.log('[testing] No data loading - missing reportId or groupByDimensions');
+    // For consolidated view, use reportIds
+    const useConsolidatedView = reportIds && reportIds.length > 0;
+    
+    if ((!reportId && !useConsolidatedView) || groupByDimensions.length === 0) {
+      console.log('[testing] No data loading - missing reportId/reportIds or groupByDimensions');
       setTableData([]);
       setTotalData({});
       setTotalCompareData({});
@@ -81,6 +86,48 @@ export function usePerformanceTableData({
     try {
       // Get current user for custom dimensions
       const { data: { user } } = await supabase.auth.getUser();
+      
+      // Use consolidated endpoint if multiple reports
+      if (useConsolidatedView) {
+        const requestBody = {
+          reportIds,
+          groupByDims: groupByDimensions,
+          breakdownDims: breakdownByDimensions,
+          thenByDims: thenByDimensions,
+          dimensionFilters: filters.dimensionFilters,
+          dateFrom: dateFromFormatted,
+          dateTo: dateToFormatted,
+          accountId,
+          userId: user?.id,
+          visibleDimensionIds: Array.from(visibleColumns),
+          limit: 50000,
+          offset: 0,
+          compareEnabled: filters.compareEnabled || false,
+          compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
+          compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined,
+          dateGranularity: activeDateTab,
+          dateOrder: dateOrder,
+        };
+        
+        console.log('[PERF-TABLE] Calling consolidated endpoint with:', requestBody);
+
+        const { data, error } = await supabase.functions.invoke('get-consolidated-performance-data', {
+          body: requestBody,
+        });
+
+        if (error) throw error;
+
+        console.log('[PERF-TABLE] Consolidated data response:', data);
+
+        // Process consolidated response
+        setTableData(data.data || []);
+        setTotalData(data.totals || {});
+        setTotalCompareData({});
+        setTotalChangeData({});
+        setIsLoadingData(false);
+        onLoadingComplete?.();
+        return;
+      }
       
       const requestBody = {
         reportId,
