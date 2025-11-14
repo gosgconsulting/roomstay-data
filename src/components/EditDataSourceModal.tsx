@@ -47,6 +47,7 @@ interface EditDataSourceModalProps {
   onOpenChange: (open: boolean) => void;
   dataSource: DataSource | null;
   onSuccess: () => void;
+  onRefreshData?: () => void;
   accountId?: string;
 }
 
@@ -55,6 +56,7 @@ export const EditDataSourceModal = ({
   onOpenChange,
   dataSource,
   onSuccess,
+  onRefreshData,
   accountId
 }: EditDataSourceModalProps) => {
   const [step, setStep] = useState(1);
@@ -590,6 +592,15 @@ export const EditDataSourceModal = ({
         
         // Refresh sync statistics
         await fetchSyncStatistics();
+        
+        // Trigger component refresh before calling onSuccess
+        if (onRefreshData) {
+          console.log('[testing] EditDataSourceModal - Triggering component refresh after successful resync');
+          // Use a delay to ensure data is fully committed and indexed
+          setTimeout(() => {
+            onRefreshData();
+          }, 500);
+        }
         
         onSuccess();
         onOpenChange(false);

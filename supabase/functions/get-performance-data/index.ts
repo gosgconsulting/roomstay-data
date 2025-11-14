@@ -69,21 +69,47 @@ Deno.serve(async (req) => {
 
     // Apply date filter if provided
     if (dateFrom || dateTo) {
-      // Get Date dimension to know which field to filter on
-      const { data: dateDimension } = await supabase
+      // First, find which date dimension is actually used in the data for this report
+      // Check all date dimensions and see which one has data
+      const { data: allDateDimensions } = await supabase
         .from('dimensions')
         .select('id, name')
         .eq('type', 'date')
         .eq('name', 'Date')
         .or(`and(scope.eq.account,account_id.eq.${accountId}),and(scope.eq.custom,user_id.eq.${userId}),scope.eq.global`)
-        .order('scope', { ascending: false }) // Prefer account > custom > global
-        .limit(1)
-        .maybeSingle();
+        .order('scope', { ascending: false }); // Prefer account > custom > global
+
+      // Find the date dimension that's actually used in the data
+      let dateDimension = null;
+      if (allDateDimensions && allDateDimensions.length > 0) {
+        // Check which date dimension has data in the fetched rows
+        for (const dim of allDateDimensions) {
+          const hasData = filteredData.some((row: any) => {
+            const dateValue = row.dimension_values?.[dim.id];
+            return dateValue !== undefined && dateValue !== null && dateValue !== '';
+          });
+          
+          if (hasData) {
+            dateDimension = dim;
+            console.log('[GET-PERFORMANCE-DATA] Found date dimension in data:', dim.id);
+            break;
+          }
+        }
+        
+        // If no date dimension found in data, use the first one (fallback)
+        if (!dateDimension && allDateDimensions.length > 0) {
+          dateDimension = allDateDimensions[0];
+          console.log('[GET-PERFORMANCE-DATA] No date dimension found in data, using fallback:', dateDimension.id);
+        }
+      }
 
       if (dateDimension) {
+        const beforeFilterCount = filteredData.length;
         filteredData = filteredData.filter((row: any) => {
           const dateValue = row.dimension_values?.[dateDimension.id];
-          if (!dateValue) return false;
+          // Only filter out rows that have a date value but it's outside the range
+          // If a row doesn't have a date value, include it (don't filter it out)
+          if (!dateValue || dateValue === '') return true;
 
           const rowDate = new Date(dateValue);
           if (dateFrom && rowDate < new Date(dateFrom)) return false;
@@ -91,6 +117,35 @@ Deno.serve(async (req) => {
 
           return true;
         });
+        
+        const afterFilterCount = filteredData.length;
+        console.log('[GET-PERFORMANCE-DATA] Date filter applied:', {
+          dateDimensionId: dateDimension.id,
+          dateFrom,
+          dateTo,
+          beforeFilter: beforeFilterCount,
+          afterFilter: afterFilterCount,
+          filteredOut: beforeFilterCount - afterFilterCount
+        });
+        
+        // If date filter resulted in 0 rows but we had data before, log a warning
+        if (afterFilterCount === 0 && beforeFilterCount > 0) {
+          console.warn('[GET-PERFORMANCE-DATA] Date filter excluded all data. Consider expanding date range.');
+          // Check what date range the data actually covers (use original data before filtering)
+          const dateValues = (dimensionData || []).map((row: any) => row.dimension_values?.[dateDimension.id]).filter(Boolean);
+          if (dateValues.length > 0) {
+            const minDate = new Date(Math.min(...dateValues.map((d: string) => new Date(d).getTime())));
+            const maxDate = new Date(Math.max(...dateValues.map((d: string) => new Date(d).getTime())));
+            console.warn('[GET-PERFORMANCE-DATA] Data date range:', {
+              min: minDate.toISOString().split('T')[0],
+              max: maxDate.toISOString().split('T')[0],
+              requestedFrom: dateFrom,
+              requestedTo: dateTo
+            });
+          }
+        }
+      } else {
+        console.log('[GET-PERFORMANCE-DATA] No date dimension found, skipping date filter');
       }
     }
 
@@ -127,7 +182,8 @@ Deno.serve(async (req) => {
         _row_number: row.row_number,
         _data_source_id: row.data_source_id,
       })),
-      totalRows: filteredData.length,
+      total: filteredData.length,
+      totalRows: filteredData.length, // Keep for backward compatibility
       hasMore: false,
     };
 

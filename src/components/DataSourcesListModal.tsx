@@ -40,6 +40,7 @@ interface DataSourcesListModalProps {
   reportId: string;
   onAddNew: () => void;
   onDataSync?: () => void;
+  onRefreshData?: () => void;
   accountId?: string;
 }
 
@@ -49,6 +50,7 @@ export const DataSourcesListModal = ({
   reportId,
   onAddNew,
   onDataSync,
+  onRefreshData,
   accountId
 }: DataSourcesListModalProps) => {
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
@@ -133,6 +135,11 @@ export const DataSourcesListModal = ({
     const handleEditSuccess = () => {
       loadDataSources();
       setIsEditDataSourceModalOpen(false);
+      // Trigger component refresh after data sync
+      if (onRefreshData) {
+        console.log('[testing] DataSourcesListModal - Triggering component refresh after edit/sync');
+        onRefreshData();
+      }
     };
 
     const handleSync = async (dataSource: DataSource) => {
@@ -611,6 +618,7 @@ export const DataSourcesListModal = ({
           onOpenChange={setIsEditDataSourceModalOpen}
           dataSource={editingDataSource}
           onSuccess={handleEditSuccess}
+          onRefreshData={onRefreshData}
           accountId={accountId}
         />
 
