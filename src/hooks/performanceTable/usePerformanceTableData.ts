@@ -14,6 +14,7 @@ export interface TableRow {
   children?: TableRow[];
   compareData?: Record<string, any>;
   changeData?: Record<string, number>;
+  originalDate?: string | Date; // Store original date for sorting
 }
 
 interface UsePerformanceTableDataOptions {
@@ -69,7 +70,8 @@ export function usePerformanceTableData({
       compareType: filters.compareType,
       hasCompareDateRange: !!filters.compareDateRange,
       compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
-      compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined
+      compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined,
+      dateOrder: dateOrder
     });
 
     // Check conditions after setting loading state
@@ -241,11 +243,16 @@ export function usePerformanceTableData({
             }
           });
           
+          // Check if first dimension is a date type and store original date value
+          const isDateDimension = firstDimension?.type === 'date';
+          const originalDate = isDateDimension ? dimensionValues[firstDimId] : undefined;
+          
           return {
             id: row.id || `row-${row.row_number || Math.random().toString(36).substring(2, 11)}`,
             name: dimensionValues[firstDimId] || 'Unknown',
             level: 0,
             data: rowData,
+            originalDate: originalDate,
             // Children will be created in usePerformanceTableFilters
           };
         });

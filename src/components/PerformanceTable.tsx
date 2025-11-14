@@ -207,6 +207,8 @@ export const PerformanceTable = ({
     totalData,
     reportId: reportId || undefined,
     accountId,
+    activeDateTab,
+    dateOrder,
   });
 
   // Apply sorting to filtered data
@@ -846,4 +848,3 @@ export const PerformanceTable = ({
     </>
   );
 };
-

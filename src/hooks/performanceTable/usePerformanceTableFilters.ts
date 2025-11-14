@@ -4,6 +4,7 @@ import type { Dimension } from "./usePerformanceTableDimensions";
 import type { TableRow } from "./usePerformanceTableData";
 import { calculateTotals, calculateComparisonTotalsAndChanges } from "@/lib/performanceTable/calculators";
 import { useVlookupMappings } from "@/hooks/useVlookupMappings";
+import { format, parse, isValid } from "date-fns";
 
 interface UsePerformanceTableFiltersOptions {
   tableData: TableRow[];
@@ -13,6 +14,8 @@ interface UsePerformanceTableFiltersOptions {
   totalData: Record<string, any>;
   reportId?: string;
   accountId?: string;
+  activeDateTab?: 'day' | 'week' | 'month' | 'year';
+  dateOrder?: 'asc' | 'desc';
 }
 
 /**
@@ -26,6 +29,8 @@ export function usePerformanceTableFilters({
   totalData,
   reportId,
   accountId,
+  activeDateTab = 'day',
+  dateOrder = 'desc',
 }: UsePerformanceTableFiltersOptions) {
   // Load vlookup mappings
   const { data: vlookupMappings = [] } = useVlookupMappings(reportId, accountId);
@@ -156,11 +161,14 @@ export function usePerformanceTableFilters({
 
     // First level grouping
     const firstDimension = groupDimensions[0];
+    const isFirstDimDate = firstDimension.type === 'date';
     
+    // Process each row and group by dimensions
     filteredData.forEach(row => {
       const firstLevelValue = row.data[firstDimension.name];
       if (firstLevelValue === undefined || firstLevelValue === null) return; // Skip rows without the first dimension value
       
+      // Create a unique key for this group
       const firstLevelKey = `${firstDimension.id}-${firstLevelValue}`;
       
       // Create or update first level group
@@ -171,6 +179,8 @@ export function usePerformanceTableFilters({
           level: 0,
           data: { ...row.data },
           children: [],
+          // Store original date value for sorting
+          originalDate: isFirstDimDate ? firstLevelValue : undefined
         };
         groupMap[firstLevelKey] = newGroup;
         hierarchicalData.push(newGroup);
@@ -191,6 +201,7 @@ export function usePerformanceTableFilters({
       // Second level grouping (if available)
       if (groupDimensions.length > 1) {
         const secondDimension = groupDimensions[1];
+        const isSecondDimDate = secondDimension.type === 'date';
         const secondLevelValue = row.data[secondDimension.name];
         
         if (secondLevelValue !== undefined && secondLevelValue !== null) {
@@ -204,6 +215,8 @@ export function usePerformanceTableFilters({
               parentId: firstLevelKey,
               data: { ...row.data },
               children: [],
+              // Store original date value for sorting
+              originalDate: isSecondDimDate ? secondLevelValue : undefined
             };
             level1Map[secondLevelKey] = newSubGroup;
             groupMap[firstLevelKey].children = groupMap[firstLevelKey].children || [];
@@ -225,6 +238,7 @@ export function usePerformanceTableFilters({
           // Third level grouping (if available)
           if (groupDimensions.length > 2) {
             const thirdDimension = groupDimensions[2];
+            const isThirdDimDate = thirdDimension.type === 'date';
             const thirdLevelValue = row.data[thirdDimension.name];
             
             if (thirdLevelValue !== undefined && thirdLevelValue !== null) {
@@ -237,6 +251,8 @@ export function usePerformanceTableFilters({
                   level: 2,
                   parentId: secondLevelKey,
                   data: { ...row.data },
+                  // Store original date value for sorting
+                  originalDate: isThirdDimDate ? thirdLevelValue : undefined
                 };
                 level2Map[thirdLevelKey] = newSubSubGroup;
                 level1Map[secondLevelKey].children = level1Map[secondLevelKey].children || [];
@@ -260,9 +276,71 @@ export function usePerformanceTableFilters({
       }
     });
 
+    // Sort the hierarchical data by date if the first dimension is a date
+    if (isFirstDimDate) {
+      // Sort top level rows
+      hierarchicalData.sort((a, b) => {
+        const dateA = a.originalDate ? new Date(a.originalDate) : new Date(0);
+        const dateB = b.originalDate ? new Date(b.originalDate) : new Date(0);
+        
+        if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+          // If either date is invalid, fall back to string comparison
+          return dateOrder === 'desc' 
+            ? String(b.name).localeCompare(String(a.name))
+            : String(a.name).localeCompare(String(b.name));
+        }
+        
+        return dateOrder === 'desc' ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
+      });
+      
+      // Sort children at each level
+      hierarchicalData.forEach(row => {
+        if (row.children && row.children.length > 0) {
+          const isChildDate = groupDimensions[1]?.type === 'date';
+          
+          if (isChildDate) {
+            row.children.sort((a, b) => {
+              const dateA = a.originalDate ? new Date(a.originalDate) : new Date(0);
+              const dateB = b.originalDate ? new Date(b.originalDate) : new Date(0);
+              
+              if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+                return dateOrder === 'desc' 
+                  ? String(b.name).localeCompare(String(a.name))
+                  : String(a.name).localeCompare(String(b.name));
+              }
+              
+              return dateOrder === 'desc' ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
+            });
+          }
+          
+          // Sort grandchildren
+          row.children.forEach(childRow => {
+            if (childRow.children && childRow.children.length > 0) {
+              const isGrandchildDate = groupDimensions[2]?.type === 'date';
+              
+              if (isGrandchildDate) {
+                childRow.children.sort((a, b) => {
+                  const dateA = a.originalDate ? new Date(a.originalDate) : new Date(0);
+                  const dateB = b.originalDate ? new Date(b.originalDate) : new Date(0);
+                  
+                  if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+                    return dateOrder === 'desc' 
+                      ? String(b.name).localeCompare(String(a.name))
+                      : String(a.name).localeCompare(String(b.name));
+                  }
+                  
+                  return dateOrder === 'desc' ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
+                });
+              }
+            }
+          });
+        }
+      });
+    }
+
     console.log('[PERF-FILTERS] Created hierarchical data with', hierarchicalData.length, 'top-level groups');
     return hierarchicalData;
-  }, [filteredData, groupByDimensions, dimensions]);
+  }, [filteredData, groupByDimensions, dimensions, dateOrder]);
 
   // Calculate totals from filtered data
   const totals = useMemo(() => {

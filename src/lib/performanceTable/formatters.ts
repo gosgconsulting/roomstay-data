@@ -140,4 +140,3 @@ export function formatValue(value: string | number | null | undefined, dimension
   
   return String(value);
 }
-
