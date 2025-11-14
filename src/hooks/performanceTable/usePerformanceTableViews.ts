@@ -202,7 +202,7 @@ export function usePerformanceTableViews({
       // Ensure Date dimension is included in selected dimensions if it exists
       // Add it to breakdown if not already in group, breakdown, or then
       let finalBreakdownDimensions = breakdownDimensions;
-      let finalThenDimensions = thenDimensions;
+      const finalThenDimensions = thenDimensions;
       
       if (dateDimension) {
         const allSelectedIds = [...finalGroupDimensions, ...finalBreakdownDimensions, ...finalThenDimensions];

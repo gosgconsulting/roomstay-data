@@ -241,7 +241,7 @@ export const ColumnMappingStep = ({
     };
 
     // First try exact match (case-insensitive)
-    let exactMatch = dimensions.find(
+    const exactMatch = dimensions.find(
       d => normalizeString(d.name) === normalizedColumn
     );
     if (exactMatch) return exactMatch;

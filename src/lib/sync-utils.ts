@@ -378,7 +378,7 @@ export const resolveDimensionNameToId = async (
   }
 
   // Priority: account-specific > custom (user-specific) > global
-  let query = supabase
+  const query = supabase
     .from('dimensions')
     .select('id, scope, account_id')
     .eq('name', dimensionName)
@@ -648,7 +648,7 @@ export const buildDimensionMappingWithAutoDetection = async (
       const sampleValues = sampleDataRows.map(row => row && row[colIndex]).filter(v => v !== null && v !== undefined);
       
       // Auto-detect type if not properly set or if it's create_new
-      let finalMapping = { ...mapping };
+      const finalMapping = { ...mapping };
       if (mapping.dimensionId === 'create_new' || !mapping.dimensionType || mapping.dimensionType === 'text') {
         const detected = autoDetectColumnType(sampleValues);
         console.log(`[SYNC] Auto-detected type for column "${mapping.column}": ${detected.type}${detected.dateFormat ? ` (${detected.dateFormat})` : ''}`);
@@ -966,7 +966,7 @@ export const detectNewColumns = async (
     }
   });
 
-  let updatedMappings = [...currentMappings];
+  const updatedMappings = [...currentMappings];
   
   if (newColumns.length > 0) {
     newColumns.forEach((column) => {
@@ -1013,7 +1013,7 @@ export const fixColumnMappings = async (dataSourceId: string): Promise<void> => 
   let hasChanges = false;
   
   const fixedMappings = mappings.map((mapping: any) => {
-    let fixed = { ...mapping };
+    const fixed = { ...mapping };
     
     // Fix create_new mappings that weren't properly resolved
     if (mapping.dimensionId === 'create_new') {

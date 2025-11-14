@@ -144,7 +144,7 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete }: KP
       });
 
       // Only load previous period data if comparison is enabled
-      let previousDateGroups = new Map<string, number>();
+      const previousDateGroups = new Map<string, number>();
       
       if (stableFilters.compareEnabled) {
         console.log('[CHART-FIXED] Comparison enabled, loading previous period data');

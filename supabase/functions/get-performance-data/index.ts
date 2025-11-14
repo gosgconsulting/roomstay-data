@@ -247,7 +247,7 @@ Deno.serve(async (req) => {
     console.log(`Loaded ${budgets.length} budgets for report/account`);
 
     // Load vlookup mappings for this report/account
-    let vlookupMappings: Record<string, Array<{ sourceValue: string; targetValue: string }>> = {};
+    const vlookupMappings: Record<string, Array<{ sourceValue: string; targetValue: string }>> = {};
     if (userId) {
       const mappingsQuery = supabase
         .from('dimension_mappings')
@@ -296,7 +296,7 @@ Deno.serve(async (req) => {
 
     // Build filter for the main query with optimized settings
     // Fetch ALL data first, then apply date filtering in memory for better performance
-    let query = supabase
+    const query = supabase
       .from('dimension_data')
       .select('dimension_values, row_number')
       .eq('report_id', reportId)
@@ -646,7 +646,7 @@ Deno.serve(async (req) => {
 
     for (const row of filteredData) {
       const dimValues = row.dimension_values as Record<string, any>;
-      let rawGroupKey = dimValues[groupDimId] || 'Unknown';
+      const rawGroupKey = dimValues[groupDimId] || 'Unknown';
       let groupKey = rawGroupKey;
       let displayName = rawGroupKey;
 
@@ -770,7 +770,7 @@ Deno.serve(async (req) => {
     if (compareFilteredData.length > 0 && dimensions) {
       for (const row of compareFilteredData) {
         const dimValues = row.dimension_values as Record<string, any>;
-        let rawGroupKey = dimValues[groupDimId] || 'Unknown';
+        const rawGroupKey = dimValues[groupDimId] || 'Unknown';
         let groupKey = rawGroupKey;
 
         // If grouping by date with granularity, transform the date
@@ -828,7 +828,7 @@ Deno.serve(async (req) => {
         
         if (dateDim && costDim && group.rawRows.length > 0) {
           let budgetTotal = 0;
-          let costTotal = group.data['Cost'] || 0;
+          const costTotal = group.data['Cost'] || 0;
           
           // Extract year/month from the first row in the group
           const firstRow = group.rawRows[0];
@@ -901,7 +901,7 @@ Deno.serve(async (req) => {
 
         for (const row of group.rawRows) {
           const dimValues = row.dimension_values as Record<string, any>;
-          let rawBreakdownKey = dimValues[breakdownDimId] || 'Unknown';
+          const rawBreakdownKey = dimValues[breakdownDimId] || 'Unknown';
           let breakdownKey = rawBreakdownKey;
           let breakdownDisplayName = rawBreakdownKey;
 
@@ -981,7 +981,7 @@ Deno.serve(async (req) => {
             
             if (dateDim && costDim && breakdownItem.rawRows.length > 0) {
               let budgetTotal = 0;
-              let costTotal = breakdownItem.data['Cost'] || 0;
+              const costTotal = breakdownItem.data['Cost'] || 0;
               
               const firstRow = breakdownItem.rawRows[0];
               const dateValue = firstRow.dimension_values[dateDim.id];
@@ -1021,7 +1021,7 @@ Deno.serve(async (req) => {
 
             for (const row of breakdownItem.rawRows) {
               const dimValues = row.dimension_values as Record<string, any>;
-              let rawThenByKey = dimValues[thenByDimId] || 'Unknown';
+              const rawThenByKey = dimValues[thenByDimId] || 'Unknown';
               let thenByKey = rawThenByKey;
               let thenByDisplayName = rawThenByKey;
 
@@ -1099,7 +1099,7 @@ Deno.serve(async (req) => {
                 
                 if (dateDim && costDim && thenByItem.data['Cost'] !== undefined) {
                   let budgetTotal = 0;
-                  let costTotal = thenByItem.data['Cost'] || 0;
+                  const costTotal = thenByItem.data['Cost'] || 0;
                   
                   // Get date from thenByItem's name or data
                   let dateValue = thenByItem.data[dateDim.name];
@@ -1216,8 +1216,8 @@ Deno.serve(async (req) => {
     }
 
     // Calculate comparison totals if enabled
-    let totalCompareData: Record<string, any> = {};
-    let totalChangeData: Record<string, any> = {};
+    const totalCompareData: Record<string, any> = {};
+    const totalChangeData: Record<string, any> = {};
     if (compareFilteredData.length > 0 && dimensions) {
       for (const dim of dimensions) {
         if (dim.formula) continue;

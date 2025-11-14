@@ -587,7 +587,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
         return `(${parseFloat(num) / 100})`;
       });
       
-      // eslint-disable-next-line no-eval
+       
       const result = eval(expression);
       
       if (!isFinite(result)) return null;

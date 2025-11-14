@@ -389,7 +389,7 @@ export const buildDimensionMappingWithAutoDetection = async (
       const sampleValues = sampleDataRows.map(row => row && row[colIndex]).filter(v => v !== null && v !== undefined);
       
       // Auto-detect type if not properly set or if it's create_new
-      let finalMapping = { ...mapping };
+      const finalMapping = { ...mapping };
       if (mapping.dimensionId === 'create_new' || !mapping.dimensionType || mapping.dimensionType === 'text') {
         const detected = autoDetectColumnType(sampleValues);
         console.log(`[RESYNC] Auto-detected type for column "${mapping.column}": ${detected.type}${detected.dateFormat ? ` (${detected.dateFormat})` : ''}`);

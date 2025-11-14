@@ -197,18 +197,34 @@ export async function loadReportData(
 
     console.log('[DATA-FIX] Loaded raw data rows:', allData.length);
 
-    // 4. Validate data structure
-    const validationResult = validateDataStructure(allData, dimensions);
+    // 4. Normalize data structure - ensure all rows have dimension_values
+    const normalizedData = allData.map((row: any) => {
+      // If row already has dimension_values, return as is
+      if (row.dimension_values) {
+        return row;
+      }
+      // If dimension_values are spread at root level, wrap them
+      return {
+        dimension_values: row,
+        row_number: row._row_number || row.row_number,
+        data_source_id: row._data_source_id || row.data_source_id,
+      };
+    });
+
+    console.log('[DATA-FIX] Normalized data rows:', normalizedData.length);
+
+    // 5. Validate data structure
+    const validationResult = validateDataStructure(normalizedData, dimensions);
     
     return {
       success: true,
-      data: allData,
+      data: normalizedData,
       dimensions,
-      totalRows: edgeData.totalCount || allData.length,
-      filteredRows: allData.length,
+      totalRows: edgeData.totalCount || normalizedData.length,
+      filteredRows: normalizedData.length,
       debugInfo: {
         validation: validationResult,
-        sampleRow: allData[0]?.dimension_values,
+        sampleRow: normalizedData[0]?.dimension_values,
         dimensionIds: dimensions.map(d => ({ id: d.id, name: d.name }))
       }
     };
@@ -240,6 +256,12 @@ function applyDataFilters(
   if (!filters) return data;
 
   return data.filter(row => {
+    // Ensure row has dimension_values
+    if (!row || !row.dimension_values) {
+      console.warn('[DATA-FIX] Row missing dimension_values:', row);
+      return false;
+    }
+
     const dimensionValues = row.dimension_values as Record<string, any>;
 
     // Apply date filter
@@ -294,7 +316,18 @@ function validateDataStructure(data: any[], dimensions: Dimension[]): any {
     return { valid: false, reason: 'No data rows' };
   }
 
-  const sampleRow = data[0].dimension_values;
+  const firstRow = data[0];
+  if (!firstRow) {
+    return { valid: false, reason: 'First row is null or undefined' };
+  }
+
+  // Handle both formats: row.dimension_values or row itself (if dimension_values are spread)
+  const sampleRow = firstRow.dimension_values || firstRow;
+  
+  if (!sampleRow || typeof sampleRow !== 'object') {
+    return { valid: false, reason: 'Sample row is not an object', sampleRow };
+  }
+
   const dataKeys = Object.keys(sampleRow);
   const dimensionIds = dimensions.map(d => d.id);
 

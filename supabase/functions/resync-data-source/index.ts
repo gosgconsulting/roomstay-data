@@ -150,7 +150,7 @@ Deno.serve(async (req) => {
     }
 
     // Apply optional updates if provided
-    let updatedDataSource: DataSource = { ...dataSource };
+    const updatedDataSource: DataSource = { ...dataSource };
     if (requestBody.updates) {
       const updates: any = {};
       

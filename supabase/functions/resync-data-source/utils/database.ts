@@ -119,7 +119,7 @@ export const fixColumnMappings = async (supabase: any, dataSourceId: string): Pr
   let hasChanges = false;
   
   const fixedMappings = mappings.map((mapping: any) => {
-    let fixed = { ...mapping };
+    const fixed = { ...mapping };
     
     // Fix create_new mappings that weren't properly resolved
     if (mapping.dimensionId === 'create_new') {
