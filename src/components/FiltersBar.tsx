@@ -1373,7 +1373,7 @@ export const FiltersBar = ({
                     None (No master dimension)
                   </Button>
                   
-                  {dimensions.filter(d => d.type === 'text' && (d.scope === 'global' || d.scope === 'account')).map(dim => (
+                  {dimensions.filter(d => d.type === 'text').map(dim => (
                     <Button
                       key={dim.id}
                       variant={masterDimensionId === dim.id ? "secondary" : "ghost"}
@@ -1383,8 +1383,10 @@ export const FiltersBar = ({
                     >
                       <Check className={cn("mr-2 h-4 w-4", masterDimensionId === dim.id ? "opacity-100" : "opacity-0")} />
                       {dim.name}
-                      {dim.scope === 'global' && (
-                        <span className="ml-2 text-xs text-muted-foreground">(Global)</span>
+                      {dim.scope && (
+                        <span className="ml-2 text-xs text-muted-foreground capitalize">
+                          ({dim.scope})
+                        </span>
                       )}
                     </Button>
                   ))}
