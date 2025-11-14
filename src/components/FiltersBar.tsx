@@ -19,6 +19,7 @@ import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
 import { useToast } from "@/components/ui/use-toast";
+import { useVlookupMappings, getMappedValue, getAllValuesForFilter } from "@/hooks/useVlookupMappings";
 
 export interface FilterState {
   dimensionFilters: Record<string, string[]>;
@@ -64,6 +65,9 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
   const [openPopovers, setOpenPopovers] = useState<Record<string, boolean>>({});
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const { toast } = useToast();
+  
+  // Load vlookup mappings for this report/account
+  const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
 
   useEffect(() => {
     if (reportId) {
@@ -650,7 +654,16 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
             if (!valuesMap[dimId]) {
               valuesMap[dimId] = new Set();
             }
-            valuesMap[dimId].add(String(value));
+            
+            const valueStr = String(value);
+            // Add the original value
+            valuesMap[dimId].add(valueStr);
+            
+            // Apply vlookup mapping and add the mapped value if different
+            const mappedValue = getMappedValue(valueStr, vlookupMappings, dimId);
+            if (mappedValue !== valueStr) {
+              valuesMap[dimId].add(mappedValue);
+            }
           }
         });
       });
@@ -674,16 +687,19 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     const currentValues = newFilters[dimensionId] || [];
     
     if (currentValues.includes(value)) {
-      // Remove value
-      const updated = currentValues.filter(v => v !== value);
+      // Remove value - need to remove all expanded values too
+      const allValuesToRemove = getAllValuesForFilter(value, vlookupMappings, dimensionId);
+      const updated = currentValues.filter(v => !allValuesToRemove.includes(v));
       if (updated.length === 0) {
         delete newFilters[dimensionId];
       } else {
         newFilters[dimensionId] = updated;
       }
     } else {
-      // Add value
-      newFilters[dimensionId] = [...currentValues, value];
+      // Add value - expand to include all source values if this is a mapped value
+      const allValuesToAdd = getAllValuesForFilter(value, vlookupMappings, dimensionId);
+      const uniqueValues = [...new Set([...currentValues, ...allValuesToAdd])];
+      newFilters[dimensionId] = uniqueValues;
     }
     
     setSelectedFilters(newFilters);
