@@ -95,10 +95,14 @@ export function TableRow({
             const change = row.changeData?.[dimension.name];
             const hasComparison = filters.compareEnabled && change !== undefined;
             
+            // Check if value is negative for styling
+            const numValue = typeof value === 'number' ? value : parseFloat(String(value));
+            const isNegative = !isNaN(numValue) && numValue < 0;
+            
             return (
               <td key={dimension.id} className="py-3 px-4 text-right">
                 <div className="flex flex-col items-end gap-1">
-                  <span>{formatValue(value, dimension)}</span>
+                  <span className={cn(isNegative && "text-red-600")}>{formatValue(value, dimension)}</span>
                   {hasComparison && (
                     <span className={cn(
                       "text-xs flex items-center gap-1",
