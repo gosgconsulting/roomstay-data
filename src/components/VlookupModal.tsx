@@ -99,6 +99,56 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
     setMappings(updated);
   };
 
+  const handleReapply = async () => {
+    if (!reportId && !accountId) {
+      toast({
+        title: "Error",
+        description: "No report or account selected",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      console.log('[VLOOKUP] Re-applying mappings...', { reportId, accountId });
+      
+      const { data: applyResult, error: applyError } = await supabase.functions.invoke(
+        'apply-vlookup-mappings',
+        {
+          body: { reportId, accountId }
+        }
+      );
+
+      console.log('[VLOOKUP] Re-apply function response:', { applyResult, applyError });
+
+      if (applyError) {
+        throw new Error(applyError.message || 'Failed to invoke edge function');
+      } else if (applyResult?.success === false) {
+        throw new Error(applyResult.error || 'Edge function returned error');
+      } else {
+        toast({
+          title: "Success",
+          description: `Applied vlookup mappings to ${applyResult?.rowsUpdated || 0} rows. Account dimension is now available in filters.`,
+        });
+        
+        // Trigger data refresh if callback provided
+        if (onSave) {
+          onSave();
+        }
+      }
+    } catch (error) {
+      console.error('Error re-applying vlookup mappings:', error);
+      toast({
+        title: "Error",
+        description: `Failed to re-apply vlookup mappings: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -287,10 +337,15 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
         </div>
 
         <div className="flex justify-between items-center pt-4 border-t">
-          <Button onClick={addRow} variant="outline" size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Row
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={addRow} variant="outline" size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Row
+            </Button>
+            <Button onClick={handleReapply} variant="secondary" size="sm" disabled={isSaving || isLoading}>
+              Re-apply Existing Mappings
+            </Button>
+          </div>
           <div className="flex gap-2">
             <Button onClick={() => onOpenChange(false)} variant="outline">
               Cancel
