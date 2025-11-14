@@ -29,13 +29,14 @@ export function usePerformanceTableFilters({
 }: UsePerformanceTableFiltersOptions) {
   // Load vlookup mappings
   const { data: vlookupMappings = [] } = useVlookupMappings(reportId, accountId);
-  // Apply column filters (text and numeric)
-  const filteredTableData = useMemo(() => {
+  
+  // First, filter the data based on dimension filters
+  const filteredData = useMemo(() => {
     if (!filters.dimensionFilters || Object.keys(filters.dimensionFilters).length === 0) {
       return tableData;
     }
 
-    console.log('[testing] Applying filters:', filters.dimensionFilters);
+    console.log('[PERF-FILTERS] Applying filters:', filters.dimensionFilters);
 
     return tableData.filter((row) => {
       // Check each dimension filter
@@ -44,7 +45,7 @@ export function usePerformanceTableFilters({
 
         const dimension = dimensions.find(d => d.id === dimId);
         if (!dimension) {
-          console.log('[testing] Dimension not found for filter:', dimId);
+          console.log('[PERF-FILTERS] Dimension not found for filter:', dimId);
           continue;
         }
 
@@ -102,8 +103,6 @@ export function usePerformanceTableFilters({
               }
               
               // Check if dimValue maps TO the filterValue via vlookup
-              // For example: "Brady Apartment Hotel" (dimValue from Hotel dimension)
-              // should match filter "Brady" (from Account dimension)
               const sourceMappings = vlookupMappings.filter(
                 m => m.targetDimensionId === dimId && 
                      m.targetValue.toLowerCase() === filterLower
@@ -131,12 +130,146 @@ export function usePerformanceTableFilters({
     });
   }, [tableData, filters.dimensionFilters, dimensions, groupByDimensions, vlookupMappings]);
 
+  // Then, transform the filtered data into a hierarchical structure for the pivot table
+  const filteredTableData = useMemo(() => {
+    if (!filteredData.length || !groupByDimensions.length) {
+      return [];
+    }
+
+    console.log('[PERF-FILTERS] Creating hierarchical data with dimensions:', groupByDimensions);
+
+    // Get dimension objects for the group by dimensions
+    const groupDimensions = groupByDimensions
+      .map(id => dimensions.find(d => d.id === id))
+      .filter(Boolean) as Dimension[];
+
+    if (groupDimensions.length === 0) {
+      console.warn('[PERF-FILTERS] No valid group dimensions found');
+      return filteredData;
+    }
+
+    // Create a hierarchical structure based on the group by dimensions
+    const hierarchicalData: TableRow[] = [];
+    const groupMap: Record<string, TableRow> = {};
+    const level1Map: Record<string, TableRow> = {};
+    const level2Map: Record<string, TableRow> = {};
+
+    // First level grouping
+    const firstDimension = groupDimensions[0];
+    
+    filteredData.forEach(row => {
+      const firstLevelValue = row.data[firstDimension.name];
+      if (firstLevelValue === undefined || firstLevelValue === null) return; // Skip rows without the first dimension value
+      
+      const firstLevelKey = `${firstDimension.id}-${firstLevelValue}`;
+      
+      // Create or update first level group
+      if (!groupMap[firstLevelKey]) {
+        const newGroup: TableRow = {
+          id: firstLevelKey,
+          name: String(firstLevelValue),
+          level: 0,
+          data: { ...row.data },
+          children: [],
+        };
+        groupMap[firstLevelKey] = newGroup;
+        hierarchicalData.push(newGroup);
+      } else {
+        // Aggregate numeric values
+        Object.keys(row.data).forEach(key => {
+          const dim = dimensions.find(d => d.name === key);
+          if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+            const existingValue = parseFloat(String(groupMap[firstLevelKey].data[key] || '0'));
+            const newValue = parseFloat(String(row.data[key] || '0'));
+            if (!isNaN(newValue)) {
+              groupMap[firstLevelKey].data[key] = existingValue + newValue;
+            }
+          }
+        });
+      }
+      
+      // Second level grouping (if available)
+      if (groupDimensions.length > 1) {
+        const secondDimension = groupDimensions[1];
+        const secondLevelValue = row.data[secondDimension.name];
+        
+        if (secondLevelValue !== undefined && secondLevelValue !== null) {
+          const secondLevelKey = `${firstLevelKey}-${secondDimension.id}-${secondLevelValue}`;
+          
+          if (!level1Map[secondLevelKey]) {
+            const newSubGroup: TableRow = {
+              id: secondLevelKey,
+              name: String(secondLevelValue),
+              level: 1,
+              parentId: firstLevelKey,
+              data: { ...row.data },
+              children: [],
+            };
+            level1Map[secondLevelKey] = newSubGroup;
+            groupMap[firstLevelKey].children = groupMap[firstLevelKey].children || [];
+            groupMap[firstLevelKey].children.push(newSubGroup);
+          } else {
+            // Aggregate numeric values
+            Object.keys(row.data).forEach(key => {
+              const dim = dimensions.find(d => d.name === key);
+              if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+                const existingValue = parseFloat(String(level1Map[secondLevelKey].data[key] || '0'));
+                const newValue = parseFloat(String(row.data[key] || '0'));
+                if (!isNaN(newValue)) {
+                  level1Map[secondLevelKey].data[key] = existingValue + newValue;
+                }
+              }
+            });
+          }
+          
+          // Third level grouping (if available)
+          if (groupDimensions.length > 2) {
+            const thirdDimension = groupDimensions[2];
+            const thirdLevelValue = row.data[thirdDimension.name];
+            
+            if (thirdLevelValue !== undefined && thirdLevelValue !== null) {
+              const thirdLevelKey = `${secondLevelKey}-${thirdDimension.id}-${thirdLevelValue}`;
+              
+              if (!level2Map[thirdLevelKey]) {
+                const newSubSubGroup: TableRow = {
+                  id: thirdLevelKey,
+                  name: String(thirdLevelValue),
+                  level: 2,
+                  parentId: secondLevelKey,
+                  data: { ...row.data },
+                };
+                level2Map[thirdLevelKey] = newSubSubGroup;
+                level1Map[secondLevelKey].children = level1Map[secondLevelKey].children || [];
+                level1Map[secondLevelKey].children.push(newSubSubGroup);
+              } else {
+                // Aggregate numeric values
+                Object.keys(row.data).forEach(key => {
+                  const dim = dimensions.find(d => d.name === key);
+                  if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+                    const existingValue = parseFloat(String(level2Map[thirdLevelKey].data[key] || '0'));
+                    const newValue = parseFloat(String(row.data[key] || '0'));
+                    if (!isNaN(newValue)) {
+                      level2Map[thirdLevelKey].data[key] = existingValue + newValue;
+                    }
+                  }
+                });
+              }
+            }
+          }
+        }
+      }
+    });
+
+    console.log('[PERF-FILTERS] Created hierarchical data with', hierarchicalData.length, 'top-level groups');
+    return hierarchicalData;
+  }, [filteredData, groupByDimensions, dimensions]);
+
   // Calculate totals from filtered data
   const totals = useMemo(() => {
     return calculateTotals(filteredTableData, dimensions, totalData);
   }, [filteredTableData, dimensions, totalData]);
 
-  // Calculate comparison totals and change percentages from filtered data
+  // Calculate comparison totals and change percentages
   const { compareTotals, changeData } = useMemo(() => {
     return calculateComparisonTotalsAndChanges(
       filteredTableData,
@@ -153,4 +286,3 @@ export function usePerformanceTableFilters({
     changeData,
   };
 }
-

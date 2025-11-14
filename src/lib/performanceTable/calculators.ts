@@ -43,7 +43,10 @@ export function calculateTotals(
           if (!hasChildren) {
             const value = row.data[dim.name];
             if (value !== undefined && value !== null) {
-              sum += parseFloat(value) || 0;
+              const numValue = parseFloat(String(value));
+              if (!isNaN(numValue)) {
+                sum += numValue;
+              }
             }
           }
           // Recursively process children
@@ -120,7 +123,10 @@ export function calculateComparisonTotalsAndChanges(
           if (!hasChildren && row.compareData) {
             const value = row.compareData[dim.name];
             if (value !== undefined && value !== null) {
-              sum += parseFloat(value) || 0;
+              const numValue = parseFloat(String(value));
+              if (!isNaN(numValue)) {
+                sum += numValue;
+              }
             }
           }
           if (row.children) {
@@ -180,4 +186,3 @@ export function calculateComparisonTotalsAndChanges(
 
   return { compareTotals: filteredCompareTotals, changeData: calculatedChangeData };
 }
-

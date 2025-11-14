@@ -220,7 +220,6 @@ export function usePerformanceTableData({
           // Create a name from the first dimension if available
           const firstDimId = groupByDimensions[0];
           const firstDimension = dimensions.find(d => d.id === firstDimId);
-          const dimensionName = firstDimension?.name || 'Unknown';
           
           // Extract dimension values from the response
           const dimensionValues = row.dimension_values || {};
@@ -231,7 +230,14 @@ export function usePerformanceTableData({
           // Map dimension IDs to dimension names for the data object
           dimensions.forEach(dim => {
             if (dimensionValues[dim.id] !== undefined) {
-              rowData[dim.name] = dimensionValues[dim.id];
+              // Convert numeric strings to numbers for proper aggregation
+              const value = dimensionValues[dim.id];
+              if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
+                const numValue = parseFloat(value);
+                rowData[dim.name] = !isNaN(numValue) ? numValue : value;
+              } else {
+                rowData[dim.name] = value;
+              }
             }
           });
           
@@ -240,7 +246,7 @@ export function usePerformanceTableData({
             name: dimensionValues[firstDimId] || 'Unknown',
             level: 0,
             data: rowData,
-            // No children, compareData, or changeData at this level
+            // Children will be created in usePerformanceTableFilters
           };
         });
         
@@ -255,8 +261,11 @@ export function usePerformanceTableData({
               if (row.data) {
                 Object.keys(row.data).forEach((dimName: string) => {
                   const dim = dimensions.find(d => d.name === dimName);
-                  if (dim && (dim.type === 'number' || dim.type === 'currency')) {
-                    calculatedTotalData[dimName] = (calculatedTotalData[dimName] || 0) + (parseFloat(row.data[dimName]) || 0);
+                  if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+                    const value = parseFloat(String(row.data[dimName] || '0'));
+                    if (!isNaN(value)) {
+                      calculatedTotalData[dimName] = (calculatedTotalData[dimName] || 0) + value;
+                    }
                   }
                 });
               }
@@ -275,8 +284,11 @@ export function usePerformanceTableData({
               if (row.compareData) {
                 Object.keys(row.compareData).forEach((dimName: string) => {
                   const dim = dimensions.find(d => d.name === dimName);
-                  if (dim && (dim.type === 'number' || dim.type === 'currency')) {
-                    calculatedCompareData[dimName] = (calculatedCompareData[dimName] || 0) + (parseFloat(row.compareData[dimName]) || 0);
+                  if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+                    const value = parseFloat(String(row.compareData[dimName] || '0'));
+                    if (!isNaN(value)) {
+                      calculatedCompareData[dimName] = (calculatedCompareData[dimName] || 0) + value;
+                    }
                   }
                 });
               }
