@@ -12,6 +12,13 @@ interface VlookupMapping {
   target_value: string;
 }
 
+interface DimensionMappingRow {
+  source_dimension_id: string;
+  source_value: string;
+  target_dimension_id: string;
+  target_value: string;
+}
+
 Deno.serve(async (req) => {
   console.log('[VLOOKUP-APPLY] Function invoked');
   
@@ -92,10 +99,17 @@ Deno.serve(async (req) => {
     }
 
     console.log(`[VLOOKUP-APPLY] Found ${mappings.length} mappings to apply`);
+    
+    // Validate that all mappings have source_dimension_id
+    const invalidMappings = mappings.filter((m: DimensionMappingRow) => !m.source_dimension_id);
+    if (invalidMappings.length > 0) {
+      console.error('[VLOOKUP-APPLY] Found mappings without source_dimension_id:', invalidMappings);
+      throw new Error(`${invalidMappings.length} mappings are missing source_dimension_id. Please update your mappings.`);
+    }
 
     // Group mappings by source and target dimension pair
     const mappingsByDimensionPair = new Map<string, VlookupMapping[]>();
-    for (const mapping of mappings) {
+    for (const mapping of mappings as DimensionMappingRow[]) {
       const key = `${mapping.source_dimension_id}:${mapping.target_dimension_id}`;
       if (!mappingsByDimensionPair.has(key)) {
         mappingsByDimensionPair.set(key, []);
@@ -108,12 +122,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    // For each dimension pair, apply mappings
+    // For each dimension pair, apply mappings using the explicit source dimension
     let totalRowsUpdated = 0;
 
     for (const [dimensionPairKey, dimMappings] of mappingsByDimensionPair.entries()) {
       const [sourceDimensionId, targetDimensionId] = dimensionPairKey.split(':');
-      console.log(`[VLOOKUP-APPLY] Processing ${dimMappings.length} mappings from ${sourceDimensionId} to ${targetDimensionId}`);
+      console.log(`[VLOOKUP-APPLY] Processing ${dimMappings.length} mappings from source dimension ${sourceDimensionId} to target dimension ${targetDimensionId}`);
 
       // Get target dimension details
       const { data: targetDimension, error: targetDimError } = await supabase
@@ -128,6 +142,20 @@ Deno.serve(async (req) => {
       }
 
       console.log(`[VLOOKUP-APPLY] Target dimension: ${targetDimension.name} (${targetDimension.type})`);
+
+      // Get source dimension details
+      const { data: sourceDimension, error: sourceDimError } = await supabase
+        .from('dimensions')
+        .select('name, type')
+        .eq('id', sourceDimensionId)
+        .single();
+
+      if (sourceDimError || !sourceDimension) {
+        console.error(`[VLOOKUP-APPLY] Could not find source dimension ${sourceDimensionId}`);
+        continue;
+      }
+
+      console.log(`[VLOOKUP-APPLY] Source dimension: ${sourceDimension.name} (${sourceDimension.type})`);
 
       // Load dimension_data rows for this report only
       let dataQuery = supabase
@@ -160,17 +188,21 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      console.log(`[VLOOKUP-APPLY] Processing ${dimensionDataRows.length} dimension_data rows using source dimension: ${sourceDimensionId}`);
+      console.log(`[VLOOKUP-APPLY] Processing ${dimensionDataRows.length} dimension_data rows. Mapping from ${sourceDimension.name} (${sourceDimensionId}) to ${targetDimension.name} (${targetDimensionId})`);
 
-      // Create a lookup map for fast matching
+      // Create a lookup map for fast matching (case-insensitive)
       const lookupMap = new Map<string, string>();
       for (const mapping of dimMappings) {
-        lookupMap.set(mapping.source_value.toLowerCase().trim(), mapping.target_value);
+        const normalizedKey = mapping.source_value.toLowerCase().trim();
+        lookupMap.set(normalizedKey, mapping.target_value);
+        console.log(`[VLOOKUP-APPLY] Mapping: "${mapping.source_value}" -> "${mapping.target_value}"`);
       }
 
       // Process rows in batches
       const batchSize = 500;
       let updatedCount = 0;
+      let matchedCount = 0;
+      let skippedCount = 0;
 
       for (let i = 0; i < dimensionDataRows.length; i += batchSize) {
         const batch = dimensionDataRows.slice(i, i + batchSize);
@@ -185,6 +217,7 @@ Deno.serve(async (req) => {
             const targetValue = lookupMap.get(normalizedSource);
 
             if (targetValue) {
+              matchedCount++;
               // Inject or update the target dimension
               const updatedValues = {
                 ...dimensionValues,
@@ -195,7 +228,11 @@ Deno.serve(async (req) => {
                 id: row.id,
                 dimension_values: updatedValues,
               });
+            } else {
+              skippedCount++;
             }
+          } else {
+            skippedCount++;
           }
         }
 
@@ -214,12 +251,12 @@ Deno.serve(async (req) => {
             }
           }
 
-          console.log(`[VLOOKUP-APPLY] Updated batch of ${updates.length} rows`);
+          console.log(`[VLOOKUP-APPLY] Batch ${Math.floor(i / batchSize) + 1}: Updated ${updates.length} rows (matched: ${matchedCount}, skipped: ${skippedCount})`);
         }
       }
 
       totalRowsUpdated += updatedCount;
-      console.log(`[VLOOKUP-APPLY] Updated ${updatedCount} rows for target dimension ${targetDimension.name}`);
+      console.log(`[VLOOKUP-APPLY] Completed mapping for ${sourceDimension.name} -> ${targetDimension.name}: ${updatedCount} rows updated, ${matchedCount} total matches, ${skippedCount} skipped`);
     }
 
     return new Response(
