@@ -189,6 +189,12 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
         // Load saved filter settings for this report
         if (data.filter_dimensions && data.filter_dimensions.length > 0) {
           setActiveDimensions(data.filter_dimensions);
+        } else {
+          // Default to only Date dimension if none saved
+          const dateDimension = dimensions.find(d => d.type === 'date');
+          if (dateDimension) {
+            setActiveDimensions([dateDimension.id]);
+          }
         }
         if (data.filter_values && Object.keys(data.filter_values).length > 0) {
           // Convert old single-value filters to array format if needed
@@ -212,6 +218,10 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
         applyDatePreset(preset);
       } else {
         // No saved view for this report, apply defaults
+        const dateDimension = dimensions.find(d => d.type === 'date');
+        if (dateDimension) {
+          setActiveDimensions([dateDimension.id]);
+        }
         applyDatePreset("this_month");
       }
     } catch (error) {
