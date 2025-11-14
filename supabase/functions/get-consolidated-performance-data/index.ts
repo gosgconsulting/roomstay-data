@@ -24,6 +24,8 @@ interface ConsolidatedRequest {
   compareDateTo?: string;
   dateGranularity?: 'day' | 'week' | 'month' | 'year';
   dateOrder?: 'asc' | 'desc';
+  masterDimensionId?: string;
+  masterDimensionValues?: string[];
 }
 
 serve(async (req) => {
@@ -39,7 +41,16 @@ serve(async (req) => {
     const requestData: ConsolidatedRequest = await req.json();
     console.log('[CONSOLIDATED-DATA] Request:', JSON.stringify(requestData, null, 2));
 
-    const { reportIds, groupByDims, dimensionFilters, dateFrom, dateTo, visibleDimensionIds } = requestData;
+    const { 
+      reportIds, 
+      groupByDims, 
+      dimensionFilters, 
+      dateFrom, 
+      dateTo, 
+      visibleDimensionIds,
+      masterDimensionId,
+      masterDimensionValues 
+    } = requestData;
 
     if (!reportIds || reportIds.length === 0) {
       return new Response(
@@ -50,6 +61,35 @@ serve(async (req) => {
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Map dimension IDs to names for filtering
+    const dimensionIdToName = new Map<string, string>();
+    if (dimensionFilters && Object.keys(dimensionFilters).length > 0) {
+      const dimIds = Object.keys(dimensionFilters);
+      const { data: dims } = await supabase
+        .from('dimensions')
+        .select('id, name')
+        .in('id', dimIds);
+      
+      dims?.forEach(dim => {
+        dimensionIdToName.set(dim.id, dim.name);
+      });
+    }
+
+    // Get master dimension name if provided
+    let masterDimensionName: string | null = null;
+    if (masterDimensionId) {
+      const { data: masterDim } = await supabase
+        .from('dimensions')
+        .select('name')
+        .eq('id', masterDimensionId)
+        .maybeSingle();
+      
+      if (masterDim) {
+        masterDimensionName = masterDim.name;
+        console.log('[CONSOLIDATED-DATA] Master dimension filter:', masterDimensionName, 'values:', masterDimensionValues);
+      }
     }
 
     // Fetch report names
@@ -98,13 +138,22 @@ serve(async (req) => {
         }
       }
 
-      // Apply dimension filters
+      // Apply dimension filters using dimension names
       for (const [dimId, values] of Object.entries(dimensionFilters)) {
         if (values && values.length > 0) {
-          // For PostgreSQL JSONB, we need to check if the value is in the array
-          const conditions = values.map(v => `dimension_values->>'${dimId}' = '${v}'`).join(' OR ');
-          query = query.or(conditions);
+          const dimName = dimensionIdToName.get(dimId);
+          if (dimName) {
+            // For PostgreSQL JSONB, use dimension name to filter
+            const conditions = values.map(v => `dimension_values->>'${dimName}' = '${v.replace(/'/g, "''")}'`).join(' OR ');
+            query = query.or(conditions);
+          }
         }
+      }
+
+      // Apply master dimension filter if provided
+      if (masterDimensionName && masterDimensionValues && masterDimensionValues.length > 0) {
+        const conditions = masterDimensionValues.map(v => `dimension_values->>'${masterDimensionName}' = '${v.replace(/'/g, "''")}'`).join(' OR ');
+        query = query.or(conditions);
       }
 
       const { data: dimensionData, error: dataError } = await query.limit(10000);
@@ -216,7 +265,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('[CONSOLIDATED-DATA] Error:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

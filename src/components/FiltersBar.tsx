@@ -36,6 +36,8 @@ export interface FilterState {
   compareEnabled: boolean;
   compareType: string;
   compareDateRange?: DateRange;
+  masterDimensionId?: string | null;
+  masterDimensionValues?: string[];
 }
 
 interface FiltersBarProps {
@@ -147,7 +149,19 @@ export const FiltersBar = ({
 
       setMasterDimensionValuesLoading(true);
       try {
-        console.log('[testing] FiltersBar - Loading values for master dimension:', masterDimensionId);
+        console.log('[FiltersBar] Loading values for master dimension:', masterDimensionId);
+        
+        // First, get the dimension name from the dimensions table
+        const { data: dimensionData, error: dimensionError } = await supabase
+          .from("dimensions")
+          .select("name")
+          .eq("id", masterDimensionId)
+          .single();
+          
+        if (dimensionError) throw dimensionError;
+        
+        const dimensionName = dimensionData.name;
+        console.log('[FiltersBar] Master dimension name:', dimensionName);
         
         // Load dimension values from all reports in the account
         const { data: reportsData } = await supabase
@@ -175,14 +189,14 @@ export const FiltersBar = ({
         
         data?.forEach((row) => {
           const dimensionValues = row.dimension_values as Record<string, string>;
-          const value = dimensionValues[masterDimensionId];
-          if (value) {
+          const value = dimensionValues[dimensionName];
+          if (value && value !== null && value !== undefined && value !== '') {
             valuesSet.add(String(value));
           }
         });
         
         const sortedValues = Array.from(valuesSet).sort();
-        console.log('[testing] FiltersBar - Loaded', sortedValues.length, 'unique values for master dimension');
+        console.log('[FiltersBar] Loaded', sortedValues.length, 'unique values for dimension:', dimensionName);
         setMasterDimensionOptions(sortedValues);
       } catch (error) {
         console.error("Error loading master dimension values:", error);
@@ -249,8 +263,8 @@ export const FiltersBar = ({
 
   // Notify parent of filter changes
   useEffect(() => {
-    console.log('[testing] FiltersBar - Filter state changed, notifying parent');
-    console.log('[testing] FiltersBar - Date range change details:', {
+    console.log('[FiltersBar] Filter state changed, notifying parent');
+    console.log('[FiltersBar] Date range change details:', {
       dateRange,
       from: dateRange?.from?.toISOString(),
       to: dateRange?.to?.toISOString(),
@@ -265,11 +279,13 @@ export const FiltersBar = ({
         compareEnabled,
         compareType,
         compareDateRange: compareEnabled ? compareDateRange : undefined,
+        masterDimensionId,
+        masterDimensionValues,
       };
-      console.log('[testing] FiltersBar - Calling onFiltersChange with:', newFilters);
+      console.log('[FiltersBar] Calling onFiltersChange with:', newFilters);
       onFiltersChange(newFilters);
     }
-  }, [onFiltersChange, selectedFilters, dateRange, datePreset, compareEnabled, compareType, compareDateRange]);
+  }, [onFiltersChange, selectedFilters, dateRange, datePreset, compareEnabled, compareType, compareDateRange, masterDimensionId, masterDimensionValues]);
 
   // Helper function to get Date dimension ID from database
   const getDateDimensionId = async (): Promise<string | null> => {
