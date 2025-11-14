@@ -149,54 +149,42 @@ export const FiltersBar = ({
 
       setMasterDimensionValuesLoading(true);
       try {
-        console.log('[FiltersBar] Loading values for master dimension:', masterDimensionId);
-        
-        // First, get the dimension name from the dimensions table
-        const { data: dimensionData, error: dimensionError } = await supabase
-          .from("dimensions")
-          .select("name")
-          .eq("id", masterDimensionId)
-          .single();
-          
-        if (dimensionError) throw dimensionError;
-        
-        const dimensionName = dimensionData.name;
-        console.log('[FiltersBar] Master dimension name:', dimensionName);
-        
-        // Load dimension values from all reports in the account
+        console.log('[FiltersBar] Loading values for master dimension ID:', masterDimensionId);
+
+        // Load all reports in the account
         const { data: reportsData } = await supabase
           .from("reports")
           .select("id")
           .eq("account_id", accountId);
-        
+
         if (!reportsData || reportsData.length === 0) {
           setMasterDimensionOptions([]);
           return;
         }
-        
+
         const reportIds = reportsData.map(r => r.id);
-        
-        // Load dimension data for all reports
+
+        // Load dimension data for all reports (distinct values will be computed client-side)
         const { data, error } = await supabase
           .from("dimension_data")
           .select("dimension_values")
           .in("report_id", reportIds)
           .limit(10000);
-        
+
         if (error) throw error;
-        
+
         const valuesSet = new Set<string>();
-        
+
         data?.forEach((row) => {
           const dimensionValues = row.dimension_values as Record<string, string>;
-          const value = dimensionValues[dimensionName];
+          const value = dimensionValues[masterDimensionId]; // Use ID key, not name
           if (value && value !== null && value !== undefined && value !== '') {
             valuesSet.add(String(value));
           }
         });
-        
+
         const sortedValues = Array.from(valuesSet).sort();
-        console.log('[FiltersBar] Loaded', sortedValues.length, 'unique values for dimension:', dimensionName);
+        console.log('[FiltersBar] Loaded', sortedValues.length, 'unique values for master dimension ID:', masterDimensionId);
         setMasterDimensionOptions(sortedValues);
       } catch (error) {
         console.error("Error loading master dimension values:", error);
@@ -1003,8 +991,8 @@ export const FiltersBar = ({
                         : 'Select dimension...'}
                       <Settings className="ml-2 h-4 w-4 opacity-50" />
                     </Button>
+                  </div>
                 </div>
-              </div>
               )}
 
               {/* Report Filter */}

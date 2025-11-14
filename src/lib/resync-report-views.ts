@@ -214,27 +214,90 @@ export async function resyncReportViews(
         }
       }
 
-      // Update filter_dimensions - include all text-type account dimensions
+      // Update filter_dimensions - preserve selection, map to account/report scoped, and avoid inflating
+      // Get all text-type account/report dimensions to use for sensible defaults when needed
       const { data: allTextDimensions } = await supabase
         .from("dimensions")
-        .select("id, type")
-        .eq("account_id", accountId)
-        .eq("scope", "account")
+        .select("id, name, type, scope, account_id, report_id")
+        .or(`and(scope.eq.account,account_id.eq.${accountId}),and(scope.eq.custom,report_id.eq.${reportId}),scope.eq.global`)
         .eq("type", "text");
 
-      const textDimensionIds = (allTextDimensions || []).map(d => d.id);
-      
-      // Merge with existing filter dimensions and remove duplicates
-      const mergedFilterDimensions = Array.from(new Set([
-        ...oldFilterDimensions,
-        ...textDimensionIds
-      ]));
+      let newFilterDimensions: string[] = [];
 
-      if (mergedFilterDimensions.length !== oldFilterDimensions.length) {
-        console.log(
-          `[RESYNC-VIEWS] Updating filter_dimensions for view "${view.name}": ${oldFilterDimensions.length} -> ${mergedFilterDimensions.length} dimensions`
-        );
-        needsUpdate.filter_dimensions = mergedFilterDimensions;
+      if (oldFilterDimensions.length > 0) {
+        // Map existing filter dimension IDs to account/report-scoped IDs by name (similar to visible_columns)
+        const { data: oldFilterDimsMeta } = await supabase
+          .from("dimensions")
+          .select("id, name")
+          .in("id", oldFilterDimensions);
+
+        const mappedIds: string[] = [];
+        const unmappedIds: string[] = [];
+
+        oldFilterDimsMeta?.forEach((oldDim) => {
+          const normalizedName = oldDim.name.toLowerCase();
+          const newId = dimensionNameToIdMap.get(normalizedName);
+
+          if (newId) {
+            mappedIds.push(newId);
+            console.log(`[RESYNC-VIEWS] Mapped filter dimension "${oldDim.name}": ${oldDim.id} -> ${newId}`);
+          } else {
+            // If the old ID is already valid in account/report scope, keep it
+            const isValid =
+              (accountDimensions?.some(d => d.id === oldDim.id) || reportDimensions?.some(d => d.id === oldDim.id));
+            if (isValid) {
+              mappedIds.push(oldDim.id);
+              console.log(`[RESYNC-VIEWS] Filter "${oldDim.name}" (${oldDim.id}) already valid, keeping`);
+            } else {
+              unmappedIds.push(oldDim.id);
+              console.warn(`[RESYNC-VIEWS] Could not map filter dimension "${oldDim.name}" (${oldDim.id})`);
+            }
+          }
+        });
+
+        newFilterDimensions = Array.from(new Set(mappedIds));
+        if (
+          newFilterDimensions.length !== oldFilterDimensions.length ||
+          unmappedIds.length > 0
+        ) {
+          console.log(
+            `[RESYNC-VIEWS] Updating filter_dimensions for view "${view.name}": ${oldFilterDimensions.length} -> ${newFilterDimensions.length} (preserved, mapped)`
+          );
+          needsUpdate.filter_dimensions = newFilterDimensions;
+        }
+      } else {
+        // Initialize a compact, sensible default set (max 5) if none exist
+        const priorityNames = ["Account", "Hotel", "Channel", "Campaign", "Ad Group", "Source", "Medium"];
+        const priorityIds: string[] = [];
+
+        // Prefer account/report scoped dimensions by name
+        allTextDimensions?.forEach(dim => {
+          const idx = priorityNames.findIndex(n => n.toLowerCase() === dim.name.toLowerCase());
+          if (idx !== -1) {
+            const id = dimensionNameToIdMap.get(dim.name.toLowerCase());
+            if (id && !priorityIds.includes(id)) {
+              priorityIds.push(id);
+            }
+          }
+        });
+
+        // Fill up with remaining text dimensions (account/report/global) if fewer than 3–5 found
+        const fallbackIds: string[] = [];
+        allTextDimensions?.forEach(dim => {
+          const id = dimensionNameToIdMap.get(dim.name.toLowerCase());
+          if (id && !priorityIds.includes(id) && !fallbackIds.includes(id)) {
+            fallbackIds.push(id);
+          }
+        });
+
+        newFilterDimensions = [...priorityIds, ...fallbackIds].slice(0, 5);
+
+        if (newFilterDimensions.length > 0) {
+          console.log(
+            `[RESYNC-VIEWS] Initializing filter_dimensions for view "${view.name}" with ${newFilterDimensions.length} compact defaults`
+          );
+          needsUpdate.filter_dimensions = newFilterDimensions;
+        }
       }
 
       // Update the view if needed
@@ -261,4 +324,3 @@ export async function resyncReportViews(
     throw error;
   }
 }
-
