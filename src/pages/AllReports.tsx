@@ -334,7 +334,8 @@ export default function AllReports() {
             
             {/* Performance Table */}
             <PerformanceTable 
-              reportId="consolidated" 
+              reportId={null}
+              reportIds={selectedReportIds.length > 0 ? selectedReportIds : reports.map(r => r.id)}
               filters={getCombinedFilters('consolidated')} 
               isSharedView={false}
               accountId={accountId}

@@ -19,6 +19,7 @@ import { checkDataSources } from "@/lib/performanceTable/dataSourceUtils";
 
 interface PerformanceTableProps {
   reportId: string | null;
+  reportIds?: string[]; // For consolidated view with multiple reports
   filters: FilterState;
   isSharedView?: boolean;
   accountId?: string;
@@ -29,6 +30,7 @@ interface PerformanceTableProps {
 
 export const PerformanceTable = ({
   reportId,
+  reportIds,
   filters,
   isSharedView = false,
   accountId,
@@ -174,6 +176,7 @@ export const PerformanceTable = ({
     setIsLoadingData,
   } = usePerformanceTableData({
     reportId,
+    reportIds,
     accountId,
     groupByDimensions,
     breakdownByDimensions,
