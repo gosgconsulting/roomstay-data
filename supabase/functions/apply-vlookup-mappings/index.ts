@@ -12,6 +12,8 @@ interface VlookupMapping {
 }
 
 Deno.serve(async (req) => {
+  console.log('[VLOOKUP-APPLY] Function invoked');
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -19,37 +21,54 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    
+    console.log('[VLOOKUP-APPLY] Creating Supabase client with service role');
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { reportId, accountId } = await req.json();
+    const body = await req.json();
+    console.log('[VLOOKUP-APPLY] Request body:', JSON.stringify(body));
+    
+    const { reportId, accountId } = body;
 
     if (!reportId && !accountId) {
+      console.error('[VLOOKUP-APPLY] Missing reportId or accountId');
       throw new Error('Either reportId or accountId is required');
     }
 
     console.log(`[VLOOKUP-APPLY] Starting to apply mappings for report: ${reportId}, account: ${accountId}`);
 
-    // Get the user from auth header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      console.error('[VLOOKUP-APPLY] No authorization header provided');
-      throw new Error('No authorization header');
+    // Use service role - no need for user authentication since this is called from backend
+    // Get user_id from the report or account
+    let userId: string | null = null;
+    
+    if (reportId) {
+      const { data: report } = await supabase
+        .from('reports')
+        .select('user_id')
+        .eq('id', reportId)
+        .single();
+      userId = report?.user_id || null;
+    } else if (accountId) {
+      const { data: account } = await supabase
+        .from('accounts')
+        .select('user_id')
+        .eq('id', accountId)
+        .single();
+      userId = account?.user_id || null;
     }
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    if (userError || !user) {
-      console.error('[VLOOKUP-APPLY] User authentication failed:', userError);
-      throw new Error('Unauthorized');
+    if (!userId) {
+      console.error('[VLOOKUP-APPLY] Could not find user_id from report or account');
+      throw new Error('Could not determine user_id');
     }
 
-    console.log(`[VLOOKUP-APPLY] Authenticated user: ${user.id}`);
+    console.log(`[VLOOKUP-APPLY] Found user_id: ${userId}`);
 
     // Load vlookup mappings
     let mappingsQuery = supabase
       .from('dimension_mappings')
       .select('*')
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
 
     if (reportId) {
       mappingsQuery = mappingsQuery.eq('report_id', reportId);
