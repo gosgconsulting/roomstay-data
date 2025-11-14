@@ -27,14 +27,30 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    console.log('[VLOOKUP-APPLY] Getting environment variables');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('[VLOOKUP-APPLY] Missing environment variables:', { 
+        hasUrl: !!supabaseUrl, 
+        hasKey: !!supabaseKey 
+      });
+      throw new Error('Missing required environment variables');
+    }
     
     console.log('[VLOOKUP-APPLY] Creating Supabase client with service role');
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const body = await req.json();
-    console.log('[VLOOKUP-APPLY] Request body:', JSON.stringify(body));
+    console.log('[VLOOKUP-APPLY] Parsing request body');
+    let body;
+    try {
+      body = await req.json();
+      console.log('[VLOOKUP-APPLY] Request body:', JSON.stringify(body));
+    } catch (parseError) {
+      console.error('[VLOOKUP-APPLY] Failed to parse request body:', parseError);
+      throw new Error('Invalid request body: ' + (parseError instanceof Error ? parseError.message : 'Unknown error'));
+    }
     
     const { reportId, accountId } = body;
 
@@ -271,14 +287,24 @@ Deno.serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const errorStack = error instanceof Error ? error.stack : '';
-    console.error('[VLOOKUP-APPLY] Error:', errorMessage);
-    console.error('[VLOOKUP-APPLY] Stack:', errorStack);
-    console.error('[VLOOKUP-APPLY] Full error:', error);
+    const errorDetails = {
+      message: errorMessage,
+      stack: errorStack,
+      type: error?.constructor?.name,
+      raw: JSON.stringify(error, Object.getOwnPropertyNames(error))
+    };
+    
+    console.error('[VLOOKUP-APPLY] ❌ FATAL ERROR:', errorMessage);
+    console.error('[VLOOKUP-APPLY] Error stack:', errorStack);
+    console.error('[VLOOKUP-APPLY] Error details:', JSON.stringify(errorDetails));
+    console.error('[VLOOKUP-APPLY] Full error object:', error);
+    
     return new Response(
       JSON.stringify({ 
         success: false, 
         error: errorMessage,
-        details: errorStack
+        details: errorStack,
+        fullDetails: errorDetails
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
