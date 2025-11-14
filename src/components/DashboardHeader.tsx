@@ -13,6 +13,7 @@ import { ReportModal } from "./ReportModal";
 import { ShareModal } from "./ShareModal";
 import { SyncModeModal } from "./SyncModeModal";
 import { VlookupModal } from "./VlookupModal";
+import { ClusterDimensionModal } from "./ClusterDimensionModal";
 import { Session } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -79,6 +80,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSyncModeModal, setShowSyncModeModal] = useState(false);
   const [showVlookupModal, setShowVlookupModal] = useState(false);
+  const [showClusterDimensionModal, setShowClusterDimensionModal] = useState(false);
 
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [editingDimension, setEditingDimension] = useState<Dimension | null>(null);
@@ -761,7 +763,16 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
             onClick={() => setShowVlookupModal(true)}
           >
             <GitCompare className="h-4 w-4" />
-            Vlookup
+            Vlookup (Legacy)
+          </Button>
+
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setShowClusterDimensionModal(true)}
+          >
+            <Grid3x3 className="h-4 w-4" />
+            Cluster
           </Button>
 
           <Button
@@ -993,6 +1004,23 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
         reportId={reportId || undefined}
         accountId={accountId}
         onSave={onRefreshData}
+      />
+
+      <ClusterDimensionModal
+        open={showClusterDimensionModal}
+        onOpenChange={setShowClusterDimensionModal}
+        reportId={reportId || undefined}
+        accountId={accountId}
+        onSave={() => {
+          // Refresh data and dimensions after creating cluster
+          if (onRefreshData) {
+            onRefreshData();
+          }
+          if (onVisibilityChange) {
+            onVisibilityChange();
+          }
+          setDimensionRefreshTrigger(prev => prev + 1);
+        }}
       />
 
       

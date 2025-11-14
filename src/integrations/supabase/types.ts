@@ -92,6 +92,106 @@ export type Database = {
           },
         ]
       }
+      cluster_dimensions: {
+        Row: {
+          account_id: string | null
+          cluster_dimension_name: string
+          created_at: string
+          created_dimension_id: string | null
+          id: string
+          report_id: string | null
+          source_dimension_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          cluster_dimension_name: string
+          created_at?: string
+          created_dimension_id?: string | null
+          id?: string
+          report_id?: string | null
+          source_dimension_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          cluster_dimension_name?: string
+          created_at?: string
+          created_dimension_id?: string | null
+          id?: string
+          report_id?: string | null
+          source_dimension_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cluster_dimensions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cluster_dimensions_created_dimension_id_fkey"
+            columns: ["created_dimension_id"]
+            isOneToOne: false
+            referencedRelation: "dimensions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cluster_dimensions_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cluster_dimensions_source_dimension_id_fkey"
+            columns: ["source_dimension_id"]
+            isOneToOne: false
+            referencedRelation: "dimensions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cluster_mappings: {
+        Row: {
+          cluster_dimension_id: string
+          cluster_name: string
+          created_at: string
+          id: string
+          source_values: string[]
+          updated_at: string
+        }
+        Insert: {
+          cluster_dimension_id: string
+          cluster_name: string
+          created_at?: string
+          id?: string
+          source_values: string[]
+          updated_at?: string
+        }
+        Update: {
+          cluster_dimension_id?: string
+          cluster_name?: string
+          created_at?: string
+          id?: string
+          source_values?: string[]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cluster_mappings_cluster_dimension_id_fkey"
+            columns: ["cluster_dimension_id"]
+            isOneToOne: false
+            referencedRelation: "cluster_dimensions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       data_sources: {
         Row: {
           column_mappings: Json | null
