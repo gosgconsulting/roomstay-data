@@ -6,6 +6,7 @@ const corsHeaders = {
 };
 
 interface VlookupMapping {
+  source_dimension_id: string;
   source_value: string;
   target_dimension_id: string;
   target_value: string;
@@ -92,25 +93,27 @@ Deno.serve(async (req) => {
 
     console.log(`[VLOOKUP-APPLY] Found ${mappings.length} mappings to apply`);
 
-    // Group mappings by target dimension
-    const mappingsByTargetDimension = new Map<string, VlookupMapping[]>();
+    // Group mappings by source and target dimension pair
+    const mappingsByDimensionPair = new Map<string, VlookupMapping[]>();
     for (const mapping of mappings) {
-      const targetId = mapping.target_dimension_id;
-      if (!mappingsByTargetDimension.has(targetId)) {
-        mappingsByTargetDimension.set(targetId, []);
+      const key = `${mapping.source_dimension_id}:${mapping.target_dimension_id}`;
+      if (!mappingsByDimensionPair.has(key)) {
+        mappingsByDimensionPair.set(key, []);
       }
-      mappingsByTargetDimension.get(targetId)!.push({
+      mappingsByDimensionPair.get(key)!.push({
+        source_dimension_id: mapping.source_dimension_id,
         source_value: mapping.source_value,
         target_dimension_id: mapping.target_dimension_id,
         target_value: mapping.target_value,
       });
     }
 
-    // For each target dimension, find the source dimension and apply mappings
+    // For each dimension pair, apply mappings
     let totalRowsUpdated = 0;
 
-    for (const [targetDimensionId, dimMappings] of mappingsByTargetDimension.entries()) {
-      console.log(`[VLOOKUP-APPLY] Processing ${dimMappings.length} mappings for target dimension: ${targetDimensionId}`);
+    for (const [dimensionPairKey, dimMappings] of mappingsByDimensionPair.entries()) {
+      const [sourceDimensionId, targetDimensionId] = dimensionPairKey.split(':');
+      console.log(`[VLOOKUP-APPLY] Processing ${dimMappings.length} mappings from ${sourceDimensionId} to ${targetDimensionId}`);
 
       // Get target dimension details
       const { data: targetDimension, error: targetDimError } = await supabase
@@ -126,7 +129,7 @@ Deno.serve(async (req) => {
 
       console.log(`[VLOOKUP-APPLY] Target dimension: ${targetDimension.name} (${targetDimension.type})`);
 
-      // Load dimension_data rows for this report
+      // Load dimension_data rows for this report only
       let dataQuery = supabase
         .from('dimension_data')
         .select('id, dimension_values');
@@ -157,16 +160,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      console.log(`[VLOOKUP-APPLY] Processing ${dimensionDataRows.length} dimension_data rows`);
-
-      // Find which dimension contains the source values by checking the first few rows
-      const sourceDimensionId = findSourceDimensionId(dimensionDataRows, dimMappings);
-      if (!sourceDimensionId) {
-        console.warn('[VLOOKUP-APPLY] Could not identify source dimension for mappings');
-        continue;
-      }
-
-      console.log(`[VLOOKUP-APPLY] Identified source dimension ID: ${sourceDimensionId}`);
+      console.log(`[VLOOKUP-APPLY] Processing ${dimensionDataRows.length} dimension_data rows using source dimension: ${sourceDimensionId}`);
 
       // Create a lookup map for fast matching
       const lookupMap = new Map<string, string>();
@@ -254,38 +248,3 @@ Deno.serve(async (req) => {
   }
 });
 
-/**
- * Find the source dimension ID by checking which dimension contains the source values
- */
-function findSourceDimensionId(
-  rows: Array<{ dimension_values: Record<string, any> }>,
-  mappings: VlookupMapping[]
-): string | null {
-  const sourceValues = new Set(mappings.map(m => m.source_value.toLowerCase().trim()));
-  
-  // Get all dimension IDs from the first row
-  if (rows.length === 0) return null;
-  const firstRow = rows[0].dimension_values;
-  const dimensionIds = Object.keys(firstRow);
-
-  // Check each dimension to see if it contains the source values
-  for (const dimId of dimensionIds) {
-    let matchCount = 0;
-    
-    // Check first 100 rows for matches
-    for (let i = 0; i < Math.min(100, rows.length); i++) {
-      const value = rows[i].dimension_values[dimId];
-      if (value && sourceValues.has(String(value).toLowerCase().trim())) {
-        matchCount++;
-      }
-    }
-
-    // If we found at least one match, this is likely the source dimension
-    if (matchCount > 0) {
-      console.log(`[VLOOKUP-APPLY] Found ${matchCount} matches in dimension ${dimId}`);
-      return dimId;
-    }
-  }
-
-  return null;
-}

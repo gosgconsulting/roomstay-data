@@ -10,6 +10,7 @@ import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 
 interface VlookupMapping {
   id?: string;
+  sourceDimensionId: string;
   sourceValue: string;
   targetDimensionId: string;
   targetValue: string;
@@ -65,13 +66,14 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
       if (data && data.length > 0) {
         setMappings(data.map((m: any) => ({
           id: m.id,
+          sourceDimensionId: m.source_dimension_id || '',
           sourceValue: m.source_value,
           targetDimensionId: m.target_dimension_id,
           targetValue: m.target_value,
         })));
       } else {
         // Start with one empty row
-        setMappings([{ sourceValue: '', targetDimensionId: '', targetValue: '' }]);
+        setMappings([{ sourceDimensionId: '', sourceValue: '', targetDimensionId: '', targetValue: '' }]);
       }
     } catch (error) {
       console.error('Error loading vlookup data:', error);
@@ -86,7 +88,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
   };
 
   const addRow = () => {
-    setMappings([...mappings, { sourceValue: '', targetDimensionId: '', targetValue: '' }]);
+    setMappings([...mappings, { sourceDimensionId: '', sourceValue: '', targetDimensionId: '', targetValue: '' }]);
   };
 
   const removeRow = (index: number) => {
@@ -157,7 +159,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
 
       // Filter out empty rows
       const validMappings = mappings.filter(m => 
-        m.sourceValue.trim() && m.targetDimensionId && m.targetValue.trim()
+        m.sourceDimensionId && m.sourceValue.trim() && m.targetDimensionId && m.targetValue.trim()
       );
 
       // Delete existing mappings
@@ -181,6 +183,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
           user_id: user.id,
           report_id: reportId || null,
           account_id: accountId || null,
+          source_dimension_id: m.sourceDimensionId,
           source_value: m.sourceValue.trim(),
           target_dimension_id: m.targetDimensionId,
           target_value: m.targetValue.trim(),
@@ -278,6 +281,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
           <table className="w-full border-collapse">
             <thead className="sticky top-0 bg-background z-10">
               <tr className="border-b">
+                <th className="text-left p-2 font-medium">Source Dimension</th>
                 <th className="text-left p-2 font-medium">Original Value</th>
                 <th className="text-left p-2 font-medium">Target Dimension</th>
                 <th className="text-left p-2 font-medium">Mapped Value</th>
@@ -287,6 +291,23 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
             <tbody>
               {mappings.map((mapping, index) => (
                 <tr key={index} className="border-b">
+                  <td className="p-2">
+                    <Select
+                      value={mapping.sourceDimensionId}
+                      onValueChange={(value) => updateMapping(index, 'sourceDimensionId', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select source" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {dimensions.map(dim => (
+                          <SelectItem key={dim.id} value={dim.id}>
+                            {dim.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
                   <td className="p-2">
                     <Input
                       value={mapping.sourceValue}
@@ -301,7 +322,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
                       onValueChange={(value) => updateMapping(index, 'targetDimensionId', value)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select dimension" />
+                        <SelectValue placeholder="Select target" />
                       </SelectTrigger>
                       <SelectContent>
                         {dimensions.map(dim => (
