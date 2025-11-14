@@ -187,14 +187,27 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
 
       if (data) {
         // Load saved filter settings for this report
-        if (data.filter_dimensions && data.filter_dimensions.length > 0) {
+        // Reset to Date-only if there are excessive dimensions saved
+        const dateDimension = dimensions.find(d => d.type === 'date');
+        
+        if (data.filter_dimensions && data.filter_dimensions.length > 1 && dateDimension) {
+          // Reset excessive dimensions to Date only
+          console.log('[FILTERS-BAR] Resetting excessive filter dimensions to Date only');
+          setActiveDimensions([dateDimension.id]);
+          
+          // Save the reset to database
+          await supabase
+            .from("report_views")
+            .update({ 
+              filter_dimensions: [dateDimension.id],
+              filter_values: {}
+            })
+            .eq("id", data.id);
+        } else if (data.filter_dimensions && data.filter_dimensions.length > 0) {
           setActiveDimensions(data.filter_dimensions);
-        } else {
+        } else if (dateDimension) {
           // Default to only Date dimension if none saved
-          const dateDimension = dimensions.find(d => d.type === 'date');
-          if (dateDimension) {
-            setActiveDimensions([dateDimension.id]);
-          }
+          setActiveDimensions([dateDimension.id]);
         }
         if (data.filter_values && Object.keys(data.filter_values).length > 0) {
           // Convert old single-value filters to array format if needed
