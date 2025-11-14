@@ -247,7 +247,12 @@ Deno.serve(async (req) => {
     console.log(`Loaded ${budgets.length} budgets for report/account`);
 
     // Load vlookup mappings for this report/account
-    let vlookupMappings: Record<string, Array<{ sourceValue: string; targetValue: string }>> = {};
+    // Group by source_dimension_id to map from source to target
+    let vlookupMappings: Record<string, Array<{ 
+      sourceValue: string; 
+      targetValue: string; 
+      targetDimensionId: string;
+    }>> = {};
     if (userId) {
       const mappingsQuery = supabase
         .from('dimension_mappings')
@@ -263,34 +268,45 @@ Deno.serve(async (req) => {
 
       const { data: mappingsData, error: mappingsError } = await mappingsQuery;
       if (!mappingsError && mappingsData) {
-        // Group mappings by target dimension ID
+        // Group mappings by source dimension ID (the dimension we're reading from)
         mappingsData.forEach(m => {
-          if (!vlookupMappings[m.target_dimension_id]) {
-            vlookupMappings[m.target_dimension_id] = [];
+          if (!m.source_dimension_id) {
+            console.warn('[VLOOKUP] Skipping mapping without source_dimension_id:', m);
+            return;
           }
-          vlookupMappings[m.target_dimension_id].push({
+          if (!vlookupMappings[m.source_dimension_id]) {
+            vlookupMappings[m.source_dimension_id] = [];
+          }
+          vlookupMappings[m.source_dimension_id].push({
             sourceValue: m.source_value,
             targetValue: m.target_value,
+            targetDimensionId: m.target_dimension_id,
           });
         });
-        console.log(`Loaded ${mappingsData.length} vlookup mappings`);
-      }
-    }
+                console.log(`Loaded ${mappingsData.length} vlookup mappings grouped by ${Object.keys(vlookupMappings).length} source dimensions`);
 
     // Helper function to apply vlookup mappings to dimension values
+    // This maps values from source dimensions to target dimensions
     const applyVlookupMappings = (dimensionValues: Record<string, any>): Record<string, any> => {
       const result = { ...dimensionValues };
-      for (const [dimId, value] of Object.entries(dimensionValues)) {
-        const mappings = vlookupMappings[dimId];
-        if (mappings && mappings.length > 0) {
-          const mapping = mappings.find(m => 
-            m.sourceValue.toLowerCase() === String(value).toLowerCase()
-          );
-          if (mapping) {
-            result[dimId] = mapping.targetValue;
-          }
+      
+      // For each source dimension that has mappings
+      for (const [sourceDimId, mappings] of Object.entries(vlookupMappings)) {
+        const sourceValue = dimensionValues[sourceDimId];
+        if (sourceValue == null) continue;
+        
+        // Find a mapping that matches the source value
+        const normalizedSourceValue = String(sourceValue).toLowerCase().trim();
+        const mapping = mappings.find(m => 
+          m.sourceValue.toLowerCase().trim() === normalizedSourceValue
+        );
+        
+        if (mapping) {
+          // Apply the mapping: set the target dimension to the target value
+          result[mapping.targetDimensionId] = mapping.targetValue;
         }
       }
+      
       return result;
     };
 

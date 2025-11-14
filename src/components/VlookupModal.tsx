@@ -115,18 +115,52 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
     try {
       console.log('[VLOOKUP-MODAL] Re-applying mappings...', { reportId, accountId });
       
-      const { data: applyResult, error: applyError } = await supabase.functions.invoke(
-        'apply-vlookup-mappings',
-        {
-          body: { reportId, accountId }
-        }
-      );
+      // Add timeout wrapper for edge function call
+      const invokeWithTimeout = async () => {
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout after 5 minutes')), 5 * 60 * 1000)
+        );
+        
+        const invokePromise = supabase.functions.invoke(
+          'apply-vlookup-mappings',
+          {
+            body: { reportId, accountId }
+          }
+        );
+        
+        return Promise.race([invokePromise, timeoutPromise]) as Promise<{ data: any; error: any }>;
+      };
+
+      const { data: applyResult, error: applyError } = await invokeWithTimeout();
 
       console.log('[VLOOKUP-MODAL] Re-apply function response:', { applyResult, applyError });
 
       if (applyError) {
         console.error('[VLOOKUP-MODAL] Edge function invocation error:', applyError);
-        throw new Error(`Edge function error: ${applyError.message || JSON.stringify(applyError)}`);
+        const errorDetails = {
+          message: applyError.message,
+          status: applyError.status,
+          context: applyError.context,
+          name: applyError.name,
+          full: JSON.stringify(applyError, Object.getOwnPropertyNames(applyError))
+        };
+        console.error('[VLOOKUP-MODAL] Full error details:', errorDetails);
+        
+        // Provide more specific error messages
+        let errorMessage = 'Failed to send a request to the Edge Function';
+        if (applyError.message?.includes('timeout') || applyError.message?.includes('Timeout')) {
+          errorMessage = 'Edge function timed out. The operation may be processing a large dataset. Please try again or contact support.';
+        } else if (applyError.message?.includes('network') || applyError.message?.includes('fetch')) {
+          errorMessage = 'Network error connecting to edge function. Please check your connection and try again.';
+        } else if (applyError.status === 404) {
+          errorMessage = 'Edge function not found. Please ensure the function is deployed.';
+        } else if (applyError.status === 401 || applyError.status === 403) {
+          errorMessage = 'Authentication error. Please refresh the page and try again.';
+        } else if (applyError.message) {
+          errorMessage = applyError.message;
+        }
+        
+        throw new Error(errorMessage);
       }
       
       if (applyResult?.success === false) {
@@ -215,17 +249,51 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
       
       while (retryCount < maxRetries && !applySuccess) {
         try {
-          const { data: applyResult, error: applyError } = await supabase.functions.invoke(
-            'apply-vlookup-mappings',
-            {
-              body: { reportId, accountId }
-            }
-          );
+          // Add timeout wrapper for edge function call
+          const invokeWithTimeout = async () => {
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Request timeout after 5 minutes')), 5 * 60 * 1000)
+            );
+            
+            const invokePromise = supabase.functions.invoke(
+              'apply-vlookup-mappings',
+              {
+                body: { reportId, accountId }
+              }
+            );
+            
+            return Promise.race([invokePromise, timeoutPromise]) as Promise<{ data: any; error: any }>;
+          };
+
+          const { data: applyResult, error: applyError } = await invokeWithTimeout();
 
           console.log('[VLOOKUP] Apply function response:', { applyResult, applyError, attempt: retryCount + 1 });
 
           if (applyError) {
-            throw new Error(applyError.message || 'Failed to invoke edge function');
+            const errorDetails = {
+              message: applyError.message,
+              status: applyError.status,
+              context: applyError.context,
+              name: applyError.name,
+              full: JSON.stringify(applyError, Object.getOwnPropertyNames(applyError))
+            };
+            console.error(`[VLOOKUP] Apply attempt ${retryCount + 1} error details:`, errorDetails);
+            
+            // Provide more specific error messages
+            let errorMessage = 'Failed to send a request to the Edge Function';
+            if (applyError.message?.includes('timeout') || applyError.message?.includes('Timeout')) {
+              errorMessage = 'Edge function timed out. The operation may be processing a large dataset.';
+            } else if (applyError.message?.includes('network') || applyError.message?.includes('fetch')) {
+              errorMessage = 'Network error connecting to edge function.';
+            } else if (applyError.status === 404) {
+              errorMessage = 'Edge function not found. Please ensure the function is deployed.';
+            } else if (applyError.status === 401 || applyError.status === 403) {
+              errorMessage = 'Authentication error. Please refresh the page.';
+            } else if (applyError.message) {
+              errorMessage = applyError.message;
+            }
+            
+            throw new Error(errorMessage);
           } else if (applyResult?.success === false) {
             throw new Error(applyResult.error || 'Edge function returned error');
           } else {
@@ -241,14 +309,17 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
           console.error(`[VLOOKUP] Apply attempt ${retryCount} failed:`, applyErr);
           
           if (retryCount >= maxRetries) {
+            const errorMsg = applyErr instanceof Error ? applyErr.message : 'Unknown error';
             toast({
               title: "Warning",
-              description: `Mappings saved but failed to apply after ${maxRetries} attempts: ${applyErr instanceof Error ? applyErr.message : 'Unknown error'}. Try reopening the modal and saving again.`,
+              description: `Mappings saved but failed to apply after ${maxRetries} attempts: ${errorMsg}. Don't worry - your mappings are saved and will be automatically applied when you load data in the performance table. The apply function is optional and mainly updates existing data.`,
               variant: "destructive",
             });
           } else {
             // Wait before retrying (exponential backoff)
-            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+            const delay = 2000 * retryCount; // Increased delay: 2s, 4s, 6s
+            console.log(`[VLOOKUP] Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
           }
         }
       }
@@ -276,6 +347,10 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
       <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Vlookup - Map Dimension Values</DialogTitle>
+          <p className="text-sm text-muted-foreground mt-2">
+            Map multiple values to a single dimension value. Mappings are automatically applied when data is loaded, 
+            so even if the apply function fails, your mappings will still work in the performance table.
+          </p>
         </DialogHeader>
 
         <div className="text-sm text-muted-foreground mb-4">

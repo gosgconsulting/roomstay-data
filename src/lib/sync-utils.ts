@@ -38,6 +38,9 @@ export interface SyncResult {
   rowsProcessed: number;
   dimensionsCreated: number;
   error?: string;
+  vlookupApplied?: boolean;
+  vlookupRowsUpdated?: number;
+  vlookupError?: string;
 }
 
 // Utility functions
@@ -1271,10 +1274,45 @@ export const syncDataSource = async (
 
     console.log(`[SYNC] Complete! Processed ${allData.length} rows with ${Object.keys(dimensionIdMap).length} dimensions`);
 
+    // Apply vlookup mappings if report_id exists
+    let vlookupApplied = false;
+    let vlookupRowsUpdated = 0;
+    let vlookupError: string | undefined = undefined;
+
+    if (reportId) {
+      try {
+        console.log('[SYNC] Applying vlookup mappings after successful sync...');
+        const { data: vlookupResult, error: vlookupErr } = await supabase.functions.invoke(
+          'apply-vlookup-mappings',
+          {
+            body: { reportId, accountId }
+          }
+        );
+
+        if (vlookupErr) {
+          console.warn('[SYNC] Error invoking apply-vlookup-mappings:', vlookupErr);
+          vlookupError = vlookupErr.message || 'Failed to invoke vlookup function';
+        } else if (vlookupResult?.success) {
+          vlookupApplied = true;
+          vlookupRowsUpdated = vlookupResult.rowsUpdated || 0;
+          console.log(`[SYNC] Successfully applied vlookup mappings: ${vlookupRowsUpdated} rows updated`);
+        } else {
+          vlookupError = vlookupResult?.error || 'Unknown error from vlookup function';
+          console.warn('[SYNC] Vlookup function returned error:', vlookupError);
+        }
+      } catch (vlookupException) {
+        console.error('[SYNC] Exception applying vlookup mappings:', vlookupException);
+        vlookupError = vlookupException instanceof Error ? vlookupException.message : 'Unknown error';
+      }
+    }
+
     return {
       success: true,
       rowsProcessed: allData.length,
       dimensionsCreated: createdCount,
+      vlookupApplied,
+      vlookupRowsUpdated,
+      vlookupError,
     };
 
   } catch (error) {
@@ -1305,6 +1343,8 @@ export const syncDataSource = async (
       rowsProcessed: 0,
       dimensionsCreated: 0,
       error: errorMessage,
+      vlookupApplied: false,
+      vlookupRowsUpdated: 0,
     };
   }
 };

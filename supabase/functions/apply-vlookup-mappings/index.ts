@@ -2,7 +2,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.77.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE, PATCH',
+  'Access-Control-Allow-Headers': '*',
+  'Access-Control-Max-Age': '86400',
 };
 
 interface VlookupMapping {
@@ -21,9 +23,16 @@ interface DimensionMappingRow {
 
 Deno.serve(async (req) => {
   console.log('[VLOOKUP-APPLY] Function invoked');
-  
+  // Handle CORS preflight requests immediately - MUST be first
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    console.log('[VLOOKUP-APPLY] Handling OPTIONS preflight request');
+    return new Response('ok', { 
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        'Content-Length': '2'
+      }
+    });
   }
 
   try {
@@ -252,19 +261,34 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Batch update
+        // Batch update - process updates in smaller chunks to avoid timeouts
         if (updates.length > 0) {
-          for (const update of updates) {
-            const { error: updateError } = await supabase
-              .from('dimension_data')
-              .update({ dimension_values: update.dimension_values })
-              .eq('id', update.id);
+          const updateChunkSize = 50; // Process 50 updates at a time
+          for (let j = 0; j < updates.length; j += updateChunkSize) {
+            const updateChunk = updates.slice(j, j + updateChunkSize);
+            
+            // Process chunk updates in parallel with Promise.all for better performance
+            const updatePromises = updateChunk.map(async (update) => {
+              try {
+                const { error: updateError } = await supabase
+                  .from('dimension_data')
+                  .update({ dimension_values: update.dimension_values })
+                  .eq('id', update.id);
 
-            if (updateError) {
-              console.error(`[VLOOKUP-APPLY] Error updating row ${update.id}:`, updateError);
-            } else {
-              updatedCount++;
-            }
+                if (updateError) {
+                  console.error(`[VLOOKUP-APPLY] Error updating row ${update.id}:`, updateError);
+                  return false;
+                } else {
+                  return true;
+                }
+              } catch (err) {
+                console.error(`[VLOOKUP-APPLY] Exception updating row ${update.id}:`, err);
+                return false;
+              }
+            });
+            
+            const results = await Promise.all(updatePromises);
+            updatedCount += results.filter(r => r === true).length;
           }
 
           console.log(`[VLOOKUP-APPLY] Batch ${Math.floor(i / batchSize) + 1}: Updated ${updates.length} rows (matched: ${matchedCount}, skipped: ${skippedCount})`);

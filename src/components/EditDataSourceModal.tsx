@@ -578,27 +578,66 @@ export const EditDataSourceModal = ({
         setResyncProgress(prev => prev.map(step => 
           step.id === 'insert' 
             ? { ...step, status: 'completed', detail: `${result.rowsProcessed.toLocaleString()} rows imported` }
-            : step.id === 'vlookup'
-            ? { ...step, status: 'in-progress', detail: 'Applying mappings...' }
             : step
         ));
 
-        // Wait a bit to show the vlookup step
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Mark vlookup as completed
-        setResyncProgress(prev => prev.map(step => 
-          step.id === 'vlookup' 
-            ? { ...step, status: 'completed', detail: 'Mappings applied successfully' }
-            : step
-        ));
+        // Handle vlookup step based on actual result
+        if (result.vlookupApplied !== undefined) {
+          // Mark vlookup as in-progress first
+          setResyncProgress(prev => prev.map(step => 
+            step.id === 'vlookup' 
+              ? { ...step, status: 'in-progress', detail: 'Applying mappings...' }
+              : step
+          ));
+
+          // Wait a bit to show the step
+          await new Promise(resolve => setTimeout(resolve, 300));
+          
+          // Mark vlookup based on actual result
+          if (result.vlookupApplied) {
+            setResyncProgress(prev => prev.map(step => 
+              step.id === 'vlookup' 
+                ? { 
+                    ...step, 
+                    status: 'completed', 
+                    detail: `Applied to ${result.vlookupRowsUpdated?.toLocaleString() || 0} rows` 
+                  }
+                : step
+            ));
+          } else {
+            // Vlookup failed but resync succeeded
+            setResyncProgress(prev => prev.map(step => 
+              step.id === 'vlookup' 
+                ? { 
+                    ...step, 
+                    status: 'error', 
+                    detail: result.vlookupError || 'Failed to apply mappings' 
+                  }
+                : step
+            ));
+            console.warn('[RESYNC] Vlookup application failed:', result.vlookupError);
+          }
+        } else {
+          // No vlookup step if no mappings exist or report_id is missing
+          setResyncProgress(prev => prev.map(step => 
+            step.id === 'vlookup' 
+              ? { ...step, status: 'completed', detail: 'No mappings to apply' }
+              : step
+          ));
+        }
 
         // Wait to show completion
         await new Promise(resolve => setTimeout(resolve, 1000));
 
+        const vlookupMessage = result.vlookupApplied 
+          ? ` Applied vlookup mappings to ${result.vlookupRowsUpdated?.toLocaleString() || 0} rows.`
+          : result.vlookupError 
+            ? ` Note: Vlookup mappings could not be applied (${result.vlookupError}). Mappings will still work when data is loaded.`
+            : '';
+
         toast({
           title: "Resync complete",
-          description: `Successfully resynced ${result.rowsProcessed.toLocaleString()} rows and recreated ${result.dimensionsCreated} dimensions from scratch`,
+          description: `Successfully resynced ${result.rowsProcessed.toLocaleString()} rows and recreated ${result.dimensionsCreated} dimensions from scratch.${vlookupMessage}`,
         });
         
         // Refresh sync statistics
