@@ -294,8 +294,16 @@ function validateDataStructure(data: any[], dimensions: Dimension[]): any {
     return { valid: false, reason: 'No data rows' };
   }
 
-  const sampleRow = data[0].dimension_values;
-  const dataKeys = Object.keys(sampleRow);
+  const sampleRow = data[0];
+  
+  // Handle both nested (dimension_values) and flattened structures
+  const dimensionValues = sampleRow?.dimension_values || sampleRow;
+  
+  if (!dimensionValues || typeof dimensionValues !== 'object') {
+    return { valid: false, reason: 'Invalid data structure - no dimension values' };
+  }
+
+  const dataKeys = Object.keys(dimensionValues).filter(key => !key.startsWith('_'));
   const dimensionIds = dimensions.map(d => d.id);
 
   const matchingIds = dataKeys.filter(key => dimensionIds.includes(key));
