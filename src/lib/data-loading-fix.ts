@@ -320,21 +320,6 @@ function validateDataStructure(data: any[], dimensions: Dimension[]): any {
     return { valid: false, reason: 'No data rows' };
   }
 
-<<<<<<< HEAD
-  const firstRow = data[0];
-  if (!firstRow) {
-    return { valid: false, reason: 'First row is null or undefined' };
-  }
-
-  // Handle both formats: row.dimension_values or row itself (if dimension_values are spread)
-  const sampleRow = firstRow.dimension_values || firstRow;
-  
-  if (!sampleRow || typeof sampleRow !== 'object') {
-    return { valid: false, reason: 'Sample row is not an object', sampleRow };
-  }
-
-  const dataKeys = Object.keys(sampleRow);
-=======
   const sampleRow = data[0];
   
   // Handle both nested (dimension_values) and flattened structures
@@ -345,7 +330,6 @@ function validateDataStructure(data: any[], dimensions: Dimension[]): any {
   }
 
   const dataKeys = Object.keys(dimensionValues).filter(key => !key.startsWith('_'));
->>>>>>> 1c998a4f68425652b77fe9d79c9ba9a120bfd221
   const dimensionIds = dimensions.map(d => d.id);
 
   const matchingIds = dataKeys.filter(key => dimensionIds.includes(key));
