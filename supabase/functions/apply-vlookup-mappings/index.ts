@@ -34,7 +34,7 @@ async function getOrCreateTargetDimension(
   accountId: string | null
 ): Promise<{ name: string; type: string; id: string } | null> {
   // First, try to fetch existing dimension by ID
-  const { data: existingById, error: fetchError } = await supabase
+  const { data: existingById } = await supabase
     .from('dimensions')
     .select('id, name, type')
     .eq('id', targetDimensionId)
@@ -230,79 +230,68 @@ Deno.serve(async (req) => {
     }
 
     // Group mappings by source and target dimension pair
-    const mappingsByDimensionPair = new Map<string, VlookupMapping[]>();
+    const mappingsByDimensionPair = new Map<string, DimensionMappingRow[]>();
     for (const mapping of mappings as DimensionMappingRow[]) {
       const key = `${mapping.source_dimension_id}:${mapping.target_dimension_id}`;
       if (!mappingsByDimensionPair.has(key)) {
         mappingsByDimensionPair.set(key, []);
       }
-      mappingsByDimensionPair.get(key)!.push({
-        source_dimension_id: mapping.source_dimension_id,
-        source_value: mapping.source_value,
-        target_dimension_id: mapping.target_dimension_id,
-        target_value: mapping.target_value,
-      });
+      mappingsByDimensionPair.get(key)!.push(mapping);
     }
 
-    // For each dimension pair, apply mappings using the explicit source dimension
-    let totalRowsUpdated = 0;
+    console.log(`[VLOOKUP-APPLY] Processing ${mappingsByDimensionPair.size} dimension pairs`);
 
-    for (const [dimensionPairKey, dimMappings] of mappingsByDimensionPair.entries()) {
-      const [sourceDimensionId, targetDimensionId] = dimensionPairKey.split(':');
-      console.log(`[VLOOKUP-APPLY] Processing ${dimMappings.length} mappings from source dimension ${sourceDimensionId} to target dimension ${targetDimensionId}`);
+    let totalUpdated = 0;
 
-      // Get target dimension details
-      const { data: targetDimension, error: targetDimError } = await supabase
-        .from('dimensions')
-        .select('name, type')
-        .eq('id', targetDimensionId)
-        .single();
-
-      if (targetDimError || !targetDimension) {
-        console.error(`[VLOOKUP-APPLY] Could not find target dimension ${targetDimensionId}`);
-        continue;
-      }
-
-      console.log(`[VLOOKUP-APPLY] Target dimension: ${targetDimension.name} (${targetDimension.type})`);
+    // Process each source-target dimension pair
+    for (const [key, pairMappings] of mappingsByDimensionPair.entries()) {
+      const [sourceDimId, targetDimId] = key.split(':');
+      const targetDimName = pairMappings[0]?.target_dimension_name || '';
+      console.log(`[VLOOKUP-APPLY] Processing dimension pair: ${sourceDimId} -> ${targetDimId} (${targetDimName}) with ${pairMappings.length} mappings`);
 
       // Get source dimension details
-      const { data: sourceDimension, error: sourceDimError } = await supabase
+      const { data: sourceDim, error: sourceDimError } = await supabase
         .from('dimensions')
         .select('name, type')
-        .eq('id', sourceDimensionId)
+        .eq('id', sourceDimId)
         .single();
 
-      if (sourceDimError || !sourceDimension) {
-        console.error(`[VLOOKUP-APPLY] Could not find source dimension ${sourceDimensionId}`);
+      if (sourceDimError || !sourceDim) {
+        console.error(`[VLOOKUP-APPLY] Source dimension ${sourceDimId} not found:`, sourceDimError);
         continue;
       }
 
-      console.log(`[VLOOKUP-APPLY] Source dimension: ${sourceDimension.name} (${sourceDimension.type})`);
+      // Get or create target dimension
+      const targetDim = await getOrCreateTargetDimension(
+        supabase,
+        targetDimId,
+        targetDimName,
+        userId,
+        reportId,
+        accountId
+      );
 
-      // Load dimension_data rows for this report only
-      let dataQuery = supabase
+      if (!targetDim) {
+        console.error(`[VLOOKUP-APPLY] Failed to get or create target dimension ${targetDimId}`);
+        continue;
+      }
+
+      console.log(`[VLOOKUP-APPLY] Source: ${sourceDim.name} (${sourceDimId}), Target: ${targetDim.name} (${targetDim.id})`);
+
+      // Load all dimension_data rows that have values for the source dimension
+      const queryBuilder = supabase
         .from('dimension_data')
         .select('id, dimension_values');
-
+      
       if (reportId) {
-        dataQuery = dataQuery.eq('report_id', reportId);
-      } else if (accountId) {
-        // Get all reports for this account
-        const { data: reports } = await supabase
-          .from('reports')
-          .select('id')
-          .eq('account_id', accountId);
-        
-        if (reports && reports.length > 0) {
-          const reportIds = reports.map(r => r.id);
-          dataQuery = dataQuery.in('report_id', reportIds);
-        }
+        queryBuilder.eq('report_id', reportId);
       }
 
-      const { data: dimensionDataRows, error: dataError } = await dataQuery;
+      const { data: dimensionDataRows, error: dataError } = await queryBuilder;
+
       if (dataError) {
         console.error('[VLOOKUP-APPLY] Error loading dimension_data:', dataError);
-        continue;
+        throw dataError;
       }
 
       if (!dimensionDataRows || dimensionDataRows.length === 0) {
@@ -310,125 +299,107 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      console.log(`[VLOOKUP-APPLY] Processing ${dimensionDataRows.length} dimension_data rows. Mapping from ${sourceDimension.name} (${sourceDimensionId}) to ${targetDimension.name} (${targetDimensionId})`);
+      // Filter rows that have the source dimension
+      const relevantRows = dimensionDataRows.filter((row: any) => 
+        row.dimension_values && row.dimension_values[sourceDimId] !== undefined
+      );
 
-      // Create a lookup map for fast matching (case-insensitive)
+      console.log(`[VLOOKUP-APPLY] Found ${relevantRows.length} rows with source dimension`);
+
+      // Create a lookup map for efficient matching (case-insensitive)
       const lookupMap = new Map<string, string>();
-      for (const mapping of dimMappings) {
-        const normalizedKey = mapping.source_value.toLowerCase().trim();
-        lookupMap.set(normalizedKey, mapping.target_value);
-        console.log(`[VLOOKUP-APPLY] Mapping: "${mapping.source_value}" -> "${mapping.target_value}"`);
+      for (const mapping of pairMappings) {
+        const normalizedSource = mapping.source_value.toLowerCase().trim();
+        lookupMap.set(normalizedSource, mapping.target_value);
       }
 
       // Process rows in batches
-      const batchSize = 500;
-      let updatedCount = 0;
-      let matchedCount = 0;
-      let skippedCount = 0;
+      const BATCH_SIZE = 100;
+      const updates: Array<{ id: string; dimension_values: any }> = [];
 
-      for (let i = 0; i < dimensionDataRows.length; i += batchSize) {
-        const batch = dimensionDataRows.slice(i, i + batchSize);
-        const updates = [];
+      for (const row of relevantRows) {
+        const sourceValue = row.dimension_values[sourceDimId];
+        if (!sourceValue) continue;
 
-        for (const row of batch) {
-          const dimensionValues = row.dimension_values as Record<string, any>;
-          const sourceValue = dimensionValues[sourceDimensionId];
+        const normalizedValue = sourceValue.toString().toLowerCase().trim();
+        const targetValue = lookupMap.get(normalizedValue);
 
-          if (sourceValue) {
-            const normalizedSource = String(sourceValue).toLowerCase().trim();
-            const targetValue = lookupMap.get(normalizedSource);
+        if (targetValue) {
+          // Create updated dimension_values with the target dimension value
+          const updatedValues = { ...row.dimension_values };
+          updatedValues[targetDim.id] = targetValue;
 
-            if (targetValue) {
-              matchedCount++;
-              // Inject or update the target dimension
-              const updatedValues = {
-                ...dimensionValues,
-                [targetDimensionId]: targetValue,
-              };
-
-              updates.push({
-                id: row.id,
-                dimension_values: updatedValues,
-              });
-            } else {
-              skippedCount++;
-            }
-          } else {
-            skippedCount++;
-          }
+          updates.push({
+            id: row.id,
+            dimension_values: updatedValues
+          });
         }
 
-        // Batch update - process updates in smaller chunks to avoid timeouts
-        if (updates.length > 0) {
-          const updateChunkSize = 50; // Process 50 updates at a time
-          for (let j = 0; j < updates.length; j += updateChunkSize) {
-            const updateChunk = updates.slice(j, j + updateChunkSize);
-            
-            // Process chunk updates in parallel with Promise.all for better performance
-            const updatePromises = updateChunk.map(async (update) => {
-              try {
-                const { error: updateError } = await supabase
-                  .from('dimension_data')
-                  .update({ dimension_values: update.dimension_values })
-                  .eq('id', update.id);
+        // Update in batches
+        if (updates.length >= BATCH_SIZE) {
+          console.log(`[VLOOKUP-APPLY] Updating batch of ${updates.length} rows`);
+          for (const update of updates) {
+            const { error: updateError } = await supabase
+              .from('dimension_data')
+              .update({ dimension_values: update.dimension_values })
+              .eq('id', update.id);
 
-                if (updateError) {
-                  console.error(`[VLOOKUP-APPLY] Error updating row ${update.id}:`, updateError);
-                  return false;
-                } else {
-                  return true;
-                }
-              } catch (err) {
-                console.error(`[VLOOKUP-APPLY] Exception updating row ${update.id}:`, err);
-                return false;
-              }
-            });
-            
-            const results = await Promise.all(updatePromises);
-            updatedCount += results.filter(r => r === true).length;
+            if (updateError) {
+              console.error(`[VLOOKUP-APPLY] Error updating row ${update.id}:`, updateError);
+            } else {
+              totalUpdated++;
+            }
           }
-
-          console.log(`[VLOOKUP-APPLY] Batch ${Math.floor(i / batchSize) + 1}: Updated ${updates.length} rows (matched: ${matchedCount}, skipped: ${skippedCount})`);
+          updates.length = 0; // Clear the batch
         }
       }
 
-      totalRowsUpdated += updatedCount;
-      console.log(`[VLOOKUP-APPLY] Completed mapping for ${sourceDimension.name} -> ${targetDimension.name}: ${updatedCount} rows updated, ${matchedCount} total matches, ${skippedCount} skipped`);
+      // Update remaining rows
+      if (updates.length > 0) {
+        console.log(`[VLOOKUP-APPLY] Updating final batch of ${updates.length} rows`);
+        for (const update of updates) {
+          const { error: updateError } = await supabase
+            .from('dimension_data')
+            .update({ dimension_values: update.dimension_values })
+            .eq('id', update.id);
+
+          if (updateError) {
+            console.error(`[VLOOKUP-APPLY] Error updating row ${update.id}:`, updateError);
+          } else {
+            totalUpdated++;
+          }
+        }
+      }
+
+      console.log(`[VLOOKUP-APPLY] Completed processing dimension pair. Updated ${totalUpdated} rows so far.`);
     }
+
+    console.log(`[VLOOKUP-APPLY] Vlookup application complete. Total rows updated: ${totalUpdated}`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Applied vlookup mappings to ${totalRowsUpdated} rows`,
-        rowsUpdated: totalRowsUpdated 
+        message: `Applied vlookup mappings to ${totalUpdated} rows`,
+        rowsUpdated: totalUpdated
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : '';
-    const errorDetails = {
-      message: errorMessage,
-      stack: errorStack,
-      type: error?.constructor?.name,
-      raw: JSON.stringify(error, Object.getOwnPropertyNames(error))
-    };
-    
-    console.error('[VLOOKUP-APPLY] ❌ FATAL ERROR:', errorMessage);
-    console.error('[VLOOKUP-APPLY] Error stack:', errorStack);
-    console.error('[VLOOKUP-APPLY] Error details:', JSON.stringify(errorDetails));
-    console.error('[VLOOKUP-APPLY] Full error object:', error);
+    console.error('[VLOOKUP-APPLY] Unexpected error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    const errorDetails = error instanceof Error ? error.stack : JSON.stringify(error);
     
     return new Response(
       JSON.stringify({ 
         success: false, 
         error: errorMessage,
-        details: errorStack,
-        fullDetails: errorDetails
+        details: errorDetails
       }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
     );
   }
 });
-
