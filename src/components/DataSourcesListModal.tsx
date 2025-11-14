@@ -15,52 +15,56 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useState, useEffect } from "react";
-import { Database, Plus, Eye, Trash2, FileSpreadsheet, Edit, RefreshCw } from "lucide-react";
+import { FileSpreadsheet, RefreshCw, Pencil, Eye, Trash2, Plus } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { EditMappingModal } from "./EditMappingModal";
-import { EditDataSourceModal } from "./EditDataSourceModal";
-import { 
-  syncDataSource, 
-  fetchGoogleSheetsData,
-  parseValue,
-  parseDate,
-  insertDataInBatches,
-  detectNewColumns,
-  type DataSource,
-  type SyncOptions 
-} from "@/lib/sync-utils";
-import { resyncReportViews } from "@/lib/resync-report-views";
 import { ViewDataModal } from "./ViewDataModal";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
+import { syncDataSource } from "@/lib/sync-utils";
 
+interface DataSource {
+  id: string;
+  name: string;
+  google_sheets_url?: string | null;
+  spreadsheet_id?: string | null;
+  tab_name?: string | null;
+  csv_url?: string | null;
+  source_type?: 'google_sheets' | 'csv_url';
+  header_row: number;
+  column_mappings: any[] | null;
+  report_id?: string;
+  last_synced_at?: string | null;
+}
 
 interface DataSourcesListModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   reportId: string;
+  accountId?: string;
   onAddNew: () => void;
   onDataSync?: () => void;
   onRefreshData?: () => void;
-  accountId?: string;
 }
 
 export const DataSourcesListModal = ({
   open,
   onOpenChange,
   reportId,
+  accountId,
   onAddNew,
   onDataSync,
-  onRefreshData,
-  accountId
+  onRefreshData
 }: DataSourcesListModalProps) => {
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
-    const [editingDataSource, setEditingDataSource] = useState<DataSource | null>(null);
-    const [viewingDataSource, setViewingDataSource] = useState<DataSource | null>(null);
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-    const [isEditDataSourceModalOpen, setIsEditDataSourceModalOpen] = useState(false);
-    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState<string | null>(null);
+  const [editingDataSource, setEditingDataSource] = useState<DataSource | null>(null);
+  const [viewingDataSource, setViewingDataSource] = useState<DataSource | null>(null);
+  const [showEditMappingModal, setShowEditMappingModal] = useState(false);
+  const [showViewDataModal, setShowViewDataModal] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingDataSource, setDeletingDataSource] = useState<DataSource | null>(null);
 
   useEffect(() => {
     if (open && reportId) {
@@ -69,7 +73,10 @@ export const DataSourcesListModal = ({
   }, [open, reportId]);
 
   const loadDataSources = async () => {
+    if (!reportId) return;
+    
     setIsLoading(true);
+    
     try {
       const { data, error } = await supabase
         .from('data_sources')
@@ -79,7 +86,13 @@ export const DataSourcesListModal = ({
 
       if (error) throw error;
 
-      setDataSources((data || []) as any);
+      // Ensure column_mappings is always an array
+      const processedData = (data || []).map(ds => ({
+        ...ds,
+        column_mappings: Array.isArray(ds.column_mappings) ? ds.column_mappings : []
+      })) as DataSource[];
+
+      setDataSources(processedData);
     } catch (error) {
       console.error("Error loading data sources:", error);
       toast({
@@ -92,21 +105,106 @@ export const DataSourcesListModal = ({
     }
   };
 
-  const handleDelete = async (dataSource: DataSource) => {
+  const handleSync = async (dataSource: DataSource) => {
+    setIsSyncing(dataSource.id);
+    
     try {
-      const { error } = await supabase
+      toast({
+        title: "Syncing data...",
+        description: `Starting sync for ${dataSource.name}`,
+      });
+
+      const result = await syncDataSource(dataSource);
+
+      if (result.success) {
+        toast({
+          title: "Sync complete",
+          description: `Successfully synced ${result.rowsProcessed.toLocaleString()} rows from ${dataSource.name}`,
+        });
+        
+        // Update last_synced_at timestamp
+        await supabase
+          .from('data_sources')
+          .update({ 
+            last_synced_at: new Date().toISOString()
+          })
+          .eq('id', dataSource.id);
+        
+        // Refresh the list
+        await loadDataSources();
+        
+        // Notify parent components
+        if (onDataSync) {
+          onDataSync();
+        }
+        
+        // Also trigger component refresh
+        if (onRefreshData) {
+          // Use a delay to ensure data is fully committed and indexed
+          setTimeout(() => {
+            onRefreshData();
+          }, 500);
+        }
+      } else {
+        toast({
+          title: "Sync failed",
+          description: result.error || "Unknown error occurred",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error syncing data source:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      toast({
+        title: "Sync failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingDataSource) return;
+    
+    try {
+      // First delete all dimension_data for this data source
+      const { error: deleteDataError } = await supabase
+        .from('dimension_data')
+        .delete()
+        .eq('data_source_id', deletingDataSource.id);
+
+      if (deleteDataError) throw deleteDataError;
+
+      // Then delete the data source itself
+      const { error: deleteSourceError } = await supabase
         .from('data_sources')
         .delete()
-        .eq('id', dataSource.id);
+        .eq('id', deletingDataSource.id);
 
-      if (error) throw error;
+      if (deleteSourceError) throw deleteSourceError;
 
-      setDataSources(dataSources.filter(ds => ds.id !== dataSource.id));
-      
       toast({
         title: "Data source deleted",
-        description: `Deleted "${dataSource.name}"`,
+        description: `Successfully deleted ${deletingDataSource.name} and all its data`,
       });
+      
+      // Refresh the list
+      await loadDataSources();
+      
+      // Notify parent components
+      if (onDataSync) {
+        onDataSync();
+      }
+      
+      // Also trigger component refresh
+      if (onRefreshData) {
+        // Use a delay to ensure data is fully committed and indexed
+        setTimeout(() => {
+          onRefreshData();
+        }, 500);
+      }
     } catch (error) {
       console.error("Error deleting data source:", error);
       toast({
@@ -114,527 +212,171 @@ export const DataSourcesListModal = ({
         description: "Failed to delete data source",
         variant: "destructive",
       });
-    }
-  };
-
-  const handleView = (dataSource: DataSource) => {
-    setViewingDataSource(dataSource);
-    setIsViewModalOpen(true);
-  };
-
-    const handleEdit = (dataSource: DataSource) => {
-      setEditingDataSource(dataSource);
-      setIsEditModalOpen(true); // Edit button opens mapping modal
-    };
-
-    const handleEditDataSource = (dataSource: DataSource) => {
-      setEditingDataSource(dataSource);
-      setIsEditDataSourceModalOpen(true); // Sync button opens edit data source modal
-    };
-
-    const handleEditSuccess = () => {
-      loadDataSources();
-      setIsEditDataSourceModalOpen(false);
-      // Trigger component refresh after data sync
-      if (onRefreshData) {
-        console.log('[testing] DataSourcesListModal - Triggering component refresh after edit/sync');
-        onRefreshData();
-      }
-    };
-
-    const handleSync = async (dataSource: DataSource) => {
-      setSyncingIds(prev => new Set(prev).add(dataSource.id));
-      
-      try {
-        console.log(`[REFRESH] Starting refresh for data source: ${dataSource.name}`);
-        
-        // Determine source type and validate accordingly
-        const sourceType = dataSource.source_type || 'google_sheets'; // Default to google_sheets for backward compatibility
-        
-        if (sourceType === 'csv_url') {
-          // Validate CSV URL source
-          if (!dataSource.csv_url || dataSource.csv_url.trim() === '') {
-            throw new Error('CSV URL is missing');
-          }
-        } else {
-          // Validate Google Sheets source
-          if (!dataSource.spreadsheet_id || dataSource.spreadsheet_id.trim() === '') {
-            throw new Error('Spreadsheet ID is missing');
-          }
-        }
-        
-        if (!dataSource.header_row || dataSource.header_row < 1) {
-          throw new Error('Header row must be at least 1');
-        }
-        
-        let sheetHeaders: string[] = [];
-        let dataRows: any[][] = [];
-
-        if (sourceType === 'csv_url') {
-          // CSV URL source
-          toast({
-            title: "Syncing...",
-            description: "Fetching data from CSV URL...",
-          });
-
-          const { data: csvData, error: csvError } = await supabase.functions.invoke('fetch-csv-url', {
-            body: {
-              csvUrl: dataSource.csv_url,
-            },
-          });
-
-          if (csvError) {
-            console.error('[REFRESH] CSV fetch error:', csvError);
-            throw new Error(csvError.message || 'Failed to fetch CSV data');
-          }
-
-          if (!csvData?.values || csvData.values.length === 0) {
-            throw new Error("No data found in CSV file");
-          }
-
-          // Extract headers from the specified header row
-          const headerRowNum = dataSource.header_row || 1;
-          if (headerRowNum < 1 || headerRowNum > csvData.values.length) {
-            throw new Error(`Header row ${headerRowNum} is out of range. CSV has ${csvData.values.length} rows.`);
-          }
-
-          sheetHeaders = csvData.values[headerRowNum - 1].map((h: any) => 
-            h === null || h === undefined ? '' : String(h).trim()
-          );
-          dataRows = csvData.values.slice(headerRowNum);
-
-          console.log(`[REFRESH] Found ${sheetHeaders.length} columns in CSV:`, sheetHeaders);
-        } else {
-          // Google Sheets source
-          // First, fetch just the header to validate the sheet
-          // Use A1 notation: A{row}:Z{row} for header row (Z is column 26, should be enough for headers)
-          // If more columns needed, we can expand later
-          const headerRange = `A${dataSource.header_row}:Z${dataSource.header_row}`;
-          const { data: headerData, error: headerError } = await supabase.functions.invoke('fetch-google-sheets', {
-            body: {
-              spreadsheetId: dataSource.spreadsheet_id.trim(),
-              tabName: dataSource.tab_name?.trim() || undefined, // Use undefined if empty/null
-              range: headerRange,
-            },
-          });
-
-          if (headerError) {
-            console.error('[REFRESH] Header fetch error:', headerError);
-            console.error('[REFRESH] Error details:', {
-              spreadsheetId: dataSource.spreadsheet_id,
-              tabName: dataSource.tab_name,
-              headerRow: dataSource.header_row,
-              headerRange
-            });
-            throw new Error(headerError.message || `Failed to fetch sheet headers: ${headerError}`);
-          }
-          if (!headerData?.values || headerData.values.length === 0) {
-            throw new Error("Could not read sheet headers");
-          }
-
-          sheetHeaders = headerData.values[0];
-          console.log(`[REFRESH] Found ${sheetHeaders.length} columns in sheet:`, sheetHeaders);
-          
-          // Normalize headers - convert to strings and handle empty values
-          // Keep original length for index matching with data rows
-          sheetHeaders = sheetHeaders.map((header: any) => 
-            header === null || header === undefined ? '' : String(header).trim()
-          );
-
-          // Detect new columns and update column_mappings using utility
-          const { newColumns, updatedMappings } = await detectNewColumns(sheetHeaders, dataSource);
-          
-          // Update local dataSource object if new columns were found
-          if (newColumns.length > 0) {
-            dataSource.column_mappings = updatedMappings;
-          }
-
-          // Fetch all data rows - no limit, fetch all available data
-          // Use A1 notation: A{startRow}:Z for data rows (Google Sheets API supports up to 10 million rows)
-          const startRow = dataSource.header_row + 1;
-          const dataRange = `A${startRow}:Z`;
-          
-          toast({
-            title: "Syncing...",
-            description: "Fetching data from Google Sheets...",
-          });
-
-          const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
-            body: {
-              spreadsheetId: dataSource.spreadsheet_id.trim(),
-              tabName: dataSource.tab_name?.trim() || undefined, // Use undefined if empty/null
-              range: dataRange,
-            },
-          });
-
-          if (sheetsError) {
-            console.error('[REFRESH] Data fetch error:', sheetsError);
-            throw new Error(sheetsError.message || 'Failed to fetch sheet data');
-          }
-
-          if (!sheetsData?.values || sheetsData.values.length === 0) {
-            throw new Error("No data rows found in the sheet");
-          }
-
-          dataRows = sheetsData.values;
-        }
-
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("User not authenticated");
-
-      // Delete ALL existing dimension_data for this source efficiently
-      toast({
-        title: "Syncing...",
-        description: "Clearing old data...",
-      });
-      
-      // Keep deleting until no more rows are found
-      let totalDeleted = 0;
-      let continueDeleting = true;
-      
-      while (continueDeleting) {
-        // Delete in chunks of 5000 to avoid timeouts
-        const { error: deleteError, count } = await supabase
-          .from('dimension_data')
-          .delete({ count: 'exact' })
-          .eq('data_source_id', dataSource.id)
-          .limit(5000);
-
-        if (deleteError) {
-          console.error('Delete error:', deleteError);
-          throw new Error(`Failed to clear old data: ${deleteError.message}`);
-        }
-        
-        // If count is returned and is less than limit, we're done
-        if (count !== null && count !== undefined) {
-          totalDeleted += count;
-          if (count < 5000) {
-            continueDeleting = false;
-          }
-        } else {
-          // If count not available, do one more check
-          const { data: checkData, error: checkError } = await supabase
-            .from('dimension_data')
-            .select('id', { count: 'exact', head: true })
-            .eq('data_source_id', dataSource.id)
-            .limit(1);
-          
-          if (checkError) throw checkError;
-          continueDeleting = checkData && checkData.length > 0;
-        }
-      }
-
-        // Build dimension ID map from current mappings and validate against sheet headers
-        // Use a map that tracks both original column name and current sheet header index
-        const dimensionIdMap: Record<string, string> = {}; // Maps original column name -> dimension ID
-        const columnIndexMap: Record<string, number> = {}; // Maps original column name -> current sheet index
-        
-        // Detect new columns that aren't in existing mappings
-        const { newColumns } = await detectNewColumns(sheetHeaders, dataSource);
-        
-        const visibleMappings = (dataSource.column_mappings || []).filter((m: any) => m.visible);
-        
-        console.log(`[REFRESH] Processing ${visibleMappings.length} visible mappings`);
-        console.log(`[REFRESH] Sheet headers (${sheetHeaders.length}):`, sheetHeaders);
-        
-        // Create a normalized header map for fast lookup (case-insensitive, trimmed)
-        const normalizedHeaderMap = new Map<string, number>();
-        sheetHeaders.forEach((header: string, index: number) => {
-          if (header && header.trim()) {
-            const normalized = header.trim().toLowerCase();
-            // If multiple headers have the same normalized name, keep the first one
-            if (!normalizedHeaderMap.has(normalized)) {
-              normalizedHeaderMap.set(normalized, index);
-            }
-          }
-        });
-        
-        visibleMappings.forEach((mapping: any) => {
-          if (mapping.dimensionId && mapping.dimensionId !== 'none') {
-            // Find column by name (exact match first, then normalized match)
-            let colIndex = -1;
-            
-            // Try exact match first
-            colIndex = sheetHeaders.indexOf(mapping.column);
-            
-            // If not found, try normalized match
-            if (colIndex === -1) {
-              const normalizedMappingCol = mapping.column.trim().toLowerCase();
-              colIndex = normalizedHeaderMap.get(normalizedMappingCol) ?? -1;
-            }
-            
-            if (colIndex !== -1) {
-              dimensionIdMap[mapping.column] = mapping.dimensionId;
-              columnIndexMap[mapping.column] = colIndex;
-              console.log(`[REFRESH] Mapped "${mapping.column}" (index ${colIndex}) -> dimension ${mapping.dimensionId}`);
-            } else {
-              console.warn(`[REFRESH] Column "${mapping.column}" not found in sheet headers - will be skipped`);
-            }
-          }
-        });
-        
-        console.log(`[REFRESH] Successfully mapped ${Object.keys(dimensionIdMap).length} columns`);
-
-              // Use parseDate and parseValue from sync-utils (remove duplicate implementations)
-
-        // Transform data with detailed logging for first row
-        // Handle rows that might have different lengths than headers (columns added/removed/reordered)
-        const rowsToInsert = dataRows.map((row, index) => {
-          const dimensionValues: Record<string, any> = {};
-          
-          // Safety check: ensure row is an array
-          if (!Array.isArray(row)) {
-            console.warn(`[REFRESH] Row ${index + 1} is not an array, skipping`);
-            return null;
-          }
-          
-          visibleMappings.forEach((mapping: any) => {
-            // Use the pre-computed column index map for efficient lookup
-            const colIndex = columnIndexMap[mapping.column];
-            
-            // Only process if column exists in sheet and is mapped
-            if (colIndex !== undefined && colIndex >= 0 && dimensionIdMap[mapping.column]) {
-              // Handle rows that might be shorter than headers (some columns might be missing)
-              // or longer (extra data that we'll ignore)
-              // Check if row has enough columns for this index
-              if (colIndex < row.length) {
-                const rawValue = row[colIndex];
-                
-                // Process value (even if it's empty string, null, etc.)
-                const dimensionType = mapping.newDimensionType || mapping.dimensionType || 'text';
-                const dateFormat = mapping.dateFormat;
-                const value = parseValue(rawValue, dimensionType, dateFormat);
-                
-                // Only add if value is not null (null values are optional)
-                if (value !== null) {
-                  dimensionValues[dimensionIdMap[mapping.column]] = value;
-                }
-                
-                // Log first row values for debugging
-                if (index === 0) {
-                  console.log(`[REFRESH] Row 1 - ${mapping.column} (col ${colIndex}): "${rawValue}" -> ${value} (${dimensionType})`);
-                }
-              } else if (index === 0) {
-                // Log missing columns in first row for debugging
-                console.warn(`[REFRESH] Row 1 - Column "${mapping.column}" (expected at index ${colIndex}) not found in row data (row has ${row.length} columns, headers have ${sheetHeaders.length})`);
-              }
-            }
-          });
-          
-          return {
-            report_id: reportId,
-            data_source_id: dataSource.id,
-            row_number: index + 1,
-            dimension_values: dimensionValues,
-          };
-        }).filter((row): row is NonNullable<typeof row> => row !== null); // Remove any null rows from invalid data
-
-      console.log(`[REFRESH] Prepared ${rowsToInsert.length} rows for insertion`);
-      
-      // Insert in smaller batches with progress updates
-        // Insert data using utility function
-        await insertDataInBatches(rowsToInsert, (message) => {
-          toast({
-            title: "Syncing...",
-            description: message,
-          });
-        });
-      
-      console.log(`[REFRESH] Successfully imported all ${rowsToInsert.length} rows`);
-
-        const successMessage = newColumns.length > 0
-          ? `Successfully imported ${dataRows.length.toLocaleString()} rows. ${newColumns.length} new column(s) detected and added to mappings.`
-          : `Successfully imported ${dataRows.length.toLocaleString()} rows with ${Object.keys(dimensionIdMap).length} dimensions`;
-        
-        toast({
-          title: "Refresh complete",
-          description: successMessage,
-        });
-      
-        console.log(`[REFRESH] Refresh completed for "${dataSource.name}"`);
-        
-        // Resync report views after data sync to ensure they use account-scoped dimensions
-        if (accountId && reportId) {
-          try {
-            console.log('[RESYNC] Resyncing report views after data sync');
-            await resyncReportViews(reportId, accountId);
-          } catch (error) {
-            console.error('[RESYNC] Error resyncing report views after data sync:', error);
-            // Don't block the UI if report views resync fails
-          }
-        }
-        
-        // Reload data sources to show updated column mappings
-        await loadDataSources();
-        
-        // Close modal and trigger refresh
-        onOpenChange(false);
-        if (onDataSync) {
-          onDataSync();
-        }
-    } catch (error) {
-      console.error("[REFRESH] Error syncing data source:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to refresh data";
-      toast({
-        title: "Refresh failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
     } finally {
-      setSyncingIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(dataSource.id);
-        return newSet;
-      });
+      setDeleteConfirmOpen(false);
+      setDeletingDataSource(null);
     }
+  };
+
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return "Never";
+    
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleString();
+    } catch (e) {
+      return "Invalid date";
+    }
+  };
+
+  const getSourceTypeLabel = (dataSource: DataSource) => {
+    if (dataSource.source_type === 'csv_url') {
+      return 'CSV URL';
+    }
+    return 'Google Sheets';
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5 text-primary" />
-            Data sources
-          </DialogTitle>
-          <DialogDescription>
-            Manage your connected data sources
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5 text-primary" />
+              Data Sources
+            </DialogTitle>
+            <DialogDescription>
+              Manage data sources for this report
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="py-4">
-          {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Loading data sources...
-            </div>
-          ) : dataSources.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No data sources connected yet
-            </div>
-          ) : (
-            <div className="border rounded-md">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Connector Type</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dataSources.map((dataSource) => (
-                    <TableRow key={dataSource.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <FileSpreadsheet className="h-4 w-4 text-green-600" />
-                          {dataSource.name}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {(() => {
-                          const sourceType = (dataSource as any).source_type || 'google_sheets';
-                          const isCsv = sourceType === 'csv_url';
-                          const url = isCsv ? (dataSource as any).csv_url : dataSource.google_sheets_url;
-                          const label = isCsv ? 'CSV' : 'Google Sheets';
-                          
-                          return url ? (
-                            <a
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline cursor-pointer"
-                            >
-                              {label}
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground">{label}</span>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleView(dataSource)}
-                            disabled={syncingIds.has(dataSource.id)}
-                          >
-                            <Eye className="h-4 w-4 mr-1" />
-                            View
-                          </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEditDataSource(dataSource)}
-                              disabled={syncingIds.has(dataSource.id)}
-                            >
-                              <RefreshCw className={`h-4 w-4 mr-1 ${syncingIds.has(dataSource.id) ? 'animate-spin' : ''}`} />
-                              Sync
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(dataSource)}
-                              disabled={syncingIds.has(dataSource.id)}
-                            >
-                              <Edit className="h-4 w-4 mr-1" />
-                              Edit
-                            </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(dataSource)}
-                            disabled={syncingIds.has(dataSource.id)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-1" />
-                            Delete
-                          </Button>
-                        </div>
-                      </TableCell>
+          <div className="py-4">
+            {isLoading ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Loading data sources...
+              </div>
+            ) : dataSources.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No data sources found. Add a data source to get started.
+              </div>
+            ) : (
+              <div className="border rounded-md overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Last Synced</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </div>
+                  </TableHeader>
+                  <TableBody>
+                    {dataSources.map((dataSource) => (
+                      <TableRow key={dataSource.id}>
+                        <TableCell className="font-medium">{dataSource.name}</TableCell>
+                        <TableCell>{getSourceTypeLabel(dataSource)}</TableCell>
+                        <TableCell>{formatDate(dataSource.last_synced_at)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => {
+                                setViewingDataSource(dataSource);
+                                setShowViewDataModal(true);
+                              }}
+                              title="View Data"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => {
+                                setEditingDataSource(dataSource);
+                                setShowEditMappingModal(true);
+                              }}
+                              title="Edit Mappings"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => handleSync(dataSource)}
+                              disabled={isSyncing !== null}
+                              title="Sync Data"
+                            >
+                              <RefreshCw className={`h-4 w-4 ${isSyncing === dataSource.id ? 'animate-spin' : ''}`} />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => {
+                                setDeletingDataSource(dataSource);
+                                setDeleteConfirmOpen(true);
+                              }}
+                              className="text-destructive hover:text-destructive"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
 
-        <div className="flex justify-start border-t pt-4">
-          <Button 
-            variant="outline" 
-            className="gap-2 text-primary"
-            onClick={onAddNew}
-          >
-            <Plus className="h-4 w-4" />
-            ADD A DATA SOURCE
-          </Button>
-        </div>
-      </DialogContent>
-
-        <EditDataSourceModal
-          open={isEditDataSourceModalOpen}
-          onOpenChange={setIsEditDataSourceModalOpen}
-          dataSource={editingDataSource}
-          onSuccess={handleEditSuccess}
-          onRefreshData={onRefreshData}
-          accountId={accountId}
-        />
-
-        <EditMappingModal
-          open={isEditModalOpen}
-          onOpenChange={setIsEditModalOpen}
-          dataSource={editingDataSource}
-          onSuccess={handleEditSuccess}
-          accountId={accountId}
-        />
-
-        <ViewDataModal
-          open={isViewModalOpen}
-          onOpenChange={setIsViewModalOpen}
-          dataSource={viewingDataSource}
-        />
+          <div className="flex justify-end">
+            <Button onClick={onAddNew} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add Data Source
+            </Button>
+          </div>
+        </DialogContent>
       </Dialog>
-    );
-  };
+
+      {/* Edit Mapping Modal */}
+      <EditMappingModal
+        open={showEditMappingModal}
+        onOpenChange={setShowEditMappingModal}
+        dataSource={editingDataSource}
+        onSuccess={() => {
+          loadDataSources();
+          if (onDataSync) onDataSync();
+        }}
+        accountId={accountId}
+      />
+
+      {/* View Data Modal */}
+      <ViewDataModal
+        open={showViewDataModal}
+        onOpenChange={setShowViewDataModal}
+        dataSource={viewingDataSource}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the data source "{deletingDataSource?.name}" and all its data.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+};

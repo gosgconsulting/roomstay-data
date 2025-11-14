@@ -21,6 +21,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const {
       reportId,
+      reportIds,
       accountId,
       userId,
       dateFrom,
@@ -31,10 +32,18 @@ Deno.serve(async (req) => {
       offset = 0,
     } = body || {};
 
-    if (!reportId) {
+    // Support both single reportId and multiple reportIds
+    if (!reportId && (!reportIds || !reportIds.length)) {
       return new Response(
-        JSON.stringify({ error: 'reportId is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ 
+          error: 'reportId or reportIds is required',
+          data: [],
+          total: 0,
+          totalRows: 0,
+          totalCount: 0,
+          hasMore: false
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -46,17 +55,46 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Load dimensions (account > custom > global)
-    const { data: dimensions, error: dimErr } = await supabase
+    const dimensionsQuery = supabase
       .from('dimensions')
-      .select('id, name, type, scope, account_id, report_id')
-      .or(
+      .select('id, name, type, scope, account_id, report_id');
+    
+    if (accountId && userId) {
+      dimensionsQuery.or(
         `and(scope.eq.account,account_id.eq.${accountId}),
          and(scope.eq.custom,user_id.eq.${userId}),
          scope.eq.global`
       );
+    } else if (accountId) {
+      dimensionsQuery.or(
+        `and(scope.eq.account,account_id.eq.${accountId}),
+         scope.eq.global`
+      );
+    } else if (userId) {
+      dimensionsQuery.or(
+        `and(scope.eq.custom,user_id.eq.${userId}),
+         scope.eq.global`
+      );
+    } else {
+      dimensionsQuery.eq('scope', 'global');
+    }
+
+    const { data: dimensions, error: dimErr } = await dimensionsQuery;
 
     if (dimErr) {
-      throw dimErr;
+      console.error('[GET-PERFORMANCE-DATA] Error loading dimensions:', dimErr);
+      // Return empty data instead of throwing error
+      return new Response(
+        JSON.stringify({ 
+          error: 'Error loading dimensions',
+          data: [],
+          total: 0,
+          totalRows: 0,
+          totalCount: 0,
+          hasMore: false
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const dateDimensions = (dimensions || []).filter((d: any) => d.type === 'date');
@@ -64,9 +102,16 @@ Deno.serve(async (req) => {
     // Fetch dimension_data
     let query = supabase
       .from('dimension_data')
-      .select('dimension_values, row_number, data_source_id')
-      .eq('report_id', reportId)
-      .order('row_number', { ascending: true });
+      .select('dimension_values, row_number, data_source_id');
+    
+    // Handle single report or multiple reports
+    if (reportId) {
+      query = query.eq('report_id', reportId);
+    } else if (reportIds && reportIds.length) {
+      query = query.in('report_id', reportIds);
+    }
+    
+    query = query.order('row_number', { ascending: true });
 
     // Apply range (offset/limit)
     if (typeof offset === 'number' && typeof limit === 'number') {
@@ -75,7 +120,19 @@ Deno.serve(async (req) => {
 
     const { data: rawRows, error: rowsErr } = await query;
     if (rowsErr) {
-      throw rowsErr;
+      console.error('[GET-PERFORMANCE-DATA] Error fetching rows:', rowsErr);
+      // Return empty data instead of throwing error
+      return new Response(
+        JSON.stringify({ 
+          error: 'Error fetching data rows',
+          data: [],
+          total: 0,
+          totalRows: 0,
+          totalCount: 0,
+          hasMore: false
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const rows = rawRows || [];
@@ -164,8 +221,17 @@ Deno.serve(async (req) => {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const details = error instanceof Error ? error.stack : undefined;
 
-    return new Response(JSON.stringify({ error: message, details }), {
-      status: 500,
+    // Return a 200 response with error information instead of 500
+    return new Response(JSON.stringify({ 
+      error: message, 
+      details,
+      data: [],
+      total: 0,
+      totalRows: 0,
+      totalCount: 0,
+      hasMore: false
+    }), {
+      status: 200, // Changed from 500 to 200
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

@@ -75,6 +75,7 @@ export const ColumnMappingStep = ({
 
   const loadDimensions = async () => {
     try {
+      setIsLoadingDimensions(true);
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) return;
@@ -148,11 +149,14 @@ export const ColumnMappingStep = ({
       return dimensions.some(d => d.id === dimensionId);
     };
 
+    // Ensure existingMappings is an array
+    const safeExistingMappings = Array.isArray(existingMappings) ? existingMappings : [];
+
     // If we have existing mappings, validate them against account-scoped dimensions
     // Clear any mappings that reference old global/custom dimensions
-    if (existingMappings && existingMappings.length > 0) {
+    if (safeExistingMappings.length > 0) {
       const updatedMappings: ColumnMapping[] = headers.map((header, index) => {
-        const existingMapping = existingMappings.find(m => m.column === header);
+        const existingMapping = safeExistingMappings.find(m => m.column === header);
         if (existingMapping) {
           let dimensionId: string | null = "none";
           let dimensionName: string | null = null;
@@ -180,435 +184,265 @@ export const ColumnMappingStep = ({
           
           // If still no match, this mapping references an old dimension - unmap it
           if (dimensionId === "none") {
-            console.log(`Unmapping column "${header}" - old dimension not found in account scope`);
+            return {
+              column: header,
+              dimensionId: "none",
+              dimensionName: null,
+              visible: existingMapping.visible,
+              dateFormat: existingMapping.dateFormat,
+            };
           }
           
           return {
-            column: header,
-            dimensionId: dimensionId,
-            dimensionName: dimensionName,
-            visible: existingMapping.visible ?? true,
-            dateFormat: dimensionId !== "none" && isDateDimension(dimensionId) 
-              ? (existingMapping.dateFormat || 'yyyy-mm-dd') 
-              : undefined,
+            ...existingMapping,
+            dimensionId,
+            dimensionName,
           };
         }
         
-        // For new columns, try smart matching with account dimensions
-        const matchedDimension = findBestMatch(header, dimensions);
+        // For new headers, create default mappings
         return {
           column: header,
-          dimensionId: matchedDimension?.id || "none",
-          dimensionName: matchedDimension?.name || null,
+          dimensionId: "none",
+          dimensionName: null,
           visible: true,
-          dateFormat: matchedDimension?.type === 'date' ? 'yyyy-mm-dd' : undefined,
         };
       });
+      
       setMappings(updatedMappings);
     } else {
-      // No existing mappings, use smart matching with account dimensions
-      const initialMappings: ColumnMapping[] = headers.map((header, index) => {
-        const matchedDimension = findBestMatch(header, dimensions);
-        return {
-          column: header,
-          dimensionId: matchedDimension?.id || "none",
-          dimensionName: matchedDimension?.name || null,
-          visible: true,
-          dateFormat: matchedDimension?.type === 'date' ? 'yyyy-mm-dd' : undefined,
-        };
-      });
-      setMappings(initialMappings);
-    }
-  };
-
-  // Smart matching function to find the best dimension match for a column
-  const findBestMatch = (columnName: string, dimensions: Dimension[]): Dimension | null => {
-    const normalizedColumn = normalizeString(columnName);
-    
-    // Define common synonyms/mappings - more specific matches
-    const synonyms: Record<string, string[]> = {
-      'impressions': ['impression', 'impr', 'imp', 'impressions'],
-      'clicks': ['click', 'clk', 'clicks'],
-      'conversions': ['conversion', 'conversions', 'booking', 'bookings', 'conv', 'cvr'],
-      'purchases': ['purchase', 'purchases', 'orders', 'order'],
-      'cost': ['spend', 'cost', 'costs'],
-      'revenue': ['rev', 'revenue', 'income', 'sales'],
-      'ctr': ['click_through_rate', 'clickrate', 'ctr'],
-      'cpc': ['cost_per_click', 'costperclick'],
-      'cpm': ['cost_per_mille', 'cost_per_thousand', 'cpm'],
-      'roas': ['return_on_ad_spend', 'returnon_ad_spend', 'roas'],
-      'leads': ['lead', 'leads', 'prospects'],
-    };
-
-    // First try exact match (case-insensitive)
-    const exactMatch = dimensions.find(
-      d => normalizeString(d.name) === normalizedColumn
-    );
-    if (exactMatch) return exactMatch;
-
-    // Try synonym matching with exact synonym match first
-    for (const [dimensionKey, synonymList] of Object.entries(synonyms)) {
-      // Check if the column name exactly matches any synonym
-      if (synonymList.includes(normalizedColumn)) {
-        const match = dimensions.find(d => normalizeString(d.name) === dimensionKey || normalizeString(d.name).includes(dimensionKey));
-        if (match) return match;
-      }
-    }
-
-    // Try more lenient partial match for compound names (e.g., "Purchases conversion value")
-    // Only match if dimension name is a complete word in the column
-    const partialMatch = dimensions.find(d => {
-      const normalizedDim = normalizeString(d.name);
-      // Only match if dimension appears as a complete word segment
-      const columnWords = columnName.toLowerCase().split(/[\s_-]+/);
-      const dimensionWords = d.name.toLowerCase().split(/[\s_-]+/);
+      // No existing mappings, create default mappings for all headers
+      const defaultMappings: ColumnMapping[] = headers.map(header => ({
+        column: header,
+        dimensionId: "none",
+        dimensionName: null,
+        visible: true,
+      }));
       
-      // Check if all dimension words appear in column words
-      return dimensionWords.every(dimWord => 
-        columnWords.some(colWord => colWord === dimWord || colWord.includes(dimWord))
-      );
-    });
-    
-    return partialMatch || null;
+      setMappings(defaultMappings);
+    }
   };
 
-  // Normalize string for comparison (lowercase, remove spaces and special chars)
-  const normalizeString = (str: string): string => {
-    return str
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '')
-      .trim();
-  };
-
-  const updateMapping = (index: number, dimensionId: string | null) => {
+  const handleDimensionChange = (index: number, dimensionId: string) => {
     const newMappings = [...mappings];
-    newMappings[index].dimensionId = dimensionId;
     
-    // Store dimension name for stable mapping (primary identifier)
-    if (dimensionId && dimensionId !== 'none' && dimensionId !== 'create_new') {
+    if (dimensionId === "create_new") {
+      // Set up for creating a new dimension
+      newMappings[index] = {
+        ...newMappings[index],
+        dimensionId: "create_new",
+        dimensionName: null,
+        newDimensionName: newMappings[index].column, // Default to column name
+        newDimensionType: "text", // Default type
+      };
+      setCreatingDimensionIndex(index);
+    } else if (dimensionId === "none") {
+      // Clear dimension mapping
+      newMappings[index] = {
+        ...newMappings[index],
+        dimensionId: "none",
+        dimensionName: null,
+      };
+    } else {
+      // Set to existing dimension
       const dimension = dimensions.find(d => d.id === dimensionId);
       if (dimension) {
-        newMappings[index].dimensionName = dimension.name;
-      }
-    } else {
-      newMappings[index].dimensionName = null;
-    }
-    
-    // If "create_new" is selected, auto-populate new dimension name
-    if (dimensionId === 'create_new') {
-      newMappings[index].newDimensionName = mappings[index].column;
-      newMappings[index].newDimensionType = 'text';
-      newMappings[index].dateFormat = undefined;
-    } else {
-      // If Date dimension is selected, set default date format if not already set
-      const dimension = dimensions.find(d => d.id === dimensionId);
-      if (dimension?.type === 'date' && !newMappings[index].dateFormat) {
-        newMappings[index].dateFormat = 'yyyy-mm-dd';
-      } else if (dimension?.type !== 'date') {
-        newMappings[index].dateFormat = undefined;
+        newMappings[index] = {
+          ...newMappings[index],
+          dimensionId: dimension.id,
+          dimensionName: dimension.name,
+          // Set default date format for date dimensions
+          dateFormat: dimension.type === 'date' ? (newMappings[index].dateFormat || 'yyyy-mm-dd') : undefined,
+        };
       }
     }
     
     setMappings(newMappings);
   };
 
-  const updateDateFormat = (index: number, dateFormat: string) => {
+  const handleVisibilityToggle = (index: number) => {
     const newMappings = [...mappings];
-    newMappings[index].dateFormat = dateFormat;
+    newMappings[index] = {
+      ...newMappings[index],
+      visible: !newMappings[index].visible,
+    };
     setMappings(newMappings);
   };
 
-    const toggleVisibility = (index: number) => {
-      const newMappings = [...mappings];
-      newMappings[index].visible = !newMappings[index].visible;
-      setMappings(newMappings);
+  const handleNewDimensionNameChange = (index: number, name: string) => {
+    const newMappings = [...mappings];
+    newMappings[index] = {
+      ...newMappings[index],
+      newDimensionName: name,
     };
+    setMappings(newMappings);
+  };
 
-    const handleCreateDimension = async (index: number) => {
-      const mapping = mappings[index];
-      
+  const handleNewDimensionTypeChange = (index: number, type: string) => {
+    const newMappings = [...mappings];
+    newMappings[index] = {
+      ...newMappings[index],
+      newDimensionType: type,
+    };
+    setMappings(newMappings);
+  };
+
+  const handleDateFormatChange = (index: number, format: string) => {
+    const newMappings = [...mappings];
+    newMappings[index] = {
+      ...newMappings[index],
+      dateFormat: format,
+    };
+    setMappings(newMappings);
+  };
+
+  const handleSave = () => {
+    // Validate new dimension names
+    const newDimensionMappings = mappings.filter(m => m.dimensionId === 'create_new');
+    
+    for (const mapping of newDimensionMappings) {
       if (!mapping.newDimensionName || mapping.newDimensionName.trim() === '') {
         toast({
-          title: "Error",
-          description: "Please enter a dimension name",
+          title: "Validation error",
+          description: "New dimension name cannot be empty",
           variant: "destructive",
         });
         return;
       }
-
-      if (!reportId) {
+      
+      // Check for duplicate names
+      const existingDimension = dimensions.find(d => 
+        d.name.toLowerCase() === mapping.newDimensionName?.toLowerCase()
+      );
+      
+      if (existingDimension) {
         toast({
-          title: "Error",
-          description: "Report ID is required to create dimensions",
+          title: "Validation error",
+          description: `Dimension name "${mapping.newDimensionName}" already exists`,
           variant: "destructive",
         });
         return;
       }
-
-      setCreatingDimensionIndex(index);
-
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          throw new Error("User not authenticated");
-        }
-
-        // Check if dimension with same name already exists
-        const normalizedName = mapping.newDimensionName.trim();
-        const existingDimension = dimensions.find(
-          d => d.name.toLowerCase() === normalizedName.toLowerCase()
-        );
-
-        if (existingDimension) {
-          // Use existing dimension
-          const newMappings = [...mappings];
-          newMappings[index].dimensionId = existingDimension.id;
-          newMappings[index].dimensionName = existingDimension.name; // Store name for stable mapping
-          newMappings[index].newDimensionName = undefined;
-          newMappings[index].newDimensionType = undefined;
-          setMappings(newMappings);
-          
-          toast({
-            title: "Dimension already exists",
-            description: `Using existing dimension "${existingDimension.name}"`,
-          });
-          return;
-        }
-
-        // Create new dimension with account scope
-        if (!accountId) {
-          throw new Error("Account ID is required to create dimensions");
-        }
-
-        const { data: newDimension, error: createError } = await supabase
-          .from('dimensions')
-          .insert({
-            user_id: user.id,
-            account_id: accountId,
-            name: normalizedName,
-            type: mapping.newDimensionType || 'text',
-            scope: 'account',
-          })
-          .select()
-          .single();
-
-        if (createError) throw createError;
-
-        // Update mapping to use the newly created dimension
-        const newMappings = [...mappings];
-        newMappings[index].dimensionId = newDimension.id;
-        newMappings[index].dimensionName = newDimension.name; // Store name for stable mapping
-        newMappings[index].newDimensionName = undefined;
-        newMappings[index].newDimensionType = undefined;
-        setMappings(newMappings);
-
-        // Reload dimensions to include the new one
-        await loadDimensions();
-
-        toast({
-          title: "Dimension created",
-          description: `Successfully created dimension "${newDimension.name}"`,
-        });
-      } catch (error) {
-        console.error("Error creating dimension:", error);
-        const errorMessage = error instanceof Error ? error.message : "Failed to create dimension";
-        toast({
-          title: "Error",
-          description: errorMessage,
-          variant: "destructive",
-        });
-      } finally {
-        setCreatingDimensionIndex(null);
-      }
-    };
-
-    const handleSave = () => {
-      onSave(mappings);
-    };
-
-  if (isLoadingDimensions) {
-    return (
-      <div className="py-8 text-center text-muted-foreground">
-        Loading dimensions...
-      </div>
-    );
-  }
+    }
+    
+    onSave(mappings);
+  };
 
   return (
-    <div className="space-y-4">
-      <div className="text-sm text-muted-foreground">
-        Map your Google Sheets columns to dimensions. You can hide columns you don't need.
-      </div>
-
-      <div className="border rounded-lg max-h-[400px] overflow-auto">
+    <div className="space-y-6">
+      <div className="border rounded-md overflow-hidden">
         <Table>
-          <TableHeader className="sticky top-0 bg-background z-10">
+          <TableHeader>
             <TableRow>
-              <TableHead className="w-[35%]">Column from Sheet</TableHead>
-              <TableHead className="w-[50%]">Map to Dimension</TableHead>
-              <TableHead className="w-[15%] text-center">Visible</TableHead>
+              <TableHead className="w-[200px]">Column</TableHead>
+              <TableHead className="w-[200px]">Example Value</TableHead>
+              <TableHead className="w-[250px]">Map to Dimension</TableHead>
+              <TableHead className="w-[150px]">Format</TableHead>
+              <TableHead className="w-[80px] text-center">Visible</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {mappings.map((mapping, index) => {
-              const exampleValue = getExampleValue(index);
-              const isDate = isDateDimension(mapping.dimensionId) || 
-                           (mapping.dimensionId === 'create_new' && mapping.newDimensionType === 'date');
-              
-              return (
+            {mappings.map((mapping, index) => (
               <TableRow key={index}>
-                <TableCell className="font-medium">
-                  <div className="space-y-1">
-                    <div>{mapping.column}</div>
-                    {exampleValue && (
-                      <div className="text-xs text-muted-foreground italic">
-                        {exampleValue}
-                      </div>
-                    )}
-                  </div>
+                <TableCell className="font-medium">{mapping.column}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {getExampleValue(index) || "No example"}
                 </TableCell>
                 <TableCell>
-                  <div className="space-y-2">
+                  {creatingDimensionIndex === index ? (
+                    <div className="space-y-2">
+                      <Input
+                        placeholder="New dimension name"
+                        value={mapping.newDimensionName || ''}
+                        onChange={(e) => handleNewDimensionNameChange(index, e.target.value)}
+                      />
+                      <Select
+                        value={mapping.newDimensionType || 'text'}
+                        onValueChange={(value) => handleNewDimensionTypeChange(index, value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="text">Text</SelectItem>
+                          <SelectItem value="number">Number</SelectItem>
+                          <SelectItem value="currency">Currency</SelectItem>
+                          <SelectItem value="percentage">Percentage</SelectItem>
+                          <SelectItem value="date">Date</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCreatingDimensionIndex(null)}
+                      >
+                        <Check className="h-4 w-4 mr-1" />
+                        Done
+                      </Button>
+                    </div>
+                  ) : (
                     <Select
-                      value={mapping.dimensionId || "none"}
-                      onValueChange={(value) => updateMapping(index, value === "none" ? null : value)}
+                      value={mapping.dimensionId || 'none'}
+                      onValueChange={(value) => handleDimensionChange(index, value)}
                     >
-                      <SelectTrigger className="bg-background">
-                        <SelectValue placeholder="Select dimension..." />
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select dimension" />
                       </SelectTrigger>
-                      <SelectContent className="bg-background z-50">
-                        <SelectItem value="none">No mapping</SelectItem>
-                        <SelectItem value="create_new" className="text-primary font-medium">
-                          + Create new dimension
-                        </SelectItem>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="create_new">Create New Dimension</SelectItem>
                         {dimensions.map((dimension) => (
                           <SelectItem key={dimension.id} value={dimension.id}>
-                            {dimension.name}
+                            {dimension.name} ({dimension.type})
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    {mapping.dimensionId === 'create_new' && (
-                        <div className="space-y-2">
-                          <div className="flex gap-2">
-                            <Input
-                              placeholder="Dimension name"
-                              value={mapping.newDimensionName || ''}
-                              onChange={(e) => {
-                                const newMappings = [...mappings];
-                                newMappings[index].newDimensionName = e.target.value;
-                                setMappings(newMappings);
-                              }}
-                              className="flex-1"
-                              disabled={creatingDimensionIndex === index}
-                            />
-                            <Select
-                              value={mapping.newDimensionType || 'text'}
-                              onValueChange={(value) => {
-                                const newMappings = [...mappings];
-                                newMappings[index].newDimensionType = value;
-                                if (value === 'date' && !newMappings[index].dateFormat) {
-                                  newMappings[index].dateFormat = 'yyyy-mm-dd';
-                                } else if (value !== 'date') {
-                                  newMappings[index].dateFormat = undefined;
-                                }
-                                setMappings(newMappings);
-                              }}
-                              disabled={creatingDimensionIndex === index}
-                            >
-                              <SelectTrigger className="w-32">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="text">Text</SelectItem>
-                                <SelectItem value="number">Number</SelectItem>
-                                <SelectItem value="currency">Currency</SelectItem>
-                                <SelectItem value="date">Date</SelectItem>
-                                <SelectItem value="percentage">Percentage</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              type="button"
-                              onClick={() => handleCreateDimension(index)}
-                              disabled={creatingDimensionIndex === index || !mapping.newDimensionName?.trim()}
-                              size="sm"
-                              className="gap-2"
-                            >
-                              {creatingDimensionIndex === index ? (
-                                <>
-                                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                  Creating...
-                                </>
-                              ) : (
-                                <>
-                                  <Check className="h-4 w-4" />
-                                  Create
-                                </>
-                              )}
-                            </Button>
-                          </div>
-                          {mapping.newDimensionType === 'date' && (
-                            <Select
-                              value={mapping.dateFormat || 'yyyy-mm-dd'}
-                              onValueChange={(value) => updateDateFormat(index, value)}
-                              disabled={creatingDimensionIndex === index}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select date format" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="yyyy-mm-dd">YYYY-MM-DD (e.g., 2025-01-01)</SelectItem>
-                                <SelectItem value="dd-mm-yyyy">DD-MM-YYYY (e.g., 01-01-2025)</SelectItem>
-                                <SelectItem value="mm-dd-yyyy">MM-DD-YYYY (e.g., 01-01-2025)</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          )}
-                        </div>
-                      )}
-                    {isDate && mapping.dimensionId !== 'create_new' && (
-                      <Select
-                        value={mapping.dateFormat || 'yyyy-mm-dd'}
-                        onValueChange={(value) => updateDateFormat(index, value)}
-                      >
-                        <SelectTrigger className="w-full mt-2">
-                          <SelectValue placeholder="Select date format" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="yyyy-mm-dd">YYYY-MM-DD (e.g., 2025-01-01)</SelectItem>
-                          <SelectItem value="dd-mm-yyyy">DD-MM-YYYY (e.g., 01-01-2025)</SelectItem>
-                          <SelectItem value="mm-dd-yyyy">MM-DD-YYYY (e.g., 01-01-2025)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {isDateDimension(mapping.dimensionId) && (
+                    <Select
+                      value={mapping.dateFormat || 'yyyy-mm-dd'}
+                      onValueChange={(value) => handleDateFormatChange(index, value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Date format" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="yyyy-mm-dd">YYYY-MM-DD</SelectItem>
+                        <SelectItem value="mm-dd-yyyy">MM-DD-YYYY</SelectItem>
+                        <SelectItem value="dd-mm-yyyy">DD-MM-YYYY</SelectItem>
+                        <SelectItem value="auto-detect">Auto-detect</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </TableCell>
                 <TableCell className="text-center">
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => toggleVisibility(index)}
-                    className="h-8 w-8"
+                    onClick={() => handleVisibilityToggle(index)}
                   >
                     {mapping.visible ? (
-                      <Eye className="h-4 w-4 text-primary" />
+                      <Eye className="h-4 w-4" />
                     ) : (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      <EyeOff className="h-4 w-4" />
                     )}
                   </Button>
                 </TableCell>
               </TableRow>
-              );
-            })}
+            ))}
           </TableBody>
         </Table>
       </div>
 
-      <div className="flex justify-end gap-3 pt-4">
-        <Button variant="outline" onClick={onBack} disabled={isLoading}>
+      <div className="flex justify-between">
+        <Button variant="outline" onClick={onBack}>
           Back
         </Button>
         <Button onClick={handleSave} disabled={isLoading}>
-          {isLoading ? "Saving..." : "Save Data Source"}
+          {isLoading ? "Saving..." : "Save Mappings"}
         </Button>
       </div>
     </div>

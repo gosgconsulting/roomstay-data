@@ -18,10 +18,10 @@ interface DataSource {
   id: string;
   name: string;
   source_type?: 'google_sheets' | 'csv_url';
-  google_sheets_url?: string;
-  spreadsheet_id?: string;
-  tab_name?: string;
-  csv_url?: string;
+  google_sheets_url?: string | null;
+  spreadsheet_id?: string | null;
+  tab_name?: string | null;
+  csv_url?: string | null;
   header_row: number;
   column_mappings: any[] | null;
   report_id?: string;
@@ -238,7 +238,7 @@ export const EditMappingModal = ({
             Edit Column Mappings
           </DialogTitle>
           <DialogDescription>
-            Update the column mappings for {dataSource?.name}
+            Update the column mappings for {dataSource?.name || 'this data source'}
           </DialogDescription>
         </DialogHeader>
 
@@ -254,7 +254,7 @@ export const EditMappingModal = ({
               onSave={handleSaveMappings}
               onBack={() => onOpenChange(false)}
               isLoading={isLoading}
-              existingMappings={dataSource?.column_mappings || undefined}
+              existingMappings={dataSource?.column_mappings || []}
               accountId={accountId}
               reportId={dataSource?.report_id || undefined}
             />
