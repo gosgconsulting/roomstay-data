@@ -10,7 +10,6 @@ import { CreateAccountModal } from "@/components/CreateAccountModal";
 import { migrateAllAccountsToAccountDimensions } from "@/lib/migrate-to-account-dimensions";
 import { EditAccountModal } from "@/components/EditAccountModal";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
-import { fallbackAuth, clearAuthAndReload, checkCORSIssues } from "@/lib/auth-fallback";
 
 interface Account {
   id: string;
@@ -34,142 +33,48 @@ export default function ReportTool() {
     checkAuth();
   }, []);
 
-  // ADD: Safety timeout to stop infinite loading
-  useEffect(() => {
-    const loadingTimeout = setTimeout(() => {
-      if (isLoading) {
-        console.error('[REPORT-TOOL] Loading timeout reached, forcing stop');
-        setIsLoading(false);
-        toast({
-          title: "Loading Timeout",
-          description: "The page is taking too long to load. Please refresh or try signing in again.",
-          variant: "destructive",
-        });
-      }
-    }, 15000);
-    return () => clearTimeout(loadingTimeout);
-  }, [isLoading]);
-
-  // REPLACE: checkAuth with robust version using fallback auth and CORS detection
   const checkAuth = async () => {
-    let authCompleted = false;
     try {
-      console.log('[REPORT-TOOL][AUTH] Starting authentication check...');
-      const corsCheck = checkCORSIssues();
-      if (corsCheck.hasCORSIssue) {
-        console.warn('[REPORT-TOOL][AUTH] Potential CORS issue detected:', corsCheck);
-      }
-
-      let session, error;
-      try {
-        const result = await supabase.auth.getSession();
-        session = result.data.session;
-        error = result.error;
-      } catch (networkError) {
-        console.error('[REPORT-TOOL][AUTH] Network error, trying fallback:', networkError);
-        try {
-          const fallbackResult = await fallbackAuth();
-          session = fallbackResult.session;
-          error = fallbackResult.error;
-        } catch (fallbackError) {
-          console.error('[REPORT-TOOL][AUTH] Fallback auth also failed:', fallbackError);
-          setIsLoading(false);
-          authCompleted = true;
-          toast({
-            title: "Connection Error",
-            description: "Unable to connect to authentication service. Please check your connection and try again.",
-            variant: "destructive",
-          });
-          return;
-        }
-      }
-
-      if (error) {
-        console.error('[REPORT-TOOL][AUTH] Session error:', error);
-        setIsLoading(false);
-        authCompleted = true;
-
-        if (error.message?.includes('CORS') || error.message?.includes('fetch')) {
-          toast({
-            title: "Connection Error",
-            description: "Please check your internet connection and try refreshing. If the issue persists, the Supabase configuration may need updating.",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        toast({
-          title: "Authentication Error",
-          description: error.message || "Failed to authenticate. Please sign in again.",
-          variant: "destructive",
-        });
-        navigate('/auth');
-        return;
-      }
-
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) throw error;
+      
       if (!session) {
-        console.log('[REPORT-TOOL][AUTH] No session found, redirecting to auth');
-        setIsLoading(false);
-        authCompleted = true;
         navigate('/auth');
         return;
       }
-
+      
       setSession(session);
       await loadAccounts(session.user.id);
       setIsLoading(false);
-      authCompleted = true;
-    } catch (error: any) {
-      console.error('[REPORT-TOOL][AUTH] Error in checkAuth:', error);
-      if (!authCompleted) {
-        setIsLoading(false);
-      }
-
-      if (error?.message === 'Accounts loading timeout') {
-        toast({
-          title: "Loading Timeout",
-          description: "Accounts are taking too long to load. Please refresh the page.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to load accounts. Please try again.",
-          variant: "destructive",
-        });
-        navigate('/auth');
-      }
+    } catch (error) {
+      console.error('Error checking auth:', error);
+      setIsLoading(false); // Ensure loading is stopped on error
+      toast({
+        title: "Authentication Error",
+        description: "Please sign in again.",
+        variant: "destructive",
+      });
+      navigate('/auth');
     }
   };
 
   const loadAccounts = async (userId: string) => {
     try {
-      const accountsPromise = supabase
+      const { data, error } = await supabase
         .from('accounts')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
-
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Accounts loading timeout')), 10000)
-      );
-
-      const { data, error } = await Promise.race([
-        accountsPromise,
-        timeoutPromise,
-      ]) as any;
-
+      
       if (error) throw error;
-
+      
       setAccounts(data || []);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error loading accounts:', error);
       toast({
         title: "Error",
-        description:
-          error?.message === 'Accounts loading timeout'
-            ? "Accounts are taking too long to load. Please refresh the page."
-            : "Failed to load accounts.",
+        description: "Failed to load accounts.",
         variant: "destructive",
       });
     }
@@ -322,29 +227,12 @@ export default function ReportTool() {
     navigate(`/tools/report/${account.id}`);
   };
 
-  // UPDATE: Loading UI to include helpful actions
   if (isLoading) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-          <p className="text-muted-foreground">Loading your workspace...</p>
-          <div className="flex gap-2 mt-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.location.reload()}
-            >
-              Refresh Page
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={clearAuthAndReload}
-            >
-              Clear Cache & Reload
-            </Button>
-          </div>
+          <p className="text-muted-foreground">Loading...</p>
         </div>
       </div>
     );
