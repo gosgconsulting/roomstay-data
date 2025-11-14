@@ -170,7 +170,7 @@ export function usePerformanceTableViews({
 
     console.log('Loading view settings for:', view.name, view);
     
-    // Load saved settings - map dimension IDs asynchronously
+    // Load saved settings - map dimension IDs
     const loadDimensionsAsync = async () => {
       const groupDimensions = await mapDimensionIds(view.group_by_dimensions || [], dimensions);
       const breakdownDimensions = groupDimensions;
@@ -181,7 +181,9 @@ export function usePerformanceTableViews({
       
       // If no grouping dimension is set and dimensions are available, set a default
       let finalGroupDimensions = groupDimensions;
+      let needsSave = false;
       if (groupDimensions.length === 0 && dimensions.length > 0) {
+        needsSave = true;
         // Prefer Date first, then text dimensions
         if (dateDimension) {
           finalGroupDimensions = [dateDimension.id];
@@ -197,6 +199,9 @@ export function usePerformanceTableViews({
             console.log('Auto-selected first available dimension for grouping:', dimensions[0].name);
           }
         }
+        
+        // Immediately update state before async operations
+        onGroupByChange(finalGroupDimensions);
       }
       
       // Ensure Date dimension is included in selected dimensions if it exists
@@ -215,9 +220,40 @@ export function usePerformanceTableViews({
         }
       }
       
-      onGroupByChange(finalGroupDimensions);
-      onBreakdownByChange(finalBreakdownDimensions);
-      onThenByChange(finalThenDimensions);
+      
+      // Update all dimension selections (group was already updated above if needed)
+      if (groupDimensions.length > 0 || needsSave) {
+        if (!needsSave) {
+          onGroupByChange(finalGroupDimensions);
+        }
+        onBreakdownByChange(finalBreakdownDimensions);
+        onThenByChange(finalThenDimensions);
+      }
+      
+      // Save the auto-selected dimensions to the database if needed
+      if (needsSave && view.id && reportId) {
+        console.log('Saving auto-selected group dimension to database');
+        try {
+          const { error: updateError } = await supabase
+            .from('report_views')
+            .update({
+              group_by_dimensions: finalGroupDimensions,
+              breakdown_by_dimensions: finalBreakdownDimensions,
+              then_by_dimensions: finalThenDimensions,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', view.id)
+            .eq('report_id', reportId);
+            
+          if (updateError) {
+            console.error('Error saving auto-selected dimensions:', updateError);
+          } else {
+            console.log('Successfully saved auto-selected dimensions');
+          }
+        } catch (error) {
+          console.error('Error in auto-save:', error);
+        }
+      }
     };
     
     loadDimensionsAsync();
