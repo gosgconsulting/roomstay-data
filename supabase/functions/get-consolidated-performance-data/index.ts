@@ -290,9 +290,18 @@ Deno.serve(async (req) => {
 
     // Group and aggregate data
     const groupedData = new Map<string, any>();
-    const allDimIds = [...groupByDims, ...breakdownDims, ...thenByDims];
+    
+    // For grouping, only use the primary group by dimensions
+    // Breakdown and Then dimensions should create separate rows, not be aggregated
+    const groupingDimIds = [...groupByDims];
     
     // Add Report dimension to grouping if not already included
+    if (!groupingDimIds.includes(REPORT_DIMENSION_ID)) {
+      groupingDimIds.unshift(REPORT_DIMENSION_ID);
+    }
+    
+    // All dimensions for tracking (but not for grouping key)
+    const allDimIds = [...groupByDims, ...breakdownDims, ...thenByDims];
     if (!allDimIds.includes(REPORT_DIMENSION_ID)) {
       allDimIds.unshift(REPORT_DIMENSION_ID);
     }
@@ -334,15 +343,15 @@ Deno.serve(async (req) => {
       // Process dimension values and aggregate dates if needed
       const processedDimValues: Record<string, any> = { ...dimValues };
       
-      allDimIds.forEach(dimId => {
+      groupingDimIds.forEach(dimId => {
         const dimType = dimensionIdToType.get(dimId);
         if (dimType === 'date' && processedDimValues[dimId]) {
           processedDimValues[dimId] = aggregateDateByGranularity(processedDimValues[dimId], dateGranularity);
         }
       });
       
-      // Create group key using processed values
-      const groupKey = allDimIds.map(dimId => processedDimValues[dimId] || '').join('|');
+      // Create group key using ONLY grouping dimensions (not breakdown/then dimensions)
+      const groupKey = groupingDimIds.map(dimId => processedDimValues[dimId] || '').join('|');
       
       if (!groupedData.has(groupKey)) {
         groupedData.set(groupKey, {
@@ -353,8 +362,8 @@ Deno.serve(async (req) => {
 
       const group = groupedData.get(groupKey)!;
       
-      // Store dimension values (use processed values for dates)
-      allDimIds.forEach(dimId => {
+      // Store grouping dimension values (use processed values for dates)
+      groupingDimIds.forEach(dimId => {
         if (!group.dimension_values[dimId]) {
           group.dimension_values[dimId] = processedDimValues[dimId] || '';
         }
