@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, ChevronDown, Pencil, Database, Grid3x3, Wallet, RefreshCw } from "lucide-react";
+import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, ChevronDown, Pencil, Database, Grid3x3, Wallet, RefreshCw, GitCompare } from "lucide-react";
 import { DataSourceModal } from "./DataSourceModal";
 import { DataSourceSelectionModal } from "./DataSourceSelectionModal";
 import { DataSourcesListModal } from "./DataSourcesListModal";
@@ -12,6 +12,7 @@ import { DimensionModal } from "./DimensionModal";
 import { ReportModal } from "./ReportModal";
 import { ShareModal } from "./ShareModal";
 import { SyncModeModal } from "./SyncModeModal";
+import { VlookupModal } from "./VlookupModal";
 import { Session } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -76,6 +77,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const [showReportModal, setShowReportModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSyncModeModal, setShowSyncModeModal] = useState(false);
+  const [showVlookupModal, setShowVlookupModal] = useState(false);
 
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [editingDimension, setEditingDimension] = useState<Dimension | null>(null);
@@ -967,6 +969,13 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
         isLoading={isSyncing}
         lastSyncTime={lastUpdateDate}
         totalRows={totalRows}
+      />
+
+      <VlookupModal
+        open={showVlookupModal}
+        onOpenChange={setShowVlookupModal}
+        reportId={reportId || undefined}
+        accountId={accountId}
       />
 
       

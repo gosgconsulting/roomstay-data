@@ -246,6 +246,54 @@ Deno.serve(async (req) => {
     const budgets = budgetsResult.data || [];
     console.log(`Loaded ${budgets.length} budgets for report/account`);
 
+    // Load vlookup mappings for this report/account
+    let vlookupMappings: Record<string, Array<{ sourceValue: string; targetValue: string }>> = {};
+    if (userId) {
+      const mappingsQuery = supabase
+        .from('dimension_mappings')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (reportId) {
+        mappingsQuery.or(`report_id.eq.${reportId},report_id.is.null`);
+      }
+      if (accountId) {
+        mappingsQuery.or(`account_id.eq.${accountId},account_id.is.null`);
+      }
+
+      const { data: mappingsData, error: mappingsError } = await mappingsQuery;
+      if (!mappingsError && mappingsData) {
+        // Group mappings by target dimension ID
+        mappingsData.forEach(m => {
+          if (!vlookupMappings[m.target_dimension_id]) {
+            vlookupMappings[m.target_dimension_id] = [];
+          }
+          vlookupMappings[m.target_dimension_id].push({
+            sourceValue: m.source_value,
+            targetValue: m.target_value,
+          });
+        });
+        console.log(`Loaded ${mappingsData.length} vlookup mappings`);
+      }
+    }
+
+    // Helper function to apply vlookup mappings to dimension values
+    const applyVlookupMappings = (dimensionValues: Record<string, any>): Record<string, any> => {
+      const result = { ...dimensionValues };
+      for (const [dimId, value] of Object.entries(dimensionValues)) {
+        const mappings = vlookupMappings[dimId];
+        if (mappings && mappings.length > 0) {
+          const mapping = mappings.find(m => 
+            m.sourceValue.toLowerCase() === String(value).toLowerCase()
+          );
+          if (mapping) {
+            result[dimId] = mapping.targetValue;
+          }
+        }
+      }
+      return result;
+    };
+
     // Build filter for the main query with optimized settings
     // Fetch ALL data first, then apply date filtering in memory for better performance
     let query = supabase
@@ -268,8 +316,11 @@ Deno.serve(async (req) => {
       console.log('Dimension filters:', JSON.stringify(dimensionFilters));
       console.log('Date range:', { dateFrom, dateTo });
 
-      // Apply filters and build hierarchical structure
-      let filteredData = rawData || [];
+      // Apply vlookup mappings to all rows
+      let filteredData = (rawData || []).map(row => ({
+        ...row,
+        dimension_values: applyVlookupMappings(row.dimension_values as Record<string, any>)
+      }));
 
       // Filter by dimension filters first
       if (Object.keys(dimensionFilters).length > 0) {
