@@ -96,6 +96,7 @@ export const FiltersBar = ({
   const [masterDimensionOptions, setMasterDimensionOptions] = useState<string[]>([]);
   const [masterDimensionPopoverOpen, setMasterDimensionPopoverOpen] = useState(false);
   const [masterDimensionSettingsOpen, setMasterDimensionSettingsOpen] = useState(false);
+  const [masterDimensionValuesLoading, setMasterDimensionValuesLoading] = useState(false);
   
   // Load vlookup mappings for this report/account
   const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
@@ -135,6 +136,64 @@ export const FiltersBar = ({
       });
     }
   }, [reportId, accountId]);
+
+  // Load master dimension values when dimension is selected
+  useEffect(() => {
+    const loadMasterDimensionValues = async () => {
+      if (!masterDimensionId || !accountId) {
+        setMasterDimensionOptions([]);
+        return;
+      }
+
+      setMasterDimensionValuesLoading(true);
+      try {
+        console.log('[testing] FiltersBar - Loading values for master dimension:', masterDimensionId);
+        
+        // Load dimension values from all reports in the account
+        const { data: reportsData } = await supabase
+          .from("reports")
+          .select("id")
+          .eq("account_id", accountId);
+        
+        if (!reportsData || reportsData.length === 0) {
+          setMasterDimensionOptions([]);
+          return;
+        }
+        
+        const reportIds = reportsData.map(r => r.id);
+        
+        // Load dimension data for all reports
+        const { data, error } = await supabase
+          .from("dimension_data")
+          .select("dimension_values")
+          .in("report_id", reportIds)
+          .limit(10000);
+        
+        if (error) throw error;
+        
+        const valuesSet = new Set<string>();
+        
+        data?.forEach((row) => {
+          const dimensionValues = row.dimension_values as Record<string, string>;
+          const value = dimensionValues[masterDimensionId];
+          if (value) {
+            valuesSet.add(String(value));
+          }
+        });
+        
+        const sortedValues = Array.from(valuesSet).sort();
+        console.log('[testing] FiltersBar - Loaded', sortedValues.length, 'unique values for master dimension');
+        setMasterDimensionOptions(sortedValues);
+      } catch (error) {
+        console.error("Error loading master dimension values:", error);
+        setMasterDimensionOptions([]);
+      } finally {
+        setMasterDimensionValuesLoading(false);
+      }
+    };
+
+    loadMasterDimensionValues();
+  }, [masterDimensionId, accountId]);
 
   // Refresh dimensions when data is remapped/synced
   useEffect(() => {
@@ -897,7 +956,16 @@ export const FiltersBar = ({
                       }}
                     >
                       {masterDimensionId 
-                        ? dimensions.find(d => d.id === masterDimensionId)?.name || 'Select...'
+                        ? (
+                          <span className="flex items-center gap-2">
+                            {dimensions.find(d => d.id === masterDimensionId)?.name || 'Select...'}
+                            {masterDimensionValues.length > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                ({masterDimensionValues.length})
+                              </span>
+                            )}
+                          </span>
+                        )
                         : 'Select dimension...'}
                       <Settings className="ml-2 h-4 w-4 opacity-50" />
                     </Button>
@@ -1417,43 +1485,125 @@ export const FiltersBar = ({
         </DialogContent>
       </Dialog>
 
-      {/* Master Dimension Popover (for quick selection) */}
+      {/* Master Dimension Popover */}
       <Popover open={masterDimensionPopoverOpen} onOpenChange={setMasterDimensionPopoverOpen}>
         <PopoverTrigger asChild>
           <div style={{ display: 'none' }} />
         </PopoverTrigger>
-        <PopoverContent className="w-[250px] p-0 bg-background z-[100]" align="start">
-          <ScrollArea className="h-[200px]">
-            <div className="p-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start text-xs mb-1"
-                onClick={() => {
-                  setMasterDimensionId(null);
-                  setMasterDimensionValues([]);
-                  setMasterDimensionPopoverOpen(false);
-                }}
-              >
-                None (Clear filter)
-              </Button>
-              {dimensions.filter(d => d.type === 'text').map(dim => (
+        <PopoverContent className="w-[300px] p-0 bg-background border shadow-lg z-[100]" align="start">
+          {!masterDimensionId ? (
+            // Show dimension selector
+            <>
+              <div className="p-2 border-b bg-muted/50">
+                <p className="text-xs font-medium text-muted-foreground">Select Master Dimension</p>
+              </div>
+              <ScrollArea className="h-[250px]">
+                <div className="p-2 space-y-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start text-xs"
+                    onClick={() => {
+                      setMasterDimensionId(null);
+                      setMasterDimensionValues([]);
+                      setMasterDimensionPopoverOpen(false);
+                    }}
+                  >
+                    None (Clear filter)
+                  </Button>
+                  {dimensions.filter(d => d.type === 'text').map(dim => (
+                    <Button
+                      key={dim.id}
+                      variant={masterDimensionId === dim.id ? "secondary" : "ghost"}
+                      size="sm"
+                      className="w-full justify-start text-xs"
+                      onClick={() => {
+                        setMasterDimensionId(dim.id);
+                        setMasterDimensionValues([]);
+                      }}
+                    >
+                      {dim.name}
+                      {dim.scope && (
+                        <span className="ml-auto text-[10px] text-muted-foreground capitalize">
+                          {dim.scope}
+                        </span>
+                      )}
+                    </Button>
+                  ))}
+                </div>
+              </ScrollArea>
+            </>
+          ) : (
+            // Show dimension values for filtering
+            <>
+              <div className="p-2 border-b bg-muted/50 flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {dimensions.find(d => d.id === masterDimensionId)?.name} Values
+                </p>
                 <Button
-                  key={dim.id}
-                  variant={masterDimensionId === dim.id ? "secondary" : "ghost"}
+                  variant="ghost"
                   size="sm"
-                  className="w-full justify-start text-xs"
+                  className="h-6 px-2 text-xs"
                   onClick={() => {
-                    setMasterDimensionId(dim.id);
+                    setMasterDimensionId(null);
                     setMasterDimensionValues([]);
-                    setMasterDimensionPopoverOpen(false);
                   }}
                 >
-                  {dim.name}
+                  Change Dimension
                 </Button>
-              ))}
-            </div>
-          </ScrollArea>
+              </div>
+              <div className="p-2 border-b flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex-1 h-7 text-xs"
+                  onClick={() => setMasterDimensionValues(masterDimensionOptions)}
+                >
+                  Select All
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex-1 h-7 text-xs"
+                  onClick={() => setMasterDimensionValues([])}
+                >
+                  Clear All
+                </Button>
+              </div>
+              <ScrollArea className="h-[250px]">
+                <div className="p-2 space-y-1">
+                  {masterDimensionValuesLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary"></div>
+                    </div>
+                  ) : masterDimensionOptions.length === 0 ? (
+                    <div className="text-xs text-muted-foreground text-center py-4">
+                      No values found
+                    </div>
+                  ) : (
+                    masterDimensionOptions.map(value => (
+                      <div
+                        key={value}
+                        className="flex items-center gap-2 p-2 hover:bg-accent rounded cursor-pointer transition-colors"
+                        onClick={() => {
+                          const newValues = masterDimensionValues.includes(value)
+                            ? masterDimensionValues.filter(v => v !== value)
+                            : [...masterDimensionValues, value];
+                          setMasterDimensionValues(newValues);
+                        }}
+                      >
+                        <Checkbox
+                          checked={masterDimensionValues.includes(value)}
+                          onCheckedChange={() => {}}
+                        />
+                        <span className="text-xs">{value}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </>
+          )}
         </PopoverContent>
       </Popover>
     </>
