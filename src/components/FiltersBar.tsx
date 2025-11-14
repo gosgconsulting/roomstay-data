@@ -837,19 +837,16 @@ export const FiltersBar = ({
     const currentValues = newFilters[dimensionId] || [];
     
     if (currentValues.includes(value)) {
-      // Remove value - need to remove all expanded values too
-      const allValuesToRemove = getAllValuesForFilter(value, vlookupMappings, dimensionId);
-      const updated = currentValues.filter(v => !allValuesToRemove.includes(v));
+      // Remove value
+      const updated = currentValues.filter(v => v !== value);
       if (updated.length === 0) {
         delete newFilters[dimensionId];
       } else {
         newFilters[dimensionId] = updated;
       }
     } else {
-      // Add value - expand to include all source values if this is a mapped value
-      const allValuesToAdd = getAllValuesForFilter(value, vlookupMappings, dimensionId);
-      const uniqueValues = [...new Set([...currentValues, ...allValuesToAdd])];
-      newFilters[dimensionId] = uniqueValues;
+      // Add value (don't expand - expansion happens during filtering)
+      newFilters[dimensionId] = [...currentValues, value];
     }
     
     setSelectedFilters(newFilters);

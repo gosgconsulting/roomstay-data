@@ -205,6 +205,8 @@ export const PerformanceTable = ({
     dimensions,
     groupByDimensions,
     totalData,
+    reportId: reportId || undefined,
+    accountId,
   });
 
   // Apply sorting to filtered data
