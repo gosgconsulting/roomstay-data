@@ -256,12 +256,10 @@ export default function AllReports() {
     // Cancel previous loading by incrementing generation
     setLoadingGeneration(prev => prev + 1);
     
-    // Mark all components as loading
-    reports.forEach(report => {
-      markComponentLoading(`metrics-${report.id}`);
-      markComponentLoading(`chart-${report.id}`);
-      markComponentLoading(`table-${report.id}`);
-    });
+    // Mark consolidated components as loading
+    markComponentLoading('metrics-consolidated');
+    markComponentLoading('chart-consolidated');
+    markComponentLoading('table-consolidated');
   };
 
   if (isLoading) {
@@ -314,63 +312,65 @@ export default function AllReports() {
             selectedValues={masterFilterValues}
           />
           
-          {reports.map((report) => {
-            const reportDataSources = dataSources[report.id] || [];
-            const activeDataSourceId = activeDataSources[report.id];
+          {/* Consolidated Analytics Section */}
+          <Card className="p-6 space-y-6">
+            {/* Section Header */}
+            <div className="border-b pb-4">
+              <h2 className="text-2xl font-bold text-foreground">
+                {account?.name || 'All Reports'} - Consolidated Analytics
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Combined data from {reports.length} report{reports.length !== 1 ? 's' : ''}
+              </p>
+            </div>
             
-            return (
-              <Card key={report.id} className="p-6 space-y-4">
-                {/* Report Title */}
-                <div className="border-b pb-2">
-                  <h2 className="text-2xl font-bold text-foreground">{report.name}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Last updated: {new Date(report.updated_at).toLocaleDateString()}
-                  </p>
-                </div>
-                
-                {/* Filters for this report */}
-                <FiltersBar 
-                  reportId={report.id} 
-                  onFiltersChange={(filters) => handleFiltersChange(report.id, filters)}
-                  isSharedView={false} 
-                  accountId={accountId || report.account_id || undefined}
-                  refreshTrigger={loadingGeneration} 
-                />
-                
-                {/* KPI Metrics Cards */}
-                <KPIMetricsCards
-                  reportId={report.id}
-                  filters={getCombinedFilters(report.id)}
-                  accountId={accountId || report.account_id || undefined}
-                  visibilityRefreshTrigger={loadingGeneration}
-                  key={`metrics-${report.id}-${loadingGeneration}`}
-                  onLoadingComplete={() => markComponentLoaded(`metrics-${report.id}`)}
-                />
-                
-                {/* KPI Chart */}
-                <KPIChart
-                  reportId={report.id}
-                  filters={getCombinedFilters(report.id)}
-                  accountId={accountId || report.account_id || undefined}
-                  visibilityRefreshTrigger={loadingGeneration}
-                  key={`chart-${report.id}-${loadingGeneration}`}
-                  onLoadingComplete={() => markComponentLoaded(`chart-${report.id}`)}
-                />
-                
-                {/* Performance Table - shows all data sources */}
-                <PerformanceTable 
-                  reportId={report.id} 
-                  filters={getCombinedFilters(report.id)} 
-                  isSharedView={false}
-                  accountId={accountId || report.account_id || undefined}
-                  onFiltersChange={(filters) => handleFiltersChange(report.id, filters)}
-                  key={`table-${report.id}-${loadingGeneration}`}
-                  onLoadingComplete={() => markComponentLoaded(`table-${report.id}`)}
-                  visibilityRefreshTrigger={loadingGeneration}
-                />
-              </Card>
-            );
-          })}
+            {/* Filters */}
+            <FiltersBar 
+              reportId="consolidated" 
+              onFiltersChange={(filters) => handleFiltersChange('consolidated', filters)}
+              isSharedView={false} 
+              accountId={accountId}
+              refreshTrigger={loadingGeneration} 
+            />
+            
+            {/* KPI Metrics Cards */}
+            <div className="space-y-2">
+              <h3 className="text-base font-semibold text-foreground">Analytics & Insights</h3>
+              <KPIMetricsCards
+                reportId="consolidated"
+                filters={getCombinedFilters('consolidated')}
+                accountId={accountId}
+                visibilityRefreshTrigger={loadingGeneration}
+                key={`metrics-consolidated-${loadingGeneration}`}
+                onLoadingComplete={() => markComponentLoaded('metrics-consolidated')}
+              />
+            </div>
+            
+            {/* KPI Chart */}
+            <div className="space-y-2">
+              <h3 className="text-base font-semibold text-foreground">Performance Chart</h3>
+              <KPIChart
+                reportId="consolidated"
+                filters={getCombinedFilters('consolidated')}
+                accountId={accountId}
+                visibilityRefreshTrigger={loadingGeneration}
+                key={`chart-consolidated-${loadingGeneration}`}
+                onLoadingComplete={() => markComponentLoaded('chart-consolidated')}
+              />
+            </div>
+            
+            {/* Performance Table */}
+            <PerformanceTable 
+              reportId="consolidated" 
+              filters={getCombinedFilters('consolidated')} 
+              isSharedView={false}
+              accountId={accountId}
+              onFiltersChange={(filters) => handleFiltersChange('consolidated', filters)}
+              key={`table-consolidated-${loadingGeneration}`}
+              onLoadingComplete={() => markComponentLoaded('table-consolidated')}
+              visibilityRefreshTrigger={loadingGeneration}
+            />
+          </Card>
         </main>
       ) : (
         <main className="container mx-auto px-6 py-6">
