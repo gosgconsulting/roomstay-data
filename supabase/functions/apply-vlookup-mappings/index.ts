@@ -215,11 +215,16 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('[VLOOKUP-APPLY] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : '';
+    console.error('[VLOOKUP-APPLY] Error:', errorMessage);
+    console.error('[VLOOKUP-APPLY] Stack:', errorStack);
+    console.error('[VLOOKUP-APPLY] Full error:', error);
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+        error: errorMessage,
+        details: errorStack
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
