@@ -7,6 +7,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -87,6 +95,7 @@ export const FiltersBar = ({
   const [masterDimensionValues, setMasterDimensionValues] = useState<string[]>([]);
   const [masterDimensionOptions, setMasterDimensionOptions] = useState<string[]>([]);
   const [masterDimensionPopoverOpen, setMasterDimensionPopoverOpen] = useState(false);
+  const [masterDimensionSettingsOpen, setMasterDimensionSettingsOpen] = useState(false);
   
   // Load vlookup mappings for this report/account
   const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
@@ -843,66 +852,43 @@ export const FiltersBar = ({
             <div className="flex items-center gap-3 flex-1">
               {/* Master Dimension Filter */}
               {showMasterDimensionFilter && (
-                <div 
-                  className="flex flex-col gap-1"
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setMasterDimensionPopoverOpen(true);
-                  }}
-                >
-                  <label className="text-xs text-muted-foreground">
-                    Master Dimension
-                  </label>
-                  <Popover open={masterDimensionPopoverOpen} onOpenChange={setMasterDimensionPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-[200px] justify-between bg-background"
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          setMasterDimensionPopoverOpen(true);
-                        }}
-                      >
-                        {masterDimensionId 
-                          ? dimensions.find(d => d.id === masterDimensionId)?.name || 'Select...'
-                          : 'Select dimension...'}
-                        <Settings className="ml-2 h-4 w-4 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[250px] p-0 bg-background z-50" align="start">
-                      <ScrollArea className="h-[200px]">
-                        <div className="p-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-full justify-start text-xs mb-1"
-                            onClick={() => {
-                              setMasterDimensionId(null);
-                              setMasterDimensionValues([]);
-                              setMasterDimensionPopoverOpen(false);
-                            }}
-                          >
-                            None (Clear filter)
-                          </Button>
-                          {dimensions.filter(d => d.type === 'text').map(dim => (
-                            <Button
-                              key={dim.id}
-                              variant={masterDimensionId === dim.id ? "secondary" : "ghost"}
-                              size="sm"
-                              className="w-full justify-start text-xs"
-                              onClick={() => {
-                                setMasterDimensionId(dim.id);
-                                setMasterDimensionValues([]);
-                                setMasterDimensionPopoverOpen(false);
-                              }}
-                            >
-                              {dim.name}
-                            </Button>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </PopoverContent>
-                  </Popover>
+                <div className="flex items-end gap-2">
+                  <div 
+                    className="flex flex-col gap-1"
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setMasterDimensionPopoverOpen(true);
+                    }}
+                  >
+                    <label className="text-xs text-muted-foreground">
+                      Master Dimension
+                    </label>
+                    <Button
+                      variant="outline"
+                      className="w-[200px] justify-between bg-background"
+                      onClick={() => setMasterDimensionPopoverOpen(true)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setMasterDimensionPopoverOpen(true);
+                      }}
+                    >
+                      {masterDimensionId 
+                        ? dimensions.find(d => d.id === masterDimensionId)?.name || 'Select...'
+                        : 'Select dimension...'}
+                      <Settings className="ml-2 h-4 w-4 opacity-50" />
+                    </Button>
+                  </div>
+                  
+                  {/* Settings Button */}
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10"
+                    onClick={() => setMasterDimensionSettingsOpen(true)}
+                    title="Configure master dimension settings"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
                 </div>
               )}
 
@@ -1340,6 +1326,110 @@ export const FiltersBar = ({
         onDimensionsChange={handleDimensionsChange}
         reportId={reportId}
       />
+
+      {/* Master Dimension Settings Modal */}
+      <Dialog open={masterDimensionSettingsOpen} onOpenChange={setMasterDimensionSettingsOpen}>
+        <DialogContent className="sm:max-w-[500px] bg-background">
+          <DialogHeader>
+            <DialogTitle>Master Dimension Settings</DialogTitle>
+            <DialogDescription>
+              Choose a dimension to use as the master filter across all reports. This will be automatically applied when viewing consolidated data.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Select Master Dimension</Label>
+              <ScrollArea className="h-[300px] border rounded-md p-2">
+                <div className="space-y-1">
+                  <Button
+                    variant={!masterDimensionId ? "secondary" : "ghost"}
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => setMasterDimensionId(null)}
+                  >
+                    <Check className={cn("mr-2 h-4 w-4", !masterDimensionId ? "opacity-100" : "opacity-0")} />
+                    None (No master dimension)
+                  </Button>
+                  
+                  {dimensions.filter(d => d.type === 'text' && (d.scope === 'global' || d.scope === 'account')).map(dim => (
+                    <Button
+                      key={dim.id}
+                      variant={masterDimensionId === dim.id ? "secondary" : "ghost"}
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => setMasterDimensionId(dim.id)}
+                    >
+                      <Check className={cn("mr-2 h-4 w-4", masterDimensionId === dim.id ? "opacity-100" : "opacity-0")} />
+                      {dim.name}
+                      {dim.scope === 'global' && (
+                        <span className="ml-2 text-xs text-muted-foreground">(Global)</span>
+                      )}
+                    </Button>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMasterDimensionSettingsOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => {
+              setMasterDimensionSettingsOpen(false);
+              toast({
+                title: "Settings saved",
+                description: masterDimensionId 
+                  ? `Master dimension set to: ${dimensions.find(d => d.id === masterDimensionId)?.name}`
+                  : "Master dimension cleared",
+              });
+            }}>
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Master Dimension Popover (for quick selection) */}
+      <Popover open={masterDimensionPopoverOpen} onOpenChange={setMasterDimensionPopoverOpen}>
+        <PopoverTrigger asChild>
+          <div style={{ display: 'none' }} />
+        </PopoverTrigger>
+        <PopoverContent className="w-[250px] p-0 bg-background z-[100]" align="start">
+          <ScrollArea className="h-[200px]">
+            <div className="p-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start text-xs mb-1"
+                onClick={() => {
+                  setMasterDimensionId(null);
+                  setMasterDimensionValues([]);
+                  setMasterDimensionPopoverOpen(false);
+                }}
+              >
+                None (Clear filter)
+              </Button>
+              {dimensions.filter(d => d.type === 'text').map(dim => (
+                <Button
+                  key={dim.id}
+                  variant={masterDimensionId === dim.id ? "secondary" : "ghost"}
+                  size="sm"
+                  className="w-full justify-start text-xs"
+                  onClick={() => {
+                    setMasterDimensionId(dim.id);
+                    setMasterDimensionValues([]);
+                    setMasterDimensionPopoverOpen(false);
+                  }}
+                >
+                  {dim.name}
+                </Button>
+              ))}
+            </div>
+          </ScrollArea>
+        </PopoverContent>
+      </Popover>
     </>
   );
 };
