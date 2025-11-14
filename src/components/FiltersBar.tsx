@@ -19,6 +19,7 @@ import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
 import { useToast } from "@/components/ui/use-toast";
+import { CleanupFilterDimensionsButton } from "./CleanupFilterDimensionsButton";
 
 export interface FilterState {
   dimensionFilters: Record<string, string[]>;
@@ -62,11 +63,13 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
   const [compareDateRange, setCompareDateRange] = useState<DateRange | undefined>();
   const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
   const [openPopovers, setOpenPopovers] = useState<Record<string, boolean>>({});
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
     if (reportId) {
       // Reset all filter state when report changes - use last 7 days for performance
+      setIsInitialLoad(true);
       setActiveDimensions([]);
       setSelectedFilters({});
       setDateRange(undefined);
@@ -75,9 +78,12 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
       setCompareType("previous_period");
       setCompareDateRange(undefined);
       
-      // Then load settings for the new report
-      loadDimensions();
-      loadFilterSettings();
+      // Load dimensions first, then load settings
+      loadDimensions().then(() => {
+        loadFilterSettings().finally(() => {
+          setIsInitialLoad(false);
+        });
+      });
     }
   }, [reportId]);
 
@@ -115,12 +121,16 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     }
   }, []); // Only run on mount
 
-  // Save filter settings whenever they change
+  // Save filter settings whenever they change (but not during initial load)
   useEffect(() => {
-    if (reportId && !isLoading) {
-      saveFilterSettings();
+    if (reportId && !isLoading && !isInitialLoad) {
+      const timeoutId = setTimeout(() => {
+        saveFilterSettings();
+      }, 300); // Small delay to batch rapid changes
+      
+      return () => clearTimeout(timeoutId);
     }
-  }, [activeDimensions, selectedFilters, dateRange, datePreset, reportId]);
+  }, [activeDimensions, selectedFilters, dateRange, datePreset, reportId, isInitialLoad]);
 
   // Update comparison date range when date range or compare type changes
   useEffect(() => {
@@ -153,6 +163,29 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     }
   }, [onFiltersChange, selectedFilters, dateRange, datePreset, compareEnabled, compareType, compareDateRange]);
 
+  // Helper function to get Date dimension ID from database
+  const getDateDimensionId = async (): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase
+        .from("dimensions")
+        .select("id")
+        .eq("scope", "global")
+        .eq("type", "date")
+        .eq("name", "Date")
+        .maybeSingle();
+      
+      if (error) {
+        console.error('[FILTERS-BAR] Error fetching Date dimension:', error);
+        return null;
+      }
+      
+      return data?.id || null;
+    } catch (error) {
+      console.error('[FILTERS-BAR] Error in getDateDimensionId:', error);
+      return null;
+    }
+  };
+
   const loadFilterSettings = async () => {
     if (!reportId) return;
     
@@ -174,6 +207,9 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
         }
       }
       
+      // Get the Date dimension ID first
+      const dateDimensionId = await getDateDimensionId();
+      
       // Try to load saved filters for this specific report and user (or report owner for shared views)
       const { data, error } = await supabase
         .from("report_views")
@@ -186,54 +222,65 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
       if (error && error.code !== 'PGRST116') throw error; // Ignore "no rows" error
 
       if (data) {
-        // Load saved filter settings for this report
-        // Reset to Date-only if there are excessive dimensions saved
-        const dateDimension = dimensions.find(d => d.type === 'date');
+        // Check if we need to reset excessive dimensions BEFORE setting state
+        const needsReset = data.filter_dimensions && data.filter_dimensions.length > 1;
         
-        if (data.filter_dimensions && data.filter_dimensions.length > 1 && dateDimension) {
+        if (needsReset && dateDimensionId) {
           // Reset excessive dimensions to Date only
-          console.log('[FILTERS-BAR] Resetting excessive filter dimensions to Date only');
-          setActiveDimensions([dateDimension.id]);
+          console.log('[FILTERS-BAR] Detected excessive filter dimensions, resetting to Date only');
+          console.log('[FILTERS-BAR] Old dimensions:', data.filter_dimensions);
           
-          // Save the reset to database
+          // Update database immediately
           await supabase
             .from("report_views")
             .update({ 
-              filter_dimensions: [dateDimension.id],
+              filter_dimensions: [dateDimensionId],
               filter_values: {}
             })
             .eq("id", data.id);
-        } else if (data.filter_dimensions && data.filter_dimensions.length > 0) {
-          setActiveDimensions(data.filter_dimensions);
-        } else if (dateDimension) {
-          // Default to only Date dimension if none saved
-          setActiveDimensions([dateDimension.id]);
-        }
-        if (data.filter_values && Object.keys(data.filter_values).length > 0) {
-          // Convert old single-value filters to array format if needed
-          const filterValues = data.filter_values as Record<string, string | string[]>;
-          const normalizedFilters: Record<string, string[]> = {};
-          const activeDims = data.filter_dimensions || [];
           
-          Object.entries(filterValues).forEach(([key, value]) => {
-            // Only load filter values for dimensions that are in filter_dimensions
-            if (activeDims.includes(key)) {
-              normalizedFilters[key] = Array.isArray(value) ? value : [value];
-            } else {
-              console.warn(`[FILTER-CLEANUP] Ignoring filter value for inactive dimension: ${key}`);
-            }
+          // Set state to the reset value
+          setActiveDimensions([dateDimensionId]);
+          setSelectedFilters({});
+          
+          toast({
+            title: "Filter dimensions reset",
+            description: "Filter dimensions have been reset to default (Date only).",
+            variant: "default",
           });
-          setSelectedFilters(normalizedFilters);
+        } else if (data.filter_dimensions && data.filter_dimensions.length > 0) {
+          // Load saved dimensions if they're valid
+          setActiveDimensions(data.filter_dimensions);
+          
+          if (data.filter_values && Object.keys(data.filter_values).length > 0) {
+            // Convert old single-value filters to array format if needed
+            const filterValues = data.filter_values as Record<string, string | string[]>;
+            const normalizedFilters: Record<string, string[]> = {};
+            const activeDims = data.filter_dimensions || [];
+            
+            Object.entries(filterValues).forEach(([key, value]) => {
+              // Only load filter values for dimensions that are in filter_dimensions
+              if (activeDims.includes(key)) {
+                normalizedFilters[key] = Array.isArray(value) ? value : [value];
+              } else {
+                console.warn(`[FILTER-CLEANUP] Ignoring filter value for inactive dimension: ${key}`);
+              }
+            });
+            setSelectedFilters(normalizedFilters);
+          }
+        } else if (dateDimensionId) {
+          // Default to only Date dimension if none saved
+          setActiveDimensions([dateDimensionId]);
         }
+        
         // Always apply date preset if saved, or default to "this_month"
         const preset = data.date_range_preset || "this_month";
         setDatePreset(preset);
         applyDatePreset(preset);
       } else {
         // No saved view for this report, apply defaults
-        const dateDimension = dimensions.find(d => d.type === 'date');
-        if (dateDimension) {
-          setActiveDimensions([dateDimension.id]);
+        if (dateDimensionId) {
+          setActiveDimensions([dateDimensionId]);
         }
         applyDatePreset("this_month");
       }
@@ -666,6 +713,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
   };
 
   const handleDimensionsChange = async (dimensionIds: string[]) => {
+    console.log('[FILTERS-BAR] handleDimensionsChange called with:', dimensionIds);
     setActiveDimensions(dimensionIds);
     // Clear filters for removed dimensions
     const newFilters = { ...selectedFilters };
@@ -676,8 +724,8 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     });
     setSelectedFilters(newFilters);
     
-    // Save the updated dimensions to the database
-    if (!reportId || isSharedView) return;
+    // Save the updated dimensions to the database (but not during initial load)
+    if (!reportId || isSharedView || isInitialLoad) return;
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -1083,14 +1131,17 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
               )}
 
               {activeDimensions.length > 0 && !isSharedView && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowDimensionSelector(true)}
-                  title="Edit filter dimensions"
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
+                <>
+                  <CleanupFilterDimensionsButton />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowDimensionSelector(true)}
+                    title="Edit filter dimensions"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </>
               )}
             </div>
           </div>
