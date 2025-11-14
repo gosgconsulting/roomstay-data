@@ -228,6 +228,74 @@ export const FiltersBar = ({
     }
   };
 
+  // Helper: fetch account_id for a report if not provided
+  const getReportAccountId = async (): Promise<string | null> => {
+    if (!reportId) return null;
+    try {
+      const { data, error } = await supabase
+        .from("reports")
+        .select("account_id")
+        .eq("id", reportId)
+        .maybeSingle();
+      if (error) return null;
+      return data?.account_id || null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Helper: prefer Account dimension as default (account-scoped > custom/global), fallback to Date
+  const getAccountDimensionId = async (): Promise<string | null> => {
+    try {
+      const resolvedAccountId = accountId || (await getReportAccountId());
+      // 1) Prefer account-scoped "Account" dimension for the report's account
+      if (resolvedAccountId) {
+        const { data: acctDim, error: acctErr } = await supabase
+          .from("dimensions")
+          .select("id")
+          .eq("name", "Account")
+          .eq("type", "text")
+          .eq("scope", "account")
+          .eq("account_id", resolvedAccountId)
+          .order("created_at", { ascending: false })
+          .maybeSingle();
+        if (!acctErr && acctDim?.id) return acctDim.id;
+      }
+
+      // 2) Fall back to a user custom "Account" dimension (global custom or report-specific)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: customDim, error: customErr } = await supabase
+          .from("dimensions")
+          .select("id")
+          .eq("name", "Account")
+          .eq("type", "text")
+          .eq("scope", "custom")
+          .eq("user_id", user.id)
+          .or(`report_id.is.null,report_id.eq.${reportId || ''}`)
+          .order("created_at", { ascending: false })
+          .maybeSingle();
+        if (!customErr && customDim?.id) return customDim.id;
+      }
+
+      // 3) Fall back to a global "Account" dimension if present
+      const { data: globalDim, error: globalErr } = await supabase
+        .from("dimensions")
+        .select("id")
+        .eq("name", "Account")
+        .eq("type", "text")
+        .eq("scope", "global")
+        .order("created_at", { ascending: false })
+        .maybeSingle();
+      if (!globalErr && globalDim?.id) return globalDim.id;
+
+      // 4) Final fallback: Date dimension
+      return await getDateDimensionId();
+    } catch {
+      return await getDateDimensionId();
+    }
+  };
+
   const loadFilterSettings = async () => {
     if (!reportId) return;
     try {
@@ -244,6 +312,7 @@ export const FiltersBar = ({
       }
 
       const dateDimensionId = await getDateDimensionId();
+      const defaultAccountDimId = await getAccountDimensionId();
 
       const { data, error } = await supabase
         .from("report_views")
@@ -256,12 +325,25 @@ export const FiltersBar = ({
       if (error && error.code !== "PGRST116") throw error;
 
       if (data) {
-        if (data.filter_dimensions?.length) {
-          setActiveDimensions(data.filter_dimensions);
+        // If only Date is set as the sole default filter dimension, replace it with Account (if available)
+        const existingDims = Array.isArray(data.filter_dimensions) ? data.filter_dimensions : [];
+        if (existingDims.length === 1 && dateDimensionId && existingDims[0] === dateDimensionId && defaultAccountDimId) {
+          setActiveDimensions([defaultAccountDimId]);
+
+          // Persist fix so future loads are correct
+          await supabase
+            .from("report_views")
+            .update({
+              filter_dimensions: [defaultAccountDimId],
+              filter_values: {}, // clear since dimension changed
+            })
+            .eq("id", data.id);
+        } else if (existingDims.length) {
+          setActiveDimensions(existingDims);
           if (data.filter_values && Object.keys(data.filter_values).length) {
             const fv = data.filter_values as Record<string, string | string[]>;
             const normalized: Record<string, string[]> = {};
-            const activeDims = data.filter_dimensions || [];
+            const activeDims = existingDims;
             Object.entries(fv).forEach(([key, value]) => {
               if (activeDims.includes(key) && !key.startsWith("__")) {
                 normalized[key] = Array.isArray(value) ? value : [value];
@@ -269,6 +351,8 @@ export const FiltersBar = ({
             });
             setSelectedFilters(normalized);
           }
+        } else if (defaultAccountDimId) {
+          setActiveDimensions([defaultAccountDimId]);
         } else if (dateDimensionId) {
           setActiveDimensions([dateDimensionId]);
         }
@@ -281,11 +365,24 @@ export const FiltersBar = ({
         const preset = data.date_range_preset || "all_time";
         applyDatePreset(preset);
       } else {
-        if (dateDimensionId) setActiveDimensions([dateDimensionId]);
+        // No view: default to Account if available, else Date
+        if (defaultAccountDimId) {
+          setActiveDimensions([defaultAccountDimId]);
+        } else if (dateDimensionId) {
+          setActiveDimensions([dateDimensionId]);
+        }
         applyDatePreset("all_time");
       }
     } catch (error) {
       console.error("Error loading filter settings:", error);
+      // Fallback default
+      const defaultAccountDimId = await getAccountDimensionId();
+      const dateDimensionId = await getDateDimensionId();
+      if (defaultAccountDimId) {
+        setActiveDimensions([defaultAccountDimId]);
+      } else if (dateDimensionId) {
+        setActiveDimensions([dateDimensionId]);
+      }
       applyDatePreset("all_time");
     }
   };
