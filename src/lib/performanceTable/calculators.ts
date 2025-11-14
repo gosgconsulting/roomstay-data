@@ -70,7 +70,12 @@ export function calculateTotals(
         
         const dimensionNames = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
         for (const dimName of dimensionNames) {
-          const value = filteredTotals[dimName] || 0;
+          const value = filteredTotals[dimName];
+          // Only proceed if value exists and is not undefined/null
+          if (value === undefined || value === null) {
+            console.warn(`[CALC] Missing value for dimension ${dimName} in formula ${dim.formula}`);
+            continue;
+          }
           const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const regex = new RegExp(`\\b${escapedName}\\b`, 'g');
           expression = expression.replace(regex, `(${value})`);
@@ -78,7 +83,7 @@ export function calculateTotals(
         const result = eval(expression);
         filteredTotals[dim.name] = typeof result === 'number' && !isNaN(result) && isFinite(result) ? result : 0;
       } catch (error) {
-        console.error('Formula evaluation error:', error, 'for dimension:', dim.name);
+        console.error('Formula evaluation error:', error, 'for dimension:', dim.name, 'formula:', dim.formula);
         filteredTotals[dim.name] = 0;
       }
     }

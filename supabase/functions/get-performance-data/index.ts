@@ -41,6 +41,23 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Load dimensions to map IDs to names
+    const { data: dimensions, error: dimError } = await supabase
+      .from('dimensions')
+      .select('id, name, type')
+      .or(`and(scope.eq.account,account_id.eq.${accountId}),and(scope.eq.custom,user_id.eq.${userId}),scope.eq.global`);
+
+    if (dimError) {
+      console.error('[GET-PERFORMANCE-DATA] Error loading dimensions:', dimError);
+      throw dimError;
+    }
+
+    // Create dimension ID to name mapping
+    const dimensionMap = new Map();
+    dimensions?.forEach((dim: any) => {
+      dimensionMap.set(dim.id, { name: dim.name, type: dim.type });
+    });
+
     // Build query for dimension_data
     let query = supabase
       .from('dimension_data')
@@ -175,13 +192,34 @@ Deno.serve(async (req) => {
 
     console.log('[GET-PERFORMANCE-DATA] Filtered rows:', filteredData.length);
 
-    // Return the filtered data
-    const response = {
-      data: filteredData.map((row: any) => ({
-        ...row.dimension_values,
+    // Transform data from dimension IDs to dimension names
+    const transformedData = filteredData.map((row: any) => {
+      const dimensionValues = row.dimension_values || {};
+      const transformedRow: any = {};
+      
+      // Map dimension IDs to names
+      for (const [dimId, value] of Object.entries(dimensionValues)) {
+        const dimInfo = dimensionMap.get(dimId);
+        if (dimInfo) {
+          transformedRow[dimInfo.name] = value;
+        }
+      }
+      
+      return {
+        id: row.id || `row-${row.row_number}`,
+        name: '', // Will be set by grouping logic in frontend
+        level: 0,
+        data: transformedRow,
         _row_number: row.row_number,
         _data_source_id: row.data_source_id,
-      })),
+      };
+    });
+
+    console.log('[GET-PERFORMANCE-DATA] Sample transformed row:', transformedData[0]);
+
+    // Return the filtered data
+    const response = {
+      data: transformedData,
       total: filteredData.length,
       totalRows: filteredData.length, // Keep for backward compatibility
       hasMore: false,
