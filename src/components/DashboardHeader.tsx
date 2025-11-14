@@ -758,6 +758,15 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
           <Button
             variant="outline"
             className="gap-2"
+            onClick={() => setShowVlookupModal(true)}
+          >
+            <GitCompare className="h-4 w-4" />
+            Vlookup
+          </Button>
+
+          <Button
+            variant="outline"
+            className="gap-2"
             onClick={() => {
               if (accountId) {
                 navigate(`/tools/budget/${accountId}`);
