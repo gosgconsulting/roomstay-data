@@ -53,21 +53,14 @@ export default function ReportDashboard() {
     const fromDateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
     const toDateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
     
-    const from = new Date(fromDateString);
-    const to = new Date(toDateString);
-    
     console.log('[testing] ReportDashboard - Initializing with timezone-free date range:', {
-      fromDateString,
-      toDateString,
-      from: from.toISOString(),
-      to: to.toISOString(),
-      preset: "this_month"
+      preset: "all_time"
     });
     
     return {
       dimensionFilters: {},
-      dateRange: { from, to },
-      datePreset: "this_month",
+      dateRange: undefined,
+      datePreset: "all_time",
       compareEnabled: false,
       compareType: "previous_period",
       compareDateRange: undefined,
@@ -142,7 +135,7 @@ export default function ReportDashboard() {
         setFilters({
           dimensionFilters: {},
           dateRange: undefined,
-          datePreset: "this_month",
+          datePreset: "all_time",
           compareEnabled: false,
           compareType: "previous_period",
           compareDateRange: undefined,

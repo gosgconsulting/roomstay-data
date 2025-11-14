@@ -80,7 +80,7 @@ export const FiltersBar = ({
     console.log('[testing] FiltersBar - Initial dateRange state set to undefined');
     return undefined;
   });
-  const [datePreset, setDatePreset] = useState<string>("this_month");
+  const [datePreset, setDatePreset] = useState<string>("all_time");
   const [showDimensionSelector, setShowDimensionSelector] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingFilters, setIsLoadingFilters] = useState(false);
@@ -119,7 +119,7 @@ export const FiltersBar = ({
       setActiveDimensions([]);
       setSelectedFilters({});
       setDateRange(undefined);
-      setDatePreset("this_month");
+      setDatePreset("all_time");
       setCompareEnabled(false);
       setCompareType("previous_period");
       setCompareDateRange(undefined);
@@ -238,8 +238,8 @@ export const FiltersBar = ({
   useEffect(() => {
     console.log('[testing] FiltersBar - Initial mount effect');
     if (!reportId) {
-      console.log('[testing] FiltersBar - No reportId on mount, applying this_month preset');
-      applyDatePreset("this_month");
+      console.log('[testing] FiltersBar - No reportId on mount, applying all_time preset');
+      applyDatePreset("all_time");
     }
   }, []); // Only run on mount
 
@@ -386,8 +386,8 @@ export const FiltersBar = ({
           }
         }
         
-        // Always apply date preset if saved, or default to "this_month"
-        const preset = data.date_range_preset || "this_month";
+        // Always apply date preset if saved, or default to "all_time"
+        const preset = data.date_range_preset || "all_time";
         setDatePreset(preset);
         applyDatePreset(preset);
       } else {
@@ -395,12 +395,12 @@ export const FiltersBar = ({
         if (dateDimensionId) {
           setActiveDimensions([dateDimensionId]);
         }
-        applyDatePreset("this_month");
+        applyDatePreset("all_time");
       }
     } catch (error) {
       console.error("Error loading filter settings:", error);
       // On error, apply defaults
-      applyDatePreset("this_month");
+      applyDatePreset("all_time");
     }
   };
 
@@ -598,14 +598,14 @@ export const FiltersBar = ({
     setDatePreset(preset);
   };
 
-  // Check if any filters are currently applied (excluding default "this_month")
+  // Check if any filters are currently applied (excluding default "all_time")
   const hasActiveFilters = () => {
     // Check if any dimension has selected filter values
     const hasDimensionFilters = Object.keys(selectedFilters).some(
       dimensionId => selectedFilters[dimensionId] && selectedFilters[dimensionId].length > 0
     );
-    // Only consider date filter active if it's NOT the default "this_month"
-    const hasDateFilter = datePreset !== "this_month";
+    // Only consider date filter active if it's NOT the default "all_time"
+    const hasDateFilter = datePreset !== "all_time";
     const hasCompareFilter = compareEnabled;
     return hasDimensionFilters || hasDateFilter || hasCompareFilter;
   };
@@ -621,8 +621,8 @@ export const FiltersBar = ({
       }
     });
     
-    // Only count date filter if it's NOT the default "this_month"
-    if (datePreset !== "this_month") {
+    // Only count date filter if it's NOT the default "all_time"
+    if (datePreset !== "all_time") {
       count += 1;
     }
     
@@ -638,8 +638,8 @@ export const FiltersBar = ({
     // Keep the active dimensions but clear their selected values
     // setActiveDimensions([]); // DON'T remove dimensions from filter bar
     setSelectedFilters({}); // Clear all filter values
-    // Reset to default "this_month" date filter
-    applyDatePreset("this_month");
+    // Reset to default "all_time" date filter
+    applyDatePreset("all_time");
     setCompareEnabled(false);
     setCompareType("previous_period");
     setCompareDateRange(undefined);
@@ -912,7 +912,7 @@ export const FiltersBar = ({
         filter_values: newFilters,
         date_range_start: existingView?.date_range_start || null,
         date_range_end: existingView?.date_range_end || null,
-        date_range_preset: existingView?.date_range_preset || "this_month",
+        date_range_preset: existingView?.date_range_preset || "all_time",
       };
 
       if (existingView) {
