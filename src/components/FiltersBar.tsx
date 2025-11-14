@@ -19,7 +19,6 @@ import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
 import { useToast } from "@/components/ui/use-toast";
-import { CleanupFilterDimensionsButton } from "./CleanupFilterDimensionsButton";
 
 export interface FilterState {
   dimensionFilters: Record<string, string[]>;
@@ -1131,17 +1130,14 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
               )}
 
               {activeDimensions.length > 0 && !isSharedView && (
-                <>
-                  <CleanupFilterDimensionsButton />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowDimensionSelector(true)}
-                    title="Edit filter dimensions"
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowDimensionSelector(true)}
+                  title="Edit filter dimensions"
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
               )}
             </div>
           </div>
