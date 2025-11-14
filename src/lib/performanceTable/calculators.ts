@@ -74,14 +74,11 @@ export function calculateTotals(
         const dimensionNames = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
         for (const dimName of dimensionNames) {
           const value = filteredTotals[dimName];
-          // Only proceed if value exists and is not undefined/null
-          if (value === undefined || value === null) {
-            console.warn(`[CALC] Missing value for dimension ${dimName} in formula ${dim.formula}`);
-            continue;
-          }
+          // Use 0 for missing values to allow formulas to work
+          const numValue = (value === undefined || value === null) ? 0 : value;
           const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const regex = new RegExp(`\\b${escapedName}\\b`, 'g');
-          expression = expression.replace(regex, `(${value})`);
+          expression = expression.replace(regex, `(${numValue})`);
         }
         const result = eval(expression);
         filteredTotals[dim.name] = typeof result === 'number' && !isNaN(result) && isFinite(result) ? result : 0;
@@ -152,10 +149,12 @@ export function calculateComparisonTotalsAndChanges(
         
         const dimensionNames = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
         for (const dimName of dimensionNames) {
-          const value = filteredCompareTotals[dimName] || 0;
+          // Use 0 for missing values to allow formulas to work
+          const value = filteredCompareTotals[dimName];
+          const numValue = (value === undefined || value === null) ? 0 : value;
           const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const regex = new RegExp(`\\b${escapedName}\\b`, 'g');
-          expression = expression.replace(regex, `(${value})`);
+          expression = expression.replace(regex, `(${numValue})`);
         }
         const result = eval(expression);
         filteredCompareTotals[dim.name] = typeof result === 'number' && !isNaN(result) && isFinite(result) ? result : 0;

@@ -282,7 +282,7 @@ Deno.serve(async (req) => {
         if (rowVal === undefined || rowVal === null) return false;
         
         const rowStr = String(rowVal);
-        return masterDimensionValues.some(v => rowStr === String(v));
+        return masterDimensionValues.some((v: any) => rowStr === String(v));
       });
       
       console.log(`[GET-CONSOLIDATED-PERFORMANCE-DATA] After master dimension filter: ${allData.length} rows`);
@@ -297,11 +297,52 @@ Deno.serve(async (req) => {
       allDimIds.unshift(REPORT_DIMENSION_ID);
     }
 
+    // Helper function to aggregate dates by granularity
+    const aggregateDateByGranularity = (dateStr: string, granularity: string): string => {
+      if (!dateStr || dateStr === '') return dateStr;
+      
+      try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return dateStr;
+        
+        switch (granularity) {
+          case 'year':
+            return `${date.getFullYear()}-01-01`;
+          case 'month':
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
+          case 'week': {
+            // Get ISO week start (Monday)
+            const day = date.getDay();
+            const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+            const weekStart = new Date(date);
+            weekStart.setDate(diff);
+            return `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+          }
+          case 'day':
+          default:
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+      } catch (e) {
+        console.error('[DATE-AGGREGATION] Error aggregating date:', e);
+        return dateStr;
+      }
+    };
+
     allData.forEach(row => {
       const dimValues = row.dimension_values;
       
-      // Create group key
-      const groupKey = allDimIds.map(dimId => dimValues[dimId] || '').join('|');
+      // Process dimension values and aggregate dates if needed
+      const processedDimValues: Record<string, any> = { ...dimValues };
+      
+      allDimIds.forEach(dimId => {
+        const dimType = dimensionIdToType.get(dimId);
+        if (dimType === 'date' && processedDimValues[dimId]) {
+          processedDimValues[dimId] = aggregateDateByGranularity(processedDimValues[dimId], dateGranularity);
+        }
+      });
+      
+      // Create group key using processed values
+      const groupKey = allDimIds.map(dimId => processedDimValues[dimId] || '').join('|');
       
       if (!groupedData.has(groupKey)) {
         groupedData.set(groupKey, {
@@ -312,15 +353,15 @@ Deno.serve(async (req) => {
 
       const group = groupedData.get(groupKey)!;
       
-      // Store dimension values
+      // Store dimension values (use processed values for dates)
       allDimIds.forEach(dimId => {
         if (!group.dimension_values[dimId]) {
-          group.dimension_values[dimId] = dimValues[dimId] || '';
+          group.dimension_values[dimId] = processedDimValues[dimId] || '';
         }
       });
 
       // Aggregate metrics (numerical and currency dimensions)
-      visibleDimensionIds.forEach(dimId => {
+      visibleDimensionIds.forEach((dimId: string) => {
         if (allDimIds.includes(dimId)) return; // Skip grouping dimensions
         
         const value = dimValues[dimId];
@@ -344,7 +385,7 @@ Deno.serve(async (req) => {
 
     // Calculate totals
     const totals: Record<string, number> = {};
-    visibleDimensionIds.forEach(dimId => {
+    visibleDimensionIds.forEach((dimId: string) => {
       if (allDimIds.includes(dimId)) return;
       
       let total = 0;
