@@ -41,16 +41,41 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Load dimensions to map IDs to names
-    const { data: dimensions, error: dimError } = await supabase
-      .from('dimensions')
-      .select('id, name, type')
-      .or(`and(scope.eq.account,account_id.eq.${accountId}),and(scope.eq.custom,user_id.eq.${userId}),scope.eq.global`);
+    // Helper function to retry database queries
+    const retryQuery = async (queryFn: () => any, maxRetries = 3) => {
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          const result = await queryFn();
+          if (result.error) {
+            if (i === maxRetries - 1) throw result.error;
+            console.log(`[GET-PERFORMANCE-DATA] Query error, retrying (${i + 1}/${maxRetries}):`, result.error);
+            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+            continue;
+          }
+          return result;
+        } catch (error) {
+          if (i === maxRetries - 1) throw error;
+          console.log(`[GET-PERFORMANCE-DATA] Exception, retrying (${i + 1}/${maxRetries}):`, error);
+          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+        }
+      }
+    };
 
-    if (dimError) {
-      console.error('[GET-PERFORMANCE-DATA] Error loading dimensions:', dimError);
-      throw dimError;
+    // Load dimensions to map IDs to names with retry
+    const dimensionsResult = await retryQuery(async () => 
+      await supabase
+        .from('dimensions')
+        .select('id, name, type')
+        .or(`and(scope.eq.account,account_id.eq.${accountId}),and(scope.eq.custom,user_id.eq.${userId}),scope.eq.global`)
+    );
+
+    if (!dimensionsResult || dimensionsResult.error) {
+      const error = dimensionsResult?.error || new Error('Failed to load dimensions');
+      console.error('[GET-PERFORMANCE-DATA] Error loading dimensions:', error);
+      throw error;
     }
+
+    const dimensions = dimensionsResult.data;
 
     // Create dimension ID to name mapping
     const dimensionMap = new Map();
@@ -58,26 +83,31 @@ Deno.serve(async (req) => {
       dimensionMap.set(dim.id, { name: dim.name, type: dim.type });
     });
 
-    // Build query for dimension_data
-    let query = supabase
-      .from('dimension_data')
-      .select('dimension_values, row_number, data_source_id')
-      .eq('report_id', reportId);
+    // Build query for dimension_data with retry
+    const dimensionDataResult = await retryQuery(async () => {
+      let query = supabase
+        .from('dimension_data')
+        .select('dimension_values, row_number, data_source_id')
+        .eq('report_id', reportId);
 
-    // Apply limit and offset
-    if (limit) {
-      query = query.limit(limit);
-    }
-    if (offset) {
-      query = query.range(offset, offset + limit - 1);
+      // Apply limit and offset
+      if (limit) {
+        query = query.limit(limit);
+      }
+      if (offset) {
+        query = query.range(offset, offset + limit - 1);
+      }
+
+      return await query;
+    });
+
+    if (!dimensionDataResult || dimensionDataResult.error) {
+      const error = dimensionDataResult?.error || new Error('Failed to load dimension data');
+      console.error('[GET-PERFORMANCE-DATA] Query error:', error);
+      throw error;
     }
 
-    const { data: dimensionData, error: queryError } = await query;
-
-    if (queryError) {
-      console.error('[GET-PERFORMANCE-DATA] Query error:', queryError);
-      throw queryError;
-    }
+    const dimensionData = dimensionDataResult.data;
 
     console.log('[GET-PERFORMANCE-DATA] Fetched rows:', dimensionData?.length || 0);
 
@@ -237,10 +267,23 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('[GET-PERFORMANCE-DATA] Error:', error);
+    
+    // Extract meaningful error information
+    let errorMessage = 'Unknown error';
+    let errorDetails = undefined;
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      errorDetails = error.stack;
+    } else if (typeof error === 'object' && error !== null) {
+      errorMessage = JSON.stringify(error);
+    }
+    
     return new Response(
       JSON.stringify({ 
-        error: error instanceof Error ? error.message : 'Unknown error',
-        details: error instanceof Error ? error.stack : undefined
+        error: errorMessage,
+        details: errorDetails,
+        timestamp: new Date().toISOString()
       }),
       { 
         status: 500,
