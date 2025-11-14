@@ -148,46 +148,51 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
         description: `Saved ${validMappings.length} vlookup mappings`,
       });
 
-      // Apply the mappings to dimension_data
+      // Apply the mappings to dimension_data with retry logic
       console.log('[VLOOKUP] Applying mappings to dimension_data...', { reportId, accountId });
-      try {
-        const { data: applyResult, error: applyError } = await supabase.functions.invoke(
-          'apply-vlookup-mappings',
-          {
-            body: { reportId, accountId },
+      
+      let retryCount = 0;
+      const maxRetries = 3;
+      let applySuccess = false;
+      
+      while (retryCount < maxRetries && !applySuccess) {
+        try {
+          const { data: applyResult, error: applyError } = await supabase.functions.invoke(
+            'apply-vlookup-mappings',
+            {
+              body: { reportId, accountId }
+            }
+          );
+
+          console.log('[VLOOKUP] Apply function response:', { applyResult, applyError, attempt: retryCount + 1 });
+
+          if (applyError) {
+            throw new Error(applyError.message || 'Failed to invoke edge function');
+          } else if (applyResult?.success === false) {
+            throw new Error(applyResult.error || 'Edge function returned error');
+          } else {
+            applySuccess = true;
+            console.log('[VLOOKUP] Successfully applied mappings');
+            toast({
+              title: "Success",
+              description: `Applied vlookup mappings to ${applyResult?.rowsUpdated || 0} rows. Account dimension is now available in filters.`,
+            });
           }
-        );
-
-        console.log('[VLOOKUP] Apply function response:', { applyResult, applyError });
-
-        if (applyError) {
-          console.error('[VLOOKUP] Error applying mappings:', applyError);
-          toast({
-            title: "Warning",
-            description: `Mappings saved but failed to apply: ${applyError.message || 'Unknown error'}`,
-            variant: "destructive",
-          });
-        } else if (applyResult?.success === false) {
-          console.error('[VLOOKUP] Apply function returned error:', applyResult.error);
-          toast({
-            title: "Warning",
-            description: `Mappings saved but failed to apply: ${applyResult.error || 'Unknown error'}`,
-            variant: "destructive",
-          });
-        } else {
-          console.log('[VLOOKUP] Successfully applied mappings');
-          toast({
-            title: "Success",
-            description: `Applied vlookup mappings to ${applyResult?.rowsUpdated || 0} rows`,
-          });
+        } catch (applyErr) {
+          retryCount++;
+          console.error(`[VLOOKUP] Apply attempt ${retryCount} failed:`, applyErr);
+          
+          if (retryCount >= maxRetries) {
+            toast({
+              title: "Warning",
+              description: `Mappings saved but failed to apply after ${maxRetries} attempts: ${applyErr instanceof Error ? applyErr.message : 'Unknown error'}. Try reopening the modal and saving again.`,
+              variant: "destructive",
+            });
+          } else {
+            // Wait before retrying (exponential backoff)
+            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+          }
         }
-      } catch (applyErr) {
-        console.error('[VLOOKUP] Error calling apply function:', applyErr);
-        toast({
-          title: "Warning",
-          description: `Mappings saved but failed to apply: ${applyErr instanceof Error ? applyErr.message : 'Unknown error'}`,
-          variant: "destructive",
-        });
       }
 
       // Trigger data refresh if callback provided
