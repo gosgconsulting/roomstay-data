@@ -991,6 +991,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
         onOpenChange={setShowVlookupModal}
         reportId={reportId || undefined}
         accountId={accountId}
+        onSave={onRefreshData}
       />
 
       

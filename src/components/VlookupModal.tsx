@@ -20,9 +20,10 @@ interface VlookupModalProps {
   onOpenChange: (open: boolean) => void;
   reportId?: string;
   accountId?: string;
+  onSave?: () => void;
 }
 
-export function VlookupModal({ open, onOpenChange, reportId, accountId }: VlookupModalProps) {
+export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }: VlookupModalProps) {
   const [mappings, setMappings] = useState<VlookupMapping[]>([]);
   const [dimensions, setDimensions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -144,8 +145,13 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId }: Vlooku
 
       toast({
         title: "Success",
-        description: `Saved ${validMappings.length} vlookup mappings`,
+        description: `Saved ${validMappings.length} vlookup mappings. Refreshing data...`,
       });
+
+      // Trigger data refresh if callback provided
+      if (onSave) {
+        onSave();
+      }
 
       onOpenChange(false);
     } catch (error) {
