@@ -91,12 +91,13 @@ export function TableRow({
         {getOrderedDimensions()
           .filter(d => visibleColumns.has(d.id))
           .map((dimension) => {
-            const value = row.data[dimension.name];
-            const change = row.changeData?.[dimension.name];
+            // Safely access row data with fallbacks
+            const value = row.data && dimension.name in row.data ? row.data[dimension.name] : null;
+            const change = row.changeData && dimension.name in row.changeData ? row.changeData[dimension.name] : undefined;
             const hasComparison = filters.compareEnabled && change !== undefined;
             
             // Check if value is negative for styling
-            const numValue = typeof value === 'number' ? value : parseFloat(String(value));
+            const numValue = typeof value === 'number' ? value : parseFloat(String(value || 0));
             const isNegative = !isNaN(numValue) && numValue < 0;
             
             return (
@@ -148,4 +149,3 @@ export function TableRow({
     </>
   );
 }
-
