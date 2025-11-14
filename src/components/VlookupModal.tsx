@@ -145,8 +145,36 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
 
       toast({
         title: "Success",
-        description: `Saved ${validMappings.length} vlookup mappings. Refreshing data...`,
+        description: `Saved ${validMappings.length} vlookup mappings`,
       });
+
+      // Apply the mappings to dimension_data
+      console.log('[VLOOKUP] Applying mappings to dimension_data...');
+      try {
+        const { data: applyResult, error: applyError } = await supabase.functions.invoke(
+          'apply-vlookup-mappings',
+          {
+            body: { reportId, accountId },
+          }
+        );
+
+        if (applyError) {
+          console.error('[VLOOKUP] Error applying mappings:', applyError);
+          toast({
+            title: "Warning",
+            description: "Mappings saved but failed to apply to data",
+            variant: "destructive",
+          });
+        } else {
+          console.log('[VLOOKUP] Apply result:', applyResult);
+          toast({
+            title: "Success",
+            description: `Applied vlookup mappings to ${applyResult.rowsUpdated || 0} rows`,
+          });
+        }
+      } catch (applyErr) {
+        console.error('[VLOOKUP] Error calling apply function:', applyErr);
+      }
 
       // Trigger data refresh if callback provided
       if (onSave) {
