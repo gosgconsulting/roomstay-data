@@ -313,11 +313,18 @@ Deno.serve(async (req) => {
         lookupMap.set(normalizedSource, mapping.target_value);
       }
 
-      // Process rows in batches
-      const BATCH_SIZE = 100;
-      const updates: Array<{ id: string; dimension_values: any }> = [];
+      // Process rows - only update those that need changes
+      let processedCount = 0;
+      let skippedCount = 0;
+      const MAX_UPDATES = 5000; // Limit to prevent timeout
 
       for (const row of relevantRows) {
+        // Check if we've hit the update limit
+        if (totalUpdated >= MAX_UPDATES) {
+          console.log(`[VLOOKUP-APPLY] Reached maximum update limit (${MAX_UPDATES}), stopping to prevent timeout`);
+          break;
+        }
+
         const sourceValue = row.dimension_values[sourceDimId];
         if (!sourceValue) continue;
 
@@ -325,62 +332,54 @@ Deno.serve(async (req) => {
         const targetValue = lookupMap.get(normalizedValue);
 
         if (targetValue) {
+          // Check if row already has the correct target value
+          const existingValue = row.dimension_values[targetDim.id];
+          if (existingValue === targetValue) {
+            skippedCount++;
+            continue; // Skip if already correct
+          }
+
           // Create updated dimension_values with the target dimension value
           const updatedValues = { ...row.dimension_values };
           updatedValues[targetDim.id] = targetValue;
 
-          updates.push({
-            id: row.id,
-            dimension_values: updatedValues
-          });
-        }
-
-        // Update in batches
-        if (updates.length >= BATCH_SIZE) {
-          console.log(`[VLOOKUP-APPLY] Updating batch of ${updates.length} rows`);
-          for (const update of updates) {
-            const { error: updateError } = await supabase
-              .from('dimension_data')
-              .update({ dimension_values: update.dimension_values })
-              .eq('id', update.id);
-
-            if (updateError) {
-              console.error(`[VLOOKUP-APPLY] Error updating row ${update.id}:`, updateError);
-            } else {
-              totalUpdated++;
-            }
-          }
-          updates.length = 0; // Clear the batch
-        }
-      }
-
-      // Update remaining rows
-      if (updates.length > 0) {
-        console.log(`[VLOOKUP-APPLY] Updating final batch of ${updates.length} rows`);
-        for (const update of updates) {
+          // Update this single row
           const { error: updateError } = await supabase
             .from('dimension_data')
-            .update({ dimension_values: update.dimension_values })
-            .eq('id', update.id);
+            .update({ dimension_values: updatedValues })
+            .eq('id', row.id);
 
           if (updateError) {
-            console.error(`[VLOOKUP-APPLY] Error updating row ${update.id}:`, updateError);
+            console.error(`[VLOOKUP-APPLY] Error updating row ${row.id}:`, updateError);
           } else {
             totalUpdated++;
           }
+
+          processedCount++;
+
+          // Log progress every 100 updates
+          if (processedCount % 100 === 0) {
+            console.log(`[VLOOKUP-APPLY] Progress: ${processedCount} processed, ${totalUpdated} updated, ${skippedCount} skipped`);
+          }
         }
       }
 
-      console.log(`[VLOOKUP-APPLY] Completed processing dimension pair. Updated ${totalUpdated} rows so far.`);
+      console.log(`[VLOOKUP-APPLY] Dimension pair complete: ${processedCount} processed, ${totalUpdated} updated, ${skippedCount} skipped`);
+
     }
 
     console.log(`[VLOOKUP-APPLY] Vlookup application complete. Total rows updated: ${totalUpdated}`);
 
+    const responseMessage = totalUpdated >= 5000 
+      ? `Applied vlookup mappings to ${totalUpdated} rows (max limit reached, remaining rows will be mapped at query time)`
+      : `Applied vlookup mappings to ${totalUpdated} rows`;
+
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Applied vlookup mappings to ${totalUpdated} rows`,
-        rowsUpdated: totalUpdated
+        message: responseMessage,
+        rowsUpdated: totalUpdated,
+        note: 'Vlookup mappings are also applied dynamically at query time in get-performance-data'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
