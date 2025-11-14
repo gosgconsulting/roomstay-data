@@ -149,7 +149,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
       });
 
       // Apply the mappings to dimension_data
-      console.log('[VLOOKUP] Applying mappings to dimension_data...');
+      console.log('[VLOOKUP] Applying mappings to dimension_data...', { reportId, accountId });
       try {
         const { data: applyResult, error: applyError } = await supabase.functions.invoke(
           'apply-vlookup-mappings',
@@ -158,22 +158,36 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
           }
         );
 
+        console.log('[VLOOKUP] Apply function response:', { applyResult, applyError });
+
         if (applyError) {
           console.error('[VLOOKUP] Error applying mappings:', applyError);
           toast({
             title: "Warning",
-            description: "Mappings saved but failed to apply to data",
+            description: `Mappings saved but failed to apply: ${applyError.message || 'Unknown error'}`,
+            variant: "destructive",
+          });
+        } else if (applyResult?.success === false) {
+          console.error('[VLOOKUP] Apply function returned error:', applyResult.error);
+          toast({
+            title: "Warning",
+            description: `Mappings saved but failed to apply: ${applyResult.error || 'Unknown error'}`,
             variant: "destructive",
           });
         } else {
-          console.log('[VLOOKUP] Apply result:', applyResult);
+          console.log('[VLOOKUP] Successfully applied mappings');
           toast({
             title: "Success",
-            description: `Applied vlookup mappings to ${applyResult.rowsUpdated || 0} rows`,
+            description: `Applied vlookup mappings to ${applyResult?.rowsUpdated || 0} rows`,
           });
         }
       } catch (applyErr) {
         console.error('[VLOOKUP] Error calling apply function:', applyErr);
+        toast({
+          title: "Warning",
+          description: `Mappings saved but failed to apply: ${applyErr instanceof Error ? applyErr.message : 'Unknown error'}`,
+          variant: "destructive",
+        });
       }
 
       // Trigger data refresh if callback provided
