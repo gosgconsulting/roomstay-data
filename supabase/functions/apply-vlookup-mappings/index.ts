@@ -32,14 +32,18 @@ Deno.serve(async (req) => {
     // Get the user from auth header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
+      console.error('[VLOOKUP-APPLY] No authorization header provided');
       throw new Error('No authorization header');
     }
 
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) {
+      console.error('[VLOOKUP-APPLY] User authentication failed:', userError);
       throw new Error('Unauthorized');
     }
+
+    console.log(`[VLOOKUP-APPLY] Authenticated user: ${user.id}`);
 
     // Load vlookup mappings
     let mappingsQuery = supabase

@@ -38,15 +38,21 @@ When you filter by "Brady" in the Account dimension, it will automatically group
    - Icon: GitCompare (merge/mapping icon)
 
 ### Data Processing
-The vlookup mappings are applied in two ways:
+The vlookup mappings are applied in three ways:
 
 1. **Real-time application** in `get-performance-data` edge function:
    - Mappings are loaded at the start of the request
    - Applied to all `dimension_values` after fetching from `dimension_data` table
    - Happens before any filtering or aggregation
 
-2. **Injection into dimension_data** via `apply-vlookup-mappings` edge function:
+2. **Automatic application during data resync** in `resync-data-source` edge function:
+   - Called automatically after every successful data resync
+   - Ensures mappings are applied consistently whether data is synced manually, auto-synced via cron, or resynced after configuration changes
+   - Returns status in response: `vlookupApplied`, `vlookupRowsUpdated`, `vlookupError`
+
+3. **Manual injection into dimension_data** via `apply-vlookup-mappings` edge function:
    - Called automatically after saving mappings in VlookupModal
+   - Can also be invoked manually if needed
    - Identifies the source dimension by analyzing dimension_data rows
    - Updates all matching rows to inject/populate the target dimension
    - Ensures the target dimension becomes available for filtering and grouping
@@ -100,11 +106,15 @@ The vlookup mappings are applied in two ways:
 - Case-insensitive matching
 - Report-specific or account-wide mappings
 - Real-time application during data loading
+- **Automatic application during data resync** - mappings are reapplied whenever data is synced
 - Multiple mappings per dimension
 - Excel-like editing interface
+- Batch processing for efficient updates
 
 ## Technical Notes
 - Mappings are applied in the edge function for optimal performance
 - Uses case-insensitive comparison for flexible matching
 - Supports both report-level and account-level scope
 - RLS policies ensure users can only access their own mappings
+- **Automatic reapplication**: When data is resynced (manual or scheduled), vlookup mappings are automatically applied to the new data
+- Batch processing ensures efficient updates even with large datasets
