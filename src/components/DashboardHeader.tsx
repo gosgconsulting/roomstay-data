@@ -12,7 +12,7 @@ import { DimensionModal } from "./DimensionModal";
 import { ReportModal } from "./ReportModal";
 import { ShareModal } from "./ShareModal";
 import { SyncModeModal } from "./SyncModeModal";
-import { VlookupModal } from "./VlookupModal";
+
 import { ClusterDimensionModal } from "./ClusterDimensionModal";
 import { Session } from "@supabase/supabase-js";
 
@@ -79,7 +79,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const [showReportModal, setShowReportModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSyncModeModal, setShowSyncModeModal] = useState(false);
-  const [showVlookupModal, setShowVlookupModal] = useState(false);
+  
   const [showClusterDimensionModal, setShowClusterDimensionModal] = useState(false);
 
   const [editingReport, setEditingReport] = useState<Report | null>(null);
@@ -760,15 +760,6 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
           <Button
             variant="outline"
             className="gap-2"
-            onClick={() => setShowVlookupModal(true)}
-          >
-            <GitCompare className="h-4 w-4" />
-            Vlookup (Legacy)
-          </Button>
-
-          <Button
-            variant="outline"
-            className="gap-2"
             onClick={() => setShowClusterDimensionModal(true)}
           >
             <Grid3x3 className="h-4 w-4" />
@@ -996,14 +987,6 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
         isLoading={isSyncing}
         lastSyncTime={lastUpdateDate}
         totalRows={totalRows}
-      />
-
-      <VlookupModal
-        open={showVlookupModal}
-        onOpenChange={setShowVlookupModal}
-        reportId={reportId || undefined}
-        accountId={accountId}
-        onSave={onRefreshData}
       />
 
       <ClusterDimensionModal

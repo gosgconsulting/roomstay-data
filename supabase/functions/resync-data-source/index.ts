@@ -266,7 +266,7 @@ Deno.serve(async (req) => {
       userId
     );
 
-    console.log('[RESYNC] Resync completed successfully - vlookup mappings NOT applied automatically');
+    console.log('[RESYNC] Resync completed successfully');
 
     // Return response
     const statusCode = result.success ? 200 : 500;
