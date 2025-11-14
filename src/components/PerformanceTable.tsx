@@ -19,6 +19,7 @@ import { checkDataSources } from "@/lib/performanceTable/dataSourceUtils";
 
 interface PerformanceTableProps {
   reportId: string | null;
+  reportIds?: string[]; // For consolidated view with multiple reports
   filters: FilterState;
   isSharedView?: boolean;
   accountId?: string;
@@ -29,6 +30,7 @@ interface PerformanceTableProps {
 
 export const PerformanceTable = ({
   reportId,
+  reportIds,
   filters,
   isSharedView = false,
   accountId,
@@ -174,6 +176,7 @@ export const PerformanceTable = ({
     setIsLoadingData,
   } = usePerformanceTableData({
     reportId,
+    reportIds,
     accountId,
     groupByDimensions,
     breakdownByDimensions,
@@ -202,6 +205,8 @@ export const PerformanceTable = ({
     dimensions,
     groupByDimensions,
     totalData,
+    reportId: reportId || undefined,
+    accountId,
   });
 
   // Apply sorting to filtered data
@@ -630,16 +635,50 @@ export const PerformanceTable = ({
     return thenByDimensions;
   }, [currentSelector, groupByDimensions, breakdownByDimensions, thenByDimensions]);
 
+  // Handle date tab change with auto-save
+  const handleDateTabChange = useCallback((newDateTab: 'day' | 'week' | 'month' | 'year') => {
+    setActiveDateTab(newDateTab);
+    
+    // Save the updated date granularity to the view
+    saveViewSettings(
+      groupByDimensions,
+      breakdownByDimensions,
+      thenByDimensions,
+      visibleColumns,
+      columnOrder,
+      newDateTab,
+      dateOrder
+    );
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, columnOrder, dateOrder, saveViewSettings]);
+
   // Handle dimensions change from modal
   const handleDimensionsChange = useCallback((newDimensions: string[]) => {
+    let updatedGroupBy = groupByDimensions;
+    let updatedBreakdownBy = breakdownByDimensions;
+    let updatedThenBy = thenByDimensions;
+    
     if (currentSelector === "group") {
       setGroupByDimensions(newDimensions);
+      updatedGroupBy = newDimensions;
     } else if (currentSelector === "breakdown") {
       setBreakdownByDimensions(newDimensions);
+      updatedBreakdownBy = newDimensions;
     } else if (currentSelector === "then") {
       setThenByDimensions(newDimensions);
+      updatedThenBy = newDimensions;
     }
-  }, [currentSelector]);
+    
+    // Save the updated dimensions to the view
+    saveViewSettings(
+      updatedGroupBy,
+      updatedBreakdownBy,
+      updatedThenBy,
+      visibleColumns,
+      columnOrder,
+      activeDateTab,
+      dateOrder
+    );
+  }, [currentSelector, groupByDimensions, breakdownByDimensions, thenByDimensions, saveViewSettings, visibleColumns, columnOrder, activeDateTab, dateOrder]);
 
   // Get selector title
   const getSelectorTitle = useCallback(() => {
@@ -723,7 +762,7 @@ export const PerformanceTable = ({
         <CardHeader className="pb-3">
           <TableHeader
             activeDateTab={activeDateTab}
-            onDateTabChange={setActiveDateTab}
+            onDateTabChange={handleDateTabChange}
             groupByDimensions={groupByDimensions}
             breakdownByDimensions={breakdownByDimensions}
             thenByDimensions={thenByDimensions}
@@ -800,7 +839,7 @@ export const PerformanceTable = ({
         title={getSelectorTitle()}
         selectedDimensions={getCurrentDimensions()}
         onDimensionsChange={handleDimensionsChange}
-        onDateGranularityChange={(granularity) => setActiveDateTab(granularity as 'day' | 'week' | 'month' | 'year')}
+        onDateGranularityChange={handleDateTabChange}
         currentDateGranularity={activeDateTab}
         reportId={reportId}
       />

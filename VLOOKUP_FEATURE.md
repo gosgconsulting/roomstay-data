@@ -31,17 +31,39 @@ When you filter by "Brady" in the Account dimension, it will automatically group
    - Add/remove rows functionality
    - Dimension selector dropdown
    - Save/cancel actions
+   - Automatically applies mappings to dimension_data after saving
 
 2. **Button Location**
    - Dashboard header between "Dimensions" and "Budget" buttons
    - Icon: GitCompare (merge/mapping icon)
 
 ### Data Processing
-The vlookup mappings are applied in the `get-performance-data` edge function:
+The vlookup mappings are applied in three ways:
 
-1. Mappings are loaded at the start of the request
-2. Applied to all `dimension_values` after fetching from `dimension_data` table
-3. Happens before any filtering or aggregation
+1. **Real-time application** in `get-performance-data` edge function:
+   - Mappings are loaded at the start of the request
+   - Applied to all `dimension_values` after fetching from `dimension_data` table
+   - Happens before any filtering or aggregation
+
+2. **Automatic application during data resync** in `resync-data-source` edge function:
+   - Called automatically after every successful data resync
+   - Ensures mappings are applied consistently whether data is synced manually, auto-synced via cron, or resynced after configuration changes
+   - Returns status in response: `vlookupApplied`, `vlookupRowsUpdated`, `vlookupError`
+
+3. **Manual injection into dimension_data** via `apply-vlookup-mappings` edge function:
+   - Called automatically after saving mappings in VlookupModal
+   - Can also be invoked manually if needed
+   - Identifies the source dimension by analyzing dimension_data rows
+   - Updates all matching rows to inject/populate the target dimension
+   - Ensures the target dimension becomes available for filtering and grouping
+   - Processes rows in batches for performance
+
+### Edge Functions
+- **apply-vlookup-mappings**: Injects target dimension values into dimension_data
+  - Automatically finds source dimension containing the source values
+  - Updates dimension_data rows with mapped target values
+  - Processes in batches of 500 rows for efficiency
+  - Returns count of rows updated
 
 ### Hook Integration
 - **useVlookupMappings**: Custom hook for loading mappings with React Query
@@ -55,17 +77,44 @@ The vlookup mappings are applied in the `get-performance-data` edge function:
    - Column 2: Select target dimension and enter mapped value (e.g., "Account" → "Brady")
 3. Add multiple rows as needed using the "+ Add Row" button
 4. Click "Save Mappings"
-5. The system will automatically apply mappings when loading data
+5. The system will:
+   - Save the mappings to the database
+   - Automatically inject the target dimension values into all matching dimension_data rows
+   - Show a success message with the number of rows updated
+6. The target dimension (e.g., "Account") will now be available for:
+   - Filtering in the FiltersBar
+   - Grouping/breakdown in reports
+   - All data analysis operations
+
+## Example Workflow
+
+**Scenario**: You want to group multiple hotels under brand names
+
+1. Open Vlookup modal
+2. Create mappings:
+   - "Brady Apartment Hotel Flinders Street" → Account → "Brady"
+   - "Brady Apartment Hotel Hardware Lane" → Account → "Brady"
+   - "Sojourn Apartment Hotel - Riddiford" → Account → "Sojourn"
+3. Save mappings
+4. Result:
+   - All 21,871 dimension_data rows are updated
+   - The "Account" dimension now contains "Brady" or "Sojourn" for matching hotels
+   - You can now filter by Account = "Brady" to see combined data from both Brady hotels
+   - The Account dimension appears in the filters and dimension selectors
 
 ## Features
 - Case-insensitive matching
 - Report-specific or account-wide mappings
 - Real-time application during data loading
+- **Automatic application during data resync** - mappings are reapplied whenever data is synced
 - Multiple mappings per dimension
 - Excel-like editing interface
+- Batch processing for efficient updates
 
 ## Technical Notes
 - Mappings are applied in the edge function for optimal performance
 - Uses case-insensitive comparison for flexible matching
 - Supports both report-level and account-level scope
 - RLS policies ensure users can only access their own mappings
+- **Automatic reapplication**: When data is resynced (manual or scheduled), vlookup mappings are automatically applied to the new data
+- Batch processing ensures efficient updates even with large datasets

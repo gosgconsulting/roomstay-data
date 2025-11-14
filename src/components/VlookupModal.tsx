@@ -10,8 +10,10 @@ import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 
 interface VlookupMapping {
   id?: string;
+  sourceDimensionId: string;
   sourceValue: string;
   targetDimensionId: string;
+  targetDimensionName?: string;
   targetValue: string;
 }
 
@@ -65,13 +67,15 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
       if (data && data.length > 0) {
         setMappings(data.map((m: any) => ({
           id: m.id,
+          sourceDimensionId: m.source_dimension_id || '',
           sourceValue: m.source_value,
           targetDimensionId: m.target_dimension_id,
+          targetDimensionName: m.target_dimension_name || '',
           targetValue: m.target_value,
         })));
       } else {
         // Start with one empty row
-        setMappings([{ sourceValue: '', targetDimensionId: '', targetValue: '' }]);
+        setMappings([{ sourceDimensionId: '', sourceValue: '', targetDimensionId: '', targetValue: '' }]);
       }
     } catch (error) {
       console.error('Error loading vlookup data:', error);
@@ -86,7 +90,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
   };
 
   const addRow = () => {
-    setMappings([...mappings, { sourceValue: '', targetDimensionId: '', targetValue: '' }]);
+    setMappings([...mappings, { sourceDimensionId: '', sourceValue: '', targetDimensionId: '', targetValue: '' }]);
   };
 
   const removeRow = (index: number) => {
@@ -99,6 +103,95 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
     setMappings(updated);
   };
 
+  const handleReapply = async () => {
+    if (!reportId && !accountId) {
+      toast({
+        title: "Error",
+        description: "No report or account selected",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      console.log('[VLOOKUP-MODAL] Re-applying mappings...', { reportId, accountId });
+      
+      // Add timeout wrapper for edge function call
+      const invokeWithTimeout = async () => {
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout after 5 minutes')), 5 * 60 * 1000)
+        );
+        
+        const invokePromise = supabase.functions.invoke(
+          'apply-vlookup-mappings',
+          {
+            body: { reportId, accountId }
+          }
+        );
+        
+        return Promise.race([invokePromise, timeoutPromise]) as Promise<{ data: any; error: any }>;
+      };
+
+      const { data: applyResult, error: applyError } = await invokeWithTimeout();
+
+      console.log('[VLOOKUP-MODAL] Re-apply function response:', { applyResult, applyError });
+
+      if (applyError) {
+        console.error('[VLOOKUP-MODAL] Edge function invocation error:', applyError);
+        const errorDetails = {
+          message: applyError.message,
+          status: applyError.status,
+          context: applyError.context,
+          name: applyError.name,
+          full: JSON.stringify(applyError, Object.getOwnPropertyNames(applyError))
+        };
+        console.error('[VLOOKUP-MODAL] Full error details:', errorDetails);
+        
+        // Provide more specific error messages
+        let errorMessage = 'Failed to send a request to the Edge Function';
+        if (applyError.message?.includes('timeout') || applyError.message?.includes('Timeout')) {
+          errorMessage = 'Edge function timed out. The operation may be processing a large dataset. Please try again or contact support.';
+        } else if (applyError.message?.includes('network') || applyError.message?.includes('fetch')) {
+          errorMessage = 'Network error connecting to edge function. Please check your connection and try again.';
+        } else if (applyError.status === 404) {
+          errorMessage = 'Edge function not found. Please ensure the function is deployed.';
+        } else if (applyError.status === 401 || applyError.status === 403) {
+          errorMessage = 'Authentication error. Please refresh the page and try again.';
+        } else if (applyError.message) {
+          errorMessage = applyError.message;
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      if (applyResult?.success === false) {
+        console.error('[VLOOKUP-MODAL] Edge function returned error:', applyResult);
+        throw new Error(applyResult.error || applyResult.details || 'Unknown error from edge function');
+      }
+      
+      toast({
+        title: "Success",
+        description: `Applied vlookup mappings to ${applyResult?.rowsUpdated || 0} rows. Account dimension is now available in filters.`,
+      });
+      
+      // Trigger data refresh if callback provided
+      if (onSave) {
+        onSave();
+      }
+    } catch (error) {
+      console.error('[VLOOKUP-MODAL] Error re-applying vlookup mappings:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast({
+        title: "Error",
+        description: `Failed to re-apply vlookup mappings: ${errorMessage}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -107,7 +200,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
 
       // Filter out empty rows
       const validMappings = mappings.filter(m => 
-        m.sourceValue.trim() && m.targetDimensionId && m.targetValue.trim()
+        m.sourceDimensionId && m.sourceValue.trim() && m.targetDimensionId && m.targetValue.trim()
       );
 
       // Delete existing mappings
@@ -127,14 +220,19 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
 
       // Insert new mappings
       if (validMappings.length > 0) {
-        const insertData = validMappings.map(m => ({
-          user_id: user.id,
-          report_id: reportId || null,
-          account_id: accountId || null,
-          source_value: m.sourceValue.trim(),
-          target_dimension_id: m.targetDimensionId,
-          target_value: m.targetValue.trim(),
-        }));
+        const insertData = validMappings.map(m => {
+          const targetDim = dimensions.find(d => d.id === m.targetDimensionId);
+          return {
+            user_id: user.id,
+            report_id: reportId || null,
+            account_id: accountId || null,
+            source_dimension_id: m.sourceDimensionId,
+            source_value: m.sourceValue.trim(),
+            target_dimension_id: m.targetDimensionId,
+            target_dimension_name: targetDim?.name || m.targetDimensionName || '',
+            target_value: m.targetValue.trim(),
+          };
+        });
 
         const { error: insertError } = await supabase
           .from('dimension_mappings' as any)
@@ -145,8 +243,92 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
 
       toast({
         title: "Success",
-        description: `Saved ${validMappings.length} vlookup mappings. Refreshing data...`,
+        description: `Saved ${validMappings.length} vlookup mappings`,
       });
+
+      // Apply the mappings to dimension_data with retry logic
+      console.log('[VLOOKUP] Applying mappings to dimension_data...', { reportId, accountId });
+      
+      let retryCount = 0;
+      const maxRetries = 3;
+      let applySuccess = false;
+      
+      while (retryCount < maxRetries && !applySuccess) {
+        try {
+          // Add timeout wrapper for edge function call
+          const invokeWithTimeout = async () => {
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Request timeout after 5 minutes')), 5 * 60 * 1000)
+            );
+            
+            const invokePromise = supabase.functions.invoke(
+              'apply-vlookup-mappings',
+              {
+                body: { reportId, accountId }
+              }
+            );
+            
+            return Promise.race([invokePromise, timeoutPromise]) as Promise<{ data: any; error: any }>;
+          };
+
+          const { data: applyResult, error: applyError } = await invokeWithTimeout();
+
+          console.log('[VLOOKUP] Apply function response:', { applyResult, applyError, attempt: retryCount + 1 });
+
+          if (applyError) {
+            const errorDetails = {
+              message: applyError.message,
+              status: applyError.status,
+              context: applyError.context,
+              name: applyError.name,
+              full: JSON.stringify(applyError, Object.getOwnPropertyNames(applyError))
+            };
+            console.error(`[VLOOKUP] Apply attempt ${retryCount + 1} error details:`, errorDetails);
+            
+            // Provide more specific error messages
+            let errorMessage = 'Failed to send a request to the Edge Function';
+            if (applyError.message?.includes('timeout') || applyError.message?.includes('Timeout')) {
+              errorMessage = 'Edge function timed out. The operation may be processing a large dataset.';
+            } else if (applyError.message?.includes('network') || applyError.message?.includes('fetch')) {
+              errorMessage = 'Network error connecting to edge function.';
+            } else if (applyError.status === 404) {
+              errorMessage = 'Edge function not found. Please ensure the function is deployed.';
+            } else if (applyError.status === 401 || applyError.status === 403) {
+              errorMessage = 'Authentication error. Please refresh the page.';
+            } else if (applyError.message) {
+              errorMessage = applyError.message;
+            }
+            
+            throw new Error(errorMessage);
+          } else if (applyResult?.success === false) {
+            throw new Error(applyResult.error || 'Edge function returned error');
+          } else {
+            applySuccess = true;
+            console.log('[VLOOKUP] Successfully applied mappings');
+            toast({
+              title: "Success",
+              description: `Applied vlookup mappings to ${applyResult?.rowsUpdated || 0} rows. Account dimension is now available in filters.`,
+            });
+          }
+        } catch (applyErr) {
+          retryCount++;
+          console.error(`[VLOOKUP] Apply attempt ${retryCount} failed:`, applyErr);
+          
+          if (retryCount >= maxRetries) {
+            const errorMsg = applyErr instanceof Error ? applyErr.message : 'Unknown error';
+            toast({
+              title: "Warning",
+              description: `Mappings saved but failed to apply after ${maxRetries} attempts: ${errorMsg}. Don't worry - your mappings are saved and will be automatically applied when you load data in the performance table. The apply function is optional and mainly updates existing data.`,
+              variant: "destructive",
+            });
+          } else {
+            // Wait before retrying (exponential backoff)
+            const delay = 2000 * retryCount; // Increased delay: 2s, 4s, 6s
+            console.log(`[VLOOKUP] Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
+      }
 
       // Trigger data refresh if callback provided
       if (onSave) {
@@ -171,6 +353,10 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
       <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Vlookup - Map Dimension Values</DialogTitle>
+          <p className="text-sm text-muted-foreground mt-2">
+            Map multiple values to a single dimension value. Mappings are automatically applied when data is loaded, 
+            so even if the apply function fails, your mappings will still work in the performance table.
+          </p>
         </DialogHeader>
 
         <div className="text-sm text-muted-foreground mb-4">
@@ -181,6 +367,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
           <table className="w-full border-collapse">
             <thead className="sticky top-0 bg-background z-10">
               <tr className="border-b">
+                <th className="text-left p-2 font-medium">Source Dimension</th>
                 <th className="text-left p-2 font-medium">Original Value</th>
                 <th className="text-left p-2 font-medium">Target Dimension</th>
                 <th className="text-left p-2 font-medium">Mapped Value</th>
@@ -190,6 +377,23 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
             <tbody>
               {mappings.map((mapping, index) => (
                 <tr key={index} className="border-b">
+                  <td className="p-2">
+                    <Select
+                      value={mapping.sourceDimensionId}
+                      onValueChange={(value) => updateMapping(index, 'sourceDimensionId', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select source" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {dimensions.map(dim => (
+                          <SelectItem key={dim.id} value={dim.id}>
+                            {dim.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
                   <td className="p-2">
                     <Input
                       value={mapping.sourceValue}
@@ -204,7 +408,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
                       onValueChange={(value) => updateMapping(index, 'targetDimensionId', value)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select dimension" />
+                        <SelectValue placeholder="Select target" />
                       </SelectTrigger>
                       <SelectContent>
                         {dimensions.map(dim => (
@@ -240,10 +444,15 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
         </div>
 
         <div className="flex justify-between items-center pt-4 border-t">
-          <Button onClick={addRow} variant="outline" size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Row
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={addRow} variant="outline" size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Row
+            </Button>
+            <Button onClick={handleReapply} variant="secondary" size="sm" disabled={isSaving || isLoading}>
+              Re-apply Existing Mappings
+            </Button>
+          </div>
           <div className="flex gap-2">
             <Button onClick={() => onOpenChange(false)} variant="outline">
               Cancel

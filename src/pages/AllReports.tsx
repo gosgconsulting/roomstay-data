@@ -6,7 +6,7 @@ import { PerformanceTable } from "@/components/PerformanceTable";
 import { LoadingToast } from "@/components/LoadingToast";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import { KPIChart } from "@/components/KPIChart";
-import { MasterFilter } from "@/components/MasterFilter";
+
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
@@ -41,9 +41,8 @@ export default function AllReports() {
   // Filter state for each report - using reportId as key
   const [reportFilters, setReportFilters] = useState<Record<string, FilterState>>({});
   
-  // Master filter state
-  const [masterFilterDimension, setMasterFilterDimension] = useState<string | null>(null);
-  const [masterFilterValues, setMasterFilterValues] = useState<string[]>([]);
+  // Selected reports for consolidated view
+  const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
   
   // Loading state management
   const [isDataLoading, setIsDataLoading] = useState(false);
@@ -72,7 +71,7 @@ export default function AllReports() {
   const getDefaultFilters = (): FilterState => ({
     dimensionFilters: {},
     dateRange: undefined,
-    datePreset: "this_month",
+    datePreset: "all_time",
     compareEnabled: false,
     compareType: "previous_period",
     compareDateRange: undefined,
@@ -82,6 +81,13 @@ export default function AllReports() {
   useEffect(() => {
     checkAuth();
   }, [accountId]);
+
+  // Initialize selected reports to all reports when reports are loaded
+  useEffect(() => {
+    if (reports.length > 0 && selectedReportIds.length === 0) {
+      setSelectedReportIds(reports.map(r => r.id));
+    }
+  }, [reports]);
 
   const checkAuth = async () => {
     try {
@@ -209,45 +215,15 @@ export default function AllReports() {
     }));
   };
 
-  const handleMasterFilterChange = (dimension: string | null, values: string[]) => {
-    console.log('[MASTER-FILTER] Master filter changed:', { dimension, values });
-    setMasterFilterDimension(dimension);
-    setMasterFilterValues(values);
-    
-    // Trigger data refresh for all reports when master filter changes
-    if (dimension && values.length > 0) {
-      setLoadingGeneration(prev => prev + 1);
-      toast({
-        title: "Master Filter Applied",
-        description: `Filtering all reports by ${dimension}: ${values.join(', ')}`,
-      });
-    } else if (!dimension) {
-      setLoadingGeneration(prev => prev + 1);
-      toast({
-        title: "Master Filter Cleared",
-        description: "All reports are now showing unfiltered data",
-      });
-    }
+  const handleReportSelectionChange = (reportIds: string[]) => {
+    console.log('[testing] AllReports - Selected reports changed:', reportIds);
+    setSelectedReportIds(reportIds);
+    setLoadingGeneration(prev => prev + 1);
   };
 
-  // Get combined filters for a report (report filters + master filter)
+  // Get combined filters for a report
   const getCombinedFilters = (reportId: string): FilterState => {
-    const reportFilter = reportFilters[reportId] || getDefaultFilters();
-    
-    if (!masterFilterDimension || masterFilterValues.length === 0) {
-      return reportFilter;
-    }
-
-    // Add master filter to dimension filters
-    const combinedDimensionFilters = {
-      ...reportFilter.dimensionFilters,
-      [masterFilterDimension]: masterFilterValues
-    };
-
-    return {
-      ...reportFilter,
-      dimensionFilters: combinedDimensionFilters
-    };
+    return reportFilters[reportId] || getDefaultFilters();
   };
 
   const refreshData = () => {
@@ -256,12 +232,10 @@ export default function AllReports() {
     // Cancel previous loading by incrementing generation
     setLoadingGeneration(prev => prev + 1);
     
-    // Mark all components as loading
-    reports.forEach(report => {
-      markComponentLoading(`metrics-${report.id}`);
-      markComponentLoading(`chart-${report.id}`);
-      markComponentLoading(`table-${report.id}`);
-    });
+    // Mark consolidated components as loading
+    markComponentLoading('metrics-consolidated');
+    markComponentLoading('chart-consolidated');
+    markComponentLoading('table-consolidated');
   };
 
   if (isLoading) {
@@ -306,71 +280,71 @@ export default function AllReports() {
       
       {reports.length > 0 ? (
         <main className="container mx-auto px-6 py-6 space-y-8">
-          {/* Master Filter */}
-          <MasterFilter
-            accountId={accountId}
-            onFilterChange={handleMasterFilterChange}
-            selectedDimension={masterFilterDimension}
-            selectedValues={masterFilterValues}
-          />
-          
-          {reports.map((report) => {
-            const reportDataSources = dataSources[report.id] || [];
-            const activeDataSourceId = activeDataSources[report.id];
+          {/* Consolidated Analytics Section */}
+          <Card className="p-6 space-y-6">
+            {/* Section Header */}
+            <div className="border-b pb-4">
+              <h2 className="text-2xl font-bold text-foreground">
+                {account?.name || 'All Reports'} - Consolidated Analytics
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Combined data from {reports.length} report{reports.length !== 1 ? 's' : ''}
+              </p>
+            </div>
             
-            return (
-              <Card key={report.id} className="p-6 space-y-4">
-                {/* Report Title */}
-                <div className="border-b pb-2">
-                  <h2 className="text-2xl font-bold text-foreground">{report.name}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Last updated: {new Date(report.updated_at).toLocaleDateString()}
-                  </p>
-                </div>
-                
-                {/* Filters for this report */}
-                <FiltersBar 
-                  reportId={report.id} 
-                  onFiltersChange={(filters) => handleFiltersChange(report.id, filters)}
-                  isSharedView={false} 
-                  accountId={accountId || report.account_id || undefined}
-                  refreshTrigger={loadingGeneration} 
-                />
-                
-                {/* KPI Metrics Cards */}
-                <KPIMetricsCards
-                  reportId={report.id}
-                  filters={getCombinedFilters(report.id)}
-                  accountId={accountId || report.account_id || undefined}
-                  visibilityRefreshTrigger={loadingGeneration}
-                  key={`metrics-${report.id}-${loadingGeneration}`}
-                  onLoadingComplete={() => markComponentLoaded(`metrics-${report.id}`)}
-                />
-                
-                {/* KPI Chart */}
-                <KPIChart
-                  reportId={report.id}
-                  filters={getCombinedFilters(report.id)}
-                  accountId={accountId || report.account_id || undefined}
-                  visibilityRefreshTrigger={loadingGeneration}
-                  key={`chart-${report.id}-${loadingGeneration}`}
-                  onLoadingComplete={() => markComponentLoaded(`chart-${report.id}`)}
-                />
-                
-                {/* Performance Table - shows all data sources */}
-                <PerformanceTable 
-                  reportId={report.id} 
-                  filters={getCombinedFilters(report.id)} 
-                  isSharedView={false}
-                  accountId={accountId || report.account_id || undefined}
-                  onFiltersChange={(filters) => handleFiltersChange(report.id, filters)}
-                  key={`table-${report.id}-${loadingGeneration}`}
-                  onLoadingComplete={() => markComponentLoaded(`table-${report.id}`)}
-                  visibilityRefreshTrigger={loadingGeneration}
-                />
-              </Card>
-            );
-          })}
+            {/* Filters */}
+            <FiltersBar 
+              reportId={null}
+              onFiltersChange={(filters) => handleFiltersChange('consolidated', filters)}
+              isSharedView={false} 
+              accountId={accountId}
+              refreshTrigger={loadingGeneration}
+              showMasterDimensionFilter={true}
+              showReportFilter={true}
+              availableReports={reports}
+              selectedReportIds={selectedReportIds}
+              onReportSelectionChange={handleReportSelectionChange}
+            />
+            
+            {/* KPI Metrics Cards */}
+            <div className="space-y-2">
+              <h3 className="text-base font-semibold text-foreground">Analytics & Insights</h3>
+              <KPIMetricsCards
+                reportId="consolidated"
+                filters={getCombinedFilters('consolidated')}
+                accountId={accountId}
+                visibilityRefreshTrigger={loadingGeneration}
+                key={`metrics-consolidated-${loadingGeneration}`}
+                onLoadingComplete={() => markComponentLoaded('metrics-consolidated')}
+              />
+            </div>
+            
+            {/* KPI Chart */}
+            <div className="space-y-2">
+              <h3 className="text-base font-semibold text-foreground">Performance Chart</h3>
+              <KPIChart
+                reportId="consolidated"
+                filters={getCombinedFilters('consolidated')}
+                accountId={accountId}
+                visibilityRefreshTrigger={loadingGeneration}
+                key={`chart-consolidated-${loadingGeneration}`}
+                onLoadingComplete={() => markComponentLoaded('chart-consolidated')}
+              />
+            </div>
+            
+            {/* Performance Table */}
+            <PerformanceTable 
+              reportId={null}
+              reportIds={selectedReportIds.length > 0 ? selectedReportIds : reports.map(r => r.id)}
+              filters={getCombinedFilters('consolidated')} 
+              isSharedView={false}
+              accountId={accountId}
+              onFiltersChange={(filters) => handleFiltersChange('consolidated', filters)}
+              key={`table-consolidated-${loadingGeneration}`}
+              onLoadingComplete={() => markComponentLoaded('table-consolidated')}
+              visibilityRefreshTrigger={loadingGeneration}
+            />
+          </Card>
         </main>
       ) : (
         <main className="container mx-auto px-6 py-6">

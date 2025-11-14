@@ -35,6 +35,9 @@ export function calculateTotals(
       let sum = 0;
       const calculateRowTotal = (rows: TableRow[]) => {
         rows.forEach(row => {
+          // Skip if row or row.data is undefined/null
+          if (!row || !row.data) return;
+          
           // Only sum values from leaf nodes (rows without children)
           const hasChildren = row.children && row.children.length > 0;
           if (!hasChildren) {
@@ -59,9 +62,20 @@ export function calculateTotals(
     if (dim.formula) {
       try {
         let expression = dim.formula;
+        
+        // Convert percentage notation (e.g., "15%" to "0.15")
+        expression = expression.replace(/(\d+(?:\.\d+)?)%/g, (match, num) => {
+          return String(parseFloat(num) / 100);
+        });
+        
         const dimensionNames = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
         for (const dimName of dimensionNames) {
-          const value = filteredTotals[dimName] || 0;
+          const value = filteredTotals[dimName];
+          // Only proceed if value exists and is not undefined/null
+          if (value === undefined || value === null) {
+            console.warn(`[CALC] Missing value for dimension ${dimName} in formula ${dim.formula}`);
+            continue;
+          }
           const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const regex = new RegExp(`\\b${escapedName}\\b`, 'g');
           expression = expression.replace(regex, `(${value})`);
@@ -69,6 +83,7 @@ export function calculateTotals(
         const result = eval(expression);
         filteredTotals[dim.name] = typeof result === 'number' && !isNaN(result) && isFinite(result) ? result : 0;
       } catch (error) {
+        console.error('Formula evaluation error:', error, 'for dimension:', dim.name, 'formula:', dim.formula);
         filteredTotals[dim.name] = 0;
       }
     }
@@ -98,6 +113,9 @@ export function calculateComparisonTotalsAndChanges(
       let sum = 0;
       const calculateRowTotal = (rows: TableRow[]) => {
         rows.forEach(row => {
+          // Skip if row is undefined/null
+          if (!row) return;
+          
           const hasChildren = row.children && row.children.length > 0;
           if (!hasChildren && row.compareData) {
             const value = row.compareData[dim.name];
@@ -120,6 +138,12 @@ export function calculateComparisonTotalsAndChanges(
     if (dim.formula) {
       try {
         let expression = dim.formula;
+        
+        // Convert percentage notation (e.g., "15%" to "0.15")
+        expression = expression.replace(/(\d+(?:\.\d+)?)%/g, (match, num) => {
+          return String(parseFloat(num) / 100);
+        });
+        
         const dimensionNames = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
         for (const dimName of dimensionNames) {
           const value = filteredCompareTotals[dimName] || 0;
@@ -130,6 +154,7 @@ export function calculateComparisonTotalsAndChanges(
         const result = eval(expression);
         filteredCompareTotals[dim.name] = typeof result === 'number' && !isNaN(result) && isFinite(result) ? result : 0;
       } catch (error) {
+        console.error('Formula comparison evaluation error:', error, 'for dimension:', dim.name);
         filteredCompareTotals[dim.name] = 0;
       }
     }

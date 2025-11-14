@@ -831,6 +831,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
               setShowDataSourceSelectionModal(true);
             }}
             onDataSync={onDataSync}
+            onRefreshData={onRefreshData}
           />
           
           <DataSourceSelectionModal

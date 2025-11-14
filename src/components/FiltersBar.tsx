@@ -7,6 +7,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,6 +36,8 @@ export interface FilterState {
   compareEnabled: boolean;
   compareType: string;
   compareDateRange?: DateRange;
+  masterDimensionId?: string | null;
+  masterDimensionValues?: string[];
 }
 
 interface FiltersBarProps {
@@ -36,6 +46,11 @@ interface FiltersBarProps {
   isSharedView?: boolean;
   accountId?: string;
   refreshTrigger?: number;
+  showMasterDimensionFilter?: boolean;
+  showReportFilter?: boolean;
+  availableReports?: Array<{ id: string; name: string }>;
+  selectedReportIds?: string[];
+  onReportSelectionChange?: (reportIds: string[]) => void;
 }
 
 interface Dimension {
@@ -45,7 +60,18 @@ interface Dimension {
   scope?: 'global' | 'account' | 'custom';
 }
 
-export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, accountId, refreshTrigger }: FiltersBarProps) => {
+export const FiltersBar = ({ 
+  reportId, 
+  onFiltersChange, 
+  isSharedView = false, 
+  accountId, 
+  refreshTrigger,
+  showMasterDimensionFilter = false,
+  showReportFilter = false,
+  availableReports = [],
+  selectedReportIds = [],
+  onReportSelectionChange
+}: FiltersBarProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [activeDimensions, setActiveDimensions] = useState<string[]>([]);
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
@@ -54,7 +80,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     console.log('[testing] FiltersBar - Initial dateRange state set to undefined');
     return undefined;
   });
-  const [datePreset, setDatePreset] = useState<string>("this_month");
+  const [datePreset, setDatePreset] = useState<string>("all_time");
   const [showDimensionSelector, setShowDimensionSelector] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingFilters, setIsLoadingFilters] = useState(false);
@@ -66,37 +92,130 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const { toast } = useToast();
   
+  // Master dimension filter state
+  const [masterDimensionId, setMasterDimensionId] = useState<string | null>(null);
+  const [masterDimensionValues, setMasterDimensionValues] = useState<string[]>([]);
+  const [masterDimensionOptions, setMasterDimensionOptions] = useState<string[]>([]);
+  const [masterDimensionPopoverOpen, setMasterDimensionPopoverOpen] = useState(false);
+  const [masterDimensionSettingsOpen, setMasterDimensionSettingsOpen] = useState(false);
+  const [masterDimensionValuesLoading, setMasterDimensionValuesLoading] = useState(false);
+  
   // Load vlookup mappings for this report/account
   const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
 
+  // Initialize selected reports to all reports by default
   useEffect(() => {
-    if (reportId) {
+    if (showReportFilter && availableReports.length > 0 && selectedReportIds.length === 0) {
+      onReportSelectionChange?.(availableReports.map(r => r.id));
+    }
+  }, [availableReports, showReportFilter]);
+
+  useEffect(() => {
+    // Load dimensions when report or account changes
+    console.log('[testing] FiltersBar - useEffect triggered. reportId:', reportId, 'accountId:', accountId);
+    if (reportId || accountId) {
       // Reset all filter state when report changes - use last 7 days for performance
       setIsInitialLoad(true);
       setActiveDimensions([]);
       setSelectedFilters({});
       setDateRange(undefined);
-      setDatePreset("this_month");
+      setDatePreset("all_time");
       setCompareEnabled(false);
       setCompareType("previous_period");
       setCompareDateRange(undefined);
       
-      // Load dimensions first, then load settings
+      console.log('[testing] FiltersBar - Starting to load dimensions...');
+      // Load dimensions first, then load settings (only if reportId exists)
       loadDimensions().then(() => {
-        loadFilterSettings().finally(() => {
+        console.log('[testing] FiltersBar - Dimensions loaded');
+        if (reportId) {
+          loadFilterSettings().finally(() => {
+            setIsInitialLoad(false);
+          });
+        } else {
           setIsInitialLoad(false);
-        });
+        }
       });
     }
-  }, [reportId]);
+  }, [reportId, accountId]);
+
+  // Load master dimension values when dimension is selected
+  useEffect(() => {
+    const loadMasterDimensionValues = async () => {
+      if (!masterDimensionId || !accountId) {
+        setMasterDimensionOptions([]);
+        return;
+      }
+
+      setMasterDimensionValuesLoading(true);
+      try {
+        console.log('[FiltersBar] Loading values for master dimension:', masterDimensionId);
+        
+        // First, get the dimension name from the dimensions table
+        const { data: dimensionData, error: dimensionError } = await supabase
+          .from("dimensions")
+          .select("name")
+          .eq("id", masterDimensionId)
+          .single();
+          
+        if (dimensionError) throw dimensionError;
+        
+        const dimensionName = dimensionData.name;
+        console.log('[FiltersBar] Master dimension name:', dimensionName);
+        
+        // Load dimension values from all reports in the account
+        const { data: reportsData } = await supabase
+          .from("reports")
+          .select("id")
+          .eq("account_id", accountId);
+        
+        if (!reportsData || reportsData.length === 0) {
+          setMasterDimensionOptions([]);
+          return;
+        }
+        
+        const reportIds = reportsData.map(r => r.id);
+        
+        // Load dimension data for all reports
+        const { data, error } = await supabase
+          .from("dimension_data")
+          .select("dimension_values")
+          .in("report_id", reportIds)
+          .limit(10000);
+        
+        if (error) throw error;
+        
+        const valuesSet = new Set<string>();
+        
+        data?.forEach((row) => {
+          const dimensionValues = row.dimension_values as Record<string, string>;
+          const value = dimensionValues[dimensionName];
+          if (value && value !== null && value !== undefined && value !== '') {
+            valuesSet.add(String(value));
+          }
+        });
+        
+        const sortedValues = Array.from(valuesSet).sort();
+        console.log('[FiltersBar] Loaded', sortedValues.length, 'unique values for dimension:', dimensionName);
+        setMasterDimensionOptions(sortedValues);
+      } catch (error) {
+        console.error("Error loading master dimension values:", error);
+        setMasterDimensionOptions([]);
+      } finally {
+        setMasterDimensionValuesLoading(false);
+      }
+    };
+
+    loadMasterDimensionValues();
+  }, [masterDimensionId, accountId]);
 
   // Refresh dimensions when data is remapped/synced
   useEffect(() => {
-    if (reportId && refreshTrigger && refreshTrigger > 0) {
+    if ((reportId || accountId) && refreshTrigger && refreshTrigger > 0) {
       console.log('[testing] FiltersBar - Refreshing dimensions due to data sync, trigger:', refreshTrigger);
       loadDimensions();
     }
-  }, [refreshTrigger, reportId]);
+  }, [refreshTrigger, reportId, accountId]);
 
   useEffect(() => {
     if (activeDimensions.length > 0 && reportId) {
@@ -119,8 +238,8 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
   useEffect(() => {
     console.log('[testing] FiltersBar - Initial mount effect');
     if (!reportId) {
-      console.log('[testing] FiltersBar - No reportId on mount, applying this_month preset');
-      applyDatePreset("this_month");
+      console.log('[testing] FiltersBar - No reportId on mount, applying all_time preset');
+      applyDatePreset("all_time");
     }
   }, []); // Only run on mount
 
@@ -133,7 +252,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
       
       return () => clearTimeout(timeoutId);
     }
-  }, [activeDimensions, selectedFilters, dateRange, datePreset, reportId, isInitialLoad]);
+  }, [activeDimensions, selectedFilters, dateRange, datePreset, masterDimensionId, reportId, isInitialLoad]);
 
   // Update comparison date range when date range or compare type changes
   useEffect(() => {
@@ -144,8 +263,8 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
 
   // Notify parent of filter changes
   useEffect(() => {
-    console.log('[testing] FiltersBar - Filter state changed, notifying parent');
-    console.log('[testing] FiltersBar - Date range change details:', {
+    console.log('[FiltersBar] Filter state changed, notifying parent');
+    console.log('[FiltersBar] Date range change details:', {
       dateRange,
       from: dateRange?.from?.toISOString(),
       to: dateRange?.to?.toISOString(),
@@ -160,11 +279,13 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
         compareEnabled,
         compareType,
         compareDateRange: compareEnabled ? compareDateRange : undefined,
+        masterDimensionId,
+        masterDimensionValues,
       };
-      console.log('[testing] FiltersBar - Calling onFiltersChange with:', newFilters);
+      console.log('[FiltersBar] Calling onFiltersChange with:', newFilters);
       onFiltersChange(newFilters);
     }
-  }, [onFiltersChange, selectedFilters, dateRange, datePreset, compareEnabled, compareType, compareDateRange]);
+  }, [onFiltersChange, selectedFilters, dateRange, datePreset, compareEnabled, compareType, compareDateRange, masterDimensionId, masterDimensionValues]);
 
   // Helper function to get Date dimension ID from database
   const getDateDimensionId = async (): Promise<string | null> => {
@@ -225,35 +346,15 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
       if (error && error.code !== 'PGRST116') throw error; // Ignore "no rows" error
 
       if (data) {
-        // Check if we need to reset excessive dimensions BEFORE setting state
-        const needsReset = data.filter_dimensions && data.filter_dimensions.length > 1;
+        console.log('[FILTERS-BAR] Loading saved filter settings:', {
+          filter_dimensions: data.filter_dimensions,
+          filter_values: data.filter_values,
+        });
         
-        if (needsReset && dateDimensionId) {
-          // Reset excessive dimensions to Date only
-          console.log('[FILTERS-BAR] Detected excessive filter dimensions, resetting to Date only');
-          console.log('[FILTERS-BAR] Old dimensions:', data.filter_dimensions);
-          
-          // Update database immediately
-          await supabase
-            .from("report_views")
-            .update({ 
-              filter_dimensions: [dateDimensionId],
-              filter_values: {}
-            })
-            .eq("id", data.id);
-          
-          // Set state to the reset value
-          setActiveDimensions([dateDimensionId]);
-          setSelectedFilters({});
-          
-          toast({
-            title: "Filter dimensions reset",
-            description: "Filter dimensions have been reset to default (Date only).",
-            variant: "default",
-          });
-        } else if (data.filter_dimensions && data.filter_dimensions.length > 0) {
-          // Load saved dimensions if they're valid
+        // Load saved dimensions if they exist
+        if (data.filter_dimensions && data.filter_dimensions.length > 0) {
           setActiveDimensions(data.filter_dimensions);
+          console.log('[FILTERS-BAR] Loaded', data.filter_dimensions.length, 'saved dimensions');
           
           if (data.filter_values && Object.keys(data.filter_values).length > 0) {
             // Convert old single-value filters to array format if needed
@@ -263,21 +364,30 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
             
             Object.entries(filterValues).forEach(([key, value]) => {
               // Only load filter values for dimensions that are in filter_dimensions
-              if (activeDims.includes(key)) {
+              // Skip special keys like __master_dimension_id
+              if (activeDims.includes(key) && !key.startsWith('__')) {
                 normalizedFilters[key] = Array.isArray(value) ? value : [value];
-              } else {
-                console.warn(`[FILTER-CLEANUP] Ignoring filter value for inactive dimension: ${key}`);
               }
             });
             setSelectedFilters(normalizedFilters);
+            console.log('[FILTERS-BAR] Loaded filter values for', Object.keys(normalizedFilters).length, 'dimensions');
           }
         } else if (dateDimensionId) {
           // Default to only Date dimension if none saved
           setActiveDimensions([dateDimensionId]);
+          console.log('[FILTERS-BAR] No saved dimensions, defaulting to Date dimension');
         }
         
-        // Always apply date preset if saved, or default to "this_month"
-        const preset = data.date_range_preset || "this_month";
+        // Load master dimension if saved (stored in filter_values with special key)
+        if (data.filter_values && typeof data.filter_values === 'object') {
+          const filterValues = data.filter_values as Record<string, any>;
+          if (filterValues.__master_dimension_id) {
+            setMasterDimensionId(filterValues.__master_dimension_id);
+          }
+        }
+        
+        // Always apply date preset if saved, or default to "all_time"
+        const preset = data.date_range_preset || "all_time";
         setDatePreset(preset);
         applyDatePreset(preset);
       } else {
@@ -285,12 +395,12 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
         if (dateDimensionId) {
           setActiveDimensions([dateDimensionId]);
         }
-        applyDatePreset("this_month");
+        applyDatePreset("all_time");
       }
     } catch (error) {
       console.error("Error loading filter settings:", error);
       // On error, apply defaults
-      applyDatePreset("this_month");
+      applyDatePreset("all_time");
     }
   };
 
@@ -317,7 +427,11 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
 
       const viewData = {
         filter_dimensions: activeDimensions,
-        filter_values: selectedFilters,
+        filter_values: {
+          ...selectedFilters,
+          // Store master dimension ID with special key to distinguish from regular filters
+          ...(masterDimensionId && { __master_dimension_id: masterDimensionId })
+        },
         date_range_start: dateRange?.from?.toISOString().split('T')[0] || null,
         date_range_end: dateRange?.to?.toISOString().split('T')[0] || null,
         date_range_preset: datePreset,
@@ -484,14 +598,14 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     setDatePreset(preset);
   };
 
-  // Check if any filters are currently applied (excluding default "this_month")
+  // Check if any filters are currently applied (excluding default "all_time")
   const hasActiveFilters = () => {
     // Check if any dimension has selected filter values
     const hasDimensionFilters = Object.keys(selectedFilters).some(
       dimensionId => selectedFilters[dimensionId] && selectedFilters[dimensionId].length > 0
     );
-    // Only consider date filter active if it's NOT the default "this_month"
-    const hasDateFilter = datePreset !== "this_month";
+    // Only consider date filter active if it's NOT the default "all_time"
+    const hasDateFilter = datePreset !== "all_time";
     const hasCompareFilter = compareEnabled;
     return hasDimensionFilters || hasDateFilter || hasCompareFilter;
   };
@@ -507,8 +621,8 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
       }
     });
     
-    // Only count date filter if it's NOT the default "this_month"
-    if (datePreset !== "this_month") {
+    // Only count date filter if it's NOT the default "all_time"
+    if (datePreset !== "all_time") {
       count += 1;
     }
     
@@ -524,8 +638,8 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     // Keep the active dimensions but clear their selected values
     // setActiveDimensions([]); // DON'T remove dimensions from filter bar
     setSelectedFilters({}); // Clear all filter values
-    // Reset to default "this_month" date filter
-    applyDatePreset("this_month");
+    // Reset to default "all_time" date filter
+    applyDatePreset("all_time");
     setCompareEnabled(false);
     setCompareType("previous_period");
     setCompareDateRange(undefined);
@@ -538,7 +652,8 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
   };
 
   const loadDimensions = async () => {
-    if (!reportId) return;
+    // Allow loading dimensions even without reportId if accountId is available (All Reports view)
+    if (!reportId && !accountId) return;
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -560,18 +675,33 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
         accountData = (data || []) as Dimension[];
       }
 
-      // Load custom dimensions for this user (both global custom and report-specific)
+      // Load custom dimensions for this user
       let customData: Dimension[] = [];
-      const { data, error: customError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("scope", "custom")
-        .or(`report_id.is.null,report_id.eq.${reportId}`) // Include both global custom (report_id=null) and report-specific
-        .order("created_at", { ascending: false });
+      if (reportId) {
+        // If reportId is provided, load both global custom and report-specific
+        const { data, error: customError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("scope", "custom")
+          .or(`report_id.is.null,report_id.eq.${reportId}`)
+          .order("created_at", { ascending: false });
 
-      if (customError) throw customError;
-      customData = (data || []) as Dimension[];
+        if (customError) throw customError;
+        customData = (data || []) as Dimension[];
+      } else {
+        // If no reportId (All Reports view), only load global custom dimensions (not report-specific)
+        const { data, error: customError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("scope", "custom")
+          .is("report_id", null) // Only global custom dimensions
+          .order("created_at", { ascending: false });
+
+        if (customError) throw customError;
+        customData = (data || []) as Dimension[];
+      }
 
       // Load global dimensions (lowest priority, fallback)
       const { data: globalData, error: globalError } = await supabase
@@ -606,7 +736,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
         d.type === 'text'
       );
 
-      // Filter dimensions by visibility settings
+      // Filter dimensions by visibility settings (only for specific reports)
       let finalDimensions = filterableDimensions;
       if (user && reportId) {
         finalDimensions = await filterDimensionsByVisibility(filterableDimensions, reportId, user.id, supabase);
@@ -665,6 +795,26 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
               valuesMap[dimId].add(mappedValue);
             }
           }
+          
+          // Also check if any values from OTHER dimensions map TO this dimension
+          // For example, if Hotel values map to Account dimension, add those mapped values to Account
+          Object.entries(dimensionValues).forEach(([sourceDimId, sourceValue]) => {
+            if (sourceDimId !== dimId && sourceValue) {
+              // Check if this source value has a mapping that targets the current dimension
+              const targetMappings = vlookupMappings.filter(
+                m => m.sourceDimensionId === sourceDimId && m.targetDimensionId === dimId
+              );
+              
+              targetMappings.forEach(mapping => {
+                if (mapping.sourceValue.toLowerCase() === String(sourceValue).toLowerCase()) {
+                  if (!valuesMap[dimId]) {
+                    valuesMap[dimId] = new Set();
+                  }
+                  valuesMap[dimId].add(mapping.targetValue);
+                }
+              });
+            }
+          });
         });
       });
 
@@ -687,19 +837,16 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     const currentValues = newFilters[dimensionId] || [];
     
     if (currentValues.includes(value)) {
-      // Remove value - need to remove all expanded values too
-      const allValuesToRemove = getAllValuesForFilter(value, vlookupMappings, dimensionId);
-      const updated = currentValues.filter(v => !allValuesToRemove.includes(v));
+      // Remove value
+      const updated = currentValues.filter(v => v !== value);
       if (updated.length === 0) {
         delete newFilters[dimensionId];
       } else {
         newFilters[dimensionId] = updated;
       }
     } else {
-      // Add value - expand to include all source values if this is a mapped value
-      const allValuesToAdd = getAllValuesForFilter(value, vlookupMappings, dimensionId);
-      const uniqueValues = [...new Set([...currentValues, ...allValuesToAdd])];
-      newFilters[dimensionId] = uniqueValues;
+      // Add value (don't expand - expansion happens during filtering)
+      newFilters[dimensionId] = [...currentValues, value];
     }
     
     setSelectedFilters(newFilters);
@@ -728,7 +875,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
   };
 
   const handleDimensionsChange = async (dimensionIds: string[]) => {
-    console.log('[FILTERS-BAR] handleDimensionsChange called with:', dimensionIds);
+    console.log('[FILTERS-BAR] Dimensions changed:', dimensionIds);
     setActiveDimensions(dimensionIds);
     // Clear filters for removed dimensions
     const newFilters = { ...selectedFilters };
@@ -740,11 +887,17 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
     setSelectedFilters(newFilters);
     
     // Save the updated dimensions to the database (but not during initial load)
-    if (!reportId || isSharedView || isInitialLoad) return;
+    if (!reportId || isSharedView || isInitialLoad) {
+      console.log('[FILTERS-BAR] Skipping save - reportId:', reportId, 'isSharedView:', isSharedView, 'isInitialLoad:', isInitialLoad);
+      return;
+    }
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('[FILTERS-BAR] No user found, cannot save dimensions');
+        return;
+      }
 
       const { data: existingView } = await supabase
         .from("report_views")
@@ -759,16 +912,19 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
         filter_values: newFilters,
         date_range_start: existingView?.date_range_start || null,
         date_range_end: existingView?.date_range_end || null,
-        date_range_preset: existingView?.date_range_preset || "this_month",
+        date_range_preset: existingView?.date_range_preset || "all_time",
       };
 
       if (existingView) {
-        await supabase
+        const { error } = await supabase
           .from("report_views")
           .update(viewData)
           .eq("id", existingView.id);
+        
+        if (error) throw error;
+        console.log('[FILTERS-BAR] Updated filter dimensions in existing view');
       } else {
-        await supabase
+        const { error } = await supabase
           .from("report_views")
           .insert({
             ...viewData,
@@ -776,11 +932,22 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
             user_id: user.id,
             is_default: true,
           });
+        
+        if (error) throw error;
+        console.log('[FILTERS-BAR] Created new view with filter dimensions');
       }
       
-      console.log('[FILTERS-BAR] Saved dimension configuration changes');
+      toast({
+        title: "Dimensions saved",
+        description: `${dimensionIds.length} dimension${dimensionIds.length !== 1 ? 's' : ''} configured for this report`,
+      });
     } catch (error) {
-      console.error("Error saving dimension changes:", error);
+      console.error('[FILTERS-BAR] Error saving dimension changes:', error);
+      toast({
+        title: "Error saving dimensions",
+        description: "Failed to save dimension configuration",
+        variant: "destructive",
+      });
     }
   };
 
@@ -800,6 +967,112 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
             </div>
 
             <div className="flex items-center gap-3 flex-1">
+              {/* Master Dimension Filter */}
+              {showMasterDimensionFilter && (
+                <div className="flex items-end gap-2">
+                  <div 
+                    className="flex flex-col gap-1"
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setMasterDimensionPopoverOpen(true);
+                    }}
+                  >
+                    <label className="text-xs text-muted-foreground">
+                      Master Dimension
+                    </label>
+                    <Button
+                      variant="outline"
+                      className="w-[200px] justify-between bg-background"
+                      onClick={() => setMasterDimensionPopoverOpen(true)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setMasterDimensionPopoverOpen(true);
+                      }}
+                    >
+                      {masterDimensionId 
+                        ? (
+                          <span className="flex items-center gap-2">
+                            {dimensions.find(d => d.id === masterDimensionId)?.name || 'Select...'}
+                            {masterDimensionValues.length > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                ({masterDimensionValues.length})
+                              </span>
+                            )}
+                          </span>
+                        )
+                        : 'Select dimension...'}
+                      <Settings className="ml-2 h-4 w-4 opacity-50" />
+                    </Button>
+                </div>
+              </div>
+              )}
+
+              {/* Report Filter */}
+              {showReportFilter && availableReports.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-muted-foreground">
+                    Include Reports
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-[200px] justify-between bg-background"
+                      >
+                        {selectedReportIds.length === 0
+                          ? 'All reports'
+                          : selectedReportIds.length === availableReports.length
+                          ? 'All reports'
+                          : `${selectedReportIds.length} selected`}
+                        <Settings className="ml-2 h-4 w-4 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[300px] p-0 bg-background z-50" align="start">
+                      <div className="p-2 border-b flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="flex-1 h-8 text-xs"
+                          onClick={() => onReportSelectionChange?.(availableReports.map(r => r.id))}
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="flex-1 h-8 text-xs"
+                          onClick={() => onReportSelectionChange?.([])}
+                        >
+                          Deselect All
+                        </Button>
+                      </div>
+                      <ScrollArea className="h-[200px]">
+                        <div className="p-2 space-y-1">
+                          {availableReports.map(report => (
+                            <div
+                              key={report.id}
+                              className="flex items-center gap-2 p-2 hover:bg-accent rounded cursor-pointer"
+                              onClick={() => {
+                                const newSelection = selectedReportIds.includes(report.id)
+                                  ? selectedReportIds.filter(id => id !== report.id)
+                                  : [...selectedReportIds, report.id];
+                                onReportSelectionChange?.(newSelection);
+                              }}
+                            >
+                              <Checkbox
+                                checked={selectedReportIds.includes(report.id)}
+                                onCheckedChange={() => {}}
+                              />
+                              <span className="text-sm">{report.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+
               {activeDimensions.map((dimId) => {
                 const dimension = dimensions.find((d) => d.id === dimId);
                 if (!dimension) return null;
@@ -1119,7 +1392,7 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
                 </Popover>
               </div>
 
-              {activeDimensions.length === 0 && !isSharedView && (
+              {activeDimensions.length === 0 && !isSharedView && !showMasterDimensionFilter && (
                 <Button
                   variant="outline"
                   className="gap-2"
@@ -1168,6 +1441,194 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
         onDimensionsChange={handleDimensionsChange}
         reportId={reportId}
       />
+
+      {/* Master Dimension Settings Modal */}
+      <Dialog open={masterDimensionSettingsOpen} onOpenChange={setMasterDimensionSettingsOpen}>
+        <DialogContent className="sm:max-w-[500px] bg-background">
+          <DialogHeader>
+            <DialogTitle>Master Dimension Settings</DialogTitle>
+            <DialogDescription>
+              Choose a dimension to use as the master filter across all reports. This will be automatically applied when viewing consolidated data.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Select Master Dimension</Label>
+              <ScrollArea className="h-[300px] border rounded-md p-2">
+                <div className="space-y-1">
+                  <Button
+                    variant={!masterDimensionId ? "secondary" : "ghost"}
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => setMasterDimensionId(null)}
+                  >
+                    <Check className={cn("mr-2 h-4 w-4", !masterDimensionId ? "opacity-100" : "opacity-0")} />
+                    None (No master dimension)
+                  </Button>
+                  
+                  {dimensions.filter(d => d.type === 'text').map(dim => (
+                    <Button
+                      key={dim.id}
+                      variant={masterDimensionId === dim.id ? "secondary" : "ghost"}
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => setMasterDimensionId(dim.id)}
+                    >
+                      <Check className={cn("mr-2 h-4 w-4", masterDimensionId === dim.id ? "opacity-100" : "opacity-0")} />
+                      {dim.name}
+                      {dim.scope && (
+                        <span className="ml-2 text-xs text-muted-foreground capitalize">
+                          ({dim.scope})
+                        </span>
+                      )}
+                    </Button>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMasterDimensionSettingsOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => {
+              setMasterDimensionSettingsOpen(false);
+              toast({
+                title: "Settings saved",
+                description: masterDimensionId 
+                  ? `Master dimension set to: ${dimensions.find(d => d.id === masterDimensionId)?.name}`
+                  : "Master dimension cleared",
+              });
+            }}>
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Master Dimension Popover */}
+      <Popover open={masterDimensionPopoverOpen} onOpenChange={setMasterDimensionPopoverOpen}>
+        <PopoverTrigger asChild>
+          <div style={{ display: 'none' }} />
+        </PopoverTrigger>
+        <PopoverContent className="w-[300px] p-0 bg-background border shadow-lg z-[100]" align="start">
+          {!masterDimensionId ? (
+            // Show dimension selector
+            <>
+              <div className="p-2 border-b bg-muted/50">
+                <p className="text-xs font-medium text-muted-foreground">Select Master Dimension</p>
+              </div>
+              <ScrollArea className="h-[250px]">
+                <div className="p-2 space-y-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start text-xs"
+                    onClick={() => {
+                      setMasterDimensionId(null);
+                      setMasterDimensionValues([]);
+                      setMasterDimensionPopoverOpen(false);
+                    }}
+                  >
+                    None (Clear filter)
+                  </Button>
+                  {dimensions.filter(d => d.type === 'text').map(dim => (
+                    <Button
+                      key={dim.id}
+                      variant={masterDimensionId === dim.id ? "secondary" : "ghost"}
+                      size="sm"
+                      className="w-full justify-start text-xs"
+                      onClick={() => {
+                        setMasterDimensionId(dim.id);
+                        setMasterDimensionValues([]);
+                      }}
+                    >
+                      {dim.name}
+                      {dim.scope && (
+                        <span className="ml-auto text-[10px] text-muted-foreground capitalize">
+                          {dim.scope}
+                        </span>
+                      )}
+                    </Button>
+                  ))}
+                </div>
+              </ScrollArea>
+            </>
+          ) : (
+            // Show dimension values for filtering
+            <>
+              <div className="p-2 border-b bg-muted/50 flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {dimensions.find(d => d.id === masterDimensionId)?.name} Values
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => {
+                    setMasterDimensionId(null);
+                    setMasterDimensionValues([]);
+                  }}
+                >
+                  Change Dimension
+                </Button>
+              </div>
+              <div className="p-2 border-b flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex-1 h-7 text-xs"
+                  onClick={() => setMasterDimensionValues(masterDimensionOptions)}
+                >
+                  Select All
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex-1 h-7 text-xs"
+                  onClick={() => setMasterDimensionValues([])}
+                >
+                  Clear All
+                </Button>
+              </div>
+              <ScrollArea className="h-[250px]">
+                <div className="p-2 space-y-1">
+                  {masterDimensionValuesLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary"></div>
+                    </div>
+                  ) : masterDimensionOptions.length === 0 ? (
+                    <div className="text-xs text-muted-foreground text-center py-4">
+                      No values found
+                    </div>
+                  ) : (
+                    masterDimensionOptions.map(value => (
+                      <div
+                        key={value}
+                        className="flex items-center gap-2 p-2 hover:bg-accent rounded cursor-pointer transition-colors"
+                        onClick={() => {
+                          const newValues = masterDimensionValues.includes(value)
+                            ? masterDimensionValues.filter(v => v !== value)
+                            : [...masterDimensionValues, value];
+                          setMasterDimensionValues(newValues);
+                        }}
+                      >
+                        <Checkbox
+                          checked={masterDimensionValues.includes(value)}
+                          onCheckedChange={() => {}}
+                        />
+                        <span className="text-xs">{value}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </>
+          )}
+        </PopoverContent>
+      </Popover>
     </>
   );
 };

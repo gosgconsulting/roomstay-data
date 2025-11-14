@@ -7,245 +7,90 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400',
 };
 
-interface PerformanceDataRequest {
-  reportId: string;
-  groupByDims: string[];
-  breakdownDims?: string[];
-  thenByDims?: string[];
-  dimensionFilters?: Record<string, string | string[]>;
-  dateFrom?: string;
-  dateTo?: string;
-  accountId?: string;
-  userId?: string;
-  visibleDimensionIds?: string[];
-  limit?: number;
-  offset?: number;
-  compareEnabled?: boolean;
-  compareDateFrom?: string;
-  compareDateTo?: string;
-  dateGranularity?: string;
-  dateOrder?: string;
-}
-
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests immediately - MUST be first
   if (req.method === 'OPTIONS') {
-    console.log('[CORS] Handling OPTIONS preflight request');
     return new Response('ok', { 
       status: 200,
-      headers: {
-        ...corsHeaders,
-        'Content-Length': '2'
-      }
+      headers: corsHeaders
     });
   }
 
   try {
+    const {
+      reportId,
+      accountId,
+      userId,
+      dateFrom,
+      dateTo,
+      dimensionFilters = {},
+      visibleDimensionIds = [],
+      limit = 50000,
+      offset = 0,
+    } = await req.json();
+
+    console.log('[GET-PERFORMANCE-DATA] Starting query:', {
+      reportId,
+      accountId,
+      dateFrom,
+      dateTo,
+      filterCount: Object.keys(dimensionFilters).length,
+    });
+
+    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const {
-      reportId,
-      groupByDims = [],
-      breakdownDims = [],
-      thenByDims = [],
-      dimensionFilters = {},
-      dateFrom,
-      dateTo,
-      accountId,
-      userId,
-      visibleDimensionIds = [],
-      limit = 50000, // Reasonable limit for performance
-      offset = 0,
-      compareEnabled = false,
-      compareDateFrom,
-      compareDateTo,
-      dateGranularity = 'none',
-      dateOrder = 'desc',
-    }: PerformanceDataRequest = await req.json();
-
-    console.log('get-performance-data: Starting request', {
-      reportId,
-      groupByDims,
-      limit,
-      offset,
-      compareEnabled,
-      dateFrom,
-      dateTo,
-      dateGranularity,
-      timestamp: new Date().toISOString()
-    });
-    
-    console.log('get-performance-data: Date filter analysis:', {
-      hasDateFrom: !!dateFrom,
-      hasDateTo: !!dateTo,
-      dateFromValue: dateFrom,
-      dateToValue: dateTo,
-      dateFromType: typeof dateFrom,
-      dateToType: typeof dateTo,
-      willApplyDateFilter: !!(dateFrom || dateTo)
-    });
-
-    // Helper function to parse dates in various formats
-    const parseDateValue = (dateValue: any): Date | null => {
-      if (!dateValue) return null;
-      
-      try {
-        // If already a Date object, return it
-        if (dateValue instanceof Date) {
-          return isNaN(dateValue.getTime()) ? null : dateValue;
-        }
-        
-        const stringValue = String(dateValue).trim();
-        if (!stringValue) return null;
-        
-        // Try YYYY-MM-DD format (ISO format, what we store)
-        // Parse as UTC to avoid timezone issues
-        if (stringValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          const parts = stringValue.split('-');
-          if (parts.length === 3) {
-            const [year, month, day] = parts;
-            const date = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
-            if (!isNaN(date.getTime())) return date;
+    // Helper function to retry database queries
+    const retryQuery = async (queryFn: () => any, maxRetries = 3) => {
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          const result = await queryFn();
+          if (result.error) {
+            if (i === maxRetries - 1) throw result.error;
+            console.log(`[GET-PERFORMANCE-DATA] Query error, retrying (${i + 1}/${maxRetries}):`, result.error);
+            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+            continue;
           }
+          return result;
+        } catch (error) {
+          if (i === maxRetries - 1) throw error;
+          console.log(`[GET-PERFORMANCE-DATA] Exception, retrying (${i + 1}/${maxRetries}):`, error);
+          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
         }
-        
-        // Try MM/DD/YYYY format (legacy format)
-        if (stringValue.includes('/')) {
-          const parts = stringValue.split('/');
-          if (parts.length === 3) {
-            // Check if first part is 4 digits (YYYY) -> YYYY/MM/DD
-            if (parts[0].length === 4) {
-              const [year, month, day] = parts;
-              const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-              if (!isNaN(date.getTime())) return date;
-            } else {
-              // Assume MM/DD/YYYY
-              const [month, day, year] = parts;
-              const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-              if (!isNaN(date.getTime())) return date;
-            }
-          }
-        }
-        
-        // Try DD-MM-YYYY format
-        if (stringValue.includes('-') && !stringValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          const parts = stringValue.split('-');
-          if (parts.length === 3 && parts[2].length === 4) {
-            const [day, month, year] = parts;
-            const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-            if (!isNaN(date.getTime())) return date;
-          }
-        }
-        
-        // Fallback: try standard Date parsing
-        const date = new Date(stringValue);
-        if (!isNaN(date.getTime())) return date;
-        
-        return null;
-      } catch (e) {
-        console.warn(`Failed to parse date value: ${dateValue}`, e);
-        return null;
       }
     };
 
-    // Helper function to retry queries with exponential backoff
-    const retryQuery = async <T>(
-      queryFn: () => Promise<{ data: T | null; error: any }>,
-      maxRetries = 3,
-      baseDelay = 1000
-    ): Promise<{ data: T | null; error: any }> => {
-      for (let attempt = 0; attempt < maxRetries; attempt++) {
-        const result = await queryFn();
-        
-        if (!result.error) {
-          return result;
-        }
-        
-        // Check if error is retryable (connection issues, timeouts, 5xx errors)
-        const isRetryable = 
-          result.error.message?.includes('520') ||
-          result.error.message?.includes('timeout') ||
-          result.error.message?.includes('ETIMEDOUT') ||
-          result.error.message?.includes('ECONNREFUSED') ||
-          result.error.code === 'PGRST301';
-        
-        if (!isRetryable || attempt === maxRetries - 1) {
-          return result;
-        }
-        
-        // Exponential backoff with jitter
-        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
-        console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-      
-      return await queryFn();
-    };
-
-    // Fetch dimensions (account-specific + custom for the user + global templates) with retry
-    const dimensionsResult = await retryQuery(async () => {
-      let query = supabase
+    // Load dimensions to map IDs to names with retry
+    const dimensionsResult = await retryQuery(async () => 
+      await supabase
         .from('dimensions')
-        .select('id, name, type, formula, scope, user_id, report_id, account_id');
-      
-      // Load account-specific, custom, and global dimensions
-      if (userId && accountId) {
-        // Load: account-specific (for this account) + custom (for this user) + global (templates)
-        query = query.or(`and(scope.eq.account,account_id.eq.${accountId}),and(scope.eq.custom,user_id.eq.${userId}),scope.eq.global`);
-      } else if (userId) {
-        // No accountId: load custom + global only
-        query = query.or(`and(scope.eq.custom,user_id.eq.${userId}),scope.eq.global`);
-      } else {
-        // If no userId, only load global dimensions
-        query = query.eq('scope', 'global');
-      }
-      
-      return query;
-    });
-    
-    const { data: allDimensions, error: dimError } = dimensionsResult;
-
-    if (dimError) {
-      console.error('Error fetching dimensions:', dimError);
-      throw new Error(`Failed to fetch dimensions: ${dimError.message || 'Unknown error'}`);
-    }
-
-    // Filter dimensions for this specific report (include account + global + custom for this report)
-    const dimensions = (allDimensions || []).filter((d: any) => 
-      d.scope === 'global' || 
-      d.scope === 'account' || // Include account-scoped dimensions
-      (d.scope === 'custom' && d.user_id === userId && (d.report_id === null || d.report_id === reportId))
+        .select('id, name, type')
+        .or(`and(scope.eq.account,account_id.eq.${accountId}),and(scope.eq.custom,user_id.eq.${userId}),scope.eq.global`)
     );
 
-    console.log(`Loaded ${dimensions.length} dimensions (${allDimensions?.length} total) for user ${userId}, report ${reportId}`);
-
-    if (!dimensions || dimensions.length === 0) {
-      console.error('No dimensions found');
-      throw new Error('No dimensions configured for this report');
+    if (!dimensionsResult || dimensionsResult.error) {
+      const error = dimensionsResult?.error || new Error('Failed to load dimensions');
+      console.error('[GET-PERFORMANCE-DATA] Error loading dimensions:', error);
+      throw error;
     }
 
-    console.log(`Loaded ${dimensions?.length || 0} dimensions for aggregation`);
+    const dimensions = dimensionsResult.data;
 
-    // Load budgets for budget calculation
-    const budgetsResult = await retryQuery(async () => {
-      let query = supabase
-        .from('budgets')
-        .select('*');
-      
-      if (reportId) {
-        query = query.eq('report_id', reportId);
-      } else if (accountId) {
-        query = query.eq('account_id', accountId);
-      }
-      
-      return query;
+    // Create dimension ID to name mapping
+    const dimensionMap = new Map();
+    dimensions?.forEach((dim: any) => {
+      dimensionMap.set(dim.id, { name: dim.name, type: dim.type });
     });
 
-    const budgets = budgetsResult.data || [];
-    console.log(`Loaded ${budgets.length} budgets for report/account`);
+    // Build query for dimension_data with retry
+    const dimensionDataResult = await retryQuery(async () => {
+      let query = supabase
+        .from('dimension_data')
+        .select('dimension_values, row_number, data_source_id')
+        .eq('report_id', reportId);
 
+<<<<<<< HEAD
     // Load vlookup mappings for this report/account
     const vlookupMappings: Record<string, Array<{ sourceValue: string; targetValue: string }>> = {};
     if (userId) {
@@ -256,44 +101,69 @@ Deno.serve(async (req) => {
 
       if (reportId) {
         mappingsQuery.or(`report_id.eq.${reportId},report_id.is.null`);
+=======
+      // Apply limit and offset
+      if (limit) {
+        query = query.limit(limit);
+>>>>>>> 1c998a4f68425652b77fe9d79c9ba9a120bfd221
       }
-      if (accountId) {
-        mappingsQuery.or(`account_id.eq.${accountId},account_id.is.null`);
+      if (offset) {
+        query = query.range(offset, offset + limit - 1);
       }
 
-      const { data: mappingsData, error: mappingsError } = await mappingsQuery;
-      if (!mappingsError && mappingsData) {
-        // Group mappings by target dimension ID
-        mappingsData.forEach(m => {
-          if (!vlookupMappings[m.target_dimension_id]) {
-            vlookupMappings[m.target_dimension_id] = [];
-          }
-          vlookupMappings[m.target_dimension_id].push({
-            sourceValue: m.source_value,
-            targetValue: m.target_value,
-          });
-        });
-        console.log(`Loaded ${mappingsData.length} vlookup mappings`);
-      }
+      return await query;
+    });
+
+    if (!dimensionDataResult || dimensionDataResult.error) {
+      const error = dimensionDataResult?.error || new Error('Failed to load dimension data');
+      console.error('[GET-PERFORMANCE-DATA] Query error:', error);
+      throw error;
     }
 
-    // Helper function to apply vlookup mappings to dimension values
-    const applyVlookupMappings = (dimensionValues: Record<string, any>): Record<string, any> => {
-      const result = { ...dimensionValues };
-      for (const [dimId, value] of Object.entries(dimensionValues)) {
-        const mappings = vlookupMappings[dimId];
-        if (mappings && mappings.length > 0) {
-          const mapping = mappings.find(m => 
-            m.sourceValue.toLowerCase() === String(value).toLowerCase()
-          );
-          if (mapping) {
-            result[dimId] = mapping.targetValue;
+    const dimensionData = dimensionDataResult.data;
+
+    console.log('[GET-PERFORMANCE-DATA] Fetched rows:', dimensionData?.length || 0);
+
+    // Filter data based on date range and dimension filters
+    let filteredData = dimensionData || [];
+
+    // Apply date filter if provided
+    if (dateFrom || dateTo) {
+      // First, find which date dimension is actually used in the data for this report
+      // Check all date dimensions and see which one has data
+      const { data: allDateDimensions } = await supabase
+        .from('dimensions')
+        .select('id, name')
+        .eq('type', 'date')
+        .eq('name', 'Date')
+        .or(`and(scope.eq.account,account_id.eq.${accountId}),and(scope.eq.custom,user_id.eq.${userId}),scope.eq.global`)
+        .order('scope', { ascending: false }); // Prefer account > custom > global
+
+      // Find the date dimension that's actually used in the data
+      let dateDimension = null;
+      if (allDateDimensions && allDateDimensions.length > 0) {
+        // Check which date dimension has data in the fetched rows
+        for (const dim of allDateDimensions) {
+          const hasData = filteredData.some((row: any) => {
+            const dateValue = row.dimension_values?.[dim.id];
+            return dateValue !== undefined && dateValue !== null && dateValue !== '';
+          });
+          
+          if (hasData) {
+            dateDimension = dim;
+            console.log('[GET-PERFORMANCE-DATA] Found date dimension in data:', dim.id);
+            break;
           }
         }
+        
+        // If no date dimension found in data, use the first one (fallback)
+        if (!dateDimension && allDateDimensions.length > 0) {
+          dateDimension = allDateDimensions[0];
+          console.log('[GET-PERFORMANCE-DATA] No date dimension found in data, using fallback:', dateDimension.id);
+        }
       }
-      return result;
-    };
 
+<<<<<<< HEAD
     // Build filter for the main query with optimized settings
     // Fetch ALL data first, then apply date filtering in memory for better performance
     const query = supabase
@@ -303,269 +173,50 @@ Deno.serve(async (req) => {
       .order('row_number', { ascending: false })
       .limit(limit) // Use limit instead of range for better performance
       .abortSignal(AbortSignal.timeout(300000)); // Increased to 300 seconds (5 minutes) for very large datasets
+=======
+      if (dateDimension) {
+        const beforeFilterCount = filteredData.length;
+        filteredData = filteredData.filter((row: any) => {
+          const dateValue = row.dimension_values?.[dateDimension.id];
+          // Only filter out rows that have a date value but it's outside the range
+          // If a row doesn't have a date value, include it (don't filter it out)
+          if (!dateValue || dateValue === '') return true;
+>>>>>>> 1c998a4f68425652b77fe9d79c9ba9a120bfd221
 
-    const rawDataResult = await retryQuery(async () => await query);
-    const { data: rawData, error: dataError } = rawDataResult;
+          const rowDate = new Date(dateValue);
+          if (dateFrom && rowDate < new Date(dateFrom)) return false;
+          if (dateTo && rowDate > new Date(dateTo)) return false;
 
-    if (dataError) {
-      console.error('Error fetching dimension data:', dataError);
-      throw new Error(`Failed to fetch dimension data: ${dataError.message || 'Unknown error'}`);
-    }
-
-      console.log(`Fetched ${rawData?.length || 0} raw rows`);
-      console.log('Dimension filters:', JSON.stringify(dimensionFilters));
-      console.log('Date range:', { dateFrom, dateTo });
-
-      // Apply vlookup mappings to all rows
-      let filteredData = (rawData || []).map(row => ({
-        ...row,
-        dimension_values: applyVlookupMappings(row.dimension_values as Record<string, any>)
-      }));
-
-      // Filter by dimension filters first
-      if (Object.keys(dimensionFilters).length > 0) {
-        const beforeCount = filteredData.length;
-        filteredData = filteredData.filter((row) => {
-          const dimValues = row.dimension_values as Record<string, any>;
-          for (const [dimId, filterValue] of Object.entries(dimensionFilters)) {
-            const rowValue = dimValues[dimId];
-            
-            // Handle both single values and arrays
-            if (Array.isArray(filterValue)) {
-              // For array filters, check if row value is in the array
-              if (!filterValue.includes(rowValue)) {
-                return false;
-              }
-            } else {
-              // For single value filters, check exact match
-              if (rowValue !== filterValue) {
-                return false;
-              }
-            }
-          }
           return true;
         });
-        console.log(`After dimension filters: ${filteredData.length} rows (from ${beforeCount})`);
-      }
-
-      // Filter by date range (after dimension filters)
-      if ((dateFrom || dateTo) && dimensions) {
-        // Prioritize account-scoped date dimension over global/custom to ensure each account uses its own date dimension
-        const dateDim = dimensions.find(d => d.type === 'date' && d.scope === 'account') 
-          || dimensions.find(d => d.type === 'date' && d.scope === 'custom')
-          || dimensions.find(d => d.type === 'date');
-              console.log('get-performance-data: Applying date filter', {
-        dateDimension: dateDim ? { id: dateDim.id, name: dateDim.name } : null,
-        dateFrom,
-        dateTo,
-        dateFromParsed: dateFrom ? new Date(dateFrom).toISOString() : null,
-        dateToParsed: dateTo ? new Date(dateTo).toISOString() : null,
-        beforeFilterCount: filteredData.length,
-        sampleRowDates: filteredData.slice(0, 3).map(row => ({
-          rowNumber: row.row_number,
-          dateValue: row.dimension_values[dateDim?.id || '']
-        }))
-      });
-        if (dateDim) {
-          const beforeDateCount = filteredData.length;
-          filteredData = filteredData.filter((row) => {
-            const dimValues = row.dimension_values as Record<string, any>;
-            const dateValue = dimValues[dateDim.id];
-            if (!dateValue) return false;
-
-            const rowDate = parseDateValue(dateValue);
-            if (!rowDate) return false;
-            
-            const dateFromObj = dateFrom ? new Date(dateFrom) : null;
-            const dateToObj = dateTo ? new Date(dateTo) : null;
-            
-            // Normalize both dates to UTC for consistent comparison
-            if (dateFromObj && !isNaN(dateFromObj.getTime())) {
-              const rowDateUTC = Date.UTC(rowDate.getUTCFullYear(), rowDate.getUTCMonth(), rowDate.getUTCDate());
-              const fromDateUTC = Date.UTC(dateFromObj.getUTCFullYear(), dateFromObj.getUTCMonth(), dateFromObj.getUTCDate());
-              if (rowDateUTC < fromDateUTC) return false;
-            }
-            
-                      if (dateToObj && !isNaN(dateToObj.getTime())) {
-            const rowDateUTC = Date.UTC(rowDate.getUTCFullYear(), rowDate.getUTCMonth(), rowDate.getUTCDate());
-            const toDateUTC = Date.UTC(dateToObj.getUTCFullYear(), dateToObj.getUTCMonth(), dateToObj.getUTCDate());
-            // Include the end date: row date must be <= end date
-            if (rowDateUTC > toDateUTC) return false;
-          }
-            
-            return true;
-          });
-          console.log(`After date filters: ${filteredData.length} rows (from ${beforeDateCount})`);
         
-        // Debug: Check if November 1st data is still present
-        const nov1Data = filteredData.filter(row => {
-          const dateValue = row.dimension_values[dateDim.id];
-          return dateValue && dateValue.includes('2025-11-01');
+        const afterFilterCount = filteredData.length;
+        console.log('[GET-PERFORMANCE-DATA] Date filter applied:', {
+          dateDimensionId: dateDimension.id,
+          dateFrom,
+          dateTo,
+          beforeFilter: beforeFilterCount,
+          afterFilter: afterFilterCount,
+          filteredOut: beforeFilterCount - afterFilterCount
         });
         
-        if (nov1Data.length > 0) {
-          console.log('🚨 ISSUE: November 1st data still present after filtering:', {
-            nov1RowCount: nov1Data.length,
-            sampleNov1Data: nov1Data.slice(0, 2).map(row => ({
-              rowNumber: row.row_number,
-              dateValue: row.dimension_values[dateDim.id],
-              parsedDate: parseDateValue(row.dimension_values[dateDim.id])?.toISOString()
-            }))
-          });
-        } else {
-          console.log('✅ November 1st data correctly filtered out');
-        }
-        
-        // Debug: Show sample dates that passed the filter
-        if (filteredData.length > 0) {
-          const sampleDates = filteredData.slice(0, 5).map(row => ({
-            rowNumber: row.row_number,
-            dateValue: row.dimension_values[dateDim.id],
-            parsedDate: parseDateValue(row.dimension_values[dateDim.id])?.toISOString()
-          }));
-          console.log('Sample dates that passed filter:', sampleDates);
-        }
-        
-        // Debug: Show sample dates that were filtered out
-        const filteredOutSample = (rawData || []).filter(row => {
-          const dimValues = row.dimension_values;
-          const dateValue = dimValues[dateDim.id];
-          if (!dateValue) return false;
-          const rowDate = parseDateValue(dateValue);
-          if (!rowDate) return false;
-          
-          const dateFromObj = dateFrom ? new Date(dateFrom) : null;
-          const dateToObj = dateTo ? new Date(dateTo) : null;
-          
-          if (dateFromObj && !isNaN(dateFromObj.getTime())) {
-            const rowDateUTC = Date.UTC(rowDate.getUTCFullYear(), rowDate.getUTCMonth(), rowDate.getUTCDate());
-            const fromDateUTC = Date.UTC(dateFromObj.getUTCFullYear(), dateFromObj.getUTCMonth(), dateFromObj.getUTCDate());
-            if (rowDateUTC < fromDateUTC) return true;
-          }
-          if (dateToObj && !isNaN(dateToObj.getTime())) {
-            const rowDateUTC = Date.UTC(rowDate.getUTCFullYear(), rowDate.getUTCMonth(), rowDate.getUTCDate());
-            const toDateUTC = Date.UTC(dateToObj.getUTCFullYear(), dateToObj.getUTCMonth(), dateToObj.getUTCDate());
-            if (rowDateUTC > toDateUTC) return true;
-          }
-          return false;
-        }).slice(0, 5);
-        
-        if (filteredOutSample.length > 0) {
-          const filteredOutDates = filteredOutSample.map(row => ({
-            rowNumber: row.row_number,
-            dateValue: row.dimension_values[dateDim.id],
-            parsedDate: parseDateValue(row.dimension_values[dateDim.id])?.toISOString(),
-            reason: 'outside date range'
-          }));
-          console.log('Sample dates that were filtered OUT:', filteredOutDates);
-        }
-        }
-      }
-
-    console.log(`After all filtering: ${filteredData.length} rows`);
-
-    // Fetch and filter comparison period data if enabled
-    let compareFilteredData: any[] = [];
-    if (compareEnabled && compareDateFrom && compareDateTo && dimensions) {
-      // Prioritize account-scoped date dimension over global/custom
-      const dateDim = dimensions.find(d => d.type === 'date' && d.scope === 'account') 
-        || dimensions.find(d => d.type === 'date' && d.scope === 'custom')
-        || dimensions.find(d => d.type === 'date');
-      if (dateDim) {
-        // Filter the same rawData for comparison period
-        let compareData = rawData || [];
-        
-          // Apply same dimension filters (handle both single values and arrays)
-          if (Object.keys(dimensionFilters).length > 0) {
-            compareData = compareData.filter((row) => {
-              const dimValues = row.dimension_values as Record<string, any>;
-              for (const [dimId, filterValue] of Object.entries(dimensionFilters)) {
-                const rowValue = dimValues[dimId];
-                
-                // Handle both single values and arrays
-                if (Array.isArray(filterValue)) {
-                  // For array filters, check if row value is in the array
-                  if (!filterValue.includes(rowValue)) {
-                    return false;
-                  }
-                } else {
-                  // For single value filters, check exact match
-                  if (rowValue !== filterValue) {
-                    return false;
-                  }
-                }
-              }
-              return true;
+        // If date filter resulted in 0 rows but we had data before, log a warning
+        if (afterFilterCount === 0 && beforeFilterCount > 0) {
+          console.warn('[GET-PERFORMANCE-DATA] Date filter excluded all data. Consider expanding date range.');
+          // Check what date range the data actually covers (use original data before filtering)
+          const dateValues = (dimensionData || []).map((row: any) => row.dimension_values?.[dateDimension.id]).filter(Boolean);
+          if (dateValues.length > 0) {
+            const minDate = new Date(Math.min(...dateValues.map((d: string) => new Date(d).getTime())));
+            const maxDate = new Date(Math.max(...dateValues.map((d: string) => new Date(d).getTime())));
+            console.warn('[GET-PERFORMANCE-DATA] Data date range:', {
+              min: minDate.toISOString().split('T')[0],
+              max: maxDate.toISOString().split('T')[0],
+              requestedFrom: dateFrom,
+              requestedTo: dateTo
             });
           }
-        
-          // Filter by comparison date range
-          compareData = compareData.filter((row) => {
-            const dimValues = row.dimension_values as Record<string, any>;
-            const dateValue = dimValues[dateDim.id];
-            if (!dateValue) return false;
-
-            // Parse date using helper function
-            const rowDate = parseDateValue(dateValue);
-            if (!rowDate) return false;
-            
-            // Compare dates (ignore time component)
-            const compareFromObj = compareDateFrom ? new Date(compareDateFrom) : null;
-            const compareToObj = compareDateTo ? new Date(compareDateTo) : null;
-            
-            if (compareFromObj && !isNaN(compareFromObj.getTime())) {
-              const rowDateStart = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate());
-              const fromDateStart = new Date(compareFromObj.getFullYear(), compareFromObj.getMonth(), compareFromObj.getDate());
-              if (rowDateStart < fromDateStart) return false;
-            }
-            
-            if (compareToObj && !isNaN(compareToObj.getTime())) {
-              const rowDateEnd = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate(), 23, 59, 59);
-              const toDateEnd = new Date(compareToObj.getFullYear(), compareToObj.getMonth(), compareToObj.getDate(), 23, 59, 59);
-              if (rowDateEnd > toDateEnd) return false;
-            }
-            
-            return true;
-          });
-        
-        compareFilteredData = compareData;
-        console.log(`Comparison period: ${compareFilteredData.length} rows`);
-      }
-    }
-
-      // Helper function to format date based on granularity
-      const formatDateByGranularity = (dateStr: string, granularity: string): { key: string; display: string } => {
-        try {
-          // Handle year-only values (like "2023")
-          if (/^\d{4}$/.test(String(dateStr).trim())) {
-            const year = parseInt(String(dateStr));
-            if (year >= 1900 && year <= 2100) {
-              // Create a date for the year (January 1st)
-              const date = new Date(year, 0, 1);
-              
-              switch (granularity) {
-                case 'day':
-                  return { key: `${year}-01-01`, display: `January 1, ${year}` };
-                case 'week':
-                  return { key: `${year}-W01`, display: `Week 1, ${year}` };
-                case 'month':
-                  return { key: `${year}-01`, display: `January ${year}` };
-                case 'year':
-                default:
-                  return { key: String(year), display: String(year) };
-              }
-            }
-          }
-          
-          // Parse date using helper function
-          const date = parseDateValue(dateStr);
-          if (!date) {
-            return { key: dateStr, display: dateStr };
-          }
-        
-        if (isNaN(date.getTime())) {
-          return { key: dateStr, display: dateStr };
         }
+<<<<<<< HEAD
 
         const year = date.getFullYear();
         const month = date.getMonth(); // 0-11
@@ -1186,35 +837,45 @@ Deno.serve(async (req) => {
           sortKey: g.sortKey,
           dataKeys: Object.keys(g.data)
         })));
+=======
+>>>>>>> 1c998a4f68425652b77fe9d79c9ba9a120bfd221
       } else {
-        console.log('✅ No November dates in final grouped data');
+        console.log('[GET-PERFORMANCE-DATA] No date dimension found, skipping date filter');
       }
     }
 
-    // Calculate total for all visible metric columns
-    const totalData: Record<string, any> = {};
-    for (const dim of dimensions || []) {
-      if (dim.formula) continue;
-      if (dim.type === 'number' || dim.type === 'currency') {
-        let sum = 0;
-        for (const row of filteredData) {
-          const dimValues = row.dimension_values as Record<string, any>;
-          const value = dimValues[dim.id];
-          if (value !== undefined && value !== null) {
-            sum += parseFloat(value) || 0;
-          }
+    // Apply dimension filters
+    if (Object.keys(dimensionFilters).length > 0) {
+      filteredData = filteredData.filter((row: any) => {
+        const dimensionValues = row.dimension_values || {};
+
+        for (const [dimId, filterValues] of Object.entries(dimensionFilters)) {
+          // Normalize filterValues to always be an array
+          const filterValuesArray = Array.isArray(filterValues) 
+            ? filterValues 
+            : (filterValues ? [filterValues] : []);
+            
+          if (filterValuesArray.length === 0) continue;
+
+          const rowValue = dimensionValues[dimId];
+          if (rowValue === undefined || rowValue === null) return false;
+
+          const rowValueStr = String(rowValue).toLowerCase();
+          const hasMatch = filterValuesArray.some((filterValue: string) => {
+            const filterLower = String(filterValue).toLowerCase();
+            return rowValueStr.includes(filterLower);
+          });
+
+          if (!hasMatch) return false;
         }
-        totalData[dim.name] = sum;
-      }
+
+        return true;
+      });
     }
 
-    // Calculate formula totals
-    for (const dim of dimensions || []) {
-      if (dim.formula) {
-        totalData[dim.name] = calculateFormula(dim.formula, totalData);
-      }
-    }
+    console.log('[GET-PERFORMANCE-DATA] Filtered rows:', filteredData.length);
 
+<<<<<<< HEAD
     // Calculate comparison totals if enabled
     const totalCompareData: Record<string, any> = {};
     const totalChangeData: Record<string, any> = {};
@@ -1231,79 +892,69 @@ Deno.serve(async (req) => {
             }
           }
           totalCompareData[dim.name] = sum;
+=======
+    // Transform data from dimension IDs to dimension names
+    const transformedData = filteredData.map((row: any) => {
+      const dimensionValues = row.dimension_values || {};
+      const transformedRow: any = {};
+      
+      // Map dimension IDs to names
+      for (const [dimId, value] of Object.entries(dimensionValues)) {
+        const dimInfo = dimensionMap.get(dimId);
+        if (dimInfo) {
+          transformedRow[dimInfo.name] = value;
+>>>>>>> 1c998a4f68425652b77fe9d79c9ba9a120bfd221
         }
       }
+      
+      return {
+        id: row.id || `row-${row.row_number}`,
+        name: '', // Will be set by grouping logic in frontend
+        level: 0,
+        data: transformedRow,
+        _row_number: row.row_number,
+        _data_source_id: row.data_source_id,
+      };
+    });
 
-      // Calculate formula totals for comparison
-      for (const dim of dimensions) {
-        if (dim.formula) {
-          totalCompareData[dim.name] = calculateFormula(dim.formula, totalCompareData);
-        }
-      }
+    console.log('[GET-PERFORMANCE-DATA] Sample transformed row:', transformedData[0]);
 
-      // Calculate percentage changes for totals
-      for (const dim of dimensions) {
-        if (dim.type === 'number' || dim.type === 'currency' || dim.formula) {
-          const currentValue = totalData[dim.name] || 0;
-          const compareValue = totalCompareData[dim.name] || 0;
-          
-          if (compareValue !== 0) {
-            const change = ((currentValue - compareValue) / compareValue) * 100;
-            totalChangeData[dim.name] = change;
-          } else if (currentValue !== 0) {
-            totalChangeData[dim.name] = currentValue > 0 ? 100 : -100;
-          } else {
-            totalChangeData[dim.name] = 0;
-          }
-        }
-      }
-    }
-
+    // Return the filtered data
     const response = {
-      data: groupedArray,
+      data: transformedData,
       total: filteredData.length,
-      totalData,
-      totalCompareData: Object.keys(totalCompareData).length > 0 ? totalCompareData : undefined,
-      totalChangeData: Object.keys(totalChangeData).length > 0 ? totalChangeData : undefined,
-      hasMore: offset + limit < filteredData.length,
+      totalRows: filteredData.length, // Keep for backward compatibility
+      hasMore: false,
     };
 
-    console.log('get-performance-data: Response prepared', {
-      rowCount: groupedArray.length,
-      total: filteredData.length,
-      hasMore: response.hasMore,
-    });
+    return new Response(
+      JSON.stringify(response),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
 
-    return new Response(JSON.stringify(response), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
   } catch (error) {
-    console.error('Error in get-performance-data:', error);
+    console.error('[GET-PERFORMANCE-DATA] Error:', error);
     
-    // Provide more detailed error messages
-    let errorMessage = 'Unknown error occurred';
-    let statusCode = 500;
+    // Extract meaningful error information
+    let errorMessage = 'Unknown error';
+    let errorDetails = undefined;
     
     if (error instanceof Error) {
       errorMessage = error.message;
-      
-      // Check for specific error types
-      if (errorMessage.includes('dimensions') || errorMessage.includes('dimension data')) {
-        statusCode = 503; // Service Unavailable - temporary database issue
-      } else if (errorMessage.includes('timeout') || errorMessage.includes('520')) {
-        statusCode = 504; // Gateway Timeout
-      }
+      errorDetails = error.stack;
+    } else if (typeof error === 'object' && error !== null) {
+      errorMessage = JSON.stringify(error);
     }
     
     return new Response(
       JSON.stringify({ 
         error: errorMessage,
-        details: error instanceof Error ? error.stack : undefined,
-        timestamp: Date.now(),
-      }), 
-      {
-        status: statusCode,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        details: errorDetails,
+        timestamp: new Date().toISOString()
+      }),
+      { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );
   }

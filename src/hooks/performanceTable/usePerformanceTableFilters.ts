@@ -3,6 +3,7 @@ import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "./usePerformanceTableDimensions";
 import type { TableRow } from "./usePerformanceTableData";
 import { calculateTotals, calculateComparisonTotalsAndChanges } from "@/lib/performanceTable/calculators";
+import { useVlookupMappings } from "@/hooks/useVlookupMappings";
 
 interface UsePerformanceTableFiltersOptions {
   tableData: TableRow[];
@@ -10,6 +11,8 @@ interface UsePerformanceTableFiltersOptions {
   dimensions: Dimension[];
   groupByDimensions: string[];
   totalData: Record<string, any>;
+  reportId?: string;
+  accountId?: string;
 }
 
 /**
@@ -21,7 +24,11 @@ export function usePerformanceTableFilters({
   dimensions,
   groupByDimensions,
   totalData,
+  reportId,
+  accountId,
 }: UsePerformanceTableFiltersOptions) {
+  // Load vlookup mappings
+  const { data: vlookupMappings = [] } = useVlookupMappings(reportId, accountId);
   // Apply column filters (text and numeric)
   const filteredTableData = useMemo(() => {
     if (!filters.dimensionFilters || Object.keys(filters.dimensionFilters).length === 0) {
@@ -87,10 +94,29 @@ export function usePerformanceTableFilters({
             const dimValue = row.data[dimension.name];
             if (dimValue !== undefined && dimValue !== null) {
               const dimValueStr = String(dimValue).toLowerCase();
+              
+              // Direct match
               if (dimValueStr.includes(filterLower)) {
                 matchesAnyValue = true;
-                break; // Found a match
+                break;
               }
+              
+              // Check if dimValue maps TO the filterValue via vlookup
+              // For example: "Brady Apartment Hotel" (dimValue from Hotel dimension)
+              // should match filter "Brady" (from Account dimension)
+              const sourceMappings = vlookupMappings.filter(
+                m => m.targetDimensionId === dimId && 
+                     m.targetValue.toLowerCase() === filterLower
+              );
+              
+              for (const mapping of sourceMappings) {
+                if (dimValueStr.includes(mapping.sourceValue.toLowerCase())) {
+                  matchesAnyValue = true;
+                  break;
+                }
+              }
+              
+              if (matchesAnyValue) break;
             }
           }
         }
@@ -103,7 +129,7 @@ export function usePerformanceTableFilters({
 
       return true; // All filters passed
     });
-  }, [tableData, filters.dimensionFilters, dimensions, groupByDimensions]);
+  }, [tableData, filters.dimensionFilters, dimensions, groupByDimensions, vlookupMappings]);
 
   // Calculate totals from filtered data
   const totals = useMemo(() => {

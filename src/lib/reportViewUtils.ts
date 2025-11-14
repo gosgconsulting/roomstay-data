@@ -56,7 +56,7 @@ export async function saveDimensionSettings(
       filter_values: cleanedFilterValues, // Use cleaned values
       date_range_start: existingView?.date_range_start || null,
       date_range_end: existingView?.date_range_end || null,
-      date_range_preset: existingView?.date_range_preset || "this_month",
+      date_range_preset: existingView?.date_range_preset || "all_time",
     };
 
     if (existingView) {
