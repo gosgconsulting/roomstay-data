@@ -90,12 +90,12 @@ export function KPIMetricsCards({
     console.log('[KPI-FIXED] loadMetrics - Starting data fetch for reportId:', reportId);
     setIsLoading(true);
     try {
-      // Get the current user
+      // Get the current user (optional for public/shared views)
       const { data: { user } } = await supabase.auth.getUser();
       console.log('[KPI-FIXED] loadMetrics - User:', user?.id);
       
-      if (!user || !reportId || !accountId) {
-        console.error('[KPI-FIXED] Missing required data:', { user: !!user, reportId, accountId });
+      if (!reportId || !accountId) {
+        console.error('[KPI-FIXED] Missing required data:', { reportId, accountId });
         setMetrics([]);
         return;
       }
@@ -104,31 +104,33 @@ export function KPIMetricsCards({
       let visibleKPIs: string[] | null = null;
       let kpiOrder: string[] | null = null;
 
-      try {
-        const viewSettings = await retryWithBackoff(
-          async () => {
-            const { data, error } = await supabase
-              .from("report_views")
-              .select("visible_kpis, kpi_order")
-              .eq("report_id", reportId)
-              .eq("user_id", user.id)
-              .eq("is_default", true)
-              .maybeSingle();
+      if (user?.id) {
+        try {
+          const viewSettings = await retryWithBackoff(
+            async () => {
+              const { data, error } = await supabase
+                .from("report_views")
+                .select("visible_kpis, kpi_order")
+                .eq("report_id", reportId)
+                .eq("user_id", user.id)
+                .eq("is_default", true)
+                .maybeSingle();
 
-            if (error) throw error;
-            return data;
-          },
-          3,
-          500
-        );
+              if (error) throw error;
+              return data;
+            },
+            3,
+            500
+          );
 
-        if (viewSettings) {
-          visibleKPIs = viewSettings.visible_kpis as string[] | null;
-          kpiOrder = viewSettings.kpi_order as string[] | null;
-          console.log('[KPI-FIXED] Loaded KPI settings:', { visibleKPIs, kpiOrder });
+          if (viewSettings) {
+            visibleKPIs = viewSettings.visible_kpis as string[] | null;
+            kpiOrder = viewSettings.kpi_order as string[] | null;
+            console.log('[KPI-FIXED] Loaded KPI settings:', { visibleKPIs, kpiOrder });
+          }
+        } catch (error) {
+          console.error('[KPI-FIXED] Failed to load KPI view settings:', error);
         }
-      } catch (error) {
-        console.error('[KPI-FIXED] Failed to load KPI view settings:', error);
       }
 
       // Get current month date range for filtering if no date range provided
@@ -148,7 +150,7 @@ export function KPIMetricsCards({
       });
 
       // Load data using the standardized approach
-      const result = await loadReportData(reportId, accountId, user.id, filters);
+      const result = await loadReportData(reportId, accountId, user?.id, filters);
 
       if (!result.success) {
         console.error('[KPI-FIXED] Failed to load report data:', result.error);
@@ -176,7 +178,7 @@ export function KPIMetricsCards({
           dimensionFilters: stableFilters.dimensionFilters
         };
 
-        const comparisonResult = await loadReportData(reportId, accountId, user.id, comparisonFilters);
+        const comparisonResult = await loadReportData(reportId, accountId, user?.id, comparisonFilters);
         if (comparisonResult.success) {
           comparisonMetrics = await calculateKPIMetrics(comparisonResult.data, dimensions, reportId, accountId);
           console.log('[KPI-FIXED] Comparison metrics calculated:', comparisonMetrics);

@@ -64,8 +64,8 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete }: KP
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      if (!user || !reportId || !accountId) {
-        console.error('[CHART-FIXED] Missing required data:', { user: !!user, reportId, accountId });
+      if (!reportId || !accountId) {
+        console.error('[CHART-FIXED] Missing required data:', { reportId, accountId });
         setChartData([]);
         return;
       }
@@ -82,7 +82,7 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete }: KP
       console.log('[CHART-FIXED] Loading data with filters:', dataFilters);
 
       // Load data using the standardized approach
-      const result = await loadReportData(reportId, accountId, user.id, dataFilters);
+      const result = await loadReportData(reportId, accountId, user?.id, dataFilters);
 
       if (!result.success) {
         console.error('[CHART-FIXED] Failed to load report data:', result.error);
