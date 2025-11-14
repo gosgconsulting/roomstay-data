@@ -108,7 +108,8 @@ export const FiltersBar = ({
   }, [availableReports, showReportFilter]);
 
   useEffect(() => {
-    if (reportId) {
+    // Load dimensions when report or account changes
+    if (reportId || accountId) {
       // Reset all filter state when report changes - use last 7 days for performance
       setIsInitialLoad(true);
       setActiveDimensions([]);
@@ -119,22 +120,26 @@ export const FiltersBar = ({
       setCompareType("previous_period");
       setCompareDateRange(undefined);
       
-      // Load dimensions first, then load settings
+      // Load dimensions first, then load settings (only if reportId exists)
       loadDimensions().then(() => {
-        loadFilterSettings().finally(() => {
+        if (reportId) {
+          loadFilterSettings().finally(() => {
+            setIsInitialLoad(false);
+          });
+        } else {
           setIsInitialLoad(false);
-        });
+        }
       });
     }
-  }, [reportId]);
+  }, [reportId, accountId]);
 
   // Refresh dimensions when data is remapped/synced
   useEffect(() => {
-    if (reportId && refreshTrigger && refreshTrigger > 0) {
+    if ((reportId || accountId) && refreshTrigger && refreshTrigger > 0) {
       console.log('[testing] FiltersBar - Refreshing dimensions due to data sync, trigger:', refreshTrigger);
       loadDimensions();
     }
-  }, [refreshTrigger, reportId]);
+  }, [refreshTrigger, reportId, accountId]);
 
   useEffect(() => {
     if (activeDimensions.length > 0 && reportId) {
@@ -588,7 +593,8 @@ export const FiltersBar = ({
   };
 
   const loadDimensions = async () => {
-    if (!reportId) return;
+    // Allow loading dimensions even without reportId if accountId is available (All Reports view)
+    if (!reportId && !accountId) return;
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -610,18 +616,33 @@ export const FiltersBar = ({
         accountData = (data || []) as Dimension[];
       }
 
-      // Load custom dimensions for this user (both global custom and report-specific)
+      // Load custom dimensions for this user
       let customData: Dimension[] = [];
-      const { data, error: customError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("scope", "custom")
-        .or(`report_id.is.null,report_id.eq.${reportId}`) // Include both global custom (report_id=null) and report-specific
-        .order("created_at", { ascending: false });
+      if (reportId) {
+        // If reportId is provided, load both global custom and report-specific
+        const { data, error: customError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("scope", "custom")
+          .or(`report_id.is.null,report_id.eq.${reportId}`)
+          .order("created_at", { ascending: false });
 
-      if (customError) throw customError;
-      customData = (data || []) as Dimension[];
+        if (customError) throw customError;
+        customData = (data || []) as Dimension[];
+      } else {
+        // If no reportId (All Reports view), only load global custom dimensions (not report-specific)
+        const { data, error: customError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("scope", "custom")
+          .is("report_id", null) // Only global custom dimensions
+          .order("created_at", { ascending: false });
+
+        if (customError) throw customError;
+        customData = (data || []) as Dimension[];
+      }
 
       // Load global dimensions (lowest priority, fallback)
       const { data: globalData, error: globalError } = await supabase
@@ -656,7 +677,7 @@ export const FiltersBar = ({
         d.type === 'text'
       );
 
-      // Filter dimensions by visibility settings
+      // Filter dimensions by visibility settings (only for specific reports)
       let finalDimensions = filterableDimensions;
       if (user && reportId) {
         finalDimensions = await filterDimensionsByVisibility(filterableDimensions, reportId, user.id, supabase);
