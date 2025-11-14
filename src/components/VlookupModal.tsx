@@ -113,7 +113,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
 
     setIsSaving(true);
     try {
-      console.log('[VLOOKUP] Re-applying mappings...', { reportId, accountId });
+      console.log('[VLOOKUP-MODAL] Re-applying mappings...', { reportId, accountId });
       
       const { data: applyResult, error: applyError } = await supabase.functions.invoke(
         'apply-vlookup-mappings',
@@ -122,28 +122,33 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
         }
       );
 
-      console.log('[VLOOKUP] Re-apply function response:', { applyResult, applyError });
+      console.log('[VLOOKUP-MODAL] Re-apply function response:', { applyResult, applyError });
 
       if (applyError) {
-        throw new Error(applyError.message || 'Failed to invoke edge function');
-      } else if (applyResult?.success === false) {
-        throw new Error(applyResult.error || 'Edge function returned error');
-      } else {
-        toast({
-          title: "Success",
-          description: `Applied vlookup mappings to ${applyResult?.rowsUpdated || 0} rows. Account dimension is now available in filters.`,
-        });
-        
-        // Trigger data refresh if callback provided
-        if (onSave) {
-          onSave();
-        }
+        console.error('[VLOOKUP-MODAL] Edge function invocation error:', applyError);
+        throw new Error(`Edge function error: ${applyError.message || JSON.stringify(applyError)}`);
+      }
+      
+      if (applyResult?.success === false) {
+        console.error('[VLOOKUP-MODAL] Edge function returned error:', applyResult);
+        throw new Error(applyResult.error || applyResult.details || 'Unknown error from edge function');
+      }
+      
+      toast({
+        title: "Success",
+        description: `Applied vlookup mappings to ${applyResult?.rowsUpdated || 0} rows. Account dimension is now available in filters.`,
+      });
+      
+      // Trigger data refresh if callback provided
+      if (onSave) {
+        onSave();
       }
     } catch (error) {
-      console.error('Error re-applying vlookup mappings:', error);
+      console.error('[VLOOKUP-MODAL] Error re-applying vlookup mappings:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       toast({
         title: "Error",
-        description: `Failed to re-apply vlookup mappings: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        description: `Failed to re-apply vlookup mappings: ${errorMessage}`,
         variant: "destructive",
       });
     } finally {
