@@ -162,7 +162,7 @@ export const FiltersBar = ({
       
       return () => clearTimeout(timeoutId);
     }
-  }, [activeDimensions, selectedFilters, dateRange, datePreset, reportId, isInitialLoad]);
+  }, [activeDimensions, selectedFilters, dateRange, datePreset, masterDimensionId, reportId, isInitialLoad]);
 
   // Update comparison date range when date range or compare type changes
   useEffect(() => {
@@ -305,6 +305,14 @@ export const FiltersBar = ({
           setActiveDimensions([dateDimensionId]);
         }
         
+        // Load master dimension if saved (stored in filter_values with special key)
+        if (data.filter_values && typeof data.filter_values === 'object') {
+          const filterValues = data.filter_values as Record<string, any>;
+          if (filterValues.__master_dimension_id) {
+            setMasterDimensionId(filterValues.__master_dimension_id);
+          }
+        }
+        
         // Always apply date preset if saved, or default to "this_month"
         const preset = data.date_range_preset || "this_month";
         setDatePreset(preset);
@@ -346,7 +354,11 @@ export const FiltersBar = ({
 
       const viewData = {
         filter_dimensions: activeDimensions,
-        filter_values: selectedFilters,
+        filter_values: {
+          ...selectedFilters,
+          // Store master dimension ID with special key to distinguish from regular filters
+          ...(masterDimensionId && { __master_dimension_id: masterDimensionId })
+        },
         date_range_start: dateRange?.from?.toISOString().split('T')[0] || null,
         date_range_end: dateRange?.to?.toISOString().split('T')[0] || null,
         date_range_preset: datePreset,
@@ -831,7 +843,13 @@ export const FiltersBar = ({
             <div className="flex items-center gap-3 flex-1">
               {/* Master Dimension Filter */}
               {showMasterDimensionFilter && (
-                <div className="flex flex-col gap-1">
+                <div 
+                  className="flex flex-col gap-1"
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setMasterDimensionPopoverOpen(true);
+                  }}
+                >
                   <label className="text-xs text-muted-foreground">
                     Master Dimension
                   </label>
