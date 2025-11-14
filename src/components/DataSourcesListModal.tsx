@@ -22,6 +22,7 @@ import { EditMappingModal } from "./EditMappingModal";
 import { ViewDataModal } from "./ViewDataModal";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { syncDataSource } from "@/lib/sync-utils";
+import { SyncModeModal } from "./SyncModeModal";
 
 interface DataSource {
   id: string;
@@ -66,6 +67,11 @@ export const DataSourcesListModal = ({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingDataSource, setDeletingDataSource] = useState<DataSource | null>(null);
 
+  // NEW: Sync modal state
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [syncTarget, setSyncTarget] = useState<DataSource | null>(null);
+  const [syncTotalRows, setSyncTotalRows] = useState<number>(0);
+
   useEffect(() => {
     if (open && reportId) {
       loadDataSources();
@@ -102,6 +108,108 @@ export const DataSourcesListModal = ({
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // NEW: Open sync modal and load stats
+  const openSyncModal = async (dataSource: DataSource) => {
+    setSyncTarget(dataSource);
+    setSyncModalOpen(true);
+
+    // Fetch total rows for display
+    try {
+      const { count, error } = await supabase
+        .from('dimension_data')
+        .select('id', { count: 'exact', head: true })
+        .eq('data_source_id', dataSource.id);
+
+      if (!error && typeof count === 'number') {
+        setSyncTotalRows(count);
+      } else {
+        setSyncTotalRows(0);
+      }
+    } catch {
+      setSyncTotalRows(0);
+    }
+  };
+
+  // NEW: Handle modal sync with schedule + mode
+  const handleModalSync = async (
+    mode: 'incremental' | 'full',
+    schedule: { enabled: boolean; frequency: 'manual' | 'daily' | 'weekly' | 'monthly'; time?: string | null; timezone?: string | null }
+  ) => {
+    if (!syncTarget) return;
+
+    setIsSyncing(syncTarget.id);
+
+    try {
+      // Save auto-sync schedule to data source
+      const { error: scheduleError } = await supabase
+        .from('data_sources')
+        .update({
+          sync_frequency: schedule.enabled ? schedule.frequency : 'manual',
+          sync_time: schedule.enabled ? (schedule.time || null) : null,
+          sync_timezone: schedule.enabled ? (schedule.timezone || null) : null,
+        })
+        .eq('id', syncTarget.id);
+
+      if (scheduleError) {
+        toast({
+          title: "Schedule update warning",
+          description: "Could not update auto sync schedule. Proceeding to sync.",
+          variant: "destructive",
+        });
+      }
+
+      // Inform user
+      toast({
+        title: "Syncing data...",
+        description: `Starting ${mode === 'incremental' ? 'incremental' : 'full'} sync for ${syncTarget.name}`,
+      });
+
+      // Run sync according to mode
+      const result = await syncDataSource(syncTarget, {
+        deleteExistingData: mode === 'full',
+        recreateDimensions: mode === 'full',
+        showProgress: true,
+      });
+
+      if (result.success) {
+        toast({
+          title: "Sync complete",
+          description: `Successfully synced ${result.rowsProcessed.toLocaleString()} rows from ${syncTarget.name}`,
+        });
+
+        // Update last_synced_at
+        await supabase
+          .from('data_sources')
+          .update({ last_synced_at: new Date().toISOString() })
+          .eq('id', syncTarget.id);
+
+        // Refresh list and parent
+        await loadDataSources();
+        if (onDataSync) onDataSync();
+        if (onRefreshData) setTimeout(() => onRefreshData(), 500);
+
+        // Close modal
+        setSyncModalOpen(false);
+        setSyncTarget(null);
+      } else {
+        toast({
+          title: "Sync failed",
+          description: result.error || "Unknown error occurred",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      toast({
+        title: "Sync failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(null);
     }
   };
 
@@ -303,7 +411,7 @@ export const DataSourcesListModal = ({
                             <Button
                               variant="outline"
                               size="icon"
-                              onClick={() => handleSync(dataSource)}
+                              onClick={() => openSyncModal(dataSource)}
                               disabled={isSyncing !== null}
                               title="Sync Data"
                             >
@@ -377,6 +485,16 @@ export const DataSourcesListModal = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* NEW: Sync Mode Modal */}
+      <SyncModeModal
+        open={syncModalOpen}
+        onOpenChange={(o) => setSyncModalOpen(o)}
+        onSync={handleModalSync}
+        isLoading={isSyncing !== null}
+        lastSyncTime={syncTarget?.last_synced_at ?? null}
+        totalRows={syncTotalRows}
+      />
     </>
   );
 };

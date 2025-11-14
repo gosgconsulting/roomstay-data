@@ -5,11 +5,14 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { RefreshCw, Plus, RotateCcw, Clock, Database, Zap } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 
 interface SyncModeModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSync: (mode: 'incremental' | 'full') => void;
+  onSync: (mode: 'incremental' | 'full', schedule: { enabled: boolean; frequency: 'manual' | 'daily' | 'weekly' | 'monthly'; time?: string | null; timezone?: string | null }) => void;
   isLoading?: boolean;
   lastSyncTime?: string | null;
   totalRows?: number;
@@ -25,8 +28,19 @@ export const SyncModeModal = ({
 }: SyncModeModalProps) => {
   const [selectedMode, setSelectedMode] = useState<'incremental' | 'full'>('incremental');
 
+  // NEW: Auto sync state
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(true);
+  const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'monthly' | 'manual'>('daily');
+  const [syncTime, setSyncTime] = useState<string>('02:00');
+  const [timezone, setTimezone] = useState<string>('Asia/Singapore');
+
   const handleSync = () => {
-    onSync(selectedMode);
+    onSync(selectedMode, {
+      enabled: autoSyncEnabled,
+      frequency,
+      time: autoSyncEnabled ? syncTime : null,
+      timezone: autoSyncEnabled ? timezone : null
+    });
   };
 
   const formatLastSync = (dateString: string | null) => {
@@ -149,6 +163,49 @@ export const SyncModeModal = ({
               </CardContent>
             </Card>
           </RadioGroup>
+
+          {/* NEW: Auto Sync Configuration */}
+          <Card className="bg-muted/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Auto Sync
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Enable a schedule to keep your data up to date automatically.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="autoSync">Enable auto sync</Label>
+                <Switch id="autoSync" checked={autoSyncEnabled} onCheckedChange={setAutoSyncEnabled} />
+              </div>
+              <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 ${autoSyncEnabled ? '' : 'opacity-50 pointer-events-none'}`}>
+                <div>
+                  <Label htmlFor="frequency">Frequency</Label>
+                  <Select value={frequency} onValueChange={(v) => setFrequency(v as typeof frequency)}>
+                    <SelectTrigger id="frequency" className="bg-background mt-1">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background z-50">
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="manual">Manual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="syncTime">Time</Label>
+                  <Input id="syncTime" type="time" value={syncTime} onChange={(e) => setSyncTime(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="timezone">Timezone</Label>
+                  <Input id="timezone" value={timezone} onChange={(e) => setTimezone(e.target.value)} className="mt-1" placeholder="e.g., Asia/Singapore" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Action Buttons */}
           <div className="flex justify-end gap-2 pt-4">
