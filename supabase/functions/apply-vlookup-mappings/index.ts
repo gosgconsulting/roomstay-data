@@ -18,7 +18,104 @@ interface DimensionMappingRow {
   source_dimension_id: string;
   source_value: string;
   target_dimension_id: string;
+  target_dimension_name: string;
   target_value: string;
+}
+
+/**
+ * Gets an existing dimension or creates it if it doesn't exist
+ */
+async function getOrCreateTargetDimension(
+  supabase: any,
+  targetDimensionId: string,
+  targetDimensionName: string,
+  userId: string,
+  reportId: string | null,
+  accountId: string | null
+): Promise<{ name: string; type: string; id: string } | null> {
+  // First, try to fetch existing dimension by ID
+  const { data: existingById, error: fetchError } = await supabase
+    .from('dimensions')
+    .select('id, name, type')
+    .eq('id', targetDimensionId)
+    .maybeSingle();
+
+  if (existingById) {
+    console.log(`[VLOOKUP-APPLY] Found existing target dimension: ${existingById.name} (${existingById.id})`);
+    return existingById;
+  }
+
+  // If not found by ID and we have a name, try to find by name and scope
+  if (targetDimensionName) {
+    let query = supabase
+      .from('dimensions')
+      .select('id, name, type')
+      .eq('name', targetDimensionName);
+    
+    if (accountId) {
+      query = query.eq('scope', 'account').eq('account_id', accountId);
+    } else if (reportId) {
+      query = query.eq('scope', 'custom').eq('report_id', reportId);
+    }
+
+    const { data: existingByName } = await query.maybeSingle();
+
+    if (existingByName) {
+      console.log(`[VLOOKUP-APPLY] Found existing dimension by name: ${existingByName.name} (${existingByName.id})`);
+      
+      // Update mappings to use the correct ID
+      await supabase
+        .from('dimension_mappings')
+        .update({ target_dimension_id: existingByName.id })
+        .eq('target_dimension_id', targetDimensionId)
+        .eq('target_dimension_name', targetDimensionName);
+      
+      return existingByName;
+    }
+  }
+
+  // Dimension doesn't exist - create it
+  if (!targetDimensionName) {
+    console.error(`[VLOOKUP-APPLY] Cannot create dimension without a name`);
+    return null;
+  }
+
+  console.log(`[VLOOKUP-APPLY] Creating new dimension: ${targetDimensionName}`);
+  
+  const scope = accountId ? 'account' : 'custom';
+  const dimensionData: any = {
+    user_id: userId,
+    name: targetDimensionName,
+    type: 'text',
+    scope: scope,
+  };
+
+  if (accountId) {
+    dimensionData.account_id = accountId;
+  } else if (reportId) {
+    dimensionData.report_id = reportId;
+  }
+
+  const { data: newDim, error: createError } = await supabase
+    .from('dimensions')
+    .insert(dimensionData)
+    .select('id, name, type')
+    .single();
+
+  if (createError) {
+    console.error(`[VLOOKUP-APPLY] Failed to create dimension:`, createError);
+    return null;
+  }
+
+  // Update all mappings to use the new dimension ID
+  await supabase
+    .from('dimension_mappings')
+    .update({ target_dimension_id: newDim.id })
+    .eq('target_dimension_id', targetDimensionId)
+    .eq('target_dimension_name', targetDimensionName);
+
+  console.log(`[VLOOKUP-APPLY] Created new ${scope} dimension: ${newDim.name} (${newDim.id})`);
+  return newDim;
 }
 
 Deno.serve(async (req) => {
