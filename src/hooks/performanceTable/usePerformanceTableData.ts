@@ -214,14 +214,44 @@ export function usePerformanceTableData({
 
         // The edge function returns { data: [...], total: ..., totalData: {...}, hasMore: ... }
         const rows = data?.data || [];
-        setTableData(rows);
+        
+        // Transform the data into the expected format for TableRow
+        const transformedRows: TableRow[] = rows.map((row: any) => {
+          // Create a name from the first dimension if available
+          const firstDimId = groupByDimensions[0];
+          const firstDimension = dimensions.find(d => d.id === firstDimId);
+          const dimensionName = firstDimension?.name || 'Unknown';
+          
+          // Extract dimension values from the response
+          const dimensionValues = row.dimension_values || {};
+          
+          // Create a data object with dimension names as keys
+          const rowData: Record<string, any> = {};
+          
+          // Map dimension IDs to dimension names for the data object
+          dimensions.forEach(dim => {
+            if (dimensionValues[dim.id] !== undefined) {
+              rowData[dim.name] = dimensionValues[dim.id];
+            }
+          });
+          
+          return {
+            id: row.id || `row-${row.row_number || Math.random().toString(36).substring(2, 11)}`,
+            name: dimensionValues[firstDimId] || 'Unknown',
+            level: 0,
+            data: rowData,
+            // No children, compareData, or changeData at this level
+          };
+        });
+        
+        setTableData(transformedRows);
         
         // Use totalData from edge function if available (more efficient than recalculating)
         const finalTotalData = data?.totalData || (() => {
           // Fallback: Calculate total data from all rows if edge function doesn't provide it
           const calculatedTotalData: Record<string, any> = {};
-          if (rows.length > 0 && dimensions.length > 0) {
-            rows.forEach((row: any) => {
+          if (transformedRows.length > 0 && dimensions.length > 0) {
+            transformedRows.forEach((row: TableRow) => {
               if (row.data) {
                 Object.keys(row.data).forEach((dimName: string) => {
                   const dim = dimensions.find(d => d.name === dimName);
@@ -240,8 +270,8 @@ export function usePerformanceTableData({
         const finalCompareData = data?.totalCompareData || (() => {
           // Fallback: Calculate comparison totals from rows if not provided
           const calculatedCompareData: Record<string, any> = {};
-          if (rows.length > 0 && dimensions.length > 0) {
-            rows.forEach((row: any) => {
+          if (transformedRows.length > 0 && dimensions.length > 0) {
+            transformedRows.forEach((row: TableRow) => {
               if (row.compareData) {
                 Object.keys(row.compareData).forEach((dimName: string) => {
                   const dim = dimensions.find(d => d.name === dimName);
