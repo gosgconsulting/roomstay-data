@@ -36,6 +36,11 @@ interface FiltersBarProps {
   isSharedView?: boolean;
   accountId?: string;
   refreshTrigger?: number;
+  showMasterDimensionFilter?: boolean;
+  showReportFilter?: boolean;
+  availableReports?: Array<{ id: string; name: string }>;
+  selectedReportIds?: string[];
+  onReportSelectionChange?: (reportIds: string[]) => void;
 }
 
 interface Dimension {
@@ -45,7 +50,18 @@ interface Dimension {
   scope?: 'global' | 'account' | 'custom';
 }
 
-export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, accountId, refreshTrigger }: FiltersBarProps) => {
+export const FiltersBar = ({ 
+  reportId, 
+  onFiltersChange, 
+  isSharedView = false, 
+  accountId, 
+  refreshTrigger,
+  showMasterDimensionFilter = false,
+  showReportFilter = false,
+  availableReports = [],
+  selectedReportIds = [],
+  onReportSelectionChange
+}: FiltersBarProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [activeDimensions, setActiveDimensions] = useState<string[]>([]);
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
@@ -66,8 +82,20 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const { toast } = useToast();
   
+  // Master dimension filter state
+  const [masterDimensionId, setMasterDimensionId] = useState<string | null>(null);
+  const [masterDimensionValues, setMasterDimensionValues] = useState<string[]>([]);
+  const [masterDimensionOptions, setMasterDimensionOptions] = useState<string[]>([]);
+  
   // Load vlookup mappings for this report/account
   const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
+
+  // Initialize selected reports to all reports by default
+  useEffect(() => {
+    if (showReportFilter && availableReports.length > 0 && selectedReportIds.length === 0) {
+      onReportSelectionChange?.(availableReports.map(r => r.id));
+    }
+  }, [availableReports, showReportFilter]);
 
   useEffect(() => {
     if (reportId) {
@@ -800,6 +828,125 @@ export const FiltersBar = ({ reportId, onFiltersChange, isSharedView = false, ac
             </div>
 
             <div className="flex items-center gap-3 flex-1">
+              {/* Master Dimension Filter */}
+              {showMasterDimensionFilter && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-muted-foreground">
+                    Master Dimension
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-[200px] justify-between bg-background"
+                      >
+                        {masterDimensionId 
+                          ? dimensions.find(d => d.id === masterDimensionId)?.name || 'Select...'
+                          : 'Select dimension...'}
+                        <Settings className="ml-2 h-4 w-4 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[250px] p-0 bg-background z-50" align="start">
+                      <ScrollArea className="h-[200px]">
+                        <div className="p-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start text-xs mb-1"
+                            onClick={() => {
+                              setMasterDimensionId(null);
+                              setMasterDimensionValues([]);
+                            }}
+                          >
+                            None (Clear filter)
+                          </Button>
+                          {dimensions.filter(d => d.type === 'text').map(dim => (
+                            <Button
+                              key={dim.id}
+                              variant={masterDimensionId === dim.id ? "secondary" : "ghost"}
+                              size="sm"
+                              className="w-full justify-start text-xs"
+                              onClick={() => {
+                                setMasterDimensionId(dim.id);
+                                setMasterDimensionValues([]);
+                              }}
+                            >
+                              {dim.name}
+                            </Button>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+
+              {/* Report Filter */}
+              {showReportFilter && availableReports.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-muted-foreground">
+                    Include Reports
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-[200px] justify-between bg-background"
+                      >
+                        {selectedReportIds.length === 0
+                          ? 'All reports'
+                          : selectedReportIds.length === availableReports.length
+                          ? 'All reports'
+                          : `${selectedReportIds.length} selected`}
+                        <Settings className="ml-2 h-4 w-4 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[300px] p-0 bg-background z-50" align="start">
+                      <div className="p-2 border-b flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="flex-1 h-8 text-xs"
+                          onClick={() => onReportSelectionChange?.(availableReports.map(r => r.id))}
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="flex-1 h-8 text-xs"
+                          onClick={() => onReportSelectionChange?.([])}
+                        >
+                          Deselect All
+                        </Button>
+                      </div>
+                      <ScrollArea className="h-[200px]">
+                        <div className="p-2 space-y-1">
+                          {availableReports.map(report => (
+                            <div
+                              key={report.id}
+                              className="flex items-center gap-2 p-2 hover:bg-accent rounded cursor-pointer"
+                              onClick={() => {
+                                const newSelection = selectedReportIds.includes(report.id)
+                                  ? selectedReportIds.filter(id => id !== report.id)
+                                  : [...selectedReportIds, report.id];
+                                onReportSelectionChange?.(newSelection);
+                              }}
+                            >
+                              <Checkbox
+                                checked={selectedReportIds.includes(report.id)}
+                                onCheckedChange={() => {}}
+                              />
+                              <span className="text-sm">{report.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+
               {activeDimensions.map((dimId) => {
                 const dimension = dimensions.find((d) => d.id === dimId);
                 if (!dimension) return null;
