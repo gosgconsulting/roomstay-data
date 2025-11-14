@@ -35,6 +35,9 @@ export function calculateTotals(
       let sum = 0;
       const calculateRowTotal = (rows: TableRow[]) => {
         rows.forEach(row => {
+          // Skip if row or row.data is undefined/null
+          if (!row || !row.data) return;
+          
           // Only sum values from leaf nodes (rows without children)
           const hasChildren = row.children && row.children.length > 0;
           if (!hasChildren) {
@@ -105,6 +108,9 @@ export function calculateComparisonTotalsAndChanges(
       let sum = 0;
       const calculateRowTotal = (rows: TableRow[]) => {
         rows.forEach(row => {
+          // Skip if row is undefined/null
+          if (!row) return;
+          
           const hasChildren = row.children && row.children.length > 0;
           if (!hasChildren && row.compareData) {
             const value = row.compareData[dim.name];

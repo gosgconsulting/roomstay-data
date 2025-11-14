@@ -202,6 +202,70 @@ export type Database = {
           },
         ]
       }
+      dimension_mappings: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          id: string
+          report_id: string | null
+          source_dimension_id: string | null
+          source_value: string
+          target_dimension_id: string
+          target_dimension_name: string | null
+          target_value: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          id?: string
+          report_id?: string | null
+          source_dimension_id?: string | null
+          source_value: string
+          target_dimension_id: string
+          target_dimension_name?: string | null
+          target_value: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          id?: string
+          report_id?: string | null
+          source_dimension_id?: string | null
+          source_value?: string
+          target_dimension_id?: string
+          target_dimension_name?: string | null
+          target_value?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dimension_mappings_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dimension_mappings_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dimension_mappings_source_dimension_id_fkey"
+            columns: ["source_dimension_id"]
+            isOneToOne: false
+            referencedRelation: "dimensions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dimensions: {
         Row: {
           account_id: string | null
@@ -262,6 +326,118 @@ export type Database = {
             columns: ["report_id"]
             isOneToOne: false
             referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      forecasts: {
+        Row: {
+          conversion_rate: number | null
+          cost_of_sell: number | null
+          created_at: string | null
+          id: string
+          name: string
+          paid_revenue_share: number | null
+          report_id: string | null
+          revenue_per_month: number | null
+          target_average_order_value: number | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          conversion_rate?: number | null
+          cost_of_sell?: number | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          paid_revenue_share?: number | null
+          report_id?: string | null
+          revenue_per_month?: number | null
+          target_average_order_value?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          conversion_rate?: number | null
+          cost_of_sell?: number | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          paid_revenue_share?: number | null
+          report_id?: string | null
+          revenue_per_month?: number | null
+          target_average_order_value?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forecasts_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      master_filter_settings: {
+        Row: {
+          account_id: string | null
+          compare_date_from: string | null
+          compare_date_to: string | null
+          compare_enabled: boolean | null
+          compare_type: string | null
+          created_at: string | null
+          date_preset: string | null
+          date_range_from: string | null
+          date_range_to: string | null
+          id: string
+          selected_dimension_id: string | null
+          selected_dimension_values: string[] | null
+          selected_report_ids: string[] | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          compare_date_from?: string | null
+          compare_date_to?: string | null
+          compare_enabled?: boolean | null
+          compare_type?: string | null
+          created_at?: string | null
+          date_preset?: string | null
+          date_range_from?: string | null
+          date_range_to?: string | null
+          id?: string
+          selected_dimension_id?: string | null
+          selected_dimension_values?: string[] | null
+          selected_report_ids?: string[] | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          compare_date_from?: string | null
+          compare_date_to?: string | null
+          compare_enabled?: boolean | null
+          compare_type?: string | null
+          created_at?: string | null
+          date_preset?: string | null
+          date_range_from?: string | null
+          date_range_to?: string | null
+          id?: string
+          selected_dimension_id?: string | null
+          selected_dimension_values?: string[] | null
+          selected_report_ids?: string[] | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "master_filter_settings_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -578,6 +754,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      convert_time_to_utc_cron: {
+        Args: { sync_time: string; sync_timezone: string }
+        Returns: string
+      }
       get_aggregated_performance_data: {
         Args: {
           p_breakdown_dims?: string[]
@@ -607,10 +787,18 @@ export type Database = {
           year: number
         }[]
       }
+      get_supabase_config: {
+        Args: never
+        Returns: {
+          anon_key: string
+          url: string
+        }[]
+      }
       has_report_access: {
         Args: { _report_id: string; _user_id: string }
         Returns: boolean
       }
+      initialize_existing_auto_sync_jobs: { Args: never; Returns: undefined }
       is_master_account: { Args: { _user_id: string }; Returns: boolean }
       owns_report: {
         Args: { _report_id: string; _user_id: string }
@@ -618,7 +806,7 @@ export type Database = {
       }
     }
     Enums: {
-      data_source_type: 'google_sheets' | 'csv_url'
+      data_source_type: "google_sheets" | "csv_url"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -745,6 +933,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      data_source_type: ["google_sheets", "csv_url"],
+    },
   },
 } as const
