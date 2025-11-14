@@ -346,37 +346,16 @@ export const FiltersBar = ({
       if (error && error.code !== 'PGRST116') throw error; // Ignore "no rows" error
 
       if (data) {
-        console.log('[FILTERS-BAR] Loading saved filter settings:', {
-          filter_dimensions: data.filter_dimensions,
-          filter_values: data.filter_values,
-        });
+        console.log('[FILTERS-BAR] Loading saved filter settings (date only)');
         
-        // Load saved dimensions if they exist
-        if (data.filter_dimensions && data.filter_dimensions.length > 0) {
-          setActiveDimensions(data.filter_dimensions);
-          console.log('[FILTERS-BAR] Loaded', data.filter_dimensions.length, 'saved dimensions');
-          
-          if (data.filter_values && Object.keys(data.filter_values).length > 0) {
-            // Convert old single-value filters to array format if needed
-            const filterValues = data.filter_values as Record<string, string | string[]>;
-            const normalizedFilters: Record<string, string[]> = {};
-            const activeDims = data.filter_dimensions || [];
-            
-            Object.entries(filterValues).forEach(([key, value]) => {
-              // Only load filter values for dimensions that are in filter_dimensions
-              // Skip special keys like __master_dimension_id
-              if (activeDims.includes(key) && !key.startsWith('__')) {
-                normalizedFilters[key] = Array.isArray(value) ? value : [value];
-              }
-            });
-            setSelectedFilters(normalizedFilters);
-            console.log('[FILTERS-BAR] Loaded filter values for', Object.keys(normalizedFilters).length, 'dimensions');
-          }
-        } else if (dateDimensionId) {
-          // Default to only Date dimension if none saved
+        // Always default to only Date dimension - no dimension filters loaded
+        if (dateDimensionId) {
           setActiveDimensions([dateDimensionId]);
-          console.log('[FILTERS-BAR] No saved dimensions, defaulting to Date dimension');
+          console.log('[FILTERS-BAR] Defaulting to Date dimension only');
         }
+        
+        // Clear any dimension filters
+        setSelectedFilters({});
         
         // Load master dimension if saved (stored in filter_values with special key)
         if (data.filter_values && typeof data.filter_values === 'object') {
@@ -391,10 +370,11 @@ export const FiltersBar = ({
         setDatePreset(preset);
         applyDatePreset(preset);
       } else {
-        // No saved view for this report, apply defaults
+        // No saved view for this report, apply defaults - only Date dimension
         if (dateDimensionId) {
           setActiveDimensions([dateDimensionId]);
         }
+        setSelectedFilters({});
         applyDatePreset("all_time");
       }
     } catch (error) {
