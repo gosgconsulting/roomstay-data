@@ -346,35 +346,15 @@ export const FiltersBar = ({
       if (error && error.code !== 'PGRST116') throw error; // Ignore "no rows" error
 
       if (data) {
-        // Check if we need to reset excessive dimensions BEFORE setting state
-        const needsReset = data.filter_dimensions && data.filter_dimensions.length > 1;
+        console.log('[FILTERS-BAR] Loading saved filter settings:', {
+          filter_dimensions: data.filter_dimensions,
+          filter_values: data.filter_values,
+        });
         
-        if (needsReset && dateDimensionId) {
-          // Reset excessive dimensions to Date only
-          console.log('[FILTERS-BAR] Detected excessive filter dimensions, resetting to Date only');
-          console.log('[FILTERS-BAR] Old dimensions:', data.filter_dimensions);
-          
-          // Update database immediately
-          await supabase
-            .from("report_views")
-            .update({ 
-              filter_dimensions: [dateDimensionId],
-              filter_values: {}
-            })
-            .eq("id", data.id);
-          
-          // Set state to the reset value
-          setActiveDimensions([dateDimensionId]);
-          setSelectedFilters({});
-          
-          toast({
-            title: "Filter dimensions reset",
-            description: "Filter dimensions have been reset to default (Date only).",
-            variant: "default",
-          });
-        } else if (data.filter_dimensions && data.filter_dimensions.length > 0) {
-          // Load saved dimensions if they're valid
+        // Load saved dimensions if they exist
+        if (data.filter_dimensions && data.filter_dimensions.length > 0) {
           setActiveDimensions(data.filter_dimensions);
+          console.log('[FILTERS-BAR] Loaded', data.filter_dimensions.length, 'saved dimensions');
           
           if (data.filter_values && Object.keys(data.filter_values).length > 0) {
             // Convert old single-value filters to array format if needed
@@ -384,17 +364,18 @@ export const FiltersBar = ({
             
             Object.entries(filterValues).forEach(([key, value]) => {
               // Only load filter values for dimensions that are in filter_dimensions
-              if (activeDims.includes(key)) {
+              // Skip special keys like __master_dimension_id
+              if (activeDims.includes(key) && !key.startsWith('__')) {
                 normalizedFilters[key] = Array.isArray(value) ? value : [value];
-              } else {
-                console.warn(`[FILTER-CLEANUP] Ignoring filter value for inactive dimension: ${key}`);
               }
             });
             setSelectedFilters(normalizedFilters);
+            console.log('[FILTERS-BAR] Loaded filter values for', Object.keys(normalizedFilters).length, 'dimensions');
           }
         } else if (dateDimensionId) {
           // Default to only Date dimension if none saved
           setActiveDimensions([dateDimensionId]);
+          console.log('[FILTERS-BAR] No saved dimensions, defaulting to Date dimension');
         }
         
         // Load master dimension if saved (stored in filter_values with special key)
@@ -877,7 +858,7 @@ export const FiltersBar = ({
   };
 
   const handleDimensionsChange = async (dimensionIds: string[]) => {
-    console.log('[FILTERS-BAR] handleDimensionsChange called with:', dimensionIds);
+    console.log('[FILTERS-BAR] Dimensions changed:', dimensionIds);
     setActiveDimensions(dimensionIds);
     // Clear filters for removed dimensions
     const newFilters = { ...selectedFilters };
@@ -889,11 +870,17 @@ export const FiltersBar = ({
     setSelectedFilters(newFilters);
     
     // Save the updated dimensions to the database (but not during initial load)
-    if (!reportId || isSharedView || isInitialLoad) return;
+    if (!reportId || isSharedView || isInitialLoad) {
+      console.log('[FILTERS-BAR] Skipping save - reportId:', reportId, 'isSharedView:', isSharedView, 'isInitialLoad:', isInitialLoad);
+      return;
+    }
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('[FILTERS-BAR] No user found, cannot save dimensions');
+        return;
+      }
 
       const { data: existingView } = await supabase
         .from("report_views")
@@ -912,12 +899,15 @@ export const FiltersBar = ({
       };
 
       if (existingView) {
-        await supabase
+        const { error } = await supabase
           .from("report_views")
           .update(viewData)
           .eq("id", existingView.id);
+        
+        if (error) throw error;
+        console.log('[FILTERS-BAR] Updated filter dimensions in existing view');
       } else {
-        await supabase
+        const { error } = await supabase
           .from("report_views")
           .insert({
             ...viewData,
@@ -925,11 +915,22 @@ export const FiltersBar = ({
             user_id: user.id,
             is_default: true,
           });
+        
+        if (error) throw error;
+        console.log('[FILTERS-BAR] Created new view with filter dimensions');
       }
       
-      console.log('[FILTERS-BAR] Saved dimension configuration changes');
+      toast({
+        title: "Dimensions saved",
+        description: `${dimensionIds.length} dimension${dimensionIds.length !== 1 ? 's' : ''} configured for this report`,
+      });
     } catch (error) {
-      console.error("Error saving dimension changes:", error);
+      console.error('[FILTERS-BAR] Error saving dimension changes:', error);
+      toast({
+        title: "Error saving dimensions",
+        description: "Failed to save dimension configuration",
+        variant: "destructive",
+      });
     }
   };
 
