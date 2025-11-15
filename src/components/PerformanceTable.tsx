@@ -363,204 +363,32 @@ export const PerformanceTable = ({
 
   // Handle dimension change (from dropdown - preserves custom dimensions)
   const handleDimensionChange = useCallback((value: string, selector: "group" | "breakdown" | "then") => {
-    // Prevent selecting the same dimension that's already in all three
-    const groupValue = groupByDimensions[0];
-    const breakdownValue = breakdownByDimensions[0];
-    const thenValue = thenByDimensions[0];
-    
-    // Check if all three are the same and we're trying to select that same value
-    if (groupValue === breakdownValue && breakdownValue === thenValue && groupValue === value) {
-      console.warn('[testing] Cannot select the same dimension for all three selectors');
-      return; // Prevent the change
-    }
-    
-    // If selecting a dimension already used in another selector, swap them
-    if (selector === "group") {
-      const isUsedInBreakdown = breakdownValue === value;
-      const isUsedInThen = thenValue === value;
-      
-      // Swap with breakdown by if needed
-      if (isUsedInBreakdown) {
-        const oldGroupValue = groupValue;
-        setGroupByDimensions(prev => {
-          const newDims = prev.includes(value) 
-            ? [value, ...prev.filter(d => d !== value)]
-            : [value, ...prev];
-          return newDims;
-        });
-        // Swap breakdown by to the old group value, but only if it's different from then by
-        if (oldGroupValue && oldGroupValue !== thenValue) {
-          setBreakdownByDimensions([oldGroupValue]);
-        } else if (oldGroupValue && oldGroupValue === thenValue && groupByDimensions.length > 1) {
-          // If old group value is same as then by, pick a different dimension
-          const alternative = groupByDimensions.find(d => d !== value && d !== thenValue);
-          if (alternative) {
-            setBreakdownByDimensions([alternative]);
-          }
-        }
-        return;
-      }
-      
-      // Swap with then by if needed
-      if (isUsedInThen) {
-        const oldGroupValue = groupValue;
-        setGroupByDimensions(prev => {
-          const newDims = prev.includes(value) 
-            ? [value, ...prev.filter(d => d !== value)]
-            : [value, ...prev];
-          return newDims;
-        });
-        // Swap then by to the old group value, but only if it's different from breakdown by
-        if (oldGroupValue && oldGroupValue !== breakdownValue) {
-          setThenByDimensions([oldGroupValue]);
-        } else if (oldGroupValue && oldGroupValue === breakdownValue && groupByDimensions.length > 1) {
-          // If old group value is same as breakdown by, pick a different dimension
-          const alternative = groupByDimensions.find(d => d !== value && d !== breakdownValue);
-          if (alternative) {
-            setThenByDimensions([alternative]);
-          }
-        }
-        return;
-      }
-      
-      // Normal case: just update group by
-      setGroupByDimensions(prev => {
-        const newDims = prev.includes(value) 
-          ? [value, ...prev.filter(d => d !== value)]
-          : [value, ...prev];
-        return newDims;
-      });
-    } else if (selector === "breakdown") {
-      const isUsedInGroup = groupValue === value;
-      const isUsedInThen = thenValue === value;
-      
-      // Swap with group by if needed
-      if (isUsedInGroup) {
-        const oldBreakdownValue = breakdownValue;
-        setBreakdownByDimensions(prev => {
-          const newDims = prev.includes(value) 
-            ? [value, ...prev.filter(d => d !== value)]
-            : [value, ...prev];
-          return newDims;
-        });
-        // Swap group by to the old breakdown value, but only if it's different from then by
-        if (oldBreakdownValue && oldBreakdownValue !== thenValue) {
-          setGroupByDimensions(prev => {
-            const newDims = prev.includes(oldBreakdownValue) 
-              ? [oldBreakdownValue, ...prev.filter(d => d !== oldBreakdownValue)]
-              : [oldBreakdownValue, ...prev];
-            return newDims;
-          });
-        } else if (oldBreakdownValue && oldBreakdownValue === thenValue && groupByDimensions.length > 1) {
-          // If old breakdown value is same as then by, pick a different dimension
-          const alternative = groupByDimensions.find(d => d !== value && d !== thenValue);
-          if (alternative) {
-            setGroupByDimensions(prev => {
-              const newDims = prev.includes(alternative) 
-                ? [alternative, ...prev.filter(d => d !== alternative)]
-                : [alternative, ...prev];
-              return newDims;
-            });
-          }
-        }
-        return;
-      }
-      
-      // Swap with then by if needed
-      if (isUsedInThen) {
-        const oldBreakdownValue = breakdownValue;
-        setBreakdownByDimensions(prev => {
-          const newDims = prev.includes(value) 
-            ? [value, ...prev.filter(d => d !== value)]
-            : [value, ...prev];
-          return newDims;
-        });
-        // Swap then by to the old breakdown value, but only if it's different from group by
-        if (oldBreakdownValue && oldBreakdownValue !== groupValue) {
-          setThenByDimensions([oldBreakdownValue]);
-        } else if (oldBreakdownValue && oldBreakdownValue === groupValue && groupByDimensions.length > 1) {
-          // If old breakdown value is same as group by, pick a different dimension
-          const alternative = groupByDimensions.find(d => d !== value && d !== groupValue);
-          if (alternative) {
-            setThenByDimensions([alternative]);
-          }
-        }
-        return;
-      }
-      
-      // Normal case: just update breakdown by
-      setBreakdownByDimensions(prev => {
-        const newDims = prev.includes(value) 
-          ? [value, ...prev.filter(d => d !== value)]
-          : [value, ...prev];
-        return newDims;
-      });
-    } else if (selector === "then") {
-      const isUsedInGroup = groupValue === value;
-      const isUsedInBreakdown = breakdownValue === value;
-      
-      // Swap with group by if needed
-      if (isUsedInGroup) {
-        const oldThenValue = thenValue;
-        setThenByDimensions(prev => {
-          const newDims = prev.includes(value) 
-            ? [value, ...prev.filter(d => d !== value)]
-            : [value, ...prev];
-          return newDims;
-        });
-        // Swap group by to the old then value, but only if it's different from breakdown by
-        if (oldThenValue && oldThenValue !== breakdownValue) {
-          setGroupByDimensions(prev => {
-            const newDims = prev.includes(oldThenValue) 
-              ? [oldThenValue, ...prev.filter(d => d !== oldThenValue)]
-              : [oldThenValue, ...prev];
-            return newDims;
-          });
-        } else if (oldThenValue && oldThenValue === breakdownValue && groupByDimensions.length > 1) {
-          // If old then value is same as breakdown by, pick a different dimension
-          const alternative = groupByDimensions.find(d => d !== value && d !== breakdownValue);
-          if (alternative) {
-            setGroupByDimensions(prev => {
-              const newDims = prev.includes(alternative) 
-                ? [alternative, ...prev.filter(d => d !== alternative)]
-                : [alternative, ...prev];
-              return newDims;
-            });
-          }
-        }
-        return;
-      }
-      
-      // Swap with breakdown by if needed
-      if (isUsedInBreakdown) {
-        const oldThenValue = thenValue;
-        setThenByDimensions(prev => {
-          const newDims = prev.includes(value) 
-            ? [value, ...prev.filter(d => d !== value)]
-            : [value, ...prev];
-          return newDims;
-        });
-        // Swap breakdown by to the old then value, but only if it's different from group by
-        if (oldThenValue && oldThenValue !== groupValue) {
-          setBreakdownByDimensions([oldThenValue]);
-        } else if (oldThenValue && oldThenValue === groupValue && groupByDimensions.length > 1) {
-          // If old then value is same as group by, pick a different dimension
-          const alternative = groupByDimensions.find(d => d !== value && d !== groupValue);
-          if (alternative) {
-            setBreakdownByDimensions([alternative]);
-          }
-        }
-        return;
-      }
-      
-      // Normal case: just update then by
-      setThenByDimensions(prev => {
-        const newDims = prev.includes(value) 
-          ? [value, ...prev.filter(d => d !== value)]
-          : [value, ...prev];
-        return newDims;
-      });
-    }
+    // Build target selections based on current picker change
+    const currentGroup = groupByDimensions[0];
+    const currentBreakdown = breakdownByDimensions[0];
+    const currentThen = thenByDimensions[0];
+
+    const targetGroup = selector === "group" ? value : currentGroup;
+    const targetBreakdown = selector === "breakdown" ? value : currentBreakdown;
+    const targetThen = selector === "then" ? value : currentThen;
+
+    // Compose new ordered list for grouping: [group, breakdown, then] (unique, preserve extras)
+    const ordered: string[] = [];
+    const pushUnique = (id?: string) => {
+      if (id && !ordered.includes(id)) ordered.push(id);
+    };
+
+    pushUnique(targetGroup);
+    pushUnique(targetBreakdown);
+    pushUnique(targetThen);
+
+    // Preserve any additional dimensions already selected after the first three
+    groupByDimensions.forEach((id) => pushUnique(id));
+
+    // Update states to reflect consistent selections
+    setGroupByDimensions(ordered);
+    setBreakdownByDimensions(targetBreakdown ? [targetBreakdown] : []);
+    setThenByDimensions(targetThen ? [targetThen] : []);
   }, [groupByDimensions, breakdownByDimensions, thenByDimensions]);
 
   // Auto-fix: Ensure all three dimensions are different
