@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import { useDimensionSelector } from "@/hooks/useDimensionSelector";
 import { SelectedDimensionItem } from "./DimensionSelectorModal/SelectedDimensionItem";
 import { AddDimensionSection } from "./DimensionSelectorModal/AddDimensionSection";
@@ -49,6 +49,29 @@ export const DimensionSelectorModal = ({
     currentDateGranularity,
     onDateGranularityChange,
   });
+
+  // Load dimensions and check their data availability
+  const loadDimensions = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const loadedDimensions = await loadDimensionsForUser(user.id, reportId);
+      // Include all dimensions (including vlookup dimensions)
+      setDimensions(loadedDimensions);
+
+      // Check data availability if reportId is provided
+      if (reportId && loadedDimensions.length > 0) {
+        const dimensionIds = loadedDimensions.map(d => d.id);
+        await checkDataAvailability(dimensionIds, reportId);
+      }
+    } catch (error) {
+      console.error("Error loading dimensions:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [reportId, checkDataAvailability]);
 
   useEffect(() => {
     if (open) {

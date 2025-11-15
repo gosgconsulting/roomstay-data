@@ -26,6 +26,7 @@ export async function getAccountIdFromReport(reportId: string): Promise<string |
  * 1. Account-specific dimensions (highest priority)
  * 2. Custom dimensions (user-specific)
  * 3. Global dimensions (templates/fallback)
+ * 4. Vlookup dimensions (now included as regular dimensions)
  * 
  * @param userId - The ID of the user
  * @param reportId - Optional report ID to get account-specific dimensions
@@ -35,7 +36,7 @@ export async function loadDimensionsForUser(
   userId: string,
   reportId?: string
 ): Promise<Dimension[]> {
-  console.log('[testing] DimensionSelectorModal - Loading dimensions for user:', userId);
+  console.log('[testing] DimensionLoader - Loading dimensions for user:', userId);
 
   let accountId: string | null = null;
   let accountData: Dimension[] | null = null;
@@ -54,7 +55,7 @@ export async function loadDimensionsForUser(
 
       if (accountError) throw accountError;
       accountData = accData as Dimension[];
-      console.log('[testing] DimensionSelectorModal - Loaded account-specific dimensions:', accData?.length || 0);
+      console.log('[testing] DimensionLoader - Loaded account-specific dimensions:', accData?.length || 0);
     }
   }
 
@@ -67,12 +68,13 @@ export async function loadDimensionsForUser(
 
   if (globalError) throw globalError;
 
-  // Load user's custom dimensions
+  // Load user's custom dimensions (including vlookup dimensions)
   const { data: customData, error: customError } = await supabase
     .from("dimensions")
     .select("*")
     .eq("scope", "custom")
     .eq("user_id", userId)
+    .or(`report_id.is.null,report_id.eq.${reportId}`)
     .order("created_at", { ascending: false });
 
   if (customError) throw customError;
@@ -89,7 +91,7 @@ export async function loadDimensionsForUser(
     arr.findIndex(d => d.name === dim.name) === index
   );
 
-  console.log('[testing] DimensionSelectorModal - Loaded dimensions:', {
+  console.log('[testing] DimensionLoader - Loaded dimensions:', {
     global: globalData?.length || 0,
     account: accountData?.length || 0,
     custom: customData?.length || 0,
@@ -98,4 +100,3 @@ export async function loadDimensionsForUser(
 
   return uniqueDimensions;
 }
-

@@ -598,7 +598,12 @@ export const FiltersBar = ({
         .order("created_at", { ascending: false });
       if (globalError) throw globalError;
 
-      const all = [...accountData, ...customData, ...(globalData || [])] as Dimension[];
+      // Include all dimensions (vlookup dimensions are now included in custom data)
+      const all = [
+        ...(accountData || []),
+        ...(customData || []),
+        ...(globalData || [])
+      ] as Dimension[];
       const seen = new Set<string>();
       const unique = all.filter(d => {
         if (seen.has(d.name)) return false;

@@ -153,6 +153,40 @@ export function usePerformanceTableFilters({
       return filteredData;
     }
 
+    // Check if any group dimension is a vlookup dimension (created through vlookup modal)
+    const hasVlookupDimension = groupDimensions.some(dim => {
+      // Vlookup dimensions are text dimensions created by users
+      return dim.type === 'text' && dim.scope === 'custom';
+    });
+
+    // For vlookup dimensions, we need to apply mappings before grouping
+    let processedData = filteredData;
+    if (hasVlookupDimension) {
+      processedData = filteredData.map(row => {
+        const transformedRow = { ...row };
+        
+        // Apply vlookup mappings to each dimension value
+        groupDimensions.forEach(dim => {
+          if (dim.type === 'text' && dim.scope === 'custom') {
+            const originalValue = row.data[dim.name];
+            if (originalValue) {
+              // Check if this value should be mapped
+              const mapping = vlookupMappings.find(m => 
+                m.targetDimensionId === dim.id && 
+                m.sourceValue.toLowerCase() === String(originalValue).toLowerCase()
+              );
+              
+              if (mapping) {
+                transformedRow.data[dim.name] = mapping.targetValue;
+              }
+            }
+          }
+        });
+        
+        return transformedRow;
+      });
+    }
+
     // Helper function to aggregate dates by granularity (matching edge function logic)
     const aggregateDateByGranularity = (dateStr: string | number | Date): string => {
       if (!dateStr) return String(dateStr);
@@ -188,12 +222,11 @@ export function usePerformanceTableFilters({
     const firstDimension = groupDimensions[0];
     const isFirstDimDate = firstDimension.type === 'date';
     
-    let processedData = filteredData;
     if (isFirstDimDate && activeDateTab !== 'day') {
       // Aggregate rows with same week/month/year + same breakdown combinations
       const aggregationMap = new Map<string, TableRow>();
       
-      filteredData.forEach(row => {
+      processedData.forEach(row => {
         const dateValue = row.data[firstDimension.name];
         const aggregatedDate = aggregateDateByGranularity(dateValue);
         
@@ -465,7 +498,7 @@ export function usePerformanceTableFilters({
 
     console.log('[PERF-FILTERS] Created hierarchical data with', hierarchicalData.length, 'top-level groups');
     return hierarchicalData;
-  }, [filteredData, groupByDimensions, dimensions, dateOrder]);
+  }, [filteredData, groupByDimensions, dimensions, dateOrder, vlookupMappings]);
 
   // Calculate totals from filtered data
   const totals = useMemo(() => {

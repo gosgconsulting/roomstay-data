@@ -15,15 +15,15 @@ export function useVlookupMappings(reportId?: string, accountId?: string) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      const query = supabase
-        .from('dimension_mappings' as any)
+      let query = supabase
+        .from('dimension_mappings')
         .select('*')
         .eq('user_id', user.id);
 
       if (reportId) {
-        query.eq('report_id', reportId);
+        query = query.eq('report_id', reportId);
       } else if (accountId) {
-        query.eq('account_id', accountId);
+        query = query.eq('account_id', accountId);
       }
 
       const { data, error } = await query;
@@ -84,41 +84,4 @@ export function getMappedValue(
          m.sourceValue.toLowerCase() === sourceValue.toLowerCase()
   );
   return mapping ? mapping.targetValue : sourceValue;
-}
-
-/**
- * Get all source values that map to a specific target value
- */
-export function getSourceValues(
-  targetValue: string,
-  mappings: VlookupMapping[],
-  dimensionId: string
-): string[] {
-  return mappings
-    .filter(
-      m => m.targetDimensionId === dimensionId && 
-           m.targetValue.toLowerCase() === targetValue.toLowerCase()
-    )
-    .map(m => m.sourceValue);
-}
-
-/**
- * Get all values (both the selected value and any source values that map to it)
- * This is used for filtering - when a user selects "Brady", we want to match
- * both "Brady" and all hotels that map to "Brady"
- */
-export function getAllValuesForFilter(
-  selectedValue: string,
-  mappings: VlookupMapping[],
-  dimensionId: string
-): string[] {
-  const sourceValues = getSourceValues(selectedValue, mappings, dimensionId);
-  
-  // If there are source values, this is a mapped value - return all sources + the mapped value
-  if (sourceValues.length > 0) {
-    return [selectedValue, ...sourceValues];
-  }
-  
-  // Otherwise, return just the value itself (it might be an unmapped original value)
-  return [selectedValue];
 }

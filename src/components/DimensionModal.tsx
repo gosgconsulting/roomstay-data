@@ -99,19 +99,20 @@ export const DimensionModal = ({
         accountData = (data || []) as Dimension[];
       }
 
-      // Load custom dimensions for this user
+      // Load custom dimensions for this user (including vlookup dimensions)
       const { data: customData, error: customError } = await supabase
         .from("dimensions")
         .select("*")
         .eq("user_id", user.id)
         .eq("scope", "custom")
+        .or(`report_id.is.null,report_id.eq.${reportId}`)
         .order("created_at", { ascending: false });
 
       if (customError) throw customError;
 
       // Combine dimensions with priority: account > custom
       const allDimensions = [
-        ...accountData,
+        ...(accountData || []),
         ...(customData || [])
       ] as Dimension[];
 
