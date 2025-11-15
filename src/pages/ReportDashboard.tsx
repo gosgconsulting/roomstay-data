@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { startOfMonth, endOfMonth } from "date-fns";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
-import { KPIMetricsCards } from "@/components/KPIMetricsCardsFixed";
-import { KPIChart } from "@/components/KPIChartFixed";
+import { KPIMetricsCards } from "@/components/KPIMetricsCards";
+import { KPIChart } from "@/components/KPIChart";
 import { PerformanceTable } from "@/components/PerformanceTable";
 import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
@@ -16,6 +15,7 @@ import { Settings, ArrowLeft } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
 import { resyncReportViews } from "@/lib/resync-report-views";
+import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 
 interface Account {
   id: string;
@@ -41,18 +41,20 @@ export default function ReportDashboard() {
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
+
+  // Load dimensions using the same hook as PerformanceTable
+  const {
+    dimensions,
+    dimensionHasData,
+    isLoadingDimensions,
+    loadDimensions,
+  } = usePerformanceTableDimensions({
+    reportId,
+    accountId: accountId || undefined,
+  });
   
   // Filter state - default to this month with timezone-free date range
   const [filters, setFilters] = useState<FilterState>(() => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    
-    // Create timezone-free dates
-    const fromDateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
-    const toDateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
-    
     console.log('[testing] ReportDashboard - Initializing with timezone-free date range:', {
       preset: "all_time"
     });
@@ -132,16 +134,19 @@ export default function ReportDashboard() {
       markComponentLoading('chart');
       markComponentLoading('table');
       
-        setFilters({
-          dimensionFilters: {},
-          dateRange: undefined,
-          datePreset: "all_time",
-          compareEnabled: false,
-          compareType: "previous_period",
-          compareDateRange: undefined,
-        });
+      setFilters({
+        dimensionFilters: {},
+        dateRange: undefined,
+        datePreset: "all_time",
+        compareEnabled: false,
+        compareType: "previous_period",
+        compareDateRange: undefined,
+      });
+
+      // Load dimensions when reportId changes
+      loadDimensions();
     }
-  }, [reportId]);
+  }, [reportId, loadDimensions]);
   
   useEffect(() => {
     checkAuth();
@@ -346,15 +351,10 @@ export default function ReportDashboard() {
         <>
           <FiltersBar reportId={reportId} onFiltersChange={handleFiltersChange} isSharedView={isSharedView} accountId={accountId} refreshTrigger={loadingGeneration} />
           <main className="container mx-auto px-6 py-6 space-y-6">
-            <KPIMetricsCards
-              reportId={reportId}
-              filters={filters}
-              accountId={accountId}
-              visibilityRefreshTrigger={visibilityRefreshTrigger}
-              key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
-              onLoadingComplete={() => markComponentLoaded('metrics')}
-              headerAction={
-                !isSharedView ? (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Analytics & Insights</h2>
+                {!isSharedView && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -364,14 +364,24 @@ export default function ReportDashboard() {
                     <Settings className="h-4 w-4" />
                     KPI Settings
                   </Button>
-                ) : null
-              }
-            />
+                )}
+              </div>
+              <KPIMetricsCards
+                reportId={reportId}
+                filters={filters}
+                accountId={accountId}
+                visibilityRefreshTrigger={visibilityRefreshTrigger}
+                dimensions={dimensions}
+                key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
+                onLoadingComplete={() => markComponentLoaded('metrics')}
+              />
+            </div>
             <KPIChart
               reportId={reportId}
               filters={filters}
               accountId={accountId}
               visibilityRefreshTrigger={visibilityRefreshTrigger}
+              dimensions={dimensions}
               key={`charts-${dataRefreshKey}-${loadingGeneration}`}
               onLoadingComplete={() => markComponentLoaded('chart')}
             />

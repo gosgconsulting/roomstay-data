@@ -13,6 +13,7 @@ import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 import { Settings } from "lucide-react";
 import { fallbackAuth, clearAuthAndReload, checkCORSIssues } from "@/lib/auth-fallback";
+import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 
 export default function Index() {
   const navigate = useNavigate();
@@ -25,8 +26,18 @@ export default function Index() {
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
+
+  // Load dimensions using the same hook as PerformanceTable
+  const {
+    dimensions,
+    dimensionHasData,
+    isLoadingDimensions,
+    loadDimensions,
+  } = usePerformanceTableDimensions({
+    reportId,
+    accountId,
+  });
   
-  // Filter state
   // Filter state - default to last 7 days for better performance with large datasets
   const [filters, setFilters] = useState<FilterState>({
     dimensionFilters: {},
@@ -118,8 +129,11 @@ export default function Index() {
       markComponentLoading('chart');
       markComponentLoading('table');
       setDataRefreshKey(prev => prev + 1);
+
+      // Load dimensions when reportId changes
+      loadDimensions();
     }
-  }, [reportId]);
+  }, [reportId, loadDimensions]);
 
   const checkAuth = async () => {
     let authCompleted = false;
@@ -391,6 +405,7 @@ export default function Index() {
               reportId={reportId}
               filters={filters}
               accountId={accountId}
+              dimensions={dimensions}
               key={`charts-${dataRefreshKey}-${loadingGeneration}`}
             />
             <PerformanceTable 

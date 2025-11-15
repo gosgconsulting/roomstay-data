@@ -4,9 +4,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { format, parseISO } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { loadReportData, getCurrentMonthDateRange, Dimension } from "@/lib/data-loading-fix";
-import { getAccountIdFromReport } from "@/lib/dimensionLoader";
 import type { FilterState } from "@/components/FiltersBar";
+import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 
 interface KPIChartProps {
   reportId: string | null;
@@ -14,14 +13,14 @@ interface KPIChartProps {
   accountId?: string | null;
   visibilityRefreshTrigger?: number;
   onLoadingComplete?: () => void;
+  dimensions?: Dimension[];
 }
 
-export function KPIChart({ reportId, filters, accountId, visibilityRefreshTrigger, onLoadingComplete }: KPIChartProps) {
+export function KPIChart({ reportId, filters, accountId, visibilityRefreshTrigger, onLoadingComplete, dimensions = [] }: KPIChartProps) {
   const [chartData, setChartData] = useState<any[]>([]);
   const [selectedMetric, setSelectedMetric] = useState<string>("Revenue");
   const [isLoading, setIsLoading] = useState(true);
   const [availableMetrics, setAvailableMetrics] = useState<string[]>([]);
-  const [resolvedAccountId, setResolvedAccountId] = useState<string | null>(accountId ?? null);
 
   // Create a stable reference for filters to prevent unnecessary re-renders
   const stableFilters = useMemo(() => {
@@ -42,69 +41,28 @@ export function KPIChart({ reportId, filters, accountId, visibilityRefreshTrigge
     filters.compareDateRange?.to ? (filters.compareDateRange.to as Date).toISOString() : undefined,
   ]);
 
-  // Resolve accountId if not passed
-  useEffect(() => {
-    let cancelled = false;
-    const resolveAccount = async () => {
-      if (!reportId) return;
-      if (accountId) {
-        setResolvedAccountId(accountId);
-        return;
-      }
-      const accId = await getAccountIdFromReport(reportId);
-      if (!cancelled) setResolvedAccountId(accId);
-    };
-    resolveAccount();
-    return () => { cancelled = true; };
-  }, [reportId, accountId]);
-
   // Reload on visibility changes
   useEffect(() => {
-    if (reportId && resolvedAccountId && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
+    if (reportId && dimensions.length > 0 && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
       loadChartData();
     }
-  }, [visibilityRefreshTrigger, reportId, resolvedAccountId]);
+  }, [visibilityRefreshTrigger, reportId, dimensions.length]);
 
   useEffect(() => {
-    if (reportId && resolvedAccountId) {
+    if (reportId && dimensions.length > 0) {
       loadChartData();
     } else {
       setIsLoading(false);
       onLoadingComplete?.();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportId, resolvedAccountId, stableFilters, selectedMetric]);
+  }, [reportId, stableFilters, selectedMetric, dimensions.length]);
 
   const loadChartData = async () => {
     setIsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!reportId || !resolvedAccountId) {
+      if (!reportId || dimensions.length === 0) {
         setChartData([]);
-        return;
-      }
-
-      const currentMonthRange = getCurrentMonthDateRange();
-
-      const dataFilters = {
-        dateRange: stableFilters.dateRange || currentMonthRange,
-        dimensionFilters: stableFilters.dimensionFilters
-      };
-
-      const result = await loadReportData(reportId, resolvedAccountId, user?.id, dataFilters);
-
-      if (!result.success) {
-        console.error('[KPIChart] Failed to load report data:', result.error);
-        setChartData([]);
-        return;
-      }
-
-      const { data: filteredData, dimensions } = result;
-
-      if (!dimensions || dimensions.length === 0 || filteredData.length === 0) {
-        setChartData([]);
-        setAvailableMetrics([]);
         return;
       }
 
@@ -128,9 +86,71 @@ export function KPIChart({ reportId, filters, accountId, visibilityRefreshTrigge
         return;
       }
 
+      // Fetch raw dimension_data rows (same as Performance Table)
+      let query = supabase
+        .from('dimension_data')
+        .select('dimension_values, row_number, data_source_id')
+        .eq('report_id', reportId)
+        .order('row_number', { ascending: true });
+
+      const { data: rawRows, error } = await query;
+      if (error) throw new Error((error as any)?.message ?? 'Failed to fetch dimension_data');
+      
+      if (!rawRows || rawRows.length === 0) {
+        setChartData([]);
+        return;
+      }
+
+      // Apply date filter (same logic as Performance Table)
+      const dateFromFormatted = stableFilters.dateRange?.from ? format(stableFilters.dateRange.from, 'yyyy-MM-dd') : undefined;
+      const dateToFormatted = stableFilters.dateRange?.to ? format(stableFilters.dateRange.to, 'yyyy-MM-dd') : undefined;
+
+      let filteredRows = rawRows;
+      if (dateFromFormatted || dateToFormatted) {
+        const fromDate = dateFromFormatted ? new Date(dateFromFormatted) : null;
+        const toDate = dateToFormatted ? new Date(dateToFormatted) : null;
+        const adjustedToDate = toDate
+          ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1)
+          : null;
+
+        filteredRows = filteredRows.filter((row: any) => {
+          const dv = row.dimension_values || {};
+          const val = dv[dateDimension.id];
+          if (!val) return true;
+          const rowDate = new Date(String(val));
+          if (fromDate && rowDate < fromDate) return false;
+          if (adjustedToDate && rowDate >= adjustedToDate) return false;
+          return true;
+        });
+      }
+
+      // Apply dimension filters (same logic as Performance Table)
+      const normalizedFilters: Record<string, string[]> = {};
+      for (const [k, v] of Object.entries(stableFilters.dimensionFilters || {})) {
+        if (Array.isArray(v)) normalizedFilters[k] = v.map((x) => String(x));
+        else if (v !== undefined && v !== null) normalizedFilters[k] = [String(v)];
+      }
+
+      if (Object.keys(normalizedFilters).length > 0) {
+        filteredRows = filteredRows.filter((row: any) => {
+          const dv = row.dimension_values || {};
+          for (const [dimId, values] of Object.entries(normalizedFilters)) {
+            if (!values || values.length === 0) continue;
+            const rowVal = dv[dimId];
+            if (rowVal === undefined || rowVal === null) return false;
+
+            const rowStr = String(rowVal).trim().toLowerCase();
+            const filterValuesLower = (values as string[]).map(v => String(v).trim().toLowerCase());
+
+            if (!filterValuesLower.some((v) => v === rowStr)) return false;
+          }
+          return true;
+        });
+      }
+
       // Group current period data by date
       const currentDateGroups = new Map<string, number>();
-      filteredData.forEach((row: any) => {
+      filteredRows.forEach((row: any) => {
         const dv = row.dimension_values;
         const dateStr = dv[dateDimension.id];
         const metricValue = dv[metricDimension.id];
@@ -143,36 +163,75 @@ export function KPIChart({ reportId, filters, accountId, visibilityRefreshTrigge
 
       // Previous period data if enabled
       const previousDateGroups = new Map<string, number>();
-      if (stableFilters.compareEnabled && dataFilters.dateRange?.from && dataFilters.dateRange?.to) {
-        const currentPeriod = dataFilters.dateRange;
+      if (stableFilters.compareEnabled && stableFilters.dateRange?.from && stableFilters.dateRange?.to) {
+        const currentPeriod = stableFilters.dateRange;
         const daysDiff = Math.ceil((currentPeriod.to.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
         const previousPeriodEnd = new Date(currentPeriod.from);
         previousPeriodEnd.setDate(previousPeriodEnd.getDate() - 1);
         const previousPeriodStart = new Date(previousPeriodEnd);
         previousPeriodStart.setDate(previousPeriodStart.getDate() - daysDiff + 1);
 
-        const previousFilters = {
-          dateRange: { from: previousPeriodStart, to: previousPeriodEnd },
-          dimensionFilters: dataFilters.dimensionFilters
-        };
+        const prevFromFormatted = format(previousPeriodStart, 'yyyy-MM-dd');
+        const prevToFormatted = format(previousPeriodEnd, 'yyyy-MM-dd');
 
-        const previousResult = await loadReportData(reportId, resolvedAccountId, user?.id, previousFilters);
-        const previousData = previousResult.success ? previousResult.data : [];
+        // Fetch comparison data
+        const { data: prevRawRows } = await supabase
+          .from('dimension_data')
+          .select('dimension_values, row_number, data_source_id')
+          .eq('report_id', reportId)
+          .order('row_number', { ascending: true });
 
-        previousData.forEach((row: any) => {
-          const dv = row.dimension_values;
-          const dateStr = dv[dateDimension.id];
-          const metricValue = dv[metricDimension.id];
-          if (dateStr && metricValue !== undefined && metricValue !== null) {
-            const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(String(metricValue)) || 0;
-            const originalDate = parseISO(String(dateStr));
-            const offsetDate = new Date(originalDate);
-            offsetDate.setDate(offsetDate.getDate() + daysDiff + 1);
-            const offsetDateStr = offsetDate.toISOString().split('T')[0];
-            const currentTotal = previousDateGroups.get(offsetDateStr) || 0;
-            previousDateGroups.set(offsetDateStr, currentTotal + numericValue);
+        if (prevRawRows) {
+          let prevFilteredRows = prevRawRows;
+          
+          // Apply date filter for comparison period
+          const prevFromDate = new Date(prevFromFormatted);
+          const prevToDate = new Date(prevToFormatted);
+          const prevAdjustedToDate = new Date(prevToDate.getFullYear(), prevToDate.getMonth(), prevToDate.getDate() + 1);
+
+          prevFilteredRows = prevFilteredRows.filter((row: any) => {
+            const dv = row.dimension_values || {};
+            const val = dv[dateDimension.id];
+            if (!val) return true;
+            const rowDate = new Date(String(val));
+            if (rowDate < prevFromDate) return false;
+            if (rowDate >= prevAdjustedToDate) return false;
+            return true;
+          });
+
+          // Apply same dimension filters
+          if (Object.keys(normalizedFilters).length > 0) {
+            prevFilteredRows = prevFilteredRows.filter((row: any) => {
+              const dv = row.dimension_values || {};
+              for (const [dimId, values] of Object.entries(normalizedFilters)) {
+                if (!values || values.length === 0) continue;
+                const rowVal = dv[dimId];
+                if (rowVal === undefined || rowVal === null) return false;
+
+                const rowStr = String(rowVal).trim().toLowerCase();
+                const filterValuesLower = (values as string[]).map(v => String(v).trim().toLowerCase());
+
+                if (!filterValuesLower.some((v) => v === rowStr)) return false;
+              }
+              return true;
+            });
           }
-        });
+
+          prevFilteredRows.forEach((row: any) => {
+            const dv = row.dimension_values;
+            const dateStr = dv[dateDimension.id];
+            const metricValue = dv[metricDimension.id];
+            if (dateStr && metricValue !== undefined && metricValue !== null) {
+              const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(String(metricValue)) || 0;
+              const originalDate = parseISO(String(dateStr));
+              const offsetDate = new Date(originalDate);
+              offsetDate.setDate(offsetDate.getDate() + daysDiff + 1);
+              const offsetDateStr = offsetDate.toISOString().split('T')[0];
+              const currentTotal = previousDateGroups.get(offsetDateStr) || 0;
+              previousDateGroups.set(offsetDateStr, currentTotal + numericValue);
+            }
+          });
+        }
       }
 
       // Build chart data array

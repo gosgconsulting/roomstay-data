@@ -22,6 +22,7 @@ interface KPIMetricsCardsProps {
   onLoadingComplete?: () => void;
   accountId?: string | null;
   visibilityRefreshTrigger?: number;
+  dimensions?: Dimension[];
 }
 
 export const KPIMetricsCards = ({ 
@@ -29,7 +30,8 @@ export const KPIMetricsCards = ({
   filters, 
   onLoadingComplete,
   accountId,
-  visibilityRefreshTrigger
+  visibilityRefreshTrigger,
+  dimensions = []
 }: KPIMetricsCardsProps) => {
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,27 +73,27 @@ export const KPIMetricsCards = ({
   }, [reportId, accountId]);
 
   useEffect(() => {
-    if (reportId && resolvedAccountId) {
+    if (reportId && dimensions.length > 0) {
       loadMetrics();
     } else {
       setIsLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportId, resolvedAccountId, stableFilters]);
+  }, [reportId, stableFilters, dimensions.length]);
 
   // Refresh metrics when dimension visibility changes
   useEffect(() => {
-    if (reportId && resolvedAccountId && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
+    if (reportId && dimensions.length > 0 && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
       loadMetrics();
     }
-  }, [visibilityRefreshTrigger, reportId, resolvedAccountId]);
+  }, [visibilityRefreshTrigger, reportId, dimensions.length]);
 
   const loadMetrics = async () => {
     setIsLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      if (!reportId || !resolvedAccountId) {
+      if (!reportId || dimensions.length === 0) {
         setMetrics([]);
         return;
       }
@@ -130,15 +132,15 @@ export const KPIMetricsCards = ({
         return;
       }
 
-      const { data: filteredData, dimensions } = result;
+      const { data: filteredData, dimensions: loadedDimensions } = result;
 
-      if (!dimensions || dimensions.length === 0 || filteredData.length === 0) {
+      if (!loadedDimensions || loadedDimensions.length === 0 || filteredData.length === 0) {
         setMetrics([]);
         return;
       }
 
       // Calculate current period metrics
-      const currentMetrics = await calculateKPIMetrics(filteredData, dimensions, reportId, resolvedAccountId);
+      const currentMetrics = await calculateKPIMetrics(filteredData, loadedDimensions, reportId, resolvedAccountId);
 
       // Load comparison period data if comparison is enabled
       let comparisonMetrics: Record<string, number> = {};
@@ -157,7 +159,7 @@ export const KPIMetricsCards = ({
 
         const comparisonResult = await loadReportData(reportId, resolvedAccountId, user?.id, comparisonFilters);
         if (comparisonResult.success) {
-          comparisonMetrics = await calculateKPIMetrics(comparisonResult.data, dimensions, reportId, resolvedAccountId);
+          comparisonMetrics = await calculateKPIMetrics(comparisonResult.data, loadedDimensions, reportId, resolvedAccountId);
         }
       }
 
@@ -266,36 +268,28 @@ export const KPIMetricsCards = ({
 
   if (isLoading) {
     return (
-      <div>
-        <h2 className="text-lg font-semibold mb-4">Analytics & Insights</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <Card key={i} className="animate-pulse">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  <div className="h-4 bg-gray-200 rounded w-20"></div>
-                </CardTitle>
-                <div className="h-4 w-4 bg-gray-200 rounded"></div>
-              </CardHeader>
-              <CardContent>
-                <div className="h-8 bg-gray-200 rounded w-16 mb-1"></div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <Card key={i} className="animate-pulse">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                <div className="h-4 bg-gray-200 rounded w-20"></div>
+              </CardTitle>
+              <div className="h-4 w-4 bg-gray-200 rounded"></div>
+            </CardHeader>
+            <CardContent>
+              <div className="h-8 bg-gray-200 rounded w-16 mb-1"></div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     );
   }
 
   if (metrics.length === 0) {
     return (
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Analytics & Insights</h2>
-        </div>
-        <div className="text-center py-8 text-gray-500">
-          No data available for the selected filters
-        </div>
+      <div className="text-center py-8 text-gray-500">
+        No data available for the selected filters
       </div>
     );
   }

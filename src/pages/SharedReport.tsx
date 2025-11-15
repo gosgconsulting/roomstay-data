@@ -312,6 +312,7 @@ export default function SharedReport() {
           reportId={reportId}
           filters={filters}
           accountId={account?.id}
+          dimensions={[]}
           key={`charts-${dataRefreshKey}-${loadingGeneration}`}
           onLoadingComplete={() => markComponentLoaded('chart')}
         />

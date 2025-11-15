@@ -326,7 +326,8 @@ export default function AllReports() {
                 reportId="consolidated"
                 filters={getCombinedFilters('consolidated')}
                 accountId={accountId}
-                key={`chart-consolidated-${loadingGeneration}`}
+                dimensions={[]}
+                key={`charts-${loadingGeneration}`}
                 onLoadingComplete={() => markComponentLoaded('chart')}
               />
             </div>
