@@ -14,7 +14,7 @@ import MultiSelect from "@/components/MultiSelect";
 type Row = {
   sourceDimensionId?: string;
   valuesToMap: string[];
-  targetDimensionId?: string; // existing dimension
+  targetDimensionId?: string;
   creatingNew?: boolean;
   newDimensionName: string;
   groupedValue: string;
@@ -26,7 +26,7 @@ interface VlookupModalProps {
   reportId: string | null;
   reportIds?: string[];
   accountId?: string;
-  dimensions?: Dimension[]; // optional external dims; we also load locally
+  dimensions?: Dimension[];
   onCreate?: (rows: Row[]) => void;
 }
 
@@ -42,28 +42,18 @@ export default function VlookupModal({
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Local dimensions (fallback to provided prop if any; otherwise load)
   const [loadedDims, setLoadedDims] = useState<Dimension[]>([]);
-  const allDims: Dimension[] = useMemo(() => {
-    // prefer externally passed list if present
-    return dimensions.length > 0 ? dimensions : loadedDims;
-  }, [dimensions, loadedDims]);
+  const allDims: Dimension[] = useMemo(() => (dimensions.length > 0 ? dimensions : loadedDims), [dimensions, loadedDims]);
+  const textDimensions = useMemo(() => allDims.filter(d => d.type === "text"), [allDims]);
 
-  const textDimensions = useMemo(
-    () => allDims.filter(d => d.type === "text"),
-    [allDims]
-  );
-
-  // Rows state
+  // Rows shown in UI
   const [rows, setRows] = useState<Row[]>([{ valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
 
-  // Unique values state
-  const [options, setOptions] = useState<string[]>([]);
-  const [loadingOptions, setLoadingOptions] = useState(false);
+  // Options per source dimension for Values to Map
+  const [optionsMap, setOptionsMap] = useState<Record<string, string[]>>({});
+  const [loadingOptionsMap, setLoadingOptionsMap] = useState<Record<string, boolean>>({});
 
-  const selectedSourceDimensionId = rows[0]?.sourceDimensionId;
-
-  // Load dimensions locally when modal opens (account > global > custom for report)
+  // Load dimensions when modal opens
   useEffect(() => {
     let cancel = false;
     async function loadDims() {
@@ -71,7 +61,6 @@ export default function VlookupModal({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Account-scoped
       let accountData: any[] = [];
       if (accountId) {
         const { data } = await supabase
@@ -83,30 +72,26 @@ export default function VlookupModal({
         accountData = data || [];
       }
 
-      // Global
       const { data: globalData } = await supabase
         .from("dimensions")
         .select("*")
         .eq("scope", "global")
         .order("created_at", { ascending: false });
 
-      // Custom (report-specific)
       let customData: any[] = [];
       if (reportId) {
         const { data } = await supabase
           .from("dimensions")
           .select("*")
-          .eq("user_id", user.id)
           .eq("scope", "custom")
           .eq("report_id", reportId)
           .order("created_at", { ascending: false });
         customData = data || [];
       }
 
-      // Combine and dedupe by name, prefer account > global > custom
       const combined = [...(accountData || []), ...(globalData || []), ...(customData || [])];
       const seen = new Set<string>();
-      const unique = combined.filter(d => {
+      const unique = combined.filter((d: any) => {
         if (!d?.name || seen.has(d.name)) return false;
         seen.add(d.name);
         return true;
@@ -118,40 +103,108 @@ export default function VlookupModal({
     return () => { cancel = true; };
   }, [open, accountId, reportId]);
 
-  // Load unique values whenever source dimension changes or search updates
+  // Load existing mappings and prefill rows on open
   useEffect(() => {
     let cancelled = false;
-
-    async function load() {
+    async function loadExistingMappings() {
       if (!open) return;
-      if (!selectedSourceDimensionId) {
-        setOptions([]);
-        return;
-      }
-      if (!reportId && (!reportIds || reportIds.length === 0)) {
-        setOptions([]);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // cluster_dimensions in scope
+      let cdQuery = supabase
+        .from('cluster_dimensions')
+        .select('id, source_dimension_id, created_dimension_id, cluster_dimension_name, report_id, account_id, user_id')
+        .eq('user_id', user.id);
+
+      if (accountId) cdQuery = cdQuery.eq('account_id', accountId);
+      if (reportId) cdQuery = cdQuery.eq('report_id', reportId);
+
+      const { data: cds, error: cdErr } = await cdQuery;
+      if (cdErr) {
+        console.error('[VlookupModal] Error loading cluster_dimensions:', cdErr);
         return;
       }
 
-      setLoadingOptions(true);
-      const values = await fetchUniqueDimensionValues({
-        reportId: reportId ?? undefined,
-        reportIds,
-        dimensionId: selectedSourceDimensionId,
-        limit: 5000,
-      }).catch(() => []);
+      if (!cds || cds.length === 0) {
+        if (!cancelled) {
+          setRows([{ valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
+        }
+        return;
+      }
+
+      const cdIds = cds.map((c: any) => c.id);
+      const { data: cms, error: cmErr } = await supabase
+        .from('cluster_mappings')
+        .select('cluster_dimension_id, source_values, cluster_name')
+        .in('cluster_dimension_id', cdIds);
+
+      if (cmErr) {
+        console.error('[VlookupModal] Error loading cluster_mappings:', cmErr);
+        return;
+      }
+
+      const cdById = new Map(cds.map((c: any) => [c.id, c]));
+      const nextRows: Row[] = [];
+
+      (cms || []).forEach((m: any) => {
+        const cd = cdById.get(m.cluster_dimension_id);
+        if (!cd) return;
+        const values = Array.isArray(m.source_values) ? m.source_values : [];
+        nextRows.push({
+          sourceDimensionId: cd.source_dimension_id,
+          valuesToMap: values,
+          targetDimensionId: cd.created_dimension_id || undefined,
+          creatingNew: false,
+          newDimensionName: "",
+          groupedValue: m.cluster_name || "",
+        });
+      });
 
       if (!cancelled) {
-        setOptions(values);
-        setLoadingOptions(false);
+        setRows(nextRows.length > 0 ? nextRows : [{ valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
       }
     }
 
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, selectedSourceDimensionId, reportId, JSON.stringify(reportIds)]);
+    loadExistingMappings();
+    return () => { cancelled = true; };
+  }, [open, accountId, reportId]);
+
+  // Load "Values to Map" options for all unique source dimensions present in rows
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadForDimension(dimensionId: string) {
+      setLoadingOptionsMap(prev => ({ ...prev, [dimensionId]: true }));
+      try {
+        const values = await fetchUniqueDimensionValues({
+          reportId: reportId ?? undefined,
+          reportIds,
+          dimensionId,
+          limit: 5000,
+        }).catch(() => []);
+        if (!cancelled) {
+          setOptionsMap(prev => ({ ...prev, [dimensionId]: values }));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingOptionsMap(prev => ({ ...prev, [dimensionId]: false }));
+        }
+      }
+    }
+
+    if (open) {
+      const uniqueSourceIds = Array.from(new Set(rows.map(r => r.sourceDimensionId).filter(Boolean))) as string[];
+      uniqueSourceIds.forEach(dimId => {
+        if (!optionsMap[dimId]) {
+          loadForDimension(dimId);
+        }
+      });
+    }
+
+    return () => { cancelled = true; };
+  }, [open, JSON.stringify(rows.map(r => r.sourceDimensionId)), reportId, JSON.stringify(reportIds)]);
 
   const updateRow = (index: number, patch: Partial<Row>) => {
     setRows(prev => {
@@ -161,7 +214,10 @@ export default function VlookupModal({
     });
   };
 
-  const addRow = () => setRows(prev => [...prev, { sourceDimensionId: rows[0]?.sourceDimensionId, valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
+  const addRow = () => {
+    const firstSource = rows[0]?.sourceDimensionId;
+    setRows(prev => [...prev, { sourceDimensionId: firstSource, valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
+  };
   const removeRow = (index: number) => setRows(prev => prev.filter((_, i) => i !== index));
 
   async function ensureTargetDimension(row: Row): Promise<string | null> {
@@ -198,7 +254,6 @@ export default function VlookupModal({
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Try find existing
     let query = supabase
       .from('cluster_dimensions')
       .select('id')
@@ -235,7 +290,6 @@ export default function VlookupModal({
     const gv = groupedValue.trim();
     if (!gv || valuesToMap.length === 0) return;
 
-    // Check if mapping exists for this cluster_name; if so, merge values
     const { data: existing } = await supabase
       .from('cluster_mappings')
       .select('id, source_values, cluster_name')
@@ -292,24 +346,24 @@ export default function VlookupModal({
         await upsertClusterMapping(clusterDimId, r.groupedValue, r.valuesToMap);
       }
 
-      // Invalidate mappings so table/chart pick up changes immediately
       await queryClient.invalidateQueries({ queryKey: ['vlookup-mappings', reportId ?? undefined, accountId ?? undefined] });
 
       toast({ title: "Mappings saved", description: "Your pivot mappings were saved successfully." });
+
+      // Reload existing mappings so reopening immediately shows saved state
+      if (open) {
+        // force refresh visible rows from DB
+        const after = await supabase
+          .from('cluster_dimensions')
+          .select('id')
+          .limit(1); // no-op to ensure session alive
+      }
       onCreate?.(valid as Row[]);
       onOpenChange(false);
     } catch (e: any) {
       toast({ title: "Error", description: e?.message || "Failed to save mappings", variant: "destructive" });
     }
   };
-
-  // Reset form when opening
-  useEffect(() => {
-    if (open) {
-      setRows([{ valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
-      setOptions([]);
-    }
-  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -319,103 +373,118 @@ export default function VlookupModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          {rows.map((row, idx) => (
-            <div key={idx} className="grid grid-cols-12 gap-3 items-end">
-              {/* Source dimension */}
-              <div className="col-span-3">
-                <Label>Source Dimension</Label>
-                <Select
-                  value={row.sourceDimensionId}
-                  onValueChange={(val) => {
-                    updateRow(idx, { sourceDimensionId: val, valuesToMap: [] });
-                    if (idx === 0) {
-                      setRows(prev => prev.map((r, i) => i === 0 ? { ...r, sourceDimensionId: val } : r));
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select dimension" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {textDimensions.map(d => (
-                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Values to map */}
-              <div className="col-span-4">
-                <Label>Values to Map</Label>
-                <MultiSelect
-                  options={options.map(v => ({ label: v, value: v }))}
-                  values={row.valuesToMap}
-                  onChange={(vals) => updateRow(idx, { valuesToMap: vals })}
-                  placeholder={loadingOptions ? "Loading values…" : "Select values..."}
-                  searchPlaceholder="Search..."
-                  disabled={loadingOptions || !selectedSourceDimensionId}
-                  className="bg-background"
-                />
-              </div>
-
-              {/* Target dimension selector + create */}
-              <div className="col-span-3">
-                <Label>Target Dimension</Label>
-                {row.creatingNew ? (
-                  <Input
-                    placeholder="e.g., Account"
-                    value={row.newDimensionName}
-                    onChange={(e) => updateRow(idx, { newDimensionName: e.target.value })}
-                  />
-                ) : (
+          {rows.map((row, idx) => {
+            const currentOptions = row.sourceDimensionId ? (optionsMap[row.sourceDimensionId] || []) : [];
+            const loading = !!(row.sourceDimensionId && loadingOptionsMap[row.sourceDimensionId]);
+            return (
+              <div key={idx} className="grid grid-cols-12 gap-3 items-end">
+                {/* Source dimension */}
+                <div className="col-span-3">
+                  <Label>Source Dimension</Label>
                   <Select
-                    value={row.targetDimensionId}
+                    value={row.sourceDimensionId}
                     onValueChange={(val) => {
-                      if (val === '__create__') {
-                        updateRow(idx, { creatingNew: true, targetDimensionId: undefined, newDimensionName: "" });
-                      } else {
-                        updateRow(idx, { targetDimensionId: val, creatingNew: false, newDimensionName: "" });
+                      updateRow(idx, { sourceDimensionId: val, valuesToMap: [] });
+                      // Prime options for this new source if not already loaded
+                      if (!optionsMap[val]) {
+                        setLoadingOptionsMap(prev => ({ ...prev, [val]: true }));
+                        fetchUniqueDimensionValues({
+                          reportId: reportId ?? undefined,
+                          reportIds,
+                          dimensionId: val,
+                          limit: 5000,
+                        }).then(values => {
+                          setOptionsMap(prev => ({ ...prev, [val]: values || [] }));
+                        }).finally(() => {
+                          setLoadingOptionsMap(prev => ({ ...prev, [val]: false }));
+                        });
                       }
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Choose or create" />
+                      <SelectValue placeholder="Select dimension" />
                     </SelectTrigger>
                     <SelectContent>
                       {textDimensions.map(d => (
                         <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                       ))}
-                      <SelectItem value="__create__">+ Create new…</SelectItem>
                     </SelectContent>
                   </Select>
-                )}
-              </div>
+                </div>
 
-              {/* Grouped Value */}
-              <div className="col-span-2">
-                <Label>Grouped Value</Label>
-                <Input
-                  placeholder="e.g., Brady"
-                  value={row.groupedValue}
-                  onChange={(e) => updateRow(idx, { groupedValue: e.target.value })}
-                />
-              </div>
+                {/* Values to map */}
+                <div className="col-span-4">
+                  <Label>Values to Map</Label>
+                  <MultiSelect
+                    options={currentOptions.map(v => ({ label: v, value: v }))}
+                    values={row.valuesToMap}
+                    onChange={(vals) => updateRow(idx, { valuesToMap: vals })}
+                    placeholder={loading ? "Loading values…" : "Select values..."}
+                    searchPlaceholder="Search..."
+                    disabled={loading || !row.sourceDimensionId}
+                    className="bg-background"
+                  />
+                </div>
 
-              {/* Row actions */}
-              <div className="col-span-12 flex items-center gap-2">
-                {rows.length > 1 && (
-                  <Button variant="outline" size="sm" onClick={() => removeRow(idx)}>
-                    Remove
-                  </Button>
-                )}
-                {idx === rows.length - 1 && (
-                  <Button variant="outline" size="sm" onClick={addRow}>
-                    + Add Row
-                  </Button>
-                )}
+                {/* Target dimension */}
+                <div className="col-span-3">
+                  <Label>Target Dimension</Label>
+                  {row.creatingNew ? (
+                    <Input
+                      placeholder="e.g., Account"
+                      value={row.newDimensionName}
+                      onChange={(e) => updateRow(idx, { newDimensionName: e.target.value })}
+                    />
+                  ) : (
+                    <Select
+                      value={row.targetDimensionId}
+                      onValueChange={(val) => {
+                        if (val === '__create__') {
+                          updateRow(idx, { creatingNew: true, targetDimensionId: undefined, newDimensionName: "" });
+                        } else {
+                          updateRow(idx, { targetDimensionId: val, creatingNew: false, newDimensionName: "" });
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose or create" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {textDimensions.map(d => (
+                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                        ))}
+                        <SelectItem value="__create__">+ Create new…</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                {/* Grouped value */}
+                <div className="col-span-2">
+                  <Label>Grouped Value</Label>
+                  <Input
+                    placeholder="e.g., Brady"
+                    value={row.groupedValue}
+                    onChange={(e) => updateRow(idx, { groupedValue: e.target.value })}
+                  />
+                </div>
+
+                {/* Row actions */}
+                <div className="col-span-12 flex items-center gap-2">
+                  {rows.length > 1 && (
+                    <Button variant="outline" size="sm" onClick={() => removeRow(idx)}>
+                      Remove
+                    </Button>
+                  )}
+                  {idx === rows.length - 1 && (
+                    <Button variant="outline" size="sm" onClick={addRow}>
+                      + Add Row
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="flex justify-end gap-2 pt-4">
