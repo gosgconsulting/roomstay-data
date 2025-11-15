@@ -650,201 +650,334 @@ export function DashboardHeader({
   }
 
   return (
-    <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-      <div className="container mx-auto px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {title && !isAllReportsPage ? (
-              <h1 className="text-2xl font-bold text-foreground">{title}</h1>
-            ) : (
-              <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="gap-2">
-                    {isAllReportsPage ? "All Reports" : (currentReport?.name || "Select Report")} <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-80 bg-background z-50">
-                  <DropdownMenuItem 
-                    className={`text-primary font-semibold ${!reportId || isAllReportsPage ? 'bg-accent' : ''}`}
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      if (accountId) {
-                        navigate(`/all-reports/${accountId}`);
-                      } else {
-                        navigate('/all-reports');
-                      }
-                    }}
-                  >
-                    <Grid3x3 className="h-4 w-4 mr-2" />
-                    All Reports
-                  </DropdownMenuItem>
-                  {reports.length > 0 && <DropdownMenuSeparator />}
-                  {reports.map((report) => (
+    <>
+      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {title && !isAllReportsPage ? (
+                <h1 className="text-2xl font-bold text-foreground">{title}</h1>
+              ) : (
+                <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="gap-2">
+                      {isAllReportsPage ? "All Reports" : (currentReport?.name || "Select Report")} <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-80 bg-background z-50">
                     <DropdownMenuItem 
-                      key={report.id}
-                      className={`justify-between group ${report.is_shared ? 'flex-col items-start' : ''} ${reportId === report.id ? 'bg-accent' : ''}`}
+                      className={`text-primary font-semibold ${!reportId || isAllReportsPage ? 'bg-accent' : ''}`}
                       onSelect={(e) => {
                         e.preventDefault();
-                        setCurrentReport(report);
-                        onReportChange(report.id);
-                        setDropdownOpen(false);
+                        if (accountId) {
+                          navigate(`/all-reports/${accountId}`);
+                        } else {
+                          navigate('/all-reports');
+                        }
                       }}
                     >
-                      <div className="flex items-center justify-between w-full">
-                        <span 
-                          className="flex-1 cursor-pointer"
-                          onClick={() => {
-                            setCurrentReport(report);
-                            onReportChange(report.id);
-                            setDropdownOpen(false);
-                          }}
-                        >
-                          {report.name}
-                        </span>
-                        {!report.is_shared && (
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingReport(report);
-                                setShowReportModal(true);
-                              }}
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 text-destructive"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteReport(report);
-                              }}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                      {report.is_shared && report.owner_email && (
-                        <span className="text-xs text-muted-foreground mt-1">
-                          Owner: {report.owner_email}
-                        </span>
-                      )}
+                      <Grid3x3 className="h-4 w-4 mr-2" />
+                      All Reports
                     </DropdownMenuItem>
-                  ))}
-                  {reports.length > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuItem 
-                    className="text-primary" 
-                    onClick={() => {
-                      setEditingReport(null);
-                      setShowReportModal(true);
-                    }}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add new
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+                    {reports.length > 0 && <DropdownMenuSeparator />}
+                    {reports.map((report) => (
+                      <DropdownMenuItem 
+                        key={report.id}
+                        className={`justify-between group ${report.is_shared ? 'flex-col items-start' : ''} ${reportId === report.id ? 'bg-accent' : ''}`}
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          setCurrentReport(report);
+                          onReportChange(report.id);
+                          setDropdownOpen(false);
+                        }}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span 
+                            className="flex-1 cursor-pointer"
+                            onClick={() => {
+                              setCurrentReport(report);
+                              onReportChange(report.id);
+                              setDropdownOpen(false);
+                            }}
+                          >
+                            {report.name}
+                          </span>
+                          {!report.is_shared && (
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingReport(report);
+                                  setShowReportModal(true);
+                                }}
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteReport(report);
+                                }}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        {report.is_shared && report.owner_email && (
+                          <span className="text-xs text-muted-foreground mt-1">
+                            Owner: {report.owner_email}
+                          </span>
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                    {reports.length > 0 && <DropdownMenuSeparator />}
+                    <DropdownMenuItem 
+                      className="text-primary" 
+                      onClick={() => {
+                        setEditingReport(null);
+                        setShowReportModal(true);
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add new
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
 
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => setShowDataSourcesListModal(true)}
-              disabled={!currentReport}
-            >
-              <Database className="h-4 w-4" />
-              Data sources
-            </Button>
-
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => setShowDimensionsListModal(true)}
-            >
-              <Grid3x3 className="h-4 w-4" />
-              Dimensions
-            </Button>
-
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => setShowVlookupModal(true)}
-            >
-              <GitCompare className="h-4 w-4" />
-              Vlookup
-            </Button>
-
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => {
-                if (accountId) {
-                  navigate(`/tools/budget/${accountId}`);
-                } else {
-                  navigate('/tools/budget');
-                }
-              }}
-            >
-              <Wallet className="h-4 w-4" />
-              Budget
-            </Button>
-            
-            {!isSharedView && onVlookupClick && (
               <Button
-                onClick={onVlookupClick}
                 variant="outline"
-                size="sm"
                 className="gap-2"
+                onClick={() => setShowDataSourcesListModal(true)}
+                disabled={!currentReport}
               >
-                <Plus className="h-4 w-4" />
-                Create Pivot
+                <Database className="h-4 w-4" />
+                Data sources
               </Button>
-            )}
-          </div>
 
-          <div className="flex items-center gap-3">
-            {lastUpdateDate && (
-              <span className="text-sm text-muted-foreground">
-                Last update: {lastUpdateDate}
-              </span>
-            )}
-                  <Button 
-            variant="outline" 
-            className="gap-2"
-            onClick={() => {
-              if (onRefreshData) {
-                onRefreshData();
-              }
-              // Also trigger a hard refresh by reloading the page for problematic reports
-              if (currentReport?.name?.includes('Social')) {
-                setTimeout(() => {
-                  window.location.reload();
-                }, 1000);
-              }
-            }}
-            disabled={!currentReport}
-            title="Refresh report data"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Reload
-          </Button>
-            <Button 
-              variant="outline" 
-              className="gap-2"
-              onClick={() => setShowShareModal(true)}
-              disabled={!currentReport}
-            >
-              <Share2 className="h-4 w-4" />
-              Share
-            </Button>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setShowDimensionsListModal(true)}
+              >
+                <Grid3x3 className="h-4 w-4" />
+                Dimensions
+              </Button>
+
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setShowVlookupModal(true)}
+              >
+                <GitCompare className="h-4 w-4" />
+                Vlookup
+              </Button>
+
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => {
+                  if (accountId) {
+                    navigate(`/tools/budget/${accountId}`);
+                  } else {
+                    navigate('/tools/budget');
+                  }
+                }}
+              >
+                <Wallet className="h-4 w-4" />
+                Budget
+              </Button>
+              
+              {!isSharedView && onVlookupClick && (
+                <Button
+                  onClick={onVlookupClick}
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Create Pivot
+                </Button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3">
+              {lastUpdateDate && (
+                <span className="text-sm text-muted-foreground">
+                  Last update: {lastUpdateDate}
+                </span>
+              )}
+              <Button 
+                variant="outline" 
+                className="gap-2"
+                onClick={() => {
+                  if (onRefreshData) {
+                    onRefreshData();
+                  }
+                  if (currentReport?.name?.includes('Social')) {
+                    setTimeout(() => {
+                      window.location.reload();
+                    }, 1000);
+                  }
+                }}
+                disabled={!currentReport}
+                title="Refresh report data"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Reload
+              </Button>
+              <Button 
+                variant="outline" 
+                className="gap-2"
+                onClick={() => setShowShareModal(true)}
+                disabled={!currentReport}
+              >
+                <Share2 className="h-4 w-4" />
+                Share
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* Modals */}
+      <DataSourcesListModal
+        open={showDataSourcesListModal}
+        onOpenChange={setShowDataSourcesListModal}
+        reportId={currentReport?.id || ""}
+        accountId={accountId}
+        onAddNew={() => setShowDataSourceSelectionModal(true)}
+        onDataSync={onDataSync}
+        onRefreshData={onRefreshData}
+      />
+
+      <DimensionsListModal
+        open={showDimensionsListModal}
+        onOpenChange={setShowDimensionsListModal}
+        onAddNew={() => {
+          setEditingDimension(null);
+          setDimensionModalMode('add');
+          setShowDimensionModal(true);
+        }}
+        onEdit={(dimension) => {
+          setEditingDimension(dimension);
+          setDimensionModalMode('edit');
+          setShowDimensionModal(true);
+        }}
+        refreshTrigger={dimensionRefreshTrigger}
+        reportId={currentReport?.id || null}
+        accountId={accountId}
+        onVisibilityChange={() => {
+          onVisibilityChange?.();
+          setVisibilityRefreshTrigger(prev => prev + 1);
+        }}
+      />
+
+      <DimensionModal
+        open={showDimensionModal}
+        onOpenChange={setShowDimensionModal}
+        dimension={editingDimension || undefined}
+        mode={dimensionModalMode}
+        onSaved={() => {
+          setShowDimensionModal(false);
+          setDimensionRefreshTrigger(prev => prev + 1);
+          onRefreshData?.();
+        }}
+        reportId={currentReport?.id || undefined}
+        accountId={accountId}
+      />
+
+      <ReportModal
+        open={showReportModal}
+        onOpenChange={setShowReportModal}
+        onSave={(name: string) => {
+          if (editingReport) {
+            handleEditReport(name);
+          } else {
+            handleCreateReport(name);
+          }
+        }}
+        initialName={editingReport?.name || ""}
+        title={editingReport ? "Edit Report" : "Create Report"}
+        description={editingReport ? "Rename your report" : "Create a new report in this account"}
+      />
+
+      <ShareModal
+        open={showShareModal}
+        onOpenChange={setShowShareModal}
+        reportId={currentReport?.id || ""}
+        reportName={currentReport?.name || ""}
+        accountId={accountId}
+      />
+
+      <SyncModeModal
+        open={showSyncModeModal}
+        onOpenChange={setShowSyncModeModal}
+        onSync={(mode, _schedule) => handleSync(mode)}
+        isLoading={isSyncing}
+        lastSyncTime={lastUpdateDate}
+        totalRows={totalRows}
+      />
+
+      <VlookupModal
+        open={showVlookupModal}
+        onOpenChange={setShowVlookupModal}
+        reportId={currentReport?.id || null}
+        accountId={accountId}
+      />
+
+      <CSVImportChoiceModal
+        open={showCSVImportChoiceModal}
+        onOpenChange={setShowCSVImportChoiceModal}
+        onSelectUpload={() => {
+          toast({
+            title: "Coming soon",
+            description: "Upload from local CSV will be available shortly.",
+          });
+        }}
+        onSelectURL={() => {
+          setShowCSVImportChoiceModal(false);
+          setShowCSVDataSourceModal(true);
+        }}
+      />
+
+      <CSVDataSourceModal
+        open={showCSVDataSourceModal}
+        onOpenChange={setShowCSVDataSourceModal}
+        reportId={currentReport?.id || null}
+      />
+
+      <DataSourceSelectionModal
+        open={showDataSourceSelectionModal}
+        onOpenChange={setShowDataSourceSelectionModal}
+        onSelectGoogleSheets={() => {
+          setShowDataSourceSelectionModal(false);
+          setShowDataSourceModal(true);
+        }}
+        onSelectCSV={() => {
+          setShowDataSourceSelectionModal(false);
+          setShowCSVImportChoiceModal(true);
+        }}
+        onSelectAPI={() => {
+          toast({
+            title: "Coming soon",
+            description: "API data source integration is on the roadmap.",
+          });
+        }}
+      />
+
+      <DataSourceModal
+        open={showDataSourceModal}
+        onOpenChange={setShowDataSourceModal}
+        reportId={currentReport?.id || null}
+      />
+    </>
   );
 }
