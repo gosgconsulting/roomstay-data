@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useEffect, useCallback } from "react";
+import { useEffect } from "react";
 import { useDimensionSelector } from "@/hooks/useDimensionSelector";
 import { SelectedDimensionItem } from "./DimensionSelectorModal/SelectedDimensionItem";
 import { AddDimensionSection } from "./DimensionSelectorModal/AddDimensionSection";
@@ -36,6 +36,7 @@ export const DimensionSelectorModal = ({
     dimensions,
     isLoading,
     dimensionHasData,
+    dimensionGranularities,
     availableDimensions,
     loadDimensions,
     handleRemoveDimension,
@@ -49,7 +50,6 @@ export const DimensionSelectorModal = ({
     onDateGranularityChange,
   });
 
-  // Load dimensions and check their data availability
   useEffect(() => {
     if (open) {
       loadDimensions();
@@ -83,7 +83,7 @@ export const DimensionSelectorModal = ({
                         key={dimensionId}
                         dimension={dimension}
                         dimensionId={dimensionId}
-                        granularity={String(dimensionHasData[dimensionId] || 'Day')}
+                        granularity={dimensionGranularities[dimensionId] || 'Day'}
                         onRemove={handleRemoveDimension}
                         onGranularityChange={handleGranularityChange}
                       />

@@ -1,1 +1,19 @@
 project_id = "zcxxwpwheevwavdcgfht"
+
+[functions.fetch-google-sheets]
+verify_jwt = false
+
+[functions.create-admin-user]
+verify_jwt = false
+
+[functions.migrate-sheet-data]
+verify_jwt = false
+
+[functions.auto-sync-data-sources]
+verify_jwt = false
+
+[functions.get-performance-data]
+verify_jwt = true
+
+[functions.apply-vlookup-mappings]
+verify_jwt = true
