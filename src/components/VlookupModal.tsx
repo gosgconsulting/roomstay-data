@@ -45,6 +45,9 @@ export default function VlookupModal({
   const [loadedDims, setLoadedDims] = useState<Dimension[]>([]);
   const allDims: Dimension[] = useMemo(() => (dimensions.length > 0 ? dimensions : loadedDims), [dimensions, loadedDims]);
   const textDimensions = useMemo(() => allDims.filter(d => d.type === "text"), [allDims]);
+  
+  // Target dimensions created via Vlookup (account-scoped only)
+  const [targetDimensions, setTargetDimensions] = useState<Dimension[]>([]);
 
   // Rows shown in UI
   const [rows, setRows] = useState<Row[]>([{ valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
@@ -61,6 +64,7 @@ export default function VlookupModal({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Load source dimensions (for Source Dimension dropdown)
       let accountData: any[] = [];
       if (accountId) {
         const { data } = await supabase
@@ -98,6 +102,19 @@ export default function VlookupModal({
       });
 
       if (!cancel) setLoadedDims(unique as Dimension[]);
+
+      // Load target dimensions (account-scoped dimensions created via Vlookup)
+      if (accountId) {
+        const { data: targetDims } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("scope", "account")
+          .eq("account_id", accountId)
+          .eq("type", "text")
+          .order("created_at", { ascending: false });
+        
+        if (!cancel) setTargetDimensions(targetDims || []);
+      }
     }
     loadDims();
     return () => { cancel = true; };
@@ -152,12 +169,16 @@ export default function VlookupModal({
         const cd = cdById.get(m.cluster_dimension_id);
         if (!cd) return;
         const values = Array.isArray(m.source_values) ? m.source_values : [];
+        
+        // Find the target dimension name for display
+        const targetDim = targetDimensions.find(d => d.id === cd.created_dimension_id);
+        
         nextRows.push({
           sourceDimensionId: cd.source_dimension_id,
           valuesToMap: values,
           targetDimensionId: cd.created_dimension_id || undefined,
           creatingNew: false,
-          newDimensionName: "",
+          newDimensionName: targetDim?.name || "",
           groupedValue: m.cluster_name || "",
         });
       });
@@ -167,9 +188,10 @@ export default function VlookupModal({
       }
     }
 
-    loadExistingMappings();
-    return () => { cancelled = true; };
-  }, [open, accountId, reportId]);
+    if (targetDimensions.length > 0) {
+      loadExistingMappings();
+    }
+  }, [open, accountId, reportId, targetDimensions]);
 
   // Load "Values to Map" options for all unique source dimensions present in rows
   useEffect(() => {
@@ -229,14 +251,28 @@ export default function VlookupModal({
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const scope = accountId ? 'account' : 'custom';
+    // Check if dimension with this name already exists in account scope
+    const { data: existing } = await supabase
+      .from('dimensions')
+      .select('id')
+      .eq('scope', 'account')
+      .eq('account_id', accountId)
+      .eq('name', name)
+      .eq('type', 'text')
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      return existing[0].id;
+    }
+
+    // Create new account-scoped dimension
     const insertData: any = {
       name,
       type: 'text',
       user_id: user.id,
-      scope,
-      account_id: accountId ?? null,
-      report_id: accountId ? null : (reportId ?? null),
+      scope: 'account',
+      account_id: accountId,
+      report_id: null, // Account-scoped, not report-specific
       formula: null,
     };
 
@@ -254,6 +290,7 @@ export default function VlookupModal({
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
+    // Check for existing cluster dimension with same source and target
     let query = supabase
       .from('cluster_dimensions')
       .select('id')
@@ -267,11 +304,12 @@ export default function VlookupModal({
     const { data: existing } = await query.limit(1);
     if (existing && existing.length > 0) return existing[0].id;
 
+    // Create new cluster dimension
     const insertData: any = {
       cluster_dimension_name: newName || 'Cluster',
       source_dimension_id: sourceDimensionId,
       created_dimension_id: targetDimensionId,
-      user_id: (await supabase.auth.getUser()).data.user?.id,
+      user_id: user.id,
       account_id: accountId ?? null,
       report_id: accountId ? null : (reportId ?? null),
     };
@@ -321,17 +359,22 @@ export default function VlookupModal({
 
   const handleCreate = async () => {
     try {
-      if (!reportId && !accountId) {
-        toast({ title: "Select a context", description: "Missing report/account.", variant: "destructive" });
+      if (!accountId) {
+        toast({ title: "Account required", description: "Target dimensions require an account context.", variant: "destructive" });
         return;
       }
+      
       const valid = rows.filter(r =>
         r.sourceDimensionId &&
         r.valuesToMap.length > 0 &&
-        (r.targetDimensionId || r.newDimensionName.trim()) &&
+        r.newDimensionName.trim() &&
         r.groupedValue.trim()
       );
-      if (valid.length === 0) return;
+      
+      if (valid.length === 0) {
+        toast({ title: "Invalid data", description: "Please fill in all required fields.", variant: "destructive" });
+        return;
+      }
 
       for (const r of valid) {
         const targetId = await ensureTargetDimension(r);
@@ -340,7 +383,7 @@ export default function VlookupModal({
         const clusterDimId = await findOrCreateClusterDimension(
           r.sourceDimensionId!,
           targetId,
-          r.newDimensionName || (textDimensions.find(d => d.id === r.sourceDimensionId!)?.name ?? "Cluster")
+          r.newDimensionName || "Cluster"
         );
 
         await upsertClusterMapping(clusterDimId, r.groupedValue, r.valuesToMap);
@@ -350,17 +393,10 @@ export default function VlookupModal({
 
       toast({ title: "Mappings saved", description: "Your pivot mappings were saved successfully." });
 
-      // Reload existing mappings so reopening immediately shows saved state
-      if (open) {
-        // force refresh visible rows from DB
-        const after = await supabase
-          .from('cluster_dimensions')
-          .select('id')
-          .limit(1); // no-op to ensure session alive
-      }
       onCreate?.(valid as Row[]);
       onOpenChange(false);
     } catch (e: any) {
+      console.error('Vlookup save error:', e);
       toast({ title: "Error", description: e?.message || "Failed to save mappings", variant: "destructive" });
     }
   };
@@ -426,36 +462,18 @@ export default function VlookupModal({
                   />
                 </div>
 
-                {/* Target dimension */}
+                {/* Target dimension - only input field for creating new */}
                 <div className="col-span-3">
                   <Label>Target Dimension</Label>
-                  {row.creatingNew ? (
-                    <Input
-                      placeholder="e.g., Account"
-                      value={row.newDimensionName}
-                      onChange={(e) => updateRow(idx, { newDimensionName: e.target.value })}
-                    />
-                  ) : (
-                    <Select
-                      value={row.targetDimensionId}
-                      onValueChange={(val) => {
-                        if (val === '__create__') {
-                          updateRow(idx, { creatingNew: true, targetDimensionId: undefined, newDimensionName: "" });
-                        } else {
-                          updateRow(idx, { targetDimensionId: val, creatingNew: false, newDimensionName: "" });
-                        }
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose or create" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {textDimensions.map(d => (
-                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                        ))}
-                        <SelectItem value="__create__">+ Create new…</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <Input
+                    placeholder="e.g., Account Group"
+                    value={row.newDimensionName}
+                    onChange={(e) => updateRow(idx, { newDimensionName: e.target.value })}
+                  />
+                  {targetDimensions.length > 0 && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Existing: {targetDimensions.map(d => d.name).join(', ')}
+                    </div>
                   )}
                 </div>
 
