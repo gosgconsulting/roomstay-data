@@ -36,7 +36,7 @@ interface KPISettingsModalProps {
   onOpenChange: (open: boolean) => void;
   reportId: string | null;
   onSettingsChange?: () => void;
-  visibilityRefreshTrigger?: number; // Trigger to refresh when dimension visibility changes
+  visibilityRefreshTrigger?: number;
 }
 
 interface KPIConfig {
@@ -291,7 +291,8 @@ export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChang
         .from("report_views")
         .update({
           visible_kpis: visibleKPIs,
-          kpi_order: kpiOrder,
+          kpi_order: visibleKPIs,
+          name: "Default View", // Add required name field
         })
         .eq("report_id", reportId)
         .eq("user_id", user.id)

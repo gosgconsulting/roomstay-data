@@ -302,14 +302,17 @@ export async function resyncReportViews(
 
       // Update the view if needed
       if (Object.keys(needsUpdate).length > 0) {
-        const { error: updateError } = await supabase
+        const { error } = await supabase
           .from("report_views")
-          .update(needsUpdate)
+          .update({
+            ...needsUpdate,
+            name: view.name || "Default View",
+          })
           .eq("id", view.id);
 
-        if (updateError) {
-          console.error(`[RESYNC-VIEWS] Error updating view "${view.name}":`, updateError);
-          throw updateError;
+        if (error) {
+          console.error(`[RESYNC-VIEWS] Error updating view "${view.name}":`, error);
+          throw error;
         }
 
         console.log(`[RESYNC-VIEWS] Successfully updated view "${view.name}"`);

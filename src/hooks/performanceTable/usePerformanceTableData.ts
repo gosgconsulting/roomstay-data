@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useVlookupMappings } from "@/hooks/useVlookupMappings";
 import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "./usePerformanceTableDimensions";
 
@@ -33,7 +34,7 @@ interface UsePerformanceTableDataOptions {
 }
 
 /**
- * Hook for loading performance table data
+ * Hook for loading performance table data with vlookup mappings support
  */
 export function usePerformanceTableData({
   reportId,
@@ -56,6 +57,9 @@ export function usePerformanceTableData({
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Load vlookup mappings for applying to data
+  const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
+
   const loadPerformanceData = useCallback(async () => {
     // Reset error state
     setLoadError(null);
@@ -71,7 +75,8 @@ export function usePerformanceTableData({
       hasCompareDateRange: !!filters.compareDateRange,
       compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
       compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined,
-      dateOrder: dateOrder
+      dateOrder: dateOrder,
+      vlookupMappingsCount: vlookupMappings.length
     });
 
     // Check conditions after setting loading state
@@ -170,7 +175,7 @@ export function usePerformanceTableData({
         });
       }
 
-      // Transform rows into TableRow format (client-side mapping from IDs to names)
+      // Transform rows into TableRow format and apply vlookup mappings
       const firstDimId = groupByDimensions[0];
       const firstDimension = dimensions.find(d => d.id === firstDimId);
 
@@ -178,10 +183,32 @@ export function usePerformanceTableData({
         const dv: Record<string, any> = row.dimension_values || {};
         const rowData: Record<string, any> = {};
 
-        // Map dimension IDs to names; convert numeric strings to numbers
+        // Map dimension IDs to names; convert numeric strings to numbers; apply vlookup mappings
         dimensions.forEach(dim => {
           if (dv[dim.id] !== undefined) {
-            const value = dv[dim.id];
+            let value = dv[dim.id];
+            
+            // Apply vlookup mappings if this is a vlookup target dimension
+            if (dim.type === 'text' && dim.scope === 'custom' && vlookupMappings.length > 0) {
+              // Check if there's a mapping for this dimension and value
+              const mapping = vlookupMappings.find(m => 
+                m.targetDimensionId === dim.id
+              );
+              
+              if (mapping) {
+                // Look for source mappings that match this value
+                const sourceMapping = vlookupMappings.find(m => 
+                  m.targetDimensionId === dim.id && 
+                  m.sourceValue.toLowerCase() === String(value).toLowerCase()
+                );
+                
+                if (sourceMapping) {
+                  value = sourceMapping.targetValue;
+                  console.log(`[VLOOKUP] Applied mapping: ${dv[dim.id]} -> ${value} for dimension ${dim.name}`);
+                }
+              }
+            }
+            
             if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
               const numValue = parseFloat(String(value));
               rowData[dim.name] = !isNaN(numValue) ? numValue : value;
@@ -195,7 +222,7 @@ export function usePerformanceTableData({
 
         return {
           id: `row-${row.row_number ?? idx + 1}`,
-          name: dv[firstDimId] || 'Unknown',
+          name: rowData[firstDimension?.name || ''] || dv[firstDimId] || 'Unknown',
           level: 0,
           data: rowData,
           originalDate,
@@ -264,6 +291,7 @@ export function usePerformanceTableData({
     activeDateTab,
     dateOrder,
     dimensions.length,
+    vlookupMappings.length, // Include vlookup mappings in dependency array
     onLoadingComplete,
   ]);
 

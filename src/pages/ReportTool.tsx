@@ -122,28 +122,37 @@ export default function ReportTool() {
       if (dimError) {
         console.warn('[ACCOUNT] Could not load global dimensions for cloning:', dimError);
       } else if (globalDimensions && globalDimensions.length > 0) {
-        const accountDimensions = globalDimensions.map(d => ({
-          name: d.name,
-          type: d.type,
-          formula: d.formula,
-          scope: 'account',
-          account_id: newAccount.id,
-          user_id: session.user.id,
-        }));
-        
-        const { error: insertError } = await supabase
+        const { data: globalDimensions, error: dimError } = await supabase
           .from('dimensions')
-          .insert(accountDimensions);
+          .select('name, type, formula, user_id')
+          .eq('scope', 'global');
         
-        if (insertError) {
-          console.error('[ACCOUNT] Error cloning dimensions:', insertError);
-          toast({
-            title: "Warning",
-            description: "Account created but some dimensions could not be initialized.",
-            variant: "destructive",
-          });
-        } else {
-          console.log('[ACCOUNT] Cloned', globalDimensions.length, 'dimensions for new account');
+        if (dimError) {
+          console.warn('[ACCOUNT] Could not load global dimensions for cloning:', dimError);
+        } else if (globalDimensions && globalDimensions.length > 0) {
+          const accountDimensions = globalDimensions.map(dim => ({
+            name: dim.name,
+            type: dim.type,
+            formula: dim.formula,
+            scope: 'account' as const,
+            account_id: newAccount.id,
+            user_id: session.user.id,
+          }));
+          
+          const { error: insertError } = await supabase
+            .from('dimensions')
+            .insert(accountDimensions);
+          
+          if (insertError) {
+            console.error('[ACCOUNT] Error cloning dimensions:', insertError);
+            toast({
+              title: "Warning",
+              description: "Account created but some dimensions could not be initialized.",
+              variant: "destructive",
+            });
+          } else {
+            console.log('[ACCOUNT] Cloned', globalDimensions.length, 'dimensions for new account');
+          }
         }
       }
       

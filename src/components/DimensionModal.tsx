@@ -319,21 +319,21 @@ export const DimensionModal = ({
           throw new Error("Report ID is required for creating dimensions");
         }
 
-        const dimensionData = {
+        const formData = {
           name: name.trim(),
           type,
           formula: formula.trim() || null,
-          scope: 'custom',
+          scope: (reportId ? 'custom' : 'account') as 'custom' | 'account',
           user_id: user.id,
           report_id: reportId,
-          account_id: null,
+          account_id: accountId,
         };
 
-        console.log('[testing] Creating dimension:', dimensionData);
-
-        const { error } = await supabase
+        const { data: newDimension, error } = await supabase
           .from("dimensions")
-          .insert(dimensionData);
+          .insert(dimensionData)
+          .select()
+          .single();
 
         if (error) throw error;
 

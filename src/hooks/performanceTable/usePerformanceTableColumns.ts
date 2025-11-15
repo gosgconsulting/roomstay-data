@@ -58,7 +58,10 @@ export function usePerformanceTableColumns({
 
       const { error } = await supabase
         .from("report_views")
-        .update(viewData)
+        .update({
+          ...viewData,
+          name: "Default View", // Add required name field
+        })
         .eq("id", activeViewId);
 
       if (error) {
@@ -170,4 +173,3 @@ export function usePerformanceTableColumns({
     handleColumnReorder,
   };
 }
-

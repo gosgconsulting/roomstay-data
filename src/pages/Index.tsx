@@ -387,12 +387,11 @@ export default function Index() {
                 visibilityRefreshTrigger={visibilityRefreshTrigger}
               />
             </div>
-            <KPIChart 
-              reportId={reportId} 
+            <KPIChart
+              reportId={reportId}
               filters={filters}
-              accountId={accountId || undefined}
+              accountId={accountId}
               key={`charts-${dataRefreshKey}-${loadingGeneration}`}
-              onLoadingComplete={() => markComponentLoaded('chart')}
             />
             <PerformanceTable 
               reportId={reportId} 

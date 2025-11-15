@@ -362,7 +362,7 @@ export const FiltersBar = ({
           setMasterDimensionId(fv.__master_dimension_id);
         }
 
-        const preset = data.date_range_preset || "all_time";
+        const preset = (data && 'date_range_preset' in data) ? data.date_range_preset : "all_time";
         applyDatePreset(preset);
       } else {
         // No view: default to Account if available, else Date
@@ -425,6 +425,7 @@ export const FiltersBar = ({
             ...viewData,
             report_id: reportId,
             user_id: user.id,
+            name: "Default View",
             is_default: true,
           });
         if (error) throw error;
@@ -715,12 +716,12 @@ export const FiltersBar = ({
       const viewData = {
         filter_dimensions: dimensionIds,
         filter_values: next,
-        date_range_start: existingView?.date_range_start || null,
-        date_range_end: existingView?.date_range_end || null,
-        date_range_preset: existingView?.date_range_preset || "all_time",
+        date_range_start: (existingView && 'date_range_start' in existingView) ? existingView.date_range_start : null,
+        date_range_end: (existingView && 'date_range_end' in existingView) ? existingView.date_range_end : null,
+        date_range_preset: (existingView && 'date_range_preset' in existingView) ? existingView.date_range_preset : "all_time",
       };
 
-      if (existingView) {
+      if (existingView && 'id' in existingView) {
         const { error } = await supabase
           .from("report_views")
           .update(viewData)
@@ -733,6 +734,7 @@ export const FiltersBar = ({
             ...viewData,
             report_id: reportId,
             user_id: user.id,
+            name: "Default View",
             is_default: true,
           });
         if (error) throw error;

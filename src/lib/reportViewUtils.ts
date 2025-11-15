@@ -47,52 +47,38 @@ export async function saveDimensionSettings(
       .maybeSingle();
 
     // Clean up filter_values to only include active dimensions
-    const cleanedFilterValues = existingView?.filter_values 
+    const cleanedFilterValues = (existingView && 'filter_values' in existingView && existingView.filter_values)
       ? cleanupFilterValues(dimensions, existingView.filter_values as Record<string, any>)
       : {};
 
     const viewData = {
-      filter_dimensions: dimensions,
+      filter_dimensions: activeDimensions,
       filter_values: cleanedFilterValues, // Use cleaned values
-      date_range_start: existingView?.date_range_start || null,
-      date_range_end: existingView?.date_range_end || null,
-      date_range_preset: existingView?.date_range_preset || "all_time",
+      date_range_start: (existingView && 'date_range_start' in existingView) ? existingView.date_range_start : null,
+      date_range_end: (existingView && 'date_range_end' in existingView) ? existingView.date_range_end : null,
+      date_range_preset: (existingView && 'date_range_preset' in existingView) ? existingView.date_range_preset : "all_time",
     };
 
-    if (existingView) {
-      // Update existing view
+    if (existingView && 'id' in existingView) {
       const { error } = await supabase
         .from("report_views")
         .update(viewData)
         .eq("id", existingView.id);
-
-      if (error) {
-        console.error('[DIMENSION-SELECTOR] Error updating report view:', error);
-        throw error;
-      }
-      
-      console.log('[DIMENSION-SELECTOR] Successfully updated dimension settings for report');
+      if (error) throw error;
     } else {
-      // Create new view
       const { error } = await supabase
         .from("report_views")
         .insert({
           ...viewData,
           report_id: reportId,
           user_id: userId,
+          name: "Default View",
           is_default: true,
         });
-
-      if (error) {
-        console.error('[DIMENSION-SELECTOR] Error creating report view:', error);
-        throw error;
-      }
-      
-      console.log('[DIMENSION-SELECTOR] Successfully created dimension settings for report');
+      if (error) throw error;
     }
   } catch (error) {
     console.error('[DIMENSION-SELECTOR] Error saving dimension settings:', error);
     throw error;
   }
 }
-

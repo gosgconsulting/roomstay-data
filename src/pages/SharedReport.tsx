@@ -312,7 +312,6 @@ export default function SharedReport() {
           reportId={reportId}
           filters={filters}
           accountId={account?.id}
-          visibilityRefreshTrigger={visibilityRefreshTrigger}
           key={`charts-${dataRefreshKey}-${loadingGeneration}`}
           onLoadingComplete={() => markComponentLoaded('chart')}
         />

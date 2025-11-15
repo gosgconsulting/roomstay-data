@@ -133,7 +133,8 @@ export function usePerformanceTableViews({
                 .update({
                   visible_kpis: roomstayKPIs,
                   kpi_order: roomstayKPIs,
-                  updated_at: new Date().toISOString()
+                  updated_at: new Date().toISOString(),
+                  name: defaultView.name || "Default View",
                 })
                 .eq('id', defaultView.id);
               
@@ -170,90 +171,84 @@ export function usePerformanceTableViews({
 
     console.log('Loading view settings for:', view.name, view);
     
-    // Load saved settings - map dimension IDs
-    const loadDimensionsAsync = async () => {
-      const groupDimensions = await mapDimensionIds(view.group_by_dimensions || [], dimensions);
-      const breakdownDimensions = groupDimensions;
-      const thenDimensions = groupDimensions;
+    // Map old dimension IDs to account-scoped dimension IDs for group_by_dimensions
+    const mapDimensionIds = async (dimIds: string[]): Promise<string[]> => {
+      if (!dimIds || dimIds.length === 0) return [];
       
-      // Find Date dimension
-      const dateDimension = dimensions.find(d => d.type === 'date');
+      const mapped: string[] = [];
+      const unmappedIds: string[] = [];
+      
+      // First, find dimensions that are already valid
+      for (const dimId of dimIds) {
+        const dimension = dimensions.find(d => d.id === dimId);
+        if (dimension) {
+          mapped.push(dimension.id);
+        } else {
+          unmappedIds.push(dimId);
+        }
+      }
+      
+      // If we have unmapped IDs, query them to get their names and map to account-scoped dimensions
+      if (unmappedIds.length > 0) {
+        try {
+          const dimensionNameToIdMap = new Map<string, string>();
+          dimensions.forEach(dim => {
+            dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
+          });
+          
+          const { data: oldDimensions } = await supabase
+            .from("dimensions")
+            .select("id, name")
+            .in("id", unmappedIds);
+          
+          if (oldDimensions) {
+            oldDimensions.forEach((oldDim) => {
+              const normalizedName = oldDim.name.toLowerCase();
+              const newDimensionId = dimensionNameToIdMap.get(normalizedName);
+              
+              if (newDimensionId) {
+                mapped.push(newDimensionId);
+                console.log(`[testing] Mapped group dimension "${oldDim.name}": ${oldDim.id} -> ${newDimensionId}`);
+              } else {
+                console.warn(`[testing] Could not find account-scoped dimension for "${oldDim.name}" (${oldDim.id})`);
+              }
+            });
+          }
+        } catch (error) {
+          console.error('[testing] Error mapping old dimension IDs:', error);
+        }
+      }
+      
+      return mapped;
+    };
+
+    // Load saved settings - map dimension IDs asynchronously
+    const loadDimensionsAsync = async () => {
+      const groupDimensions = await mapDimensionIds(view.group_by_dimensions || []);
       
       // If no grouping dimension is set and dimensions are available, set a default
       let finalGroupDimensions = groupDimensions;
-      let needsSave = false;
       if (groupDimensions.length === 0 && dimensions.length > 0) {
-        needsSave = true;
-        // Prefer Date first, then text dimensions
+        // Find a suitable dimension for grouping - prefer Date first, then text dimensions
+        const dateDimension = dimensions.find(d => d.type === 'date');
+        const textDimension = dimensions.find(d => d.type === 'text');
+        
         if (dateDimension) {
           finalGroupDimensions = [dateDimension.id];
           console.log('Auto-selected Date dimension for grouping:', dateDimension.name);
+        } else if (textDimension) {
+          finalGroupDimensions = [textDimension.id];
+          console.log('Auto-selected text dimension for grouping:', textDimension.name);
         } else {
-          const textDimension = dimensions.find(d => d.type === 'text');
-          if (textDimension) {
-            finalGroupDimensions = [textDimension.id];
-            console.log('Auto-selected text dimension for grouping:', textDimension.name);
-          } else {
-            // Fallback to first available dimension
-            finalGroupDimensions = [dimensions[0].id];
-            console.log('Auto-selected first available dimension for grouping:', dimensions[0].name);
-          }
-        }
-        
-        // Immediately update state before async operations
-        onGroupByChange(finalGroupDimensions);
-      }
-      
-      // Ensure Date dimension is included in selected dimensions if it exists
-      // Add it to breakdown if not already in group, breakdown, or then
-      let finalBreakdownDimensions = breakdownDimensions;
-      const finalThenDimensions = thenDimensions;
-      
-      if (dateDimension) {
-        const allSelectedIds = [...finalGroupDimensions, ...finalBreakdownDimensions, ...finalThenDimensions];
-        const dateAlreadySelected = allSelectedIds.includes(dateDimension.id);
-        
-        if (!dateAlreadySelected) {
-          // Add Date dimension to breakdown by default if not already selected
-          finalBreakdownDimensions = [dateDimension.id, ...finalBreakdownDimensions];
-          console.log('Auto-added Date dimension to breakdown by default:', dateDimension.name);
+          // Fallback to first available dimension
+          finalGroupDimensions = [dimensions[0].id];
+          console.log('Auto-selected first available dimension for grouping:', dimensions[0].name);
         }
       }
       
-      
-      // Update all dimension selections (group was already updated above if needed)
-      if (groupDimensions.length > 0 || needsSave) {
-        if (!needsSave) {
-          onGroupByChange(finalGroupDimensions);
-        }
-        onBreakdownByChange(finalBreakdownDimensions);
-        onThenByChange(finalThenDimensions);
-      }
-      
-      // Save the auto-selected dimensions to the database if needed
-      if (needsSave && view.id && reportId) {
-        console.log('Saving auto-selected group dimension to database');
-        try {
-          const { error: updateError } = await supabase
-            .from('report_views')
-            .update({
-              group_by_dimensions: finalGroupDimensions,
-              breakdown_by_dimensions: finalBreakdownDimensions,
-              then_by_dimensions: finalThenDimensions,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', view.id)
-            .eq('report_id', reportId);
-            
-          if (updateError) {
-            console.error('Error saving auto-selected dimensions:', updateError);
-          } else {
-            console.log('Successfully saved auto-selected dimensions');
-          }
-        } catch (error) {
-          console.error('Error in auto-save:', error);
-        }
-      }
+      setGroupByDimensions(finalGroupDimensions);
+      setBreakdownByDimensions(await mapDimensionIds(view.breakdown_by_dimensions || []));
+      setThenByDimensions(await mapDimensionIds(view.then_by_dimensions || []));
     };
     
     loadDimensionsAsync();
@@ -477,7 +472,10 @@ export function usePerformanceTableViews({
 
       const { error } = await supabase
         .from("report_views")
-        .update(viewData)
+        .update({
+          ...viewData,
+          name: tableViews.find(v => v.id === activeViewId)?.name || "Default View",
+        })
         .eq("id", activeViewId);
 
       if (error) {
@@ -494,7 +492,7 @@ export function usePerformanceTableViews({
     } catch (error) {
       console.error("Error saving view settings:", error);
     }
-  }, [reportId, activeViewId, isSharedView]);
+  }, [reportId, activeViewId, isSharedView, tableViews]);
 
   const handleViewChange = useCallback((viewId: string) => {
     setActiveViewId(viewId);
@@ -571,4 +569,3 @@ export function usePerformanceTableViews({
     handleTabNameSave,
   };
 }
-

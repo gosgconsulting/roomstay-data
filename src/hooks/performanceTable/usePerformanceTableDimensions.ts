@@ -6,7 +6,10 @@ export interface Dimension {
   id: string;
   name: string;
   type: string;
-  formula: string | null;
+  user_id?: string;
+  formula?: string | null;
+  is_system?: boolean;
+  scope?: 'global' | 'custom' | 'account';
 }
 
 interface UsePerformanceTableDimensionsOptions {

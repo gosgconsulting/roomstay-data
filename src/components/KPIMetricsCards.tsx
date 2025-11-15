@@ -1,32 +1,35 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
-import { Card } from "@/components/ui/card";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { supabase } from "@/integrations/supabase/client";
-import { FilterState } from "./FiltersBar";
+import { Settings, TrendingDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { debugLog, retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
+import { supabase } from "@/integrations/supabase/client";
+import { loadDimensionsForUser } from "@/lib/dimensionLoader";
+import type { FilterState } from "@/components/FiltersBar";
+
+// Remove duplicate TrendingUp import and use from existing icons
 import {
-  Eye,
   MousePointerClick,
-  TrendingUp,
   ShoppingCart,
-  Percent,
   DollarSign,
+  BarChart3,
+  Percent,
+  Eye,
   Target,
-  Calculator,
-  Calendar,
-  PieChart
+  ArrowUpRight,
+  ArrowDownRight,
+  TrendingUp,
 } from "lucide-react";
 
 interface Dimension {
   id: string;
   name: string;
   type: string;
-  formula?: string;
-  scope?: string;
   user_id?: string;
-  report_id?: string;
-  account_id?: string;
+  formula?: string | null;
+  is_system?: boolean;
+  scope?: 'global' | 'custom' | 'account';
 }
 
 interface KPIMetric {
@@ -49,7 +52,10 @@ interface KPIMetricsCardsProps {
 export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountId, visibilityRefreshTrigger }: KPIMetricsCardsProps) => {
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [availableDimensions, setAvailableDimensions] = useState<Dimension[]>([]);
+  const [isLoadingDimensions, setIsLoadingDimensions] = useState(false);
+  const [dimensions, setDimensions] = useState<Dimension[]>([]);
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+  const [initialColumnOrder, setInitialColumnOrder] = useState<string[]>([]);
 
   console.log('[KPI-DEBUG] Component render - reportId:', reportId, 'accountId:', accountId, 'filters:', filters);
 
@@ -57,7 +63,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
   const stableFilters = useMemo(() => {
     console.log('[testing] KPIMetricsCards - Creating stable filters reference:', filters);
     return {
-      dimensionFilters: filters.dimensionFilters,
+      dimensionFilters: filters.dimensionFilters || {},
       dateRange: filters.dateRange,
       datePreset: filters.datePreset,
       compareEnabled: filters.compareEnabled,
@@ -75,30 +81,44 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
     filters.compareDateRange?.to?.toISOString(),
   ]);
 
-  // Load dimensions for the dimension selector
+  // Load dimensions and apply vlookup mappings
   const loadDimensions = useCallback(async () => {
     if (!reportId) return;
     
     try {
+      setIsLoadingDimensions(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      
+      if (!user) {
+        console.error("User not authenticated");
+        setIsLoadingDimensions(false);
+        return;
+      }
 
-      // Load all dimensions (including vlookup dimensions)
-      const { data: dimensions, error } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("user_id", user.id)
-        .or(`report_id.is.null,report_id.eq.${reportId}`)
-        .order("created_at", { ascending: false });
+      console.log('[testing] KPIMetricsCards - Loading dimensions for user:', user.id, 'account:', accountId);
 
-      if (error) throw error;
-
-      // Include all dimensions (vlookup dimensions are now included)
-      setAvailableDimensions(dimensions || []);
+      // Load all dimensions including vlookup dimensions
+      const dims = await loadDimensionsForUser(user.id, reportId);
+      console.log('[testing] KPIMetricsCards - Loaded dimensions:', dims.length);
+      setDimensions(dims);
+      
+      // Initialize column order if not set (only for numeric dimensions)
+      if (columnOrder.length === 0) {
+        const numericDimensions = dims.filter(d => 
+          d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || (d.formula && d.formula.length > 0)
+        );
+        const orderIds = numericDimensions.map(d => d.id);
+        setColumnOrder(orderIds);
+        setInitialColumnOrder([...orderIds]);
+      }
+      
+      console.log('[testing] Dimensions loaded successfully');
     } catch (error) {
       console.error("Error loading dimensions:", error);
+    } finally {
+      setIsLoadingDimensions(false);
     }
-  }, [reportId]);
+  }, [reportId, accountId, columnOrder.length]);
 
   useEffect(() => {
     console.log('[KPI-DEBUG] ============= KPIMetricsCards useEffect =============');
@@ -365,8 +385,9 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
           
           // Apply dimension filters
           for (const [dimId, filterValues] of Object.entries(stableFilters.dimensionFilters)) {
-            if (filterValues && filterValues.length > 0) {
+            if (filterValues && Array.isArray(filterValues) && filterValues.length > 0) {
               const rowValue = dimensionValues[dimId];
+              
               // Check if the row value matches any of the selected filter values
               if (!filterValues.includes(String(rowValue))) {
                 return false;
@@ -475,7 +496,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
         'Cost': { icon: DollarSign, color: 'bg-blue-500' },
         'Revenue': { icon: DollarSign, color: 'bg-cyan-500' },
         'Conversions': { icon: ShoppingCart, color: 'bg-orange-500' },
-        'Bookings': { icon: Calendar, color: 'bg-green-500' }, // Added Bookings icon
+        'Bookings': { icon: BarChart3, color: 'bg-green-500' }, // Added Bookings icon
         'Leads': { icon: Target, color: 'bg-indigo-500' },
         
         // Calculated KPIs

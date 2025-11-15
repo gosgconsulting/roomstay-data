@@ -248,7 +248,10 @@ export const DimensionsListModal = ({
         // Update existing view
         const { error: updateError } = await supabase
           .from("report_views")
-          .update(updateData)
+          .update({
+            ...updateData,
+            name: "Default View", // Use static name since existingView type is unclear
+          })
           .eq("id", existingView.id);
 
         if (updateError) {

@@ -226,6 +226,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       setColumnOrder([]);
       setTableData([]);
       setTotalData({});
+      setTotalCompareData({});
+      setTotalChangeData({});
       setHasDataSources(false); // Reset data sources check
     }
   }, [reportId]);
@@ -463,7 +465,8 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
                 .update({
                   visible_kpis: roomstayKPIs,
                   kpi_order: roomstayKPIs,
-                  updated_at: new Date().toISOString()
+                  updated_at: new Date().toISOString(),
+                  name: defaultView.name || "Default View",
                 })
                 .eq('id', defaultView.id);
               

@@ -326,9 +326,8 @@ export default function AllReports() {
                 reportId="consolidated"
                 filters={getCombinedFilters('consolidated')}
                 accountId={accountId}
-                visibilityRefreshTrigger={loadingGeneration}
                 key={`chart-consolidated-${loadingGeneration}`}
-                onLoadingComplete={() => markComponentLoaded('chart-consolidated')}
+                onLoadingComplete={() => markComponentLoaded('chart')}
               />
             </div>
             
