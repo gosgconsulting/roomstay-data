@@ -79,7 +79,7 @@ export function usePerformanceTableViews({
         
         if (reportError) {
           console.error("Error fetching report owner:", reportError);
-          throw reportError;
+          throw new Error((reportError as any)?.message ?? 'Failed to fetch report owner');
         }
         
         userId = reportData.user_id;
@@ -99,7 +99,7 @@ export function usePerformanceTableViews({
 
       if (error) {
         console.error("Error fetching views:", error);
-        throw error;
+        throw new Error((error as any)?.message ?? 'Failed to fetch views');
       }
 
       console.log('Found views:', views?.length || 0);
@@ -480,7 +480,7 @@ export function usePerformanceTableViews({
 
       if (error) {
         console.error('Error saving view settings:', error);
-        throw error;
+        throw new Error((error as any)?.message ?? 'Failed to save view settings');
       }
 
       console.log('View settings saved successfully');
@@ -508,7 +508,7 @@ export function usePerformanceTableViews({
         .delete()
         .eq("id", viewId);
 
-      if (error) throw error;
+      if (error) throw new Error((error as any)?.message ?? 'Failed to delete view');
 
       const deletedView = tableViews.find(v => v.id === viewId);
       setTableViews(prev => prev.filter(v => v.id !== viewId));
@@ -542,7 +542,7 @@ export function usePerformanceTableViews({
         .update({ name: editingTabName.trim() })
         .eq("id", editingTabId);
 
-      if (error) throw error;
+      if (error) throw new Error((error as any)?.message ?? 'Failed to rename view');
 
       // Update local state
       setTableViews(prev => prev.map(v => 

@@ -127,7 +127,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
                 .eq("is_default", true)
                 .maybeSingle();
 
-              if (error) throw error;
+              if (error) throw new Error((error as any)?.message ?? 'Failed to load KPI view settings');
               return data;
             },
             3,
@@ -155,7 +155,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
             .eq("scope", "global")
             .order("created_at", { ascending: false });
 
-          if (globalError) throw globalError;
+          if (globalError) throw new Error((globalError as any)?.message ?? 'Failed to load global dimensions');
 
           // Load account-specific dimensions if accountId is provided
           let accountData: Dimension[] = [];
@@ -167,7 +167,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
               .eq("account_id", accountId)
               .order("created_at", { ascending: false });
 
-            if (accountError) throw accountError;
+            if (accountError) throw new Error((accountError as any)?.message ?? 'Failed to load account dimensions');
             accountData = (data || []);
           }
 
@@ -181,8 +181,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
             .or(`report_id.is.null,report_id.eq.${reportId}`)
             .order("created_at", { ascending: false });
 
-          if (customError) throw customError;
-          customData = (data || []);
+          if (customError) throw new Error((customError as any)?.message ?? 'Failed to load custom dimensions');
 
           // Combine all dimensions - prioritize account-scoped over global
           const allDimensions = [
@@ -232,7 +231,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
                 .order('row_number', { ascending: false })
                 .range(offset, offset + CHUNK_SIZE - 1);
 
-              if (error) throw error;
+              if (error) throw new Error((error as any)?.message ?? 'Failed to load dimension_data chunk');
               return data;
             },
             3,

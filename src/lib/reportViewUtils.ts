@@ -37,7 +37,6 @@ export async function saveDimensionSettings(
   try {
     console.log(`[DIMENSION-SELECTOR] Saving dimensions for report ${reportId}:`, activeDimensions);
 
-    // Select only existing columns to avoid SelectQueryError typing
     const { data: existingView } = await supabase
       .from("report_views")
       .select("id, filter_values, date_range_start, date_range_end, date_preset")
@@ -46,7 +45,6 @@ export async function saveDimensionSettings(
       .eq("is_default", true)
       .maybeSingle();
 
-    // Clean up filter_values to only include active dimensions
     const cleanedFilterValues =
       existingView && (existingView as any).filter_values
         ? cleanupFilterValues(
@@ -68,7 +66,7 @@ export async function saveDimensionSettings(
         .from("report_views")
         .update(viewData)
         .eq("id", (existingView as any).id as string);
-      if (error) throw error;
+      if (error) throw new Error((error as any)?.message ?? 'Supabase update error');
     } else {
       const { error } = await supabase
         .from("report_views")
@@ -79,10 +77,10 @@ export async function saveDimensionSettings(
           name: "Default View",
           is_default: true,
         });
-      if (error) throw error;
+      if (error) throw new Error((error as any)?.message ?? 'Supabase insert error');
     }
   } catch (error) {
     console.error('[DIMENSION-SELECTOR] Error saving dimension settings:', error);
-    throw error;
+    throw error instanceof Error ? error : new Error(String(error));
   }
 }

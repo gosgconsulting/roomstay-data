@@ -112,7 +112,7 @@ export function usePerformanceTableData({
         }
 
         const { data, error } = await query;
-        if (error) throw error;
+        if (error) throw new Error((error as any)?.message ?? 'Failed to fetch dimension_data');
         return data || [];
       };
 
