@@ -1,252 +1,257 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { format } from "date-fns";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { format, parseISO } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { loadDimensionsForUser } from "@/lib/dimensionLoader";
+import { loadReportData, getCurrentMonthDateRange, Dimension } from "@/lib/data-loading-fix";
+import { getAccountIdFromReport } from "@/lib/dimensionLoader";
 import type { FilterState } from "@/components/FiltersBar";
-
-interface ChartData {
-  date: string;
-  value: number;
-  formattedDate: string;
-  compareValue?: number;
-}
 
 interface KPIChartProps {
   reportId: string | null;
   filters: FilterState;
-  accountId?: string;
+  accountId?: string | null;
   visibilityRefreshTrigger?: number;
   onLoadingComplete?: () => void;
 }
 
 export function KPIChart({ reportId, filters, accountId, visibilityRefreshTrigger, onLoadingComplete }: KPIChartProps) {
-  const [dimensions, setDimensions] = useState<any[]>([]);
-  const [selectedMetric, setSelectedMetric] = useState<string>("");
-  const [chartData, setChartData] = useState<ChartData[]>([]);
-  const [isLoadingDimensions, setIsLoadingDimensions] = useState(true);
-  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [selectedMetric, setSelectedMetric] = useState<string>("Revenue");
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [availableMetrics, setAvailableMetrics] = useState<string[]>([]);
+  const [resolvedAccountId, setResolvedAccountId] = useState<string | null>(accountId ?? null);
 
-  // Create stable filters reference
-  const stableFilters = useMemo(() => ({
-    dimensionFilters: filters.dimensionFilters || {},
-    dateRange: filters.dateRange,
-    datePreset: filters.datePreset,
-    compareEnabled: filters.compareEnabled,
-    compareType: filters.compareType,
-    compareDateRange: filters.compareDateRange,
-  }), [
+  // Create a stable reference for filters to prevent unnecessary re-renders
+  const stableFilters = useMemo(() => {
+    return {
+      dimensionFilters: filters.dimensionFilters || {},
+      dateRange: filters.dateRange,
+      compareEnabled: filters.compareEnabled,
+      compareType: filters.compareType,
+      compareDateRange: filters.compareDateRange,
+    };
+  }, [
     JSON.stringify(filters.dimensionFilters),
     filters.dateRange?.from?.toISOString(),
     filters.dateRange?.to?.toISOString(),
-    filters.datePreset,
     filters.compareEnabled,
     filters.compareType,
     filters.compareDateRange?.from?.toISOString(),
     filters.compareDateRange?.to?.toISOString(),
   ]);
 
-  // Get available KPIs from dimensions
-  const availableKPIs = useMemo(() => {
-    return dimensions
-      .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage')
-      .map(d => ({ value: d.name, label: d.name }));
-  }, [dimensions]);
-
-  // Auto-select first KPI if none selected
+  // Resolve accountId if not passed
   useEffect(() => {
-    if (!selectedMetric && availableKPIs.length > 0) {
-      setSelectedMetric(availableKPIs[0].value);
+    let cancelled = false;
+    const resolveAccount = async () => {
+      if (!reportId) return;
+      if (accountId) {
+        setResolvedAccountId(accountId);
+        return;
+      }
+      const accId = await getAccountIdFromReport(reportId);
+      if (!cancelled) setResolvedAccountId(accId);
+    };
+    resolveAccount();
+    return () => { cancelled = true; };
+  }, [reportId, accountId]);
+
+  // Reload on visibility changes
+  useEffect(() => {
+    if (reportId && resolvedAccountId && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
+      loadChartData();
     }
-  }, [selectedMetric, availableKPIs]);
+  }, [visibilityRefreshTrigger, reportId, resolvedAccountId]);
 
-  // Debug logging
   useEffect(() => {
-    console.log('[CHART-DEBUG] =======================================');
-    console.log('[CHART-DEBUG] reportId:', reportId);
-    console.log('[CHART-DEBUG] selectedMetric:', selectedMetric);
-    console.log('[CHART-DEBUG] stableFilters:', JSON.stringify(stableFilters, null, 2));
-    console.log('[CHART-DEBUG] =======================================');
-  }, [reportId, selectedMetric, stableFilters, visibilityRefreshTrigger]);
-
-  // Refresh chart when visibility changes
-  useEffect(() => {
-    if (reportId && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
-      console.log('[testing] Refreshing KPI chart due to dimension visibility change');
-      loadDimensions();
+    if (reportId && resolvedAccountId) {
+      loadChartData();
+    } else {
+      setIsLoading(false);
+      onLoadingComplete?.();
     }
-  }, [visibilityRefreshTrigger, reportId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportId, resolvedAccountId, stableFilters, selectedMetric]);
 
-  const loadDimensions = async () => {
-    if (!reportId) return;
-    
+  const loadChartData = async () => {
+    setIsLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
 
-      console.log('[testing] KPIChart - Loading dimensions for user:', user.id);
-
-      // Load all dimensions including vlookup dimensions
-      const dims = await loadDimensionsForUser(user.id, reportId);
-      console.log('[testing] KPIChart - Loaded dimensions:', dims.length);
-      setDimensions(dims);
-    } catch (error) {
-      console.error("Error loading dimensions:", error);
-    } finally {
-      setIsLoadingDimensions(false);
-    }
-  };
-
-  // Load chart data with vlookup mappings applied
-  const loadChartData = useCallback(async () => {
-    if (!reportId || !selectedMetric || isLoadingDimensions) {
-      setChartData([]);
-      setIsLoadingData(false);
-      return;
-    }
-
-    try {
-      setIsLoadingData(true);
-      console.log('[testing] Loading chart data for metric:', selectedMetric);
-
-      // Get date range
-      const dateFrom = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined;
-      const dateTo = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined;
-
-      // Load raw data
-      let query = supabase
-        .from('dimension_data')
-        .select('dimension_values, row_number')
-        .eq('report_id', reportId)
-        .order('row_number', { ascending: true });
-
-      const { data: rawData, error } = await query;
-      if (error) throw error;
-
-      if (!rawData || rawData.length === 0) {
+      if (!reportId || !resolvedAccountId) {
         setChartData([]);
         return;
       }
 
-      // Find date dimension
-      const dateDimension = dimensions.find(d => d.type === 'date');
-      if (!dateDimension) {
-        console.warn('[testing] No date dimension found for chart');
+      const currentMonthRange = getCurrentMonthDateRange();
+
+      const dataFilters = {
+        dateRange: stableFilters.dateRange || currentMonthRange,
+        dimensionFilters: stableFilters.dimensionFilters
+      };
+
+      const result = await loadReportData(reportId, resolvedAccountId, user?.id, dataFilters);
+
+      if (!result.success) {
+        console.error('[KPIChart] Failed to load report data:', result.error);
         setChartData([]);
         return;
       }
 
-      // Find metric dimension
-      const metricDimension = dimensions.find(d => d.name === selectedMetric);
-      if (!metricDimension) {
-        console.warn('[testing] Metric dimension not found:', selectedMetric);
+      const { data: filteredData, dimensions } = result;
+
+      if (!dimensions || dimensions.length === 0 || filteredData.length === 0) {
+        setChartData([]);
+        setAvailableMetrics([]);
+        return;
+      }
+
+      const metrics = dimensions
+        .filter((d: Dimension) => d.type === 'number' || d.type === 'currency' || d.type === 'percentage')
+        .map((d: Dimension) => d.name);
+
+      setAvailableMetrics(metrics);
+
+      // Auto-select metric if current is not available
+      if (!metrics.includes(selectedMetric) && metrics.length > 0) {
+        setSelectedMetric(metrics[0]);
+        return;
+      }
+
+      const dateDimension = dimensions.find((d: Dimension) => d.type === 'date');
+      const metricDimension = dimensions.find((d: Dimension) => d.name === selectedMetric);
+
+      if (!dateDimension || !metricDimension) {
         setChartData([]);
         return;
       }
 
-      // Apply date filtering
-      let filteredData = rawData;
-      if (dateFrom || dateTo) {
-        const fromDate = dateFrom ? new Date(dateFrom) : null;
-        const toDate = dateTo ? new Date(dateTo) : null;
-        const adjustedToDate = toDate ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1) : null;
-
-        filteredData = rawData.filter((row: any) => {
-          const dv = row.dimension_values || {};
-          const dateValue = dv[dateDimension.id];
-          if (!dateValue) return true;
-          
-          const rowDate = new Date(String(dateValue));
-          if (fromDate && rowDate < fromDate) return false;
-          if (adjustedToDate && rowDate >= adjustedToDate) return false;
-          return true;
-        });
-      }
-
-      // Apply dimension filters with vlookup mappings
-      if (filters.dimensionFilters && Object.keys(filters.dimensionFilters).length > 0) {
-        filteredData = filteredData.filter((row: any) => {
-          const dv = row.dimension_values || {};
-          
-          for (const [dimId, filterValues] of Object.entries(filters.dimensionFilters || {})) {
-            if (!filterValues || filterValues.length === 0) continue;
-            
-            let rowValue = dv[dimId];
-            if (rowValue === undefined || rowValue === null) return false;
-            
-            // Apply vlookup mapping if this is a vlookup dimension
-            const dimension = dimensions.find(d => d.id === dimId);
-            if (dimension && dimension.type === 'text' && dimension.scope === 'custom') {
-              // This might be a vlookup dimension - check for mappings
-              // Note: We would need vlookup mappings here, but for now we'll use the raw value
-            }
-            
-            const rowStr = String(rowValue);
-            if (!filterValues.some((v: string) => rowStr === v)) return false;
-          }
-          return true;
-        });
-      }
-
-      // Transform data for chart
-      const chartPoints: ChartData[] = [];
-      const dateValueMap = new Map<string, number>();
-
+      // Group current period data by date
+      const currentDateGroups = new Map<string, number>();
       filteredData.forEach((row: any) => {
-        const dv = row.dimension_values || {};
-        const dateValue = dv[dateDimension.id];
+        const dv = row.dimension_values;
+        const dateStr = dv[dateDimension.id];
         const metricValue = dv[metricDimension.id];
-
-        if (dateValue && metricValue !== undefined && metricValue !== null) {
-          const dateStr = String(dateValue);
-          const numValue = parseFloat(String(metricValue));
-          
-          if (!isNaN(numValue)) {
-            const existing = dateValueMap.get(dateStr) || 0;
-            dateValueMap.set(dateStr, existing + numValue);
-          }
+        if (dateStr && metricValue !== undefined && metricValue !== null) {
+          const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(String(metricValue)) || 0;
+          const currentTotal = currentDateGroups.get(dateStr) || 0;
+          currentDateGroups.set(dateStr, currentTotal + numericValue);
         }
       });
 
-      // Convert to chart format and sort by date
-      const sortedData = Array.from(dateValueMap.entries())
-        .map(([date, value]) => ({
-          date,
-          value,
-          formattedDate: format(new Date(date), 'MMM dd')
-        }))
+      // Previous period data if enabled
+      const previousDateGroups = new Map<string, number>();
+      if (stableFilters.compareEnabled) {
+        const currentPeriod = dataFilters.dateRange!;
+        const daysDiff = Math.ceil((currentPeriod.to!.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
+        const previousPeriodEnd = new Date(currentPeriod.from);
+        previousPeriodEnd.setDate(previousPeriodEnd.getDate() - 1);
+        const previousPeriodStart = new Date(previousPeriodEnd);
+        previousPeriodStart.setDate(previousPeriodStart.getDate() - daysDiff + 1);
+
+        const previousFilters = {
+          dateRange: { from: previousPeriodStart, to: previousPeriodEnd },
+          dimensionFilters: dataFilters.dimensionFilters
+        };
+
+        const previousResult = await loadReportData(reportId, resolvedAccountId, user?.id, previousFilters);
+        const previousData = previousResult.success ? previousResult.data : [];
+
+        previousData.forEach((row: any) => {
+          const dv = row.dimension_values;
+          const dateStr = dv[dateDimension.id];
+          const metricValue = dv[metricDimension.id];
+          if (dateStr && metricValue !== undefined && metricValue !== null) {
+            const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(String(metricValue)) || 0;
+            const originalDate = parseISO(String(dateStr));
+            const offsetDate = new Date(originalDate);
+            offsetDate.setDate(offsetDate.getDate() + daysDiff + 1);
+            const offsetDateStr = offsetDate.toISOString().split('T')[0];
+            const currentTotal = previousDateGroups.get(offsetDateStr) || 0;
+            previousDateGroups.set(offsetDateStr, currentTotal + numericValue);
+          }
+        });
+      }
+
+      // Build chart data array
+      const allDates = new Set([...currentDateGroups.keys(), ...previousDateGroups.keys()]);
+      const chartDataArray = Array.from(allDates)
+        .map(dateStr => {
+          const dataPoint: any = {
+            date: dateStr,
+            formattedDate: format(parseISO(dateStr), 'MMM dd'),
+            [selectedMetric]: currentDateGroups.get(dateStr) || 0,
+          };
+          if (stableFilters.compareEnabled) {
+            dataPoint[`${selectedMetric}_previous`] = previousDateGroups.get(dateStr) || 0;
+          }
+          return dataPoint;
+        })
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-      console.log('[testing] Chart data loaded:', sortedData.length, 'points');
-      setChartData(sortedData);
+      setChartData(chartDataArray);
     } catch (error) {
-      console.error('[testing] Error loading chart data:', error);
+      console.error('[KPIChart] Error loading chart data:', error);
       setChartData([]);
     } finally {
-      setIsLoadingData(false);
+      setIsLoading(false);
+      onLoadingComplete?.();
     }
-  }, [reportId, selectedMetric, filters, dimensions, isLoadingDimensions]);
+  };
 
-  // Set selectedKPI function
-  const setSelectedKPI = (value: string) => {
-    setSelectedMetric(value);
+  const formatTooltipValue = (value: number, name: string) => {
+    const cleanName = name.replace('_previous', '');
+    const n = Number(value);
+    if (Number.isNaN(n)) return String(value);
+    if (cleanName.includes('Rate') || cleanName.includes('CTR') || cleanName.includes('Cost of sale')) {
+      return `${n.toFixed(2)}%`;
+    } else if (cleanName.includes('Cost') || cleanName.includes('Revenue') || cleanName.includes('CPC') || cleanName.includes('CPM')) {
+      return `$${n.toLocaleString()}`;
+    } else {
+      return n.toLocaleString();
+    }
   };
 
   if (isLoading) {
     return (
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-lg font-semibold">Performance Chart</CardTitle>
-          <Skeleton className="h-10 w-[180px]" />
+        <CardHeader>
+          <CardTitle>Performance Chart</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[300px] flex items-center justify-center">
-            <Skeleton className="h-full w-full" />
+          <div className="h-80 flex items-center justify-center">
+            <div className="animate-pulse text-gray-500">Loading chart data...</div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (chartData.length === 0) {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Performance Chart</CardTitle>
+          {availableMetrics.length > 0 && (
+            <Select value={selectedMetric} onValueChange={setSelectedMetric}>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableMetrics.map((metric) => (
+                  <SelectItem key={metric} value={metric}>
+                    {metric}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </CardHeader>
+        <CardContent>
+          <div className="h-80 flex items-center justify-center text-gray-500">
+            No chart data for selected date range
           </div>
         </CardContent>
       </Card>
@@ -255,99 +260,66 @@ export function KPIChart({ reportId, filters, accountId, visibilityRefreshTrigge
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-lg font-semibold">Performance Chart</CardTitle>
-        <Select value={selectedMetric} onValueChange={setSelectedKPI}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select metric" />
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle>Performance Chart</CardTitle>
+        <Select value={selectedMetric} onValueChange={setSelectedMetric}>
+          <SelectTrigger className="w-48">
+            <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-card border-border z-50">
-            {availableKPIs.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
+          <SelectContent>
+            {availableMetrics.map((metric) => (
+              <SelectItem key={metric} value={metric}>
+                {metric}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </CardHeader>
       <CardContent>
-        {error ? (
-          <div className="h-[300px] flex flex-col items-center justify-center text-destructive text-sm space-y-2">
-            <div className="font-medium">Failed to load chart data</div>
-            <div className="text-xs text-center max-w-md">
-              {error.includes('timeout') ? (
-                <>
-                  The request timed out. This usually happens with large datasets.
-                  <br />Try applying filters to reduce the data size.
-                </>
-              ) : (
-                error
+        <div className="h-80">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="formattedDate" 
+                tick={{ fontSize: 12 }}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip 
+                formatter={(value: number, name: string) => [
+                  formatTooltipValue(value, name),
+                  name
+                ]}
+                labelFormatter={(label) => `Date: ${label}`}
+              />
+              <Legend />
+              <Line 
+                type="monotone" 
+                dataKey={selectedMetric} 
+                stroke="#e91e63" 
+                strokeWidth={3}
+                dot={{ fill: '#e91e63', strokeWidth: 2, r: 4 }}
+                activeDot={{ r: 6 }}
+                name="Current Period"
+              />
+              {stableFilters.compareEnabled && (
+                <Line 
+                  type="monotone" 
+                  dataKey={`${selectedMetric}_previous`} 
+                  stroke="#eab308" 
+                  strokeWidth={3}
+                  dot={{ fill: '#eab308', strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6 }}
+                  name="Previous Period"
+                  strokeDasharray="5 5"
+                />
               )}
-            </div>
-          </div>
-        ) : chartData.length === 0 ? (
-          <div className="h-[300px] flex items-center justify-center text-muted-foreground text-sm">
-            No data available for the selected metric and filters
-          </div>
-        ) : (
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis 
-                  dataKey="formattedDate" 
-                  className="text-xs fill-muted-foreground"
-                />
-                <YAxis className="text-xs fill-muted-foreground" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '6px',
-                  }}
-                  formatter={(value: any, name: string) => {
-                    const label = name === 'value' ? 'Current' : 'Previous';
-                    return [value.toLocaleString(), `${label} ${selectedMetric}`];
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
-                />
-                {stableFilters.compareEnabled && chartData.some(d => d.compareValue !== undefined) && (
-                  <Line
-                    type="monotone"
-                    dataKey="compareValue"
-                    stroke="hsl(var(--muted-foreground))"
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    dot={{ fill: 'hsl(var(--muted-foreground))', strokeWidth: 2, r: 4 }}
-                  />
-                )}
-                {stableFilters.compareEnabled && (
-                  <Legend
-                    content={({ payload }) => (
-                      <div className="flex justify-center gap-4 text-sm">
-                        {payload?.map((entry, index) => (
-                          <div key={index} className="flex items-center gap-2">
-                            <div 
-                              className="w-3 h-0.5" 
-                              style={{ backgroundColor: entry.color }}
-                            />
-                            <span>{entry.value === 'value' ? 'Current' : 'Previous'}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  />
-                )}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        )}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   );
