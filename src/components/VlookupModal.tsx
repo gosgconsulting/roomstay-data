@@ -280,7 +280,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
       const createdDimensions: Record<string, string> = {}; // name -> id
 
       for (const targetName of uniqueTargetNames) {
-        // Check if dimension already exists
+        // Check if dimension already exists (might have been created earlier)
         const { data: existingDim } = await supabase
           .from('dimensions')
           .select('id')
@@ -292,7 +292,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
         if (existingDim) {
           createdDimensions[targetName] = existingDim.id;
         } else {
-          // Create new vlookup dimension
+          // Create new vlookup dimension if it doesn't exist
           const { data: newDim, error: dimError } = await supabase
             .from('dimensions')
             .insert({
