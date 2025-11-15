@@ -440,7 +440,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
 
       toast({
         title: "Success",
-        description: `Created ${uniqueTargetNames.length} vlookup dimension(s) and saved ${validMappings.reduce((acc, m) => acc + m.sourceValues.length, 0)} mappings`,
+        description: `Created ${uniqueTargetNames.length} new vlookup dimension(s) and saved ${validMappings.reduce((acc, m) => acc + m.sourceValues.length, 0)} mappings`,
       });
 
       // Apply the mappings to dimension_data with retry logic
