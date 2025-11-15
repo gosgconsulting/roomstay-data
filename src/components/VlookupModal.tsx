@@ -166,6 +166,91 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
     setMappings(updated);
   };
 
+  const createDimensionImmediately = async (dimensionName: string, index: number) => {
+    try {
+      console.log('Creating dimension immediately:', dimensionName);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('No user found');
+        return;
+      }
+
+      // Check if dimension already exists
+      console.log('Checking if dimension exists:', dimensionName);
+      const { data: existingDim } = await supabase
+        .from('dimensions')
+        .select('id')
+        .eq('name', dimensionName.trim())
+        .eq('user_id', user.id)
+        .eq('type', 'vlookup')
+        .maybeSingle();
+
+      if (existingDim) {
+        console.log('Dimension already exists:', existingDim);
+        // Dimension already exists, just update the mapping
+        updateMapping(index, 'targetDimensionName', dimensionName);
+        toast({
+          title: "Dimension exists",
+          description: `Using existing dimension "${dimensionName}"`,
+        });
+      } else {
+        console.log('Creating new dimension:', dimensionName);
+        // Create new vlookup dimension
+        const { data: newDim, error: dimError } = await supabase
+          .from('dimensions')
+          .insert({
+            name: dimensionName.trim(),
+            type: 'vlookup',
+            user_id: user.id,
+            report_id: reportId || null,
+            account_id: accountId || null,
+            scope: reportId ? 'custom' : 'account'
+          })
+          .select('id')
+          .single();
+
+        if (dimError) {
+          console.error('Error creating vlookup dimension:', dimError);
+          toast({
+            title: "Error",
+            description: `Failed to create dimension "${dimensionName}": ${dimError.message}`,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        console.log('Dimension created successfully:', newDim);
+        // Update the mapping with the new dimension name
+        updateMapping(index, 'targetDimensionName', dimensionName);
+        
+        // Refresh the vlookup dimensions list
+        const { data: updatedVlookupDims } = await supabase
+          .from('dimensions')
+          .select('id, name')
+          .eq('user_id', user.id)
+          .eq('type', 'vlookup')
+          .order('name');
+        
+        setVlookupDimensions(updatedVlookupDims || []);
+
+        toast({
+          title: "Dimension created",
+          description: `Created new dimension "${dimensionName}"`,
+        });
+      }
+
+      // Close the popover
+      document.body.click();
+    } catch (error) {
+      console.error('Error creating dimension immediately:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create dimension",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleReapply = async () => {
     if (!reportId && !accountId) {
       toast({
@@ -548,12 +633,15 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
                                 <div className="p-2">
                                   <Button
                                     variant="ghost"
-                                    className="w-full text-sm"
-                                    onClick={() => {
-                                      // Just close the popover, the name is already set
-                                      document.body.click(); // Close popover
+                                    className="w-full text-sm justify-start"
+                                    onClick={async (e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      console.log('Create button clicked for:', mapping.targetDimensionName);
+                                      await createDimensionImmediately(mapping.targetDimensionName, index);
                                     }}
                                   >
+                                    <Plus className="mr-2 h-4 w-4" />
                                     Create "{mapping.targetDimensionName}"
                                   </Button>
                                 </div>
