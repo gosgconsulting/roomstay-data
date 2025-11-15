@@ -8,6 +8,11 @@ import { Plus, Trash2, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { loadDimensionsForUser } from "@/lib/dimensionLoader";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button as Button2 } from "@/components/ui/button";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface VlookupMapping {
   id?: string;
@@ -30,6 +35,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
   const [mappings, setMappings] = useState<VlookupMapping[]>([]);
   const [dimensions, setDimensions] = useState<any[]>([]);
   const [dimensionValueOptions, setDimensionValueOptions] = useState<Record<string, MultiSelectOption[]>>({});
+  const [vlookupDimensions, setVlookupDimensions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
@@ -49,6 +55,16 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
       // Load dimensions
       const dims = await loadDimensionsForUser(user.id, reportId);
       setDimensions(dims.filter(d => d.type !== 'date'));
+
+      // Load existing vlookup dimensions
+      const { data: vlookupDims } = await supabase
+        .from('dimensions')
+        .select('id, name')
+        .eq('user_id', user.id)
+        .eq('type', 'vlookup')
+        .order('name');
+      
+      setVlookupDimensions(vlookupDims || []);
 
       // Preload dimension values using same logic as FiltersBar
       let rows: any[] = [];
@@ -466,7 +482,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
               <tr className="border-b">
                 <th className="text-left p-2 font-medium">Source Dimension</th>
                 <th className="text-left p-2 font-medium">Dimension Value</th>
-                <th className="text-left p-2 font-medium">New Dimension Name</th>
+                <th className="text-left p-2 font-medium">Dimension Name</th>
                 <th className="text-left p-2 font-medium">Mapped Value</th>
                 <th className="w-12"></th>
               </tr>
@@ -508,12 +524,50 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
                     />
                   </td>
                   <td className="p-2">
-                    <Input
-                      value={mapping.targetDimensionName || ''}
-                      onChange={(e) => updateMapping(index, 'targetDimensionName', e.target.value)}
-                      placeholder="e.g., Account"
-                      className="w-full"
-                    />
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          className="w-full justify-between"
+                        >
+                          {mapping.targetDimensionName || "Type dimension name..."}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                        <Command>
+                          <CommandInput 
+                            placeholder="Type dimension name..." 
+                            value={mapping.targetDimensionName || ''}
+                            onValueChange={(value) => updateMapping(index, 'targetDimensionName', value)}
+                          />
+                          <CommandList>
+                            <CommandEmpty>
+                              <div className="p-2 text-sm text-muted-foreground">
+                                Press Enter to create "{mapping.targetDimensionName}"
+                              </div>
+                            </CommandEmpty>
+                            <CommandGroup>
+                              {vlookupDimensions.map((dim) => (
+                                <CommandItem
+                                  key={dim.id}
+                                  onSelect={() => updateMapping(index, 'targetDimensionName', dim.name)}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      mapping.targetDimensionName === dim.name ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  {dim.name}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </td>
                   <td className="p-2">
                     <Input
