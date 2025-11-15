@@ -92,257 +92,142 @@ export function usePerformanceTableData({
     try {
       // Get current user for custom dimensions (optional for public views)
       const { data: { user } } = await supabase.auth.getUser();
-      
-      // Use consolidated endpoint if multiple reports
-      if (useConsolidatedView) {
-        const requestBody = {
-          reportIds,
-          groupByDims: groupByDimensions,
-          breakdownDims: breakdownByDimensions,
-          thenByDims: thenByDimensions,
-          dimensionFilters: filters.dimensionFilters,
-          dateFrom: dateFromFormatted,
-          dateTo: dateToFormatted,
-          accountId,
-          userId: user?.id,
-          visibleDimensionIds: Array.from(visibleColumns),
-          limit: 50000,
-          offset: 0,
-          compareEnabled: filters.compareEnabled || false,
-          compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
-          compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined,
-          dateGranularity: activeDateTab,
-          dateOrder: dateOrder,
-        };
-        
-        console.log('[PERF-TABLE] Calling consolidated endpoint with:', requestBody);
 
-        try {
-          const { data, error } = await supabase.functions.invoke('get-consolidated-performance-data', {
-            body: requestBody,
-          });
+      // Helper: fetch raw dimension_data rows
+      const fetchRows = async (ids: string[] | null, id: string | null) => {
+        let query = supabase
+          .from('dimension_data')
+          .select('dimension_values, row_number, data_source_id')
+          .order('row_number', { ascending: true });
 
-          if (error) {
-            console.error('[PERF-TABLE] Edge function error:', error);
-            throw error;
-          }
-
-          if (data?.error) {
-            console.error('[PERF-TABLE] Data contains error:', data.error);
-            throw new Error(data.error);
-          }
-
-          console.log('[PERF-TABLE] Consolidated data response:', data);
-
-          // Process consolidated response
-          setTableData(data.data || []);
-          setTotalData(data.totals || {});
-          setTotalCompareData({});
-          setTotalChangeData({});
-        } catch (error) {
-          console.error('[PERF-TABLE] Error in consolidated data:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-          setLoadError(errorMessage);
-          toast({
-            title: "Error loading data",
-            description: `Failed to load consolidated data: ${errorMessage}`,
-            variant: "destructive",
-          });
-          setTableData([]);
-          setTotalData({});
-          setTotalCompareData({});
-          setTotalChangeData({});
+        if (ids && ids.length > 0) {
+          query = query.in('report_id', ids);
+        } else if (id) {
+          query = query.eq('report_id', id);
         }
-        
-        setIsLoadingData(false);
-        onLoadingComplete?.();
-        return;
-      }
-      
-      const requestBody = {
-        reportId,
-        groupByDims: groupByDimensions,
-        breakdownDims: breakdownByDimensions,
-        thenByDims: thenByDimensions,
-        dimensionFilters: filters.dimensionFilters,
-        dateFrom: dateFromFormatted,
-        dateTo: dateToFormatted,
-        accountId, // Pass accountId to edge function
-        userId: user?.id, // Pass userId for custom dimensions
-        visibleDimensionIds: Array.from(visibleColumns),
-        limit: 50000, // Increased to get more data for pagination
-        offset: 0,
-        compareEnabled: filters.compareEnabled || false,
-        compareDateFrom: filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined,
-        compareDateTo: filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined,
-        dateGranularity: activeDateTab,
-        dateOrder: dateOrder,
+
+        const { data, error } = await query;
+        if (error) throw error;
+        return data || [];
       };
-      
-      console.log('[testing] Calling get-performance-data with request body:', requestBody);
-      console.log('[testing] Date filter details being sent:', {
-        dateFrom: requestBody.dateFrom,
-        dateTo: requestBody.dateTo,
-        hasDateFrom: !!requestBody.dateFrom,
-        hasDateTo: !!requestBody.dateTo,
-        originalDateRange: filters.dateRange,
-        originalFrom: filters.dateRange?.from?.toISOString(),
-        originalTo: filters.dateRange?.to?.toISOString(),
-        timestamp: new Date().toISOString()
+
+      // Fetch rows for single or consolidated view
+      const rawRows = await fetchRows(useConsolidatedView ? (reportIds as string[]) : null, useConsolidatedView ? null : reportId!);
+
+      // Detect date dimension present in data
+      const dateDims = dimensions.filter(d => d.type === 'date');
+      let dateDimInUse: { id: string; name: string } | null = null;
+      for (const d of dateDims) {
+        const found = rawRows.some((r: any) => {
+          const dv = r.dimension_values || {};
+          return dv[d.id] !== undefined && dv[d.id] !== null && dv[d.id] !== '';
+        });
+        if (found) {
+          dateDimInUse = { id: d.id, name: d.name };
+          break;
+        }
+      }
+
+      // Apply date filter (inclusive end)
+      let filteredRows = rawRows;
+      if (dateDimInUse && (dateFromFormatted || dateToFormatted)) {
+        const fromDate = dateFromFormatted ? new Date(dateFromFormatted) : null;
+        const toDate = dateToFormatted ? new Date(dateToFormatted) : null;
+        const adjustedToDate = toDate
+          ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1)
+          : null;
+
+        filteredRows = filteredRows.filter((row: any) => {
+          const dv = row.dimension_values || {};
+          const val = dv[dateDimInUse!.id];
+          if (!val) return true; // keep rows without date
+          const rowDate = new Date(String(val));
+          if (fromDate && rowDate < fromDate) return false;
+          if (adjustedToDate && rowDate >= adjustedToDate) return false;
+          return true;
+        });
+      }
+
+      // Normalize dimensionFilters to arrays and apply filtering by dimension IDs
+      const normalizedFilters: Record<string, string[]> = {};
+      for (const [k, v] of Object.entries(filters.dimensionFilters || {})) {
+        if (Array.isArray(v)) normalizedFilters[k] = v.map((x) => String(x));
+        else if (v !== undefined && v !== null) normalizedFilters[k] = [String(v)];
+      }
+
+      if (Object.keys(normalizedFilters).length > 0) {
+        filteredRows = filteredRows.filter((row: any) => {
+          const dv = row.dimension_values || {};
+          for (const [dimId, values] of Object.entries(normalizedFilters)) {
+            if (!values || values.length === 0) continue;
+            const rowVal = dv[dimId];
+            if (rowVal === undefined || rowVal === null) return false;
+            const rowStr = String(rowVal);
+            // Must match one of the values exactly (case-sensitive)
+            if (!values.some((v) => rowStr === v)) return false;
+          }
+          return true;
+        });
+      }
+
+      // Transform rows into TableRow format (client-side mapping from IDs to names)
+      const firstDimId = groupByDimensions[0];
+      const firstDimension = dimensions.find(d => d.id === firstDimId);
+
+      const transformedRows: TableRow[] = filteredRows.map((row: any, idx: number) => {
+        const dv: Record<string, any> = row.dimension_values || {};
+        const rowData: Record<string, any> = {};
+
+        // Map dimension IDs to names; convert numeric strings to numbers
+        dimensions.forEach(dim => {
+          if (dv[dim.id] !== undefined) {
+            const value = dv[dim.id];
+            if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
+              const numValue = parseFloat(String(value));
+              rowData[dim.name] = !isNaN(numValue) ? numValue : value;
+            } else {
+              rowData[dim.name] = value;
+            }
+          }
+        });
+
+        const originalDate = firstDimension?.type === 'date' ? dv[firstDimId] : undefined;
+
+        return {
+          id: `row-${row.row_number ?? idx + 1}`,
+          name: dv[firstDimId] || 'Unknown',
+          level: 0,
+          data: rowData,
+          originalDate,
+        };
       });
 
-      try {
-        const { data, error } = await supabase.functions.invoke('get-performance-data', {
-          body: requestBody,
-        });
+      // Set table data
+      setTableData(transformedRows);
 
-        if (error) {
-          console.error('[testing] Edge function invocation error:', error);
-          throw error;
-        }
-
-        // Check if the response contains an error field
-        if (data?.error) {
-          console.error('[testing] Data contains error:', data.error);
-          throw new Error(data.error);
-        }
-
-        console.log('[testing] Performance data response:', {
-          hasData: !!data,
-          rowsCount: data?.data?.length || 0,
-          total: data?.total || 0,
-          hasMore: data?.hasMore,
-        });
-
-        // The edge function returns { data: [...], total: ..., totalData: {...}, hasMore: ... }
-        const rows = data?.data || [];
-        
-        // Transform the data into the expected format for TableRow
-        const transformedRows: TableRow[] = rows.map((row: any) => {
-          // Create a name from the first dimension if available
-          const firstDimId = groupByDimensions[0];
-          const firstDimension = dimensions.find(d => d.id === firstDimId);
-          
-          // Extract dimension values from the response
-          const dimensionValues = row.dimension_values || {};
-          
-          // Create a data object with dimension names as keys
-          const rowData: Record<string, any> = {};
-          
-          // Map dimension IDs to dimension names for the data object
-          dimensions.forEach(dim => {
-            if (dimensionValues[dim.id] !== undefined) {
-              // Convert numeric strings to numbers for proper aggregation
-              const value = dimensionValues[dim.id];
-              if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
-                const numValue = parseFloat(value);
-                rowData[dim.name] = !isNaN(numValue) ? numValue : value;
-              } else {
-                rowData[dim.name] = value;
-              }
-            }
-          });
-          
-          // Check if first dimension is a date type and store original date value
-          const isDateDimension = firstDimension?.type === 'date';
-          const originalDate = isDateDimension ? dimensionValues[firstDimId] : undefined;
-          
-          return {
-            id: row.id || `row-${row.row_number || Math.random().toString(36).substring(2, 11)}`,
-            name: dimensionValues[firstDimId] || 'Unknown',
-            level: 0,
-            data: rowData,
-            originalDate: originalDate,
-            // Children will be created in usePerformanceTableFilters
-          };
-        });
-        
-        setTableData(transformedRows);
-        
-        // Use totalData from edge function if available (more efficient than recalculating)
-        const finalTotalData = data?.totalData || (() => {
-          // Fallback: Calculate total data from all rows if edge function doesn't provide it
-          const calculatedTotalData: Record<string, any> = {};
-          if (transformedRows.length > 0 && dimensions.length > 0) {
-            transformedRows.forEach((row: TableRow) => {
-              if (row.data) {
-                Object.keys(row.data).forEach((dimName: string) => {
-                  const dim = dimensions.find(d => d.name === dimName);
-                  if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
-                    const value = parseFloat(String(row.data[dimName] || '0'));
-                    if (!isNaN(value)) {
-                      calculatedTotalData[dimName] = (calculatedTotalData[dimName] || 0) + value;
-                    }
-                  }
-                });
+      // Calculate totals from transformed rows (fallback similar to previous logic)
+      const calculatedTotalData: Record<string, any> = {};
+      if (transformedRows.length > 0 && dimensions.length > 0) {
+        transformedRows.forEach((row: TableRow) => {
+          if (row.data) {
+            Object.keys(row.data).forEach((dimName: string) => {
+              const dim = dimensions.find(d => d.name === dimName);
+              if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+                const value = parseFloat(String(row.data[dimName] || '0'));
+                if (!isNaN(value)) {
+                  calculatedTotalData[dimName] = (calculatedTotalData[dimName] || 0) + value;
+                }
               }
             });
           }
-          return calculatedTotalData;
-        })();
-        setTotalData(finalTotalData);
-        
-        // Use totalCompareData from edge function if available
-        const finalCompareData = data?.totalCompareData || (() => {
-          // Fallback: Calculate comparison totals from rows if not provided
-          const calculatedCompareData: Record<string, any> = {};
-          if (transformedRows.length > 0 && dimensions.length > 0) {
-            transformedRows.forEach((row: TableRow) => {
-              if (row.compareData) {
-                Object.keys(row.compareData).forEach((dimName: string) => {
-                  const dim = dimensions.find(d => d.name === dimName);
-                  if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
-                    const value = parseFloat(String(row.compareData[dimName] || '0'));
-                    if (!isNaN(value)) {
-                      calculatedCompareData[dimName] = (calculatedCompareData[dimName] || 0) + value;
-                    }
-                  }
-                });
-              }
-            });
-          }
-          return calculatedCompareData;
-        })();
-        setTotalCompareData(finalCompareData);
-        
-        // Use totalChangeData from edge function if available
-        const finalChangeData = data?.totalChangeData || (() => {
-          // Fallback: Calculate change data from totals
-          const calculatedChangeData: Record<string, any> = {};
-          
-          // Use all dimensions to ensure we calculate change for all metrics
-          const allDimNames = new Set<string>();
-          Object.keys(finalTotalData).forEach(k => allDimNames.add(k));
-          Object.keys(finalCompareData).forEach(k => allDimNames.add(k));
-          
-          allDimNames.forEach((dimName: string) => {
-            const current = finalTotalData[dimName] || 0;
-            const previous = finalCompareData[dimName] || 0;
-            if (previous !== 0) {
-              calculatedChangeData[dimName] = ((current - previous) / previous) * 100;
-            } else if (current !== 0) {
-              calculatedChangeData[dimName] = current > 0 ? 100 : -100;
-            } else {
-              calculatedChangeData[dimName] = 0;
-            }
-          });
-          return calculatedChangeData;
-        })();
-        setTotalChangeData(finalChangeData);
-      } catch (error) {
-        console.error('[testing] Error processing performance data:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        setLoadError(errorMessage);
-        toast({
-          title: "Error loading data",
-          description: `Failed to load performance table data: ${errorMessage}`,
-          variant: "destructive",
         });
-        setTableData([]);
-        setTotalData({});
-        setTotalCompareData({});
-        setTotalChangeData({});
       }
+      setTotalData(calculatedTotalData);
+
+      // Clear compare and change data (can be computed in filters hook if needed)
+      setTotalCompareData({});
+      setTotalChangeData({});
+
     } catch (error) {
       console.error('[testing] Error in loadPerformanceData:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
