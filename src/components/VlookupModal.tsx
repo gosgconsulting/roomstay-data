@@ -50,21 +50,21 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
       const dims = await loadDimensionsForUser(user.id, reportId);
       setDimensions(dims.filter(d => d.type !== 'date'));
 
-      // Preload up to 1000 rows of dimension_data and extract unique values per dimension
-      const filterBy = reportId ? { column: "report_id", value: reportId } : accountId ? { column: "account_id", value: accountId } : null;
+      // Preload dimension values using same logic as FiltersBar
       let rows: any[] = [];
-      if (filterBy) {
+      if (reportId) {
         const { data: dimData, error: dimErr } = await (supabase as any)
           .from('dimension_data')
           .select('dimension_values')
-          .eq(filterBy.column, filterBy.value)
-          .limit(1000);
+          .eq('report_id', reportId)
+          .limit(10000); // Match FiltersBar limit
         if (dimErr) {
           console.error('[VLOOKUP] Error loading dimension values:', dimErr);
         } else {
           rows = dimData || [];
         }
       }
+      
       const dimIds = new Set<string>(dims.filter(d => d.type !== 'date').map((d: any) => d.id));
       const valuesMap: Record<string, Set<string>> = {};
       rows.forEach((r) => {
@@ -78,6 +78,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
           valuesMap[k].add(String(val));
         });
       });
+      
       const optionsMap: Record<string, MultiSelectOption[]> = {};
       Object.entries(valuesMap).forEach(([k, set]) => {
         const opts = Array.from(set).sort((a, b) => a.localeCompare(b)).map(v => ({ label: v, value: v }));
