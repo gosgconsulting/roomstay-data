@@ -5,11 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fetchUniqueDimensionValues } from "../lib/vlookup/fetchUniqueValues";
-import { useDebounce } from "@/hooks/useDebounce";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
+import MultiSelect from "@/components/MultiSelect";
 
 type Row = {
   sourceDimensionId?: string;
@@ -59,8 +59,6 @@ export default function VlookupModal({
 
   // Unique values state
   const [options, setOptions] = useState<string[]>([]);
-  const [search, setSearch] = useState("");
-  const debouncedSearch = useDebounce(search, 300);
   const [loadingOptions, setLoadingOptions] = useState(false);
 
   const selectedSourceDimensionId = rows[0]?.sourceDimensionId;
@@ -140,7 +138,6 @@ export default function VlookupModal({
         reportId: reportId ?? undefined,
         reportIds,
         dimensionId: selectedSourceDimensionId,
-        search: debouncedSearch || undefined,
         limit: 5000,
       }).catch(() => []);
 
@@ -154,7 +151,7 @@ export default function VlookupModal({
     return () => {
       cancelled = true;
     };
-  }, [open, selectedSourceDimensionId, debouncedSearch, reportId, JSON.stringify(reportIds)]);
+  }, [open, selectedSourceDimensionId, reportId, JSON.stringify(reportIds)]);
 
   const updateRow = (index: number, patch: Partial<Row>) => {
     setRows(prev => {
@@ -310,7 +307,6 @@ export default function VlookupModal({
   useEffect(() => {
     if (open) {
       setRows([{ valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
-      setSearch("");
       setOptions([]);
     }
   }, [open]);
@@ -351,43 +347,15 @@ export default function VlookupModal({
               {/* Values to map */}
               <div className="col-span-4">
                 <Label>Values to Map</Label>
-                <div className="space-y-2">
-                  <Input
-                    placeholder="Search..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                  <div className="max-h-48 overflow-auto border rounded p-2">
-                    {loadingOptions ? (
-                      <div className="text-sm text-muted-foreground">Loading values…</div>
-                    ) : options.length === 0 ? (
-                      <div className="text-sm text-muted-foreground">No values found</div>
-                    ) : (
-                      <div className="flex flex-col gap-1">
-                        {options.map((val) => {
-                          const selected = row.valuesToMap.includes(val);
-                          return (
-                            <button
-                              key={val}
-                              type="button"
-                              onClick={() => {
-                                const set = new Set(row.valuesToMap);
-                                if (selected) set.delete(val); else set.add(val);
-                                updateRow(idx, { valuesToMap: Array.from(set) });
-                              }}
-                              className={`text-left px-2 py-1 rounded ${selected ? 'bg-primary/10' : 'hover:bg-accent'}`}
-                            >
-                              {val}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                  {row.valuesToMap.length > 0 && (
-                    <div className="text-xs text-muted-foreground">{row.valuesToMap.length} selected</div>
-                  )}
-                </div>
+                <MultiSelect
+                  options={options.map(v => ({ label: v, value: v }))}
+                  values={row.valuesToMap}
+                  onChange={(vals) => updateRow(idx, { valuesToMap: vals })}
+                  placeholder={loadingOptions ? "Loading values…" : "Select values..."}
+                  searchPlaceholder="Search..."
+                  disabled={loadingOptions || !selectedSourceDimensionId}
+                  className="bg-background"
+                />
               </div>
 
               {/* Target dimension selector + create */}
