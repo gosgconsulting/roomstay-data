@@ -37,33 +37,37 @@ export async function saveDimensionSettings(
   try {
     console.log(`[DIMENSION-SELECTOR] Saving dimensions for report ${reportId}:`, activeDimensions);
 
-    // Check if a default view already exists for this report
+    // Select only existing columns to avoid SelectQueryError typing
     const { data: existingView } = await supabase
       .from("report_views")
-      .select("id, filter_values, date_range_start, date_range_end, date_range_preset")
+      .select("id, filter_values, date_range_start, date_range_end, date_preset")
       .eq("report_id", reportId)
       .eq("user_id", userId)
       .eq("is_default", true)
       .maybeSingle();
 
     // Clean up filter_values to only include active dimensions
-    const cleanedFilterValues = (existingView && existingView.filter_values)
-      ? cleanupFilterValues(activeDimensions, existingView.filter_values as Record<string, any>)
-      : {};
+    const cleanedFilterValues =
+      existingView && (existingView as any).filter_values
+        ? cleanupFilterValues(
+            activeDimensions,
+            (existingView as any).filter_values as Record<string, any>
+          )
+        : {};
 
     const viewData = {
       filter_dimensions: activeDimensions,
       filter_values: cleanedFilterValues,
-      date_range_start: existingView?.date_range_start || null,
-      date_range_end: existingView?.date_range_end || null,
-      date_range_preset: existingView?.date_range_preset || "all_time",
+      date_range_start: (existingView?.date_range_start as string) || null,
+      date_range_end: (existingView?.date_range_end as string) || null,
+      date_preset: (existingView?.date_preset as string) || "all_time",
     };
 
-    if (existingView && existingView.id) {
+    if (existingView && (existingView as any).id) {
       const { error } = await supabase
         .from("report_views")
         .update(viewData)
-        .eq("id", existingView.id);
+        .eq("id", (existingView as any).id as string);
       if (error) throw error;
     } else {
       const { error } = await supabase

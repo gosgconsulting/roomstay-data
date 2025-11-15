@@ -362,7 +362,7 @@ export const FiltersBar = ({
           setMasterDimensionId(fv.__master_dimension_id);
         }
 
-        const preset = data.date_range_preset || "all_time";
+        const preset = (data as any).date_preset || "all_time";
         applyDatePreset(preset);
       } else {
         // No view: default to Account if available, else Date
@@ -407,16 +407,16 @@ export const FiltersBar = ({
           ...selectedFilters,
           ...(masterDimensionId && { __master_dimension_id: masterDimensionId }),
         },
-        date_range_start: dateRange?.from?.toISOString().split("T")[0] || null,
-        date_range_end: dateRange?.to?.toISOString().split("T")[0] || null,
-        date_range_preset: datePreset,
+        date_range_start: dateRange?.from ? dateRange.from.toISOString().split("T")[0] : null,
+        date_range_end: dateRange?.to ? dateRange.to.toISOString().split("T")[0] : null,
+        date_preset: datePreset as string,
       };
 
-      if (existingView && existingView.id) {
+      if (existingView && (existingView as any).id) {
         const { error } = await supabase
           .from("report_views")
           .update(viewData)
-          .eq("id", existingView.id);
+          .eq("id", (existingView as any).id as string);
         if (error) throw error;
       } else {
         const { error } = await supabase
@@ -707,7 +707,7 @@ export const FiltersBar = ({
 
       const { data: existingView } = await supabase
         .from("report_views")
-        .select("id, date_range_start, date_range_end, date_range_preset")
+        .select("id, date_range_start, date_range_end, date_preset")
         .eq("report_id", reportId)
         .eq("user_id", user.id)
         .eq("is_default", true)
@@ -716,16 +716,22 @@ export const FiltersBar = ({
       const viewData = {
         filter_dimensions: dimensionIds,
         filter_values: next,
-        date_range_start: (existingView && 'date_range_start' in existingView) ? existingView.date_range_start : null,
-        date_range_end: (existingView && 'date_range_end' in existingView) ? existingView.date_range_end : null,
-        date_range_preset: (existingView && 'date_range_preset' in existingView) ? existingView.date_range_preset : "all_time",
+        date_range_start: (existingView && 'date_range_start' in (existingView as any))
+          ? ((existingView as any).date_range_start as string)
+          : null,
+        date_range_end: (existingView && 'date_range_end' in (existingView as any))
+          ? ((existingView as any).date_range_end as string)
+          : null,
+        date_preset: (existingView && 'date_preset' in (existingView as any))
+          ? ((existingView as any).date_preset as string)
+          : "all_time",
       };
 
-      if (existingView && existingView.id) {
+      if (existingView && (existingView as any).id) {
         const { error } = await supabase
           .from("report_views")
           .update(viewData)
-          .eq("id", existingView.id);
+          .eq("id", (existingView as any).id as string);
         if (error) throw error;
       } else {
         const { error } = await supabase
