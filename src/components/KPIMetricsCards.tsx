@@ -267,11 +267,20 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
         const filteredData = allDimensionData.filter((row) => {
           const dimensionValues = row.dimension_values as Record<string, any>;
           
-          // Apply dimension filters
+          // Apply dimension filters (case-insensitive)
           for (const [dimId, filterValues] of Object.entries(stableFilters.dimensionFilters)) {
             if (filterValues && Array.isArray(filterValues) && filterValues.length > 0) {
               const rowValue = dimensionValues[dimId];
-              if (!filterValues.includes(String(rowValue))) {
+
+              // If dimension missing in row, exclude
+              if (rowValue === undefined || rowValue === null) {
+                return false;
+              }
+
+              const rowStr = String(rowValue).trim().toLowerCase();
+              const filterValuesLower = (filterValues as string[]).map(v => String(v).trim().toLowerCase());
+
+              if (!filterValuesLower.some(v => v === rowStr)) {
                 return false;
               }
             }
