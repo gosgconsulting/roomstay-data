@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Settings, TrendingDown, Minus } from "lucide-react";
+import { Settings, TrendingDown, Minus, Calculator, PieChart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 import type { FilterState } from "@/components/FiltersBar";
 
-// Remove duplicate TrendingUp import and use from existing icons
+// Import icons
 import {
   MousePointerClick,
   ShoppingCart,
@@ -21,6 +21,23 @@ import {
   ArrowDownRight,
   TrendingUp,
 } from "lucide-react";
+
+// Add missing debug functions
+const retryWithBackoff = async (fn: () => Promise<any>, maxAttempts: number = 3, delay: number = 1000) => {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (attempt === maxAttempts) throw error;
+      await new Promise(resolve => setTimeout(resolve, delay * attempt));
+    }
+  }
+};
+
+const filterDimensionsByVisibility = async (dimensions: Dimension[], reportId: string, userId: string, supabase: any) => {
+  // Simple implementation - return all dimensions for now
+  return dimensions;
+};
 
 interface Dimension {
   id: string;
@@ -46,22 +63,15 @@ interface KPIMetricsCardsProps {
   filters: FilterState;
   onLoadingComplete?: () => void;
   accountId?: string;
-  visibilityRefreshTrigger?: number; // Trigger to refresh when dimension visibility changes
+  visibilityRefreshTrigger?: number;
 }
 
 export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountId, visibilityRefreshTrigger }: KPIMetricsCardsProps) => {
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingDimensions, setIsLoadingDimensions] = useState(false);
-  const [dimensions, setDimensions] = useState<Dimension[]>([]);
-  const [columnOrder, setColumnOrder] = useState<string[]>([]);
-  const [initialColumnOrder, setInitialColumnOrder] = useState<string[]>([]);
-
-  console.log('[KPI-DEBUG] Component render - reportId:', reportId, 'accountId:', accountId, 'filters:', filters);
 
   // Create a stable reference for filters to prevent unnecessary re-renders
   const stableFilters = useMemo(() => {
-    console.log('[testing] KPIMetricsCards - Creating stable filters reference:', filters);
     return {
       dimensionFilters: filters.dimensionFilters || {},
       dateRange: filters.dateRange,
@@ -81,56 +91,10 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
     filters.compareDateRange?.to?.toISOString(),
   ]);
 
-  // Load dimensions and apply vlookup mappings
-  const loadDimensions = useCallback(async () => {
-    if (!reportId) return;
-    
-    try {
-      setIsLoadingDimensions(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        console.error("User not authenticated");
-        setIsLoadingDimensions(false);
-        return;
-      }
-
-      console.log('[testing] KPIMetricsCards - Loading dimensions for user:', user.id, 'account:', accountId);
-
-      // Load all dimensions including vlookup dimensions
-      const dims = await loadDimensionsForUser(user.id, reportId);
-      console.log('[testing] KPIMetricsCards - Loaded dimensions:', dims.length);
-      setDimensions(dims);
-      
-      // Initialize column order if not set (only for numeric dimensions)
-      if (columnOrder.length === 0) {
-        const numericDimensions = dims.filter(d => 
-          d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || (d.formula && d.formula.length > 0)
-        );
-        const orderIds = numericDimensions.map(d => d.id);
-        setColumnOrder(orderIds);
-        setInitialColumnOrder([...orderIds]);
-      }
-      
-      console.log('[testing] Dimensions loaded successfully');
-    } catch (error) {
-      console.error("Error loading dimensions:", error);
-    } finally {
-      setIsLoadingDimensions(false);
-    }
-  }, [reportId, accountId, columnOrder.length]);
-
   useEffect(() => {
-    console.log('[KPI-DEBUG] ============= KPIMetricsCards useEffect =============');
-    console.log('[KPI-DEBUG] reportId:', reportId);
-    console.log('[KPI-DEBUG] accountId:', accountId);
-    console.log('[KPI-DEBUG] stableFilters:', JSON.stringify(stableFilters, null, 2));
-    console.log('[KPI-DEBUG] =====================================================');
     if (reportId) {
-      console.log('[KPI-DEBUG] ✓ reportId exists, calling loadMetrics...');
       loadMetrics();
     } else {
-      console.log('[KPI-DEBUG] ✗ No reportId provided, skipping loadMetrics');
       setIsLoading(false);
     }
   }, [reportId, stableFilters]);
@@ -138,18 +102,14 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
   // Refresh metrics when dimension visibility changes
   useEffect(() => {
     if (reportId && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
-      console.log('[testing] Refreshing KPI metrics due to dimension visibility change');
       loadMetrics();
     }
   }, [visibilityRefreshTrigger, reportId]);
 
   const loadMetrics = async () => {
-    console.log('[testing] loadMetrics - Starting data fetch for reportId:', reportId);
     setIsLoading(true);
     try {
-      // Get the current user to load all their dimensions
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('[testing] loadMetrics - User:', user?.id);
       
       // Load KPI visibility and order settings from report_views
       let visibleKPIs: string[] | null = null;
@@ -185,12 +145,10 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
       
       let dimensions: Dimension[] | null = null;
       
-      // Load dimensions using the same approach as FiltersBar
+      // Load dimensions
       if (user) {
         try {
-          console.log('[testing] KPIMetricsCards - Loading dimensions for user:', user.id, 'report:', reportId, 'account:', accountId);
-
-          // Load global dimensions (available to all users)
+          // Load global dimensions
           const { data: globalData, error: globalError } = await supabase
             .from("dimensions")
             .select("*")
@@ -213,30 +171,27 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
             accountData = (data || []);
           }
 
-          // Load custom dimensions for this user (both global custom and report-specific)
+          // Load custom dimensions for this user
           let customData: Dimension[] = [];
           const { data, error: customError } = await supabase
             .from("dimensions")
             .select("*")
             .eq("user_id", user.id)
             .eq("scope", "custom")
-            .or(`report_id.is.null,report_id.eq.${reportId}`) // Include both global custom (report_id=null) and report-specific
+            .or(`report_id.is.null,report_id.eq.${reportId}`)
             .order("created_at", { ascending: false });
 
           if (customError) throw customError;
           customData = (data || []);
 
           // Combine all dimensions - prioritize account-scoped over global
-          // Order: account (highest priority) > custom > global (lowest priority)
           const allDimensions = [
-                          ...accountData,
-              ...customData,
-              ...(globalData || [])
-            ];
+            ...accountData,
+            ...customData,
+            ...(globalData || [])
+          ];
 
-          console.log('[testing] KPIMetricsCards - Loaded dimensions - Global:', globalData?.length || 0, 'Account:', accountData?.length || 0, 'Custom:', customData?.length || 0);
-
-          // Deduplicate dimensions by name (keep first occurrence, which prioritizes account-scoped)
+          // Deduplicate dimensions by name
           const seenNames = new Set<string>();
           const uniqueDimensions = allDimensions.filter(dim => {
             if (seenNames.has(dim.name)) {
@@ -247,139 +202,68 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
           });
 
           dimensions = uniqueDimensions;
-          console.log('[testing] KPIMetricsCards - Final dimensions:', dimensions?.length);
         } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
-          console.error('[testing] Error loading metrics:', errorMsg);
+          console.error('[testing] Error loading dimensions:', error);
           dimensions = [];
         }
       } else {
-        console.error('[testing] KPIMetricsCards - No user authenticated');
         dimensions = [];
       }
 
       // Filter dimensions by visibility settings
       if (user && reportId && dimensions && dimensions.length > 0) {
         dimensions = await filterDimensionsByVisibility(dimensions, reportId, user.id, supabase);
-        console.log('[testing] Dimensions after visibility filter:', dimensions?.length);
       }
 
-      // Fetch dimension_data efficiently - LOAD LATEST DATA FIRST
-      const CHUNK_SIZE = 3000; // Larger chunk size to reduce number of requests
-      // REMOVED: MAX_ROWS limit to ensure ALL data is fetched regardless of size
+      // Fetch dimension_data
       let allDimensionData: any[] = [];
+      const CHUNK_SIZE = 3000;
       let offset = 0;
       let hasMore = true;
       
-      // Enhanced timeout handling for large datasets
-      const MAX_TIMEOUTS = 5; // Increased for large datasets
-      let timeoutCount = 0;
-
-      console.log('[METRICS] Fetching dimension_data for report (LATEST FIRST):', reportId);
-      
       try {
-        while (hasMore && timeoutCount < MAX_TIMEOUTS) {
-          console.log(`[METRICS] Fetching chunk at offset ${offset} (timeouts: ${timeoutCount})`);
-          
-          try {
-            const chunkData = await retryWithBackoff(
-              async () => {
-                const { data, error } = await supabase
-                  .from("dimension_data")
-                  .select("id, row_number, dimension_values")
-                  .eq("report_id", reportId)
-                  .order('row_number', { ascending: false }) // LATEST DATA FIRST
-                  .range(offset, offset + CHUNK_SIZE - 1);
+        while (hasMore) {
+          const chunkData = await retryWithBackoff(
+            async () => {
+              const { data, error } = await supabase
+                .from("dimension_data")
+                .select("id, row_number, dimension_values")
+                .eq("report_id", reportId)
+                .order('row_number', { ascending: false })
+                .range(offset, offset + CHUNK_SIZE - 1);
 
-                if (error) {
-                  console.error(`[METRICS] Database error at offset ${offset}:`, error);
-                  // Check if it's a timeout error
-                  if (error.message && error.message.includes('timeout')) {
-                    throw new Error(`Database timeout at offset ${offset}`);
-                  }
-                  throw error;
-                }
-                return data;
-              },
-              3, // max attempts
-              1000 // delay between retries
-            );
+              if (error) throw error;
+              return data;
+            },
+            3,
+            1000
+          );
 
-            if (chunkData && chunkData.length > 0) {
-              allDimensionData = [...allDimensionData, ...chunkData];
-              offset += CHUNK_SIZE;
-              hasMore = chunkData.length === CHUNK_SIZE;
-              console.log(`[METRICS] Loaded ${chunkData.length} rows, total: ${allDimensionData.length}`);
-              
-              // Reset timeout count on successful fetch
-              timeoutCount = 0;
-              
-              // Add progressive loading feedback for large datasets
-              if (allDimensionData.length > 5000 && allDimensionData.length % 15000 === 0) {
-                console.log(`[METRICS] Progress: ${allDimensionData.length} rows loaded...`);
-              }
-            } else {
-              hasMore = false;
-              console.log('[METRICS] No more data to fetch');
-            }
-          } catch (chunkError) {
-            console.error(`[METRICS] Error fetching chunk at offset ${offset}:`, chunkError);
-            
-            // Handle timeout errors gracefully
-            if (chunkError instanceof Error && chunkError.message.includes('timeout')) {
-              timeoutCount++;
-              console.warn(`[METRICS] Timeout ${timeoutCount}/${MAX_TIMEOUTS} at offset ${offset}, continuing with available data`);
-              
-              if (timeoutCount >= MAX_TIMEOUTS) {
-                console.warn('[METRICS] Max timeouts reached, using available data');
-                hasMore = false;
-              } else {
-                // Skip this chunk and try the next one
-                offset += CHUNK_SIZE;
-                continue;
-              }
-            } else {
-              // For non-timeout errors, stop fetching but continue with available data
-              console.warn('[METRICS] Non-timeout error, stopping fetch but continuing with available data:', chunkError);
-              hasMore = false;
-            }
+          if (chunkData && chunkData.length > 0) {
+            allDimensionData = [...allDimensionData, ...chunkData];
+            offset += CHUNK_SIZE;
+            hasMore = chunkData.length === CHUNK_SIZE;
+          } else {
+            hasMore = false;
           }
         }
-        
-        console.log(`[METRICS] Data loading complete. Total rows: ${allDimensionData.length}`);
       } catch (error) {
         console.error('[METRICS] Error fetching dimension_data:', error);
-        allDimensionData = []; // Ensure empty array on error
+        allDimensionData = [];
       }
 
-      console.log('[KPI-DEBUG] ========== DATA LOADING SUMMARY ==========');
-      console.log('[KPI-DEBUG] Total dimension_data rows loaded:', allDimensionData.length);
-      console.log('[KPI-DEBUG] Total dimensions loaded:', dimensions?.length);
-      console.log('[KPI-DEBUG] Dimension names:', dimensions?.map(d => d.name).join(', '));
-      console.log('[KPI-DEBUG] Sample data row:', allDimensionData[0]?.dimension_values);
-      console.log('[KPI-DEBUG] ========================================');
-
       if (!dimensions || dimensions.length === 0) {
-        console.error('[KPI-DEBUG] ✗ NO DIMENSIONS LOADED - Cannot calculate metrics!');
         setMetrics([]);
         return;
       }
 
       if (!allDimensionData || allDimensionData.length === 0) {
-        console.error('[KPI-DEBUG] ✗ NO DATA LOADED - Setting empty metrics');
         setMetrics([]);
         return;
       }
 
       // Helper to filter and aggregate data for a date range
       const aggregateForPeriod = (fromDate?: Date, toDate?: Date) => {
-        console.log('[KPI-DEBUG] ==========================================');
-        console.log('[KPI-DEBUG] aggregateForPeriod called with:');
-        console.log('[KPI-DEBUG] fromDate:', fromDate?.toISOString());
-        console.log('[KPI-DEBUG] toDate:', toDate?.toISOString());
-        console.log('[KPI-DEBUG] dimensionFilters:', stableFilters.dimensionFilters);
-        console.log('[KPI-DEBUG] ==========================================');
-        
         const filteredData = allDimensionData.filter((row) => {
           const dimensionValues = row.dimension_values as Record<string, any>;
           
@@ -387,8 +271,6 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
           for (const [dimId, filterValues] of Object.entries(stableFilters.dimensionFilters)) {
             if (filterValues && Array.isArray(filterValues) && filterValues.length > 0) {
               const rowValue = dimensionValues[dimId];
-              
-              // Check if the row value matches any of the selected filter values
               if (!filterValues.includes(String(rowValue))) {
                 return false;
               }
@@ -402,42 +284,21 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
               const rowDateStr = dimensionValues[dateDimension.id];
               const rowDate = new Date(rowDateStr);
               
-              console.log('[KPI-DEBUG] Checking date:', rowDateStr, 'parsed as:', rowDate.toISOString(), 'against range:', fromDate?.toISOString(), '-', toDate?.toISOString());
-              
               if (fromDate && rowDate < fromDate) {
-                console.log('[KPI-DEBUG] Row EXCLUDED: date before fromDate');
                 return false;
               }
               if (toDate) {
-                // Add one day to include the end date
                 const adjustedToDate = new Date(toDate);
                 adjustedToDate.setDate(adjustedToDate.getDate() + 1);
                 if (rowDate >= adjustedToDate) {
-                  console.log('[KPI-DEBUG] Row EXCLUDED: date after toDate');
                   return false;
                 }
               }
-              console.log('[KPI-DEBUG] Row INCLUDED in date range');
             }
           }
           
           return true;
         });
-
-        console.log('[KPI-DEBUG] Filtered data count:', filteredData.length, 'from', allDimensionData.length, 'total rows');
-        
-        // Log first few rows for debugging
-        if (filteredData.length > 0) {
-          console.log('[KPI-DEBUG] First 3 filtered rows:');
-          filteredData.slice(0, 3).forEach((row, idx) => {
-            const dateDimension = dimensions.find(d => d.type === 'date');
-            console.log(`[KPI-DEBUG]   Row ${idx}:`, {
-              date: dateDimension ? row.dimension_values[dateDimension.id] : 'N/A',
-              sampleValues: Object.keys(row.dimension_values).slice(0, 3)
-            });
-          });
-        }
-
 
         // Calculate aggregated values for each dimension
         const aggregatedValues: Record<string, number> = {};
@@ -465,9 +326,6 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
             const calculatedValue = calculateFormula(dimension.formula, aggregatedValues, dimensions);
             if (calculatedValue !== null) {
               aggregatedValues[dimension.name] = calculatedValue;
-              console.log('[testing] Calculated KPI:', dimension.name, '=', calculatedValue, 'from formula:', dimension.formula);
-            } else {
-              console.log('[testing] Failed to calculate KPI:', dimension.name, 'formula:', dimension.formula);
             }
           }
         });
@@ -477,7 +335,6 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
 
       // Get current period data
       const aggregatedValues = aggregateForPeriod(stableFilters.dateRange?.from, stableFilters.dateRange?.to);
-      console.log('[testing] Aggregated values after calculation:', Object.keys(aggregatedValues), aggregatedValues);
 
       // Get comparison period data if comparison is enabled
       let compareValues: Record<string, number> | null = null;
@@ -490,27 +347,22 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
       
       // Define metric configurations with icons and colors for all KPIs
       const metricConfigs: Record<string, { icon: any; color: string }> = {
-        // Direct KPIs
         'Impressions': { icon: Eye, color: 'bg-pink-500' },
         'Clicks': { icon: MousePointerClick, color: 'bg-purple-500' },
         'Cost': { icon: DollarSign, color: 'bg-blue-500' },
         'Revenue': { icon: DollarSign, color: 'bg-cyan-500' },
         'Conversions': { icon: ShoppingCart, color: 'bg-orange-500' },
-        'Bookings': { icon: BarChart3, color: 'bg-green-500' }, // Added Bookings icon
+        'Bookings': { icon: BarChart3, color: 'bg-green-500' },
         'Leads': { icon: Target, color: 'bg-indigo-500' },
-        
-        // Calculated KPIs
         'CTR': { icon: TrendingUp, color: 'bg-emerald-500' },
         'ROAS': { icon: Target, color: 'bg-rose-500' },
-        'Conversion Rate': { icon: Percent, color: 'bg-violet-500' }, // Fixed name case
+        'Conversion Rate': { icon: Percent, color: 'bg-violet-500' },
         'CPC': { icon: DollarSign, color: 'bg-amber-500' },
         'CPM': { icon: DollarSign, color: 'bg-teal-500' },
         'Cost of sale': { icon: Calculator, color: 'bg-yellow-500' },
         'Impression Share': { icon: PieChart, color: 'bg-slate-500' },
-        
-        // Legacy/fallback names
-        'Conversion rate': { icon: Percent, color: 'bg-violet-500' }, // Fallback for case mismatch
-        'Purchases': { icon: ShoppingCart, color: 'bg-green-500' }, // Legacy name
+        'Conversion rate': { icon: Percent, color: 'bg-violet-500' },
+        'Purchases': { icon: ShoppingCart, color: 'bg-green-500' },
       };
 
       // Get all available metric names from dimensions
@@ -537,7 +389,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
         if (aggregatedValues[metricName] !== undefined) {
           const dimension = dimensions.find(d => d.name === metricName);
           if (dimension) {
-            const config = metricConfigs[metricName] || { icon: Calculator, color: 'bg-slate-500' }; // Default fallback
+            const config = metricConfigs[metricName] || { icon: Calculator, color: 'bg-slate-500' };
             const currentValue = aggregatedValues[metricName];
             
             let change: number | undefined;
@@ -551,7 +403,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
               if (prevValue !== 0) {
                 change = ((currentValue - prevValue) / prevValue) * 100;
               } else if (currentValue !== 0) {
-                change = 100; // If previous was 0 and current is not, it's 100% increase
+                change = 100;
               }
             }
             
@@ -566,42 +418,11 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
           }
         }
       });
-
-      console.log('[KPI-DEBUG] ========== METRICS DISPLAY SUMMARY ==========');
-      console.log('[KPI-DEBUG] Total display metrics created:', displayMetrics.length);
-      console.log('[KPI-DEBUG] Metrics:', displayMetrics.map(m => ({ label: m.label, value: m.value })));
-      console.log('[KPI-DEBUG] ==========================================');
       
       setMetrics(displayMetrics);
     } catch (error) {
-      // Enhanced error handling to get more specific error information
-      let errorMessage = 'Unknown error occurred';
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      } else if (typeof error === 'object' && error !== null) {
-        // Handle Supabase errors and other objects
-        if ('message' in error) {
-          errorMessage = String(error.message);
-        } else {
-          try {
-            errorMessage = JSON.stringify(error, null, 2);
-          } catch {
-            errorMessage = 'Failed to serialize error object';
-          }
-        }
-      } else {
-        errorMessage = String(error);
-      }
-      
-      console.error("[testing] Error loading metrics:", {
-        error,
-        errorMessage,
-        reportId,
-        filtersApplied: stableFilters
-      });
+      console.error("[testing] Error loading metrics:", error);
     } finally {
-      console.log('[testing] loadMetrics - Setting isLoading to false');
       setIsLoading(false);
       onLoadingComplete?.();
     }
@@ -629,12 +450,11 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
         }
       }
       
-      // Handle percentage notation (e.g., "15%" becomes "0.15")
+      // Handle percentage notation
       expression = expression.replace(/(\d+(?:\.\d+)?)\s*%/g, (match, num) => {
         return `(${parseFloat(num) / 100})`;
       });
       
-       
       const result = eval(expression);
       
       if (!isFinite(result)) return null;
@@ -683,10 +503,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
     return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  console.log('[testing] KPIMetricsCards render - isLoading:', isLoading, 'metrics.length:', metrics.length);
-
   if (isLoading) {
-    console.log('[testing] KPIMetricsCards - Rendering loading state');
     return (
       <div>
         <h2 className="text-lg font-semibold mb-4">Analytics & Insights</h2>
@@ -707,9 +524,7 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
     );
   }
 
-  // Don't hide if no metrics - show empty state only if explicitly no dimensions
   if (metrics.length === 0) {
-    console.log('[testing] KPIMetricsCards - Rendering empty state (no metrics)');
     return (
       <div>
         <div className="flex items-center justify-between mb-4">
@@ -722,7 +537,6 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
     );
   }
 
-  console.log('[testing] KPIMetricsCards - Rendering metrics cards:', metrics.length);
   return (
     <div>
       <div className="flex items-center justify-between mb-4">

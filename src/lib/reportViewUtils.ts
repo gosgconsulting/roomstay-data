@@ -27,15 +27,15 @@ export function cleanupFilterValues(
  * 
  * @param reportId - The ID of the report
  * @param userId - The ID of the user
- * @param dimensions - Array of dimension IDs to save
+ * @param activeDimensions - Array of dimension IDs to save
  */
 export async function saveDimensionSettings(
   reportId: string,
   userId: string,
-  dimensions: string[]
+  activeDimensions: string[]
 ): Promise<void> {
   try {
-    console.log(`[DIMENSION-SELECTOR] Saving dimensions for report ${reportId}:`, dimensions);
+    console.log(`[DIMENSION-SELECTOR] Saving dimensions for report ${reportId}:`, activeDimensions);
 
     // Check if a default view already exists for this report
     const { data: existingView } = await supabase
@@ -47,19 +47,19 @@ export async function saveDimensionSettings(
       .maybeSingle();
 
     // Clean up filter_values to only include active dimensions
-    const cleanedFilterValues = (existingView && 'filter_values' in existingView && existingView.filter_values)
-      ? cleanupFilterValues(dimensions, existingView.filter_values as Record<string, any>)
+    const cleanedFilterValues = (existingView && existingView.filter_values)
+      ? cleanupFilterValues(activeDimensions, existingView.filter_values as Record<string, any>)
       : {};
 
     const viewData = {
       filter_dimensions: activeDimensions,
-      filter_values: cleanedFilterValues, // Use cleaned values
-      date_range_start: (existingView && 'date_range_start' in existingView) ? existingView.date_range_start : null,
-      date_range_end: (existingView && 'date_range_end' in existingView) ? existingView.date_range_end : null,
-      date_range_preset: (existingView && 'date_range_preset' in existingView) ? existingView.date_range_preset : "all_time",
+      filter_values: cleanedFilterValues,
+      date_range_start: existingView?.date_range_start || null,
+      date_range_end: existingView?.date_range_end || null,
+      date_range_preset: existingView?.date_range_preset || "all_time",
     };
 
-    if (existingView && 'id' in existingView) {
+    if (existingView && existingView.id) {
       const { error } = await supabase
         .from("report_views")
         .update(viewData)

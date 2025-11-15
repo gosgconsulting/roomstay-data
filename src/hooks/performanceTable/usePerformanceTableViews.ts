@@ -172,7 +172,7 @@ export function usePerformanceTableViews({
     console.log('Loading view settings for:', view.name, view);
     
     // Map old dimension IDs to account-scoped dimension IDs for group_by_dimensions
-    const mapDimensionIds = async (dimIds: string[]): Promise<string[]> => {
+    const mapDimensionIdsLocal = async (dimIds: string[]): Promise<string[]> => {
       if (!dimIds || dimIds.length === 0) return [];
       
       const mapped: string[] = [];
@@ -224,7 +224,7 @@ export function usePerformanceTableViews({
 
     // Load saved settings - map dimension IDs asynchronously
     const loadDimensionsAsync = async () => {
-      const groupDimensions = await mapDimensionIds(view.group_by_dimensions || []);
+      const groupDimensions = await mapDimensionIdsLocal(view.group_by_dimensions || []);
       
       // If no grouping dimension is set and dimensions are available, set a default
       let finalGroupDimensions = groupDimensions;
@@ -246,9 +246,9 @@ export function usePerformanceTableViews({
         }
       }
       
-      setGroupByDimensions(finalGroupDimensions);
-      setBreakdownByDimensions(await mapDimensionIds(view.breakdown_by_dimensions || []));
-      setThenByDimensions(await mapDimensionIds(view.then_by_dimensions || []));
+      onGroupByChange(finalGroupDimensions);
+      onBreakdownByChange(await mapDimensionIdsLocal(view.breakdown_by_dimensions || []));
+      onThenByChange(await mapDimensionIdsLocal(view.then_by_dimensions || []));
     };
     
     loadDimensionsAsync();
@@ -259,7 +259,7 @@ export function usePerformanceTableViews({
       
       // Map old dimension IDs to account-scoped dimension IDs
       const loadVisibleColumnsAsync = async () => {
-        const mappedVisibleColumns = await mapVisibleColumns(view.visible_columns || [], dimensions);
+        const mappedVisibleColumns = await mapVisibleColumns(view.visible_columns || [], dimensions.map(d => ({ ...d, formula: d.formula || null })));
         
         const visibleSet = new Set<string>(mappedVisibleColumns);
         onVisibleColumnsChange(visibleSet);
@@ -312,7 +312,7 @@ export function usePerformanceTableViews({
     }
     
     console.log('View settings loaded successfully');
-  }, [dimensions.length, onGroupByChange, onBreakdownByChange, onThenByChange, onVisibleColumnsChange, onInitialVisibleColumnsChange, onColumnOrderChange, onInitialColumnOrderChange, onDateGranularityChange, onDateOrderChange]);
+  }, [dimensions, onGroupByChange, onBreakdownByChange, onThenByChange, onVisibleColumnsChange, onInitialVisibleColumnsChange, onColumnOrderChange, onInitialColumnOrderChange, onDateGranularityChange, onDateOrderChange]);
 
   const createDefaultViews = useCallback(async () => {
     if (!reportId) {

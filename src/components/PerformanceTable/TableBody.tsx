@@ -190,7 +190,7 @@ export function TableBody({
                   
                   return (
                     <td key={dimension.id} className="py-3 px-4 text-right">
-                      <span className={cn(isNegative && "text-red-600")}>{formatValue(value, dimension)}</span>
+                      <span className={cn(isNegative && "text-red-600")}>{formatValue(value, { ...dimension, formula: dimension.formula || null })}</span>
                     </td>
                   );
                 })}
@@ -268,4 +268,3 @@ export function TableBody({
     </>
   );
 }
-

@@ -57,16 +57,14 @@ export async function migrateAccountToAccountDimensions(accountId: string): Prom
 
     console.log('[MIGRATION] Creating account dimensions for:', dimensionsToCreate.map(d => d.name));
 
-    const { data: { user: userId } } = await supabase.auth.getUser();
-    const accountDimensions = globalDimensions.map(dim => ({
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    const accountDimensions = dimensionsToCreate.map(dim => ({
       name: dim.name,
       type: dim.type,
       formula: dim.formula,
       scope: 'account' as const,
       account_id: accountId,
-      user_id: userId, // userId is already a string
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      user_id: currentUser.id, // user.id is already a string
     }));
 
     const { error: insertError } = await supabase

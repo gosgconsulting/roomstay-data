@@ -532,14 +532,14 @@ export function usePerformanceTableFilters({
 
   // Calculate totals from filtered data
   const totals = useMemo(() => {
-    return calculateTotals(filteredTableData, dimensions, totalData);
+    return calculateTotals(filteredTableData, dimensions.map(d => ({ ...d, formula: d.formula || null })), totalData);
   }, [filteredTableData, dimensions, totalData]);
 
   // Calculate comparison totals and change percentages
   const { compareTotals, changeData } = useMemo(() => {
     return calculateComparisonTotalsAndChanges(
       filteredTableData,
-      dimensions,
+      dimensions.map(d => ({ ...d, formula: d.formula || null })),
       totals,
       filters.compareEnabled || false
     );

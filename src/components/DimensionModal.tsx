@@ -323,7 +323,7 @@ export const DimensionModal = ({
           name: name.trim(),
           type,
           formula: formula.trim() || null,
-          scope: (reportId ? 'custom' : 'account') as 'custom' | 'account',
+          scope: 'custom' as const,
           user_id: user.id,
           report_id: reportId,
           account_id: accountId,
@@ -331,7 +331,7 @@ export const DimensionModal = ({
 
         const { data: newDimension, error } = await supabase
           .from("dimensions")
-          .insert(dimensionData)
+          .insert(formData)
           .select()
           .single();
 

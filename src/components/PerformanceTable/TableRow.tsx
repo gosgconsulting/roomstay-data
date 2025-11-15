@@ -82,7 +82,7 @@ export function TableRow({
                 groupByDimensions,
                 breakdownByDimensions,
                 thenByDimensions,
-                dimensions,
+                dimensions.map(d => ({ ...d, formula: d.formula || null })),
                 activeDateTab
               )}
             </span>
@@ -103,7 +103,7 @@ export function TableRow({
             return (
               <td key={dimension.id} className="py-3 px-4 text-right">
                 <div className="flex flex-col items-end gap-1">
-                  <span className={cn(isNegative && "text-red-600")}>{formatValue(value, dimension)}</span>
+                  <span className={cn(isNegative && "text-red-600")}>{formatValue(value, { ...dimension, formula: dimension.formula || null })}</span>
                   {hasComparison && (
                     <span className={cn(
                       "text-xs flex items-center gap-1",

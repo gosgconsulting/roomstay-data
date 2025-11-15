@@ -9,13 +9,14 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
-import { loadDimensionsForUser, type Dimension } from "@/lib/dimensionLoader";
+import { loadDimensionsForUser } from "@/lib/dimensionLoader";
+import type { Dimension as LoaderDimension } from "@/lib/dimensionLoader";
 
 export interface Dimension {
   id: string;
   name: string;
   type: string;
-  scope: string;
+  scope?: string;
   account_id?: string;
   report_id?: string;
   formula?: string;
@@ -43,12 +44,22 @@ export async function loadAccountDimensions(accountId: string, userId?: string):
       // For account view, we don't have a specific reportId, so pass undefined
       const dimensions = await loadDimensionsForUser(userId);
       
-      // Filter to include account-specific and global dimensions
-      const accountDimensions = dimensions.filter(dim => 
-        dim.scope === 'account' || 
-        dim.scope === 'global' || 
-        (dim.scope === 'custom' && !dim.report_id) // Include global custom dimensions
-      );
+      // Convert to local Dimension interface and filter
+      const accountDimensions = dimensions
+        .map(dim => ({
+          id: dim.id,
+          name: dim.name,
+          type: dim.type,
+          scope: (dim as any).scope,
+          account_id: (dim as any).account_id,
+          report_id: (dim as any).report_id,
+          formula: (dim as any).formula,
+        }))
+        .filter(dim => 
+          dim.scope === 'account' || 
+          dim.scope === 'global' || 
+          (dim.scope === 'custom' && !dim.report_id) // Include global custom dimensions
+        );
       
       console.log('[DATA-LOADING-FIX] Loaded dimensions via centralized loader:', accountDimensions.length);
       return accountDimensions;
@@ -134,7 +145,7 @@ export async function loadReportData(
         name: 'Budget',
         type: 'currency',
         scope: 'virtual',
-        formula: null,
+        formula: undefined,
         account_id: accountId,
         report_id: reportId
       };
@@ -199,7 +210,7 @@ export async function loadReportData(
     console.log('[DATA-FIX] Loaded raw data rows:', allData.length);
 
     // 4. Normalize data structure - ensure all rows have dimension_values
-    const normalizedData = allData.map((row: any) => {
+    const normalizedData = allData.map((row: any, idx: number) => {
       // If row already has dimension_values, return as is
       if (row.dimension_values) {
         return row;
