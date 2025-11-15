@@ -4,6 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { fetchUniqueDimensionValues } from "../lib/vlookup/fetchUniqueValues";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -462,19 +466,98 @@ export default function VlookupModal({
                   />
                 </div>
 
-                {/* Target dimension - only input field for creating new */}
+                {/* Target dimension - combobox with existing + create new */}
                 <div className="col-span-3">
-                  <Label>Target Dimension</Label>
-                  <Input
-                    placeholder="e.g., Account Group"
-                    value={row.newDimensionName}
-                    onChange={(e) => updateRow(idx, { newDimensionName: e.target.value })}
-                  />
-                  {targetDimensions.length > 0 && (
-                    <div className="text-xs text-muted-foreground mt-1">
-                      Existing: {targetDimensions.map(d => d.name).join(', ')}
-                    </div>
-                  )}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className={cn(
+                          "w-full justify-between",
+                          !row.newDimensionName && "text-muted-foreground"
+                        )}
+                      >
+                        {row.newDimensionName || (
+                          targetDimensions.length > 0 
+                            ? "Select or create dimension..." 
+                            : "Create new dimension..."
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0">
+                      <Command>
+                        <CommandInput 
+                          placeholder={
+                            targetDimensions.length > 0 
+                              ? "Search or type new name..." 
+                              : "Type dimension name..."
+                          }
+                          value={row.newDimensionName}
+                          onValueChange={(val) => {
+                            updateRow(idx, { 
+                              newDimensionName: val,
+                              targetDimensionId: targetDimensions.find(d => d.name === val)?.id,
+                              creatingNew: !targetDimensions.find(d => d.name === val)
+                            });
+                          }}
+                        />
+                        <CommandList>
+                          {targetDimensions.length > 0 && (
+                            <CommandGroup heading="Existing Dimensions">
+                              {targetDimensions.map((dim) => (
+                                <CommandItem
+                                  key={dim.id}
+                                  value={dim.name}
+                                  onSelect={() => {
+                                    updateRow(idx, { 
+                                      newDimensionName: dim.name,
+                                      targetDimensionId: dim.id,
+                                      creatingNew: false
+                                    });
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      row.targetDimensionId === dim.id ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  {dim.name}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          )}
+                          {row.newDimensionName && !targetDimensions.find(d => d.name === row.newDimensionName) && (
+                            <CommandGroup heading="Create New">
+                              <CommandItem
+                                value={row.newDimensionName}
+                                onSelect={() => {
+                                  updateRow(idx, { 
+                                    newDimensionName: row.newDimensionName,
+                                    targetDimensionId: undefined,
+                                    creatingNew: true
+                                  });
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    row.creatingNew && row.newDimensionName ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                Create "{row.newDimensionName}"
+                              </CommandItem>
+                            </CommandGroup>
+                          )}
+                          <CommandEmpty>
+                            {row.newDimensionName ? `Create "${row.newDimensionName}"` : "Type to create new dimension"}
+                          </CommandEmpty>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
                 {/* Grouped value */}
