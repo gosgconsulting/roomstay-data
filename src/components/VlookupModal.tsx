@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import MultiSelect, { MultiSelectOption } from "@/components/MultiSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,7 +12,7 @@ import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 interface VlookupMapping {
   id?: string;
   sourceDimensionId: string;
-  sourceValue: string;
+  sourceValues: string[];
   targetDimensionId: string;
   targetDimensionName?: string;
   targetValue: string;
@@ -28,6 +29,7 @@ interface VlookupModalProps {
 export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }: VlookupModalProps) {
   const [mappings, setMappings] = useState<VlookupMapping[]>([]);
   const [dimensions, setDimensions] = useState<any[]>([]);
+  const [dimensionValueOptions, setDimensionValueOptions] = useState<Record<string, MultiSelectOption[]>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
@@ -47,6 +49,41 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
       // Load dimensions
       const dims = await loadDimensionsForUser(user.id, reportId);
       setDimensions(dims.filter(d => d.type !== 'date'));
+
+      // Preload up to 1000 rows of dimension_data and extract unique values per dimension
+      const filterBy = reportId ? { column: "report_id", value: reportId } : accountId ? { column: "account_id", value: accountId } : null;
+      let rows: any[] = [];
+      if (filterBy) {
+        const { data: dimData, error: dimErr } = await (supabase as any)
+          .from('dimension_data')
+          .select('dimension_values')
+          .eq(filterBy.column, filterBy.value)
+          .limit(1000);
+        if (dimErr) {
+          console.error('[VLOOKUP] Error loading dimension values:', dimErr);
+        } else {
+          rows = dimData || [];
+        }
+      }
+      const dimIds = new Set<string>(dims.filter(d => d.type !== 'date').map((d: any) => d.id));
+      const valuesMap: Record<string, Set<string>> = {};
+      rows.forEach((r) => {
+        const dv = r.dimension_values as Record<string, any>;
+        if (!dv) return;
+        Object.keys(dv).forEach((k) => {
+          if (!dimIds.has(k)) return;
+          const val = dv[k];
+          if (val === undefined || val === null || val === "") return;
+          if (!valuesMap[k]) valuesMap[k] = new Set<string>();
+          valuesMap[k].add(String(val));
+        });
+      });
+      const optionsMap: Record<string, MultiSelectOption[]> = {};
+      Object.entries(valuesMap).forEach(([k, set]) => {
+        const opts = Array.from(set).sort((a, b) => a.localeCompare(b)).map(v => ({ label: v, value: v }));
+        optionsMap[k] = opts;
+      });
+      setDimensionValueOptions(optionsMap);
 
       // Load existing mappings
       const query = supabase
@@ -68,14 +105,14 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
         setMappings(data.map((m: any) => ({
           id: m.id,
           sourceDimensionId: m.source_dimension_id || '',
-          sourceValue: m.source_value,
+          sourceValues: m.source_value ? [m.source_value] : [],
           targetDimensionId: m.target_dimension_id,
           targetDimensionName: m.target_dimension_name || '',
           targetValue: m.target_value,
         })));
       } else {
         // Start with one empty row
-        setMappings([{ sourceDimensionId: '', sourceValue: '', targetDimensionId: '', targetValue: '' }]);
+        setMappings([{ sourceDimensionId: '', sourceValues: [], targetDimensionId: '', targetValue: '' }]);
       }
     } catch (error) {
       console.error('Error loading vlookup data:', error);
@@ -90,14 +127,14 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
   };
 
   const addRow = () => {
-    setMappings([...mappings, { sourceDimensionId: '', sourceValue: '', targetDimensionId: '', targetValue: '' }]);
+    setMappings([...mappings, { sourceDimensionId: '', sourceValues: [], targetDimensionId: '', targetValue: '' }]);
   };
 
   const removeRow = (index: number) => {
     setMappings(mappings.filter((_, i) => i !== index));
   };
 
-  const updateMapping = (index: number, field: keyof VlookupMapping, value: string) => {
+  const updateMapping = (index: number, field: keyof VlookupMapping, value: any) => {
     const updated = [...mappings];
     updated[index] = { ...updated[index], [field]: value };
     setMappings(updated);
@@ -200,7 +237,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
 
       // Filter out empty rows
       const validMappings = mappings.filter(m => 
-        m.sourceDimensionId && m.sourceValue.trim() && m.targetDimensionId && m.targetValue.trim()
+        m.sourceDimensionId && m.sourceValues && m.sourceValues.length > 0 && m.targetDimensionId && m.targetValue.trim()
       );
 
       // Delete existing mappings
@@ -220,18 +257,19 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
 
       // Insert new mappings
       if (validMappings.length > 0) {
-        const insertData = validMappings.map(m => {
+        // Expand each selected source value into its own row (DB stores one source_value per record)
+        const insertData = validMappings.flatMap(m => {
           const targetDim = dimensions.find(d => d.id === m.targetDimensionId);
-          return {
+          return m.sourceValues.map((sv) => ({
             user_id: user.id,
             report_id: reportId || null,
             account_id: accountId || null,
             source_dimension_id: m.sourceDimensionId,
-            source_value: m.sourceValue.trim(),
+            source_value: String(sv).trim(),
             target_dimension_id: m.targetDimensionId,
             target_dimension_name: targetDim?.name || m.targetDimensionName || '',
             target_value: m.targetValue.trim(),
-          };
+          }));
         });
 
         const { error: insertError } = await supabase
@@ -243,7 +281,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
 
       toast({
         title: "Success",
-        description: `Saved ${validMappings.length} vlookup mappings`,
+        description: `Saved ${validMappings.reduce((acc, m) => acc + m.sourceValues.length, 0)} vlookup mappings`,
       });
 
       // Apply the mappings to dimension_data with retry logic
@@ -368,7 +406,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
             <thead className="sticky top-0 bg-background z-10">
               <tr className="border-b">
                 <th className="text-left p-2 font-medium">Source Dimension</th>
-                <th className="text-left p-2 font-medium">Original Value</th>
+                <th className="text-left p-2 font-medium">Dimension Value</th>
                 <th className="text-left p-2 font-medium">Target Dimension</th>
                 <th className="text-left p-2 font-medium">Mapped Value</th>
                 <th className="w-12"></th>
@@ -380,7 +418,13 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
                   <td className="p-2">
                     <Select
                       value={mapping.sourceDimensionId}
-                      onValueChange={(value) => updateMapping(index, 'sourceDimensionId', value)}
+                      onValueChange={(value) => {
+                        // When changing source dimension, clear previously selected values
+                        const updated = { ...mapping, sourceDimensionId: value, sourceValues: [] };
+                        const next = [...mappings];
+                        next[index] = updated;
+                        setMappings(next);
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select source" />
@@ -395,11 +439,13 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
                     </Select>
                   </td>
                   <td className="p-2">
-                    <Input
-                      value={mapping.sourceValue}
-                      onChange={(e) => updateMapping(index, 'sourceValue', e.target.value)}
-                      placeholder="e.g., Hotel A"
-                      className="w-full"
+                    <MultiSelect
+                      options={dimensionValueOptions[mapping.sourceDimensionId] || []}
+                      values={mapping.sourceValues || []}
+                      onChange={(vals) => updateMapping(index, 'sourceValues', vals)}
+                      placeholder="Select values..."
+                      searchPlaceholder="Search values..."
+                      disabled={!mapping.sourceDimensionId || isLoading}
                     />
                   </td>
                   <td className="p-2">
