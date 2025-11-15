@@ -185,13 +185,13 @@ export const FiltersBar = ({
     }
   }, [activeDimensions, reportId]);
 
-  // Persist filter settings after changes
+  // Persist filter settings after changes (only in Edit mode)
   useEffect(() => {
-    if (reportId && !isLoading && !isInitialLoad) {
+    if (reportId && !isLoading && !isInitialLoad && isEditMode) {
       const t = setTimeout(() => saveFilterSettings(), 300);
       return () => clearTimeout(t);
     }
-  }, [activeDimensions, selectedFilters, dateRange, datePreset, masterDimensionId, reportId, isInitialLoad]);
+  }, [activeDimensions, selectedFilters, dateRange, datePreset, masterDimensionId, reportId, isInitialLoad, isEditMode]);
 
   // Update compare range when needed
   useEffect(() => {
@@ -701,7 +701,8 @@ export const FiltersBar = ({
     });
     setSelectedFilters(next);
 
-    if (!reportId || isSharedView || isInitialLoad) return;
+    // Only persist changes in Edit mode
+    if (!reportId || isSharedView || isInitialLoad || !isEditMode) return;
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
