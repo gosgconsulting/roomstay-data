@@ -246,8 +246,57 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
 
       // Filter out empty rows
       const validMappings = mappings.filter(m => 
-        m.sourceDimensionId && m.sourceValues && m.sourceValues.length > 0 && m.targetDimensionId && m.targetValue.trim()
+        m.sourceDimensionId && m.sourceValues && m.sourceValues.length > 0 && m.targetDimensionName && m.targetDimensionName.trim() && m.targetValue.trim()
       );
+
+      if (validMappings.length === 0) {
+        toast({
+          title: "No valid mappings",
+          description: "Please add at least one complete mapping",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Create new vlookup dimensions for unique target dimension names
+      const uniqueTargetNames = [...new Set(validMappings.map(m => m.targetDimensionName!.trim()))];
+      const createdDimensions: Record<string, string> = {}; // name -> id
+
+      for (const targetName of uniqueTargetNames) {
+        // Check if dimension already exists
+        const { data: existingDim } = await supabase
+          .from('dimensions')
+          .select('id')
+          .eq('name', targetName)
+          .eq('user_id', user.id)
+          .eq('type', 'vlookup')
+          .maybeSingle();
+
+        if (existingDim) {
+          createdDimensions[targetName] = existingDim.id;
+        } else {
+          // Create new vlookup dimension
+          const { data: newDim, error: dimError } = await supabase
+            .from('dimensions')
+            .insert({
+              name: targetName,
+              type: 'vlookup',
+              user_id: user.id,
+              report_id: reportId || null,
+              account_id: accountId || null,
+              scope: reportId ? 'custom' : 'account'
+            })
+            .select('id')
+            .single();
+
+          if (dimError) {
+            console.error('Error creating vlookup dimension:', dimError);
+            throw new Error(`Failed to create dimension "${targetName}": ${dimError.message}`);
+          }
+
+          createdDimensions[targetName] = newDim.id;
+        }
+      }
 
       // Delete existing mappings
       const deleteQuery = supabase
@@ -264,19 +313,18 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
       const { error: deleteError } = await deleteQuery;
       if (deleteError) throw deleteError;
 
-      // Insert new mappings
+      // Insert new mappings with created dimension IDs
       if (validMappings.length > 0) {
-        // Expand each selected source value into its own row (DB stores one source_value per record)
         const insertData = validMappings.flatMap(m => {
-          const targetDim = dimensions.find(d => d.id === m.targetDimensionId);
+          const targetDimensionId = createdDimensions[m.targetDimensionName!.trim()];
           return m.sourceValues.map((sv) => ({
             user_id: user.id,
             report_id: reportId || null,
             account_id: accountId || null,
             source_dimension_id: m.sourceDimensionId,
             source_value: String(sv).trim(),
-            target_dimension_id: m.targetDimensionId,
-            target_dimension_name: targetDim?.name || m.targetDimensionName || '',
+            target_dimension_id: targetDimensionId,
+            target_dimension_name: m.targetDimensionName!.trim(),
             target_value: m.targetValue.trim(),
           }));
         });
@@ -290,7 +338,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
 
       toast({
         title: "Success",
-        description: `Saved ${validMappings.reduce((acc, m) => acc + m.sourceValues.length, 0)} vlookup mappings`,
+        description: `Created ${uniqueTargetNames.length} vlookup dimension(s) and saved ${validMappings.reduce((acc, m) => acc + m.sourceValues.length, 0)} mappings`,
       });
 
       // Apply the mappings to dimension_data with retry logic
@@ -354,7 +402,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
             console.log('[VLOOKUP] Successfully applied mappings');
             toast({
               title: "Success",
-              description: `Applied vlookup mappings to ${applyResult?.rowsUpdated || 0} rows. Account dimension is now available in filters.`,
+              description: `Applied vlookup mappings to ${applyResult?.rowsUpdated || 0} rows. New dimensions are now available in filters.`,
             });
           }
         } catch (applyErr) {
@@ -365,7 +413,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
             const errorMsg = applyErr instanceof Error ? applyErr.message : 'Unknown error';
             toast({
               title: "Warning",
-              description: `Mappings saved but failed to apply after ${maxRetries} attempts: ${errorMsg}. Don't worry - your mappings are saved and will be automatically applied when you load data in the performance table. The apply function is optional and mainly updates existing data.`,
+              description: `Dimensions created and mappings saved but failed to apply after ${maxRetries} attempts: ${errorMsg}. Don't worry - your mappings are saved and will be automatically applied when you load data in the performance table.`,
               variant: "destructive",
             });
           } else {
@@ -385,9 +433,10 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
       onOpenChange(false);
     } catch (error) {
       console.error('Error saving vlookup mappings:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       toast({
         title: "Error",
-        description: "Failed to save vlookup mappings",
+        description: `Failed to save vlookup mappings: ${errorMessage}`,
         variant: "destructive",
       });
     } finally {
@@ -458,21 +507,12 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
                     />
                   </td>
                   <td className="p-2">
-                    <Select
-                      value={mapping.targetDimensionId}
-                      onValueChange={(value) => updateMapping(index, 'targetDimensionId', value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select target" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {dimensions.map(dim => (
-                          <SelectItem key={dim.id} value={dim.id}>
-                            {dim.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      value={mapping.targetDimensionName || ''}
+                      onChange={(e) => updateMapping(index, 'targetDimensionName', e.target.value)}
+                      placeholder="e.g., Account"
+                      className="w-full"
+                    />
                   </td>
                   <td className="p-2">
                     <Input
