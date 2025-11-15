@@ -5,10 +5,33 @@ import {
   fetchReportDimensions,
   fetchOldDimensions,
 } from "./queryFunctions";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Creates a map of dimension name (lowercase) to dimension ID for account-scoped dimensions
- * Uses react-query cache for efficient fetching
+ * Normalize a dimension name for matching
+ */
+function normalizeName(name: string): { lower: string; compact: string } {
+  const lower = (name || "").trim().toLowerCase();
+  const compact = lower.replace(/\s+/g, "");
+  return { lower, compact };
+}
+
+/**
+ * Adds a name entry (lower and compact) to the map if not present
+ */
+function addNameEntries(
+  map: Map<string, string>,
+  name: string,
+  id: string
+) {
+  const { lower, compact } = normalizeName(name);
+  if (!map.has(lower)) map.set(lower, id);
+  if (!map.has(compact)) map.set(compact, id);
+}
+
+/**
+ * Creates a map of dimension name (normalized) to dimension ID
+ * Priority order: account > report > global
  */
 export async function createAccountDimensionMap(
   queryClient: QueryClient,
@@ -17,27 +40,31 @@ export async function createAccountDimensionMap(
 ): Promise<Map<string, string>> {
   const dimensionNameToIdMap = new Map<string, string>();
 
-  // Fetch account-scoped dimensions using react-query cache
+  // 1) Account-scoped dimensions (highest priority)
   const accountDimensions = await queryClient.fetchQuery({
     queryKey: resyncQueryKeys.dimensions.account(accountId),
     queryFn: fetchAccountDimensions,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
+  accountDimensions.forEach((dim) => addNameEntries(dimensionNameToIdMap, dim.name, dim.id));
 
-  accountDimensions.forEach((dim) => {
-    dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
-  });
-
-  // Fetch report-specific dimensions using react-query cache
+  // 2) Report-specific dimensions
   const reportDimensions = await queryClient.fetchQuery({
     queryKey: resyncQueryKeys.dimensions.report(reportId),
     queryFn: fetchReportDimensions,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
+  reportDimensions.forEach((dim) => addNameEntries(dimensionNameToIdMap, dim.name, dim.id));
 
-  reportDimensions.forEach((dim) => {
-    dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
-  });
+  // 3) Global dimensions (fallback if account/report not found)
+  const { data: globalDimensions, error: globalError } = await supabase
+    .from("dimensions")
+    .select("id, name, scope")
+    .eq("scope", "global");
+
+  if (!globalError && globalDimensions) {
+    globalDimensions.forEach((dim: any) => addNameEntries(dimensionNameToIdMap, dim.name, dim.id));
+  }
 
   return dimensionNameToIdMap;
 }
@@ -54,21 +81,20 @@ export async function createOldDimensionIdToNameMap(
     return new Map();
   }
 
-  // Remove duplicates and sort for consistent cache key
   const uniqueIds = Array.from(new Set(oldDimensionIds)).sort();
 
-  // Fetch old dimensions using react-query cache
   const oldDimensions = await queryClient.fetchQuery({
     queryKey: resyncQueryKeys.dimensions.oldDimensions(uniqueIds),
     queryFn: fetchOldDimensions,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 
   const oldIdToNameMap = new Map<string, string>();
   oldDimensions.forEach((dim) => {
-    oldIdToNameMap.set(dim.id, dim.name);
+    if (dim?.id && dim?.name) {
+      oldIdToNameMap.set(dim.id, dim.name);
+    }
   });
 
   return oldIdToNameMap;
 }
-

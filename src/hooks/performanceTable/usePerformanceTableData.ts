@@ -167,9 +167,11 @@ export function usePerformanceTableData({
             if (!values || values.length === 0) continue;
             const rowVal = dv[dimId];
             if (rowVal === undefined || rowVal === null) return false;
-            const rowStr = String(rowVal);
-            // Must match one of the values exactly (case-sensitive)
-            if (!values.some((v) => rowStr === v)) return false;
+
+            const rowStr = String(rowVal).trim().toLowerCase();
+            const filterValuesLower = (values as string[]).map(v => String(v).trim().toLowerCase());
+
+            if (!filterValuesLower.some((v) => v === rowStr)) return false;
           }
           return true;
         });
