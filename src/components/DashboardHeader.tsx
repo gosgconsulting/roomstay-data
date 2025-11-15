@@ -12,7 +12,7 @@ import { DimensionModal } from "./DimensionModal";
 import { ReportModal } from "./ReportModal";
 import { ShareModal } from "./ShareModal";
 import { SyncModeModal } from "./SyncModeModal";
-import { VlookupModal } from "./VlookupModal";
+import VlookupModal from "./VlookupModal";
 import { Session } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";

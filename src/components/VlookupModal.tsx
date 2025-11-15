@@ -1,315 +1,219 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import MultiSelect, { MultiSelectOption } from "@/components/MultiSelect";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Save } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { loadDimensionsForUser } from "@/lib/dimensionLoader";
+import { fetchUniqueDimensionValues } from "../lib/vlookup/fetchUniqueValues";
+import { useDebounce } from "@/hooks/useDebounce";
+import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 
-interface VlookupMapping {
-  id?: string;
-  sourceDimensionId: string;
-  sourceValues: string[];
-  targetDimensionName: string;
-  targetValue: string;
-}
+type Row = {
+  sourceDimensionId?: string;
+  valuesToMap: string[];
+  newDimensionName: string;
+  groupedValue: string;
+};
 
 interface VlookupModalProps {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
-  reportId?: string;
+  onOpenChange: (o: boolean) => void;
+  reportId: string | null;
+  reportIds?: string[];
   accountId?: string;
-  onSave?: () => void;
+  dimensions?: Dimension[];
+  onCreate?: (rows: Row[]) => void;
 }
 
-export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }: VlookupModalProps) {
-  const [mappings, setMappings] = useState<VlookupMapping[]>([]);
-  const [dimensions, setDimensions] = useState<any[]>([]);
-  const [dimensionValueOptions, setDimensionValueOptions] = useState<Record<string, MultiSelectOption[]>>({});
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const { toast } = useToast();
+export default function VlookupModal({
+  open,
+  onOpenChange,
+  reportId,
+  reportIds,
+  accountId,
+  dimensions = [],
+  onCreate,
+}: VlookupModalProps) {
+  const [rows, setRows] = useState<Row[]>([{ valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
+  const [options, setOptions] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
+  const [loadingOptions, setLoadingOptions] = useState(false);
 
+  const textDimensions = useMemo(
+    () => dimensions.filter(d => d.type === "text"),
+    [dimensions]
+  );
+
+  const selectedSourceDimensionId = rows[0]?.sourceDimensionId;
+
+  // Load unique values whenever source dimension changes or search updates
   useEffect(() => {
-    if (open) {
-      loadData();
-    }
-  }, [open, reportId]);
+    let cancelled = false;
 
-  const loadData = async () => {
-    setIsLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Load dimensions (exclude date and vlookup dimensions)
-      const dims = await loadDimensionsForUser(user.id, reportId);
-      const filteredDimensions = dims.filter(d => d.type !== 'date' && d.type !== 'vlookup');
-      setDimensions(filteredDimensions);
-
-      // Load dimension values for source dimensions
-      if (reportId) {
-        const { data: dimData, error: dimErr } = await supabase
-          .from('dimension_data')
-          .select('dimension_values')
-          .eq('report_id', reportId)
-          .limit(1000);
-        
-        if (!dimErr && dimData) {
-          const dimIds = new Set<string>(filteredDimensions.map((d: any) => d.id));
-          const valuesMap: Record<string, Set<string>> = {};
-          
-          dimData.forEach((row: any) => {
-            const dv = row.dimension_values as Record<string, any>;
-            if (!dv) return;
-            
-            Object.keys(dv).forEach((key) => {
-              if (!dimIds.has(key)) return;
-              const val = dv[key];
-              if (val === undefined || val === null || val === "") return;
-              if (!valuesMap[key]) valuesMap[key] = new Set<string>();
-              valuesMap[key].add(String(val));
-            });
-          });
-          
-          const optionsMap: Record<string, MultiSelectOption[]> = {};
-          Object.entries(valuesMap).forEach(([k, set]) => {
-            optionsMap[k] = Array.from(set).sort((a, b) => a.localeCompare(b)).map(v => ({ label: v, value: v }));
-          });
-          setDimensionValueOptions(optionsMap);
-        }
+    async function load() {
+      if (!open) return;
+      if (!selectedSourceDimensionId) {
+        setOptions([]);
+        return;
       }
-
-      // Load existing mappings
-      let query = supabase
-        .from('cluster_mappings')
-        .select('*');
-
-      // For now, initialize with empty mappings since table doesn't exist yet
-      // TODO: Create proper dimension_mappings table
-      setMappings([{ sourceDimensionId: '', sourceValues: [], targetDimensionName: '', targetValue: '' }]);
-    } catch (error) {
-      console.error('Error loading vlookup data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load vlookup mappings",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const addRow = () => {
-    setMappings([...mappings, { sourceDimensionId: '', sourceValues: [], targetDimensionName: '', targetValue: '' }]);
-  };
-
-  const removeRow = (index: number) => {
-    setMappings(mappings.filter((_, i) => i !== index));
-  };
-
-  const updateMapping = (index: number, field: keyof VlookupMapping, value: any) => {
-    const updated = [...mappings];
-    updated[index] = { ...updated[index], [field]: value };
-    setMappings(updated);
-  };
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Filter out empty rows
-      const validMappings = mappings.filter(m => 
-        m.sourceDimensionId && 
-        m.sourceValues && 
-        m.sourceValues.length > 0 && 
-        m.targetDimensionName && 
-        m.targetDimensionName.trim() && 
-        m.targetValue.trim()
-      );
-
-      if (validMappings.length === 0) {
-        toast({
-          title: "No valid mappings",
-          description: "Please add at least one complete mapping",
-          variant: "destructive",
-        });
+      if (!reportId && (!reportIds || reportIds.length === 0)) {
+        setOptions([]);
         return;
       }
 
-      // Create target dimensions
-      const uniqueTargetNames = [...new Set(validMappings.map(m => m.targetDimensionName!.trim()))];
-      const createdDimensions: Record<string, string> = {};
+      setLoadingOptions(true);
+      const values = await fetchUniqueDimensionValues({
+        reportId: reportId ?? undefined,
+        reportIds,
+        dimensionId: selectedSourceDimensionId,
+        search: debouncedSearch || undefined,
+        limit: 5000,
+      }).catch(() => []);
 
-      for (const targetName of uniqueTargetNames) {
-        // Check if dimension already exists
-        const { data: existingDim } = await supabase
-          .from('dimensions')
-          .select('id')
-          .eq('name', targetName)
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        if (existingDim) {
-          createdDimensions[targetName] = existingDim.id;
-        } else {
-          // Create new dimension as text type
-          const { data: newDim, error: dimError } = await supabase
-            .from('dimensions')
-            .insert({
-              name: targetName,
-              type: 'text',
-              user_id: user.id,
-              report_id: reportId || null,
-              account_id: accountId || null,
-              scope: reportId ? 'custom' : 'account'
-            })
-            .select('id')
-            .single();
-
-          if (dimError) throw dimError;
-          createdDimensions[targetName] = newDim.id;
-        }
+      if (!cancelled) {
+        setOptions(values);
+        setLoadingOptions(false);
       }
-
-      // Delete existing mappings (skip for now)
-      // TODO: Implement when dimension_mappings table exists
-
-      // Insert new mappings (skip for now)
-      // TODO: Implement when dimension_mappings table exists
-
-      toast({
-        title: "Success",
-        description: `Created ${uniqueTargetNames.length} dimension(s). Mappings will be available once database table is created.`,
-      });
-
-      // Skip edge function call for now
-      // TODO: Re-enable when dimension_mappings table exists
-
-      if (onSave) onSave();
-      onOpenChange(false);
-    } catch (error) {
-      console.error('Error saving vlookup mappings:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save vlookup mappings",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
     }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, selectedSourceDimensionId, debouncedSearch, reportId, JSON.stringify(reportIds)]);
+
+  const updateRow = (index: number, patch: Partial<Row>) => {
+    setRows(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], ...patch };
+      return copy;
+    });
+  };
+
+  const addRow = () => setRows(prev => [...prev, { sourceDimensionId: selectedSourceDimensionId, valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
+  const removeRow = (index: number) => setRows(prev => prev.filter((_, i) => i !== index));
+
+  const handleCreate = () => {
+    const valid = rows.filter(r => r.sourceDimensionId && r.valuesToMap.length > 0 && r.newDimensionName.trim() && r.groupedValue.trim());
+    if (valid.length === 0) return;
+    onCreate?.(valid as Row[]);
+    onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Create Pivot Dimensions</DialogTitle>
-          <p className="text-sm text-muted-foreground mt-2">
-            Map multiple values to create new text dimensions for grouping and analysis.
-          </p>
         </DialogHeader>
 
-        <div className="text-sm text-muted-foreground mb-4">
-          Example: Map "Hotel A", "Hotel B", "Hotel C" → "Brady" to create a new Account dimension.
+        <div className="space-y-4">
+          {rows.map((row, idx) => (
+            <div key={idx} className="grid grid-cols-12 gap-3 items-end">
+              <div className="col-span-3">
+                <Label>Source Dimension</Label>
+                <Select
+                  value={row.sourceDimensionId}
+                  onValueChange={(val) => {
+                    // set on the current row
+                    updateRow(idx, { sourceDimensionId: val, valuesToMap: [] });
+                    // also align first row's source for options loading UX
+                    if (idx === 0) {
+                      setRows(prev => prev.map((r, i) => i === 0 ? { ...r, sourceDimensionId: val } : r));
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select dimension" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {textDimensions.map(d => (
+                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="col-span-4">
+                <Label>Values to Map</Label>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Search..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  <div className="max-h-48 overflow-auto border rounded p-2">
+                    {loadingOptions ? (
+                      <div className="text-sm text-muted-foreground">Loading values…</div>
+                    ) : options.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">No values found</div>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        {options.map((val) => {
+                          const selected = row.valuesToMap.includes(val);
+                          return (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() => {
+                                const valuesToMap = selected
+                                  ? row.valuesToMap.filter(v => v !== val)
+                                  : [...row.valuesToMap, val];
+                                updateRow(idx, { valuesToMap });
+                              }}
+                              className={`text-left px-2 py-1 rounded ${selected ? 'bg-primary/10' : 'hover:bg-accent'}`}
+                            >
+                              {val}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  {row.valuesToMap.length > 0 && (
+                    <div className="text-xs text-muted-foreground">{row.valuesToMap.length} selected</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="col-span-3">
+                <Label>New Dimension Name</Label>
+                <Input
+                  placeholder="e.g., Account"
+                  value={row.newDimensionName}
+                  onChange={(e) => updateRow(idx, { newDimensionName: e.target.value })}
+                />
+              </div>
+
+              <div className="col-span-2">
+                <Label>Grouped Value</Label>
+                <Input
+                  placeholder="e.g., Brady"
+                  value={row.groupedValue}
+                  onChange={(e) => updateRow(idx, { groupedValue: e.target.value })}
+                />
+              </div>
+
+              <div className="col-span-12 flex items-center gap-2">
+                {rows.length > 1 && (
+                  <Button variant="outline" size="sm" onClick={() => removeRow(idx)}>
+                    Remove
+                  </Button>
+                )}
+                {idx === rows.length - 1 && (
+                  <Button variant="outline" size="sm" onClick={addRow}>
+                    + Add Row
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
 
-        <div className="flex-1 overflow-auto">
-          <table className="w-full border-collapse">
-            <thead className="sticky top-0 bg-background z-10">
-              <tr className="border-b">
-                <th className="text-left p-2 font-medium">Source Dimension</th>
-                <th className="text-left p-2 font-medium">Values to Map</th>
-                <th className="text-left p-2 font-medium">New Dimension Name</th>
-                <th className="text-left p-2 font-medium">Grouped Value</th>
-                <th className="w-12"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {mappings.map((mapping, index) => (
-                <tr key={index} className="border-b">
-                  <td className="p-2">
-                    <Select
-                      value={mapping.sourceDimensionId}
-                      onValueChange={(value) => {
-                        const updated = { ...mapping, sourceDimensionId: value, sourceValues: [] };
-                        const next = [...mappings];
-                        next[index] = updated;
-                        setMappings(next);
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select source" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {dimensions.map(dim => (
-                          <SelectItem key={dim.id} value={dim.id}>
-                            {dim.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  <td className="p-2">
-                    <MultiSelect
-                      options={dimensionValueOptions[mapping.sourceDimensionId] || []}
-                      values={mapping.sourceValues || []}
-                      onChange={(vals) => updateMapping(index, 'sourceValues', vals)}
-                      placeholder="Select values..."
-                      disabled={!mapping.sourceDimensionId || isLoading}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <Input
-                      value={mapping.targetDimensionName || ''}
-                      onChange={(e) => updateMapping(index, 'targetDimensionName', e.target.value)}
-                      placeholder="e.g., Account"
-                      className="w-full"
-                    />
-                  </td>
-                  <td className="p-2">
-                    <Input
-                      value={mapping.targetValue}
-                      onChange={(e) => updateMapping(index, 'targetValue', e.target.value)}
-                      placeholder="e.g., Brady"
-                      className="w-full"
-                    />
-                  </td>
-                  <td className="p-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeRow(index)}
-                      disabled={mappings.length === 1}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="flex justify-between items-center pt-4 border-t">
-          <Button onClick={addRow} variant="outline" size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Row
-          </Button>
-          <div className="flex gap-2">
-            <Button onClick={() => onOpenChange(false)} variant="outline">
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={isSaving}>
-              <Save className="h-4 w-4 mr-2" />
-              {isSaving ? 'Saving...' : 'Create Dimensions'}
-            </Button>
-          </div>
+        <div className="flex justify-end gap-2 pt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleCreate}>Create Dimensions</Button>
         </div>
       </DialogContent>
     </Dialog>
