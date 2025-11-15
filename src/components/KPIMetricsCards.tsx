@@ -96,6 +96,25 @@ export const KPIMetricsCards = ({
         return;
       }
 
+      // Load KPI settings if available (visible_kpis and kpi_order)
+      let visibleKPIs: string[] | null = null;
+      let kpiOrder: string[] | null = null;
+
+      if (user?.id) {
+        const { data: viewSettings } = await supabase
+          .from("report_views")
+          .select("visible_kpis, kpi_order")
+          .eq("report_id", reportId)
+          .eq("user_id", user.id)
+          .eq("is_default", true)
+          .maybeSingle();
+
+        if (viewSettings) {
+          visibleKPIs = (viewSettings as any).visible_kpis || null;
+          kpiOrder = (viewSettings as any).kpi_order || null;
+        }
+      }
+
       const currentMonthRange = getCurrentMonthDateRange();
 
       const dataFilters = {
@@ -123,9 +142,9 @@ export const KPIMetricsCards = ({
 
       // Load comparison period data if comparison is enabled
       let comparisonMetrics: Record<string, number> = {};
-      if (stableFilters.compareEnabled) {
-        const currentPeriod = dataFilters.dateRange!;
-        const daysDiff = Math.ceil((currentPeriod.to!.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
+      if (stableFilters.compareEnabled && dataFilters.dateRange?.from && dataFilters.dateRange?.to) {
+        const currentPeriod = dataFilters.dateRange;
+        const daysDiff = Math.ceil((currentPeriod.to.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
         const previousPeriodEnd = new Date(currentPeriod.from);
         previousPeriodEnd.setDate(previousPeriodEnd.getDate() - 1);
         const previousPeriodStart = new Date(previousPeriodEnd);
@@ -147,8 +166,6 @@ export const KPIMetricsCards = ({
         "CPC", "Cost", "Revenue", "ROAS", "Cost of sale"
       ];
 
-      // Build display metrics from calculated metrics
-      const displayMetrics: KPIMetric[] = [];
       const iconMap: Record<string, React.ComponentType<any>> = {
         "Impressions": Eye,
         "Clicks": MousePointer,
@@ -183,14 +200,17 @@ export const KPIMetricsCards = ({
         "Default": "text-blue-600"
       };
 
-      const kpisToShow = defaultKPIs;
-      const orderedKPIs = kpisToShow;
+      const kpisToShow = visibleKPIs || defaultKPIs;
+      const orderedKPIs = kpiOrder || kpisToShow;
+
+      const displayMetrics: KPIMetric[] = [];
 
       orderedKPIs.forEach(kpiName => {
+        if (!kpisToShow.includes(kpiName)) return;
+
         const value = currentMetrics[kpiName];
         if (value === undefined || value === null) return;
 
-        let formattedValue: string | number = value;
         let formattedCompareValue: string | number | undefined;
         let change: number | undefined;
 

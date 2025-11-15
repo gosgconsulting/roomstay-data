@@ -33,13 +33,13 @@ export function KPIChart({ reportId, filters, accountId, visibilityRefreshTrigge
       compareDateRange: filters.compareDateRange,
     };
   }, [
-    JSON.stringify(filters.dimensionFilters),
-    filters.dateRange?.from?.toISOString(),
-    filters.dateRange?.to?.toISOString(),
+    JSON.stringify(filters.dimensionFilters || {}),
+    filters.dateRange?.from ? (filters.dateRange.from as Date).toISOString() : undefined,
+    filters.dateRange?.to ? (filters.dateRange.to as Date).toISOString() : undefined,
     filters.compareEnabled,
     filters.compareType,
-    filters.compareDateRange?.from?.toISOString(),
-    filters.compareDateRange?.to?.toISOString(),
+    filters.compareDateRange?.from ? (filters.compareDateRange.from as Date).toISOString() : undefined,
+    filters.compareDateRange?.to ? (filters.compareDateRange.to as Date).toISOString() : undefined,
   ]);
 
   // Resolve accountId if not passed
@@ -143,9 +143,9 @@ export function KPIChart({ reportId, filters, accountId, visibilityRefreshTrigge
 
       // Previous period data if enabled
       const previousDateGroups = new Map<string, number>();
-      if (stableFilters.compareEnabled) {
-        const currentPeriod = dataFilters.dateRange!;
-        const daysDiff = Math.ceil((currentPeriod.to!.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
+      if (stableFilters.compareEnabled && dataFilters.dateRange?.from && dataFilters.dateRange?.to) {
+        const currentPeriod = dataFilters.dateRange;
+        const daysDiff = Math.ceil((currentPeriod.to.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
         const previousPeriodEnd = new Date(currentPeriod.from);
         previousPeriodEnd.setDate(previousPeriodEnd.getDate() - 1);
         const previousPeriodStart = new Date(previousPeriodEnd);
