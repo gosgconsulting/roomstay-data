@@ -9,6 +9,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { loadDimensionsForUser, type Dimension } from "@/lib/dimensionLoader";
 
 export interface Dimension {
   id: string;
@@ -31,13 +32,30 @@ export interface DataLoadingResult {
 }
 
 /**
- * Load dimensions for an account using the same pattern as Roomstay
+ * Load dimensions for account with proper priority
  */
 export async function loadAccountDimensions(accountId: string, userId?: string): Promise<Dimension[]> {
-  console.log('[DATA-FIX] Loading dimensions for account:', accountId, 'user:', userId);
-  
   try {
-    // Load account-scoped dimensions (highest priority)
+    console.log('[DATA-LOADING-FIX] Loading dimensions for account:', accountId, 'user:', userId);
+
+    // Use centralized dimension loader if userId is provided
+    if (userId) {
+      // For account view, we don't have a specific reportId, so pass undefined
+      const dimensions = await loadDimensionsForUser(userId);
+      
+      // Filter to include account-specific and global dimensions
+      const accountDimensions = dimensions.filter(dim => 
+        dim.scope === 'account' || 
+        dim.scope === 'global' || 
+        (dim.scope === 'custom' && !dim.report_id) // Include global custom dimensions
+      );
+      
+      console.log('[DATA-LOADING-FIX] Loaded dimensions via centralized loader:', accountDimensions.length);
+      return accountDimensions;
+    }
+
+    // Fallback for cases without userId (shared views, etc.)
+    // Load account-specific dimensions
     const { data: accountData, error: accountError } = await supabase
       .from("dimensions")
       .select("*")
@@ -46,20 +64,6 @@ export async function loadAccountDimensions(accountId: string, userId?: string):
       .order("created_at", { ascending: false });
 
     if (accountError) throw accountError;
-
-    // Load custom dimensions for the user (only if userId provided)
-    let customData: Dimension[] = [];
-    if (userId) {
-      const { data, error: customError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("scope", "custom")
-        .order("created_at", { ascending: false });
-
-      if (customError) throw customError;
-      customData = data || [];
-    }
 
     // Load global dimensions (lowest priority)
     const { data: globalData, error: globalError } = await supabase
@@ -70,34 +74,27 @@ export async function loadAccountDimensions(accountId: string, userId?: string):
 
     if (globalError) throw globalError;
 
-    // Combine dimensions with proper priority: account > custom > global
+    // Combine dimensions with proper priority: account > global
     const allDimensions = [
       ...(accountData || []),
-      ...(customData || []),
       ...(globalData || [])
     ];
 
-    // Deduplicate by name, keeping the highest priority version
-    const seenNames = new Set<string>();
-    const uniqueDimensions = allDimensions.filter(dim => {
-      if (seenNames.has(dim.name)) {
-        return false;
-      }
-      seenNames.add(dim.name);
-      return true;
-    });
+    // Remove duplicates by name (keep first occurrence = highest priority)
+    const uniqueDimensions = allDimensions.filter((dim, index, arr) => 
+      arr.findIndex(d => d.name === dim.name) === index
+    );
 
-    console.log('[DATA-FIX] Loaded dimensions:', {
+    console.log('[DATA-LOADING-FIX] Loaded dimensions (fallback):', {
       account: accountData?.length || 0,
-      custom: customData?.length || 0,
       global: globalData?.length || 0,
-      unique: uniqueDimensions.length
+      total: uniqueDimensions.length
     });
 
     return uniqueDimensions;
   } catch (error) {
-    console.error('[DATA-FIX] Error loading dimensions:', error);
-    throw error;
+    console.error('[DATA-LOADING-FIX] Error loading account dimensions:', error);
+    return [];
   }
 }
 

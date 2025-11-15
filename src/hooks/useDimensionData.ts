@@ -21,13 +21,14 @@ export function useDimensionData(reportId?: string) {
     }
   }, []);
 
-  // Load dimensions
+  // Load dimensions using centralized loader
   const loadDimensions = useCallback(async () => {
     setIsLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Use centralized dimension loader (includes vlookup dimensions)
       const loadedDimensions = await loadDimensionsForUser(user.id, reportId);
       setDimensions(loadedDimensions);
 
@@ -58,4 +59,3 @@ export function useDimensionData(reportId?: string) {
     loadDimensions,
   };
 }
-

@@ -34,7 +34,7 @@ interface UsePerformanceTableDataOptions {
 }
 
 /**
- * Hook for loading performance table data with vlookup mappings support
+ * Hook for loading performance table data
  */
 export function usePerformanceTableData({
   reportId,
@@ -175,7 +175,7 @@ export function usePerformanceTableData({
         });
       }
 
-      // Transform rows into TableRow format and apply vlookup mappings
+      // Transform rows into TableRow format (client-side mapping from IDs to names)
       const firstDimId = groupByDimensions[0];
       const firstDimension = dimensions.find(d => d.id === firstDimId);
 
@@ -183,29 +183,19 @@ export function usePerformanceTableData({
         const dv: Record<string, any> = row.dimension_values || {};
         const rowData: Record<string, any> = {};
 
-        // Map dimension IDs to names; convert numeric strings to numbers; apply vlookup mappings
+        // Map dimension IDs to names; convert numeric strings to numbers
         dimensions.forEach(dim => {
           if (dv[dim.id] !== undefined) {
             let value = dv[dim.id];
             
-            // Apply vlookup mappings if this is a vlookup target dimension
-            if (dim.type === 'text' && dim.scope === 'custom' && vlookupMappings.length > 0) {
-              // Check if there's a mapping for this dimension and value
+            // Apply vlookup mappings if this dimension has mappings
+            if (vlookupMappings.length > 0) {
               const mapping = vlookupMappings.find(m => 
-                m.targetDimensionId === dim.id
+                m.targetDimensionId === dim.id && 
+                m.sourceValue.toLowerCase() === String(value).toLowerCase()
               );
-              
               if (mapping) {
-                // Look for source mappings that match this value
-                const sourceMapping = vlookupMappings.find(m => 
-                  m.targetDimensionId === dim.id && 
-                  m.sourceValue.toLowerCase() === String(value).toLowerCase()
-                );
-                
-                if (sourceMapping) {
-                  value = sourceMapping.targetValue;
-                  console.log(`[VLOOKUP] Applied mapping: ${dv[dim.id]} -> ${value} for dimension ${dim.name}`);
-                }
+                value = mapping.targetValue;
               }
             }
             
@@ -222,7 +212,7 @@ export function usePerformanceTableData({
 
         return {
           id: `row-${row.row_number ?? idx + 1}`,
-          name: rowData[firstDimension?.name || ''] || dv[firstDimId] || 'Unknown',
+          name: dv[firstDimId] || 'Unknown',
           level: 0,
           data: rowData,
           originalDate,
@@ -291,7 +281,7 @@ export function usePerformanceTableData({
     activeDateTab,
     dateOrder,
     dimensions.length,
-    vlookupMappings.length, // Include vlookup mappings in dependency array
+    vlookupMappings.length,
     onLoadingComplete,
   ]);
 

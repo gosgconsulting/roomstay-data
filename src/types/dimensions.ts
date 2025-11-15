@@ -13,6 +13,8 @@ export interface Dimension {
   formula?: string | null;
   is_system?: boolean;
   scope?: 'global' | 'custom' | 'account';
+  report_id?: string | null;
+  account_id?: string | null;
 }
 
 /**

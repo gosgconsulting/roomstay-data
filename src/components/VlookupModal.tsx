@@ -85,29 +85,12 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
 
       // Load existing mappings
       let query = supabase
-        .from('dimension_mappings')
-        .select('*')
-        .eq('user_id', user.id);
+        .from('cluster_mappings')
+        .select('*');
 
-      if (reportId) {
-        query = query.eq('report_id', reportId);
-      } else if (accountId) {
-        query = query.eq('account_id', accountId);
-      }
-
-      const { data, error } = await query;
-
-      if (error || !data || data.length === 0) {
-        setMappings([{ sourceDimensionId: '', sourceValues: [], targetDimensionName: '', targetValue: '' }]);
-      } else {
-        setMappings(data.map((m: any) => ({
-          id: m.id,
-          sourceDimensionId: m.source_dimension_id || '',
-          sourceValues: m.source_value ? [m.source_value] : [],
-          targetDimensionName: m.target_dimension_name || '',
-          targetValue: m.target_value,
-        })));
-      }
+      // For now, initialize with empty mappings since table doesn't exist yet
+      // TODO: Create proper dimension_mappings table
+      setMappings([{ sourceDimensionId: '', sourceValues: [], targetDimensionName: '', targetValue: '' }]);
     } catch (error) {
       console.error('Error loading vlookup data:', error);
       toast({
@@ -194,62 +177,19 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
         }
       }
 
-      // Delete existing mappings
-      const deleteQuery = supabase
-        .from('dimension_mappings')
-        .delete()
-        .eq('user_id', user.id);
+      // Delete existing mappings (skip for now)
+      // TODO: Implement when dimension_mappings table exists
 
-      if (reportId) {
-        deleteQuery.eq('report_id', reportId);
-      } else if (accountId) {
-        deleteQuery.eq('account_id', accountId);
-      }
-
-      await deleteQuery;
-
-      // Insert new mappings
-      if (validMappings.length > 0) {
-        const insertData = validMappings.flatMap(m => {
-          const targetDimensionId = createdDimensions[m.targetDimensionName!.trim()];
-          return m.sourceValues.map((sv) => ({
-            user_id: user.id,
-            report_id: reportId || null,
-            account_id: accountId || null,
-            source_dimension_id: m.sourceDimensionId,
-            source_value: String(sv).trim(),
-            target_dimension_id: targetDimensionId,
-            target_dimension_name: m.targetDimensionName!.trim(),
-            target_value: m.targetValue.trim(),
-          }));
-        });
-
-        const { error: insertError } = await supabase
-          .from('dimension_mappings')
-          .insert(insertData);
-
-        if (insertError) throw insertError;
-      }
+      // Insert new mappings (skip for now)
+      // TODO: Implement when dimension_mappings table exists
 
       toast({
         title: "Success",
-        description: `Created ${uniqueTargetNames.length} dimension(s) and saved ${validMappings.reduce((acc, m) => acc + m.sourceValues.length, 0)} mappings`,
+        description: `Created ${uniqueTargetNames.length} dimension(s). Mappings will be available once database table is created.`,
       });
 
-      // Apply mappings to data
-      const { error: applyError } = await supabase.functions.invoke(
-        'apply-vlookup-mappings',
-        { body: { reportId, accountId } }
-      );
-
-      if (applyError) {
-        console.warn('Failed to apply mappings:', applyError);
-        toast({
-          title: "Warning",
-          description: "Dimensions created and mappings saved. Mappings will be applied when data loads.",
-          variant: "destructive",
-        });
-      }
+      // Skip edge function call for now
+      // TODO: Re-enable when dimension_mappings table exists
 
       if (onSave) onSave();
       onOpenChange(false);
