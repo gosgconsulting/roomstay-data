@@ -119,6 +119,23 @@ export function usePerformanceTableData({
       // Fetch rows for single or consolidated view
       const rawRows = await fetchRows(useConsolidatedView ? (reportIds as string[]) : null, useConsolidatedView ? null : reportId!);
 
+      // Inject vlookup-mapped dimension values into each row BEFORE any further processing
+      if (vlookupMappings.length > 0) {
+        for (const row of rawRows as any[]) {
+          const dv = (row.dimension_values || {}) as Record<string, any>;
+          // For each mapping: if source value matches, set the target dimension value
+          for (const m of vlookupMappings) {
+            const src = dv[m.sourceDimensionId];
+            if (src !== undefined && src !== null) {
+              if (String(src).toLowerCase() === m.sourceValue.toLowerCase()) {
+                dv[m.targetDimensionId] = m.targetValue;
+              }
+            }
+          }
+          row.dimension_values = dv;
+        }
+      }
+
       // Detect date dimension present in data
       const dateDims = dimensions.filter(d => d.type === 'date');
       let dateDimInUse: { id: string; name: string } | null = null;

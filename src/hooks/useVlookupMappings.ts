@@ -11,26 +11,69 @@ interface VlookupMapping {
 export function useVlookupMappings(reportId?: string, accountId?: string) {
   return useQuery({
     queryKey: ['vlookup-mappings', reportId, accountId],
-    queryFn: async () => {
+    queryFn: async (): Promise<VlookupMapping[]> => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      // Use cluster_mappings table as a temporary workaround
-      // TODO: Create proper dimension_mappings table
-      let query = supabase
-        .from('cluster_mappings')
-        .select('*');
+      // Load cluster_dimensions for this user and scope (report or account)
+      let cdQuery = supabase
+        .from('cluster_dimensions')
+        .select('id, source_dimension_id, created_dimension_id, cluster_dimension_name, report_id, account_id, user_id')
+        .eq('user_id', user.id);
 
-      // For now, return empty array since table doesn't exist yet
-      // This prevents TypeScript errors while maintaining functionality
-      return [] as VlookupMapping[];
+      if (reportId) {
+        cdQuery = cdQuery.eq('report_id', reportId);
+      }
+      if (accountId) {
+        cdQuery = cdQuery.eq('account_id', accountId);
+      }
+
+      const { data: cds, error: cdError } = await cdQuery;
+      if (cdError || !cds || cds.length === 0) return [];
+
+      const clusterIds = cds.map(c => c.id);
+      const { data: cms, error: cmError } = await supabase
+        .from('cluster_mappings')
+        .select('id, cluster_dimension_id, source_values, cluster_name')
+        .in('cluster_dimension_id', clusterIds);
+
+      if (cmError || !cms) return [];
+
+      // Build mapping entries, one per source value, preserving API shape
+      const mappings: VlookupMapping[] = [];
+      const cdById = new Map(cds.map(c => [c.id, c]));
+
+      for (const cm of cms) {
+        const cd = cdById.get(cm.cluster_dimension_id);
+        if (!cd) continue;
+        const targetDimensionId = cd.created_dimension_id; // require created target dimension
+        const sourceDimensionId = cd.source_dimension_id;
+        if (!targetDimensionId || !sourceDimensionId) continue;
+
+        const tgtValue = cm.cluster_name?.trim();
+        const srcValues: string[] = Array.isArray(cm.source_values) ? cm.source_values : [];
+        if (!tgtValue || srcValues.length === 0) continue;
+
+        for (const sv of srcValues) {
+          const s = String(sv).trim();
+          if (s.length === 0) continue;
+          mappings.push({
+            sourceValue: s,
+            sourceDimensionId,
+            targetDimensionId,
+            targetValue: tgtValue,
+          });
+        }
+      }
+
+      return mappings;
     },
     enabled: !!reportId || !!accountId,
   });
 }
 
 /**
- * Apply vlookup mappings to dimension values
+ * Apply vlookup mappings to dimension values (kept for compatibility)
  */
 export function applyVlookupMappings(
   dimensionValues: Record<string, any>,
@@ -38,25 +81,15 @@ export function applyVlookupMappings(
   dimensionId: string
 ): Record<string, any> {
   const result = { ...dimensionValues };
-  
-  // Find mappings that target this dimension
-  const relevantMappings = mappings.filter(m => m.targetDimensionId === dimensionId);
-  
-  if (relevantMappings.length === 0) {
-    return result;
-  }
+  const relevant = mappings.filter(m => m.targetDimensionId === dimensionId);
+  if (relevant.length === 0) return result;
 
-  // Apply mappings
   for (const [key, value] of Object.entries(dimensionValues)) {
-    const mapping = relevantMappings.find(m => 
-      m.sourceValue.toLowerCase() === String(value).toLowerCase()
-    );
-    
-    if (mapping) {
-      result[key] = mapping.targetValue;
+    const match = relevant.find(m => m.sourceValue.toLowerCase() === String(value).toLowerCase());
+    if (match) {
+      result[key] = match.targetValue;
     }
   }
-  
   return result;
 }
 
@@ -69,7 +102,7 @@ export function getMappedValue(
   dimensionId: string
 ): string {
   const mapping = mappings.find(
-    m => m.targetDimensionId === dimensionId && 
+    m => m.targetDimensionId === dimensionId &&
          m.sourceValue.toLowerCase() === sourceValue.toLowerCase()
   );
   return mapping ? mapping.targetValue : sourceValue;
