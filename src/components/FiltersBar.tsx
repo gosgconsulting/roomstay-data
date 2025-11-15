@@ -45,6 +45,7 @@ interface FiltersBarProps {
   availableReports?: Array<{ id: string; name: string }>;
   selectedReportIds?: string[];
   onReportSelectionChange?: (reportIds: string[]) => void;
+  isEditMode?: boolean;
 }
 
 interface Dimension {
@@ -64,7 +65,8 @@ export const FiltersBar = ({
   showReportFilter = false,
   availableReports = [],
   selectedReportIds = [],
-  onReportSelectionChange
+  onReportSelectionChange,
+  isEditMode = false,
 }: FiltersBarProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [activeDimensions, setActiveDimensions] = useState<string[]>([]);
@@ -762,6 +764,7 @@ export const FiltersBar = ({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
+    if (!isEditMode) return;
     setShowDimensionSelector(true);
   };
 
@@ -837,7 +840,7 @@ export const FiltersBar = ({
                 onCompareTypeChange={setCompareType}
               />
 
-              {activeDimensions.length === 0 && !isSharedView && !showMasterDimensionFilter && (
+              {activeDimensions.length === 0 && !isSharedView && !showMasterDimensionFilter && isEditMode && (
                 <Button
                   variant="outline"
                   className="gap-2"
@@ -863,7 +866,7 @@ export const FiltersBar = ({
                 </Button>
               )}
 
-              {activeDimensions.length > 0 && !isSharedView && (
+              {activeDimensions.length > 0 && !isSharedView && isEditMode && (
                 <Button
                   variant="ghost"
                   size="icon"

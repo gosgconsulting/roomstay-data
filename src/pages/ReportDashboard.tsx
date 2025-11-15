@@ -356,7 +356,14 @@ export default function ReportDashboard() {
       
       {reportId ? (
         <>
-          <FiltersBar reportId={reportId} onFiltersChange={handleFiltersChange} isSharedView={isSharedView} accountId={accountId} refreshTrigger={loadingGeneration} />
+          <FiltersBar 
+            reportId={reportId} 
+            onFiltersChange={handleFiltersChange} 
+            isSharedView={isSharedView} 
+            accountId={accountId} 
+            refreshTrigger={loadingGeneration}
+            isEditMode={isEditMode}
+          />
           <main className="container mx-auto px-6 py-6 space-y-6">
             <div>
               <div className="flex items-center justify-between mb-4">
