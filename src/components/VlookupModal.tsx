@@ -544,9 +544,24 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
                           />
                           <CommandList>
                             <CommandEmpty>
-                              <div className="p-2 text-sm text-muted-foreground">
-                                Press Enter to create "{mapping.targetDimensionName}"
-                              </div>
+                              {mapping.targetDimensionName && mapping.targetDimensionName.trim() ? (
+                                <div className="p-2">
+                                  <Button
+                                    variant="ghost"
+                                    className="w-full text-sm"
+                                    onClick={() => {
+                                      // Just close the popover, the name is already set
+                                      document.body.click(); // Close popover
+                                    }}
+                                  >
+                                    Create "{mapping.targetDimensionName}"
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="p-2 text-sm text-muted-foreground">
+                                  Type a dimension name to create
+                                </div>
+                              )}
                             </CommandEmpty>
                             <CommandGroup>
                               {vlookupDimensions.map((dim) => (
