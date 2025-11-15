@@ -85,24 +85,33 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
       });
       setDimensionValueOptions(optionsMap);
 
-      // Load existing mappings
-      const query = supabase
-        .from('dimension_mappings' as any)
-        .select('*')
-        .eq('user_id', user.id);
+      // Load existing mappings (resilient: don't fail the modal on error)
+      let mappingsData: any[] | null = null;
+      let mappingsErr: any = null;
+      try {
+        let query = (supabase as any)
+          .from('dimension_mappings')
+          .select('*')
+          .eq('user_id', user.id);
 
-      if (reportId) {
-        query.eq('report_id', reportId);
-      } else if (accountId) {
-        query.eq('account_id', accountId);
+        if (reportId) {
+          query = query.eq('report_id', reportId);
+        } else if (accountId) {
+          query = query.eq('account_id', accountId);
+        }
+
+        const { data, error } = await query;
+        mappingsData = data;
+        mappingsErr = error;
+      } catch (e) {
+        mappingsErr = e;
       }
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        setMappings(data.map((m: any) => ({
+      if (mappingsErr) {
+        console.warn('[VLOOKUP] Could not load existing mappings. Defaulting to empty row.', mappingsErr);
+        setMappings([{ sourceDimensionId: '', sourceValues: [], targetDimensionId: '', targetValue: '' }]);
+      } else if (mappingsData && mappingsData.length > 0) {
+        setMappings(mappingsData.map((m: any) => ({
           id: m.id,
           sourceDimensionId: m.source_dimension_id || '',
           sourceValues: m.source_value ? [m.source_value] : [],

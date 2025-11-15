@@ -47,8 +47,8 @@ export default function MultiSelect({
 
   const triggerText = React.useMemo(() => {
     if (selectedLabels.length === 0) return placeholder;
-    if (selectedLabels.length <= 2) return selectedLabels.join(", ");
-    return `${selectedLabels.slice(0, 2).join(", ")} +${selectedLabels.length - 2} more`;
+    if (selectedLabels.length === 1) return selectedLabels[0];
+    return `${selectedLabels.length} values`;
   }, [selectedLabels, placeholder]);
 
   return (
@@ -87,18 +87,6 @@ export default function MultiSelect({
             </CommandGroup>
           </CommandList>
         </Command>
-        {values.length > 0 ? (
-          <div className="flex flex-wrap gap-1 p-2 border-t">
-            {selectedLabels.slice(0, 5).map((lbl, idx) => (
-              <Badge key={`${lbl}-${idx}`} variant="secondary" className="max-w-[10rem] truncate">
-                {lbl}
-              </Badge>
-            ))}
-            {values.length > 5 && (
-              <Badge variant="secondary">+{values.length - 5} more</Badge>
-            )}
-          </div>
-        ) : null}
       </PopoverContent>
     </Popover>
   );
