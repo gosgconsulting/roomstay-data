@@ -1,15 +1,17 @@
-# Vlookup Feature
+# Vlookup Feature - Pivot Dimensions
 
 ## Overview
-The Vlookup feature allows users to map multiple dimension values to a single value, enabling data grouping and consolidation. This is useful for scenarios like mapping multiple hotel names to a single brand, or grouping different campaign names under a common category.
+The Vlookup feature allows users to create new text dimensions by mapping multiple existing values to single grouped values. These new dimensions become available in all performance components (Performance Table, KPI Chart, KPI Cards) and can be used as pivot dimensions for data grouping and analysis.
 
 ## Use Case Example
 If you have:
-- Hotel A → Map to "Brady"
-- Hotel B → Map to "Sojourn"  
-- Hotel C → Map to "Brady"
+- "Hotel A" → Map to "Brady" in new "Account" dimension
+- "Hotel B" → Map to "Sojourn" in new "Account" dimension  
+- "Hotel C" → Map to "Brady" in new "Account" dimension
 
-When you filter by "Brady" in the Account dimension, it will automatically group and aggregate data from both Hotel A and Hotel C.
+When you group by the new "Account" dimension in the Performance Table, it will automatically aggregate data:
+- Brady row will show combined data from Hotel A + Hotel C
+- Sojourn row will show data from Hotel B
 
 ## Implementation
 
@@ -20,101 +22,113 @@ When you filter by "Brady" in the Account dimension, it will automatically group
   - `report_id`: UUID (optional, for report-specific mappings)
   - `account_id`: UUID (optional, for account-specific mappings)
   - `user_id`: UUID (required)
+  - `source_dimension_id`: UUID (the dimension to map from)
   - `source_value`: TEXT (the original value to map from)
-  - `target_dimension_id`: UUID (the dimension to map to)
-  - `target_value`: TEXT (the value to map to)
+  - `target_dimension_id`: UUID (the new dimension to map to)
+  - `target_dimension_name`: TEXT (name of the new dimension)
+  - `target_value`: TEXT (the grouped value to map to)
   - `created_at`, `updated_at`: Timestamps
 
 ### UI Components
 1. **VlookupModal** (`src/components/VlookupModal.tsx`)
-   - Excel-like table interface for creating mappings
-   - Add/remove rows functionality
-   - Dimension selector dropdown
-   - Save/cancel actions
-   - Automatically applies mappings to dimension_data after saving
+   - Clean interface for creating pivot dimensions
+   - Source dimension selector
+   - Multi-select for values to group
+   - Target dimension name input
+   - Target value input
+   - Creates new dimensions automatically
 
 2. **Button Location**
    - Dashboard header between "Dimensions" and "Budget" buttons
-   - Icon: GitCompare (merge/mapping icon)
+   - Text: "Create Pivot Dimensions"
 
 ### Data Processing
-The vlookup mappings are applied in three ways:
+The pivot dimensions work in three ways:
 
-1. **Real-time application** in `get-performance-data` edge function:
-   - Mappings are loaded at the start of the request
-   - Applied to all `dimension_values` after fetching from `dimension_data` table
-   - Happens before any filtering or aggregation
+1. **Automatic dimension creation**: When mappings are saved, new text dimensions are created for each unique target dimension name
 
-2. **Automatic application during data resync** in `resync-data-source` edge function:
-   - Called automatically after every successful data resync
-   - Ensures mappings are applied consistently whether data is synced manually, auto-synced via cron, or resynced after configuration changes
-   - Returns status in response: `vlookupApplied`, `vlookupRowsUpdated`, `vlookupError`
+2. **Real-time application**: Mappings are applied when data loads in performance components
+   - Applied in `usePerformanceTableFilters` hook
+   - Applied before grouping and aggregation
+   - Ensures pivot dimensions work for filtering and grouping
 
-3. **Manual injection into dimension_data** via `apply-vlookup-mappings` edge function:
-   - Called automatically after saving mappings in VlookupModal
-   - Can also be invoked manually if needed
-   - Identifies the source dimension by analyzing dimension_data rows
-   - Updates all matching rows to inject/populate the target dimension
-   - Ensures the target dimension becomes available for filtering and grouping
-   - Processes rows in batches for performance
+3. **Database updates**: Edge function applies mappings to existing dimension_data
+   - Updates all matching rows with target dimension values
+   - Ensures data consistency across the system
 
-### Edge Functions
-- **apply-vlookup-mappings**: Injects target dimension values into dimension_data
-  - Automatically finds source dimension containing the source values
-  - Updates dimension_data rows with mapped target values
-  - Processes in batches of 500 rows for efficiency
-  - Returns count of rows updated
+### Integration with Performance Components
 
-### Hook Integration
-- **useVlookupMappings**: Custom hook for loading mappings with React Query
-- **applyVlookupMappings**: Utility function for applying mappings to dimension data
+#### Performance Table
+- Pivot dimensions appear in Group by/Breakdown by selectors
+- Can be used as primary grouping dimensions
+- Data is aggregated based on mapped values
+- Example: Group by "Account" dimension created from vlookup
+
+#### KPI Chart & KPI Cards
+- Pivot dimensions available in dimension selectors
+- Can be used for filtering and segmentation
+- Metrics calculated based on grouped data
+
+#### Filters Bar
+- Pivot dimensions available as filter options
+- Filter by grouped values (e.g., "Brady" matches all hotels mapped to Brady)
 
 ## Usage
 
-1. Click the "Vlookup" button in the dashboard header
+1. Click "Create Pivot Dimensions" in dashboard header
 2. In the modal:
-   - Column 1: Enter the original value (e.g., "Hotel A")
-   - Column 2: Select target dimension and enter mapped value (e.g., "Account" → "Brady")
-3. Add multiple rows as needed using the "+ Add Row" button
-4. Click "Save Mappings"
+   - Select source dimension (e.g., "Hotel")
+   - Select values to group (e.g., "Hotel A", "Hotel B", "Hotel C")
+   - Enter new dimension name (e.g., "Account")
+   - Enter grouped value (e.g., "Brady")
+3. Add multiple rows as needed
+4. Click "Create Dimensions"
 5. The system will:
-   - Save the mappings to the database
-   - Automatically inject the target dimension values into all matching dimension_data rows
-   - Show a success message with the number of rows updated
-6. The target dimension (e.g., "Account") will now be available for:
-   - Filtering in the FiltersBar
-   - Grouping/breakdown in reports
-   - All data analysis operations
+   - Create new text dimensions
+   - Save mappings to database
+   - Apply mappings to existing data
+   - Show success message with count of rows updated
+6. New dimensions are immediately available in:
+   - Performance Table (Group by/Breakdown by)
+   - KPI Chart (dimension selector)
+   - KPI Cards (dimension selector)
+   - Filters Bar (filter options)
 
 ## Example Workflow
 
-**Scenario**: You want to group multiple hotels under brand names
+**Scenario**: Group multiple hotels under brand names for analysis
 
-1. Open Vlookup modal
+1. Open "Create Pivot Dimensions" modal
 2. Create mappings:
-   - "Brady Apartment Hotel Flinders Street" → Account → "Brady"
-   - "Brady Apartment Hotel Hardware Lane" → Account → "Brady"
-   - "Sojourn Apartment Hotel - Riddiford" → Account → "Sojourn"
+   - Source: "Hotel" → Values: ["Brady Apartment Hotel Flinders Street", "Brady Apartment Hotel Hardware Lane"] → New Dimension: "Account" → Grouped Value: "Brady"
+   - Source: "Hotel" → Values: ["Sojourn Apartment Hotel - Riddiford"] → New Dimension: "Account" → Grouped Value: "Sojourn"
 3. Save mappings
 4. Result:
-   - All 21,871 dimension_data rows are updated
-   - The "Account" dimension now contains "Brady" or "Sojourn" for matching hotels
-   - You can now filter by Account = "Brady" to see combined data from both Brady hotels
-   - The Account dimension appears in the filters and dimension selectors
+   - New "Account" dimension created
+   - All dimension_data rows updated with Account values
+   - Account dimension available in all performance components
+   - Can group Performance Table by Account to see aggregated data
+   - Can filter by Account = "Brady" to see combined hotel data
 
 ## Features
-- Case-insensitive matching
-- Report-specific or account-wide mappings
-- Real-time application during data loading
-- **Automatic application during data resync** - mappings are reapplied whenever data is synced
-- Multiple mappings per dimension
-- Excel-like editing interface
-- Batch processing for efficient updates
+- **Clean interface**: Simplified modal focused on creating pivot dimensions
+- **Automatic dimension creation**: No need to manually create target dimensions
+- **Real-time application**: Mappings work immediately when data loads
+- **Universal availability**: Pivot dimensions work in all performance components
+- **Data aggregation**: Automatic grouping and aggregation based on mapped values
+- **Multiple mappings**: Create multiple pivot dimensions in one session
+- **Account and report scope**: Mappings can be account-wide or report-specific
 
 ## Technical Notes
-- Mappings are applied in the edge function for optimal performance
-- Uses case-insensitive comparison for flexible matching
-- Supports both report-level and account-level scope
+- Pivot dimensions are created as text dimensions with scope 'custom'
+- Mappings are applied client-side during data loading for performance
+- Edge function updates existing data for consistency
 - RLS policies ensure users can only access their own mappings
-- **Automatic reapplication**: When data is resynced (manual or scheduled), vlookup mappings are automatically applied to the new data
-- Batch processing ensures efficient updates even with large datasets
+- No complex database joins needed - mappings applied at load time
+
+## Benefits
+1. **Simplified analysis**: Group similar items without complex SQL
+2. **Flexible grouping**: Create any grouping logic you need
+3. **Immediate availability**: New dimensions ready to use instantly
+4. **Consistent data**: All components use the same grouped values
+5. **Performance optimized**: Client-side application for fast response

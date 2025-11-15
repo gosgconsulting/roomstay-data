@@ -41,6 +41,30 @@ interface DimensionValue {
   [key: string]: string | number;
 }
 
+// Load dimensions for the dimension selector
+const loadDimensions = useCallback(async () => {
+  if (!reportId) return;
+  
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // Load all dimensions (including vlookup dimensions)
+    const { data: dimensions, error } = await supabase
+      .from("dimensions")
+      .select("*")
+      .eq("user_id", user.id)
+      .or(`report_id.is.null,report_id.eq.${reportId}`)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    // Include all dimensions (vlookup dimensions are now included)
+    setAvailableDimensions(dimensions || []);
+  } catch (error) {
+    console.error("Error loading dimensions:", error);
+  }
+}, [reportId]);
 
 export const KPIChart = ({ reportId, filters, onLoadingComplete, accountId, visibilityRefreshTrigger }: KPIChartProps) => {
   const [selectedKPI, setSelectedKPI] = useState("Revenue");

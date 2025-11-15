@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
@@ -49,6 +49,7 @@ interface KPIMetricsCardsProps {
 export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountId, visibilityRefreshTrigger }: KPIMetricsCardsProps) => {
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [availableDimensions, setAvailableDimensions] = useState<Dimension[]>([]);
 
   console.log('[KPI-DEBUG] Component render - reportId:', reportId, 'accountId:', accountId, 'filters:', filters);
 
@@ -73,6 +74,31 @@ export const KPIMetricsCards = ({ reportId, filters, onLoadingComplete, accountI
     filters.compareDateRange?.from?.toISOString(),
     filters.compareDateRange?.to?.toISOString(),
   ]);
+
+  // Load dimensions for the dimension selector
+  const loadDimensions = useCallback(async () => {
+    if (!reportId) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Load all dimensions (including vlookup dimensions)
+      const { data: dimensions, error } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("user_id", user.id)
+        .or(`report_id.is.null,report_id.eq.${reportId}`)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      // Include all dimensions (vlookup dimensions are now included)
+      setAvailableDimensions(dimensions || []);
+    } catch (error) {
+      console.error("Error loading dimensions:", error);
+    }
+  }, [reportId]);
 
   useEffect(() => {
     console.log('[KPI-DEBUG] ============= KPIMetricsCards useEffect =============');

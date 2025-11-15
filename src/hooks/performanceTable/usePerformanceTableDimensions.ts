@@ -74,7 +74,7 @@ export function usePerformanceTableDimensions({
         accountData = (data || []);
       }
 
-      // Load custom dimensions for this user (both global custom and report-specific)
+      // Load custom dimensions for this user (including vlookup dimensions)
       let customData: any[] = [];
       const { data, error: customError } = await supabase
         .from("dimensions")
@@ -90,7 +90,7 @@ export function usePerformanceTableDimensions({
       // Combine all dimensions with proper priority: account > custom > global
       const combinedDimensions = [
         ...(accountData || []),
-        ...(customData || []),
+        ...(customData || []), // This now includes vlookup dimensions
         ...(globalData || [])
       ];
 
@@ -173,4 +173,3 @@ export function usePerformanceTableDimensions({
     loadDimensions,
   };
 }
-

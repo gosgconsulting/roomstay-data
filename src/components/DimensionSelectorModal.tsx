@@ -6,10 +6,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { useDimensionSelector } from "@/hooks/useDimensionSelector";
 import { SelectedDimensionItem } from "./DimensionSelectorModal/SelectedDimensionItem";
 import { AddDimensionSection } from "./DimensionSelectorModal/AddDimensionSection";
+import { supabase } from "@/integrations/supabase/client";
+import { loadDimensionsForUser } from "@/lib/dimensionLoader";
+import { checkDimensionsHaveData } from "@/lib/dimensionUtils";
 
 interface DimensionSelectorModalProps {
   open: boolean;
@@ -38,7 +41,6 @@ export const DimensionSelectorModal = ({
     dimensionHasData,
     dimensionGranularities,
     availableDimensions,
-    loadDimensions,
     handleRemoveDimension,
     handleAddDimension,
     handleGranularityChange,
@@ -50,28 +52,31 @@ export const DimensionSelectorModal = ({
     onDateGranularityChange,
   });
 
+  const [localDimensions, setLocalDimensions] = useState<any[]>([]);
+  const [localIsLoading, setLocalIsLoading] = useState(true);
+
   // Load dimensions and check their data availability
   const loadDimensions = useCallback(async () => {
-    setIsLoading(true);
+    setLocalIsLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const loadedDimensions = await loadDimensionsForUser(user.id, reportId);
       // Include all dimensions (including vlookup dimensions)
-      setDimensions(loadedDimensions);
+      setLocalDimensions(loadedDimensions);
 
       // Check data availability if reportId is provided
       if (reportId && loadedDimensions.length > 0) {
         const dimensionIds = loadedDimensions.map(d => d.id);
-        await checkDataAvailability(dimensionIds, reportId);
+        await checkDimensionsHaveData(dimensionIds, reportId);
       }
     } catch (error) {
       console.error("Error loading dimensions:", error);
     } finally {
-      setIsLoading(false);
+      setLocalIsLoading(false);
     }
-  }, [reportId, checkDataAvailability]);
+  }, [reportId]);
 
   useEffect(() => {
     if (open) {
@@ -90,7 +95,7 @@ export const DimensionSelectorModal = ({
         </DialogHeader>
 
         <div className="py-4 space-y-3">
-          {isLoading ? (
+          {localIsLoading ? (
             <div className="text-center py-4 text-muted-foreground text-sm">
               Loading dimensions...
             </div>
@@ -100,7 +105,7 @@ export const DimensionSelectorModal = ({
               {selectedDimensions.length > 0 && (
                 <div className="space-y-2 mb-3">
                   {selectedDimensions.map((dimensionId) => {
-                    const dimension = dimensions.find(d => d.id === dimensionId);
+                    const dimension = localDimensions.find(d => d.id === dimensionId);
                     return (
                       <SelectedDimensionItem
                         key={dimensionId}

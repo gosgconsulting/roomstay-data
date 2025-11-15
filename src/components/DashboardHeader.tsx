@@ -79,6 +79,7 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSyncModeModal, setShowSyncModeModal] = useState(false);
   const [showVlookupModal, setShowVlookupModal] = useState(false);
+  const [vlookupModalOpen, setVlookupModalOpen] = useState(false);
 
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [editingDimension, setEditingDimension] = useState<Dimension | null>(null);
@@ -757,11 +758,12 @@ export const DashboardHeader = ({ reportId, accountId, onReportChange, onDataSyn
 
           <Button
             variant="outline"
+            size="sm"
+            onClick={() => setVlookupModalOpen(true)}
             className="gap-2"
-            onClick={() => setShowVlookupModal(true)}
           >
             <GitCompare className="h-4 w-4" />
-            Vlookup
+            Create Pivot Dimensions
           </Button>
 
           <Button
