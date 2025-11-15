@@ -65,10 +65,14 @@ function SortableKPIItem({ kpi, onToggle }: { kpi: KPIConfig; onToggle: (name: s
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-3 p-3 bg-card border rounded-md hover:bg-accent/50"
+      className="flex items-center gap-3 p-3 bg-white border rounded-md hover:bg-accent/50"
     >
-      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
-        <GripVertical className="h-4 w-4 text-muted-foreground" />
+      <div
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing"
+      >
+        <GripVertical className="h-4 w-4 text-gray-400" />
       </div>
       <Checkbox
         id={`kpi-${kpi.name}`}
@@ -85,7 +89,13 @@ function SortableKPIItem({ kpi, onToggle }: { kpi: KPIConfig; onToggle: (name: s
   );
 }
 
-export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChange, visibilityRefreshTrigger }: KPISettingsModalProps) {
+export function KPISettingsModal({ 
+  open, 
+  onOpenChange, 
+  reportId, 
+  onSettingsChange,
+  visibilityRefreshTrigger 
+}: KPISettingsModalProps) {
   const [kpis, setKpis] = useState<KPIConfig[]>([]);
   const [initialKpis, setInitialKpis] = useState<KPIConfig[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -107,7 +117,7 @@ export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChang
   // Refresh KPI settings when dimension visibility changes
   useEffect(() => {
     if (open && reportId && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
-      console.log('[testing] Refreshing KPI settings due to dimension visibility change');
+      console.log('[KPI-SETTINGS] Refreshing KPI settings due to dimension visibility change');
       loadKPISettings();
     }
   }, [visibilityRefreshTrigger, open, reportId]);
@@ -120,117 +130,67 @@ export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChang
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load all KPIs that are mapped in data sources or have formulas (even if currently zero/empty)
-      console.log('[testing] KPISettings - Loading all mapped KPIs for report:', reportId);
+      console.log('[KPI-SETTINGS] Loading KPI settings for report:', reportId);
 
-      // Get all dimensions that are either:
-      // 1. Mapped in data sources for this report
-      // 2. Have formulas (calculated KPIs)
-      // 3. Are numeric types (exclude text dimensions)
-      
-      // First, get dimension IDs that are mapped in data sources
-      const { data: dataSources, error: dsError } = await supabase
-        .from("data_sources")
-        .select("column_mappings")
-        .eq("report_id", reportId);
-
-      if (dsError) throw dsError;
-
-      const mappedDimensionIds = new Set<string>();
-      
-      if (dataSources && dataSources.length > 0) {
-        dataSources.forEach(ds => {
-          if (ds.column_mappings && Array.isArray(ds.column_mappings)) {
-            ds.column_mappings.forEach((mapping: any) => {
-              if (mapping.dimensionId && mapping.dimensionId !== 'none' && mapping.dimensionId !== null) {
-                mappedDimensionIds.add(mapping.dimensionId);
-              }
-            });
-          }
-        });
-      }
-
-      console.log('[testing] Found mapped dimension IDs:', Array.from(mappedDimensionIds));
-
-      // Get all numeric dimensions (global and custom) - include all since mappings exist
-      const { data: allDimensions, error: dimError } = await supabase
-        .from("dimensions")
-        .select("id, name, type, scope, formula")
-        .in("type", ["number", "currency", "percentage"]) // Exclude text dimensions
-        .or(`scope.eq.global,and(scope.eq.custom,user_id.eq.${user.id})`);
-
-      if (dimError) throw dimError;
-
-      // Filter to include:
-      // 1. Dimensions that are mapped in data sources
-      // 2. Dimensions with formulas (calculated KPIs)
-      // 3. All global dimensions (they're available for all reports)
-      const relevantDimensions = allDimensions?.filter(dim => 
-        mappedDimensionIds.has(dim.id) ||  // Mapped in data source
-        dim.formula ||                     // Has formula (calculated)
-        dim.scope === 'global'             // Global dimensions are always available
-      ) || [];
-
-      // Remove duplicates by name, prioritizing custom > global
-      const uniqueDimensions = relevantDimensions.filter((dim, index, arr) => 
-        arr.findIndex(d => d.name === dim.name) === index
-      );
-
-      const availableKPIs = sortKPIsByDefaultOrder(uniqueDimensions.map(d => d.name));
-      console.log('[testing] KPISettings - All available KPIs (mapped + formulas):', availableKPIs.length, availableKPIs);
-      
-      if (availableKPIs.length === 0) {
-        setKpis([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Load the current view settings
-      const { data: views, error: viewError } = await supabase
+      // Load KPI settings from the default report view for THIS specific report
+      const { data: viewData, error } = await supabase
         .from("report_views")
-        .select("*")
-        .eq("report_id", reportId)
+        .select("visible_kpis, kpi_order")
+        .eq("report_id", reportId) // CRITICAL: Only load settings for THIS report
         .eq("user_id", user.id)
         .eq("is_default", true)
         .maybeSingle();
 
-      if (viewError) throw viewError;
-
-      let kpiConfigs: KPIConfig[];
-
-      if (views?.visible_kpis && views?.kpi_order) {
-        // Load from saved settings
-        const visibleKPIs = new Set(views.visible_kpis as string[]);
-        const savedOrder = views.kpi_order as string[];
-        
-        // Merge saved order with any new KPIs that might have been added
-        const savedKPIsSet = new Set(savedOrder);
-        const newKPIs = availableKPIs.filter(name => !savedKPIsSet.has(name));
-        // Sort new KPIs using default order, then append to saved order
-        const sortedNewKPIs = sortKPIsByDefaultOrder(newKPIs);
-        const allKPIsOrdered = [...savedOrder, ...sortedNewKPIs];
-        
-        kpiConfigs = allKPIsOrdered
-          .filter(name => availableKPIs.includes(name)) // Only include KPIs that still exist
-          .map((name, index) => ({
-            name,
-            visible: visibleKPIs.has(name),
-            order: index,
-          }));
-      } else {
-        // Use all available KPIs as default - all visible
-        kpiConfigs = availableKPIs.map((name, index) => ({
-          name,
-          visible: true,
-          order: index,
-        }));
+      if (error && error.code !== 'PGRST116') {
+        console.error('[KPI-SETTINGS] Error loading KPI settings:', error);
+        throw error;
       }
 
-      setKpis(kpiConfigs);
-      setInitialKpis([...kpiConfigs]); // Store initial state for comparison
-      console.log('[testing] Loaded KPI settings:', kpiConfigs.length, 'KPIs');
+      // Load all available KPIs from dimensions for this report
+      const { data: allDimensions, error: dimError } = await supabase
+        .from("dimensions")
+        .select("name, type, scope, account_id")
+        .in("type", ["number", "currency", "percentage"])
+        .or(`scope.eq.global,and(scope.eq.custom,user_id.eq.${user.id}),and(scope.eq.account,account_id.is.not.null)`);
+
+      if (dimError) throw dimError;
+
+      const availableKPIs = sortKPIsByDefaultOrder((allDimensions || []).map(d => d.name));
+      console.log('[KPI-SETTINGS] Available KPIs for report', reportId, ':', availableKPIs);
+
+      const visibleKPIs = (viewData?.visible_kpis as string[]) || availableKPIs;
+      const kpiOrder = (viewData?.kpi_order as string[]) || availableKPIs;
+
+      // Create KPI items based on order, with visibility info
+      const orderedItems: KPIConfig[] = [];
+      
+      // First, add items in the saved order
+      kpiOrder.forEach(kpi => {
+        if (availableKPIs.includes(kpi) && !orderedItems.find(item => item.name === kpi)) {
+          orderedItems.push({
+            name: kpi,
+            visible: visibleKPIs.includes(kpi),
+            order: orderedItems.length
+          });
+        }
+      });
+      
+      // Then add any remaining available KPIs that weren't in the order
+      availableKPIs.forEach(kpi => {
+        if (!orderedItems.find(item => item.name === kpi)) {
+          orderedItems.push({
+            name: kpi,
+            visible: visibleKPIs.includes(kpi),
+            order: orderedItems.length
+          });
+        }
+      });
+
+      console.log('[KPI-SETTINGS] Loaded KPI settings for report', reportId, ':', orderedItems);
+      setKpis(orderedItems);
+      setInitialKpis([...orderedItems]); // Store initial state for comparison
     } catch (error) {
-      console.error("Error loading KPI settings:", error);
+      console.error('[KPI-SETTINGS] Error loading KPI settings:', error);
       toast({
         title: "Error",
         description: "Failed to load KPI settings.",
@@ -242,7 +202,7 @@ export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChang
   };
 
   const handleToggle = (name: string) => {
-    console.log('[testing] Toggling KPI:', name);
+    console.log('[KPI-SETTINGS] Toggling KPI:', name);
     setKpis(prev => 
       prev.map(kpi => 
         kpi.name === name ? { ...kpi, visible: !kpi.visible } : kpi
@@ -267,54 +227,55 @@ export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChang
   };
 
   const applySettings = async () => {
-    if (!reportId || kpis.length === 0) return;
-
+    if (!reportId) return;
+    
+    setIsSaving(true);
     try {
-      setIsSaving(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({
-          title: "Error",
-          description: "You must be logged in to save KPI settings",
-          variant: "destructive",
-        });
-        return;
-      }
+      if (!user) return;
 
-      const visibleKPIs = kpis.filter(k => k.visible).map(k => k.name);
-      const kpiOrder = kpis.map(k => k.name);
+      const visibleKPIs = kpis.filter(item => item.visible).map(item => item.name);
+      const kpiOrder = kpis.map(item => item.name);
 
-      console.log('[testing] Applying KPI settings:', { visibleKPIs, kpiOrder });
+      console.log('[KPI-SETTINGS] Saving KPI settings for report:', reportId, {
+        visibleKPIs,
+        kpiOrder
+      });
 
-      // Update the default view with KPI settings
+      // Update the default report view for THIS specific report
       const { error } = await supabase
         .from("report_views")
         .update({
           visible_kpis: visibleKPIs,
-          kpi_order: visibleKPIs,
-          name: "Default View", // Add required name field
+          kpi_order: kpiOrder,
+          updated_at: new Date().toISOString()
         })
-        .eq("report_id", reportId)
+        .eq("report_id", reportId) // CRITICAL: Only update settings for THIS report
         .eq("user_id", user.id)
         .eq("is_default", true);
 
-      if (error) throw error;
+      if (error) {
+        console.error('[KPI-SETTINGS] Error saving KPI settings:', error);
+        throw error;
+      }
 
+      console.log('[KPI-SETTINGS] KPI settings saved successfully for report:', reportId);
+      
       // Update initial state to match current state
       setInitialKpis([...kpis]);
 
       toast({
         title: "Success",
-        description: "KPI settings applied successfully",
+        description: "KPI settings saved for this report.",
       });
 
-      console.log('[testing] KPI settings applied successfully');
       onSettingsChange?.();
+      onOpenChange(false);
     } catch (error) {
-      console.error("Error saving KPI settings:", error);
+      console.error('[KPI-SETTINGS] Error saving KPI settings:', error);
       toast({
         title: "Error",
-        description: "Failed to save KPI settings. Please try again.",
+        description: "Failed to save KPI settings.",
         variant: "destructive",
       });
     } finally {
@@ -324,7 +285,7 @@ export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChang
 
   const cancelSettings = () => {
     setKpis([...initialKpis]);
-    console.log('[testing] Cancelled KPI settings changes');
+    console.log('[KPI-SETTINGS] Cancelled KPI settings changes');
   };
 
   const hasUnsavedChanges = () => {
@@ -342,37 +303,45 @@ export function KPISettingsModal({ open, onOpenChange, reportId, onSettingsChang
         <SheetHeader>
           <SheetTitle>KPI Settings</SheetTitle>
           <SheetDescription>
-            Choose which KPIs to display and drag to reorder them.
+            Configure which KPIs to show and their order for this report only.
           </SheetDescription>
         </SheetHeader>
-
-        <div className="mt-6 space-y-2">
-          {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Loading KPI settings...
+        
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-hidden flex flex-col mt-6">
+            <div className="mb-4">
+              <Label className="text-sm font-medium">
+                Drag to reorder, click checkbox to show/hide
+              </Label>
             </div>
-          ) : (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={kpis.map(k => k.name)}
-                strategy={verticalListSortingStrategy}
+            
+            <div className="flex-1 overflow-y-auto">
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
               >
-                {kpis.map((kpi) => (
-                  <SortableKPIItem
-                    key={kpi.name}
-                    kpi={kpi}
-                    onToggle={handleToggle}
-                  />
-                ))}
-              </SortableContext>
-            </DndContext>
-          )}
-        </div>
-
+                <SortableContext
+                  items={kpis.map(k => k.name)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {kpis.map((kpi) => (
+                    <SortableKPIItem
+                      key={kpi.name}
+                      kpi={kpi}
+                      onToggle={handleToggle}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+            </div>
+          </div>
+        )}
+        
         {/* Apply/Cancel buttons */}
         {hasUnsavedChanges() && (
           <div className="border-t pt-4 mt-6 space-y-3">

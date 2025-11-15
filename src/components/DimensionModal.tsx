@@ -52,7 +52,6 @@ export const DimensionModal = ({
   const [name, setName] = useState("");
   const [type, setType] = useState("number");
   const [formula, setFormula] = useState("");
-  const [scope, setScope] = useState<'global' | 'custom' | 'account'>('account');
   const [isLoading, setIsLoading] = useState(false);
 
   const [availableDimensions, setAvailableDimensions] = useState<Dimension[]>([]);
@@ -61,29 +60,19 @@ export const DimensionModal = ({
   const [mentionCursorPos, setMentionCursorPos] = useState(0);
   const formulaInputRef = useRef<HTMLTextAreaElement>(null);
 
-  // [testing] Check if dimension is a system/default dimension
-  const isSystemDimension = (dim: Dimension | null): boolean => {
-    if (!dim) return false;
-    const systemDimensionNames = [
-      'Impressions', 'Clicks', 'Revenue', 'Cost', 'Conversions', 'Leads',
-      'CTR', 'ROAS', 'Cost of sale', 'Conversion Rate', 'CPM', 'CPC', 'Impression Share'
-    ];
-    return dim.is_system === true || systemDimensionNames.includes(dim.name);
-  };
-
   // Load available dimensions for the @ mention dropdown
   useEffect(() => {
     if (open) {
       loadAvailableDimensions();
     }
-  }, [open, reportId]);
+  }, [open, reportId, accountId]);
 
   const loadAvailableDimensions = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      console.log('[testing] Loading available dimensions for formula - accountId:', accountId, 'reportId:', reportId);
+      console.log('[DIMENSION-MODAL] Loading available dimensions for formula - accountId:', accountId, 'reportId:', reportId);
 
       // Load account-scoped dimensions first (highest priority)
       let accountData: Dimension[] = [];
@@ -99,20 +88,34 @@ export const DimensionModal = ({
         accountData = (data || []) as Dimension[];
       }
 
-      // Load custom dimensions for this user (including vlookup dimensions)
-      const { data: customData, error: customError } = await supabase
+      // Load global dimensions
+      const { data: globalData, error: globalError } = await supabase
         .from("dimensions")
         .select("*")
-        .eq("user_id", user.id)
-        .eq("scope", "custom")
-        .or(`report_id.is.null,report_id.eq.${reportId}`)
+        .eq("scope", "global")
         .order("created_at", { ascending: false });
 
-      if (customError) throw customError;
+      if (globalError) throw globalError;
 
-      // Combine dimensions with priority: account > custom
+      // Load custom dimensions for this user and report
+      let customData: Dimension[] = [];
+      if (reportId) {
+        const { data, error: customError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("scope", "custom")
+          .eq("report_id", reportId)
+          .order("created_at", { ascending: false });
+
+        if (customError) throw customError;
+        customData = (data || []) as Dimension[];
+      }
+
+      // Combine dimensions with priority: account > global > custom
       const allDimensions = [
         ...(accountData || []),
+        ...(globalData || []),
         ...(customData || [])
       ] as Dimension[];
 
@@ -125,8 +128,9 @@ export const DimensionModal = ({
         return true;
       });
 
-      console.log('[testing] Loaded dimensions for formula:', {
+      console.log('[DIMENSION-MODAL] Loaded dimensions for formula:', {
         account: accountData.length,
+        global: globalData?.length || 0,
         custom: customData?.length || 0,
         unique: uniqueDimensions.length
       });
@@ -140,19 +144,15 @@ export const DimensionModal = ({
   // Reset form when modal opens/closes or dimension changes
   useEffect(() => {
     if (open && mode === 'edit' && dimension) {
-      console.log('[testing] Populating form for edit mode:', dimension);
+      console.log('[DIMENSION-MODAL] Populating form for edit mode:', dimension);
       setName(dimension.name);
       setType(dimension.type);
       setFormula(dimension.formula || "");
-      // Show the dimension's actual scope in edit mode (editable for custom dimensions)
-      setScope(dimension.scope || 'custom');
     } else if (open && mode === 'add') {
-      console.log('[testing] Resetting form for add mode');
+      console.log('[DIMENSION-MODAL] Resetting form for add mode');
       setName("");
       setType("number");
       setFormula("");
-      // Default to account scope for new dimensions
-      setScope('account');
     }
   }, [open, mode, dimension]);
 
@@ -289,7 +289,7 @@ export const DimensionModal = ({
       if (!user) throw new Error("User not authenticated");
 
       if (mode === 'edit' && dimension) {
-        console.log('[testing] Updating dimension:', dimension.id);
+        console.log('[DIMENSION-MODAL] Updating dimension:', dimension.id);
 
         // Update the dimension directly
         const updateData = {
@@ -298,7 +298,7 @@ export const DimensionModal = ({
           formula: formula.trim() || null,
         };
 
-        console.log('[testing] Updating dimension with data:', updateData);
+        console.log('[DIMENSION-MODAL] Updating dimension with data:', updateData);
 
         const { error } = await supabase
           .from("dimensions")
@@ -312,48 +312,62 @@ export const DimensionModal = ({
           description: `Updated dimension "${name}"`,
         });
       } else {
-        console.log('[testing] Creating new dimension for report:', reportId);
+        console.log('[DIMENSION-MODAL] Creating new dimension - accountId:', accountId, 'reportId:', reportId);
 
-        // Create new dimension for the specific report
-        if (!reportId) {
-          throw new Error("Report ID is required for creating dimensions");
+        // Determine scope and related IDs based on available context
+        let scope: 'account' | 'custom' = 'custom';
+        let dimensionAccountId: string | null = null;
+        let dimensionReportId: string | null = null;
+
+        if (accountId) {
+          // PRIORITY: If accountId is available, create account-scoped dimension (shared across all reports in account)
+          scope = 'account';
+          dimensionAccountId = accountId;
+          dimensionReportId = null; // Account dimensions are not tied to specific reports
+          console.log('[DIMENSION-MODAL] Creating account-scoped dimension for account:', accountId);
+        } else if (reportId) {
+          // FALLBACK: If only reportId is available, create report-specific custom dimension
+          scope = 'custom';
+          dimensionAccountId = null;
+          dimensionReportId = reportId;
+          console.log('[DIMENSION-MODAL] Creating report-specific custom dimension for report:', reportId);
+        } else {
+          // LAST RESORT: Fallback to user-level custom dimension
+          scope = 'custom';
+          dimensionAccountId = null;
+          dimensionReportId = null;
+          console.log('[DIMENSION-MODAL] Creating user-level custom dimension');
         }
 
-        const formData = {
+        const dimensionData = {
           name: name.trim(),
           type,
           formula: formula.trim() || null,
-          scope: 'custom' as const,
           user_id: user.id,
-          report_id: reportId,
-          account_id: accountId,
+          scope,
+          account_id: dimensionAccountId,
+          report_id: dimensionReportId,
         };
 
-        const { data: newDimension, error } = await supabase
+        console.log('[DIMENSION-MODAL] Creating dimension with data:', dimensionData);
+
+        const { error } = await supabase
           .from("dimensions")
-          .insert(formData)
-          .select()
-          .single();
+          .insert(dimensionData);
 
         if (error) throw error;
 
         toast({
-          title: "Dimension added",
-          description: `Created dimension "${name}" for this report`,
+          title: "Success",
+          description: `${scope === 'account' ? 'Account' : 'Custom'} dimension "${name}" created successfully.`,
         });
       }
 
-      // Reset form
+      onSaved?.();
+      onOpenChange(false);
       setName("");
       setType("number");
       setFormula("");
-      setScope('custom'); // Default back to individual
-      onOpenChange(false);
-      
-      // Notify parent component to refresh data
-      if (onSaved) {
-        onSaved();
-      }
     } catch (error) {
       // Properly serialize error for logging
       let errorMessage = '';
@@ -367,7 +381,7 @@ export const DimensionModal = ({
         errorMessage = JSON.stringify(error, null, 2);
       }
 
-      console.error(`Error ${mode === 'edit' ? 'updating' : 'creating'} dimension:`, errorMessage);
+      console.error(`[DIMENSION-MODAL] Error ${mode === 'edit' ? 'updating' : 'creating'} dimension:`, errorMessage);
       toast({
         title: "Error",
         description: errorMessage || `Failed to ${mode === 'edit' ? 'update' : 'create'} dimension`,
@@ -386,7 +400,12 @@ export const DimensionModal = ({
             {mode === 'edit' ? 'Edit Dimension' : 'Add Dimension'}
           </DialogTitle>
           <DialogDescription>
-            {mode === 'edit' ? 'Update the dimension details' : 'Create a new dimension for your report'}
+            {mode === 'edit' 
+              ? 'Update the dimension details' 
+              : accountId 
+                ? 'Create a new dimension that will be available across all reports in this account'
+                : 'Create a new dimension for this report'
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -449,7 +468,7 @@ export const DimensionModal = ({
                       >
                         <span className="font-medium">{dim.name}</span>
                         <span className="text-xs text-muted-foreground">
-                          ({dim.type})
+                          ({dim.type}) {dim.scope && `- ${dim.scope}`}
                         </span>
                       </button>
                     ))}
@@ -480,6 +499,14 @@ export const DimensionModal = ({
               </Button>
             </div>
           </div>
+
+          {accountId && mode === 'add' && (
+            <div className="bg-blue-50 p-3 rounded-md">
+              <p className="text-sm text-blue-800">
+                <strong>Account Dimension:</strong> This dimension will be available across all reports in this account.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2">

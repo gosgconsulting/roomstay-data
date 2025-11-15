@@ -17,6 +17,7 @@ interface View {
   is_default?: boolean;
   visible_kpis?: string[];
   kpi_order?: string[];
+  report_id: string; // Ensure this is always present
 }
 
 interface UsePerformanceTableViewsOptions {
@@ -37,6 +38,7 @@ interface UsePerformanceTableViewsOptions {
 
 /**
  * Hook for managing table views in PerformanceTable
+ * Each report has its own set of views that are NOT shared with other reports
  */
 export function usePerformanceTableViews({
   reportId,
@@ -65,7 +67,7 @@ export function usePerformanceTableViews({
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      console.log('Loading views for report:', reportId, 'isSharedView:', isSharedView);
+      console.log('[VIEWS] Loading views for report:', reportId, 'isSharedView:', isSharedView);
 
       let userId = user?.id;
       
@@ -83,17 +85,17 @@ export function usePerformanceTableViews({
         }
         
         userId = reportData.user_id;
-        console.log('Loading report owner views for shared view. Owner:', userId);
+        console.log('[VIEWS] Loading report owner views for shared view. Owner:', userId);
       } else if (!user) {
         console.error("Cannot load views: No user");
         return;
       }
 
-      // Load all views for this report (either current user or report owner)
+      // Load views ONLY for this specific report (report-scoped, not account-scoped)
       const { data: views, error } = await supabase
         .from("report_views")
         .select("*")
-        .eq("report_id", reportId)
+        .eq("report_id", reportId) // CRITICAL: Only load views for THIS report
         .eq("user_id", userId)
         .order("created_at", { ascending: true });
 
@@ -102,7 +104,7 @@ export function usePerformanceTableViews({
         throw new Error((error as any)?.message ?? 'Failed to fetch views');
       }
 
-      console.log('Found views:', views?.length || 0);
+      console.log('[VIEWS] Found views for report', reportId, ':', views?.length || 0);
 
       if (views && views.length > 0) {
         // Update default views for Roomstay account if needed
@@ -127,7 +129,7 @@ export function usePerformanceTableViews({
             const needsUpdate = JSON.stringify(currentKPIs) !== JSON.stringify(roomstayKPIs);
             
             if (needsUpdate) {
-              console.log('Updating Roomstay default view KPI order');
+              console.log('[VIEWS] Updating Roomstay default view KPI order for report:', reportId);
               await supabase
                 .from('report_views')
                 .update({
@@ -153,10 +155,10 @@ export function usePerformanceTableViews({
         loadViewSettingsFromData(defaultView);
       } else if (!isSharedView) {
         // Only create a default view if not a shared view and no views exist
-        console.log('No views found, creating default views');
+        console.log('[VIEWS] No views found for report', reportId, ', creating default views');
         await createDefaultViews();
       } else {
-        console.log('No views found for shared report');
+        console.log('[VIEWS] No views found for shared report');
       }
     } catch (error) {
       console.error("Error loading views:", error);
@@ -169,7 +171,7 @@ export function usePerformanceTableViews({
       return;
     }
 
-    console.log('Loading view settings for:', view.name, view);
+    console.log('[VIEWS] Loading view settings for report:', reportId, 'view:', view.name, view);
     
     // Map old dimension IDs to account-scoped dimension IDs for group_by_dimensions
     const mapDimensionIdsLocal = async (dimIds: string[]): Promise<string[]> => {
@@ -208,14 +210,14 @@ export function usePerformanceTableViews({
               
               if (newDimensionId) {
                 mapped.push(newDimensionId);
-                console.log(`[testing] Mapped group dimension "${oldDim.name}": ${oldDim.id} -> ${newDimensionId}`);
+                console.log(`[VIEWS] Mapped group dimension "${oldDim.name}": ${oldDim.id} -> ${newDimensionId}`);
               } else {
-                console.warn(`[testing] Could not find account-scoped dimension for "${oldDim.name}" (${oldDim.id})`);
+                console.warn(`[VIEWS] Could not find account-scoped dimension for "${oldDim.name}" (${oldDim.id})`);
               }
             });
           }
         } catch (error) {
-          console.error('[testing] Error mapping old dimension IDs:', error);
+          console.error('[VIEWS] Error mapping old dimension IDs:', error);
         }
       }
       
@@ -235,14 +237,14 @@ export function usePerformanceTableViews({
         
         if (dateDimension) {
           finalGroupDimensions = [dateDimension.id];
-          console.log('Auto-selected Date dimension for grouping:', dateDimension.name);
+          console.log('[VIEWS] Auto-selected Date dimension for grouping:', dateDimension.name);
         } else if (textDimension) {
           finalGroupDimensions = [textDimension.id];
-          console.log('Auto-selected text dimension for grouping:', textDimension.name);
+          console.log('[VIEWS] Auto-selected text dimension for grouping:', textDimension.name);
         } else {
           // Fallback to first available dimension
           finalGroupDimensions = [dimensions[0].id];
-          console.log('Auto-selected first available dimension for grouping:', dimensions[0].name);
+          console.log('[VIEWS] Auto-selected first available dimension for grouping:', dimensions[0].name);
         }
       }
       
@@ -254,8 +256,8 @@ export function usePerformanceTableViews({
     loadDimensionsAsync();
     
     if (view.visible_columns && view.visible_columns.length > 0) {
-      console.log('[testing] Loading visible columns from view:', view.visible_columns.length, 'columns');
-      console.log('[testing] Visible column IDs:', view.visible_columns);
+      console.log('[VIEWS] Loading visible columns from view:', view.visible_columns.length, 'columns');
+      console.log('[VIEWS] Visible column IDs:', view.visible_columns);
       
       // Map old dimension IDs to account-scoped dimension IDs
       const loadVisibleColumnsAsync = async () => {
@@ -264,13 +266,13 @@ export function usePerformanceTableViews({
         const visibleSet = new Set<string>(mappedVisibleColumns);
         onVisibleColumnsChange(visibleSet);
         onInitialVisibleColumnsChange(new Set<string>(visibleSet));
-        console.log('[testing] Set visibleColumns state:', visibleSet.size, 'columns (mapped from', view.visible_columns.length, 'original)');
+        console.log('[VIEWS] Set visibleColumns state:', visibleSet.size, 'columns (mapped from', view.visible_columns.length, 'original)');
       };
       
       loadVisibleColumnsAsync();
     } else {
       // No saved visible_columns - set defaults based on dimension type
-      console.log('[testing] No saved visible_columns, setting defaults');
+      console.log('[VIEWS] No saved visible_columns, setting defaults');
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
       const defaultVisible = new Set<string>(
         dimensions
@@ -278,7 +280,7 @@ export function usePerformanceTableViews({
                       (d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula))
           .map(d => d.id)
       );
-      console.log('[testing] Setting default visible columns:', Array.from(defaultVisible));
+      console.log('[VIEWS] Setting default visible columns:', Array.from(defaultVisible));
       onVisibleColumnsChange(defaultVisible);
       onInitialVisibleColumnsChange(new Set(defaultVisible));
     }
@@ -286,7 +288,7 @@ export function usePerformanceTableViews({
     
     // Load column order if available
     if (view.column_order && view.column_order.length > 0) {
-      console.log('Loading column order:', view.column_order);
+      console.log('[VIEWS] Loading column order:', view.column_order);
       onColumnOrderChange(view.column_order);
       onInitialColumnOrderChange([...view.column_order]);
     } else if (dimensions.length > 0) {
@@ -301,18 +303,18 @@ export function usePerformanceTableViews({
     
     // Load date granularity if available (default to day)
     if (view.date_granularity && view.date_granularity !== 'none') {
-      console.log('Loading date granularity:', view.date_granularity);
+      console.log('[VIEWS] Loading date granularity:', view.date_granularity);
       onDateGranularityChange(view.date_granularity as 'day' | 'week' | 'month' | 'year');
     }
     
     // Load date order if available (default to desc)
     if (view.date_order) {
-      console.log('Loading date order:', view.date_order);
+      console.log('[VIEWS] Loading date order:', view.date_order);
       onDateOrderChange(view.date_order as 'asc' | 'desc');
     }
     
-    console.log('View settings loaded successfully');
-  }, [dimensions, onGroupByChange, onBreakdownByChange, onThenByChange, onVisibleColumnsChange, onInitialVisibleColumnsChange, onColumnOrderChange, onInitialColumnOrderChange, onDateGranularityChange, onDateOrderChange]);
+    console.log('[VIEWS] View settings loaded successfully for report:', reportId);
+  }, [dimensions, onGroupByChange, onBreakdownByChange, onThenByChange, onVisibleColumnsChange, onInitialVisibleColumnsChange, onColumnOrderChange, onInitialColumnOrderChange, onDateGranularityChange, onDateOrderChange, reportId]);
 
   const createDefaultViews = useCallback(async () => {
     if (!reportId) {
@@ -332,7 +334,7 @@ export function usePerformanceTableViews({
       const defaultGroupDimension = dateDimension || dimensions.find(d => d.type === 'text');
       const isDateGrouping = defaultGroupDimension?.type === 'date';
       
-      console.log('Creating default view for report:', reportId, 'with dimension:', defaultGroupDimension?.name, 'type:', defaultGroupDimension?.type);
+      console.log('[VIEWS] Creating default view for report:', reportId, 'with dimension:', defaultGroupDimension?.name, 'type:', defaultGroupDimension?.type);
 
       // Set default visible columns - hide some columns by default
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
@@ -367,7 +369,7 @@ export function usePerformanceTableViews({
         const { data: newView, error } = await supabase
           .from("report_views")
           .insert({
-            report_id: reportId,
+            report_id: reportId, // CRITICAL: Each view is tied to THIS specific report
             user_id: user.id,
             name: dateConfig.name,
             is_default: dateConfig.isDefault,
@@ -388,7 +390,7 @@ export function usePerformanceTableViews({
           .single();
 
         if (error) {
-          console.error(`Error creating ${dateConfig.name} view:`, error);
+          console.error(`[VIEWS] Error creating ${dateConfig.name} view for report ${reportId}:`, error);
           continue;
         }
 
@@ -398,7 +400,7 @@ export function usePerformanceTableViews({
       }
 
       if (createdViews.length > 0) {
-        console.log(`Created ${createdViews.length} default views successfully`);
+        console.log(`[VIEWS] Created ${createdViews.length} default views successfully for report:`, reportId);
         setTableViews(createdViews);
         const defaultView = createdViews.find(v => v.is_default) || createdViews[0];
         setActiveViewId(defaultView.id);
@@ -443,7 +445,7 @@ export function usePerformanceTableViews({
     
     // Don't save if this is a shared view (read-only)
     if (isSharedView) {
-      console.log('Skipping save for shared view (read-only)');
+      console.log('[VIEWS] Skipping save for shared view (read-only)');
       return;
     }
     
@@ -468,7 +470,7 @@ export function usePerformanceTableViews({
         date_order: dateOrder,
       };
 
-      console.log('Saving view settings:', activeViewId, viewData);
+      console.log('[VIEWS] Saving view settings for report:', reportId, 'view:', activeViewId, viewData);
 
       const { error } = await supabase
         .from("report_views")
@@ -476,14 +478,15 @@ export function usePerformanceTableViews({
           ...viewData,
           name: tableViews.find(v => v.id === activeViewId)?.name || "Default View",
         })
-        .eq("id", activeViewId);
+        .eq("id", activeViewId)
+        .eq("report_id", reportId); // CRITICAL: Ensure we only update views for THIS report
 
       if (error) {
-        console.error('Error saving view settings:', error);
+        console.error('[VIEWS] Error saving view settings:', error);
         throw new Error((error as any)?.message ?? 'Failed to save view settings');
       }
 
-      console.log('View settings saved successfully');
+      console.log('[VIEWS] View settings saved successfully for report:', reportId);
 
       // Update local state
       setTableViews(prev => prev.map(v => 
@@ -506,7 +509,8 @@ export function usePerformanceTableViews({
       const { error } = await supabase
         .from("report_views")
         .delete()
-        .eq("id", viewId);
+        .eq("id", viewId)
+        .eq("report_id", reportId); // CRITICAL: Only delete views for THIS report
 
       if (error) throw new Error((error as any)?.message ?? 'Failed to delete view');
 
@@ -540,7 +544,8 @@ export function usePerformanceTableViews({
       const { error } = await supabase
         .from("report_views")
         .update({ name: editingTabName.trim() })
-        .eq("id", editingTabId);
+        .eq("id", editingTabId)
+        .eq("report_id", reportId); // CRITICAL: Only update views for THIS report
 
       if (error) throw new Error((error as any)?.message ?? 'Failed to rename view');
 
@@ -552,7 +557,7 @@ export function usePerformanceTableViews({
       console.error("Error renaming table:", error);
       throw error;
     }
-  }, [isSharedView]);
+  }, [isSharedView, reportId]);
 
   return {
     tableViews,
