@@ -14,6 +14,7 @@ interface TableHeaderProps {
   dimensionHasData: Record<string, boolean>;
   reportId: string | null;
   isSharedView: boolean;
+  isEditMode?: boolean;
   onDimensionChange: (value: string, selector: "group" | "breakdown" | "then") => void;
   onDimensionSelectorOpen: (e: React.MouseEvent, selector: "group" | "breakdown" | "then") => void;
   visibleColumns: Set<string>;
@@ -40,6 +41,7 @@ export function TableHeader({
   dimensionHasData,
   reportId,
   isSharedView,
+  isEditMode = false,
   onDimensionChange,
   onDimensionSelectorOpen,
   visibleColumns,
@@ -66,8 +68,6 @@ export function TableHeader({
       
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 text-sm">
-          {/* Group by - always shown */}
-          {/* Show all dimensions (current selection is included so it displays properly) */}
           <DimensionSelectorGroup
             label="Group by"
             dimensions={groupByDimensions}
@@ -76,12 +76,11 @@ export function TableHeader({
             dimensionHasData={dimensionHasData}
             reportId={reportId}
             isSharedView={isSharedView}
+            isEditMode={isEditMode}
             onValueChange={(value) => onDimensionChange(value, "group")}
             onContextMenu={(e) => onDimensionSelectorOpen(e, "group")}
           />
           
-          {/* Breakdown by - shown only if 2+ dimensions selected */}
-          {/* Show all dimensions (current selection is included so it displays properly) */}
           {groupByDimensions.length >= 2 && (
             <DimensionSelectorGroup
               label="Breakdown by"
@@ -91,13 +90,12 @@ export function TableHeader({
               dimensionHasData={dimensionHasData}
               reportId={reportId}
               isSharedView={isSharedView}
+              isEditMode={isEditMode}
               onValueChange={(value) => onDimensionChange(value, "breakdown")}
               onContextMenu={(e) => onDimensionSelectorOpen(e, "breakdown")}
             />
           )}
           
-          {/* Then by - shown only if 3+ dimensions selected */}
-          {/* Show all dimensions (current selection is included so it displays properly) */}
           {groupByDimensions.length >= 3 && (
             <DimensionSelectorGroup
               label="Then by"
@@ -107,13 +105,14 @@ export function TableHeader({
               dimensionHasData={dimensionHasData}
               reportId={reportId}
               isSharedView={isSharedView}
+              isEditMode={isEditMode}
               onValueChange={(value) => onDimensionChange(value, "then")}
               onContextMenu={(e) => onDimensionSelectorOpen(e, "then")}
             />
           )}
         </div>
         
-        {!isSharedView && (
+        {!isSharedView && isEditMode && (
           <div className="flex items-center gap-2">
             <ColumnVisibilitySheet
               dimensions={dimensions}
@@ -133,4 +132,3 @@ export function TableHeader({
     </>
   );
 }
-

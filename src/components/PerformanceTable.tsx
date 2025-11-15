@@ -19,13 +19,14 @@ import { checkDataSources } from "@/lib/performanceTable/dataSourceUtils";
 
 interface PerformanceTableProps {
   reportId: string | null;
-  reportIds?: string[]; // For consolidated view with multiple reports
+  reportIds?: string[];
   filters: FilterState;
   isSharedView?: boolean;
   accountId?: string;
   visibilityRefreshTrigger?: number;
   onLoadingComplete?: () => void;
   onFiltersChange?: (filters: FilterState) => void;
+  isEditMode?: boolean;
 }
 
 export const PerformanceTable = ({
@@ -37,6 +38,7 @@ export const PerformanceTable = ({
   visibilityRefreshTrigger,
   onLoadingComplete,
   onFiltersChange,
+  isEditMode = false,
 }: PerformanceTableProps) => {
   // Modal states
   const [filterModalOpen, setFilterModalOpen] = useState(false);
@@ -600,6 +602,7 @@ export const PerformanceTable = ({
             dimensionHasData={dimensionHasData}
             reportId={reportId}
             isSharedView={isSharedView}
+            isEditMode={isEditMode}
             onDimensionChange={handleDimensionChange}
             onDimensionSelectorOpen={handleDimensionSelectorOpen}
             visibleColumns={visibleColumns}
@@ -619,7 +622,7 @@ export const PerformanceTable = ({
               {isLoadingDimensions ? (
                 "Loading dimensions..."
               ) : hasDataSources ? (
-                "Right-click on 'Group by' to select dimensions"
+                isEditMode ? "Right-click on 'Group by' to select dimensions" : "No dimensions selected"
               ) : (
                 "No data sources found. Please add a data source to this report."
               )}

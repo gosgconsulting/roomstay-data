@@ -41,6 +41,7 @@ export default function ReportDashboard() {
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
+  const [isEditMode, setIsEditMode] = useState(false); // View mode by default
 
   // Load dimensions using the same hook as PerformanceTable
   const {
@@ -328,10 +329,16 @@ export default function ReportDashboard() {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="text-sm font-medium">{session?.user?.email}</p>
-            </div>
+          <div className="flex items-center gap-3">
+            <Button
+              variant={isEditMode ? "default" : "outline"}
+              size="sm"
+              onClick={() => setIsEditMode((prev) => !prev)}
+              className="gap-2"
+              title="Toggle Edit/View mode"
+            >
+              {isEditMode ? "Edit" : "View"}
+            </Button>
           </div>
         </div>
       </header>
@@ -354,7 +361,7 @@ export default function ReportDashboard() {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold">Analytics & Insights</h2>
-                {!isSharedView && (
+                {!isSharedView && isEditMode && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -391,6 +398,7 @@ export default function ReportDashboard() {
               isSharedView={isSharedView} 
               accountId={accountId} 
               visibilityRefreshTrigger={visibilityRefreshTrigger}
+              isEditMode={isEditMode}
               key={`table-${dataRefreshKey}-${loadingGeneration}`}
               onLoadingComplete={() => markComponentLoaded('table')}
             />

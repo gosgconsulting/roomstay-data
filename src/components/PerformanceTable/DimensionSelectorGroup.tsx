@@ -11,12 +11,13 @@ import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDime
 
 interface DimensionSelectorGroupProps {
   label: string;
-  dimensions: string[]; // Current selected dimension(s)
-  availableDimensions?: string[]; // Available options (defaults to dimensions if not provided)
+  dimensions: string[];
+  availableDimensions?: string[];
   allDimensions: Dimension[];
   dimensionHasData: Record<string, boolean>;
   reportId: string | null;
   isSharedView: boolean;
+  isEditMode?: boolean;
   onValueChange: (value: string) => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }
@@ -32,6 +33,7 @@ export function DimensionSelectorGroup({
   dimensionHasData,
   reportId,
   isSharedView,
+  isEditMode = false,
   onValueChange,
   onContextMenu,
 }: DimensionSelectorGroupProps) {
@@ -53,7 +55,7 @@ export function DimensionSelectorGroup({
         >
           <SelectTrigger 
             className="w-40 bg-background"
-            onContextMenu={!isSharedView ? onContextMenu : undefined}
+            onContextMenu={!isSharedView && isEditMode ? onContextMenu : undefined}
           >
             <SelectValue />
           </SelectTrigger>
@@ -86,7 +88,7 @@ export function DimensionSelectorGroup({
     );
   }
 
-  if (!isSharedView) {
+  if (!isSharedView && isEditMode) {
     return (
       <div className="flex items-center gap-2">
         <span className="text-muted-foreground">{label}:</span>
@@ -109,4 +111,3 @@ export function DimensionSelectorGroup({
     </div>
   );
 }
-
