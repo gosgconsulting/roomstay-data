@@ -26,16 +26,19 @@ export async function getAccountIdFromReport(reportId: string): Promise<string |
  * 1. Account-specific dimensions (highest priority)
  * 2. Custom dimensions (user-specific)
  * 3. Global dimensions (templates/fallback)
+ * 4. Vlookup dimensions (special type)
  * 
  * @param userId - The ID of the user
  * @param reportId - Optional report ID to get account-specific dimensions
+ * @param includeVlookup - Whether to include vlookup dimensions (default: false)
  * @returns Promise<Dimension[]> - Array of unique dimensions
  */
 export async function loadDimensionsForUser(
   userId: string,
-  reportId?: string
+  reportId?: string,
+  includeVlookup: boolean = false
 ): Promise<Dimension[]> {
-  console.log('[testing] DimensionSelectorModal - Loading dimensions for user:', userId);
+  console.log('[testing] DimensionSelectorModal - Loading dimensions for user:', userId, 'includeVlookup:', includeVlookup);
 
   let accountId: string | null = null;
   let accountData: Dimension[] | null = null;
@@ -77,11 +80,26 @@ export async function loadDimensionsForUser(
 
   if (customError) throw customError;
 
-  // Combine all dimensions with priority: account > custom > global
+  // Load vlookup dimensions if requested
+  let vlookupData: Dimension[] = [];
+  if (includeVlookup) {
+    const { data: vlookup, error: vlookupError } = await supabase
+      .from("dimensions")
+      .select("*")
+      .eq("type", "vlookup")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (vlookupError) throw vlookupError;
+    vlookupData = vlookup as Dimension[];
+  }
+
+  // Combine all dimensions with priority: account > custom > global > vlookup
   const allDimensions = [
     ...(accountData || []),
     ...(customData || []),
-    ...(globalData || [])
+    ...(globalData || []),
+    ...vlookupData
   ];
 
   // Remove duplicates by name, keeping the first occurrence (most specific scope)
@@ -93,9 +111,9 @@ export async function loadDimensionsForUser(
     global: globalData?.length || 0,
     account: accountData?.length || 0,
     custom: customData?.length || 0,
+    vlookup: vlookupData?.length || 0,
     total: uniqueDimensions.length
   });
 
   return uniqueDimensions;
 }
-

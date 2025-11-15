@@ -598,7 +598,23 @@ export const FiltersBar = ({
         .order("created_at", { ascending: false });
       if (globalError) throw globalError;
 
-      const all = [...accountData, ...customData, ...(globalData || [])] as Dimension[];
+      // Include vlookup dimensions in filters (they can be used for filtering)
+      const { data: vlookupData, error: vlookupError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("type", "vlookup")
+        .or(`report_id.is.null,report_id.eq.${reportId}`)
+        .order("created_at", { ascending: false });
+
+      if (vlookupError) console.error("Error loading vlookup dimensions:", vlookupError);
+
+      const all = [
+        ...(accountData || []),
+        ...(customData || []),
+        ...(globalData || []),
+        ...(vlookupData || [])
+      ] as Dimension[];
       const seen = new Set<string>();
       const unique = all.filter(d => {
         if (seen.has(d.name)) return false;

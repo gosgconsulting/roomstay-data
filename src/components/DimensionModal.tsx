@@ -99,12 +99,13 @@ export const DimensionModal = ({
         accountData = (data || []) as Dimension[];
       }
 
-      // Load custom dimensions for this user
+      // Load custom dimensions for this user (excluding vlookup dimensions)
       const { data: customData, error: customError } = await supabase
         .from("dimensions")
         .select("*")
         .eq("user_id", user.id)
         .eq("scope", "custom")
+        .neq("type", "vlookup") // Exclude vlookup dimensions
         .order("created_at", { ascending: false });
 
       if (customError) throw customError;

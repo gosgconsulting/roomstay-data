@@ -52,19 +52,13 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load dimensions
-      const dims = await loadDimensionsForUser(user.id, reportId);
-      setDimensions(dims.filter(d => d.type !== 'date'));
+      // Load dimensions (excluding vlookup dimensions for source selection)
+      const dims = await loadDimensionsForUser(user.id, reportId, false);
+      setDimensions(dims.filter(d => d.type !== 'date' && d.type !== 'vlookup'));
 
-      // Load existing vlookup dimensions
-      const { data: vlookupDims } = await supabase
-        .from('dimensions')
-        .select('id, name')
-        .eq('user_id', user.id)
-        .eq('type', 'vlookup')
-        .order('name');
-      
-      setVlookupDimensions(vlookupDims || []);
+      // Load existing vlookup dimensions for display
+      const vlookupDims = await loadDimensionsForUser(user.id, reportId, true);
+      setVlookupDimensions(vlookupDims.filter(d => d.type === 'vlookup'));
 
       // Preload dimension values using same logic as FiltersBar
       let rows: any[] = [];
