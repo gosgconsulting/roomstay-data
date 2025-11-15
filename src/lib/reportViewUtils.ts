@@ -37,19 +37,21 @@ export async function saveDimensionSettings(
   try {
     console.log(`[DIMENSION-SELECTOR] Saving dimensions for report ${reportId}:`, activeDimensions);
 
-    const { data: existingView } = await supabase
+    const { data: existingViewData, error: existingViewError } = await supabase
       .from("report_views")
-      .select("id, filter_values, date_range_start, date_range_end, date_preset")
+      .select("id, filter_values, date_range_start, date_range_end, date_range_preset")
       .eq("report_id", reportId)
       .eq("user_id", userId)
       .eq("is_default", true)
       .maybeSingle();
 
+    const existingView = existingViewError ? null : (existingViewData as any);
+
     const cleanedFilterValues =
-      existingView && (existingView as any).filter_values
+      existingView && existingView.filter_values
         ? cleanupFilterValues(
             activeDimensions,
-            (existingView as any).filter_values as Record<string, any>
+            existingView.filter_values as Record<string, any>
           )
         : {};
 
@@ -58,14 +60,14 @@ export async function saveDimensionSettings(
       filter_values: cleanedFilterValues,
       date_range_start: (existingView?.date_range_start as string) || null,
       date_range_end: (existingView?.date_range_end as string) || null,
-      date_preset: (existingView?.date_preset as string) || "all_time",
+      date_range_preset: (existingView?.date_range_preset as string) || "this_month",
     };
 
-    if (existingView && (existingView as any).id) {
+    if (existingView && existingView.id) {
       const { error } = await supabase
         .from("report_views")
         .update(viewData)
-        .eq("id", (existingView as any).id as string);
+        .eq("id", existingView.id as string);
       if (error) throw new Error((error as any)?.message ?? 'Supabase update error');
     } else {
       const { error } = await supabase
