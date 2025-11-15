@@ -416,7 +416,7 @@ export function VlookupModal({ open, onOpenChange, reportId, accountId, onSave }
               <tr className="border-b">
                 <th className="text-left p-2 font-medium">Source Dimension</th>
                 <th className="text-left p-2 font-medium">Dimension Value</th>
-                <th className="text-left p-2 font-medium">Target Dimension</th>
+                <th className="text-left p-2 font-medium">New Dimension Name</th>
                 <th className="text-left p-2 font-medium">Mapped Value</th>
                 <th className="w-12"></th>
               </tr>
