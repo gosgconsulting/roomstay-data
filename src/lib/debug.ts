@@ -19,7 +19,47 @@ export const retryWithBackoff = async (
 };
 
 /**
- * Filter dimensions by visibility settings
+ * Filter dimensions by filter settings (for FiltersBar)
+ * Uses filter_dimensions instead of visible_dimensions
+ */
+export const filterDimensionsByFilterSettings = async (
+  dimensions: any[], 
+  reportId: string, 
+  userId: string, 
+  supabaseClient: any
+): Promise<any[]> => {
+  try {
+    // Get filter settings from report_views
+    const { data: viewSettings } = await supabaseClient
+      .from("report_views")
+      .select("filter_dimensions")
+      .eq("report_id", reportId)
+      .eq("user_id", userId)
+      .eq("is_default", true)
+      .maybeSingle();
+
+    console.log('[filterDimensionsByFilterSettings] viewSettings:', viewSettings);
+
+    if (viewSettings?.filter_dimensions && Array.isArray(viewSettings.filter_dimensions)) {
+      const filterDimensionIds = new Set(viewSettings.filter_dimensions);
+      console.log('[filterDimensionsByFilterSettings] filter_dimensions:', Array.from(filterDimensionIds));
+      const filtered = dimensions.filter(d => filterDimensionIds.has(d.id));
+      console.log('[filterDimensionsByFilterSettings] Filtered dimensions:', filtered.map(d => d.name));
+      return filtered;
+    }
+
+    // If no filter settings, return all dimensions
+    console.log('[filterDimensionsByFilterSettings] No filter settings, returning all dimensions');
+    return dimensions;
+  } catch (error) {
+    console.error('Error filtering dimensions by filter settings:', error);
+    // Return all dimensions on error
+    return dimensions;
+  }
+};
+
+/**
+ * Filter dimensions by visibility settings (for table columns)
  */
 export const filterDimensionsByVisibility = async (
   dimensions: any[], 

@@ -11,7 +11,7 @@ import { startOfMonth, endOfMonth, startOfWeek, subDays, subMonths, startOfYear,
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { DimensionSelectorModal } from "./DimensionSelectorModal";
-import { retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
+import { retryWithBackoff, filterDimensionsByVisibility, filterDimensionsByFilterSettings } from "@/lib/debug";
 import { useToast } from "@/components/ui/use-toast";
 import { useVlookupMappings, getMappedValue } from "@/hooks/useVlookupMappings";
 
@@ -617,11 +617,15 @@ export const FiltersBar = ({
         return true;
       });
 
+      console.log('[FiltersBar] loadDimensions - All unique dimensions:', unique.map(d => `${d.name} (${d.type})`));
       const filterable = unique.filter(d => d.type === "text");
+      console.log('[FiltersBar] loadDimensions - After type filter (text only):', filterable.map(d => d.name));
+      
       const final = (user && reportId)
-        ? await filterDimensionsByVisibility(filterable, reportId, user.id, supabase)
+        ? await filterDimensionsByFilterSettings(filterable, reportId, user.id, supabase)
         : filterable;
-
+      
+      console.log('[FiltersBar] loadDimensions - After filter settings:', final.map(d => d.name));
       setDimensions(final);
     } catch (e) {
       console.error("Error loading dimensions:", e);
