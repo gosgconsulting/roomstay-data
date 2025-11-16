@@ -128,7 +128,29 @@ export default function VlookupModal({
         return true;
       });
 
-      if (!cancel) setLoadedDims(unique as Dimension[]);
+      console.log('[VlookupModal] All unique dimensions before filter:', unique.map(d => d.name));
+
+      // Filter by filter_dimensions from report_views (same as FiltersBar)
+      let filteredDims = unique;
+      if (reportId) {
+        const { data: viewSettings } = await supabase
+          .from("report_views")
+          .select("filter_dimensions")
+          .eq("report_id", reportId)
+          .eq("user_id", user.id)
+          .eq("is_default", true)
+          .maybeSingle();
+
+        console.log('[VlookupModal] View settings filter_dimensions:', viewSettings?.filter_dimensions);
+
+        if (viewSettings?.filter_dimensions && Array.isArray(viewSettings.filter_dimensions)) {
+          const filterDimensionIds = new Set(viewSettings.filter_dimensions);
+          filteredDims = unique.filter(d => filterDimensionIds.has(d.id));
+          console.log('[VlookupModal] Filtered dimensions by filter_dimensions:', filteredDims.map(d => d.name));
+        }
+      }
+
+      if (!cancel) setLoadedDims(filteredDims as Dimension[]);
 
       // Load target dimensions - look for account-scoped text dimensions that were created via vlookup
       // We'll identify vlookup dimensions by checking if they have associated cluster_dimensions
@@ -259,10 +281,15 @@ export default function VlookupModal({
       console.log('[VlookupModal] Loading values for dimension:', dimensionId);
       setLoadingOptionsMap(prev => ({ ...prev, [dimensionId]: true }));
       try {
+        // Find dimension name for better value lookup
+        const dimension = loadedDims.find(d => d.id === dimensionId);
+        const dimensionName = dimension?.name;
+        
         const values = await fetchUniqueDimensionValues({
           reportId: reportId ?? undefined,
           reportIds,
           dimensionId,
+          dimensionName,
           limit: 5000,
         });
         console.log('[VlookupModal] Loaded values for dimension', dimensionId, ':', values?.length || 0, 'values');
@@ -515,10 +542,16 @@ export default function VlookupModal({
                       // Prime options for this new source if not already loaded
                       if (!optionsMap[val]) {
                         setLoadingOptionsMap(prev => ({ ...prev, [val]: true }));
+                        
+                        // Find dimension name for better value lookup
+                        const dimension = loadedDims.find(d => d.id === val);
+                        const dimensionName = dimension?.name;
+                        
                         fetchUniqueDimensionValues({
                           reportId: reportId ?? undefined,
                           reportIds,
                           dimensionId: val,
+                          dimensionName,
                           limit: 5000,
                         }).then(values => {
                           setOptionsMap(prev => ({ ...prev, [val]: values || [] }));
