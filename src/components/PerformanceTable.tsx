@@ -13,7 +13,7 @@ import { TableSkeleton } from "./PerformanceTable/TableSkeleton";
 import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import { usePerformanceTableViews } from "@/hooks/performanceTable/usePerformanceTableViews";
 import { usePerformanceTableColumns } from "@/hooks/performanceTable/usePerformanceTableColumns";
-import { usePerformanceTableData } from "@/hooks/performanceTable/usePerformanceTableData";
+import { usePerformanceTableDataFixed as usePerformanceTableData } from "@/hooks/performanceTable/usePerformanceTableDataFixed";
 import { usePerformanceTableFilters } from "@/hooks/performanceTable/usePerformanceTableFilters";
 import { checkDataSources } from "@/lib/performanceTable/dataSourceUtils";
 

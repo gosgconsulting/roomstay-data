@@ -6,6 +6,7 @@ import { format, parseISO } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
+import { autoFixDimensionSync } from "@/lib/dimension-sync-auto-fix";
 
 interface KPIChartProps {
   reportId: string | null;
@@ -86,7 +87,7 @@ export function KPIChart({ reportId, filters, accountId, visibilityRefreshTrigge
         return;
       }
 
-      // Fetch raw dimension_data rows (same as Performance Table)
+      // Fetch raw dimension_data rows
       let query = supabase
         .from('dimension_data')
         .select('dimension_values, row_number, data_source_id')
@@ -101,14 +102,15 @@ export function KPIChart({ reportId, filters, accountId, visibilityRefreshTrigge
         return;
       }
 
-      // Apply date filter (same logic as Performance Table)
-      const dateFromFormatted = stableFilters.dateRange?.from ? format(stableFilters.dateRange.from, 'yyyy-MM-dd') : undefined;
-      const dateToFormatted = stableFilters.dateRange?.to ? format(stableFilters.dateRange.to, 'yyyy-MM-dd') : undefined;
+      // APPLY AUTO-FIX: Fix dimension ID mismatches
+      const fixedRows = await autoFixDimensionSync(rawRows, dimensions);
+      console.log('[KPI-CHART-FIXED] Applied auto-fix to', fixedRows.length, 'rows');
 
-      let filteredRows = rawRows;
-      if (dateFromFormatted || dateToFormatted) {
-        const fromDate = dateFromFormatted ? new Date(dateFromFormatted) : null;
-        const toDate = dateToFormatted ? new Date(dateToFormatted) : null;
+      // Apply date filter (same logic as Performance Table)
+      let filteredRows = fixedRows;
+      if (stableFilters.dateRange?.from || stableFilters.dateRange?.to) {
+        const fromDate = stableFilters.dateRange?.from ? new Date(format(stableFilters.dateRange.from, 'yyyy-MM-dd')) : null;
+        const toDate = stableFilters.dateRange?.to ? new Date(format(stableFilters.dateRange.to, 'yyyy-MM-dd')) : null;
         const adjustedToDate = toDate
           ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1)
           : null;

@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
+import { autoFixDimensionSync } from "@/lib/dimension-sync-auto-fix";
 
 interface KPIMetric {
   label: string;
@@ -88,15 +89,15 @@ export const KPIMetricsCards = ({
   const loadMetrics = async () => {
     setIsLoading(true);
     try {
-      console.log('[KPIMetricsCards] Starting to load metrics...');
+      console.log('[KPI-METRICS-FIXED] Starting to load metrics with auto-fix...');
       
       if (!reportId || dimensions.length === 0) {
-        console.log('[KPIMetricsCards] Missing reportId or dimensions, skipping');
+        console.log('[KPI-METRICS-FIXED] Missing reportId or dimensions, skipping');
         setMetrics([]);
         return;
       }
 
-      // Load KPI settings if available (visible_kpis and kpi_order)
+      // Load KPI settings if available
       let visibleKPIs: string[] | null = null;
       let kpiOrder: string[] | null = null;
 
@@ -116,8 +117,8 @@ export const KPIMetricsCards = ({
         }
       }
 
-      // Fetch raw dimension_data rows (same as Performance Table)
-      console.log('[KPIMetricsCards] Fetching dimension_data for reportId:', reportId);
+      // Fetch raw dimension_data rows
+      console.log('[KPI-METRICS-FIXED] Fetching dimension_data for reportId:', reportId);
       let query = supabase
         .from('dimension_data')
         .select('dimension_values, row_number, data_source_id')
@@ -126,17 +127,21 @@ export const KPIMetricsCards = ({
 
       const { data: rawRows, error } = await query;
       if (error) {
-        console.error('[KPIMetricsCards] Error fetching dimension_data:', error);
+        console.error('[KPI-METRICS-FIXED] Error fetching dimension_data:', error);
         throw new Error((error as any)?.message ?? 'Failed to fetch dimension_data');
       }
       
-      console.log('[KPIMetricsCards] Raw rows fetched:', rawRows?.length || 0);
+      console.log('[KPI-METRICS-FIXED] Raw rows fetched:', rawRows?.length || 0);
       
       if (!rawRows || rawRows.length === 0) {
-        console.log('[KPIMetricsCards] No raw rows found');
+        console.log('[KPI-METRICS-FIXED] No raw rows found');
         setMetrics([]);
         return;
       }
+
+      // APPLY AUTO-FIX: Fix dimension ID mismatches
+      const fixedRows = await autoFixDimensionSync(rawRows, dimensions);
+      console.log('[KPI-METRICS-FIXED] Applied auto-fix to', fixedRows.length, 'rows');
 
       // Apply date filter (same logic as Performance Table)
       const dateFromFormatted = stableFilters.dateRange?.from ? format(stableFilters.dateRange.from, 'yyyy-MM-dd') : undefined;
@@ -146,7 +151,7 @@ export const KPIMetricsCards = ({
       const dateDims = dimensions.filter(d => d.type === 'date');
       let dateDimInUse: { id: string; name: string } | null = null;
       for (const d of dateDims) {
-        const found = rawRows.some((r: any) => {
+        const found = fixedRows.some((r: any) => {
           const dv = r.dimension_values || {};
           return dv[d.id] !== undefined && dv[d.id] !== null && dv[d.id] !== '';
         });
@@ -156,9 +161,9 @@ export const KPIMetricsCards = ({
         }
       }
 
-      console.log('[KPIMetricsCards] Date dimension in use:', dateDimInUse?.name);
+      console.log('[KPI-METRICS-FIXED] Date dimension in use:', dateDimInUse?.name);
 
-      let filteredRows = rawRows;
+      let filteredRows = fixedRows;
       if (dateDimInUse && (dateFromFormatted || dateToFormatted)) {
         const fromDate = dateFromFormatted ? new Date(dateFromFormatted) : null;
         const toDate = dateToFormatted ? new Date(dateToFormatted) : null;
@@ -177,7 +182,7 @@ export const KPIMetricsCards = ({
         });
       }
 
-      console.log('[KPIMetricsCards] Rows after date filter:', filteredRows.length);
+      console.log('[KPI-METRICS-FIXED] Rows after date filter:', filteredRows.length);
 
       // Apply dimension filters (same logic as Performance Table)
       const normalizedFilters: Record<string, string[]> = {};
@@ -203,7 +208,7 @@ export const KPIMetricsCards = ({
         });
       }
 
-      console.log('[KPIMetricsCards] Rows after dimension filters:', filteredRows.length);
+      console.log('[KPI-METRICS-FIXED] Rows after dimension filters:', filteredRows.length);
 
       // Calculate current period metrics
       const currentMetrics: Record<string, number> = {};
@@ -219,7 +224,7 @@ export const KPIMetricsCards = ({
         });
       });
 
-      console.log('[KPIMetricsCards] Current metrics calculated:', Object.keys(currentMetrics));
+      console.log('[KPI-METRICS-FIXED] Current metrics calculated:', Object.keys(currentMetrics));
 
       // Calculate derived metrics
       if (currentMetrics['Clicks'] && currentMetrics['Impressions']) {
