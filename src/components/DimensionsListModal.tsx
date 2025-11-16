@@ -50,7 +50,6 @@ const typeLabels: Record<string, string> = {
   number: "Number",
   currency: "Currency",
   percentage: "Percentage",
-  vlookup: "Vlookup",
 };
 
 export const DimensionsListModal = ({

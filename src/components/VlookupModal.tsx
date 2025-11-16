@@ -269,10 +269,10 @@ export default function VlookupModal({
       return existing[0].id;
     }
 
-    // Create new account-scoped dimension
+    // Create new account-scoped dimension with type 'text' (not 'vlookup')
     const insertData: any = {
       name,
-      type: 'text',
+      type: 'text', // Changed from 'vlookup' to 'text'
       user_id: user.id,
       scope: 'account',
       account_id: accountId,
