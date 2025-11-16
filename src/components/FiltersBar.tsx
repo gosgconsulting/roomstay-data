@@ -697,6 +697,9 @@ export const FiltersBar = ({
   };
 
   const handleDimensionsChange = async (dimensionIds: string[]) => {
+    console.log('[FiltersBar] handleDimensionsChange called with:', dimensionIds);
+    console.log('[FiltersBar] Current dimensions before update:', dimensions.map(d => d.name));
+    
     setActiveDimensions(dimensionIds);
     const next = { ...selectedFilters };
     Object.keys(next).forEach(key => {
@@ -705,7 +708,13 @@ export const FiltersBar = ({
     setSelectedFilters(next);
 
     // Immediately refresh dimensions so new ids are present for rendering
+    console.log('[FiltersBar] Calling loadDimensions to refresh...');
     await loadDimensions();
+    console.log('[FiltersBar] loadDimensions completed');
+    
+    // Reload filter settings to ensure we have the latest data
+    await loadFilterSettings();
+    console.log('[FiltersBar] loadFilterSettings completed');
 
     // Only persist changes in Edit mode
     if (!reportId || isSharedView || isInitialLoad || !isEditMode) return;
