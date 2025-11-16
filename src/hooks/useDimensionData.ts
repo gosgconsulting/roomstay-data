@@ -9,6 +9,7 @@ import { checkDimensionsHaveData } from "@/lib/dimensionUtils";
 export function useDimensionData(reportId?: string) {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [dimensionHasData, setDimensionHasData] = useState<Record<string, boolean>>({});
 
   // Check data availability for dimensions
@@ -17,16 +18,21 @@ export function useDimensionData(reportId?: string) {
       const hasDataMap = await checkDimensionsHaveData(dimensionIds, reportId);
       setDimensionHasData(hasDataMap);
     } catch (error) {
-      console.error('[testing] Error checking dimension data availability:', error);
+      console.error('[useDimensionData] Error checking dimension data availability:', error);
+      // Don't set error state here as this is not critical functionality
     }
   }, []);
 
   // Load dimensions using centralized loader
   const loadDimensions = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setError("User not authenticated");
+        return;
+      }
 
       // Use centralized dimension loader (includes vlookup dimensions)
       const loadedDimensions = await loadDimensionsForUser(user.id, reportId);
@@ -38,7 +44,10 @@ export function useDimensionData(reportId?: string) {
         await checkDataAvailability(dimensionIds, reportId);
       }
     } catch (error) {
-      console.error("Error loading dimensions:", error);
+      console.error("[useDimensionData] Error loading dimensions:", error);
+      setError(error instanceof Error ? error.message : "Failed to load dimensions");
+      // Set empty dimensions to prevent UI errors
+      setDimensions([]);
     } finally {
       setIsLoading(false);
     }
@@ -52,9 +61,15 @@ export function useDimensionData(reportId?: string) {
     }
   }, [reportId, dimensions.length, checkDataAvailability]);
 
+  // Initial load
+  useEffect(() => {
+    loadDimensions();
+  }, [loadDimensions]);
+
   return {
     dimensions,
     isLoading,
+    error,
     dimensionHasData,
     loadDimensions,
   };

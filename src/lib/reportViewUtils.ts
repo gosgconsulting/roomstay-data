@@ -93,11 +93,11 @@ export async function saveDimensionSettings(
       console.log(`[DIMENSION-SELECTOR] User owns the report`);
     }
 
-    // Get existing view - using correct column names from schema
+    // Get existing view - using correct column names from database schema
     console.log(`[DIMENSION-SELECTOR] Fetching existing view...`);
     const { data: existingViewData, error: existingViewError } = await supabase
       .from("report_views")
-      .select("id, filter_values, date_range_start, date_range_end, date_preset, account_id")
+      .select("*")  // Select all columns to avoid missing any
       .eq("report_id", reportId)
       .eq("user_id", userId)
       .eq("is_default", true)
@@ -119,14 +119,34 @@ export async function saveDimensionSettings(
           )
         : {};
 
-    // Prepare the data to save - using correct column names
-    const baseViewData = {
+    // Prepare the data to save - using correct column names from database schema
+    const baseViewData: Record<string, any> = {
       filter_dimensions: activeDimensions,
       filter_values: cleanedFilterValues,
-      date_range_start: existingView?.date_range_start || null,
-      date_range_end: existingView?.date_range_end || null,
-      date_preset: existingView?.date_preset || "this_month",
     };
+
+    // Add date fields only if they exist in the existing view
+    if (existingView) {
+      if ('date_range_start' in existingView) {
+        baseViewData['date_range_start'] = existingView.date_range_start;
+      }
+      
+      if ('date_range_end' in existingView) {
+        baseViewData['date_range_end'] = existingView.date_range_end;
+      }
+      
+      // Use date_preset instead of date_range_preset
+      if ('date_preset' in existingView) {
+        baseViewData['date_preset'] = existingView.date_preset;
+      } else {
+        baseViewData['date_preset'] = "this_month";
+      }
+    } else {
+      // Default values for new view
+      baseViewData['date_range_start'] = null;
+      baseViewData['date_range_end'] = null;
+      baseViewData['date_preset'] = "this_month";
+    }
 
     if (existingView && existingView.id) {
       console.log('[DIMENSION-SELECTOR] Updating existing view:', existingView.id);

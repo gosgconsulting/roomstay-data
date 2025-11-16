@@ -26,6 +26,7 @@ export function useDimensionSelector({
   const {
     dimensions,
     isLoading,
+    error,
     dimensionHasData,
     loadDimensions,
   } = useDimensionData(reportId);
@@ -76,6 +77,7 @@ export function useDimensionSelector({
   return {
     dimensions,
     isLoading,
+    error,
     dimensionHasData,
     dimensionGranularities,
     availableDimensions,
@@ -85,4 +87,3 @@ export function useDimensionSelector({
     handleGranularityChange,
   };
 }
-

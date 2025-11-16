@@ -7,14 +7,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useEffect, useCallback, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { loadDimensionsForUser } from "@/lib/dimensionLoader";
-import { checkDimensionsHaveData } from "@/lib/dimensionUtils";
 import { useDimensionSelector } from "@/hooks/useDimensionSelector";
 import { SelectedDimensionItem } from "./DimensionSelectorModal/SelectedDimensionItem";
 import { AddDimensionSection } from "./DimensionSelectorModal/AddDimensionSection";
 import { useToast } from "@/hooks/use-toast";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 
 interface DimensionSelectorModalProps {
   open: boolean;
@@ -40,10 +37,12 @@ export const DimensionSelectorModal = ({
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const {
     dimensions,
     isLoading,
+    error: loadError,
     dimensionHasData,
     dimensionGranularities,
     availableDimensions,
@@ -64,10 +63,17 @@ export const DimensionSelectorModal = ({
     try {
       setIsSaving(true);
       setSaveError(null);
+      setSuccessMessage(null);
+      
+      // Find dimension name for better user feedback
+      const dimensionName = dimensions.find(d => d.id === dimensionId)?.name || 'Dimension';
+      
       await baseHandleRemoveDimension(dimensionId);
+      
+      setSuccessMessage(`${dimensionName} removed successfully`);
       toast({
         title: "Dimension removed",
-        description: "Dimension configuration updated successfully.",
+        description: `${dimensionName} has been removed from your configuration.`,
         duration: 2000,
       });
     } catch (error) {
@@ -83,16 +89,23 @@ export const DimensionSelectorModal = ({
     } finally {
       setIsSaving(false);
     }
-  }, [baseHandleRemoveDimension, toast]);
+  }, [baseHandleRemoveDimension, toast, dimensions]);
 
   const handleAddDimension = useCallback(async (dimensionId: string) => {
     try {
       setIsSaving(true);
       setSaveError(null);
+      setSuccessMessage(null);
+      
+      // Find dimension name for better user feedback
+      const dimensionName = dimensions.find(d => d.id === dimensionId)?.name || 'Dimension';
+      
       await baseHandleAddDimension(dimensionId);
+      
+      setSuccessMessage(`${dimensionName} added successfully`);
       toast({
         title: "Dimension added",
-        description: "Dimension configuration updated successfully.",
+        description: `${dimensionName} has been added to your configuration.`,
         duration: 2000,
       });
     } catch (error) {
@@ -108,17 +121,41 @@ export const DimensionSelectorModal = ({
     } finally {
       setIsSaving(false);
     }
-  }, [baseHandleAddDimension, toast]);
+  }, [baseHandleAddDimension, toast, dimensions]);
 
+  // Reset error state when modal opens
   useEffect(() => {
     if (open) {
       setSaveError(null);
+      setSuccessMessage(null);
       loadDimensions();
     }
   }, [open, loadDimensions]);
 
+  // Auto-hide success message after 3 seconds
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => {
+        setSuccessMessage(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
+  // Handle close with confirmation if there's an error
+  const handleClose = useCallback(() => {
+    if (saveError) {
+      // If there's an error, ask for confirmation before closing
+      if (confirm("There was an error saving dimensions. Close anyway?")) {
+        onOpenChange(false);
+      }
+    } else {
+      onOpenChange(false);
+    }
+  }, [saveError, onOpenChange]);
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -128,12 +165,33 @@ export const DimensionSelectorModal = ({
         </DialogHeader>
 
         {/* Error display */}
-        {saveError && (
-          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+        {(saveError || loadError) && (
+          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm mb-4">
             <AlertCircle className="h-4 w-4 flex-shrink-0" />
             <div>
-              <div className="font-medium">Error saving dimensions</div>
-              <div className="text-red-600">{saveError}</div>
+              <div className="font-medium">Error</div>
+              <div className="text-red-600">{saveError || loadError}</div>
+              {loadError && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="mt-2 h-8 text-xs" 
+                  onClick={loadDimensions}
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" /> Retry Loading
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Success message */}
+        {successMessage && (
+          <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-md text-green-700 text-sm mb-4">
+            <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+            <div>
+              <div className="font-medium">Success</div>
+              <div className="text-green-600">{successMessage}</div>
             </div>
           </div>
         )}
@@ -141,12 +199,15 @@ export const DimensionSelectorModal = ({
         <div className="py-4 space-y-3">
           {isLoading ? (
             <div className="text-center py-4 text-muted-foreground text-sm">
+              <div className="flex justify-center mb-2">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+              </div>
               Loading dimensions...
             </div>
           ) : (
             <>
               {/* Selected dimensions list */}
-              {selectedDimensions.length > 0 && (
+              {selectedDimensions.length > 0 ? (
                 <div className="space-y-2 mb-3">
                   {selectedDimensions.map((dimensionId) => {
                     const dimension = dimensions.find(d => d.id === dimensionId);
@@ -163,6 +224,10 @@ export const DimensionSelectorModal = ({
                     );
                   })}
                 </div>
+              ) : (
+                <div className="text-center py-4 text-muted-foreground text-sm border border-dashed border-gray-200 rounded-md">
+                  No dimensions selected. Add dimensions below.
+                </div>
               )}
 
               {/* Add dimension section */}
@@ -172,7 +237,7 @@ export const DimensionSelectorModal = ({
                   dimensionHasData={dimensionHasData}
                   reportId={reportId}
                   onAdd={handleAddDimension}
-                  disabled={isSaving}
+                  disabled={isSaving || !!loadError}
                 />
               </div>
             </>
@@ -187,7 +252,7 @@ export const DimensionSelectorModal = ({
             </div>
           )}
           <div className="flex-1"></div>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
+          <Button variant="outline" onClick={handleClose} disabled={isSaving}>
             Close
           </Button>
         </div>
