@@ -15,6 +15,7 @@ interface SelectedDimensionItemProps {
   granularity: string;
   onRemove: (dimensionId: string) => void;
   onGranularityChange: (dimensionId: string, granularity: string) => void;
+  disabled?: boolean;
 }
 
 export function SelectedDimensionItem({
@@ -23,6 +24,7 @@ export function SelectedDimensionItem({
   granularity,
   onRemove,
   onGranularityChange,
+  disabled = false,
 }: SelectedDimensionItemProps) {
   const isDateDimension = dimension?.type === 'date';
 
@@ -35,6 +37,7 @@ export function SelectedDimensionItem({
           size="icon"
           className="h-6 w-6 text-destructive hover:text-destructive"
           onClick={() => onRemove(dimensionId)}
+          disabled={disabled}
         >
           <X className="h-4 w-4" />
         </Button>
@@ -44,6 +47,7 @@ export function SelectedDimensionItem({
           <Select
             value={granularity || 'Day'}
             onValueChange={(value) => onGranularityChange(dimensionId, value)}
+            disabled={disabled}
           >
             <SelectTrigger className="h-9 bg-background">
               <SelectValue placeholder="Select granularity..." />
@@ -62,4 +66,3 @@ export function SelectedDimensionItem({
     </div>
   );
 }
-

@@ -8,9 +8,18 @@ export async function saveDimensionsForReport(
   reportId: string,
   dimensions: string[]
 ): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    console.log('[DIMENSION-OPERATIONS] Saving dimensions for report:', reportId, dimensions);
     await saveDimensionSettings(reportId, user.id, dimensions);
+    console.log('[DIMENSION-OPERATIONS] Successfully saved dimensions');
+  } catch (error) {
+    console.error('[DIMENSION-OPERATIONS] Error saving dimensions for report:', error);
+    throw error instanceof Error ? error : new Error(`Failed to save dimensions: ${String(error)}`);
   }
 }
 
@@ -46,4 +55,3 @@ export function filterOutDateDimensions(
 ): string[] {
   return selectedDimensions.filter(id => !dateDimensionIds.includes(id));
 }
-

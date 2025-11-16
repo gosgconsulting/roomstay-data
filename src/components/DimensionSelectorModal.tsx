@@ -6,13 +6,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 import { checkDimensionsHaveData } from "@/lib/dimensionUtils";
 import { useDimensionSelector } from "@/hooks/useDimensionSelector";
 import { SelectedDimensionItem } from "./DimensionSelectorModal/SelectedDimensionItem";
 import { AddDimensionSection } from "./DimensionSelectorModal/AddDimensionSection";
+import { useToast } from "@/hooks/use-toast";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface DimensionSelectorModalProps {
   open: boolean;
@@ -35,6 +37,10 @@ export const DimensionSelectorModal = ({
   currentDateGranularity = 'day',
   reportId,
 }: DimensionSelectorModalProps) => {
+  const { toast } = useToast();
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const {
     dimensions,
     isLoading,
@@ -42,8 +48,8 @@ export const DimensionSelectorModal = ({
     dimensionGranularities,
     availableDimensions,
     loadDimensions,
-    handleRemoveDimension,
-    handleAddDimension,
+    handleRemoveDimension: baseHandleRemoveDimension,
+    handleAddDimension: baseHandleAddDimension,
     handleGranularityChange,
   } = useDimensionSelector({
     selectedDimensions,
@@ -53,8 +59,60 @@ export const DimensionSelectorModal = ({
     onDateGranularityChange,
   });
 
+  // Enhanced handlers with error handling
+  const handleRemoveDimension = useCallback(async (dimensionId: string) => {
+    try {
+      setIsSaving(true);
+      setSaveError(null);
+      await baseHandleRemoveDimension(dimensionId);
+      toast({
+        title: "Dimension removed",
+        description: "Dimension configuration updated successfully.",
+        duration: 2000,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to remove dimension';
+      setSaveError(errorMessage);
+      toast({
+        title: "Error removing dimension",
+        description: errorMessage,
+        variant: "destructive",
+        duration: 4000,
+      });
+      console.error('[DimensionSelectorModal] Error removing dimension:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [baseHandleRemoveDimension, toast]);
+
+  const handleAddDimension = useCallback(async (dimensionId: string) => {
+    try {
+      setIsSaving(true);
+      setSaveError(null);
+      await baseHandleAddDimension(dimensionId);
+      toast({
+        title: "Dimension added",
+        description: "Dimension configuration updated successfully.",
+        duration: 2000,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add dimension';
+      setSaveError(errorMessage);
+      toast({
+        title: "Error adding dimension",
+        description: errorMessage,
+        variant: "destructive",
+        duration: 4000,
+      });
+      console.error('[DimensionSelectorModal] Error adding dimension:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [baseHandleAddDimension, toast]);
+
   useEffect(() => {
     if (open) {
+      setSaveError(null);
       loadDimensions();
     }
   }, [open, loadDimensions]);
@@ -68,6 +126,17 @@ export const DimensionSelectorModal = ({
             Select dimensions to populate Group by, Breakdown by, and Then by options. More dimensions = more breakdown options.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Error display */}
+        {saveError && (
+          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            <div>
+              <div className="font-medium">Error saving dimensions</div>
+              <div className="text-red-600">{saveError}</div>
+            </div>
+          </div>
+        )}
 
         <div className="py-4 space-y-3">
           {isLoading ? (
@@ -89,6 +158,7 @@ export const DimensionSelectorModal = ({
                         granularity={dimensionGranularities[dimensionId] || 'Day'}
                         onRemove={handleRemoveDimension}
                         onGranularityChange={handleGranularityChange}
+                        disabled={isSaving}
                       />
                     );
                   })}
@@ -102,14 +172,22 @@ export const DimensionSelectorModal = ({
                   dimensionHasData={dimensionHasData}
                   reportId={reportId}
                   onAdd={handleAddDimension}
+                  disabled={isSaving}
                 />
               </div>
             </>
           )}
         </div>
 
-        <div className="flex justify-end border-t pt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <div className="flex justify-between items-center border-t pt-4">
+          {isSaving && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              Saving...
+            </div>
+          )}
+          <div className="flex-1"></div>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
             Close
           </Button>
         </div>

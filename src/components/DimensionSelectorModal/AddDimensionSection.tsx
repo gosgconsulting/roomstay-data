@@ -15,6 +15,7 @@ interface AddDimensionSectionProps {
   dimensionHasData: Record<string, boolean>;
   reportId?: string;
   onAdd: (dimensionId: string) => void;
+  disabled?: boolean;
 }
 
 export function AddDimensionSection({
@@ -22,12 +23,13 @@ export function AddDimensionSection({
   dimensionHasData,
   reportId,
   onAdd,
+  disabled = false,
 }: AddDimensionSectionProps) {
   const [showAddSelector, setShowAddSelector] = useState(false);
   const [selectedToAdd, setSelectedToAdd] = useState<string>("");
 
   const handleAdd = () => {
-    if (selectedToAdd) {
+    if (selectedToAdd && !disabled) {
       onAdd(selectedToAdd);
       setSelectedToAdd("");
       setShowAddSelector(false);
@@ -42,7 +44,7 @@ export function AddDimensionSection({
   if (showAddSelector) {
     return (
       <div className="space-y-3">
-        <Select value={selectedToAdd} onValueChange={setSelectedToAdd}>
+        <Select value={selectedToAdd} onValueChange={setSelectedToAdd} disabled={disabled}>
           <SelectTrigger className="bg-background">
             <SelectValue placeholder="Select a dimension to add..." />
           </SelectTrigger>
@@ -77,10 +79,10 @@ export function AddDimensionSection({
           </SelectContent>
         </Select>
         <div className="flex gap-2">
-          <Button onClick={handleAdd} disabled={!selectedToAdd} size="sm">
+          <Button onClick={handleAdd} disabled={!selectedToAdd || disabled} size="sm">
             Add
           </Button>
-          <Button variant="outline" size="sm" onClick={handleCancel}>
+          <Button variant="outline" size="sm" onClick={handleCancel} disabled={disabled}>
             Cancel
           </Button>
         </div>
@@ -94,7 +96,7 @@ export function AddDimensionSection({
         variant="outline"
         className="w-full gap-2"
         onClick={() => setShowAddSelector(true)}
-        disabled={availableDimensions.length === 0}
+        disabled={availableDimensions.length === 0 || disabled}
       >
         <Plus className="h-4 w-4" />
         Add dimension
@@ -107,4 +109,3 @@ export function AddDimensionSection({
     </div>
   );
 }
-
