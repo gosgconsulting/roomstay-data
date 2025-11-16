@@ -161,7 +161,12 @@ export default function VlookupModal({
             console.error('[VlookupModal] Error loading target dimensions:', targetError);
           } else {
             console.log('[VlookupModal] Loaded target vlookup dimensions:', targetDims?.length || 0);
-            if (!cancel) setTargetDimensions(targetDims || []);
+            // Cast dimensions with proper scope type
+            const typedDims = (targetDims || []).map(d => ({
+              ...d,
+              scope: d.scope as 'account' | 'custom' | 'global'
+            }));
+            if (!cancel) setTargetDimensions(typedDims);
           }
         } else {
           console.log('[VlookupModal] No existing vlookup dimensions found');
