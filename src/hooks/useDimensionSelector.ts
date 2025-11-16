@@ -55,15 +55,31 @@ export function useDimensionSelector({
 
   // Enhanced add handler that reloads dimensions to pick up newly created custom dimensions
   const handleAddDimension = async (dimensionId: string) => {
-    await baseHandleAddDimension(dimensionId);
-    // Reload dimensions to ensure newly created custom dimensions are available
-    await loadDimensions();
+    try {
+      await baseHandleAddDimension(dimensionId);
+      // Small delay to ensure state has propagated
+      await new Promise(resolve => setTimeout(resolve, 100));
+      // Reload dimensions to ensure newly created custom dimensions are available
+      await loadDimensions();
+    } catch (error) {
+      console.error('[useDimensionSelector] Error adding dimension:', error);
+      throw error;
+    }
   };
 
   // Enhanced remove handler that also removes granularity
   const handleRemoveDimension = async (dimensionId: string) => {
-    removeGranularity(dimensionId);
-    await baseHandleRemoveDimension(dimensionId);
+    try {
+      removeGranularity(dimensionId);
+      await baseHandleRemoveDimension(dimensionId);
+      // Small delay to ensure state has propagated
+      await new Promise(resolve => setTimeout(resolve, 100));
+      // Reload dimensions to refresh the list
+      await loadDimensions();
+    } catch (error) {
+      console.error('[useDimensionSelector] Error removing dimension:', error);
+      throw error;
+    }
   };
 
   // Get available dimensions (not already selected)

@@ -155,7 +155,6 @@ export async function saveDimensionSettings(
         ...baseViewData,
         report_id: reportId,
         user_id: userId,
-        account_id: existingView?.account_id ?? null,
         name: "Default View",
         is_default: true,
       };

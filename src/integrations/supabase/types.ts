@@ -6,34 +6,37 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export interface Database {
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "13.0.5"
+  }
   public: {
     Tables: {
-      [_ in never]: never
-    } & {
       accounts: {
         Row: {
-          created_at: string
+          created_at: string | null
           description: string | null
           id: string
           name: string
-          updated_at: string
+          updated_at: string | null
           user_id: string
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           description?: string | null
           id?: string
           name: string
-          updated_at?: string
+          updated_at?: string | null
           user_id: string
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           description?: string | null
           id?: string
           name?: string
-          updated_at?: string
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: []
@@ -41,74 +44,118 @@ export interface Database {
       budgets: {
         Row: {
           account_id: string | null
-          created_at: string
+          budget_data: Json
+          created_at: string | null
           dimension_item: string
           dimension_name: string
           id: string
           report_id: string | null
-          updated_at: string
+          updated_at: string | null
           user_id: string
-          budget_data: Json
         }
         Insert: {
           account_id?: string | null
-          created_at?: string
+          budget_data?: Json
+          created_at?: string | null
           dimension_item: string
           dimension_name: string
           id?: string
           report_id?: string | null
-          updated_at?: string
+          updated_at?: string | null
           user_id: string
-          budget_data: Json
         }
         Update: {
           account_id?: string | null
-          created_at?: string
+          budget_data?: Json
+          created_at?: string | null
           dimension_item?: string
           dimension_name?: string
           id?: string
           report_id?: string | null
-          updated_at?: string
+          updated_at?: string | null
           user_id?: string
-          budget_data?: Json
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "budgets_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budgets_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cluster_dimensions: {
         Row: {
           account_id: string | null
+          cluster_dimension_name: string
           created_at: string
           created_dimension_id: string | null
           id: string
           report_id: string | null
           source_dimension_id: string
-          user_id: string
-          cluster_dimension_name: string
           updated_at: string
+          user_id: string
         }
         Insert: {
           account_id?: string | null
+          cluster_dimension_name: string
           created_at?: string
           created_dimension_id?: string | null
           id?: string
           report_id?: string | null
           source_dimension_id: string
-          user_id: string
-          cluster_dimension_name: string
           updated_at?: string
+          user_id: string
         }
         Update: {
           account_id?: string | null
+          cluster_dimension_name?: string
           created_at?: string
           created_dimension_id?: string | null
           id?: string
           report_id?: string | null
           source_dimension_id?: string
-          user_id?: string
-          cluster_dimension_name?: string
           updated_at?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "cluster_dimensions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cluster_dimensions_created_dimension_id_fkey"
+            columns: ["created_dimension_id"]
+            isOneToOne: false
+            referencedRelation: "dimensions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cluster_dimensions_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cluster_dimensions_source_dimension_id_fkey"
+            columns: ["source_dimension_id"]
+            isOneToOne: false
+            referencedRelation: "dimensions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cluster_mappings: {
         Row: {
@@ -135,11 +182,18 @@ export interface Database {
           source_values?: string[]
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "cluster_mappings_cluster_dimension_id_fkey"
+            columns: ["cluster_dimension_id"]
+            isOneToOne: false
+            referencedRelation: "cluster_dimensions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       data_sources: {
         Row: {
-          account_id: string | null
           column_mappings: Json | null
           created_at: string
           csv_url: string | null
@@ -149,17 +203,15 @@ export interface Database {
           last_synced_at: string | null
           name: string
           report_id: string
-          sheet_name: string | null
-          source_type: "google_sheets" | "csv_url"
+          source_type: Database["public"]["Enums"]["data_source_type"]
           spreadsheet_id: string | null
-          sync_frequency: "manual" | "daily" | "weekly" | "monthly"
-          sync_time: string
-          sync_timezone: string
+          sync_frequency: string | null
+          sync_time: string | null
+          sync_timezone: string | null
           tab_name: string | null
           updated_at: string
         }
         Insert: {
-          account_id?: string | null
           column_mappings?: Json | null
           created_at?: string
           csv_url?: string | null
@@ -169,17 +221,15 @@ export interface Database {
           last_synced_at?: string | null
           name: string
           report_id: string
-          sheet_name?: string | null
-          source_type?: "google_sheets" | "csv_url"
+          source_type?: Database["public"]["Enums"]["data_source_type"]
           spreadsheet_id?: string | null
-          sync_frequency?: "manual" | "daily" | "weekly" | "monthly"
-          sync_time?: string
-          sync_timezone?: string
+          sync_frequency?: string | null
+          sync_time?: string | null
+          sync_timezone?: string | null
           tab_name?: string | null
           updated_at?: string
         }
         Update: {
-          account_id?: string | null
           column_mappings?: Json | null
           created_at?: string
           csv_url?: string | null
@@ -189,16 +239,23 @@ export interface Database {
           last_synced_at?: string | null
           name?: string
           report_id?: string
-          sheet_name?: string | null
-          source_type?: "google_sheets" | "csv_url"
+          source_type?: Database["public"]["Enums"]["data_source_type"]
           spreadsheet_id?: string | null
-          sync_frequency?: "manual" | "daily" | "weekly" | "monthly"
-          sync_time?: string
-          sync_timezone?: string
+          sync_frequency?: string | null
+          sync_time?: string | null
+          sync_timezone?: string | null
           tab_name?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "data_sources_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       dimension_data: {
         Row: {
@@ -213,7 +270,7 @@ export interface Database {
         Insert: {
           created_at?: string
           data_source_id: string
-          dimension_values: Json
+          dimension_values?: Json
           id?: string
           report_id: string
           row_number: number
@@ -228,49 +285,22 @@ export interface Database {
           row_number?: number
           updated_at?: string
         }
-        Relationships: []
-      }
-      dimension_mappings: {
-        Row: {
-          account_id: string | null
-          created_at: string
-          id: string
-          report_id: string | null
-          source_dimension_id: string
-          source_value: string
-          target_dimension_id: string
-          target_dimension_name: string
-          target_value: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          account_id?: string | null
-          created_at?: string
-          id?: string
-          report_id?: string | null
-          source_dimension_id: string
-          source_value: string
-          target_dimension_id: string
-          target_dimension_name: string
-          target_value: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          account_id?: string | null
-          created_at?: string
-          id?: string
-          report_id?: string | null
-          source_dimension_id?: string
-          source_value?: string
-          target_dimension_id?: string
-          target_dimension_name?: string
-          target_value?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "dimension_data_data_source_id_fkey"
+            columns: ["data_source_id"]
+            isOneToOne: false
+            referencedRelation: "data_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dimension_data_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       dimensions: {
         Row: {
@@ -281,7 +311,7 @@ export interface Database {
           id: string
           name: string
           report_id: string | null
-          scope: "global" | "custom" | "account"
+          scope: string | null
           type: string
           updated_at: string
           user_id: string | null
@@ -294,7 +324,7 @@ export interface Database {
           id?: string
           name: string
           report_id?: string | null
-          scope?: "global" | "custom" | "account"
+          scope?: string | null
           type: string
           updated_at?: string
           user_id?: string | null
@@ -307,117 +337,151 @@ export interface Database {
           id?: string
           name?: string
           report_id?: string | null
-          scope?: "global" | "custom" | "account"
+          scope?: string | null
           type?: string
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "dimensions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dimensions_data_source_id_fkey"
+            columns: ["data_source_id"]
+            isOneToOne: false
+            referencedRelation: "data_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dimensions_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       forecasts: {
         Row: {
-          account_id: string | null
           conversion_rate: number | null
           cost_of_sell: number | null
-          created_at: string
+          created_at: string | null
           id: string
           name: string
           paid_revenue_share: number | null
           report_id: string | null
           revenue_per_month: number | null
           target_average_order_value: number | null
-          updated_at: string
+          updated_at: string | null
           user_id: string | null
         }
         Insert: {
-          account_id?: string | null
           conversion_rate?: number | null
           cost_of_sell?: number | null
-          created_at?: string
+          created_at?: string | null
           id?: string
           name?: string
           paid_revenue_share?: number | null
           report_id?: string | null
           revenue_per_month?: number | null
           target_average_order_value?: number | null
-          updated_at?: string
+          updated_at?: string | null
           user_id?: string | null
         }
         Update: {
-          account_id?: string | null
           conversion_rate?: number | null
           cost_of_sell?: number | null
-          created_at?: string
+          created_at?: string | null
           id?: string
           name?: string
           paid_revenue_share?: number | null
           report_id?: string | null
           revenue_per_month?: number | null
           target_average_order_value?: number | null
-          updated_at?: string
+          updated_at?: string | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "forecasts_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       master_filter_settings: {
         Row: {
           account_id: string | null
           compare_date_from: string | null
           compare_date_to: string | null
-          compare_enabled: boolean
-          compare_type: string
-          created_at: string
-          date_preset: string
+          compare_enabled: boolean | null
+          compare_type: string | null
+          created_at: string | null
+          date_preset: string | null
           date_range_from: string | null
           date_range_to: string | null
           id: string
           selected_dimension_id: string | null
-          selected_dimension_values: string[]
-          selected_report_ids: string[]
-          updated_at: string
+          selected_dimension_values: string[] | null
+          selected_report_ids: string[] | null
+          updated_at: string | null
           user_id: string
         }
         Insert: {
           account_id?: string | null
           compare_date_from?: string | null
           compare_date_to?: string | null
-          compare_enabled?: boolean
-          compare_type?: string
-          created_at?: string
-          date_preset?: string
+          compare_enabled?: boolean | null
+          compare_type?: string | null
+          created_at?: string | null
+          date_preset?: string | null
           date_range_from?: string | null
           date_range_to?: string | null
           id?: string
           selected_dimension_id?: string | null
-          selected_dimension_values?: string[]
-          selected_report_ids?: string[]
-          updated_at?: string
+          selected_dimension_values?: string[] | null
+          selected_report_ids?: string[] | null
+          updated_at?: string | null
           user_id: string
         }
         Update: {
           account_id?: string | null
           compare_date_from?: string | null
           compare_date_to?: string | null
-          compare_enabled?: boolean
-          compare_type?: string
-          created_at?: string
-          date_preset?: string
+          compare_enabled?: boolean | null
+          compare_type?: string | null
+          created_at?: string | null
+          date_preset?: string | null
           date_range_from?: string | null
           date_range_to?: string | null
           id?: string
           selected_dimension_id?: string | null
-          selected_dimension_values?: string[]
-          selected_report_ids?: string[]
-          updated_at?: string
+          selected_dimension_values?: string[] | null
+          selected_report_ids?: string[] | null
+          updated_at?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "master_filter_settings_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       monthly_dimension_data: {
         Row: {
-          account_id: string | null
           aggregated_metrics: Json
-          created_at: string
+          created_at: string | null
           data_source_id: string
           date_range_end: string | null
           date_range_start: string | null
@@ -426,14 +490,12 @@ export interface Database {
           month: number
           report_id: string
           row_count: number
-          updated_at: string
-          user_id: string | null
+          updated_at: string | null
           year: number
         }
         Insert: {
-          account_id?: string | null
           aggregated_metrics?: Json
-          created_at?: string
+          created_at?: string | null
           data_source_id: string
           date_range_end?: string | null
           date_range_start?: string | null
@@ -442,14 +504,12 @@ export interface Database {
           month: number
           report_id: string
           row_count?: number
-          updated_at?: string
-          user_id?: string | null
+          updated_at?: string | null
           year: number
         }
         Update: {
-          account_id?: string | null
           aggregated_metrics?: Json
-          created_at?: string
+          created_at?: string | null
           data_source_id?: string
           date_range_end?: string | null
           date_range_start?: string | null
@@ -458,11 +518,25 @@ export interface Database {
           month?: number
           report_id?: string
           row_count?: number
-          updated_at?: string
-          user_id?: string | null
+          updated_at?: string | null
           year?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "monthly_dimension_data_data_source_id_fkey"
+            columns: ["data_source_id"]
+            isOneToOne: false
+            referencedRelation: "data_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_dimension_data_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -484,6 +558,121 @@ export interface Database {
           updated_at?: string
         }
         Relationships: []
+      }
+      report_shares: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          report_id: string
+          shared_with_email: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          report_id: string
+          shared_with_email: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          report_id?: string
+          shared_with_email?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_shares_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      report_views: {
+        Row: {
+          breakdown_by_dimensions: string[] | null
+          column_order: string[] | null
+          created_at: string
+          date_granularity: string | null
+          date_order: string | null
+          date_range_end: string | null
+          date_range_preset: string | null
+          date_range_start: string | null
+          filter_dimensions: string[] | null
+          filter_values: Json | null
+          group_by_dimensions: string[] | null
+          id: string
+          is_default: boolean | null
+          kpi_order: string[] | null
+          name: string
+          report_id: string
+          then_by_dimensions: string[] | null
+          updated_at: string
+          user_id: string
+          visible_columns: string[] | null
+          visible_dimensions: string[] | null
+          visible_kpis: string[] | null
+        }
+        Insert: {
+          breakdown_by_dimensions?: string[] | null
+          column_order?: string[] | null
+          created_at?: string
+          date_granularity?: string | null
+          date_order?: string | null
+          date_range_end?: string | null
+          date_range_preset?: string | null
+          date_range_start?: string | null
+          filter_dimensions?: string[] | null
+          filter_values?: Json | null
+          group_by_dimensions?: string[] | null
+          id?: string
+          is_default?: boolean | null
+          kpi_order?: string[] | null
+          name?: string
+          report_id: string
+          then_by_dimensions?: string[] | null
+          updated_at?: string
+          user_id: string
+          visible_columns?: string[] | null
+          visible_dimensions?: string[] | null
+          visible_kpis?: string[] | null
+        }
+        Update: {
+          breakdown_by_dimensions?: string[] | null
+          column_order?: string[] | null
+          created_at?: string
+          date_granularity?: string | null
+          date_order?: string | null
+          date_range_end?: string | null
+          date_range_preset?: string | null
+          date_range_start?: string | null
+          filter_dimensions?: string[] | null
+          filter_values?: Json | null
+          group_by_dimensions?: string[] | null
+          id?: string
+          is_default?: boolean | null
+          kpi_order?: string[] | null
+          name?: string
+          report_id?: string
+          then_by_dimensions?: string[] | null
+          updated_at?: string
+          user_id?: string
+          visible_columns?: string[] | null
+          visible_dimensions?: string[] | null
+          visible_kpis?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_views_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       reports: {
         Row: {
@@ -510,139 +699,15 @@ export interface Database {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
-      }
-      report_shares: {
-        Row: {
-          created_at: string
-          created_by: string
-          id: string
-          report_id: string
-          shared_with_email: string
-        }
-        Insert: {
-          created_at?: string
-          created_by: string
-          id?: string
-          report_id: string
-          shared_with_email: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string
-          id?: string
-          report_id?: string
-          shared_with_email?: string
-        }
-        Relationships: []
-      }
-      report_views: {
-        Row: {
-          account_id: string | null
-          active_date_tab: string | null
-          breakdown_by_dimensions: string[] | null
-          column_order: string[] | null
-          created_at: string
-          date_granularity: string | null
-          date_order: string | null
-          date_preset: string | null
-          date_range_end: string | null
-          date_range_start: string | null
-          filter_dimensions: string[] | null
-          filter_values: Json | null
-          group_by_dimensions: string[] | null
-          id: string
-          is_default: boolean | null
-          kpi_order: string[] | null
-          name: string
-          report_id: string
-          then_by_dimensions: string[] | null
-          updated_at: string
-          user_id: string
-          visible_columns: string[] | null
-          visible_dimensions: string[] | null
-          visible_kpis: string[] | null
-        }
-        Insert: {
-          account_id?: string | null
-          active_date_tab?: string | null
-          breakdown_by_dimensions?: string[] | null
-          column_order?: string[] | null
-          created_at?: string
-          date_granularity?: string | null
-          date_order?: string | null
-          date_preset?: string | null
-          date_range_end?: string | null
-          date_range_start?: string | null
-          filter_dimensions?: string[] | null
-          filter_values?: Json | null
-          group_by_dimensions?: string[] | null
-          id?: string
-          is_default?: boolean | null
-          kpi_order?: string[] | null
-          name: string
-          report_id: string
-          then_by_dimensions?: string[] | null
-          updated_at?: string
-          user_id: string
-          visible_columns?: string[] | null
-          visible_dimensions?: string[] | null
-          visible_kpis?: string[] | null
-        }
-        Update: {
-          account_id?: string | null
-          active_date_tab?: string | null
-          breakdown_by_dimensions?: string[] | null
-          column_order?: string[] | null
-          created_at?: string
-          date_granularity?: string | null
-          date_order?: string | null
-          date_preset?: string | null
-          date_range_end?: string | null
-          date_range_start?: string | null
-          filter_dimensions?: string[] | null
-          filter_values?: Json | null
-          group_by_dimensions?: string[] | null
-          id?: string
-          is_default?: boolean | null
-          kpi_order?: string[] | null
-          name?: string
-          report_id?: string
-          then_by_dimensions?: string[] | null
-          updated_at?: string
-          user_id?: string
-          visible_columns?: string[] | null
-          visible_dimensions?: string[] | null
-          visible_kpis?: string[] | null
-        }
-        Relationships: []
-      }
-      sheet_data: {
-        Row: {
-          created_at: string
-          data_source_id: string
-          id: string
-          row_data: Json
-          row_number: number
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          data_source_id: string
-          id?: string
-          row_data: Json
-          row_number: number
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          data_source_id?: string
-          id?: string
-          row_data?: Json
-          row_number?: number
-          updated_at?: string
-        }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "reports_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       share_links: {
         Row: {
@@ -675,17 +740,109 @@ export interface Database {
           slug?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "share_links_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sheet_data: {
+        Row: {
+          created_at: string
+          data_source_id: string
+          id: string
+          row_data: Json
+          row_number: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data_source_id: string
+          id?: string
+          row_data: Json
+          row_number: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data_source_id?: string
+          id?: string
+          row_data?: Json
+          row_number?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sheet_data_data_source_id_fkey"
+            columns: ["data_source_id"]
+            isOneToOne: false
+            referencedRelation: "data_sources"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      convert_time_to_utc_cron: {
+        Args: { sync_time: string; sync_timezone: string }
+        Returns: string
+      }
+      get_aggregated_performance_data: {
+        Args: {
+          p_breakdown_dims?: string[]
+          p_date_from?: string
+          p_date_to?: string
+          p_dimension_filters?: Json
+          p_group_by_dims?: string[]
+          p_limit?: number
+          p_offset?: number
+          p_report_id: string
+          p_then_by_dims?: string[]
+          p_visible_dimension_ids?: string[]
+        }
+        Returns: {
+          dimension_values: Json
+          group_key: string
+          row_count: number
+        }[]
+      }
+      get_monthly_data_stats: {
+        Args: { p_report_id: string }
+        Returns: {
+          first_date: string
+          last_date: string
+          month: number
+          row_count: number
+          year: number
+        }[]
+      }
+      get_supabase_config: {
+        Args: never
+        Returns: {
+          anon_key: string
+          url: string
+        }[]
+      }
+      has_report_access: {
+        Args: { _report_id: string; _user_id: string }
+        Returns: boolean
+      }
+      initialize_existing_auto_sync_jobs: { Args: never; Returns: undefined }
+      is_master_account: { Args: { _user_id: string }; Returns: boolean }
+      owns_report: {
+        Args: { _report_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      data_source_type: "google_sheets" | "csv_url"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -693,25 +850,33 @@ export interface Database {
   }
 }
 
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
 export type Tables<
-  PublicTableNameOrOptions extends
-    | keyof (Database["public"]["Tables"] & Database["public"]["Views"])
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
-        Database[PublicTableNameOrOptions["schema"]]["Views"])
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database }
-  ? (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
-      Database[PublicTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
     ? R
     : never
-  : PublicTableNameOrOptions extends keyof (Database["public"]["Tables"] &
-        Database["public"]["Views"])
-    ? (Database["public"]["Tables"] &
-        Database["public"]["Views"])[PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
         Row: infer R
       }
       ? R
@@ -719,20 +884,24 @@ export type Tables<
     : never
 
 export type TablesInsert<
-  PublicTableNameOrOptions extends
-    | keyof Database["public"]["Tables"]
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Insert: infer I
     }
     ? I
     : never
-  : PublicTableNameOrOptions extends keyof Database["public"]["Tables"]
-    ? Database["public"]["Tables"][PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
         Insert: infer I
       }
       ? I
@@ -740,20 +909,24 @@ export type TablesInsert<
     : never
 
 export type TablesUpdate<
-  PublicTableNameOrOptions extends
-    | keyof Database["public"]["Tables"]
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Update: infer U
     }
     ? U
     : never
-  : PublicTableNameOrOptions extends keyof Database["public"]["Tables"]
-    ? Database["public"]["Tables"][PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
         Update: infer U
       }
       ? U
@@ -761,14 +934,43 @@ export type TablesUpdate<
     : never
 
 export type Enums<
-  PublicEnumNameOrOptions extends
-    | keyof Database["public"]["Enums"]
-    | { schema: keyof Database },
-  EnumName extends PublicEnumNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicEnumNameOrOptions["schema"]]["Enums"]
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
-> = PublicEnumNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicEnumNameOrOptions["schema"]]["Enums"][EnumName]
-  : PublicEnumNameOrOptions extends keyof Database["public"]["Enums"]
-    ? Database["public"]["Enums"][PublicEnumNameOrOptions]
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      data_source_type: ["google_sheets", "csv_url"],
+    },
+  },
+} as const
