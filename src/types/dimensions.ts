@@ -8,7 +8,7 @@
 export interface Dimension {
   id: string;
   name: string;
-  type: string;
+  type: 'text' | 'date' | 'number' | 'currency' | 'percentage' | 'vlookup';
   user_id?: string;
   formula?: string | null;
   is_system?: boolean;

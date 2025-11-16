@@ -50,6 +50,7 @@ const typeLabels: Record<string, string> = {
   number: "Number",
   currency: "Currency",
   percentage: "Percentage",
+  vlookup: "Vlookup",
 };
 
 export const DimensionsListModal = ({
@@ -64,6 +65,7 @@ export const DimensionsListModal = ({
 }: DimensionsListModalProps) => {
   const [textDimensions, setTextDimensions] = useState<Dimension[]>([]);
   const [valueDimensions, setValueDimensions] = useState<Dimension[]>([]);
+  const [vlookupDimensions, setVlookupDimensions] = useState<Dimension[]>([]);
   const [allDimensions, setAllDimensions] = useState<Dimension[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [mappedDimensionIds, setMappedDimensionIds] = useState<Set<string>>(new Set());
@@ -430,12 +432,14 @@ export const DimensionsListModal = ({
 
       console.log('[testing] Loaded dimensions - Account:', accountData?.length || 0, 'Custom:', customData?.length || 0, 'Global:', globalData?.length || 0, 'Unique:', uniqueDimensions.length);
 
-      // Separate into text and value dimensions
+      // Separate into text, value, and vlookup dimensions
       const textDims = uniqueDimensions.filter(d => d.type === 'text');
-      const valueDims = uniqueDimensions.filter(d => d.type !== 'text'); // number, currency, percentage, date
+      const valueDims = uniqueDimensions.filter(d => ['number', 'currency', 'percentage', 'date'].includes(d.type));
+      const vlookupDims = uniqueDimensions.filter(d => d.type === 'vlookup');
 
       setTextDimensions(textDims);
       setValueDimensions(valueDims);
+      setVlookupDimensions(vlookupDims);
       setAllDimensions(uniqueDimensions);
     } catch (error) {
       console.error("Error loading dimensions:", error);
@@ -482,6 +486,7 @@ export const DimensionsListModal = ({
       // Remove from appropriate list
       setTextDimensions(textDimensions.filter((d) => d.id !== id));
       setValueDimensions(valueDimensions.filter((d) => d.id !== id));
+      setVlookupDimensions(vlookupDimensions.filter((d) => d.id !== id));
       setAllDimensions(allDimensions.filter((d) => d.id !== id));
       toast({
         title: "Dimension deleted",
@@ -604,12 +609,15 @@ export const DimensionsListModal = ({
             </div>
           ) : (
             <Tabs defaultValue="text" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="text">
                   Text ({textDimensions.length})
                 </TabsTrigger>
                 <TabsTrigger value="values">
                   Values ({valueDimensions.length})
+                </TabsTrigger>
+                <TabsTrigger value="vlookup">
+                  Vlookup ({vlookupDimensions.length})
                 </TabsTrigger>
               </TabsList>
 
@@ -619,6 +627,10 @@ export const DimensionsListModal = ({
 
               <TabsContent value="values" className="mt-4">
                 <DimensionTable dimensions={valueDimensions} showActions={true} />
+              </TabsContent>
+
+              <TabsContent value="vlookup" className="mt-4">
+                <DimensionTable dimensions={vlookupDimensions} showActions={true} />
               </TabsContent>
             </Tabs>
           )}
