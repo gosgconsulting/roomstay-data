@@ -466,7 +466,7 @@ export default function VlookupModal({
                   />
                 </div>
 
-                {/* Target dimension - combobox with existing + create new */}
+                {/* Target dimension - combobox with existing vlookup dimensions */}
                 <div className="col-span-3">
                   <Popover>
                     <PopoverTrigger asChild>
@@ -480,8 +480,8 @@ export default function VlookupModal({
                       >
                         {row.newDimensionName || (
                           targetDimensions.length > 0 
-                            ? "Select or create dimension..." 
-                            : "Create new dimension..."
+                            ? "Select vlookup dimension..." 
+                            : "No vlookup dimensions available"
                         )}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
@@ -489,11 +489,7 @@ export default function VlookupModal({
                     <PopoverContent className="w-full p-0">
                       <Command>
                         <CommandInput 
-                          placeholder={
-                            targetDimensions.length > 0 
-                              ? "Search or type new name..." 
-                              : "Type dimension name..."
-                          }
+                          placeholder="Search vlookup dimensions..."
                           value={row.newDimensionName}
                           onValueChange={(val) => {
                             updateRow(idx, { 
@@ -504,8 +500,8 @@ export default function VlookupModal({
                           }}
                         />
                         <CommandList>
-                          {targetDimensions.length > 0 && (
-                            <CommandGroup heading="Existing Dimensions">
+                          {targetDimensions.length > 0 ? (
+                            <CommandGroup heading="Available Vlookup Dimensions">
                               {targetDimensions.map((dim) => (
                                 <CommandItem
                                   key={dim.id}
@@ -528,32 +524,14 @@ export default function VlookupModal({
                                 </CommandItem>
                               ))}
                             </CommandGroup>
+                          ) : (
+                            <CommandEmpty>
+                              <div className="p-4 text-center text-sm text-muted-foreground">
+                                <p>No vlookup dimensions available.</p>
+                                <p className="mt-2">Create vlookup dimensions first through the Dimensions modal.</p>
+                              </div>
+                            </CommandEmpty>
                           )}
-                          {row.newDimensionName && !targetDimensions.find(d => d.name === row.newDimensionName) && (
-                            <CommandGroup heading="Create New">
-                              <CommandItem
-                                value={row.newDimensionName}
-                                onSelect={() => {
-                                  updateRow(idx, { 
-                                    newDimensionName: row.newDimensionName,
-                                    targetDimensionId: undefined,
-                                    creatingNew: true
-                                  });
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    row.creatingNew && row.newDimensionName ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                Create "{row.newDimensionName}"
-                              </CommandItem>
-                            </CommandGroup>
-                          )}
-                          <CommandEmpty>
-                            {row.newDimensionName ? `Create "${row.newDimensionName}"` : "Type to create new dimension"}
-                          </CommandEmpty>
                         </CommandList>
                       </Command>
                     </PopoverContent>
