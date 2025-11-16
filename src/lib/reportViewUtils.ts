@@ -97,19 +97,17 @@ export async function saveDimensionSettings(
     console.log(`[DIMENSION-SELECTOR] Fetching existing view...`);
     const { data: existingViewData, error: existingViewError } = await supabase
       .from("report_views")
-      .select("*")  // Select all columns to avoid missing any
+      .select("*")
       .eq("report_id", reportId)
       .eq("user_id", userId)
       .eq("is_default", true)
       .maybeSingle();
 
     if (existingViewError && existingViewError.code !== 'PGRST116') {
-      console.error('[DIMENSION-SELECTOR] Error fetching existing view:', existingViewError);
       throw new Error(`Failed to fetch existing view: ${existingViewError.message}`);
     }
 
     const existingView = existingViewData;
-    console.log(`[DIMENSION-SELECTOR] Existing view:`, existingView);
 
     const cleanedFilterValues =
       existingView && existingView.filter_values
@@ -119,89 +117,60 @@ export async function saveDimensionSettings(
           )
         : {};
 
-    // Prepare the data to save - using correct column names from database schema
+    // Build payload only with columns that exist in DB
     const baseViewData: Record<string, any> = {
       filter_dimensions: activeDimensions,
       filter_values: cleanedFilterValues,
     };
 
-    // Add date fields only if they exist in the existing view
+    // Preserve existing date fields if present in DB
     if (existingView) {
       if ('date_range_start' in existingView) {
-        baseViewData['date_range_start'] = existingView.date_range_start;
+        baseViewData['date_range_start'] = existingView.date_range_start ?? null;
       }
-      
       if ('date_range_end' in existingView) {
-        baseViewData['date_range_end'] = existingView.date_range_end;
+        baseViewData['date_range_end'] = existingView.date_range_end ?? null;
       }
-      
-      // Use date_preset instead of date_range_preset
-      if ('date_preset' in existingView) {
-        baseViewData['date_preset'] = existingView.date_preset;
-      } else {
-        baseViewData['date_preset'] = "this_month";
+      if ('date_range_preset' in existingView) {
+        baseViewData['date_range_preset'] = existingView.date_range_preset ?? 'this_month';
       }
+      // DO NOT send date_preset (not a DB column)
     } else {
-      // Default values for new view
       baseViewData['date_range_start'] = null;
       baseViewData['date_range_end'] = null;
-      baseViewData['date_preset'] = "this_month";
+      baseViewData['date_range_preset'] = 'this_month';
     }
 
     if (existingView && existingView.id) {
-      console.log('[DIMENSION-SELECTOR] Updating existing view:', existingView.id);
-      console.log('[DIMENSION-SELECTOR] Update data:', baseViewData);
-      
       const { error } = await supabase
         .from("report_views")
         .update(baseViewData)
         .eq("id", existingView.id);
-      
+
       if (error) {
-        console.error('[DIMENSION-SELECTOR] Update error:', error);
-        console.error('[DIMENSION-SELECTOR] Error details:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        });
         throw new Error(`Failed to update view: ${error.message}`);
       }
-      console.log('[DIMENSION-SELECTOR] Successfully updated existing view');
     } else {
-      console.log('[DIMENSION-SELECTOR] Creating new default view');
-      
       const insertData = {
         ...baseViewData,
         report_id: reportId,
         user_id: userId,
-        account_id: reportData.account_id || null,
+        account_id: existingView?.account_id ?? null,
         name: "Default View",
         is_default: true,
       };
 
-      console.log('[DIMENSION-SELECTOR] Insert data:', insertData);
-
       const { error } = await supabase
         .from("report_views")
         .insert(insertData);
-      
+
       if (error) {
-        console.error('[DIMENSION-SELECTOR] Insert error:', error);
-        console.error('[DIMENSION-SELECTOR] Error details:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        });
         throw new Error(`Failed to create view: ${error.message}`);
       }
-      console.log('[DIMENSION-SELECTOR] Successfully created new view');
     }
 
     console.log('[DIMENSION-SELECTOR] Successfully saved dimension settings');
   } catch (error) {
-    console.error('[DIMENSION-SELECTOR] Error saving dimension settings:', error);
     throw error instanceof Error ? error : new Error(String(error));
   }
 }
