@@ -364,7 +364,8 @@ export const FiltersBar = ({
           setMasterDimensionId(fv.__master_dimension_id);
         }
 
-        const preset = (data as any).date_preset || "all_time";
+        // FIX: Use date_range_preset from DB
+        const preset = (data as any).date_range_preset || "all_time";
         applyDatePreset(preset);
       } else {
         // No view: default to Account if available, else Date
@@ -411,7 +412,8 @@ export const FiltersBar = ({
         },
         date_range_start: dateRange?.from ? dateRange.from.toISOString().split("T")[0] : null,
         date_range_end: dateRange?.to ? dateRange.to.toISOString().split("T")[0] : null,
-        date_preset: datePreset as string,
+        // FIX: Save date_range_preset to match schema
+        date_range_preset: datePreset as string,
       };
 
       if (existingView && (existingView as any).id) {
@@ -607,10 +609,11 @@ export const FiltersBar = ({
         ...(customData || []),
         ...(globalData || [])
       ] as Dimension[];
-      const seen = new Set<string>();
+      // FIX: Deduplicate by id (not by name) so newly added dimensions aren't dropped
+      const seenIds = new Set<string>();
       const unique = all.filter(d => {
-        if (seen.has(d.name)) return false;
-        seen.add(d.name);
+        if (seenIds.has(d.id)) return false;
+        seenIds.add(d.id);
         return true;
       });
 
@@ -701,6 +704,9 @@ export const FiltersBar = ({
     });
     setSelectedFilters(next);
 
+    // Immediately refresh dimensions so new ids are present for rendering
+    await loadDimensions();
+
     // Only persist changes in Edit mode
     if (!reportId || isSharedView || isInitialLoad || !isEditMode) return;
 
@@ -710,7 +716,8 @@ export const FiltersBar = ({
 
       const { data: existingView } = await supabase
         .from("report_views")
-        .select("id, date_range_start, date_range_end, date_preset")
+        // FIX: Select correct date fields
+        .select("id, date_range_start, date_range_end, date_range_preset")
         .eq("report_id", reportId)
         .eq("user_id", user.id)
         .eq("is_default", true)
@@ -725,8 +732,9 @@ export const FiltersBar = ({
         date_range_end: (existingView && 'date_range_end' in (existingView as any))
           ? ((existingView as any).date_range_end as string)
           : null,
-        date_preset: (existingView && 'date_preset' in (existingView as any))
-          ? ((existingView as any).date_preset as string)
+        // FIX: Use date_range_preset safely
+        date_range_preset: (existingView && 'date_range_preset' in (existingView as any))
+          ? ((existingView as any).date_range_preset as string)
           : "all_time",
       };
 
