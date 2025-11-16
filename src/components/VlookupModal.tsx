@@ -107,14 +107,14 @@ export default function VlookupModal({
 
       if (!cancel) setLoadedDims(unique as Dimension[]);
 
-      // Load target dimensions (account-scoped dimensions created via Vlookup)
+      // Load target dimensions (account-scoped vlookup dimensions created via Vlookup)
       if (accountId) {
         const { data: targetDims } = await supabase
           .from("dimensions")
           .select("*")
           .eq("scope", "account")
           .eq("account_id", accountId)
-          .eq("type", "text")
+          .eq("type", "vlookup") // Specifically load vlookup type dimensions
           .order("created_at", { ascending: false });
         
         if (!cancel) setTargetDimensions(targetDims || []);

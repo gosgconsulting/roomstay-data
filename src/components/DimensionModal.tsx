@@ -438,6 +438,14 @@ export const DimensionModal = ({
                 <SelectItem value="vlookup">Vlookup</SelectItem>
               </SelectContent>
             </Select>
+            {type === 'vlookup' && mode === 'add' && (
+              <div className="bg-amber-50 p-3 rounded-md">
+                <p className="text-sm text-amber-800">
+                  <strong>Note:</strong> Vlookup dimensions are created automatically through the Vlookup feature. 
+                  You cannot create them manually here. Please use the Vlookup modal to create pivot dimensions.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
