@@ -46,10 +46,11 @@ interface DimensionsListModalProps {
 
 const typeLabels: Record<string, string> = {
   text: "Plain text",
-  date: "Date",
+  date: "Date", 
   number: "Number",
   currency: "Currency",
   percentage: "Percentage",
+  vlookup: "Vlookup",
 };
 
 export const DimensionsListModal = ({

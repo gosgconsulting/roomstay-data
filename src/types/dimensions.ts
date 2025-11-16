@@ -18,26 +18,39 @@ export interface Dimension {
 }
 
 /**
- * Extended interface for selected dimensions that includes granularity
+ * Dimension with additional metadata for UI
  */
-export interface SelectedDimension {
-  id: string;
-  granularity?: string;
-  instanceId: string; // Unique ID for each instance of a dimension
-  displayName?: string; // Custom display name for the dimension
+export interface DimensionWithMetadata extends Dimension {
+  isVisible?: boolean;
+  order?: number;
 }
 
 /**
- * Date granularity options
+ * KPI (Key Performance Indicator) interface
  */
-export type DateGranularity = 'none' | 'day' | 'week' | 'month' | 'year' | 'forecast' | 'forecast_historical';
+export interface KPI {
+  id: string;
+  name: string;
+  formula?: string;
+  type: 'number' | 'currency' | 'percentage';
+  isVisible?: boolean;
+  order?: number;
+}
 
 /**
- * Dimension data from the API
+ * Available KPI names that can be calculated
  */
-export interface DimensionData {
-  id: string;
-  user_id: string;
-  dimension_values: Record<string, string>;
-  created_at: string;
-}
+export const AVAILABLE_KPIS = [
+  'Impressions',
+  'Clicks', 
+  'CTR',
+  'Conversions',
+  'Conversion rate',
+  'CPC',
+  'Cost',
+  'Revenue',
+  'ROAS',
+  'Cost of sale'
+] as const;
+
+export type AvailableKPI = typeof AVAILABLE_KPIS[number];
