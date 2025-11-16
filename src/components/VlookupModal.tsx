@@ -68,33 +68,53 @@ export default function VlookupModal({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      console.log('[VlookupModal] Loading dimensions for user:', user.id, 'accountId:', accountId, 'reportId:', reportId);
+
       // Load source dimensions (for Source Dimension dropdown)
       let accountData: any[] = [];
       if (accountId) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("dimensions")
           .select("*")
           .eq("scope", "account")
           .eq("account_id", accountId)
           .order("created_at", { ascending: false });
-        accountData = data || [];
+        
+        if (error) {
+          console.error('[VlookupModal] Error loading account dimensions:', error);
+        } else {
+          console.log('[VlookupModal] Loaded account dimensions:', data?.length || 0);
+          accountData = data || [];
+        }
       }
 
-      const { data: globalData } = await supabase
+      const { data: globalData, error: globalError } = await supabase
         .from("dimensions")
         .select("*")
         .eq("scope", "global")
         .order("created_at", { ascending: false });
 
+      if (globalError) {
+        console.error('[VlookupModal] Error loading global dimensions:', globalError);
+      } else {
+        console.log('[VlookupModal] Loaded global dimensions:', globalData?.length || 0);
+      }
+
       let customData: any[] = [];
       if (reportId) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("dimensions")
           .select("*")
           .eq("scope", "custom")
           .eq("report_id", reportId)
           .order("created_at", { ascending: false });
-        customData = data || [];
+        
+        if (error) {
+          console.error('[VlookupModal] Error loading custom dimensions:', error);
+        } else {
+          console.log('[VlookupModal] Loaded custom dimensions:', data?.length || 0);
+          customData = data || [];
+        }
       }
 
       const combined = [...(accountData || []), ...(globalData || []), ...(customData || [])];
@@ -107,17 +127,43 @@ export default function VlookupModal({
 
       if (!cancel) setLoadedDims(unique as Dimension[]);
 
-      // Load target dimensions (account-scoped vlookup dimensions created via Vlookup)
+      // Load target dimensions - look for account-scoped text dimensions that were created via vlookup
+      // We'll identify vlookup dimensions by checking if they have associated cluster_dimensions
       if (accountId) {
-        const { data: targetDims } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("scope", "account")
-          .eq("account_id", accountId)
-          .eq("type", "vlookup") // Specifically load vlookup type dimensions
-          .order("created_at", { ascending: false });
-        
-        if (!cancel) setTargetDimensions(targetDims || []);
+        // First get all cluster_dimensions for this account to identify which dimensions are vlookup targets
+        const { data: clusterDims, error: clusterError } = await supabase
+          .from('cluster_dimensions')
+          .select('created_dimension_id')
+          .eq('user_id', user.id)
+          .eq('account_id', accountId);
+
+        if (clusterError) {
+          console.error('[VlookupModal] Error loading cluster dimensions:', clusterError);
+        }
+
+        const vlookupDimensionIds = new Set((clusterDims || []).map(cd => cd.created_dimension_id).filter(Boolean));
+        console.log('[VlookupModal] Found vlookup dimension IDs:', Array.from(vlookupDimensionIds));
+
+        // Now get the actual dimensions that are vlookup targets
+        if (vlookupDimensionIds.size > 0) {
+          const { data: targetDims, error: targetError } = await supabase
+            .from("dimensions")
+            .select("*")
+            .eq("scope", "account")
+            .eq("account_id", accountId)
+            .in("id", Array.from(vlookupDimensionIds))
+            .order("created_at", { ascending: false });
+          
+          if (targetError) {
+            console.error('[VlookupModal] Error loading target dimensions:', targetError);
+          } else {
+            console.log('[VlookupModal] Loaded target vlookup dimensions:', targetDims?.length || 0);
+            if (!cancel) setTargetDimensions(targetDims || []);
+          }
+        } else {
+          console.log('[VlookupModal] No existing vlookup dimensions found');
+          if (!cancel) setTargetDimensions([]);
+        }
       }
     }
     loadDims();
@@ -202,6 +248,7 @@ export default function VlookupModal({
     let cancelled = false;
 
     async function loadForDimension(dimensionId: string) {
+      console.log('[VlookupModal] Loading values for dimension:', dimensionId);
       setLoadingOptionsMap(prev => ({ ...prev, [dimensionId]: true }));
       try {
         const values = await fetchUniqueDimensionValues({
@@ -209,9 +256,15 @@ export default function VlookupModal({
           reportIds,
           dimensionId,
           limit: 5000,
-        }).catch(() => []);
+        });
+        console.log('[VlookupModal] Loaded values for dimension', dimensionId, ':', values?.length || 0, 'values');
         if (!cancelled) {
-          setOptionsMap(prev => ({ ...prev, [dimensionId]: values }));
+          setOptionsMap(prev => ({ ...prev, [dimensionId]: values || [] }));
+        }
+      } catch (error) {
+        console.error('[VlookupModal] Error loading values for dimension', dimensionId, ':', error);
+        if (!cancelled) {
+          setOptionsMap(prev => ({ ...prev, [dimensionId]: [] }));
         }
       } finally {
         if (!cancelled) {
@@ -222,8 +275,9 @@ export default function VlookupModal({
 
     if (open) {
       const uniqueSourceIds = Array.from(new Set(rows.map(r => r.sourceDimensionId).filter(Boolean))) as string[];
+      console.log('[VlookupModal] Loading values for source dimensions:', uniqueSourceIds);
       uniqueSourceIds.forEach(dimId => {
-        if (!optionsMap[dimId]) {
+        if (!optionsMap[dimId] && !loadingOptionsMap[dimId]) {
           loadForDimension(dimId);
         }
       });
@@ -466,8 +520,9 @@ export default function VlookupModal({
                   />
                 </div>
 
-                {/* Target dimension - combobox with existing vlookup dimensions */}
+                {/* Target dimension - improved combobox that allows creating new dimensions */}
                 <div className="col-span-3">
+                  <Label>Target Dimension</Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
@@ -478,18 +533,14 @@ export default function VlookupModal({
                           !row.newDimensionName && "text-muted-foreground"
                         )}
                       >
-                        {row.newDimensionName || (
-                          targetDimensions.length > 0 
-                            ? "Select vlookup dimension..." 
-                            : "No vlookup dimensions available"
-                        )}
+                        {row.newDimensionName || "Select or create dimension..."}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-full p-0">
                       <Command>
                         <CommandInput 
-                          placeholder="Search vlookup dimensions..."
+                          placeholder="Search or type new dimension name..."
                           value={row.newDimensionName}
                           onValueChange={(val) => {
                             updateRow(idx, { 
@@ -500,8 +551,8 @@ export default function VlookupModal({
                           }}
                         />
                         <CommandList>
-                          {targetDimensions.length > 0 ? (
-                            <CommandGroup heading="Available Vlookup Dimensions">
+                          {targetDimensions.length > 0 && (
+                            <CommandGroup heading="Existing Vlookup Dimensions">
                               {targetDimensions.map((dim) => (
                                 <CommandItem
                                   key={dim.id}
@@ -524,11 +575,29 @@ export default function VlookupModal({
                                 </CommandItem>
                               ))}
                             </CommandGroup>
-                          ) : (
+                          )}
+                          {row.newDimensionName && row.newDimensionName.trim() && !targetDimensions.find(d => d.name === row.newDimensionName) && (
+                            <CommandGroup heading="Create New">
+                              <CommandItem
+                                value={row.newDimensionName}
+                                onSelect={() => {
+                                  updateRow(idx, { 
+                                    newDimensionName: row.newDimensionName,
+                                    targetDimensionId: undefined,
+                                    creatingNew: true
+                                  });
+                                }}
+                              >
+                                <Check className="mr-2 h-4 w-4 opacity-0" />
+                                Create "{row.newDimensionName}"
+                              </CommandItem>
+                            </CommandGroup>
+                          )}
+                          {targetDimensions.length === 0 && !row.newDimensionName && (
                             <CommandEmpty>
                               <div className="p-4 text-center text-sm text-muted-foreground">
-                                <p>No vlookup dimensions available.</p>
-                                <p className="mt-2">Create vlookup dimensions first through the Dimensions modal.</p>
+                                <p>No existing vlookup dimensions.</p>
+                                <p className="mt-2">Type a name to create a new dimension.</p>
                               </div>
                             </CommandEmpty>
                           )}

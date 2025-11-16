@@ -13,17 +13,37 @@ type Params = {
 export async function fetchUniqueDimensionValues(params: Params): Promise<string[]> {
   const { reportId, reportIds, dimensionId, search, limit } = params;
 
-  const res = await fetch(EDGE_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ reportId, reportIds, dimensionId, search, limit }),
-  });
+  console.log('[fetchUniqueDimensionValues] Calling with params:', params);
 
-  const json = await res.json().catch(() => ({ values: [] }));
-  if (json && Array.isArray(json.values)) {
-    return json.values as string[];
+  try {
+    const res = await fetch(EDGE_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ reportId, reportIds, dimensionId, search, limit }),
+    });
+
+    console.log('[fetchUniqueDimensionValues] Response status:', res.status);
+
+    if (!res.ok) {
+      console.error('[fetchUniqueDimensionValues] Response not ok:', res.status, res.statusText);
+      return [];
+    }
+
+    const json = await res.json().catch((e) => {
+      console.error('[fetchUniqueDimensionValues] JSON parse error:', e);
+      return { values: [] };
+    });
+
+    console.log('[fetchUniqueDimensionValues] Response data:', json);
+
+    if (json && Array.isArray(json.values)) {
+      return json.values as string[];
+    }
+    return [];
+  } catch (error) {
+    console.error('[fetchUniqueDimensionValues] Fetch error:', error);
+    return [];
   }
-  return [];
 }
