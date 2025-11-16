@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchUniqueDimensionValues } from "../lib/vlookup/fetchUniqueValues";
 import { supabase } from "@/integrations/supabase/client";
@@ -59,6 +59,9 @@ export default function VlookupModal({
   // Options per source dimension for Values to Map
   const [optionsMap, setOptionsMap] = useState<Record<string, string[]>>({});
   const [loadingOptionsMap, setLoadingOptionsMap] = useState<Record<string, boolean>>({});
+
+  // Loading state for save operation
+  const [isSaving, setIsSaving] = useState(false);
 
   // Load dimensions when modal opens
   useEffect(() => {
@@ -298,6 +301,7 @@ export default function VlookupModal({
     const firstSource = rows[0]?.sourceDimensionId;
     setRows(prev => [...prev, { sourceDimensionId: firstSource, valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
   };
+  
   const removeRow = (index: number) => setRows(prev => prev.filter((_, i) => i !== index));
 
   async function ensureTargetDimension(row: Row): Promise<string | null> {
@@ -415,8 +419,12 @@ export default function VlookupModal({
     }
   }
 
-  const handleCreate = async () => {
+  const handleSave = async () => {
+    if (isSaving) return;
+    
     try {
+      setIsSaving(true);
+      
       if (!accountId) {
         toast({ title: "Account required", description: "Target dimensions require an account context.", variant: "destructive" });
         return;
@@ -456,25 +464,45 @@ export default function VlookupModal({
     } catch (e: any) {
       console.error('Vlookup save error:', e);
       toast({ title: "Error", description: e?.message || "Failed to save mappings", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
+  // Validation for save button
+  const isValidForSave = rows.some(r =>
+    r.sourceDimensionId &&
+    r.valuesToMap.length > 0 &&
+    r.newDimensionName.trim() &&
+    r.groupedValue.trim()
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Pivot Dimensions</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-6">
+          {/* Header row */}
+          <div className="grid grid-cols-12 gap-4 text-sm font-medium text-muted-foreground border-b pb-2">
+            <div className="col-span-3">Source Dimension</div>
+            <div className="col-span-3">Values to Map</div>
+            <div className="col-span-3">Target Dimension</div>
+            <div className="col-span-2">Grouped Value</div>
+            <div className="col-span-1">Actions</div>
+          </div>
+
+          {/* Data rows */}
           {rows.map((row, idx) => {
             const currentOptions = row.sourceDimensionId ? (optionsMap[row.sourceDimensionId] || []) : [];
             const loading = !!(row.sourceDimensionId && loadingOptionsMap[row.sourceDimensionId]);
+            
             return (
-              <div key={idx} className="grid grid-cols-12 gap-3 items-end">
+              <div key={idx} className="grid grid-cols-12 gap-4 items-start py-2 border-b border-gray-100 last:border-b-0">
                 {/* Source dimension */}
                 <div className="col-span-3">
-                  <Label>Source Dimension</Label>
                   <Select
                     value={row.sourceDimensionId}
                     onValueChange={(val) => {
@@ -495,7 +523,7 @@ export default function VlookupModal({
                       }
                     }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-10">
                       <SelectValue placeholder="Select dimension" />
                     </SelectTrigger>
                     <SelectContent>
@@ -507,8 +535,7 @@ export default function VlookupModal({
                 </div>
 
                 {/* Values to map */}
-                <div className="col-span-4">
-                  <Label>Values to Map</Label>
+                <div className="col-span-3">
                   <MultiSelect
                     options={currentOptions.map(v => ({ label: v, value: v }))}
                     values={row.valuesToMap}
@@ -516,20 +543,19 @@ export default function VlookupModal({
                     placeholder={loading ? "Loading values…" : "Select values..."}
                     searchPlaceholder="Search..."
                     disabled={loading || !row.sourceDimensionId}
-                    className="bg-background"
+                    className="bg-background min-h-[40px]"
                   />
                 </div>
 
-                {/* Target dimension - improved combobox that allows creating new dimensions */}
+                {/* Target dimension */}
                 <div className="col-span-3">
-                  <Label>Target Dimension</Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
                         role="combobox"
                         className={cn(
-                          "w-full justify-between",
+                          "w-full justify-between h-10",
                           !row.newDimensionName && "text-muted-foreground"
                         )}
                       >
@@ -552,7 +578,7 @@ export default function VlookupModal({
                         />
                         <CommandList>
                           {targetDimensions.length > 0 && (
-                            <CommandGroup heading="Existing Vlookup Dimensions">
+                            <CommandGroup heading="Existing Pivot Dimensions">
                               {targetDimensions.map((dim) => (
                                 <CommandItem
                                   key={dim.id}
@@ -596,7 +622,7 @@ export default function VlookupModal({
                           {targetDimensions.length === 0 && !row.newDimensionName && (
                             <CommandEmpty>
                               <div className="p-4 text-center text-sm text-muted-foreground">
-                                <p>No existing vlookup dimensions.</p>
+                                <p>No existing pivot dimensions.</p>
                                 <p className="mt-2">Type a name to create a new dimension.</p>
                               </div>
                             </CommandEmpty>
@@ -609,35 +635,57 @@ export default function VlookupModal({
 
                 {/* Grouped value */}
                 <div className="col-span-2">
-                  <Label>Grouped Value</Label>
                   <Input
                     placeholder="e.g., Brady"
                     value={row.groupedValue}
                     onChange={(e) => updateRow(idx, { groupedValue: e.target.value })}
+                    className="h-10"
                   />
                 </div>
 
-                {/* Row actions */}
-                <div className="col-span-12 flex items-center gap-2">
+                {/* Actions */}
+                <div className="col-span-1 flex items-center justify-center">
                   {rows.length > 1 && (
-                    <Button variant="outline" size="sm" onClick={() => removeRow(idx)}>
-                      Remove
-                    </Button>
-                  )}
-                  {idx === rows.length - 1 && (
-                    <Button variant="outline" size="sm" onClick={addRow}>
-                      + Add Row
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => removeRow(idx)}
+                      className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
               </div>
             );
           })}
+
+          {/* Add row button */}
+          <div className="flex justify-start">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={addRow}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Add Row
+            </Button>
+          </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleCreate}>Create Dimensions</Button>
+        {/* Footer */}
+        <div className="flex justify-end gap-3 pt-6 border-t">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSave} 
+            disabled={!isValidForSave || isSaving}
+            className="min-w-[80px]"
+          >
+            {isSaving ? "Saving..." : "Save"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
