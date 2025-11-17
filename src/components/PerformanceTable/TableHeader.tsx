@@ -54,6 +54,11 @@ export function TableHeader({
   onCancelColumnSettings,
   onRefreshDimensions,
 }: TableHeaderProps) {
+  // Get all text and date dimensions for selector options
+  const textAndDateDimensions = dimensions
+    .filter(d => d.type === 'text' || d.type === 'date')
+    .map(d => d.id);
+
   return (
     <>
       {/* Date Granularity Tabs */}
@@ -71,7 +76,7 @@ export function TableHeader({
           <DimensionSelectorGroup
             label="Group by"
             dimensions={groupByDimensions}
-            availableDimensions={groupByDimensions}
+            availableDimensions={textAndDateDimensions}
             allDimensions={dimensions}
             dimensionHasData={dimensionHasData}
             reportId={reportId}
@@ -85,7 +90,7 @@ export function TableHeader({
             <DimensionSelectorGroup
               label="Breakdown by"
               dimensions={breakdownByDimensions}
-              availableDimensions={groupByDimensions}
+              availableDimensions={textAndDateDimensions}
               allDimensions={dimensions}
               dimensionHasData={dimensionHasData}
               reportId={reportId}
@@ -100,7 +105,7 @@ export function TableHeader({
             <DimensionSelectorGroup
               label="Then by"
               dimensions={thenByDimensions}
-              availableDimensions={groupByDimensions}
+              availableDimensions={textAndDateDimensions}
               allDimensions={dimensions}
               dimensionHasData={dimensionHasData}
               reportId={reportId}
