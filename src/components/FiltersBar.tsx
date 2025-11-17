@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 import { startOfMonth, endOfMonth, startOfWeek, subDays, subMonths, startOfYear, endOfYear, differenceInDays, subYears } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
-import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { retryWithBackoff, filterDimensionsByVisibility, filterDimensionsByFilterSettings } from "@/lib/debug";
 import { useToast } from "@/components/ui/use-toast";
 import { useVlookupMappings, getMappedValue } from "@/hooks/useVlookupMappings";
@@ -902,15 +901,6 @@ export const FiltersBar = ({
           </div>
         </div>
       </div>
-
-      <DimensionSelectorModal
-        open={showDimensionSelector}
-        onOpenChange={setShowDimensionSelector}
-        title="Configure Filter Dimensions"
-        selectedDimensions={activeDimensions}
-        onDimensionsChange={handleDimensionsChange}
-        reportId={reportId}
-      />
 
       <Dialog open={masterDimensionSettingsOpen} onOpenChange={setMasterDimensionSettingsOpen}>
         <DialogContent className="sm:max-w-[500px] bg-background">

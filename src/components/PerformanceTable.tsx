@@ -6,7 +6,6 @@ import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { FilterState } from "./FiltersBar";
 import { ColumnFilterModal } from "./ColumnFilterModal";
-import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { TableHeader } from "./PerformanceTable/TableHeader";
 import { TableBody } from "./PerformanceTable/TableBody";
 import { TableSkeleton } from "./PerformanceTable/TableSkeleton";
@@ -16,6 +15,7 @@ import { usePerformanceTableColumns } from "@/hooks/performanceTable/usePerforma
 import { usePerformanceTableDataFixed as usePerformanceTableData } from "@/hooks/performanceTable/usePerformanceTableDataFixed";
 import { usePerformanceTableFilters } from "@/hooks/performanceTable/usePerformanceTableFilters";
 import { checkDataSources } from "@/lib/performanceTable/dataSourceUtils";
+import PerformanceSettingsModal from "./PerformanceSettingsModal";
 
 interface PerformanceTableProps {
   reportId: string | null;
@@ -42,9 +42,8 @@ export const PerformanceTable = ({
 }: PerformanceTableProps) => {
   // Modal states
   const [filterModalOpen, setFilterModalOpen] = useState(false);
-  const [dimensionSelectorOpen, setDimensionSelectorOpen] = useState(false);
   const [selectedKPI, setSelectedKPI] = useState("");
-  const [currentSelector, setCurrentSelector] = useState<"group" | "breakdown" | "then">("group");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   
   // Date granularity state
   const [activeDateTab, setActiveDateTab] = useState<'day' | 'week' | 'month' | 'year'>('day');
@@ -453,20 +452,6 @@ export const PerformanceTable = ({
     }
   }, [groupByDimensions, breakdownByDimensions, thenByDimensions]);
 
-  // Handle dimension selector open
-  const handleDimensionSelectorOpen = useCallback((e: React.MouseEvent, selector: "group" | "breakdown" | "then") => {
-    e.preventDefault();
-    setCurrentSelector(selector);
-    setDimensionSelectorOpen(true);
-  }, []);
-
-  // Get current dimensions for selector
-  const getCurrentDimensions = useCallback(() => {
-    if (currentSelector === "group") return groupByDimensions;
-    if (currentSelector === "breakdown") return breakdownByDimensions;
-    return thenByDimensions;
-  }, [currentSelector, groupByDimensions, breakdownByDimensions, thenByDimensions]);
-
   // Handle date tab change with auto-save
   const handleDateTabChange = useCallback((newDateTab: 'day' | 'week' | 'month' | 'year') => {
     setActiveDateTab(newDateTab);
@@ -483,61 +468,22 @@ export const PerformanceTable = ({
     );
   }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, columnOrder, dateOrder, saveViewSettings]);
 
-  // Handle dimensions change from modal
-  const handleDimensionsChange = useCallback((newDimensions: string[]) => {
-    let updatedGroupBy = groupByDimensions;
-    let updatedBreakdownBy = breakdownByDimensions;
-    let updatedThenBy = thenByDimensions;
-    
-    if (currentSelector === "group") {
-      // If we have 3+ dimensions, auto-distribute them across all three selectors
-      if (newDimensions.length >= 3) {
-        console.log('[PerformanceTable] Auto-distributing 3+ dimensions across selectors');
-        updatedGroupBy = [newDimensions[0]];
-        updatedBreakdownBy = [newDimensions[1]];
-        updatedThenBy = [newDimensions[2]];
-        setGroupByDimensions(updatedGroupBy);
-        setBreakdownByDimensions(updatedBreakdownBy);
-        setThenByDimensions(updatedThenBy);
-      } else if (newDimensions.length === 2) {
-        // If we have 2 dimensions, put first in group and second in breakdown
-        updatedGroupBy = [newDimensions[0]];
-        updatedBreakdownBy = [newDimensions[1]];
-        updatedThenBy = [];
-        setGroupByDimensions(updatedGroupBy);
-        setBreakdownByDimensions(updatedBreakdownBy);
-        setThenByDimensions(updatedThenBy);
-      } else {
-        // Single dimension or empty
-        setGroupByDimensions(newDimensions);
-        updatedGroupBy = newDimensions;
-      }
-    } else if (currentSelector === "breakdown") {
-      setBreakdownByDimensions(newDimensions);
-      updatedBreakdownBy = newDimensions;
-    } else if (currentSelector === "then") {
-      setThenByDimensions(newDimensions);
-      updatedThenBy = newDimensions;
-    }
-    
-    // Save the updated dimensions to the view
+  // NEW: Save selections from settings modal
+  const handleSettingsSave = useCallback((newGroup: string[], newBreakdown: string[], newThen: string[]) => {
+    setGroupByDimensions(newGroup);
+    setBreakdownByDimensions(newBreakdown);
+    setThenByDimensions(newThen);
+
     saveViewSettings(
-      updatedGroupBy,
-      updatedBreakdownBy,
-      updatedThenBy,
+      newGroup,
+      newBreakdown,
+      newThen,
       visibleColumns,
       columnOrder,
       activeDateTab,
       dateOrder
     );
-  }, [currentSelector, groupByDimensions, breakdownByDimensions, thenByDimensions, saveViewSettings, visibleColumns, columnOrder, activeDateTab, dateOrder]);
-
-  // Get selector title
-  const getSelectorTitle = useCallback(() => {
-    if (currentSelector === "group") return "Select Group By Dimension";
-    if (currentSelector === "breakdown") return "Select Breakdown By Dimension";
-    return "Select Then By Dimension";
-  }, [currentSelector]);
+  }, [visibleColumns, columnOrder, activeDateTab, dateOrder, saveViewSettings]);
 
   // Handle context menu for filters
   const handleContextMenu = useCallback((e: React.MouseEvent, kpi: string) => {
@@ -624,7 +570,6 @@ export const PerformanceTable = ({
             isSharedView={isSharedView}
             isEditMode={isEditMode}
             onDimensionChange={handleDimensionChange}
-            onDimensionSelectorOpen={handleDimensionSelectorOpen}
             visibleColumns={visibleColumns}
             getOrderedDimensions={getOrderedDimensions}
             onToggleColumn={toggleColumn}
@@ -634,6 +579,7 @@ export const PerformanceTable = ({
             onApplyColumnSettings={applyColumnSettings}
             onCancelColumnSettings={cancelColumnSettings}
             onRefreshDimensions={loadDimensions}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
         </CardHeader>
         <CardContent>
@@ -686,15 +632,14 @@ export const PerformanceTable = ({
         tableData={tableData}
       />
 
-      <DimensionSelectorModal
-        open={dimensionSelectorOpen}
-        onOpenChange={setDimensionSelectorOpen}
-        title={getSelectorTitle()}
-        selectedDimensions={getCurrentDimensions()}
-        onDimensionsChange={handleDimensionsChange}
-        onDateGranularityChange={handleDateTabChange}
-        currentDateGranularity={activeDateTab}
-        reportId={reportId}
+      <PerformanceSettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        dimensions={dimensions}
+        groupBy={groupByDimensions}
+        breakdownBy={breakdownByDimensions}
+        thenBy={thenByDimensions}
+        onSave={handleSettingsSave}
       />
     </>
   );

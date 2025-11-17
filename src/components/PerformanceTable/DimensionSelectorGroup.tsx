@@ -19,7 +19,7 @@ interface DimensionSelectorGroupProps {
   isSharedView: boolean;
   isEditMode?: boolean;
   onValueChange: (value: string) => void;
-  onContextMenu: (e: React.MouseEvent) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 /**
@@ -55,7 +55,7 @@ export function DimensionSelectorGroup({
         >
           <SelectTrigger 
             className="w-40 bg-background"
-            onContextMenu={!isSharedView && isEditMode ? onContextMenu : undefined}
+            onContextMenu={!isSharedView && isEditMode && onContextMenu ? onContextMenu : undefined}
           >
             <SelectValue />
           </SelectTrigger>

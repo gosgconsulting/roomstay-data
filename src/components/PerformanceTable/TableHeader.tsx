@@ -3,6 +3,8 @@ import { DimensionSelectorGroup } from "./DimensionSelectorGroup";
 import { ColumnVisibilitySheet } from "./ColumnVisibilitySheet";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import type { DragEndEvent } from '@dnd-kit/core';
+import { Button } from "@/components/ui/button";
+import { Settings } from "lucide-react";
 
 interface TableHeaderProps {
   activeDateTab: 'day' | 'week' | 'month' | 'year';
@@ -16,7 +18,6 @@ interface TableHeaderProps {
   isSharedView: boolean;
   isEditMode?: boolean;
   onDimensionChange: (value: string, selector: "group" | "breakdown" | "then") => void;
-  onDimensionSelectorOpen: (e: React.MouseEvent, selector: "group" | "breakdown" | "then") => void;
   visibleColumns: Set<string>;
   getOrderedDimensions: () => Dimension[];
   onToggleColumn: (dimensionId: string) => void;
@@ -26,6 +27,7 @@ interface TableHeaderProps {
   onApplyColumnSettings: () => void;
   onCancelColumnSettings: () => void;
   onRefreshDimensions?: () => void;
+  onOpenSettings?: () => void;
 }
 
 /**
@@ -43,7 +45,6 @@ export function TableHeader({
   isSharedView,
   isEditMode = false,
   onDimensionChange,
-  onDimensionSelectorOpen,
   visibleColumns,
   getOrderedDimensions,
   onToggleColumn,
@@ -53,6 +54,7 @@ export function TableHeader({
   onApplyColumnSettings,
   onCancelColumnSettings,
   onRefreshDimensions,
+  onOpenSettings,
 }: TableHeaderProps) {
   // Get all text and date dimensions for selector options
   const textAndDateDimensions = dimensions
@@ -83,7 +85,6 @@ export function TableHeader({
             isSharedView={isSharedView}
             isEditMode={isEditMode}
             onValueChange={(value) => onDimensionChange(value, "group")}
-            onContextMenu={(e) => onDimensionSelectorOpen(e, "group")}
           />
           
           {groupByDimensions.length >= 2 && (
@@ -97,7 +98,6 @@ export function TableHeader({
               isSharedView={isSharedView}
               isEditMode={isEditMode}
               onValueChange={(value) => onDimensionChange(value, "breakdown")}
-              onContextMenu={(e) => onDimensionSelectorOpen(e, "breakdown")}
             />
           )}
           
@@ -112,7 +112,6 @@ export function TableHeader({
               isSharedView={isSharedView}
               isEditMode={isEditMode}
               onValueChange={(value) => onDimensionChange(value, "then")}
-              onContextMenu={(e) => onDimensionSelectorOpen(e, "then")}
             />
           )}
         </div>
@@ -131,6 +130,15 @@ export function TableHeader({
               onCancel={onCancelColumnSettings}
               onRefreshDimensions={onRefreshDimensions}
             />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-2"
+              onClick={onOpenSettings}
+              title="Table settings"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
           </div>
         )}
       </div>

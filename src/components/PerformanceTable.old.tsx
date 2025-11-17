@@ -35,7 +35,6 @@ import { toast } from "@/hooks/use-toast";
 import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
 import { cn, sortKPIsByDefaultOrder, getAccountDefaultKPIs } from "@/lib/utils";
 import { ColumnFilterModal } from "./ColumnFilterModal";
-import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff, filterDimensionsByVisibility } from "@/lib/debug";
 import { format, startOfWeek, startOfMonth, startOfYear, getWeek } from "date-fns";
@@ -138,7 +137,6 @@ function SortableColumnItem({
 export const PerformanceTable = ({ reportId, filters, isSharedView = false, accountId, visibilityRefreshTrigger, onLoadingComplete, onFiltersChange }: PerformanceTableProps) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [filterModalOpen, setFilterModalOpen] = useState(false);
-  const [dimensionSelectorOpen, setDimensionSelectorOpen] = useState(false);
   const [selectedKPI, setSelectedKPI] = useState("");
   const [currentSelector, setCurrentSelector] = useState<"group" | "breakdown" | "then">("group");
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
@@ -1596,7 +1594,6 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
   ) => {
     e.preventDefault();
     setCurrentSelector(selector);
-    setDimensionSelectorOpen(true);
   };
 
   const handleDimensionChange = (
@@ -2356,17 +2353,6 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
         currentFilters={filters}
         onFiltersChange={onFiltersChange}
         tableData={tableData}
-      />
-
-      <DimensionSelectorModal
-        open={dimensionSelectorOpen}
-        onOpenChange={setDimensionSelectorOpen}
-        title={getSelectorTitle()}
-        selectedDimensions={getCurrentDimensions()}
-        onDimensionsChange={handleDimensionsChange}
-        onDateGranularityChange={(granularity) => setActiveDateTab(granularity as 'day' | 'week' | 'month' | 'year')}
-        currentDateGranularity={activeDateTab}
-        reportId={reportId}
       />
     </>
   );

@@ -6,7 +6,6 @@ import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { FilterState } from "./FiltersBar";
 import { ColumnFilterModal } from "./ColumnFilterModal";
-import { DimensionSelectorModal } from "./DimensionSelectorModal";
 import { TableHeader } from "./PerformanceTable/TableHeader";
 import { TableBody } from "./PerformanceTable/TableBody";
 import { TableSkeleton } from "./PerformanceTable/TableSkeleton";
@@ -38,9 +37,7 @@ export const PerformanceTable = ({
 }: PerformanceTableProps) => {
   // Modal states
   const [filterModalOpen, setFilterModalOpen] = useState(false);
-  const [dimensionSelectorOpen, setDimensionSelectorOpen] = useState(false);
   const [selectedKPI, setSelectedKPI] = useState("");
-  const [currentSelector, setCurrentSelector] = useState<"group" | "breakdown" | "then">("group");
   
   // Date granularity state
   const [activeDateTab, setActiveDateTab] = useState<'day' | 'week' | 'month' | 'year'>('day');
@@ -318,38 +315,6 @@ export const PerformanceTable = ({
     }
   }, []);
 
-  // Handle dimension selector open
-  const handleDimensionSelectorOpen = useCallback((e: React.MouseEvent, selector: "group" | "breakdown" | "then") => {
-    e.preventDefault();
-    setCurrentSelector(selector);
-    setDimensionSelectorOpen(true);
-  }, []);
-
-  // Get current dimensions for selector
-  const getCurrentDimensions = useCallback(() => {
-    if (currentSelector === "group") return groupByDimensions;
-    if (currentSelector === "breakdown") return breakdownByDimensions;
-    return thenByDimensions;
-  }, [currentSelector, groupByDimensions, breakdownByDimensions, thenByDimensions]);
-
-  // Handle dimensions change from modal
-  const handleDimensionsChange = useCallback((newDimensions: string[]) => {
-    if (currentSelector === "group") {
-      setGroupByDimensions(newDimensions);
-    } else if (currentSelector === "breakdown") {
-      setBreakdownByDimensions(newDimensions);
-    } else if (currentSelector === "then") {
-      setThenByDimensions(newDimensions);
-    }
-  }, [currentSelector]);
-
-  // Get selector title
-  const getSelectorTitle = useCallback(() => {
-    if (currentSelector === "group") return "Select Group By Dimension";
-    if (currentSelector === "breakdown") return "Select Breakdown By Dimension";
-    return "Select Then By Dimension";
-  }, [currentSelector]);
-
   // Handle context menu for filters
   const handleContextMenu = useCallback((e: React.MouseEvent, kpi: string) => {
     e.preventDefault();
@@ -373,7 +338,6 @@ export const PerformanceTable = ({
             reportId={reportId}
             isSharedView={isSharedView}
             onDimensionChange={handleDimensionChange}
-            onDimensionSelectorOpen={handleDimensionSelectorOpen}
             visibleColumns={visibleColumns}
             getOrderedDimensions={getOrderedDimensions}
             onToggleColumn={toggleColumn}
@@ -429,18 +393,6 @@ export const PerformanceTable = ({
         onFiltersChange={onFiltersChange}
         tableData={tableData}
       />
-
-      <DimensionSelectorModal
-        open={dimensionSelectorOpen}
-        onOpenChange={setDimensionSelectorOpen}
-        title={getSelectorTitle()}
-        selectedDimensions={getCurrentDimensions()}
-        onDimensionsChange={handleDimensionsChange}
-        onDateGranularityChange={(granularity) => setActiveDateTab(granularity as 'day' | 'week' | 'month' | 'year')}
-        currentDateGranularity={activeDateTab}
-        reportId={reportId}
-      />
     </>
   );
 };
-
