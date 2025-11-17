@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff, filterDimensionsByVisibility, filterDimensionsByFilterSettings } from "@/lib/debug";
 import { useToast } from "@/components/ui/use-toast";
 import { useVlookupMappings, getMappedValue } from "@/hooks/useVlookupMappings";
+import PerformanceSettingsModal from "@/components/PerformanceSettingsModal";
 
 import { 
   DimensionFilter, 
@@ -91,6 +92,9 @@ export const FiltersBar = ({
   const [masterDimensionPopoverOpen, setMasterDimensionPopoverOpen] = useState(false);
   const [masterDimensionSettingsOpen, setMasterDimensionSettingsOpen] = useState(false);
   const [masterDimensionValuesLoading, setMasterDimensionValuesLoading] = useState(false);
+  // Table settings modal state
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [dateDimensionIdForModal, setDateDimensionIdForModal] = useState<string | null>(null);
 
   // vlookup mappings
   const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
@@ -183,6 +187,17 @@ export const FiltersBar = ({
       loadDimensionValues();
     }
   }, [activeDimensions, reportId]);
+
+  // Ensure Date dimension is available in the settings modal
+  useEffect(() => {
+    getDateDimensionId().then((id) => setDateDimensionIdForModal(id));
+  }, [reportId, accountId]);
+
+  // Keep only this modalDimensions declaration
+  const modalDimensions = [
+    ...(dateDimensionIdForModal ? [{ id: dateDimensionIdForModal, name: "Date", type: "date" }] : []),
+    ...dimensions,
+  ];
 
   // Persist filter settings after changes (only in Edit mode)
   useEffect(() => {
@@ -891,7 +906,7 @@ export const FiltersBar = ({
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setShowDimensionSelector(true)}
+                  onClick={() => setSettingsOpen(true)}
                   title="Edit filter dimensions"
                 >
                   <Settings className="h-4 w-4" />
@@ -975,6 +990,23 @@ export const FiltersBar = ({
         setMasterDimensionValues={setMasterDimensionValues}
         masterDimensionOptions={masterDimensionOptions}
         masterDimensionValuesLoading={masterDimensionValuesLoading}
+      />
+
+      {/* Open the new Table Settings modal from FiltersBar */}
+      <PerformanceSettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        dimensions={modalDimensions as any}
+        groupBy={[]}
+        breakdownBy={[]}
+        thenBy={[]}
+        onSave={() => {
+          setSettingsOpen(false);
+          toast({
+            title: "Settings saved",
+            description: "Dropdown options updated.",
+          });
+        }}
       />
     </>
   );
