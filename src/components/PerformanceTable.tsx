@@ -53,7 +53,9 @@ export const PerformanceTable = ({
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingTabName, setEditingTabName] = useState("");
   const [accountName, setAccountName] = useState<string | undefined>(undefined);
-  
+  // NEW: selector options configured via view settings
+  const [selectorDimensions, setSelectorDimensions] = useState<string[]>([]);
+
   // Data source state
   const [hasDataSources, setHasDataSources] = useState<boolean>(false);
   const [hasCSVSource, setHasCSVSource] = useState<boolean>(false);
@@ -145,6 +147,7 @@ export const PerformanceTable = ({
     handleViewChange,
     handleDeleteView,
     handleTabNameSave,
+    saveSelectorDimensions, // NEW
   } = usePerformanceTableViews({
     reportId,
     isSharedView,
@@ -159,6 +162,7 @@ export const PerformanceTable = ({
     onInitialColumnOrderChange: setInitialColumnOrder,
     onDateGranularityChange: setActiveDateTab,
     onDateOrderChange: setDateOrder,
+    onSelectorDimensionsChange: setSelectorDimensions, // NEW
   });
 
   // Sync activeViewId from views hook
@@ -468,26 +472,12 @@ export const PerformanceTable = ({
     );
   }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, columnOrder, dateOrder, saveViewSettings]);
 
-  // NEW: Save selections from settings modal (single ordered list applied to all three)
+  // NEW: Save selections from settings modal (only selector list; does not change group/breakdown/then)
   const handleSettingsSave = useCallback((selected: string[]) => {
-    const nextGroup = selected[0] ? [selected[0]] : [];
-    const nextBreakdown = selected[1] ? [selected[1]] : [];
-    const nextThen = selected[2] ? [selected[2]] : [];
-
-    setGroupByDimensions(nextGroup);
-    setBreakdownByDimensions(nextBreakdown);
-    setThenByDimensions(nextThen);
-
-    saveViewSettings(
-      nextGroup,
-      nextBreakdown,
-      nextThen,
-      visibleColumns,
-      columnOrder,
-      activeDateTab,
-      dateOrder
-    );
-  }, [visibleColumns, columnOrder, activeDateTab, dateOrder, saveViewSettings]);
+    setSelectorDimensions(selected);
+    // Persist to the active view
+    saveSelectorDimensions(selected);
+  }, [saveSelectorDimensions]);
 
   // Handle context menu for filters
   const handleContextMenu = useCallback((e: React.MouseEvent, kpi: string) => {
@@ -584,6 +574,7 @@ export const PerformanceTable = ({
             onCancelColumnSettings={cancelColumnSettings}
             onRefreshDimensions={loadDimensions}
             onOpenSettings={() => setSettingsOpen(true)}
+            availableSelectorDimensions={selectorDimensions} // NEW: restrict dropdowns to configured list
           />
         </CardHeader>
         <CardContent>

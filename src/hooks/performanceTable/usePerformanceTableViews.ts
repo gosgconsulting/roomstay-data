@@ -17,7 +17,8 @@ interface View {
   is_default?: boolean;
   visible_kpis?: string[];
   kpi_order?: string[];
-  report_id: string; // Ensure this is always present
+  report_id: string;
+  filter_dimensions?: string[]; // NEW: list of dimension IDs for selector options
 }
 
 interface UsePerformanceTableViewsOptions {
@@ -34,6 +35,7 @@ interface UsePerformanceTableViewsOptions {
   onInitialColumnOrderChange: (order: string[]) => void;
   onDateGranularityChange: (granularity: 'day' | 'week' | 'month' | 'year') => void;
   onDateOrderChange: (order: 'asc' | 'desc') => void;
+  onSelectorDimensionsChange?: (ids: string[]) => void; // NEW: callback to set selector options
 }
 
 /**
@@ -54,6 +56,7 @@ export function usePerformanceTableViews({
   onInitialColumnOrderChange,
   onDateGranularityChange,
   onDateOrderChange,
+  onSelectorDimensionsChange,
 }: UsePerformanceTableViewsOptions) {
   const [tableViews, setTableViews] = useState<View[]>([]);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
@@ -180,7 +183,6 @@ export function usePerformanceTableViews({
       const mapped: string[] = [];
       const unmappedIds: string[] = [];
       
-      // First, find dimensions that are already valid
       for (const dimId of dimIds) {
         const dimension = dimensions.find(d => d.id === dimId);
         if (dimension) {
@@ -190,7 +192,6 @@ export function usePerformanceTableViews({
         }
       }
       
-      // If we have unmapped IDs, query them to get their names and map to account-scoped dimensions
       if (unmappedIds.length > 0) {
         try {
           const dimensionNameToIdMap = new Map<string, string>();
@@ -227,30 +228,30 @@ export function usePerformanceTableViews({
     // Load saved settings - map dimension IDs asynchronously
     const loadDimensionsAsync = async () => {
       const groupDimensions = await mapDimensionIdsLocal(view.group_by_dimensions || []);
-      
-      // If no grouping dimension is set and dimensions are available, set a default
       let finalGroupDimensions = groupDimensions;
       if (groupDimensions.length === 0 && dimensions.length > 0) {
-        // Find a suitable dimension for grouping - prefer Date first, then text dimensions
         const dateDimension = dimensions.find(d => d.type === 'date');
         const textDimension = dimensions.find(d => d.type === 'text');
-        
         if (dateDimension) {
           finalGroupDimensions = [dateDimension.id];
-          console.log('[VIEWS] Auto-selected Date dimension for grouping:', dateDimension.name);
         } else if (textDimension) {
           finalGroupDimensions = [textDimension.id];
-          console.log('[VIEWS] Auto-selected text dimension for grouping:', textDimension.name);
         } else {
-          // Fallback to first available dimension
           finalGroupDimensions = [dimensions[0].id];
-          console.log('[VIEWS] Auto-selected first available dimension for grouping:', dimensions[0].name);
         }
       }
-      
       onGroupByChange(finalGroupDimensions);
       onBreakdownByChange(await mapDimensionIdsLocal(view.breakdown_by_dimensions || []));
       onThenByChange(await mapDimensionIdsLocal(view.then_by_dimensions || []));
+      
+      // NEW: selector options mapping (filter_dimensions)
+      if (typeof onSelectorDimensionsChange === 'function') {
+        const mappedFilters = await mapDimensionIdsLocal(view.filter_dimensions || []);
+        const defaultSelectorIds = dimensions
+          .filter(d => d.type === 'text' || d.type === 'date')
+          .map(d => d.id);
+        onSelectorDimensionsChange(mappedFilters.length > 0 ? mappedFilters : defaultSelectorIds);
+      }
     };
     
     loadDimensionsAsync();
@@ -329,14 +330,9 @@ export function usePerformanceTableViews({
         return;
       }
 
-      // Find date dimension first, fallback to text dimension for default grouping
       const dateDimension = dimensions.find(d => d.type === 'date');
       const defaultGroupDimension = dateDimension || dimensions.find(d => d.type === 'text');
-      const isDateGrouping = defaultGroupDimension?.type === 'date';
-      
-      console.log('[VIEWS] Creating default view for report:', reportId, 'with dimension:', defaultGroupDimension?.name, 'type:', defaultGroupDimension?.type);
 
-      // Set default visible columns - hide some columns by default
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
       const defaultVisibleIds = dimensions
         .filter(d => !hiddenColumns.includes(d.name) && 
@@ -347,7 +343,6 @@ export function usePerformanceTableViews({
         .filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage' || d.formula)
         .map(d => d.id);
 
-      // Set default KPI settings - use account-specific defaults
       const defaultKPIs = getAccountDefaultKPIs(
         accountName,
         dimensions
@@ -355,7 +350,11 @@ export function usePerformanceTableViews({
           .map(d => d.name)
       );
 
-      // Create four default views for different date granularities
+      // NEW: default selector options = all text/date dimensions
+      const defaultSelectorIds = dimensions
+        .filter(d => d.type === 'text' || d.type === 'date')
+        .map(d => d.id);
+
       const dateGranularities: Array<{name: string, granularity: 'day' | 'week' | 'month' | 'year', isDefault: boolean}> = [
         { name: "Day", granularity: 'day', isDefault: true },
         { name: "Week", granularity: 'week', isDefault: false },
@@ -369,12 +368,11 @@ export function usePerformanceTableViews({
         const { data: newView, error } = await supabase
           .from("report_views")
           .insert({
-            report_id: reportId, // CRITICAL: Each view is tied to THIS specific report
+            report_id: reportId,
             user_id: user.id,
             name: dateConfig.name,
             is_default: dateConfig.isDefault,
             group_by_dimensions: defaultGroupDimension ? [defaultGroupDimension.id] : [],
-            // Always include Date dimension in breakdown if it exists and isn't already in group
             breakdown_by_dimensions: dateDimension && defaultGroupDimension?.id !== dateDimension.id 
               ? [dateDimension.id] 
               : [],
@@ -385,6 +383,7 @@ export function usePerformanceTableViews({
             kpi_order: defaultKPIs,
             date_granularity: dateConfig.granularity,
             date_order: 'desc',
+            filter_dimensions: defaultSelectorIds, // NEW
           })
           .select()
           .single();
@@ -400,11 +399,9 @@ export function usePerformanceTableViews({
       }
 
       if (createdViews.length > 0) {
-        console.log(`[VIEWS] Created ${createdViews.length} default views successfully for report:`, reportId);
         setTableViews(createdViews);
         const defaultView = createdViews.find(v => v.is_default) || createdViews[0];
         setActiveViewId(defaultView.id);
-        // Load settings directly from the default view
         loadViewSettingsFromData(defaultView);
       }
     } catch (error) {
@@ -497,6 +494,40 @@ export function usePerformanceTableViews({
     }
   }, [reportId, activeViewId, isSharedView, tableViews]);
 
+  // NEW: Save selector dimensions list to the active view
+  const saveSelectorDimensions = useCallback(async (selectorIds: string[]) => {
+    if (!reportId || !activeViewId) return;
+    if (isSharedView) {
+      console.log('[VIEWS] Skipping save selector dimensions for shared view (read-only)');
+      return;
+    }
+    const filterVirtualDimensions = (ids: string[]): string[] => {
+      return ids.filter(id => !id.startsWith('virtual-'));
+    };
+    const payload = { filter_dimensions: filterVirtualDimensions(selectorIds) };
+
+    console.log('[VIEWS] Saving selector dimensions for report:', reportId, 'view:', activeViewId, payload);
+
+    const { error } = await supabase
+      .from("report_views")
+      .update({
+        ...payload,
+        name: tableViews.find(v => v.id === activeViewId)?.name || "Default View",
+      })
+      .eq("id", activeViewId)
+      .eq("report_id", reportId);
+
+    if (error) {
+      console.error('[VIEWS] Error saving selector dimensions:', error);
+      throw new Error((error as any)?.message ?? 'Failed to save selector dimensions');
+    }
+
+    // Update local cache
+    setTableViews(prev => prev.map(v => 
+      v.id === activeViewId ? { ...v, ...payload } : v
+    ));
+  }, [reportId, activeViewId, isSharedView, tableViews]);
+
   const handleViewChange = useCallback((viewId: string) => {
     setActiveViewId(viewId);
     loadViewSettings(viewId);
@@ -572,5 +603,6 @@ export function usePerformanceTableViews({
     handleViewChange,
     handleDeleteView,
     handleTabNameSave,
+    saveSelectorDimensions,
   };
 }

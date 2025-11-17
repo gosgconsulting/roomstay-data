@@ -35,7 +35,7 @@ export function PerformanceSettingsModal({
     initial.forEach(id => {
       if (id && !unique.includes(id)) unique.push(id);
     });
-    return unique.slice(0, 3);
+    return unique; // no 3-limit
   };
 
   const [selectedDims, setSelectedDims] = useState<string[]>(buildInitial());
@@ -56,7 +56,7 @@ export function PerformanceSettingsModal({
 
   const handleAdd = () => {
     if (!addValue) return;
-    if (selectedDims.length >= 3) return;
+    if (selectedDims.includes(addValue)) return;
     setSelectedDims(prev => [...prev, addValue]);
     setAddValue("");
   };
@@ -76,27 +76,22 @@ export function PerformanceSettingsModal({
         <DialogHeader>
           <DialogTitle>Table Settings</DialogTitle>
           <DialogDescription>
-            Choose up to 3 dimensions in order. They'll be applied as Group by, Breakdown by, and Then by.
+            Choose dimensions to appear in the Group by / Breakdown by / Then by dropdowns. Saving won't change your current selections.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
           <div className="space-y-2">
-            <Label>Selected dimensions (order)</Label>
+            <Label>Selected dimensions (used as dropdown options)</Label>
             {selectedDims.length === 0 ? (
               <div className="text-sm text-muted-foreground">No dimensions selected yet.</div>
             ) : (
               <div className="space-y-2">
-                {selectedDims.map((id, idx) => {
+                {selectedDims.map((id) => {
                   const dim = textDateDims.find(d => d.id === id);
                   return (
                     <div key={id} className="flex items-center justify-between rounded-md border px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground w-14">
-                          {idx === 0 ? "Group by" : idx === 1 ? "Breakdown by" : "Then by"}
-                        </span>
-                        <span className="text-sm">{dim?.name ?? id}</span>
-                      </div>
+                      <span className="text-sm">{dim?.name ?? id}</span>
                       <Button variant="ghost" size="sm" onClick={() => handleRemove(id)}>
                         Remove
                       </Button>
@@ -112,7 +107,7 @@ export function PerformanceSettingsModal({
             <div className="flex items-center gap-2">
               <Select value={addValue} onValueChange={setAddValue}>
                 <SelectTrigger className="w-full bg-background">
-                  <SelectValue placeholder={selectedDims.length >= 3 ? "Maximum 3 selected" : "Select a dimension"} />
+                  <SelectValue placeholder="Select a dimension" />
                 </SelectTrigger>
                 <SelectContent className="bg-background">
                   {availableToAdd.map(d => (
@@ -122,12 +117,12 @@ export function PerformanceSettingsModal({
                   ))}
                 </SelectContent>
               </Select>
-              <Button onClick={handleAdd} disabled={!addValue || selectedDims.length >= 3}>
+              <Button onClick={handleAdd} disabled={!addValue}>
                 Add
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              You can select up to 3 dimensions. The order matters.
+              You can add multiple dimensions; they'll be available in the table's dropdowns.
             </p>
           </div>
         </div>

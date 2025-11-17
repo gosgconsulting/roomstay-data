@@ -28,6 +28,7 @@ interface TableHeaderProps {
   onCancelColumnSettings: () => void;
   onRefreshDimensions?: () => void;
   onOpenSettings?: () => void;
+  availableSelectorDimensions?: string[];
 }
 
 /**
@@ -55,11 +56,12 @@ export function TableHeader({
   onCancelColumnSettings,
   onRefreshDimensions,
   onOpenSettings,
+  availableSelectorDimensions,
 }: TableHeaderProps) {
-  // Get all text and date dimensions for selector options
-  const textAndDateDimensions = dimensions
-    .filter(d => d.type === 'text' || d.type === 'date')
-    .map(d => d.id);
+  // Build selector options: use configured list if provided, else default to all text/date
+  const selectorOptions = (availableSelectorDimensions && availableSelectorDimensions.length > 0)
+    ? availableSelectorDimensions
+    : dimensions.filter(d => d.type === 'text' || d.type === 'date').map(d => d.id);
 
   return (
     <>
@@ -78,7 +80,7 @@ export function TableHeader({
           <DimensionSelectorGroup
             label="Group by"
             dimensions={groupByDimensions}
-            availableDimensions={textAndDateDimensions}
+            availableDimensions={selectorOptions}
             allDimensions={dimensions}
             dimensionHasData={dimensionHasData}
             reportId={reportId}
@@ -91,7 +93,7 @@ export function TableHeader({
             <DimensionSelectorGroup
               label="Breakdown by"
               dimensions={breakdownByDimensions}
-              availableDimensions={textAndDateDimensions}
+              availableDimensions={selectorOptions}
               allDimensions={dimensions}
               dimensionHasData={dimensionHasData}
               reportId={reportId}
@@ -105,7 +107,7 @@ export function TableHeader({
             <DimensionSelectorGroup
               label="Then by"
               dimensions={thenByDimensions}
-              availableDimensions={textAndDateDimensions}
+              availableDimensions={selectorOptions}
               allDimensions={dimensions}
               dimensionHasData={dimensionHasData}
               reportId={reportId}
