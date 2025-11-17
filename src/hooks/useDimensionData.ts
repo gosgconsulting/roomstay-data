@@ -41,7 +41,7 @@ export function useDimensionData(reportId?: string) {
       let filteredDimensions = loadedDimensions;
       if (reportId) {
         console.log('[useDimensionData] Loading view settings for report:', reportId);
-        const { data: viewSettings } = await supabase
+        const { data: viewSettings, error: viewError } = await supabase
           .from("report_views")
           .select("filter_dimensions")
           .eq("report_id", reportId)
@@ -50,11 +50,19 @@ export function useDimensionData(reportId?: string) {
           .maybeSingle();
 
         console.log('[useDimensionData] View filter_dimensions:', viewSettings?.filter_dimensions);
+        console.log('[useDimensionData] View error:', viewError);
 
-        if (viewSettings?.filter_dimensions && Array.isArray(viewSettings.filter_dimensions)) {
+        // Only filter if filter_dimensions is explicitly set and not empty
+        if (viewSettings?.filter_dimensions && Array.isArray(viewSettings.filter_dimensions) && viewSettings.filter_dimensions.length > 0) {
           const filterDimensionIds = new Set(viewSettings.filter_dimensions);
           filteredDimensions = loadedDimensions.filter(d => filterDimensionIds.has(d.id));
           console.log('[useDimensionData] Filtered dimensions:', filteredDimensions.length, 'of', loadedDimensions.length);
+        } else if (!viewSettings) {
+          // No view settings exist - check which dimensions actually have data
+          console.log('[useDimensionData] No view settings found, will check data availability');
+          const hasDataMap = await checkDimensionsHaveData(loadedDimensions.map(d => d.id), reportId);
+          filteredDimensions = loadedDimensions.filter(d => hasDataMap[d.id] === true);
+          console.log('[useDimensionData] Filtered to dimensions with data:', filteredDimensions.length, 'of', loadedDimensions.length);
         }
       }
       
