@@ -37,35 +37,11 @@ export function useDimensionData(reportId?: string) {
       // Use centralized dimension loader (includes vlookup dimensions)
       const loadedDimensions = await loadDimensionsForUser(user.id, reportId);
       
-      // Filter dimensions by filter_dimensions from report_views if reportId is provided
-      let filteredDimensions = loadedDimensions;
-      if (reportId) {
-        console.log('[useDimensionData] Loading view settings for report:', reportId);
-        const { data: viewSettings, error: viewError } = await supabase
-          .from("report_views")
-          .select("filter_dimensions")
-          .eq("report_id", reportId)
-          .eq("user_id", user.id)
-          .eq("is_default", true)
-          .maybeSingle();
+      // REMOVED: filtering by report_views.filter_dimensions and fallback to filtering by data availability
+      // We now always expose the complete dimension list so the selector can configure the same options
+      // shown in the PerformanceTable dropdowns.
+      const filteredDimensions = loadedDimensions;
 
-        console.log('[useDimensionData] View filter_dimensions:', viewSettings?.filter_dimensions);
-        console.log('[useDimensionData] View error:', viewError);
-
-        // Only filter if filter_dimensions is explicitly set and not empty
-        if (viewSettings?.filter_dimensions && Array.isArray(viewSettings.filter_dimensions) && viewSettings.filter_dimensions.length > 0) {
-          const filterDimensionIds = new Set(viewSettings.filter_dimensions);
-          filteredDimensions = loadedDimensions.filter(d => filterDimensionIds.has(d.id));
-          console.log('[useDimensionData] Filtered dimensions:', filteredDimensions.length, 'of', loadedDimensions.length);
-        } else {
-          // No filter_dimensions configured (or empty) - check which dimensions actually have data
-          console.log('[useDimensionData] No filter_dimensions configured, checking data availability');
-          const hasDataMap = await checkDimensionsHaveData(loadedDimensions.map(d => d.id), reportId);
-          filteredDimensions = loadedDimensions.filter(d => hasDataMap[d.id] === true);
-          console.log('[useDimensionData] Filtered to dimensions with data:', filteredDimensions.length, 'of', loadedDimensions.length);
-        }
-      }
-      
       setDimensions(filteredDimensions);
 
       // Check data availability if reportId is provided
@@ -76,7 +52,6 @@ export function useDimensionData(reportId?: string) {
     } catch (error) {
       console.error("[useDimensionData] Error loading dimensions:", error);
       setError(error instanceof Error ? error.message : "Failed to load dimensions");
-      // Set empty dimensions to prevent UI errors
       setDimensions([]);
     } finally {
       setIsLoading(false);
