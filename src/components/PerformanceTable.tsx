@@ -490,8 +490,28 @@ export const PerformanceTable = ({
     let updatedThenBy = thenByDimensions;
     
     if (currentSelector === "group") {
-      setGroupByDimensions(newDimensions);
-      updatedGroupBy = newDimensions;
+      // If we have 3+ dimensions, auto-distribute them across all three selectors
+      if (newDimensions.length >= 3) {
+        console.log('[PerformanceTable] Auto-distributing 3+ dimensions across selectors');
+        updatedGroupBy = [newDimensions[0]];
+        updatedBreakdownBy = [newDimensions[1]];
+        updatedThenBy = [newDimensions[2]];
+        setGroupByDimensions(updatedGroupBy);
+        setBreakdownByDimensions(updatedBreakdownBy);
+        setThenByDimensions(updatedThenBy);
+      } else if (newDimensions.length === 2) {
+        // If we have 2 dimensions, put first in group and second in breakdown
+        updatedGroupBy = [newDimensions[0]];
+        updatedBreakdownBy = [newDimensions[1]];
+        updatedThenBy = [];
+        setGroupByDimensions(updatedGroupBy);
+        setBreakdownByDimensions(updatedBreakdownBy);
+        setThenByDimensions(updatedThenBy);
+      } else {
+        // Single dimension or empty
+        setGroupByDimensions(newDimensions);
+        updatedGroupBy = newDimensions;
+      }
     } else if (currentSelector === "breakdown") {
       setBreakdownByDimensions(newDimensions);
       updatedBreakdownBy = newDimensions;

@@ -27,20 +27,24 @@ export function SelectedDimensionItem({
   disabled = false,
 }: SelectedDimensionItemProps) {
   const isDateDimension = dimension?.type === 'date';
+  // Date dimension cannot be removed
+  const canRemove = !isDateDimension;
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between py-2 px-3 bg-muted rounded-md">
         <span className="font-medium">{dimension?.name || dimensionId}</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 text-destructive hover:text-destructive"
-          onClick={() => onRemove(dimensionId)}
-          disabled={disabled}
-        >
-          <X className="h-4 w-4" />
-        </Button>
+        {canRemove && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-destructive hover:text-destructive"
+            onClick={() => onRemove(dimensionId)}
+            disabled={disabled}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
       </div>
       {/* {isDateDimension && (
         <div className="pl-3 pr-3">

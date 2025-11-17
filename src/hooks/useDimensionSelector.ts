@@ -70,6 +70,12 @@ export function useDimensionSelector({
   // Enhanced remove handler that also removes granularity
   const handleRemoveDimension = async (dimensionId: string) => {
     try {
+      // Prevent removing Date dimension
+      const dimension = dimensions.find(d => d.id === dimensionId);
+      if (dimension?.type === 'date') {
+        throw new Error('Date dimension cannot be removed');
+      }
+      
       removeGranularity(dimensionId);
       await baseHandleRemoveDimension(dimensionId);
       // Small delay to ensure state has propagated
