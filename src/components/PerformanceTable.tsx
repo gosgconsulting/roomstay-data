@@ -634,6 +634,7 @@ export const PerformanceTable = ({
         groupBy={groupByDimensions}
         breakdownBy={breakdownByDimensions}
         thenBy={thenByDimensions}
+        selectedDimensionIds={selectorDimensions}
         onSave={handleSettingsSave}
       />
     </>

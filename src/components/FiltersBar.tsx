@@ -1000,12 +1000,11 @@ export const FiltersBar = ({
         groupBy={[]}
         breakdownBy={[]}
         thenBy={[]}
-        onSave={() => {
+        selectedDimensionIds={activeDimensions}
+        onSave={(selectedIds) => {
+          // Apply to filter options (chips) and persist via existing handler
+          handleDimensionsChange(selectedIds);
           setSettingsOpen(false);
-          toast({
-            title: "Settings saved",
-            description: "Dropdown options updated.",
-          });
         }}
       />
     </>
