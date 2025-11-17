@@ -468,16 +468,20 @@ export const PerformanceTable = ({
     );
   }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, columnOrder, dateOrder, saveViewSettings]);
 
-  // NEW: Save selections from settings modal
-  const handleSettingsSave = useCallback((newGroup: string[], newBreakdown: string[], newThen: string[]) => {
-    setGroupByDimensions(newGroup);
-    setBreakdownByDimensions(newBreakdown);
-    setThenByDimensions(newThen);
+  // NEW: Save selections from settings modal (single ordered list applied to all three)
+  const handleSettingsSave = useCallback((selected: string[]) => {
+    const nextGroup = selected[0] ? [selected[0]] : [];
+    const nextBreakdown = selected[1] ? [selected[1]] : [];
+    const nextThen = selected[2] ? [selected[2]] : [];
+
+    setGroupByDimensions(nextGroup);
+    setBreakdownByDimensions(nextBreakdown);
+    setThenByDimensions(nextThen);
 
     saveViewSettings(
-      newGroup,
-      newBreakdown,
-      newThen,
+      nextGroup,
+      nextBreakdown,
+      nextThen,
       visibleColumns,
       columnOrder,
       activeDateTab,
