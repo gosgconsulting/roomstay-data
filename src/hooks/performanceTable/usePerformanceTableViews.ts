@@ -250,7 +250,13 @@ export function usePerformanceTableViews({
         const defaultSelectorIds = dimensions
           .filter(d => d.type === 'text' || d.type === 'date')
           .map(d => d.id);
-        onSelectorDimensionsChange(mappedFilters.length > 0 ? mappedFilters : defaultSelectorIds);
+        const configured = mappedFilters.length > 0 ? mappedFilters : defaultSelectorIds;
+
+        // Ensure Date is always included
+        const dateId = dimensions.find(d => d.type === 'date')?.id;
+        const ensured = dateId ? Array.from(new Set([dateId, ...configured])) : configured;
+
+        onSelectorDimensionsChange(ensured);
       }
     };
     
@@ -315,7 +321,7 @@ export function usePerformanceTableViews({
     }
     
     console.log('[VIEWS] View settings loaded successfully for report:', reportId);
-  }, [dimensions, onGroupByChange, onBreakdownByChange, onThenByChange, onVisibleColumnsChange, onInitialVisibleColumnsChange, onColumnOrderChange, onInitialColumnOrderChange, onDateGranularityChange, onDateOrderChange, reportId]);
+  }, [dimensions, onGroupByChange, onBreakdownByChange, onThenByChange, onVisibleColumnsChange, onInitialVisibleColumnsChange, onColumnOrderChange, onInitialColumnOrderChange, onDateGranularityChange, onDateOrderChange, reportId, onSelectorDimensionsChange]);
 
   const createDefaultViews = useCallback(async () => {
     if (!reportId) {
@@ -501,10 +507,13 @@ export function usePerformanceTableViews({
       console.log('[VIEWS] Skipping save selector dimensions for shared view (read-only)');
       return;
     }
+    const dateId = dimensions.find(d => d.type === 'date')?.id;
+    const ensured = dateId ? Array.from(new Set([dateId, ...selectorIds])) : selectorIds;
+
     const filterVirtualDimensions = (ids: string[]): string[] => {
       return ids.filter(id => !id.startsWith('virtual-'));
     };
-    const payload = { filter_dimensions: filterVirtualDimensions(selectorIds) };
+    const payload = { filter_dimensions: filterVirtualDimensions(ensured) };
 
     console.log('[VIEWS] Saving selector dimensions for report:', reportId, 'view:', activeViewId, payload);
 
@@ -526,7 +535,7 @@ export function usePerformanceTableViews({
     setTableViews(prev => prev.map(v => 
       v.id === activeViewId ? { ...v, ...payload } : v
     ));
-  }, [reportId, activeViewId, isSharedView, tableViews]);
+  }, [reportId, activeViewId, isSharedView, tableViews, dimensions]);
 
   const handleViewChange = useCallback((viewId: string) => {
     setActiveViewId(viewId);

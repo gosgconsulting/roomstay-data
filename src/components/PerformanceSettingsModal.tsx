@@ -29,13 +29,22 @@ export function PerformanceSettingsModal({
     [dimensions]
   );
 
+  const dateDimId = useMemo(() => {
+    const dateDim = dimensions.find(d => d.type === "date");
+    return dateDim?.id ?? null;
+  }, [dimensions]);
+
   const buildInitial = () => {
     const initial = [groupBy[0], breakdownBy[0], thenBy[0]].filter(Boolean) as string[];
     const unique: string[] = [];
     initial.forEach(id => {
       if (id && !unique.includes(id)) unique.push(id);
     });
-    return unique; // no 3-limit
+    // Ensure Date is always present (prefer to place it first)
+    if (dateDimId && !unique.includes(dateDimId)) {
+      unique.unshift(dateDimId);
+    }
+    return unique;
   };
 
   const [selectedDims, setSelectedDims] = useState<string[]>(buildInitial());
@@ -50,8 +59,10 @@ export function PerformanceSettingsModal({
   }, [open, groupBy[0], breakdownBy[0], thenBy[0]]);
 
   const availableToAdd = useMemo(
-    () => textDateDims.filter(d => !selectedDims.includes(d.id)),
-    [textDateDims, selectedDims]
+    () => textDateDims
+      .filter(d => !selectedDims.includes(d.id))
+      .filter(d => d.id !== dateDimId), // exclude Date from add list (it's pinned)
+    [textDateDims, selectedDims, dateDimId]
   );
 
   const handleAdd = () => {
@@ -62,11 +73,15 @@ export function PerformanceSettingsModal({
   };
 
   const handleRemove = (id: string) => {
+    // Do not allow removing Date
+    if (dateDimId && id === dateDimId) return;
     setSelectedDims(prev => prev.filter(d => d !== id));
   };
 
   const handleSave = () => {
-    onSave(selectedDims);
+    // Ensure Date is always saved
+    const final = dateDimId ? Array.from(new Set([dateDimId, ...selectedDims])) : selectedDims;
+    onSave(final);
     onOpenChange(false);
   };
 
@@ -89,11 +104,20 @@ export function PerformanceSettingsModal({
               <div className="space-y-2">
                 {selectedDims.map((id) => {
                   const dim = textDateDims.find(d => d.id === id);
+                  const isDate = dateDimId && id === dateDimId;
                   return (
                     <div key={id} className="flex items-center justify-between rounded-md border px-3 py-2">
-                      <span className="text-sm">{dim?.name ?? id}</span>
-                      <Button variant="ghost" size="sm" onClick={() => handleRemove(id)}>
-                        Remove
+                      <span className="text-sm">
+                        {dim?.name ?? id}
+                        {isDate ? " (always available)" : ""}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemove(id)}
+                        disabled={!!isDate} // Date cannot be removed
+                      >
+                        {isDate ? "Required" : "Remove"}
                       </Button>
                     </div>
                   );

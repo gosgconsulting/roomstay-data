@@ -59,9 +59,14 @@ export function TableHeader({
   availableSelectorDimensions,
 }: TableHeaderProps) {
   // Build selector options: use configured list if provided, else default to all text/date
-  const selectorOptions = (availableSelectorDimensions && availableSelectorDimensions.length > 0)
+  const configured = (availableSelectorDimensions && availableSelectorDimensions.length > 0)
     ? availableSelectorDimensions
     : dimensions.filter(d => d.type === 'text' || d.type === 'date').map(d => d.id);
+
+  const dateId = dimensions.find(d => d.type === 'date')?.id;
+  const selectorOptions = dateId
+    ? Array.from(new Set([dateId, ...configured])) // Ensure Date is always included
+    : configured;
 
   return (
     <>
