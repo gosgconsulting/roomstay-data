@@ -36,11 +36,33 @@ export function useDimensionData(reportId?: string) {
 
       // Use centralized dimension loader (includes vlookup dimensions)
       const loadedDimensions = await loadDimensionsForUser(user.id, reportId);
-      setDimensions(loadedDimensions);
+      
+      // Filter dimensions by filter_dimensions from report_views if reportId is provided
+      let filteredDimensions = loadedDimensions;
+      if (reportId) {
+        console.log('[useDimensionData] Loading view settings for report:', reportId);
+        const { data: viewSettings } = await supabase
+          .from("report_views")
+          .select("filter_dimensions")
+          .eq("report_id", reportId)
+          .eq("user_id", user.id)
+          .eq("is_default", true)
+          .maybeSingle();
+
+        console.log('[useDimensionData] View filter_dimensions:', viewSettings?.filter_dimensions);
+
+        if (viewSettings?.filter_dimensions && Array.isArray(viewSettings.filter_dimensions)) {
+          const filterDimensionIds = new Set(viewSettings.filter_dimensions);
+          filteredDimensions = loadedDimensions.filter(d => filterDimensionIds.has(d.id));
+          console.log('[useDimensionData] Filtered dimensions:', filteredDimensions.length, 'of', loadedDimensions.length);
+        }
+      }
+      
+      setDimensions(filteredDimensions);
 
       // Check data availability if reportId is provided
-      if (reportId && loadedDimensions.length > 0) {
-        const dimensionIds = loadedDimensions.map(d => d.id);
+      if (reportId && filteredDimensions.length > 0) {
+        const dimensionIds = filteredDimensions.map(d => d.id);
         await checkDataAvailability(dimensionIds, reportId);
       }
     } catch (error) {
