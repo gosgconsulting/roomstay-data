@@ -101,7 +101,7 @@ export function TableHeader({
             />
           )}
           
-          {groupByDimensions.length >= 3 && (
+          {groupByDimensions.length >= 2 && (
             <DimensionSelectorGroup
               label="Then by"
               dimensions={thenByDimensions}
