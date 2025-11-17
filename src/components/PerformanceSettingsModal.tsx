@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 
 interface PerformanceSettingsModalProps {
@@ -87,43 +88,53 @@ export function PerformanceSettingsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent className="sm:max-w-[560px] bg-background">
         <DialogHeader>
-          <DialogTitle>Table Settings</DialogTitle>
+          <DialogTitle>Filters Settings</DialogTitle>
           <DialogDescription>
-            Choose dimensions to appear in the Group by / Breakdown by / Then by dropdowns. Saving won't change your current selections.
+            Date is required and always available. Add other dimensions to appear in the Group by / Breakdown by / Then by dropdowns.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 pt-2">
+        <div className="space-y-5 pt-2">
           <div className="space-y-2">
-            <Label>Selected dimensions (used as dropdown options)</Label>
-            {selectedDims.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No dimensions selected yet.</div>
-            ) : (
-              <div className="space-y-2">
+            <Label>Selected dimensions</Label>
+            <ScrollArea className="h-[240px] rounded-md border bg-card">
+              <div className="p-3 space-y-2">
                 {selectedDims.map((id) => {
                   const dim = textDateDims.find(d => d.id === id);
                   const isDate = dateDimId && id === dateDimId;
                   return (
-                    <div key={id} className="flex items-center justify-between rounded-md border px-3 py-2">
-                      <span className="text-sm">
-                        {dim?.name ?? id}
-                        {isDate ? " (always available)" : ""}
-                      </span>
+                    <div
+                      key={id}
+                      className="flex items-center justify-between rounded-md border px-3 py-2 bg-background"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">{dim?.name ?? id}</span>
+                        {isDate && (
+                          <span className="text-xs text-muted-foreground">
+                            (Required)
+                          </span>
+                        )}
+                      </div>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleRemove(id)}
-                        disabled={!!isDate} // Date cannot be removed
+                        disabled={!!isDate}
                       >
-                        {isDate ? "Required" : "Remove"}
+                        {isDate ? "Pinned" : "Remove"}
                       </Button>
                     </div>
                   );
                 })}
+                {selectedDims.length === 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    No dimensions selected yet.
+                  </div>
+                )}
               </div>
-            )}
+            </ScrollArea>
           </div>
 
           <div className="space-y-2">
@@ -146,7 +157,7 @@ export function PerformanceSettingsModal({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              You can add multiple dimensions; they'll be available in the table's dropdowns.
+              Added dimensions will be available in the table dropdowns. Date is always included.
             </p>
           </div>
         </div>
