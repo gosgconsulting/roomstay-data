@@ -194,7 +194,7 @@ export const FiltersBar = ({
   }, [reportId, accountId]);
 
   // Keep only this modalDimensions declaration
-  const modalDimensions = [
+  const settingsModalDimensions = [
     ...(dateDimensionIdForModal ? [{ id: dateDimensionIdForModal, name: "Date", type: "date" }] : []),
     ...dimensions,
   ];
@@ -996,7 +996,7 @@ export const FiltersBar = ({
       <PerformanceSettingsModal
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
-        dimensions={modalDimensions as any}
+        dimensions={settingsModalDimensions as any}
         groupBy={[]}
         breakdownBy={[]}
         thenBy={[]}
