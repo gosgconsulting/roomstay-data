@@ -57,9 +57,9 @@ export function useDimensionData(reportId?: string) {
           const filterDimensionIds = new Set(viewSettings.filter_dimensions);
           filteredDimensions = loadedDimensions.filter(d => filterDimensionIds.has(d.id));
           console.log('[useDimensionData] Filtered dimensions:', filteredDimensions.length, 'of', loadedDimensions.length);
-        } else if (!viewSettings) {
-          // No view settings exist - check which dimensions actually have data
-          console.log('[useDimensionData] No view settings found, will check data availability');
+        } else {
+          // No filter_dimensions configured (or empty) - check which dimensions actually have data
+          console.log('[useDimensionData] No filter_dimensions configured, checking data availability');
           const hasDataMap = await checkDimensionsHaveData(loadedDimensions.map(d => d.id), reportId);
           filteredDimensions = loadedDimensions.filter(d => hasDataMap[d.id] === true);
           console.log('[useDimensionData] Filtered to dimensions with data:', filteredDimensions.length, 'of', loadedDimensions.length);
