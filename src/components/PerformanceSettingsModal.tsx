@@ -210,7 +210,7 @@ export function PerformanceSettingsModal({
               onClick={() => setIsAddOpen(true)}
             >
               <Plus className="h-4 w-4" />
-              Add dimension
+              Add New Dimension
             </Button>
           </div>
           <div className="space-y-2">
