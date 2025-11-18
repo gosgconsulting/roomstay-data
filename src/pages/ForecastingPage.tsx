@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, TrendingUp, Eye } from "lucide-react";
+import { Plus, Trash2, TrendingUp, Eye, Pencil, Check, X } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,17 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedScenario, setSelectedScenario] = useState<ForecastScenario | null>(null);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [rowForm, setRowForm] = useState({
+    name: '',
+    email: '',
+    revenue_per_month: '',
+    paid_revenue_share: '',
+    cost_of_sell: '', // percentage
+    target_average_order_value: '',
+    conversion_rate: '' // percentage
+  });
+  const [isRowSaving, setIsRowSaving] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -232,6 +243,92 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
     }
   };
 
+  const startEditing = (scenario: ForecastScenario) => {
+    setEditingRowId(scenario.id);
+    setRowForm({
+      name: scenario.name || '',
+      email: scenario.email || '',
+      revenue_per_month: String(scenario.revenue_per_month ?? ''),
+      paid_revenue_share: String(scenario.paid_revenue_share ?? ''),
+      cost_of_sell: scenario.cost_of_sell != null ? String((scenario.cost_of_sell * 100).toFixed(2)) : '',
+      target_average_order_value: String(scenario.target_average_order_value ?? ''),
+      conversion_rate: scenario.conversion_rate != null ? String((scenario.conversion_rate * 100).toFixed(2)) : '',
+    });
+  };
+
+  const handleRowChange = (field: keyof typeof rowForm, value: string) => {
+    setRowForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const cancelRowEdit = () => {
+    setEditingRowId(null);
+  };
+
+  const saveRowEdit = async () => {
+    if (!editingRowId) return;
+
+    // Validate required fields
+    if (!rowForm.name.trim()) {
+      toast({ title: "Validation Error", description: "Please enter a hotel name", variant: "destructive" });
+      return;
+    }
+    if (!rowForm.email.trim()) {
+      toast({ title: "Validation Error", description: "Please enter an email address", variant: "destructive" });
+      return;
+    }
+    const requiredFields = [
+      'revenue_per_month',
+      'paid_revenue_share',
+      'cost_of_sell',
+      'target_average_order_value',
+      'conversion_rate'
+    ];
+    for (const field of requiredFields) {
+      if (!rowForm[field as keyof typeof rowForm].trim()) {
+        toast({
+          title: "Validation Error",
+          description: `Please enter ${field.replace(/_/g, ' ')}`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    try {
+      setIsRowSaving(true);
+      const { data, error } = await (supabase as any)
+        .from('forecasts')
+        .update({
+          name: rowForm.name.trim(),
+          email: rowForm.email.trim(),
+          revenue_per_month: parseFloat(rowForm.revenue_per_month),
+          paid_revenue_share: parseFloat(rowForm.paid_revenue_share),
+          cost_of_sell: parseFloat(rowForm.cost_of_sell) / 100, // percentage to decimal
+          target_average_order_value: parseFloat(rowForm.target_average_order_value),
+          conversion_rate: parseFloat(rowForm.conversion_rate) / 100, // percentage to decimal
+        })
+        .eq('id', editingRowId)
+        .select()
+        .single() as { data: ForecastScenario | null; error: any };
+
+      if (error) {
+        console.error('Error updating scenario:', error);
+        throw error;
+      }
+
+      // Update local state
+      setScenarios(prev => prev.map(s => s.id === editingRowId ? (data as ForecastScenario) : s));
+
+      toast({ title: "Saved", description: "Forecast scenario updated successfully" });
+      setEditingRowId(null);
+    } catch (err) {
+      console.error('Error in saveRowEdit:', err);
+      toast({ title: "Error", description: "Failed to update forecast scenario", variant: "destructive" });
+    } finally {
+      setIsRowSaving(false);
+    }
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -419,39 +516,147 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                     <TableHead>Target AOV</TableHead>
                     <TableHead>Conversion Rate</TableHead>
                     <TableHead>Created</TableHead>
-                    <TableHead className="w-[100px]">Actions</TableHead>
+                    <TableHead className="w-[160px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {scenarios.map((scenario) => (
                     <TableRow key={scenario.id}>
-                      <TableCell className="font-medium">{scenario.name}</TableCell>
-                      <TableCell>{scenario.email || '-'}</TableCell>
-                      <TableCell>{formatCurrency(scenario.revenue_per_month)}</TableCell>
-                      <TableCell>{scenario.paid_revenue_share}%</TableCell>
-                      <TableCell>{formatPercentage(scenario.cost_of_sell)}</TableCell>
-                      <TableCell>{formatCurrency(scenario.target_average_order_value)}</TableCell>
-                      <TableCell>{formatPercentage(scenario.conversion_rate)}</TableCell>
+                      <TableCell className="font-medium">
+                        {editingRowId === scenario.id ? (
+                          <Input
+                            className="h-8"
+                            value={rowForm.name}
+                            onChange={(e) => handleRowChange('name', e.target.value)}
+                          />
+                        ) : scenario.name}
+                      </TableCell>
+                      <TableCell>
+                        {editingRowId === scenario.id ? (
+                          <Input
+                            className="h-8"
+                            type="email"
+                            value={rowForm.email}
+                            onChange={(e) => handleRowChange('email', e.target.value)}
+                          />
+                        ) : (scenario.email || '-')}
+                      </TableCell>
+                      <TableCell>
+                        {editingRowId === scenario.id ? (
+                          <Input
+                            className="h-8"
+                            type="number"
+                            step="0.01"
+                            value={rowForm.revenue_per_month}
+                            onChange={(e) => handleRowChange('revenue_per_month', e.target.value)}
+                          />
+                        ) : formatCurrency(scenario.revenue_per_month)}
+                      </TableCell>
+                      <TableCell>
+                        {editingRowId === scenario.id ? (
+                          <Input
+                            className="h-8"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            value={rowForm.paid_revenue_share}
+                            onChange={(e) => handleRowChange('paid_revenue_share', e.target.value)}
+                          />
+                        ) : `${scenario.paid_revenue_share}%`}
+                      </TableCell>
+                      <TableCell>
+                        {editingRowId === scenario.id ? (
+                          <Input
+                            className="h-8"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            value={rowForm.cost_of_sell}
+                            onChange={(e) => handleRowChange('cost_of_sell', e.target.value)}
+                          />
+                        ) : formatPercentage(scenario.cost_of_sell)}
+                      </TableCell>
+                      <TableCell>
+                        {editingRowId === scenario.id ? (
+                          <Input
+                            className="h-8"
+                            type="number"
+                            step="0.01"
+                            value={rowForm.target_average_order_value}
+                            onChange={(e) => handleRowChange('target_average_order_value', e.target.value)}
+                          />
+                        ) : formatCurrency(scenario.target_average_order_value)}
+                      </TableCell>
+                      <TableCell>
+                        {editingRowId === scenario.id ? (
+                          <Input
+                            className="h-8"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            value={rowForm.conversion_rate}
+                            onChange={(e) => handleRowChange('conversion_rate', e.target.value)}
+                          />
+                        ) : formatPercentage(scenario.conversion_rate)}
+                      </TableCell>
                       <TableCell>{formatDate(scenario.created_at)}</TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(scenario.id)}
-                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                          title="Delete scenario"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => { setSelectedScenario(scenario); setViewOpen(true); }}
-                          className="h-8 w-8 p-0"
-                          title="View scenario"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        {editingRowId === scenario.id ? (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={saveRowEdit}
+                              disabled={isRowSaving}
+                              className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700"
+                              title="Save"
+                            >
+                              <Check className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={cancelRowEdit}
+                              className="h-8 w-8 p-0"
+                              title="Cancel"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => startEditing(scenario)}
+                              className="h-8 w-8 p-0"
+                              title="Edit scenario"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(scenario.id)}
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                              title="Delete scenario"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => { setSelectedScenario(scenario); setViewOpen(true); }}
+                              className="h-8 w-8 p-0"
+                              title="View scenario"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
