@@ -57,6 +57,60 @@ export function PerformanceSettingsModal({
     return dateDim?.id ?? null;
   }, [localDimensions]);
 
+  const [isLoadingDims, setIsLoadingDims] = useState(false);
+
+  const loadAccountDimensions = async () => {
+    if (!accountId) {
+      toast({
+        title: "No account selected",
+        description: "Select an account to load its dimensions.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsLoadingDims(true);
+    const { data, error } = await supabase
+      .from("dimensions")
+      .select("*")
+      .eq("scope", "account")
+      .eq("account_id", accountId)
+      .order("created_at", { ascending: false });
+    setIsLoadingDims(false);
+
+    if (error) {
+      toast({
+        title: "Failed to load dimensions",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const fetched = (data || []) as Dimension[];
+    if (fetched.length === 0) {
+      toast({
+        title: "No account dimensions",
+        description: "No account dimensions found. Create some, then try again.",
+      });
+      return;
+    }
+
+    // Merge unique by id into localDimensions
+    setLocalDimensions((prev) => {
+      const existingIds = new Set(prev.map((d) => d.id));
+      const merged = [...prev];
+      for (const d of fetched) {
+        if (!existingIds.has(d.id)) merged.push(d);
+      }
+      return merged;
+    });
+
+    toast({
+      title: "Loaded",
+      description: `Loaded ${fetched.length} account dimension(s).`,
+    });
+  };
+
   const buildInitial = () => {
     // Prefer the provided selectedDimensionIds; fallback to previous heuristic
     const base = selectedDimensionIds.length
@@ -173,28 +227,42 @@ export function PerformanceSettingsModal({
         <div className="space-y-5 pt-2">
           <div className="flex items-center justify-between">
             <Label>Available dimensions</Label>
-            <Select
-              value={addSelectValue}
-              onValueChange={(id) => {
-                addDimensionById(id);
-                setAddSelectValue("");
-              }}
-            >
-              <SelectTrigger
-                className="w-[220px] bg-background"
-                aria-label="Add dimension to filters"
-                disabled={addableDims.length === 0}
+            {addableDims.length === 0 ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="gap-2"
+                onClick={loadAccountDimensions}
+                disabled={isLoadingDims || !accountId}
+                aria-label="Load account dimensions to add"
               >
-                <SelectValue placeholder={addableDims.length ? "Add account dimension..." : "No account dimensions to add"} />
-              </SelectTrigger>
-              <SelectContent className="bg-background z-50">
-                {addableDims.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    {d.name} {d.scope ? `(${d.scope})` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                <Plus className="h-4 w-4" />
+                {isLoadingDims ? "Loading..." : "Add new"}
+              </Button>
+            ) : (
+              <Select
+                value={addSelectValue}
+                onValueChange={(id) => {
+                  addDimensionById(id);
+                  setAddSelectValue("");
+                }}
+              >
+                <SelectTrigger
+                  className="w-[220px] bg-background"
+                  aria-label="Add dimension to filters"
+                  disabled={addableDims.length === 0}
+                >
+                  <SelectValue placeholder={addableDims.length ? "Add account dimension..." : "No account dimensions to add"} />
+                </SelectTrigger>
+                <SelectContent className="bg-background z-50">
+                  {addableDims.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name} {d.scope ? `(${d.scope})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div className="space-y-2">
             <ScrollArea className="h-[300px] rounded-md border bg-card">
