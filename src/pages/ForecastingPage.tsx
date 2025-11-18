@@ -5,11 +5,12 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, TrendingUp } from "lucide-react";
+import { Plus, Trash2, TrendingUp, Eye } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import ForecastScenarioModal from "@/components/ForecastScenarioModal";
 
 interface ForecastScenario {
   id: string;
@@ -32,6 +33,8 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
   const [scenarios, setScenarios] = useState<ForecastScenario[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [selectedScenario, setSelectedScenario] = useState<ForecastScenario | null>(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -436,8 +439,18 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                           size="sm"
                           onClick={() => handleDelete(scenario.id)}
                           className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          title="Delete scenario"
                         >
                           <Trash2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => { setSelectedScenario(scenario); setViewOpen(true); }}
+                          className="h-8 w-8 p-0"
+                          title="View scenario"
+                        >
+                          <Eye className="h-4 w-4" />
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -448,6 +461,13 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
           )}
         </CardContent>
       </Card>
+
+      {/* View scenario modal */}
+      <ForecastScenarioModal
+        open={viewOpen}
+        onOpenChange={(open) => { setViewOpen(open); if (!open) setSelectedScenario(null); }}
+        scenario={selectedScenario}
+      />
     </div>
   );
 };
