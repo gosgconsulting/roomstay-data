@@ -227,42 +227,49 @@ export function PerformanceSettingsModal({
         <div className="space-y-5 pt-2">
           <div className="flex items-center justify-between">
             <Label>Available dimensions</Label>
-            {addableDims.length === 0 ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="gap-2"
-                onClick={loadAccountDimensions}
-                disabled={isLoadingDims || !accountId}
-                aria-label="Load account dimensions to add"
+            <Select
+              value={addSelectValue}
+              onValueChange={(id) => {
+                addDimensionById(id);
+                setAddSelectValue("");
+              }}
+            >
+              <SelectTrigger
+                className="w-[220px] bg-background"
+                aria-label="Add dimension to filters"
+                disabled={addableDims.length === 0 && !isLoadingDims}
               >
-                <Plus className="h-4 w-4" />
-                {isLoadingDims ? "Loading..." : "Add new"}
-              </Button>
-            ) : (
-              <Select
-                value={addSelectValue}
-                onValueChange={(id) => {
-                  addDimensionById(id);
-                  setAddSelectValue("");
-                }}
-              >
-                <SelectTrigger
-                  className="w-[220px] bg-background"
-                  aria-label="Add dimension to filters"
-                  disabled={addableDims.length === 0}
-                >
-                  <SelectValue placeholder={addableDims.length ? "Add account dimension..." : "No account dimensions to add"} />
-                </SelectTrigger>
-                <SelectContent className="bg-background z-50">
-                  {addableDims.map((d) => (
+                <SelectValue placeholder={
+                  isLoadingDims 
+                    ? "Loading..." 
+                    : addableDims.length 
+                      ? "Add account dimension..." 
+                      : "No account dimensions to add"
+                } />
+              </SelectTrigger>
+              <SelectContent className="bg-background z-50">
+                {addableDims.length === 0 && !isLoadingDims ? (
+                  <SelectItem 
+                    value="load-more" 
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      loadAccountDimensions();
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Plus className="h-4 w-4" />
+                      Load account dimensions
+                    </div>
+                  </SelectItem>
+                ) : (
+                  addableDims.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
                       {d.name} {d.scope ? `(${d.scope})` : ""}
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+                  ))
+                )}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <ScrollArea className="h-[300px] rounded-md border bg-card">
