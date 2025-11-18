@@ -108,7 +108,7 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
                   <CardContent className="text-2xl font-semibold">{formatCurrency2(otaCostMonth)}</CardContent>
                 </Card>
                 <Card>
-                  <CardHeader><CardTitle>Your Cost of Sell</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>Your Cost</CardTitle></CardHeader>
                   <CardContent className="text-2xl font-semibold">{formatCurrency2(yourCostMonth)}</CardContent>
                 </Card>
                 <Card>
@@ -116,7 +116,7 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
                   <CardContent className="text-2xl font-semibold">{formatCurrency2(savingsVsOTAMonth)}</CardContent>
                 </Card>
                 <Card>
-                  <CardHeader><CardTitle>Estimated Orders</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>Estimated Bookings</CardTitle></CardHeader>
                   <CardContent className="text-2xl font-semibold">{Math.floor(ordersMonth).toLocaleString("en-US")}</CardContent>
                 </Card>
               </div>
@@ -137,7 +137,7 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
                   <CardContent className="text-2xl font-semibold">{formatCurrency2(otaCostYear)}</CardContent>
                 </Card>
                 <Card>
-                  <CardHeader><CardTitle>Your Cost of Sell</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>Your Cost</CardTitle></CardHeader>
                   <CardContent className="text-2xl font-semibold">{formatCurrency2(yourCostYear)}</CardContent>
                 </Card>
                 <Card>
@@ -145,7 +145,7 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
                   <CardContent className="text-2xl font-semibold">{formatCurrency2(savingsVsOTAYear)}</CardContent>
                 </Card>
                 <Card>
-                  <CardHeader><CardTitle>Estimated Orders</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>Estimated Bookings</CardTitle></CardHeader>
                   <CardContent className="text-2xl font-semibold">{Math.floor(ordersYear).toLocaleString("en-US")}</CardContent>
                 </Card>
               </div>
