@@ -1,19 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Plus, Trash2 } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogCancel,
-  AlertDialogAction,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -57,62 +44,6 @@ export function PerformanceSettingsModal({
     return dateDim?.id ?? null;
   }, [localDimensions]);
 
-  const [isLoadingDims, setIsLoadingDims] = useState(false);
-
-  // UPDATED: Since FiltersBar now passes all dimensions, we don't need the loadAccountDimensions function
-  // but we'll keep it as a fallback for manual loading if needed
-  const loadAccountDimensions = async () => {
-    if (!accountId) {
-      toast({
-        title: "No account selected",
-        description: "Select an account to load its dimensions.",
-        variant: "destructive",
-      });
-      return;
-    }
-    setIsLoadingDims(true);
-    const { data, error } = await supabase
-      .from("dimensions")
-      .select("*")
-      .eq("scope", "account")
-      .eq("account_id", accountId)
-      .order("created_at", { ascending: false });
-    setIsLoadingDims(false);
-
-    if (error) {
-      toast({
-        title: "Failed to load dimensions",
-        description: error.message || "Please try again.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const fetched = (data || []) as Dimension[];
-    if (fetched.length === 0) {
-      toast({
-        title: "No additional dimensions",
-        description: "No additional account dimensions found.",
-      });
-      return;
-    }
-
-    // Merge unique by id into localDimensions
-    setLocalDimensions((prev) => {
-      const existingIds = new Set(prev.map((d) => d.id));
-      const merged = [...prev];
-      for (const d of fetched) {
-        if (!existingIds.has(d.id)) merged.push(d);
-      }
-      return merged;
-    });
-
-    toast({
-      title: "Loaded",
-      description: `Loaded ${fetched.length} additional dimension(s).`,
-    });
-  };
-
   const buildInitial = () => {
     // Prefer the provided selectedDimensionIds; fallback to previous heuristic
     const base = selectedDimensionIds.length
@@ -131,28 +62,6 @@ export function PerformanceSettingsModal({
   };
 
   const [selectedDims, setSelectedDims] = useState<string[]>(buildInitial());
-
-  // ADDED: Dropdown logic AFTER dependencies are initialized
-  const [addSelectValue, setAddSelectValue] = useState<string>("");
-  const addableDims = useMemo(
-    () =>
-      textDateDims.filter((d) => {
-        const scope = String(d.scope ?? "");
-        return (
-          !selectedDims.includes(d.id) &&
-          !(dateDimId && d.id === dateDimId) &&
-          (scope === "account" || scope === "custom" || scope === "global")
-        );
-      }),
-    [textDateDims, selectedDims, dateDimId]
-  );
-  const addDimensionById = (id: string) => {
-    setSelectedDims((prev) => (prev.includes(id) ? prev : [...prev, id]));
-    const added = localDimensions.find((d) => d.id === id);
-    if (added) {
-      toast({ title: "Added", description: `Dimension "${added.name}" added to filters.` });
-    }
-  };
 
   useEffect(() => {
     if (open) {
@@ -184,38 +93,6 @@ export function PerformanceSettingsModal({
     onOpenChange(false);
   };
 
-  // REMOVED: reloadDimensions (no longer needed without create modal)
-
-  const handleDeleteDimension = async (dim: Dimension) => {
-    const isDate = dateDimId && dim.id === dateDimId;
-    const scope = String(dim.scope ?? "");
-    const isProtected = isDate || scope === "global" || scope === "virtual";
-    const isDeletable = scope === "account" || scope === "custom";
-    if (isProtected || !isDeletable) {
-      toast({
-        title: "Not allowed",
-        description: "This dimension cannot be deleted.",
-        variant: "destructive",
-      });
-      return;
-    }
-    const { error } = await supabase
-      .from("dimensions")
-      .delete()
-      .eq("id", dim.id);
-    if (error) {
-      toast({
-        title: "Delete failed",
-        description: error.message || "Could not delete dimension",
-        variant: "destructive",
-      });
-      return;
-    }
-    setLocalDimensions((prev) => prev.filter((d) => d.id !== dim.id));
-    setSelectedDims((prev) => prev.filter((id) => id !== dim.id));
-    toast({ title: "Deleted", description: `Dimension "${dim.name}" removed.` });
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[560px] bg-background">
@@ -227,65 +104,14 @@ export function PerformanceSettingsModal({
         </DialogHeader>
 
         <div className="space-y-5 pt-2">
-          <div className="flex items-center justify-between">
-            <Label>Available dimensions</Label>
-            <Select
-              value={addSelectValue}
-              onValueChange={(id) => {
-                if (id === "load-more") {
-                  loadAccountDimensions();
-                  return;
-                }
-                addDimensionById(id);
-                setAddSelectValue("");
-              }}
-            >
-              <SelectTrigger
-                className="w-[220px] bg-background"
-                aria-label="Add dimension to filters"
-                disabled={addableDims.length === 0 && !isLoadingDims}
-              >
-                <SelectValue placeholder={
-                  isLoadingDims 
-                    ? "Loading..." 
-                    : addableDims.length 
-                      ? "Add dimension..." 
-                      : "No dimensions to add"
-                } />
-              </SelectTrigger>
-              <SelectContent className="bg-background z-50">
-                {addableDims.length === 0 && !isLoadingDims ? (
-                  <SelectItem 
-                    value="load-more" 
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      loadAccountDimensions();
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Plus className="h-4 w-4" />
-                      Load additional dimensions
-                    </div>
-                  </SelectItem>
-                ) : (
-                  addableDims.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name} {d.scope ? `(${d.scope})` : ""}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          </div>
           <div className="space-y-2">
+            <Label>Available dimensions</Label>
             <ScrollArea className="h-[300px] rounded-md border bg-card">
               <div className="p-3 space-y-2">
                 {textDateDims.map((dim) => {
                   const isDate = dateDimId && dim.id === dateDimId;
                   const checked = selectedDims.includes(dim.id);
                   const scope = String(dim.scope ?? "");
-                  const isProtected = isDate || scope === "global" || scope === "virtual";
-                  const isDeletable = !isProtected && (scope === "account" || scope === "custom");
                   return (
                     <div
                       key={dim.id}
@@ -311,36 +137,8 @@ export function PerformanceSettingsModal({
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-xs text-muted-foreground">
-                          {isDate ? "Pinned" : checked ? "Selected" : "Not selected"}
-                        </div>
-                        {isDeletable && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 px-2 text-destructive hover:text-destructive">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete dimension</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This will remove the dimension "{dim.name}". You can't undo this action.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  onClick={() => handleDeleteDimension(dim)}
-                                >
-                                  Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
+                      <div className="text-xs text-muted-foreground">
+                        {isDate ? "Pinned" : checked ? "Selected" : "Not selected"}
                       </div>
                     </div>
                   );
@@ -362,8 +160,6 @@ export function PerformanceSettingsModal({
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSave}>Save</Button>
         </div>
-
-        {/* REMOVED: Create-new dimension modal; adding is now via dropdown of existing dimensions */}
       </DialogContent>
     </Dialog>
   );
