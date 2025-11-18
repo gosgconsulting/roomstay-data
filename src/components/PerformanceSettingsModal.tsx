@@ -80,9 +80,14 @@ export function PerformanceSettingsModal({
   const [addSelectValue, setAddSelectValue] = useState<string>("");
   const addableDims = useMemo(
     () =>
-      textDateDims.filter(
-        (d) => !selectedDims.includes(d.id) && !(dateDimId && d.id === dateDimId)
-      ),
+      textDateDims.filter((d) => {
+        const scope = String(d.scope ?? "");
+        return (
+          scope === "account" &&
+          !selectedDims.includes(d.id) &&
+          !(dateDimId && d.id === dateDimId)
+        );
+      }),
     [textDateDims, selectedDims, dateDimId]
   );
   const addDimensionById = (id: string) => {
@@ -180,7 +185,7 @@ export function PerformanceSettingsModal({
                 aria-label="Add dimension to filters"
                 disabled={addableDims.length === 0}
               >
-                <SelectValue placeholder={addableDims.length ? "Add dimension..." : "No dimensions to add"} />
+                <SelectValue placeholder={addableDims.length ? "Add account dimension..." : "No account dimensions to add"} />
               </SelectTrigger>
               <SelectContent className="bg-background z-50">
                 {addableDims.map((d) => (
