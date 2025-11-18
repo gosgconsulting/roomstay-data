@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { RefreshCw, Plus, RotateCcw, Clock, Database, Zap } from "lucide-react";
+import { RefreshCw, RotateCcw, Clock, Database } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
@@ -26,7 +25,8 @@ export const SyncModeModal = ({
   lastSyncTime,
   totalRows = 0
 }: SyncModeModalProps) => {
-  const [selectedMode, setSelectedMode] = useState<'incremental' | 'full'>('incremental');
+  // Only full refresh is allowed
+  const selectedMode: 'full' = 'full';
 
   // NEW: Auto sync state
   const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(true);
@@ -35,7 +35,7 @@ export const SyncModeModal = ({
   const [timezone, setTimezone] = useState<string>('Asia/Singapore');
 
   const handleSync = () => {
-    onSync(selectedMode, {
+    onSync('full', {
       enabled: autoSyncEnabled,
       frequency,
       time: autoSyncEnabled ? syncTime : null,
@@ -64,10 +64,10 @@ export const SyncModeModal = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RefreshCw className="h-5 w-5 text-primary" />
-            Choose Sync Mode
+            Full Refresh
           </DialogTitle>
           <DialogDescription>
-            Select how you want to sync data from Google Sheets
+            Replace all existing data with a fresh import from Google Sheets.
           </DialogDescription>
         </DialogHeader>
 
@@ -94,75 +94,30 @@ export const SyncModeModal = ({
             </CardContent>
           </Card>
 
-          {/* Sync Mode Selection */}
-          <RadioGroup value={selectedMode} onValueChange={(value) => setSelectedMode(value as 'incremental' | 'full')}>
-            {/* Incremental Sync Option */}
-            <Card className={`cursor-pointer transition-colors ${selectedMode === 'incremental' ? 'ring-2 ring-primary' : 'hover:bg-muted/50'}`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start space-x-3">
-                  <RadioGroupItem value="incremental" id="incremental" className="mt-1" />
-                  <div className="flex-1">
-                    <Label htmlFor="incremental" className="cursor-pointer">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <Plus className="h-4 w-4 text-green-600" />
-                        Incremental Sync
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-normal">
-                          Recommended
-                        </span>
-                      </CardTitle>
-                    </Label>
-                    <CardDescription className="mt-1">
-                      Add only new rows from Google Sheets. Keeps existing data and appends new entries.
-                    </CardDescription>
-                  </div>
+          {/* Full Refresh Info (only option) */}
+          <Card className="ring-2 ring-primary">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <RotateCcw className="h-4 w-4 text-orange-600" />
+                Full Refresh
+              </CardTitle>
+              <CardDescription className="mt-1">
+                This will remove existing data and import fresh rows from your source.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <RefreshCw className="h-3 w-3" />
+                  Complete refresh
                 </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <Zap className="h-3 w-3" />
-                    Faster sync
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    Preserves history
-                  </div>
+                <div className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  Slower for large datasets
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Full Refresh Option */}
-            <Card className={`cursor-pointer transition-colors ${selectedMode === 'full' ? 'ring-2 ring-primary' : 'hover:bg-muted/50'}`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start space-x-3">
-                  <RadioGroupItem value="full" id="full" className="mt-1" />
-                  <div className="flex-1">
-                    <Label htmlFor="full" className="cursor-pointer">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <RotateCcw className="h-4 w-4 text-orange-600" />
-                        Full Refresh
-                      </CardTitle>
-                    </Label>
-                    <CardDescription className="mt-1">
-                      Replace all data with fresh import from Google Sheets. Removes existing data first.
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <RefreshCw className="h-3 w-3" />
-                    Complete refresh
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    Slower for large datasets
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </RadioGroup>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* NEW: Auto Sync Configuration */}
           <Card className="bg-muted/50">
@@ -220,12 +175,8 @@ export const SyncModeModal = ({
                 </>
               ) : (
                 <>
-                  {selectedMode === 'incremental' ? (
-                    <Plus className="h-4 w-4" />
-                  ) : (
-                    <RotateCcw className="h-4 w-4" />
-                  )}
-                  {selectedMode === 'incremental' ? 'Add New Rows' : 'Full Refresh'}
+                  <RotateCcw className="h-4 w-4" />
+                  Full Refresh
                 </>
               )}
             </Button>
