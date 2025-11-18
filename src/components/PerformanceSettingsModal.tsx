@@ -59,6 +59,8 @@ export function PerformanceSettingsModal({
 
   const [isLoadingDims, setIsLoadingDims] = useState(false);
 
+  // UPDATED: Since FiltersBar now passes all dimensions, we don't need the loadAccountDimensions function
+  // but we'll keep it as a fallback for manual loading if needed
   const loadAccountDimensions = async () => {
     if (!accountId) {
       toast({
@@ -89,8 +91,8 @@ export function PerformanceSettingsModal({
     const fetched = (data || []) as Dimension[];
     if (fetched.length === 0) {
       toast({
-        title: "No account dimensions",
-        description: "No account dimensions found. Create some, then try again.",
+        title: "No additional dimensions",
+        description: "No additional account dimensions found.",
       });
       return;
     }
@@ -107,7 +109,7 @@ export function PerformanceSettingsModal({
 
     toast({
       title: "Loaded",
-      description: `Loaded ${fetched.length} account dimension(s).`,
+      description: `Loaded ${fetched.length} additional dimension(s).`,
     });
   };
 
@@ -137,9 +139,9 @@ export function PerformanceSettingsModal({
       textDateDims.filter((d) => {
         const scope = String(d.scope ?? "");
         return (
-          scope === "account" &&
           !selectedDims.includes(d.id) &&
-          !(dateDimId && d.id === dateDimId)
+          !(dateDimId && d.id === dateDimId) &&
+          (scope === "account" || scope === "custom" || scope === "global")
         );
       }),
     [textDateDims, selectedDims, dateDimId]
@@ -230,6 +232,10 @@ export function PerformanceSettingsModal({
             <Select
               value={addSelectValue}
               onValueChange={(id) => {
+                if (id === "load-more") {
+                  loadAccountDimensions();
+                  return;
+                }
                 addDimensionById(id);
                 setAddSelectValue("");
               }}
@@ -243,8 +249,8 @@ export function PerformanceSettingsModal({
                   isLoadingDims 
                     ? "Loading..." 
                     : addableDims.length 
-                      ? "Add account dimension..." 
-                      : "No account dimensions to add"
+                      ? "Add dimension..." 
+                      : "No dimensions to add"
                 } />
               </SelectTrigger>
               <SelectContent className="bg-background z-50">
@@ -258,7 +264,7 @@ export function PerformanceSettingsModal({
                   >
                     <div className="flex items-center gap-2">
                       <Plus className="h-4 w-4" />
-                      Load account dimensions
+                      Load additional dimensions
                     </div>
                   </SelectItem>
                 ) : (

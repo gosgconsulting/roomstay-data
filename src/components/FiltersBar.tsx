@@ -14,6 +14,7 @@ import { retryWithBackoff, filterDimensionsByVisibility, filterDimensionsByFilte
 import { useToast } from "@/components/ui/use-toast";
 import { useVlookupMappings, getMappedValue } from "@/hooks/useVlookupMappings";
 import PerformanceSettingsModal from "@/components/PerformanceSettingsModal";
+import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 
 import { 
   DimensionFilter, 
@@ -69,6 +70,7 @@ export const FiltersBar = ({
   isEditMode = false,
 }: FiltersBarProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
+  const [allDimensions, setAllDimensions] = useState<Dimension[]>([]); // NEW: All available dimensions for settings modal
   const [activeDimensions, setActiveDimensions] = useState<string[]>([]);
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
@@ -106,6 +108,29 @@ export const FiltersBar = ({
     }
   }, [availableReports, showReportFilter]);
 
+  // Load all available dimensions for the settings modal
+  const loadAllDimensions = async () => {
+    if (!reportId && !accountId) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      // Use the centralized dimension loader to get ALL dimensions
+      const allAvailableDimensions = await loadDimensionsForUser(user.id, reportId);
+      
+      // Filter to only text and date types (same as PerformanceSettingsModal expects)
+      const textDateDimensions = allAvailableDimensions.filter(d => 
+        d.type === "text" || d.type === "date"
+      );
+      
+      console.log('[FiltersBar] loadAllDimensions - All available dimensions:', textDateDimensions.map(d => `${d.name} (${d.type})`));
+      setAllDimensions(textDateDimensions);
+    } catch (e) {
+      console.error("Error loading all dimensions:", e);
+      setAllDimensions([]);
+    }
+  };
+
   // Load dimensions and filter settings on report/account change
   useEffect(() => {
     if (reportId || accountId) {
@@ -119,6 +144,7 @@ export const FiltersBar = ({
       setCompareDateRange(undefined);
 
       loadDimensions().then(() => {
+        loadAllDimensions(); // Load all dimensions for settings modal
         if (reportId) {
           loadFilterSettings().finally(() => setIsInitialLoad(false));
         } else {
@@ -178,6 +204,7 @@ export const FiltersBar = ({
   useEffect(() => {
     if ((reportId || accountId) && refreshTrigger && refreshTrigger > 0) {
       loadDimensions();
+      loadAllDimensions(); // Also refresh all dimensions
     }
   }, [refreshTrigger, reportId, accountId]);
 
@@ -193,10 +220,10 @@ export const FiltersBar = ({
     getDateDimensionId().then((id) => setDateDimensionIdForModal(id));
   }, [reportId, accountId]);
 
-  // Keep only this modalDimensions declaration
+  // Keep only this modalDimensions declaration - now using allDimensions
   const settingsModalDimensions = [
     ...(dateDimensionIdForModal ? [{ id: dateDimensionIdForModal, name: "Date", type: "date" }] : []),
-    ...dimensions,
+    ...allDimensions, // Use allDimensions instead of dimensions
   ];
 
   // Persist filter settings after changes (only in Edit mode)
@@ -728,6 +755,7 @@ export const FiltersBar = ({
     // Immediately refresh dimensions so new ids are present for rendering
     console.log('[FiltersBar] Calling loadDimensions to refresh...');
     await loadDimensions();
+    await loadAllDimensions(); // Also refresh all dimensions
     console.log('[FiltersBar] loadDimensions completed');
     
     // Reload filter settings to ensure we have the latest data
