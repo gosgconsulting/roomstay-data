@@ -30,6 +30,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Save, X } from "lucide-react";
+import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 
 interface KPISettingsModalProps {
   open: boolean;
@@ -141,7 +142,10 @@ export function KPISettingsModal({
     setIsLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.error('[KPI-SETTINGS] No authenticated user found');
+        return;
+      }
 
       console.log('[KPI-SETTINGS] Loading KPI settings for report:', reportId);
 
@@ -149,7 +153,7 @@ export function KPISettingsModal({
       const { data: viewData, error } = await supabase
         .from("report_views")
         .select("visible_kpis, kpi_order")
-        .eq("report_id", reportId) // CRITICAL: Only load settings for THIS report
+        .eq("report_id", reportId)
         .eq("user_id", user.id)
         .eq("is_default", true)
         .maybeSingle();
@@ -159,20 +163,41 @@ export function KPISettingsModal({
         throw error;
       }
 
-      // Load all available KPIs from dimensions for this report
-      const { data: allDimensions, error: dimError } = await supabase
-        .from("dimensions")
-        .select("name, type, scope, account_id")
-        .in("type", ["number", "currency", "percentage"])
-        .or(`scope.eq.global,and(scope.eq.custom,user_id.eq.${user.id}),and(scope.eq.account,account_id.is.not.null)`);
+      console.log('[KPI-SETTINGS] Loaded view data:', viewData);
 
-      if (dimError) throw dimError;
+      // NEW: Use centralized dimension loader instead of direct query
+      const allDimensions = await loadDimensionsForUser(user.id, reportId);
+      console.log('[KPI-SETTINGS] Loaded all dimensions:', allDimensions.length);
 
-      const availableKPIs = sortKPIsByDefaultOrder((allDimensions || []).map(d => d.name));
+      // Filter to only KPI-type dimensions (number, currency, percentage)
+      const kpiDimensions = allDimensions.filter(d => 
+        d.type === "number" || d.type === "currency" || d.type === "percentage"
+      );
+
+      console.log('[KPI-SETTINGS] Filtered KPI dimensions:', kpiDimensions.map(d => `${d.name} (${d.type})`));
+
+      const availableKPIs = sortKPIsByDefaultOrder(kpiDimensions.map(d => d.name));
       console.log('[KPI-SETTINGS] Available KPIs for report', reportId, ':', availableKPIs);
+
+      // If no KPI dimensions found, show default KPIs
+      if (availableKPIs.length === 0) {
+        console.warn('[KPI-SETTINGS] No KPI dimensions found, using default KPIs');
+        const defaultKPIs = ['Impressions', 'Clicks', 'CTR', 'Conversions', 'Conversion rate', 'CPC', 'Cost', 'Revenue', 'ROAS', 'Cost of sale'];
+        const defaultItems: KPIConfig[] = defaultKPIs.map((kpi, index) => ({
+          name: kpi,
+          visible: true,
+          order: index
+        }));
+        setKpis(defaultItems);
+        setInitialKpis([...defaultItems]);
+        return;
+      }
 
       const visibleKPIs = (viewData?.visible_kpis as string[]) || availableKPIs;
       const kpiOrder = (viewData?.kpi_order as string[]) || availableKPIs;
+
+      console.log('[KPI-SETTINGS] Current visible KPIs:', visibleKPIs);
+      console.log('[KPI-SETTINGS] Current KPI order:', kpiOrder);
 
       // Create KPI items based on order, with visibility info
       const orderedItems: KPIConfig[] = [];
@@ -199,14 +224,14 @@ export function KPISettingsModal({
         }
       });
 
-      console.log('[KPI-SETTINGS] Loaded KPI settings for report', reportId, ':', orderedItems);
+      console.log('[KPI-SETTINGS] Final ordered KPI items:', orderedItems);
       setKpis(orderedItems);
       setInitialKpis([...orderedItems]); // Store initial state for comparison
     } catch (error) {
       console.error('[KPI-SETTINGS] Error loading KPI settings:', error);
       toast({
         title: "Error",
-        description: "Failed to load KPI settings.",
+        description: `Failed to load KPI settings: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive",
       });
     } finally {
@@ -215,6 +240,15 @@ export function KPISettingsModal({
   };
 
   const handleToggle = (name: string) => {
+    if (!isEditMode) {
+      toast({
+        title: "Edit Mode Required",
+        description: "Switch to Edit Mode to modify KPI settings.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     console.log('[KPI-SETTINGS] Toggling KPI:', name);
     setKpis(prev => 
       prev.map(kpi => 
@@ -224,6 +258,15 @@ export function KPISettingsModal({
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
+    if (!isEditMode) {
+      toast({
+        title: "Edit Mode Required",
+        description: "Switch to Edit Mode to reorder KPIs.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
@@ -240,6 +283,15 @@ export function KPISettingsModal({
   };
 
   const applySettings = async () => {
+    if (!isEditMode) {
+      toast({
+        title: "Edit Mode Required",
+        description: "Switch to Edit Mode to save KPI settings.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     if (!reportId) return;
     
     setIsSaving(true);
@@ -263,7 +315,7 @@ export function KPISettingsModal({
           kpi_order: kpiOrder,
           updated_at: new Date().toISOString()
         })
-        .eq("report_id", reportId) // CRITICAL: Only update settings for THIS report
+        .eq("report_id", reportId)
         .eq("user_id", user.id)
         .eq("is_default", true);
 
@@ -317,6 +369,11 @@ export function KPISettingsModal({
           <SheetTitle>KPI Settings</SheetTitle>
           <SheetDescription>
             Configure which KPIs to show and their order for this report only.
+            {!isEditMode && (
+              <span className="block mt-2 text-amber-600 font-medium">
+                Switch to Edit Mode to modify settings.
+              </span>
+            )}
           </SheetDescription>
         </SheetHeader>
         
@@ -330,6 +387,11 @@ export function KPISettingsModal({
               <Label className="text-sm font-medium">
                 Drag to reorder, click checkbox to show/hide
               </Label>
+              {kpis.length === 0 && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  No KPI dimensions found. Make sure your report has dimensions with number, currency, or percentage types.
+                </p>
+              )}
             </div>
             
             <div className="flex-1 overflow-y-auto">
@@ -356,8 +418,8 @@ export function KPISettingsModal({
           </div>
         )}
         
-        {/* Apply/Cancel buttons */}
-        {hasUnsavedChanges() && (
+        {/* Apply/Cancel buttons - only show if in Edit Mode and has changes */}
+        {isEditMode && hasUnsavedChanges() && (
           <div className="border-t pt-4 mt-6 space-y-3">
             <div className="flex gap-2">
               <Button 
@@ -379,6 +441,15 @@ export function KPISettingsModal({
                 Cancel
               </Button>
             </div>
+          </div>
+        )}
+        
+        {/* Show read-only message in View Mode */}
+        {!isEditMode && (
+          <div className="border-t pt-4 mt-6">
+            <p className="text-sm text-muted-foreground text-center">
+              Settings are read-only in View Mode. Switch to Edit Mode to make changes.
+            </p>
           </div>
         )}
       </SheetContent>
