@@ -36,6 +36,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedScenario, setSelectedScenario] = useState<ForecastScenario | null>(null);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editingField, setEditingField] = useState<keyof typeof rowForm | null>(null);
   const [rowForm, setRowForm] = useState({
     name: '',
     email: '',
@@ -243,8 +244,9 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
     }
   };
 
-  const startEditing = (scenario: ForecastScenario) => {
+  const startEditing = (scenario: ForecastScenario, field?: keyof typeof rowForm) => {
     setEditingRowId(scenario.id);
+    setEditingField(field ?? null);
     setRowForm({
       name: scenario.name || '',
       email: scenario.email || '',
@@ -256,12 +258,23 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
     });
   };
 
+  const handleCellKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveRowEdit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelRowEdit();
+    }
+  };
+
   const handleRowChange = (field: keyof typeof rowForm, value: string) => {
     setRowForm(prev => ({ ...prev, [field]: value }));
   };
 
   const cancelRowEdit = () => {
     setEditingRowId(null);
+    setEditingField(null);
   };
 
   const saveRowEdit = async () => {
@@ -528,8 +541,17 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                             className="h-8"
                             value={rowForm.name}
                             onChange={(e) => handleRowChange('name', e.target.value)}
+                            autoFocus={editingField === 'name'}
+                            onKeyDown={handleCellKeyDown}
                           />
-                        ) : scenario.name}
+                        ) : (
+                          <span
+                            className="cursor-text"
+                            onClick={() => startEditing(scenario, 'name')}
+                          >
+                            {scenario.name}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {editingRowId === scenario.id ? (
@@ -538,8 +560,17 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                             type="email"
                             value={rowForm.email}
                             onChange={(e) => handleRowChange('email', e.target.value)}
+                            autoFocus={editingField === 'email'}
+                            onKeyDown={handleCellKeyDown}
                           />
-                        ) : (scenario.email || '-')}
+                        ) : (
+                          <span
+                            className="cursor-text"
+                            onClick={() => startEditing(scenario, 'email')}
+                          >
+                            {scenario.email || '-'}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {editingRowId === scenario.id ? (
@@ -549,8 +580,17 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                             step="0.01"
                             value={rowForm.revenue_per_month}
                             onChange={(e) => handleRowChange('revenue_per_month', e.target.value)}
+                            autoFocus={editingField === 'revenue_per_month'}
+                            onKeyDown={handleCellKeyDown}
                           />
-                        ) : formatCurrency(scenario.revenue_per_month)}
+                        ) : (
+                          <span
+                            className="cursor-text"
+                            onClick={() => startEditing(scenario, 'revenue_per_month')}
+                          >
+                            {formatCurrency(scenario.revenue_per_month)}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {editingRowId === scenario.id ? (
@@ -562,8 +602,17 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                             max="100"
                             value={rowForm.paid_revenue_share}
                             onChange={(e) => handleRowChange('paid_revenue_share', e.target.value)}
+                            autoFocus={editingField === 'paid_revenue_share'}
+                            onKeyDown={handleCellKeyDown}
                           />
-                        ) : `${scenario.paid_revenue_share}%`}
+                        ) : (
+                          <span
+                            className="cursor-text"
+                            onClick={() => startEditing(scenario, 'paid_revenue_share')}
+                          >
+                            {`${scenario.paid_revenue_share}%`}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {editingRowId === scenario.id ? (
@@ -575,8 +624,17 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                             max="100"
                             value={rowForm.cost_of_sell}
                             onChange={(e) => handleRowChange('cost_of_sell', e.target.value)}
+                            autoFocus={editingField === 'cost_of_sell'}
+                            onKeyDown={handleCellKeyDown}
                           />
-                        ) : formatPercentage(scenario.cost_of_sell)}
+                        ) : (
+                          <span
+                            className="cursor-text"
+                            onClick={() => startEditing(scenario, 'cost_of_sell')}
+                          >
+                            {formatPercentage(scenario.cost_of_sell)}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {editingRowId === scenario.id ? (
@@ -586,8 +644,17 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                             step="0.01"
                             value={rowForm.target_average_order_value}
                             onChange={(e) => handleRowChange('target_average_order_value', e.target.value)}
+                            autoFocus={editingField === 'target_average_order_value'}
+                            onKeyDown={handleCellKeyDown}
                           />
-                        ) : formatCurrency(scenario.target_average_order_value)}
+                        ) : (
+                          <span
+                            className="cursor-text"
+                            onClick={() => startEditing(scenario, 'target_average_order_value')}
+                          >
+                            {formatCurrency(scenario.target_average_order_value)}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {editingRowId === scenario.id ? (
@@ -599,8 +666,17 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                             max="100"
                             value={rowForm.conversion_rate}
                             onChange={(e) => handleRowChange('conversion_rate', e.target.value)}
+                            autoFocus={editingField === 'conversion_rate'}
+                            onKeyDown={handleCellKeyDown}
                           />
-                        ) : formatPercentage(scenario.conversion_rate)}
+                        ) : (
+                          <span
+                            className="cursor-text"
+                            onClick={() => startEditing(scenario, 'conversion_rate')}
+                          >
+                            {formatPercentage(scenario.conversion_rate)}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>{formatDate(scenario.created_at)}</TableCell>
                       <TableCell>
