@@ -54,7 +54,8 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
 
   // Monthly metrics
   const paidRevenueMonth = revMonth * (paidSharePct / 100);
-  const otaCostMonth = revMonth * OTA_RATE;
+  // OTA cost should also be applied to the revenue share, not total revenue
+  const otaCostMonth = paidRevenueMonth * OTA_RATE;
   // Cost should be applied to the revenue share, not total revenue
   const yourCostMonth = paidRevenueMonth * costOfSell;
   const savingsVsOTAMonth = otaCostMonth - yourCostMonth;
