@@ -1,7 +1,6 @@
 import * as React from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
 
 type ForecastScenario = {
@@ -31,7 +30,7 @@ const formatCurrency2 = (value: number) =>
 const formatPercent = (decimal: number) => `${(decimal * 100).toFixed(2)}%`;
 
 export default function ForecastScenarioModal({ open, onOpenChange, scenario }: ForecastScenarioModalProps) {
-  const [tab, setTab] = React.useState<"month" | "year">("month");
+  // REMOVED: tabs state; we show a single table comparing Month vs Year
 
   if (!scenario) {
     return (
@@ -67,6 +66,8 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
   const yourCostYear = yourCostMonth * 12;
   const savingsVsOTAYear = savingsVsOTAMonth * 12;
   const ordersYear = ordersMonth * 12;
+  const savingsMonthClass = savingsVsOTAMonth >= 0 ? "text-emerald-600 font-semibold" : "text-red-600 font-semibold";
+  const savingsYearClass = savingsVsOTAYear >= 0 ? "text-emerald-600 font-semibold" : "text-red-600 font-semibold";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -88,111 +89,58 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
             </div>
           </div>
 
-          <Tabs value={tab} onValueChange={(v) => setTab(v as "month" | "year")}>
-            <TabsList>
-              <TabsTrigger value="month">Per Month</TabsTrigger>
-              <TabsTrigger value="year">Per Year</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="month" className="mt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card>
-                  <CardHeader><CardTitle>Revenue</CardTitle></CardHeader>
-                  <CardContent className="text-2xl font-semibold">{formatCurrency0(revMonth)}</CardContent>
-                </Card>
-                <Card>
-                  <CardHeader><CardTitle>Paid Revenue</CardTitle></CardHeader>
-                  <CardContent className="text-2xl font-semibold">{formatCurrency0(paidRevenueMonth)}</CardContent>
-                </Card>
-                <Card>
-                  <CardHeader><CardTitle>OTA Cost (15%)</CardTitle></CardHeader>
-                  <CardContent className="text-2xl font-semibold">{formatCurrency2(otaCostMonth)}</CardContent>
-                </Card>
-                <Card>
-                  <CardHeader><CardTitle>Your Cost</CardTitle></CardHeader>
-                  <CardContent className="text-2xl font-semibold">{formatCurrency2(yourCostMonth)}</CardContent>
-                </Card>
-                <Card>
-                  <CardHeader><CardTitle>Savings vs OTA</CardTitle></CardHeader>
-                  <CardContent className="text-2xl font-semibold">{formatCurrency2(savingsVsOTAMonth)}</CardContent>
-                </Card>
-                <Card>
-                  <CardHeader><CardTitle>Estimated Bookings</CardTitle></CardHeader>
-                  <CardContent className="text-2xl font-semibold">{Math.floor(ordersMonth).toLocaleString("en-US")}</CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="year" className="mt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card>
-                  <CardHeader><CardTitle>Revenue</CardTitle></CardHeader>
-                  <CardContent className="text-2xl font-semibold">{formatCurrency0(revYear)}</CardContent>
-                </Card>
-                <Card>
-                  <CardHeader><CardTitle>Paid Revenue</CardTitle></CardHeader>
-                  <CardContent className="text-2xl font-semibold">{formatCurrency0(paidRevenueYear)}</CardContent>
-                </Card>
-                <Card>
-                  <CardHeader><CardTitle>OTA Cost (15%)</CardTitle></CardHeader>
-                  <CardContent className="text-2xl font-semibold">{formatCurrency2(otaCostYear)}</CardContent>
-                </Card>
-                <Card>
-                  <CardHeader><CardTitle>Your Cost</CardTitle></CardHeader>
-                  <CardContent className="text-2xl font-semibold">{formatCurrency2(yourCostYear)}</CardContent>
-                </Card>
-                <Card>
-                  <CardHeader><CardTitle>Savings vs OTA</CardTitle></CardHeader>
-                  <CardContent className="text-2xl font-semibold">{formatCurrency2(savingsVsOTAYear)}</CardContent>
-                </Card>
-                <Card>
-                  <CardHeader><CardTitle>Estimated Bookings</CardTitle></CardHeader>
-                  <CardContent className="text-2xl font-semibold">{Math.floor(ordersYear).toLocaleString("en-US")}</CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-          </Tabs>
-
-          {/* Monthly vs Yearly table comparison */}
-          <div className="mt-6">
-            <div className="mb-2">
-              <div className="text-sm font-medium text-muted-foreground">Monthly vs Yearly Overview</div>
+          {/* Modern header badges */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-2">
+              {scenario.email && (
+                <Badge variant="outline">Email: {scenario.email}</Badge>
+              )}
+              <Badge variant="outline">Paid share: {paidSharePct.toFixed(2)}%</Badge>
+              <Badge variant="outline">Cost of sell: {formatPercent(costOfSell)}</Badge>
+              <Badge variant="outline">OTA rate: 15%</Badge>
             </div>
-            <Table className="bg-card rounded-md border">
+            <div className="text-xs text-muted-foreground">
+              Compare monthly and yearly metrics side by side
+            </div>
+          </div>
+
+          {/* Single Monthly vs Yearly table comparison */}
+          <div className="mt-4">
+            <Table className="bg-card rounded-xl border shadow-sm">
               <TableHeader>
-                <TableRow>
-                  <TableHead>Metric</TableHead>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-[220px]">Metric</TableHead>
                   <TableHead>Per Month</TableHead>
                   <TableHead>Per Year</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <TableRow>
+                <TableRow className="hover:bg-muted/40">
                   <TableCell className="font-medium">Revenue</TableCell>
                   <TableCell>{formatCurrency0(revMonth)}</TableCell>
                   <TableCell>{formatCurrency0(revYear)}</TableCell>
                 </TableRow>
-                <TableRow>
+                <TableRow className="hover:bg-muted/40">
                   <TableCell className="font-medium">Paid Revenue</TableCell>
                   <TableCell>{formatCurrency0(paidRevenueMonth)}</TableCell>
                   <TableCell>{formatCurrency0(paidRevenueYear)}</TableCell>
                 </TableRow>
-                <TableRow>
+                <TableRow className="hover:bg-muted/40">
                   <TableCell className="font-medium">OTA Cost (15%)</TableCell>
                   <TableCell>{formatCurrency2(otaCostMonth)}</TableCell>
                   <TableCell>{formatCurrency2(otaCostYear)}</TableCell>
                 </TableRow>
-                <TableRow>
+                <TableRow className="hover:bg-muted/40">
                   <TableCell className="font-medium">Your Cost</TableCell>
                   <TableCell>{formatCurrency2(yourCostMonth)}</TableCell>
                   <TableCell>{formatCurrency2(yourCostYear)}</TableCell>
                 </TableRow>
-                <TableRow>
+                <TableRow className="hover:bg-muted/40">
                   <TableCell className="font-medium">Savings vs OTA</TableCell>
-                  <TableCell>{formatCurrency2(savingsVsOTAMonth)}</TableCell>
-                  <TableCell>{formatCurrency2(savingsVsOTAYear)}</TableCell>
+                  <TableCell className={savingsMonthClass}>{formatCurrency2(savingsVsOTAMonth)}</TableCell>
+                  <TableCell className={savingsYearClass}>{formatCurrency2(savingsVsOTAYear)}</TableCell>
                 </TableRow>
-                <TableRow>
+                <TableRow className="hover:bg-muted/40">
                   <TableCell className="font-medium">Estimated Bookings</TableCell>
                   <TableCell>{Math.floor(ordersMonth).toLocaleString("en-US")}</TableCell>
                   <TableCell>{Math.floor(ordersYear).toLocaleString("en-US")}</TableCell>
