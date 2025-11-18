@@ -47,29 +47,6 @@ export function PerformanceSettingsModal({
   accountId,
 }: PerformanceSettingsModalProps) {
   const [localDimensions, setLocalDimensions] = useState<Dimension[]>(dimensions || []);
-  // Dropdown to add existing dimension
-  const [addSelectValue, setAddSelectValue] = useState<string>("");
-  const addableDims = useMemo(
-    () =>
-      textDateDims.filter(
-        (d) => !selectedDims.includes(d.id) && !(dateDimId && d.id === dateDimId)
-      ),
-    [textDateDims, selectedDims, dateDimId]
-  );
-  const addDimensionById = (id: string) => {
-    setSelectedDims((prev) => (prev.includes(id) ? prev : [...prev, id]));
-    const added = localDimensions.find((d) => d.id === id);
-    if (added) {
-      toast({ title: "Added", description: `Dimension "${added.name}" added to filters.` });
-    }
-  };
-
-  useEffect(() => {
-    if (open) {
-      setLocalDimensions(dimensions || []);
-    }
-  }, [open, dimensions]);
-
   const textDateDims = useMemo(
     () => localDimensions.filter(d => d.type === "text" || d.type === "date"),
     [localDimensions]
@@ -98,6 +75,29 @@ export function PerformanceSettingsModal({
   };
 
   const [selectedDims, setSelectedDims] = useState<string[]>(buildInitial());
+
+  // ADDED: Dropdown logic AFTER dependencies are initialized
+  const [addSelectValue, setAddSelectValue] = useState<string>("");
+  const addableDims = useMemo(
+    () =>
+      textDateDims.filter(
+        (d) => !selectedDims.includes(d.id) && !(dateDimId && d.id === dateDimId)
+      ),
+    [textDateDims, selectedDims, dateDimId]
+  );
+  const addDimensionById = (id: string) => {
+    setSelectedDims((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    const added = localDimensions.find((d) => d.id === id);
+    if (added) {
+      toast({ title: "Added", description: `Dimension "${added.name}" added to filters.` });
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      setLocalDimensions(dimensions || []);
+    }
+  }, [open, dimensions]);
 
   useEffect(() => {
     if (open) {
