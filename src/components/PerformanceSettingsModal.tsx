@@ -13,13 +13,13 @@ import {
   AlertDialogAction,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { DimensionModal } from "@/components/DimensionModal";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 interface PerformanceSettingsModalProps {
   open: boolean;
@@ -47,7 +47,22 @@ export function PerformanceSettingsModal({
   accountId,
 }: PerformanceSettingsModalProps) {
   const [localDimensions, setLocalDimensions] = useState<Dimension[]>(dimensions || []);
-  const [isAddOpen, setIsAddOpen] = useState(false);
+  // Dropdown to add existing dimension
+  const [addSelectValue, setAddSelectValue] = useState<string>("");
+  const addableDims = useMemo(
+    () =>
+      textDateDims.filter(
+        (d) => !selectedDims.includes(d.id) && !(dateDimId && d.id === dateDimId)
+      ),
+    [textDateDims, selectedDims, dateDimId]
+  );
+  const addDimensionById = (id: string) => {
+    setSelectedDims((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    const added = localDimensions.find((d) => d.id === id);
+    if (added) {
+      toast({ title: "Added", description: `Dimension "${added.name}" added to filters.` });
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -108,57 +123,7 @@ export function PerformanceSettingsModal({
     onOpenChange(false);
   };
 
-  // Reload dimensions from Supabase after add/delete (prioritize account > global > custom, dedupe by name)
-  const reloadDimensions = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      let accountData: Dimension[] = [];
-      if (accountId) {
-        const { data, error } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("scope", "account")
-          .eq("account_id", accountId)
-          .order("created_at", { ascending: false });
-        if (!error) accountData = (data || []) as Dimension[];
-      }
-
-      const { data: globalData } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("scope", "global")
-        .order("created_at", { ascending: false });
-
-      let customData: Dimension[] = [];
-      if (reportId) {
-        const { data } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("scope", "custom")
-          .eq("report_id", reportId)
-          .order("created_at", { ascending: false });
-        customData = (data || []) as Dimension[];
-      }
-
-      const combined = [
-        ...(accountData || []),
-        ...((globalData || []) as Dimension[]),
-        ...(customData || []),
-      ];
-      const seen = new Set<string>();
-      const uniqueByName = combined.filter((d) => {
-        if (!d.name || seen.has(d.name)) return false;
-        seen.add(d.name);
-        return true;
-      });
-      setLocalDimensions(uniqueByName);
-    } catch (err) {
-      console.error("[FiltersSettings] Failed to reload dimensions:", err);
-    }
-  };
+  // REMOVED: reloadDimensions (no longer needed without create modal)
 
   const handleDeleteDimension = async (dim: Dimension) => {
     const isDate = dateDimId && dim.id === dateDimId;
@@ -203,15 +168,28 @@ export function PerformanceSettingsModal({
         <div className="space-y-5 pt-2">
           <div className="flex items-center justify-between">
             <Label>Available dimensions</Label>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="gap-2"
-              onClick={() => setIsAddOpen(true)}
+            <Select
+              value={addSelectValue}
+              onValueChange={(id) => {
+                addDimensionById(id);
+                setAddSelectValue("");
+              }}
             >
-              <Plus className="h-4 w-4" />
-              Add New Dimension
-            </Button>
+              <SelectTrigger
+                className="w-[220px] bg-background"
+                aria-label="Add dimension to filters"
+                disabled={addableDims.length === 0}
+              >
+                <SelectValue placeholder={addableDims.length ? "Add dimension..." : "No dimensions to add"} />
+              </SelectTrigger>
+              <SelectContent className="bg-background z-50">
+                {addableDims.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name} {d.scope ? `(${d.scope})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <ScrollArea className="h-[300px] rounded-md border bg-card">
@@ -299,18 +277,7 @@ export function PerformanceSettingsModal({
           <Button onClick={handleSave}>Save</Button>
         </div>
 
-        {/* Add Dimension Modal */}
-        <DimensionModal
-          open={isAddOpen}
-          onOpenChange={(open) => {
-            setIsAddOpen(open);
-            if (!open) reloadDimensions();
-          }}
-          mode="add"
-          onSaved={reloadDimensions}
-          reportId={reportId}
-          accountId={accountId}
-        />
+        {/* REMOVED: Create-new dimension modal; adding is now via dropdown of existing dimensions */}
       </DialogContent>
     </Dialog>
   );
