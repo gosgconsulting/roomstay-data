@@ -13,10 +13,11 @@ import { supabase } from "@/integrations/supabase/client";
 
 interface ForecastScenario {
   id: string;
-  name: string;
+  name: string; // used as Hotel Name
+  email?: string;
   revenue_per_month: number;
   paid_revenue_share: number;
-  cost_of_sell: number;
+  cost_of_sell: number; // stored as decimal (0-1) percentage
   target_average_order_value: number;
   conversion_rate: number;
   created_at: string;
@@ -34,10 +35,11 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
   
   // Form state
   const [formData, setFormData] = useState({
-    name: '',
+    name: '', // Hotel Name
+    email: '',
     revenue_per_month: '',
     paid_revenue_share: '',
-    cost_of_sell: '',
+    cost_of_sell: '', // percentage input
     target_average_order_value: '',
     conversion_rate: ''
   });
@@ -99,7 +101,15 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
     if (!formData.name.trim()) {
       toast({
         title: "Validation Error",
-        description: "Please enter a scenario name",
+        description: "Please enter a hotel name",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!formData.email.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter an email address",
         variant: "destructive",
       });
       return;
@@ -138,10 +148,11 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
         .insert({
           report_id: reportId,
           user_id: user.id,
-          name: formData.name.trim(),
+          name: formData.name.trim(), // Hotel Name
+          email: formData.email.trim(),
           revenue_per_month: parseFloat(formData.revenue_per_month),
           paid_revenue_share: parseFloat(formData.paid_revenue_share),
-          cost_of_sell: parseFloat(formData.cost_of_sell),
+          cost_of_sell: parseFloat(formData.cost_of_sell) / 100, // percentage to decimal
           target_average_order_value: parseFloat(formData.target_average_order_value),
           conversion_rate: parseFloat(formData.conversion_rate) / 100, // Convert percentage to decimal
         })
@@ -158,6 +169,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
       // Reset form
       setFormData({
         name: '',
+        email: '',
         revenue_per_month: '',
         paid_revenue_share: '',
         cost_of_sell: '',
@@ -252,10 +264,22 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="scenario-name">Scenario Name</Label>
+                <Label htmlFor="email">Email Address</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="name@example.com"
+                  value={formData.email}
+                  onChange={(e) => handleInputChange('email', e.target.value)}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="scenario-name">Hotel Name</Label>
                 <Input
                   id="scenario-name"
-                  placeholder="e.g., Q1 2024 Forecast"
+                  placeholder="e.g., Grand Plaza Hotel"
                   value={formData.name}
                   onChange={(e) => handleInputChange('name', e.target.value)}
                   required
@@ -291,12 +315,14 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="cost-of-sell">Cost of Sell ($)</Label>
+                <Label htmlFor="cost-of-sell">Cost of Sell (%)</Label>
                 <Input
                   id="cost-of-sell"
                   type="number"
                   step="0.01"
-                  placeholder="5000"
+                  min="0"
+                  max="100"
+                  placeholder="12.5"
                   value={formData.cost_of_sell}
                   onChange={(e) => handleInputChange('cost_of_sell', e.target.value)}
                   required
@@ -382,7 +408,8 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Scenario Name</TableHead>
+                    <TableHead>Hotel Name</TableHead>
+                    <TableHead>Email</TableHead>
                     <TableHead>Revenue/Month</TableHead>
                     <TableHead>Revenue Share</TableHead>
                     <TableHead>Cost of Sell</TableHead>
@@ -396,9 +423,10 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                   {scenarios.map((scenario) => (
                     <TableRow key={scenario.id}>
                       <TableCell className="font-medium">{scenario.name}</TableCell>
+                      <TableCell>{scenario.email || '-'}</TableCell>
                       <TableCell>{formatCurrency(scenario.revenue_per_month)}</TableCell>
                       <TableCell>{scenario.paid_revenue_share}%</TableCell>
-                      <TableCell>{formatCurrency(scenario.cost_of_sell)}</TableCell>
+                      <TableCell>{formatPercentage(scenario.cost_of_sell)}</TableCell>
                       <TableCell>{formatCurrency(scenario.target_average_order_value)}</TableCell>
                       <TableCell>{formatPercentage(scenario.conversion_rate)}</TableCell>
                       <TableCell>{formatDate(scenario.created_at)}</TableCell>
