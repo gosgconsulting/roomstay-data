@@ -1,4 +1,19 @@
 import { useMemo, useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+import { Plus, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { DimensionModal } from "@/components/DimensionModal";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -15,6 +30,8 @@ interface PerformanceSettingsModalProps {
   thenBy: string[];
   onSave: (selectedDimensions: string[]) => void;
   selectedDimensionIds?: string[]; // NEW: initial selection to sync with filters/options
+  reportId?: string;
+  accountId?: string;
 }
 
 export function PerformanceSettingsModal({
@@ -26,16 +43,27 @@ export function PerformanceSettingsModal({
   thenBy,
   onSave,
   selectedDimensionIds = [],
+  reportId,
+  accountId,
 }: PerformanceSettingsModalProps) {
+  const [localDimensions, setLocalDimensions] = useState<Dimension[]>(dimensions || []);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setLocalDimensions(dimensions || []);
+    }
+  }, [open, dimensions]);
+
   const textDateDims = useMemo(
-    () => dimensions.filter(d => d.type === "text" || d.type === "date"),
-    [dimensions]
+    () => localDimensions.filter(d => d.type === "text" || d.type === "date"),
+    [localDimensions]
   );
 
   const dateDimId = useMemo(() => {
-    const dateDim = dimensions.find(d => d.type === "date");
+    const dateDim = localDimensions.find(d => d.type === "date");
     return dateDim?.id ?? null;
-  }, [dimensions]);
+  }, [localDimensions]);
 
   const buildInitial = () => {
     // Prefer the provided selectedDimensionIds; fallback to previous heuristic
@@ -80,6 +108,88 @@ export function PerformanceSettingsModal({
     onOpenChange(false);
   };
 
+  // Reload dimensions from Supabase after add/delete (prioritize account > global > custom, dedupe by name)
+  const reloadDimensions = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      let accountData: Dimension[] = [];
+      if (accountId) {
+        const { data, error } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("scope", "account")
+          .eq("account_id", accountId)
+          .order("created_at", { ascending: false });
+        if (!error) accountData = (data || []) as Dimension[];
+      }
+
+      const { data: globalData } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("scope", "global")
+        .order("created_at", { ascending: false });
+
+      let customData: Dimension[] = [];
+      if (reportId) {
+        const { data } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("scope", "custom")
+          .eq("report_id", reportId)
+          .order("created_at", { ascending: false });
+        customData = (data || []) as Dimension[];
+      }
+
+      const combined = [
+        ...(accountData || []),
+        ...((globalData || []) as Dimension[]),
+        ...(customData || []),
+      ];
+      const seen = new Set<string>();
+      const uniqueByName = combined.filter((d) => {
+        if (!d.name || seen.has(d.name)) return false;
+        seen.add(d.name);
+        return true;
+      });
+      setLocalDimensions(uniqueByName);
+    } catch (err) {
+      console.error("[FiltersSettings] Failed to reload dimensions:", err);
+    }
+  };
+
+  const handleDeleteDimension = async (dim: Dimension) => {
+    const isDate = dateDimId && dim.id === dateDimId;
+    const scope = String(dim.scope ?? "");
+    const isProtected = isDate || scope === "global" || scope === "virtual";
+    const isDeletable = scope === "account" || scope === "custom";
+    if (isProtected || !isDeletable) {
+      toast({
+        title: "Not allowed",
+        description: "This dimension cannot be deleted.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const { error } = await supabase
+      .from("dimensions")
+      .delete()
+      .eq("id", dim.id);
+    if (error) {
+      toast({
+        title: "Delete failed",
+        description: error.message || "Could not delete dimension",
+        variant: "destructive",
+      });
+      return;
+    }
+    setLocalDimensions((prev) => prev.filter((d) => d.id !== dim.id));
+    setSelectedDims((prev) => prev.filter((id) => id !== dim.id));
+    toast({ title: "Deleted", description: `Dimension "${dim.name}" removed.` });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[560px] bg-background">
@@ -91,13 +201,27 @@ export function PerformanceSettingsModal({
         </DialogHeader>
 
         <div className="space-y-5 pt-2">
-          <div className="space-y-2">
+          <div className="flex items-center justify-between">
             <Label>Available dimensions</Label>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="gap-2"
+              onClick={() => setIsAddOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
+              Add dimension
+            </Button>
+          </div>
+          <div className="space-y-2">
             <ScrollArea className="h-[300px] rounded-md border bg-card">
               <div className="p-3 space-y-2">
                 {textDateDims.map((dim) => {
                   const isDate = dateDimId && dim.id === dateDimId;
                   const checked = selectedDims.includes(dim.id);
+                  const scope = String(dim.scope ?? "");
+                  const isProtected = isDate || scope === "global" || scope === "virtual";
+                  const isDeletable = !isProtected && (scope === "account" || scope === "custom");
                   return (
                     <div
                       key={dim.id}
@@ -123,8 +247,36 @@ export function PerformanceSettingsModal({
                           )}
                         </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {isDate ? "Pinned" : checked ? "Selected" : "Not selected"}
+                      <div className="flex items-center gap-3">
+                        <div className="text-xs text-muted-foreground">
+                          {isDate ? "Pinned" : checked ? "Selected" : "Not selected"}
+                        </div>
+                        {isDeletable && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 px-2 text-destructive hover:text-destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete dimension</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will remove the dimension "{dim.name}". You can't undo this action.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  onClick={() => handleDeleteDimension(dim)}
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
                       </div>
                     </div>
                   );
@@ -146,6 +298,19 @@ export function PerformanceSettingsModal({
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSave}>Save</Button>
         </div>
+
+        {/* Add Dimension Modal */}
+        <DimensionModal
+          open={isAddOpen}
+          onOpenChange={(open) => {
+            setIsAddOpen(open);
+            if (!open) reloadDimensions();
+          }}
+          mode="add"
+          onSaved={reloadDimensions}
+          reportId={reportId}
+          accountId={accountId}
+        />
       </DialogContent>
     </Dialog>
   );
