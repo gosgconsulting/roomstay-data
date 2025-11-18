@@ -2,6 +2,7 @@ import * as React from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
 
 type ForecastScenario = {
   id: string;
@@ -151,6 +152,54 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
               </div>
             </TabsContent>
           </Tabs>
+
+          {/* Monthly vs Yearly table comparison */}
+          <div className="mt-6">
+            <div className="mb-2">
+              <div className="text-sm font-medium text-muted-foreground">Monthly vs Yearly Overview</div>
+            </div>
+            <Table className="bg-card rounded-md border">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Metric</TableHead>
+                  <TableHead>Per Month</TableHead>
+                  <TableHead>Per Year</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium">Revenue</TableCell>
+                  <TableCell>{formatCurrency0(revMonth)}</TableCell>
+                  <TableCell>{formatCurrency0(revYear)}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Paid Revenue</TableCell>
+                  <TableCell>{formatCurrency0(paidRevenueMonth)}</TableCell>
+                  <TableCell>{formatCurrency0(paidRevenueYear)}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">OTA Cost (15%)</TableCell>
+                  <TableCell>{formatCurrency2(otaCostMonth)}</TableCell>
+                  <TableCell>{formatCurrency2(otaCostYear)}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Your Cost</TableCell>
+                  <TableCell>{formatCurrency2(yourCostMonth)}</TableCell>
+                  <TableCell>{formatCurrency2(yourCostYear)}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Savings vs OTA</TableCell>
+                  <TableCell>{formatCurrency2(savingsVsOTAMonth)}</TableCell>
+                  <TableCell>{formatCurrency2(savingsVsOTAYear)}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Estimated Bookings</TableCell>
+                  <TableCell>{Math.floor(ordersMonth).toLocaleString("en-US")}</TableCell>
+                  <TableCell>{Math.floor(ordersYear).toLocaleString("en-US")}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
