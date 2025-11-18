@@ -417,6 +417,7 @@ export default function ReportDashboard() {
             reportId={reportId}
             onSettingsChange={refreshData}
             visibilityRefreshTrigger={visibilityRefreshTrigger}
+            isEditMode={isEditMode}
           />
         </>
       ) : (

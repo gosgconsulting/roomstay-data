@@ -432,7 +432,7 @@ export const FiltersBar = ({
   };
 
   const saveFilterSettings = async () => {
-    if (!reportId || isSharedView) return;
+    if (!reportId || isSharedView || !isEditMode) return; // Add isEditMode check
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -475,6 +475,8 @@ export const FiltersBar = ({
           });
         if (error) throw error;
       }
+
+      console.log('[FILTERS] Filter settings saved successfully');
     } catch (error) {
       console.error("Error saving filter settings:", error);
     }

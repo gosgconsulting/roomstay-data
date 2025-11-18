@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { DragEndEvent } from '@dnd-kit/core';
@@ -27,6 +27,27 @@ export function usePerformanceTableColumns({
   const [initialColumnOrder, setInitialColumnOrder] = useState<string[]>([]);
   const [isSavingColumnSettings, setIsSavingColumnSettings] = useState(false);
 
+  // NEW: Auto-save column settings when they change (with debounce)
+  useEffect(() => {
+    if (reportId && activeViewId && !isSharedView) {
+      // Only auto-save if there are actual changes
+      if (hasUnsavedColumnChanges()) {
+        const timeoutId = setTimeout(() => {
+          console.log('[COLUMNS] Auto-saving column settings...');
+          applyColumnSettings();
+        }, 1000); // 1 second debounce for column changes
+        
+        return () => clearTimeout(timeoutId);
+      }
+    }
+  }, [
+    Array.from(visibleColumns).sort().join(','), 
+    columnOrder.join(','), 
+    reportId, 
+    activeViewId, 
+    isSharedView
+  ]);
+
   const toggleColumn = useCallback((dimensionId: string) => {
     setVisibleColumns(prev => {
       const newVisible = new Set(prev);
@@ -41,20 +62,20 @@ export function usePerformanceTableColumns({
 
   const applyColumnSettings = useCallback(async () => {
     if (!reportId || !activeViewId || isSharedView) {
-      console.log('[testing] Cannot apply column settings:', { reportId: !!reportId, activeViewId: !!activeViewId, isSharedView });
+      console.log('[COLUMNS] Cannot apply column settings:', { reportId: !!reportId, activeViewId: !!activeViewId, isSharedView });
       return;
     }
 
     try {
       setIsSavingColumnSettings(true);
-      console.log('[testing] Applying column visibility settings to view:', activeViewId);
+      console.log('[COLUMNS] Applying column visibility settings to view:', activeViewId);
 
       const viewData = {
         visible_columns: Array.from(visibleColumns),
         column_order: columnOrder,
       };
 
-      console.log('[testing] Updating report_views with data:', viewData);
+      console.log('[COLUMNS] Updating report_views with data:', viewData);
 
       const { error } = await supabase
         .from("report_views")
@@ -65,24 +86,27 @@ export function usePerformanceTableColumns({
         .eq("id", activeViewId);
 
       if (error) {
-        console.error('[testing] Error updating report_views:', error);
+        console.error('[COLUMNS] Error updating report_views:', error);
         throw error;
       }
 
-      console.log('[testing] Successfully updated report_views');
+      console.log('[COLUMNS] Successfully updated report_views');
 
       // Update initial state to match current state
       setInitialVisibleColumns(new Set(visibleColumns));
       setInitialColumnOrder([...columnOrder]);
 
-      console.log('[testing] Updated initial state - visible columns:', visibleColumns.size, 'column order:', columnOrder.length);
+      console.log('[COLUMNS] Updated initial state - visible columns:', visibleColumns.size, 'column order:', columnOrder.length);
 
-      toast({
-        title: "Success",
-        description: "Column visibility settings applied successfully",
-      });
+      // Only show toast for manual saves, not auto-saves
+      if (arguments.length > 0) {
+        toast({
+          title: "Success",
+          description: "Column visibility settings applied successfully",
+        });
+      }
 
-      console.log('[testing] Column visibility settings applied successfully');
+      console.log('[COLUMNS] Column visibility settings applied successfully');
     } catch (error) {
       console.error("Error applying column settings:", error);
       toast({

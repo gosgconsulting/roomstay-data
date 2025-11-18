@@ -37,6 +37,7 @@ interface KPISettingsModalProps {
   reportId: string | null;
   onSettingsChange?: () => void;
   visibilityRefreshTrigger?: number;
+  isEditMode?: boolean;
 }
 
 interface KPIConfig {
@@ -45,7 +46,15 @@ interface KPIConfig {
   order: number;
 }
 
-function SortableKPIItem({ kpi, onToggle }: { kpi: KPIConfig; onToggle: (name: string) => void }) {
+function SortableKPIItem({ 
+  kpi, 
+  onToggle, 
+  isEditMode = true
+}: { 
+  kpi: KPIConfig; 
+  onToggle: (name: string) => void;
+  isEditMode?: boolean;
+}) {
   const {
     attributes,
     listeners,
@@ -65,23 +74,26 @@ function SortableKPIItem({ kpi, onToggle }: { kpi: KPIConfig; onToggle: (name: s
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-3 p-3 bg-white border rounded-md hover:bg-accent/50"
+      className={`flex items-center gap-3 p-3 bg-white border rounded-md hover:bg-accent/50 ${
+        !isEditMode ? 'opacity-60' : ''
+      }`}
     >
       <div
-        {...attributes}
-        {...listeners}
-        className="cursor-grab active:cursor-grabbing"
+        {...(isEditMode ? attributes : {})}
+        {...(isEditMode ? listeners : {})}
+        className={isEditMode ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed"}
       >
-        <GripVertical className="h-4 w-4 text-gray-400" />
+        <GripVertical className={`h-4 w-4 ${isEditMode ? 'text-gray-400' : 'text-gray-300'}`} />
       </div>
       <Checkbox
         id={`kpi-${kpi.name}`}
         checked={kpi.visible}
         onCheckedChange={() => onToggle(kpi.name)}
+        disabled={!isEditMode}
       />
       <Label
         htmlFor={`kpi-${kpi.name}`}
-        className="flex-1 cursor-pointer"
+        className={`flex-1 ${isEditMode ? 'cursor-pointer' : 'cursor-default'}`}
       >
         {kpi.name}
       </Label>
@@ -94,7 +106,8 @@ export function KPISettingsModal({
   onOpenChange, 
   reportId, 
   onSettingsChange,
-  visibilityRefreshTrigger 
+  visibilityRefreshTrigger,
+  isEditMode = false
 }: KPISettingsModalProps) {
   const [kpis, setKpis] = useState<KPIConfig[]>([]);
   const [initialKpis, setInitialKpis] = useState<KPIConfig[]>([]);
@@ -334,6 +347,7 @@ export function KPISettingsModal({
                       key={kpi.name}
                       kpi={kpi}
                       onToggle={handleToggle}
+                      isEditMode={isEditMode}
                     />
                   ))}
                 </SortableContext>
