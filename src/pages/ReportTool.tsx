@@ -10,6 +10,8 @@ import { CreateAccountModal } from "@/components/CreateAccountModal";
 import { migrateAllAccountsToAccountDimensions } from "@/lib/migrate-to-account-dimensions";
 import { EditAccountModal } from "@/components/EditAccountModal";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
+import { DataSourceSelectionModal } from "@/components/DataSourceSelectionModal";
+import { UnifiedDataSourceModal } from "@/components/UnifiedDataSourceModal";
 
 interface Account {
   id: string;
@@ -28,6 +30,9 @@ export default function ReportTool() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+  const [dataSourceSelectionOpen, setDataSourceSelectionOpen] = useState(false);
+  const [unifiedDataSourceOpen, setUnifiedDataSourceOpen] = useState(false);
+  const [selectedSourceType, setSelectedSourceType] = useState<'google_sheets' | 'csv_url'>('google_sheets');
 
   useEffect(() => {
     checkAuth();
@@ -236,6 +241,19 @@ export default function ReportTool() {
     navigate(`/tools/report/${account.id}`);
   };
 
+  const handleSourceTypeSelect = (sourceType: 'google_sheets' | 'csv_url') => {
+    setSelectedSourceType(sourceType);
+    setDataSourceSelectionOpen(false);
+    setUnifiedDataSourceOpen(true);
+  };
+
+  const handleDataSourceSuccess = () => {
+    setUnifiedDataSourceOpen(false);
+    if (session) {
+      loadAccounts(session.user.id); // Fix: provide required userId argument
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
@@ -248,7 +266,7 @@ export default function ReportTool() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
@@ -386,6 +404,27 @@ export default function ReportTool() {
           />
         </>
       )}
+
+      <DataSourceSelectionModal
+        open={dataSourceSelectionOpen}
+        onOpenChange={setDataSourceSelectionOpen}
+        onSelectGoogleSheets={() => handleSourceTypeSelect('google_sheets')}
+        onSelectCSV={() => handleSourceTypeSelect('csv_url')}
+        onSelectAPI={() => {
+          toast({
+            title: "Coming soon",
+            description: "API data source integration is on the roadmap.",
+          });
+        }}
+      />
+
+      <UnifiedDataSourceModal
+        open={unifiedDataSourceOpen}
+        onOpenChange={setUnifiedDataSourceOpen}
+        reportId={selectedAccount?.id || ''}
+        sourceType={selectedSourceType}
+        onSuccess={handleDataSourceSuccess}
+      />
     </div>
   );
 }

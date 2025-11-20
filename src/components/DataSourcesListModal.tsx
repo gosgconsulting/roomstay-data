@@ -20,6 +20,8 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { EditMappingModal } from "./EditMappingModal";
 import { ViewDataModal } from "./ViewDataModal";
+import { DataSourceSelectionModal } from "./DataSourceSelectionModal";
+import { UnifiedDataSourceModal } from "./UnifiedDataSourceModal";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { syncDataSource } from "@/lib/sync-utils";
 import { SyncModeModal } from "./SyncModeModal";
@@ -66,6 +68,11 @@ export const DataSourcesListModal = ({
   const [showViewDataModal, setShowViewDataModal] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingDataSource, setDeletingDataSource] = useState<DataSource | null>(null);
+
+  // Unified modal states
+  const [showDataSourceSelectionModal, setShowDataSourceSelectionModal] = useState(false);
+  const [showUnifiedDataSourceModal, setShowUnifiedDataSourceModal] = useState(false);
+  const [selectedSourceType, setSelectedSourceType] = useState<'google_sheets' | 'csv_url'>('google_sheets');
 
   // NEW: Sync modal state
   const [syncModalOpen, setSyncModalOpen] = useState(false);
@@ -344,6 +351,17 @@ export const DataSourcesListModal = ({
     return 'Google Sheets';
   };
 
+  const handleSourceTypeSelect = (sourceType: 'google_sheets' | 'csv_url') => {
+    setSelectedSourceType(sourceType);
+    setShowDataSourceSelectionModal(false);
+    setShowUnifiedDataSourceModal(true);
+  };
+
+  const handleDataSourceSuccess = () => {
+    setShowUnifiedDataSourceModal(false);
+    loadDataSources(); // Refresh the data sources list
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -440,13 +458,36 @@ export const DataSourcesListModal = ({
           </div>
 
           <div className="flex justify-end">
-            <Button onClick={onAddNew} className="gap-2">
+            <Button onClick={() => setShowDataSourceSelectionModal(true)} className="gap-2">
               <Plus className="h-4 w-4" />
               Add Data Source
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Data Source Selection Modal */}
+      <DataSourceSelectionModal
+        open={showDataSourceSelectionModal}
+        onOpenChange={setShowDataSourceSelectionModal}
+        onSelectGoogleSheets={() => handleSourceTypeSelect('google_sheets')}
+        onSelectCSV={() => handleSourceTypeSelect('csv_url')}
+        onSelectAPI={() => {
+          toast({
+            title: "Coming soon",
+            description: "API data source integration is on the roadmap.",
+          });
+        }}
+      />
+
+      {/* Unified Data Source Modal */}
+      <UnifiedDataSourceModal
+        open={showUnifiedDataSourceModal}
+        onOpenChange={setShowUnifiedDataSourceModal}
+        reportId={reportId}
+        sourceType={selectedSourceType}
+        onSuccess={handleDataSourceSuccess}
+      />
 
       {/* Edit Mapping Modal */}
       <EditMappingModal

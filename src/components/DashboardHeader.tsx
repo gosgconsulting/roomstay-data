@@ -2,11 +2,10 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, ChevronDown, Pencil, Database, Grid3x3, Wallet, RefreshCw, GitCompare } from "lucide-react";
-import { DataSourceModal } from "./DataSourceModal";
 import { DataSourceSelectionModal } from "./DataSourceSelectionModal";
 import { DataSourcesListModal } from "./DataSourcesListModal";
 import { CSVImportChoiceModal } from "./CSVImportChoiceModal";
-import { CSVDataSourceModal } from "./CSVDataSourceModal";
+import { UnifiedDataSourceModal } from "./UnifiedDataSourceModal";
 import { DimensionsListModal } from "./DimensionsListModal";
 import { DimensionModal } from "./DimensionModal";
 import { ReportModal } from "./ReportModal";
@@ -82,11 +81,13 @@ export function DashboardHeader({
   const navigate = useNavigate();
   const location = useLocation();
   const isAllReportsPage = location.pathname.startsWith('/all-reports');
-  const [showDataSourceModal, setShowDataSourceModal] = useState(false);
+  
   const [showDataSourceSelectionModal, setShowDataSourceSelectionModal] = useState(false);
+  const [showUnifiedDataSourceModal, setShowUnifiedDataSourceModal] = useState(false);
+  const [selectedSourceType, setSelectedSourceType] = useState<'google_sheets' | 'csv_url'>('google_sheets');
+  
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
   const [showCSVImportChoiceModal, setShowCSVImportChoiceModal] = useState(false);
-  const [showCSVDataSourceModal, setShowCSVDataSourceModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
   const [showDimensionModal, setShowDimensionModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -483,7 +484,16 @@ export function DashboardHeader({
     }
   };
 
+  const handleSourceTypeSelect = (sourceType: 'google_sheets' | 'csv_url') => {
+    setSelectedSourceType(sourceType);
+    setShowDataSourceSelectionModal(false);
+    setShowUnifiedDataSourceModal(true);
+  };
 
+  const handleDataSourceSuccess = () => {
+    setShowUnifiedDataSourceModal(false);
+    onRefreshData?.(); // Refresh the data
+  };
 
   const handleSync = async (syncMode: 'incremental' | 'full') => {
     if (!reportId) return;
@@ -944,23 +954,14 @@ export function DashboardHeader({
         }}
         onSelectURL={() => {
           setShowCSVImportChoiceModal(false);
-          setShowCSVDataSourceModal(true);
+          handleSourceTypeSelect('csv_url');
         }}
-      />
-
-      <CSVDataSourceModal
-        open={showCSVDataSourceModal}
-        onOpenChange={setShowCSVDataSourceModal}
-        reportId={currentReport?.id || null}
       />
 
       <DataSourceSelectionModal
         open={showDataSourceSelectionModal}
         onOpenChange={setShowDataSourceSelectionModal}
-        onSelectGoogleSheets={() => {
-          setShowDataSourceSelectionModal(false);
-          setShowDataSourceModal(true);
-        }}
+        onSelectGoogleSheets={() => handleSourceTypeSelect('google_sheets')}
         onSelectCSV={() => {
           setShowDataSourceSelectionModal(false);
           setShowCSVImportChoiceModal(true);
@@ -973,10 +974,12 @@ export function DashboardHeader({
         }}
       />
 
-      <DataSourceModal
-        open={showDataSourceModal}
-        onOpenChange={setShowDataSourceModal}
-        reportId={currentReport?.id || null}
+      <UnifiedDataSourceModal
+        open={showUnifiedDataSourceModal}
+        onOpenChange={setShowUnifiedDataSourceModal}
+        reportId={currentReport?.id || ''}
+        sourceType={selectedSourceType}
+        onSuccess={handleDataSourceSuccess}
       />
     </>
   );
