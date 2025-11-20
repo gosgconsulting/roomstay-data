@@ -94,7 +94,7 @@ export function TableHeader({
             onValueChange={(value) => onDimensionChange(value, "group")}
           />
           
-          {groupByDimensions.length >= 2 && (
+          {groupByDimensions.length >= 1 && dimensions.length >= 2 && (
             <DimensionSelectorGroup
               label="Breakdown by"
               dimensions={breakdownByDimensions}
@@ -108,7 +108,7 @@ export function TableHeader({
             />
           )}
           
-          {groupByDimensions.length >= 2 && (
+          {(breakdownByDimensions.length >= 1 || dimensions.length >= 3) && (
             <DimensionSelectorGroup
               label="Then by"
               dimensions={thenByDimensions}

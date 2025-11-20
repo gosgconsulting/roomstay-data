@@ -267,9 +267,26 @@ export function usePerformanceTableViews({
         }
       }
       
+      let thenByDimensions = await mapDimensionIdsLocal(view.then_by_dimensions || []);
+      // If no then by dimension is set but we have 3+ dimensions available, set a default
+      if (thenByDimensions.length === 0 && dimensions.length >= 3) {
+        const usedDimensions = [...finalGroupDimensions, ...breakdownDimensions];
+        const availableForThenBy = dimensions.filter(d => !usedDimensions.includes(d.id));
+        
+        if (availableForThenBy.length > 0) {
+          // Prefer text dimensions for then by, then date, then any other
+          const preferredThenBy = availableForThenBy.find(d => d.type === 'text') || 
+                                 availableForThenBy.find(d => d.type === 'date') || 
+                                 availableForThenBy[0];
+          if (preferredThenBy) {
+            thenByDimensions = [preferredThenBy.id];
+          }
+        }
+      }
+      
       onGroupByChange(finalGroupDimensions);
       onBreakdownByChange(breakdownDimensions);
-      onThenByChange(await mapDimensionIdsLocal(view.then_by_dimensions || []));
+      onThenByChange(thenByDimensions);
       
       // NEW: selector options mapping (filter_dimensions)
       if (typeof onSelectorDimensionsChange === 'function') {
