@@ -1,3 +1,4 @@
+// @deno-types="https://esm.sh/@supabase/supabase-js@2.77.0/dist/module/index.d.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.77.0';
 
 const corsHeaders = {
@@ -17,17 +18,25 @@ interface DataSource {
   sync_frequency: string;
   sync_time: string;
   sync_timezone: string;
+  source_type?: string;
+  csv_url?: string;
+  last_synced_at?: string;
 }
 
-Deno.serve(async (req) => {
+// @ts-ignore - Deno global is available in Deno runtime
+Deno.serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // @ts-ignore - Deno.env is available in Deno runtime
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    // @ts-ignore - Deno.env is available in Deno runtime
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    // @ts-ignore - Deno.env is available in Deno runtime
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     console.log('[AUTO-SYNC] Starting auto-sync check...');
@@ -68,9 +77,9 @@ Deno.serve(async (req) => {
         sync_frequency: ds.sync_frequency,
         sync_time: ds.sync_time,
         sync_timezone: ds.sync_timezone,
-        source_type: (ds as any).source_type || 'google_sheets',
+        source_type: ds.source_type || 'google_sheets',
         report_id: ds.report_id,
-        last_synced_at: (ds as any).last_synced_at || 'never'
+        last_synced_at: ds.last_synced_at || 'never'
       }))
     );
 
@@ -100,137 +109,46 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        console.log(`[AUTO-SYNC] Syncing ${ds.name}...`);
+        console.log(`[AUTO-SYNC] Syncing ${ds.name} using resync-data-source function...`);
 
-        // Determine source type and fetch data accordingly
-        const sourceType = (ds as any).source_type || 'google_sheets'; // Default to google_sheets for backward compatibility
-        let headers: any[] = [];
-        let dataRows: any[][] = [];
+        // Use the resync-data-source function instead of duplicating logic
+        const resyncResponse = await fetch(`${supabaseUrl}/functions/v1/resync-data-source`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({
+            dataSourceId: ds.id
+          }),
+        });
 
-        if (sourceType === 'csv_url') {
-          // Fetch data from CSV URL
-          if (!(ds as any).csv_url) {
-            console.error(`[AUTO-SYNC] CSV URL missing for ${ds.name}`);
-            continue;
-          }
+        const resyncResult = await resyncResponse.json();
 
-          const { data: csvData, error: csvError } = await supabase.functions.invoke('fetch-csv-url', {
-            body: {
-              csvUrl: (ds as any).csv_url,
-            },
+        if (resyncResult.success) {
+          // Update last_synced_at timestamp
+          await supabase
+            .from('data_sources')
+            .update({ last_synced_at: now.toISOString() })
+            .eq('id', ds.id);
+
+          console.log(`[AUTO-SYNC] Successfully synced ${ds.name}: ${resyncResult.rowsProcessed} rows, ${resyncResult.dimensionsCreated} dimensions created`);
+          syncResults.push({ 
+            name: ds.name, 
+            success: true, 
+            rows: resyncResult.rowsProcessed,
+            dimensionsCreated: resyncResult.dimensionsCreated,
+            vlookupApplied: resyncResult.vlookupApplied || false,
+            vlookupRowsUpdated: resyncResult.vlookupRowsUpdated || 0
           });
-
-          if (csvError) {
-            console.error(`[AUTO-SYNC] Error fetching CSV for ${ds.name}:`, csvError);
-            continue;
-          }
-
-          if (!csvData?.values || csvData.values.length === 0) {
-            console.log(`[AUTO-SYNC] No data found for ${ds.name}`);
-            continue;
-          }
-
-          // Extract headers from the specified header row
-          const headerRowNum = ds.header_row || 1;
-          if (headerRowNum < 1 || headerRowNum > csvData.values.length) {
-            console.error(`[AUTO-SYNC] Header row ${headerRowNum} out of range for ${ds.name}`);
-            continue;
-          }
-
-          headers = csvData.values[headerRowNum - 1];
-          dataRows = csvData.values.slice(headerRowNum);
         } else {
-          // Fetch data from Google Sheets
-          if (!ds.spreadsheet_id || !ds.tab_name) {
-            console.error(`[AUTO-SYNC] Spreadsheet ID or tab name missing for ${ds.name}`);
-            continue;
-          }
-
-          const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
-            body: {
-              spreadsheetId: ds.spreadsheet_id,
-              tabName: ds.tab_name,
-              range: `${ds.header_row}:1000000`,
-            },
+          console.error(`[AUTO-SYNC] Failed to sync ${ds.name}:`, resyncResult.error);
+          syncResults.push({ 
+            name: ds.name, 
+            success: false, 
+            error: resyncResult.error 
           });
-
-          if (sheetsError) {
-            console.error(`[AUTO-SYNC] Error fetching Google Sheets for ${ds.name}:`, sheetsError);
-            continue;
-          }
-
-          if (!sheetsData?.values || sheetsData.values.length === 0) {
-            console.log(`[AUTO-SYNC] No data found for ${ds.name}`);
-            continue;
-          }
-
-          headers = sheetsData.values[0];
-          dataRows = sheetsData.values.slice(1);
         }
-
-        // Delete existing data for this data source
-        const { error: deleteError } = await supabase
-          .from('dimension_data')
-          .delete()
-          .eq('data_source_id', ds.id);
-
-        if (deleteError) throw deleteError;
-
-        // Process and insert data
-        const columnMappings = ds.column_mappings || [];
-        const visibleMappings = columnMappings.filter((m: any) => m.visible !== false);
-        
-        let rowsInserted = 0;
-        // Adaptive batch sizing based on dataset size to prevent statement timeouts
-        let batchSize: number;
-        if (dataRows.length > 100000) {
-          batchSize = 250; // Very large datasets: smaller batches
-        } else if (dataRows.length > 50000) {
-          batchSize = 400; // Large datasets: medium batches
-        } else if (dataRows.length > 10000) {
-          batchSize = 600; // Medium datasets: larger batches
-        } else {
-          batchSize = 1000; // Small datasets: standard batches
-        }
-
-        console.log(`[AUTO-SYNC] Using adaptive batch size: ${batchSize} for ${dataRows.length} rows`);
-
-        for (let i = 0; i < dataRows.length; i += batchSize) {
-          const batch = dataRows.slice(i, i + batchSize);
-          const rowsToInsert = batch.map((row: any[]) => {
-            const dimensionValues: any = {};
-
-            visibleMappings.forEach((mapping: any) => {
-              const colIndex = headers.indexOf(mapping.sourceColumn);
-              if (colIndex !== -1) {
-                const rawValue = row[colIndex];
-                dimensionValues[mapping.dimensionId] = rawValue || '';
-              }
-            });
-
-            return {
-              report_id: ds.report_id,
-              data_source_id: ds.id,
-              dimension_values: dimensionValues,
-            };
-          });
-
-          const { error: insertError } = await supabase
-            .from('dimension_data')
-            .insert(rowsToInsert);
-
-          if (insertError) throw insertError;
-          rowsInserted += rowsToInsert.length;
-        }
-
-        // Update last_synced_at timestamp
-        await supabase
-          .from('data_sources')
-          .update({ last_synced_at: now.toISOString() })
-          .eq('id', ds.id);
-
-        console.log(`[AUTO-SYNC] Successfully synced ${ds.name}: ${rowsInserted} rows`);
-        syncResults.push({ name: ds.name, success: true, rows: rowsInserted });
 
       } catch (error) {
         console.error(`[AUTO-SYNC] Error syncing ${ds.name}:`, error);

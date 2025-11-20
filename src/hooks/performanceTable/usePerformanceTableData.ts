@@ -6,6 +6,7 @@ import { useVlookupMappings } from "@/hooks/useVlookupMappings";
 import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "./usePerformanceTableDimensions";
 import { autoFixDimensionSync } from "@/lib/dimension-sync-auto-fix";
+import { logReportDiagnostics } from "@/lib/debug-report-issues";
 
 export interface TableRow {
   id: string;
@@ -64,6 +65,7 @@ export function usePerformanceTableData({
   const loadPerformanceData = useCallback(async () => {
     // Reset error state
     setLoadError(null);
+    setIsLoadingData(true);
     
     const dateFromFormatted = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined;
     const dateToFormatted = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined;
@@ -84,23 +86,40 @@ export function usePerformanceTableData({
       return;
     }
 
+    // Add diagnostic logging for debugging issues
+    if (reportId) {
+      try {
+        await logReportDiagnostics(reportId);
+      } catch (diagnosticError) {
+        console.warn('[PERF-TABLE-FIXED] Diagnostic logging failed:', diagnosticError);
+      }
+    }
+
     try {
-      // Helper: fetch raw dimension_data rows
+      // Helper: fetch raw dimension_data rows with better error handling
       const fetchRows = async (ids: string[] | null, id: string | null) => {
-        let query = supabase
-          .from('dimension_data')
-          .select('dimension_values, row_number, data_source_id')
-          .order('row_number', { ascending: true });
+        try {
+          let query = supabase
+            .from('dimension_data')
+            .select('dimension_values, row_number, data_source_id')
+            .order('row_number', { ascending: true });
 
-        if (ids && ids.length > 0) {
-          query = query.in('report_id', ids);
-        } else if (id) {
-          query = query.eq('report_id', id);
+          if (ids && ids.length > 0) {
+            query = query.in('report_id', ids);
+          } else if (id) {
+            query = query.eq('report_id', id);
+          }
+
+          const { data, error } = await query;
+          if (error) {
+            console.error('[PERF-TABLE-FIXED] Database error:', error);
+            throw new Error(`Database error: ${error.message}`);
+          }
+          return data || [];
+        } catch (fetchError) {
+          console.error('[PERF-TABLE-FIXED] Error fetching rows:', fetchError);
+          throw fetchError;
         }
-
-        const { data, error } = await query;
-        if (error) throw new Error((error as any)?.message ?? 'Failed to fetch dimension_data');
-        return data || [];
       };
 
       // Fetch rows for single or consolidated view
