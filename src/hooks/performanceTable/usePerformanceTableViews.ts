@@ -240,8 +240,35 @@ export function usePerformanceTableViews({
           finalGroupDimensions = [dimensions[0].id];
         }
       }
+      
+      let breakdownDimensions = await mapDimensionIdsLocal(view.breakdown_by_dimensions || []);
+      // If no breakdown dimension is set but we have multiple dimensions available, set a default
+      if (breakdownDimensions.length === 0 && dimensions.length > 1) {
+        const dateDimension = dimensions.find(d => d.type === 'date');
+        const textDimensions = dimensions.filter(d => d.type === 'text');
+        
+        // If group is date, use first text dimension for breakdown
+        if (finalGroupDimensions[0] === dateDimension?.id && textDimensions.length > 0) {
+          breakdownDimensions = [textDimensions[0].id];
+        }
+        // If group is text, use date or another text dimension for breakdown
+        else if (textDimensions.length > 0) {
+          const groupDim = dimensions.find(d => d.id === finalGroupDimensions[0]);
+          if (groupDim?.type === 'text') {
+            if (dateDimension) {
+              breakdownDimensions = [dateDimension.id];
+            } else if (textDimensions.length > 1) {
+              const otherTextDim = textDimensions.find(d => d.id !== finalGroupDimensions[0]);
+              if (otherTextDim) {
+                breakdownDimensions = [otherTextDim.id];
+              }
+            }
+          }
+        }
+      }
+      
       onGroupByChange(finalGroupDimensions);
-      onBreakdownByChange(await mapDimensionIdsLocal(view.breakdown_by_dimensions || []));
+      onBreakdownByChange(breakdownDimensions);
       onThenByChange(await mapDimensionIdsLocal(view.then_by_dimensions || []));
       
       // NEW: selector options mapping (filter_dimensions)
