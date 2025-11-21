@@ -634,8 +634,10 @@ export const PerformanceTable = ({
         groupBy={groupByDimensions}
         breakdownBy={breakdownByDimensions}
         thenBy={thenByDimensions}
-        selectedDimensionIds={selectorDimensions}
+        selectedDimensionIds={selectorDimensions} // Pass current filter settings
         onSave={handleSettingsSave}
+        reportId={reportId || undefined}
+        accountId={accountId}
       />
     </>
   );
