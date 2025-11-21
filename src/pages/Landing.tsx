@@ -4,21 +4,32 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
-import { LogOut, BarChart3, User, TrendingUp } from "lucide-react";
+import { LogOut, BarChart3, TrendingUp, Plus, DollarSign, Rocket } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
+
+interface Account {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+}
 
 interface Tool {
   id: string;
   name: string;
   description: string;
   icon: React.ReactNode;
-  path: string;
+  getPath: (accountId: string) => string;
+  available: boolean;
+  badge?: string;
 }
 
 export default function Landing() {
   const navigate = useNavigate();
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [accounts, setAccounts] = useState<Account[]>([]);
 
   useEffect(() => {
     checkAuth();
@@ -36,10 +47,21 @@ export default function Landing() {
       }
       
       setSession(session);
+      
+      // Load user's accounts
+      const { data: accountsData, error: accountsError } = await supabase
+        .from('accounts')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false });
+      
+      if (accountsError) throw accountsError;
+      
+      setAccounts(accountsData || []);
       setIsLoading(false);
     } catch (error) {
       console.error('Error checking auth:', error);
-      setIsLoading(false); // Ensure loading is stopped on error
+      setIsLoading(false);
       toast({
         title: "Authentication Error",
         description: "Please sign in again.",
@@ -66,17 +88,36 @@ export default function Landing() {
   const tools: Tool[] = [
     {
       id: "report",
-      name: "Report",
-      description: "Analyze your performance metrics and KPIs with detailed analytics and insights",
-      icon: <BarChart3 className="h-12 w-12" />,
-      path: "/tools/report",
+      name: "Reports",
+      description: "Analyze performance metrics and KPIs",
+      icon: <BarChart3 className="h-5 w-5" />,
+      getPath: (accountId: string) => `/tools/report/${accountId}`,
+      available: true,
     },
     {
       id: "forecasting",
       name: "Forecasting",
-      description: "Forecast future trends and predict performance with advanced analytics",
-      icon: <TrendingUp className="h-12 w-12" />,
-      path: "/tools/forecasting",
+      description: "Predict future trends and performance",
+      icon: <TrendingUp className="h-5 w-5" />,
+      getPath: (accountId: string) => `/tools/forecasting/${accountId}`,
+      available: true,
+    },
+    {
+      id: "budget",
+      name: "Budget",
+      description: "Manage budgets and allocations",
+      icon: <DollarSign className="h-5 w-5" />,
+      getPath: (accountId: string) => `/tools/budget/${accountId}`,
+      available: true,
+    },
+    {
+      id: "alerts",
+      name: "Alerts",
+      description: "Get notified of important changes",
+      icon: <Rocket className="h-5 w-5" />,
+      getPath: (accountId: string) => `#`,
+      available: false,
+      badge: "Soon",
     },
   ];
 
@@ -123,58 +164,92 @@ export default function Landing() {
           {/* Welcome Section */}
           <div className="mb-12">
             <h2 className="text-3xl font-bold mb-2">Welcome to Analytics</h2>
-            <p className="text-muted-foreground">Choose a tool below to start analyzing your data</p>
+            <p className="text-muted-foreground">Select an account to access your tools</p>
           </div>
 
-          {/* Tools Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {tools.map((tool) => (
-              <Card
-                key={tool.id}
-                className="hover:shadow-lg transition-shadow cursor-pointer group"
-                onClick={() => navigate(tool.path)}
-              >
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="text-primary group-hover:scale-110 transition-transform">
-                      {tool.icon}
+          {accounts.length > 0 ? (
+            <div className="space-y-6">
+              {accounts.map((account) => (
+                <Card key={account.id} className="overflow-hidden">
+                  <CardHeader className="bg-muted/50 pb-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-xl">{account.name}</CardTitle>
+                        {account.description && (
+                          <CardDescription className="mt-1">
+                            {account.description}
+                          </CardDescription>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <CardTitle className="mt-4">{tool.name}</CardTitle>
-                  <CardDescription>{tool.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button className="w-full" onClick={() => navigate(tool.path)}>
-                    Open {tool.name}
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* Coming Soon Section */}
-          <div className="mt-12 pt-12 border-t">
-            <h3 className="text-lg font-semibold mb-4">Coming Soon</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[
-                { name: "Forecasting", description: "Predict future trends with AI" },
-                { name: "Alerts", description: "Get notified of important changes" },
-                { name: "Custom Reports", description: "Build reports tailored to your needs" },
-              ].map((item) => (
-                <Card key={item.name} className="opacity-50">
-                  <CardHeader>
-                    <CardTitle className="text-lg">{item.name}</CardTitle>
-                    <CardDescription>{item.description}</CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <Button disabled className="w-full">
-                      Coming Soon
-                    </Button>
+                  <CardContent className="pt-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {tools.map((tool) => (
+                        <Card
+                          key={tool.id}
+                          className={`relative ${
+                            tool.available
+                              ? "hover:shadow-md hover:border-primary/50 cursor-pointer transition-all"
+                              : "opacity-60 cursor-not-allowed"
+                          }`}
+                          onClick={() => {
+                            if (tool.available) {
+                              navigate(tool.getPath(account.id));
+                            }
+                          }}
+                        >
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`${tool.available ? "text-primary" : "text-muted-foreground"}`}>
+                                {tool.icon}
+                              </div>
+                              <div className="flex-1">
+                                <CardTitle className="text-base flex items-center gap-2">
+                                  {tool.name}
+                                  {tool.badge && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      {tool.badge}
+                                    </Badge>
+                                  )}
+                                </CardTitle>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="pb-4 pt-0">
+                            <p className="text-xs text-muted-foreground">
+                              {tool.description}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
-          </div>
+          ) : (
+            <Card className="text-center py-12">
+              <CardHeader>
+                <CardTitle>No Accounts Found</CardTitle>
+                <CardDescription>
+                  Create your first account to start using the analytics tools
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button onClick={() => {
+                  // TODO: Add create account modal
+                  toast({
+                    title: "Coming Soon",
+                    description: "Account creation will be available soon.",
+                  });
+                }}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Account
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </main>
     </div>
