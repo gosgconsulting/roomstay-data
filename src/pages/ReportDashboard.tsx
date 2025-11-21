@@ -7,6 +7,7 @@ import { KPIChart } from "@/components/KPIChart";
 import { PerformanceTable } from "@/components/PerformanceTable";
 import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
+import { SystemHealthMonitor } from "@/components/SystemHealthMonitor";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Session } from "@supabase/supabase-js";
@@ -42,6 +43,12 @@ export default function ReportDashboard() {
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   const [isEditMode, setIsEditMode] = useState(false); // View mode by default
+  const [isKPILoading, setIsKPILoading] = useState(false);
+  const [isTableLoading, setIsTableLoading] = useState(false);
+  const [reportIds, setReportIds] = useState<string[]>([]);
+  const [vlookupMappings, setVlookupMappings] = useState<Record<string, any>>({});
+  const [showVlookupModal, setShowVlookupModal] = useState(false);
+  const [allowedReportIds, setAllowedReportIds] = useState<string[]>([]);
 
   // Load dimensions using the same hook as PerformanceTable
   const {
@@ -276,7 +283,8 @@ export default function ReportDashboard() {
     }
   };
   
-  const refreshData = () => {
+  const handleReportChange = (newReportId: string) => {
+    setReportId(newReportId);
     // Cancel previous loading by incrementing generation
     setLoadingGeneration(prev => prev + 1);
     
@@ -291,6 +299,47 @@ export default function ReportDashboard() {
     setDataRefreshKey(prev => prev + 1);
   };
   
+  const handleDataSync = () => {
+    // Cancel previous loading by incrementing generation
+    setLoadingGeneration(prev => prev + 1);
+    
+    // Clear previous loading states immediately
+    setLoadingComponents(new Set());
+    setIsDataLoading(false);
+    
+    // Start new loading cycle
+    markComponentLoading('metrics');
+    markComponentLoading('chart');
+    markComponentLoading('table');
+    setDataRefreshKey(prev => prev + 1);
+  };
+  
+  const handleRefreshData = () => {
+    // Cancel previous loading by incrementing generation
+    setLoadingGeneration(prev => prev + 1);
+    
+    // Clear previous loading states immediately
+    setLoadingComponents(new Set());
+    setIsDataLoading(false);
+    
+    // Start new loading cycle
+    markComponentLoading('metrics');
+    markComponentLoading('chart');
+    markComponentLoading('table');
+    setDataRefreshKey(prev => prev + 1);
+  };
+  
+  const handleVisibilityChange = () => {
+    // Increment refresh trigger to reload filters with updated dimensions
+    setVisibilityRefreshTrigger(prev => prev + 1);
+  };
+  
+  // Handle health issues
+  const handleHealthIssues = useCallback((issues: string[]) => {
+    console.warn('[DASHBOARD] Health issues detected:', issues);
+    // Could show a toast notification or other UI feedback here
+  }, []);
+
   if (isLoading) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
@@ -304,133 +353,57 @@ export default function ReportDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Loading toast for data loading */}
-      <LoadingToast 
-        isVisible={isDataLoading} 
-        loadingComponents={loadingComponents}
-      />
-      
-      {/* Header with back button and account info */}
-      <header className="border-b">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate('/tools/report')}
-              title="Back to accounts"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold">{account?.name}</h1>
-              {account?.description && (
-                <p className="text-sm text-muted-foreground">{account.description}</p>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Button
-              variant={isEditMode ? "default" : "outline"}
-              size="sm"
-              onClick={() => setIsEditMode((prev) => !prev)}
-              className="gap-2"
-              title="Toggle Edit/View mode"
-            >
-              {isEditMode ? "Edit" : "View"}
-            </Button>
-          </div>
-        </div>
-      </header>
-      
       <DashboardHeader
         reportId={reportId}
         accountId={accountId}
-        onReportChange={setReportId}
-        onRefreshData={refreshData}
-        onVisibilityChange={() => setVisibilityRefreshTrigger(prev => prev + 1)}
+        onReportChange={handleReportChange}
+        onDataSync={handleDataSync}
+        onRefreshData={handleRefreshData}
+        onVisibilityChange={handleVisibilityChange}
         session={session}
         onSignOut={handleSignOut}
-        isSharedView={isSharedView}
+        isSharedView={false}
+        allowedReportIds={allowedReportIds}
+        onVlookupClick={() => setShowVlookupModal(true)}
       />
-      
-      {reportId ? (
-        <>
-          <FiltersBar 
-            reportId={reportId} 
-            onFiltersChange={handleFiltersChange} 
-            isSharedView={isSharedView} 
-            accountId={accountId} 
-            refreshTrigger={loadingGeneration}
-            isEditMode={isEditMode}
-          />
-          <main className="container mx-auto px-6 py-6 space-y-6">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">Analytics & Insights</h2>
-                {!isSharedView && isEditMode && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setKpiSettingsOpen(true)}
-                    className="gap-2"
-                  >
-                    <Settings className="h-4 w-4" />
-                    KPI Settings
-                  </Button>
-                )}
-              </div>
-              <KPIMetricsCards
-                reportId={reportId}
-                filters={filters}
-                accountId={accountId}
-                visibilityRefreshTrigger={visibilityRefreshTrigger}
-                dimensions={dimensions}
-                key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
-                onLoadingComplete={() => markComponentLoaded('metrics')}
-              />
-            </div>
-            <KPIChart
-              reportId={reportId}
-              filters={filters}
-              accountId={accountId}
-              visibilityRefreshTrigger={visibilityRefreshTrigger}
-              dimensions={dimensions}
-              key={`charts-${dataRefreshKey}-${loadingGeneration}`}
-              onLoadingComplete={() => markComponentLoaded('chart')}
-            />
-            <PerformanceTable 
-              reportId={reportId} 
-              filters={filters} 
-              isSharedView={isSharedView} 
-              accountId={accountId} 
-              visibilityRefreshTrigger={visibilityRefreshTrigger}
-              isEditMode={isEditMode}
-              key={`table-${dataRefreshKey}-${loadingGeneration}`}
-              onLoadingComplete={() => markComponentLoaded('table')}
-            />
-          </main>
-          
-          <KPISettingsModal
-            open={kpiSettingsOpen}
-            onOpenChange={setKpiSettingsOpen}
-            reportId={reportId}
-            onSettingsChange={refreshData}
-            visibilityRefreshTrigger={visibilityRefreshTrigger}
-            isEditMode={isEditMode}
-          />
-        </>
-      ) : (
-        <main className="container mx-auto px-6 py-6">
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold mb-4">No Reports Found</h2>
-            <p className="text-muted-foreground mb-6">
-              You don't have any reports for this account yet. Create your first report to get started.
-            </p>
-            <Button>Create Report</Button>
-          </div>
-        </main>
-      )}
+
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Add System Health Monitor */}
+        <SystemHealthMonitor 
+          reportId={reportId || undefined}
+          onIssueDetected={handleHealthIssues}
+        />
+
+        {/* Master Filter */}
+        <MasterFilter
+          reportId={reportId}
+          accountId={accountId}
+          onFiltersChange={handleMasterFiltersChange}
+        />
+
+        {/* KPI Metrics Cards */}
+        <KPIMetricsCardsFixed
+          reportId={reportId}
+          reportIds={reportIds}
+          accountId={accountId}
+          filters={filters}
+          dimensions={dimensions}
+          vlookupMappings={vlookupMappings}
+          onLoadingComplete={() => setIsKPILoading(false)}
+        />
+
+        {/* Performance Table */}
+        <PerformanceTable
+          reportId={reportId}
+          reportIds={reportIds}
+          accountId={accountId}
+          onVisibilityChange={handleVisibilityChange}
+          visibilityRefreshTrigger={visibilityRefreshTrigger}
+          isSharedView={false}
+          allowedReportIds={allowedReportIds}
+          onLoadingComplete={() => setIsTableLoading(false)}
+        />
+      </div>
     </div>
   );
 }

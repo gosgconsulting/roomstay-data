@@ -1,10 +1,12 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useVlookupMappings } from "@/hooks/useVlookupMappings";
 import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "./usePerformanceTableDimensions";
+import { autoFixDimensionSync } from "@/lib/dimension-sync-auto-fix";
+import { logReportDiagnostics } from "@/lib/debug-report-issues";
 
 export interface TableRow {
   id: string;
@@ -18,7 +20,7 @@ export interface TableRow {
   originalDate?: string | Date;
 }
 
-interface UsePerformanceTableDataOptions {
+interface UsePerformanceTableDataFixedOptions {
   reportId: string | null;
   reportIds?: string[];
   accountId?: string;
@@ -33,9 +35,6 @@ interface UsePerformanceTableDataOptions {
   onLoadingComplete?: () => void;
 }
 
-/**
- * Enhanced hook for loading performance table data with automatic dimension sync fixing
- */
 export function usePerformanceTableDataFixed({
   reportId,
   reportIds,
@@ -49,215 +48,300 @@ export function usePerformanceTableDataFixed({
   dateOrder,
   dimensions,
   onLoadingComplete,
-}: UsePerformanceTableDataOptions) {
+}: UsePerformanceTableDataFixedOptions) {
   const [tableData, setTableData] = useState<TableRow[]>([]);
   const [totalData, setTotalData] = useState<Record<string, any>>({});
   const [totalCompareData, setTotalCompareData] = useState<Record<string, any>>({});
   const [totalChangeData, setTotalChangeData] = useState<Record<string, number>>({});
-  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isLoadingData, setIsLoadingData] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [loadingStrategy, setLoadingStrategy] = useState<string>('');
 
-  // Load vlookup mappings for applying to data
   const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
 
-  /**
-   * Create dimension ID mapping from old IDs to current dimension IDs
-   */
-  const createDimensionMapping = useCallback(async (
-    usedDimensionIds: string[],
-    currentDimensions: Dimension[]
-  ): Promise<Map<string, { id: string; name: string; type: string }>> => {
-    const mapping = new Map<string, { id: string; name: string; type: string }>();
-    const currentDimensionIds = new Set(currentDimensions.map(d => d.id));
+  // Validate prerequisites
+  const validatePrerequisites = useCallback((): { valid: boolean; reason?: string } => {
+    if (!reportId && (!reportIds || reportIds.length === 0)) {
+      return { valid: false, reason: 'No report ID provided' };
+    }
+    if (groupByDimensions.length === 0) {
+      return { valid: false, reason: 'No group by dimensions selected' };
+    }
+    if (dimensions.length === 0) {
+      return { valid: false, reason: 'Dimensions not loaded yet' };
+    }
+    return { valid: true };
+  }, [reportId, reportIds, groupByDimensions, dimensions]);
+
+  // Strategy 1: Use edge function (preferred)
+  const loadDataViaEdgeFunction = useCallback(async (targetReportId: string): Promise<any[]> => {
+    console.log('[DATA-FIXED] Strategy 1: Using edge function');
+    setLoadingStrategy('Edge Function');
     
-    // First, add all current dimensions that are already valid
-    currentDimensions.forEach(dim => {
-      if (usedDimensionIds.includes(dim.id)) {
-        mapping.set(dim.id, { id: dim.id, name: dim.name, type: dim.type });
-      }
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    const response = await supabase.functions.invoke('get-performance-data', {
+      body: {
+        reportId: targetReportId,
+        accountId,
+        userId: user?.id,
+        dateFrom: filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined,
+        dateTo: filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined,
+        dimensionFilters: filters.dimensionFilters || {},
+        limit: 50000,
+        offset: 0,
+      },
     });
 
-    // Find missing dimension IDs and try to map them
-    const missingIds = usedDimensionIds.filter(id => !currentDimensionIds.has(id));
-    
-    if (missingIds.length > 0) {
-      console.log('[PERF-DATA-FIXED] Found missing dimension IDs:', missingIds);
-      
-      // Try to find old dimensions by ID and map to current dimensions by name
-      const { data: oldDimensions } = await supabase
-        .from('dimensions')
-        .select('id, name, type')
-        .in('id', missingIds);
-
-      if (oldDimensions) {
-        oldDimensions.forEach(oldDim => {
-          // Find current dimension with same name
-          const currentDim = currentDimensions.find(d => d.name === oldDim.name);
-          if (currentDim) {
-            mapping.set(oldDim.id, { 
-              id: currentDim.id, 
-              name: currentDim.name, 
-              type: currentDim.type 
-            });
-            console.log('[PERF-DATA-FIXED] Mapped dimension:', oldDim.name, oldDim.id, '->', currentDim.id);
-          }
-        });
-      }
+    // Enhanced error checking for edge function response
+    if (response.error) {
+      throw new Error(`Edge function error: ${response.error.message || response.error}`);
     }
 
-    return mapping;
-  }, []);
+    if (!response.data) {
+      throw new Error('Edge function returned no data');
+    }
 
-  const loadPerformanceData = useCallback(async () => {
-    setLoadError(null);
-    setIsLoadingData(true);
+    // Check if the response contains an error field (edge function returns 200 with error)
+    if (response.data.error) {
+      throw new Error(`Edge function reported error: ${response.data.error}`);
+    }
+
+    const data = response.data.data || [];
+    console.log(`[DATA-FIXED] Edge function returned ${data.length} rows`);
+    return data;
+  }, [accountId, filters]);
+
+  // Strategy 2: Direct database query
+  const loadDataViaDirectQuery = useCallback(async (targetReportId: string): Promise<any[]> => {
+    console.log('[DATA-FIXED] Strategy 2: Direct database query');
+    setLoadingStrategy('Direct Database');
     
+    let query = supabase
+      .from('dimension_data')
+      .select('dimension_values, row_number, data_source_id')
+      .eq('report_id', targetReportId)
+      .order('row_number', { ascending: true });
+
+    // Apply date filter at database level if possible
     const dateFromFormatted = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined;
     const dateToFormatted = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined;
     
-    console.log('[PERF-DATA-FIXED] Loading performance data with automatic dimension sync');
+    if (dateFromFormatted || dateToFormatted) {
+      // Find date dimension
+      const dateDimension = dimensions.find(d => d.type === 'date');
+      if (dateDimension) {
+        if (dateFromFormatted) {
+          query = query.gte(`dimension_values->>${dateDimension.id}`, dateFromFormatted);
+        }
+        if (dateToFormatted) {
+          query = query.lte(`dimension_values->>${dateDimension.id}`, dateToFormatted);
+        }
+      }
+    }
 
-    const useConsolidatedView = reportIds && reportIds.length > 0;
+    const { data, error } = await query.limit(10000);
     
-    if ((!reportId && !useConsolidatedView) || groupByDimensions.length === 0) {
-      console.log('[PERF-DATA-FIXED] No data loading - missing reportId/reportIds or groupByDimensions');
+    if (error) {
+      throw new Error(`Database query error: ${error.message}`);
+    }
+
+    console.log(`[DATA-FIXED] Direct query returned ${data?.length || 0} rows`);
+    return data || [];
+  }, [filters, dimensions]);
+
+  // Strategy 3: Minimal data fetch (fallback)
+  const loadDataViaMinimalQuery = useCallback(async (targetReportId: string): Promise<any[]> => {
+    console.log('[DATA-FIXED] Strategy 3: Minimal query fallback');
+    setLoadingStrategy('Minimal Query');
+    
+    const { data, error } = await supabase
+      .from('dimension_data')
+      .select('dimension_values')
+      .eq('report_id', targetReportId)
+      .limit(1000);
+
+    if (error) {
+      throw new Error(`Minimal query error: ${error.message}`);
+    }
+
+    const processedData = (data || []).map((row, index) => ({
+      ...row,
+      row_number: index + 1,
+      data_source_id: null
+    }));
+
+    console.log(`[DATA-FIXED] Minimal query returned ${processedData.length} rows`);
+    return processedData;
+  }, []);
+
+  // Main data loading with multiple strategies
+  const loadPerformanceData = useCallback(async () => {
+    const validation = validatePrerequisites();
+    if (!validation.valid) {
+      console.log(`[DATA-FIXED] Skipping load: ${validation.reason}`);
       setTableData([]);
       setTotalData({});
       setTotalCompareData({});
       setTotalChangeData({});
+      setLoadError(null);
       setIsLoadingData(false);
       onLoadingComplete?.();
       return;
     }
 
-    try {
-      // Step 1: Fetch raw dimension_data rows
-      let query = supabase
-        .from('dimension_data')
-        .select('dimension_values, row_number, data_source_id')
-        .order('row_number', { ascending: true });
+    setIsLoadingData(true);
+    setLoadError(null);
+    setLoadingStrategy('');
 
-      if (useConsolidatedView && reportIds) {
-        query = query.in('report_id', reportIds);
-      } else if (reportId) {
-        query = query.eq('report_id', reportId);
+    const targetReportId = reportId || (reportIds && reportIds[0]) || '';
+    
+    try {
+      console.log(`[DATA-FIXED] Starting enhanced data load for report: ${targetReportId}`);
+      
+      // Run diagnostics (non-blocking)
+      try {
+        await logReportDiagnostics(targetReportId);
+      } catch (diagnosticError) {
+        console.warn('[DATA-FIXED] Diagnostic logging failed:', diagnosticError);
       }
 
-      const { data: rawRows, error: fetchError } = await query;
-      if (fetchError) throw fetchError;
+      // Check if data sources exist
+      const { data: dataSources, error: dsError } = await supabase
+        .from('data_sources')
+        .select('id')
+        .eq('report_id', targetReportId)
+        .limit(1);
 
-      if (!rawRows || rawRows.length === 0) {
-        console.log('[PERF-DATA-FIXED] No raw data found');
+      if (dsError) {
+        throw new Error(`Data source check failed: ${dsError.message}`);
+      }
+
+      if (!dataSources || dataSources.length === 0) {
+        console.warn('[DATA-FIXED] No data sources found');
         setTableData([]);
         setTotalData({});
-        setIsLoadingData(false);
-        onLoadingComplete?.();
+        setTotalCompareData({});
+        setTotalChangeData({});
+        setLoadError('No data sources configured for this report');
         return;
       }
 
-      console.log('[PERF-DATA-FIXED] Fetched', rawRows.length, 'raw rows');
+      // Try multiple loading strategies
+      const strategies = [
+        loadDataViaEdgeFunction,
+        loadDataViaDirectQuery,
+        loadDataViaMinimalQuery
+      ];
 
-      // Step 2: Analyze dimension IDs used in the data
-      const usedDimensionIds = new Set<string>();
-      rawRows.forEach(row => {
-        if (row.dimension_values) {
-          Object.keys(row.dimension_values).forEach(dimId => {
-            usedDimensionIds.add(dimId);
-          });
-        }
-      });
+      let rawData: any[] = [];
+      let lastError: Error | null = null;
 
-      const usedDimensionIdsArray = Array.from(usedDimensionIds);
-      console.log('[PERF-DATA-FIXED] Found dimension IDs in data:', usedDimensionIdsArray.length);
-
-      // Step 3: Create dimension mapping
-      const dimensionMapping = await createDimensionMapping(usedDimensionIdsArray, dimensions);
-      console.log('[PERF-DATA-FIXED] Created dimension mapping with', dimensionMapping.size, 'entries');
-
-      // Step 4: Transform and fix dimension values in each row
-      const processedRows = rawRows.map(row => {
-        if (!row.dimension_values) return row;
-
-        const fixedDimensionValues: Record<string, any> = {};
-        
-        Object.entries(row.dimension_values).forEach(([oldId, value]) => {
-          const mapping = dimensionMapping.get(oldId);
-          if (mapping) {
-            // Use the correct dimension ID
-            fixedDimensionValues[mapping.id] = value;
-          } else {
-            // Keep original if no mapping found
-            fixedDimensionValues[oldId] = value;
+      for (let i = 0; i < strategies.length; i++) {
+        try {
+          rawData = await strategies[i](targetReportId);
+          console.log(`[DATA-FIXED] Strategy ${i + 1} succeeded with ${rawData.length} rows`);
+          break;
+        } catch (error) {
+          console.warn(`[DATA-FIXED] Strategy ${i + 1} failed:`, error);
+          lastError = error as Error;
+          
+          // Add delay between strategies
+          if (i < strategies.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
-        });
+        }
+      }
 
-        return {
-          ...row,
-          dimension_values: fixedDimensionValues
-        };
-      });
+      if (rawData.length === 0 && lastError) {
+        throw lastError;
+      }
 
-      // Step 5: Apply vlookup mappings
+      if (rawData.length === 0) {
+        console.log('[DATA-FIXED] No data found');
+        setTableData([]);
+        setTotalData({});
+        setTotalCompareData({});
+        setTotalChangeData({});
+        setLoadError('No data found for the selected criteria');
+        return;
+      }
+
+      // Apply dimension sync auto-fix
+      let fixedData: any[];
+      try {
+        fixedData = await autoFixDimensionSync(rawData, dimensions);
+        console.log(`[DATA-FIXED] Applied auto-fix to ${fixedData.length} rows`);
+      } catch (autoFixError) {
+        console.warn('[DATA-FIXED] Auto-fix failed, using original data:', autoFixError);
+        fixedData = rawData;
+      }
+
+      // Apply vlookup mappings
       if (vlookupMappings.length > 0) {
-        processedRows.forEach(row => {
-          const dv = row.dimension_values || {};
-          vlookupMappings.forEach(mapping => {
-            const sourceValue = dv[mapping.sourceDimensionId];
-            if (sourceValue !== undefined && sourceValue !== null) {
-              if (String(sourceValue).toLowerCase() === mapping.sourceValue.toLowerCase()) {
-                dv[mapping.targetDimensionId] = mapping.targetValue;
+        try {
+          for (const row of fixedData) {
+            const dv = (row.dimension_values || {}) as Record<string, any>;
+            for (const m of vlookupMappings) {
+              const src = dv[m.sourceDimensionId];
+              if (src !== undefined && src !== null) {
+                if (String(src).toLowerCase() === m.sourceValue.toLowerCase()) {
+                  dv[m.targetDimensionId] = m.targetValue;
+                }
               }
             }
-          });
-          row.dimension_values = dv;
-        });
-      }
-
-      // Step 6: Apply date and dimension filters
-      let filteredRows = processedRows;
-
-      // Date filtering
-      const dateDimensions = dimensions.filter(d => d.type === 'date');
-      let dateDimInUse: { id: string; name: string } | null = null;
-      
-      for (const d of dateDimensions) {
-        const found = filteredRows.some(r => {
-          const dv = r.dimension_values || {};
-          return dv[d.id] !== undefined && dv[d.id] !== null && dv[d.id] !== '';
-        });
-        if (found) {
-          dateDimInUse = { id: d.id, name: d.name };
-          break;
+            row.dimension_values = dv;
+          }
+          console.log(`[DATA-FIXED] Applied ${vlookupMappings.length} vlookup mappings`);
+        } catch (vlookupError) {
+          console.warn('[DATA-FIXED] Vlookup mapping failed:', vlookupError);
         }
       }
 
-      if (dateDimInUse && (dateFromFormatted || dateToFormatted)) {
-        const fromDate = dateFromFormatted ? new Date(dateFromFormatted) : null;
-        const toDate = dateToFormatted ? new Date(dateToFormatted) : null;
-        const adjustedToDate = toDate
-          ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1)
-          : null;
+      // Apply client-side filtering if not already done
+      let filteredData = fixedData;
+      
+      // Date filtering
+      const dateFromFormatted = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined;
+      const dateToFormatted = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined;
+      
+      if ((dateFromFormatted || dateToFormatted) && loadingStrategy !== 'Direct Database') {
+        const dateDimension = dimensions.find(d => d.type === 'date');
+        if (dateDimension) {
+          const fromDate = dateFromFormatted ? new Date(dateFromFormatted) : null;
+          const toDate = dateToFormatted ? new Date(dateToFormatted) : null;
+          const adjustedToDate = toDate
+            ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1)
+            : null;
 
-        filteredRows = filteredRows.filter(row => {
-          const dv = row.dimension_values || {};
-          const val = dv[dateDimInUse!.id];
-          if (!val) return true;
-          const rowDate = new Date(String(val));
-          if (fromDate && rowDate < fromDate) return false;
-          if (adjustedToDate && rowDate >= adjustedToDate) return false;
-          return true;
-        });
+          filteredData = filteredData.filter((row: any) => {
+            const dv = row.dimension_values || {};
+            const val = dv[dateDimension.id];
+            if (!val) return true;
+            
+            try {
+              const rowDate = new Date(String(val));
+              if (isNaN(rowDate.getTime())) return true;
+              if (fromDate && rowDate < fromDate) return false;
+              if (adjustedToDate && rowDate >= adjustedToDate) return false;
+              return true;
+            } catch {
+              return true;
+            }
+          });
+        }
       }
 
       // Dimension filtering
-      const normalizedFilters: Record<string, string[]> = {};
-      for (const [k, v] of Object.entries(filters.dimensionFilters || {})) {
-        if (Array.isArray(v)) normalizedFilters[k] = v.map(x => String(x));
-        else if (v !== undefined && v !== null) normalizedFilters[k] = [String(v)];
-      }
+      if (filters.dimensionFilters && Object.keys(filters.dimensionFilters).length > 0) {
+        const normalizedFilters: Record<string, string[]> = {};
+        for (const [k, v] of Object.entries(filters.dimensionFilters)) {
+          if (Array.isArray(v)) normalizedFilters[k] = v.map(x => String(x));
+          else if (v !== undefined && v !== null) normalizedFilters[k] = [String(v)];
+        }
 
-      if (Object.keys(normalizedFilters).length > 0) {
-        filteredRows = filteredRows.filter(row => {
+        filteredData = filteredData.filter((row: any) => {
           const dv = row.dimension_values || {};
           for (const [dimId, values] of Object.entries(normalizedFilters)) {
             if (!values || values.length === 0) continue;
@@ -271,86 +355,118 @@ export function usePerformanceTableDataFixed({
         });
       }
 
-      // Step 7: Transform to TableRow format
-      const firstDimId = groupByDimensions[0];
-      const firstDimension = dimensions.find(d => d.id === firstDimId);
-
-      const transformedRows: TableRow[] = filteredRows.map((row, idx) => {
-        const dv: Record<string, any> = (row.dimension_values as Record<string, any>) || {};
+      // Transform to table format
+      const transformedRows = filteredData.map((row: any, idx: number) => {
+        const dv: Record<string, any> = row.dimension_values || {};
         const rowData: Record<string, any> = {};
 
-        // Map dimension IDs to names and convert values
         dimensions.forEach(dim => {
           if (dv[dim.id] !== undefined) {
             let value = dv[dim.id];
             
             if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
               const numValue = parseFloat(String(value));
-              rowData[dim.name] = !isNaN(numValue) ? numValue : value;
+              rowData[dim.name] = !isNaN(numValue) ? numValue : 0;
             } else {
               rowData[dim.name] = value;
             }
+          } else {
+            // Set default values for missing dimensions
+            rowData[dim.name] = dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage' ? 0 : '';
           }
         });
 
+        const firstDimId = groupByDimensions[0];
+        const firstDimension = dimensions.find(d => d.id === firstDimId);
         const originalDate = firstDimension?.type === 'date' ? dv[firstDimId] : undefined;
 
         return {
           id: `row-${row.row_number ?? idx + 1}`,
-          name: dv[firstDimId] || 'Unknown',
+          name: String(dv[firstDimId] || 'Unknown'),
           level: 0,
           data: rowData,
           originalDate,
         };
       });
 
-      setTableData(transformedRows);
-
-      // Step 8: Calculate totals
-      const calculatedTotalData: Record<string, any> = {};
-      if (transformedRows.length > 0) {
-        transformedRows.forEach(row => {
-          if (row.data) {
-            Object.keys(row.data).forEach(dimName => {
-              const dim = dimensions.find(d => d.name === dimName);
-              if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
-                const value = parseFloat(String(row.data[dimName] || '0'));
-                if (!isNaN(value)) {
-                  calculatedTotalData[dimName] = (calculatedTotalData[dimName] || 0) + value;
-                }
-              }
-            });
+      // Calculate totals
+      const calculatedTotals: Record<string, any> = {};
+      transformedRows.forEach(row => {
+        Object.keys(row.data).forEach(dimName => {
+          const dim = dimensions.find(d => d.name === dimName);
+          if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+            const value = parseFloat(String(row.data[dimName] || '0'));
+            if (!isNaN(value)) {
+              calculatedTotals[dimName] = (calculatedTotals[dimName] || 0) + value;
+            }
           }
         });
-      }
-      setTotalData(calculatedTotalData);
+      });
 
+      // Set final data
+      setTableData(transformedRows);
+      setTotalData(calculatedTotals);
       setTotalCompareData({});
       setTotalChangeData({});
+      setRetryCount(0);
 
-      console.log('[PERF-DATA-FIXED] Successfully loaded and processed', transformedRows.length, 'rows');
+      console.log(`[DATA-FIXED] Successfully loaded ${transformedRows.length} rows using ${loadingStrategy}`);
 
     } catch (error) {
-      console.error('[PERF-DATA-FIXED] Error loading data:', error);
+      console.error('[DATA-FIXED] Error loading performance data:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      
+      // Implement retry logic for transient errors
+      if (retryCount < 2 && (
+        errorMessage.includes('network') || 
+        errorMessage.includes('timeout') || 
+        errorMessage.includes('fetch') ||
+        errorMessage.includes('Edge function')
+      )) {
+        console.log(`[DATA-FIXED] Retrying... (attempt ${retryCount + 1})`);
+        setRetryCount(prev => prev + 1);
+        setTimeout(() => loadPerformanceData(), 2000 * (retryCount + 1));
+        return;
+      }
+      
       setLoadError(errorMessage);
-      toast({
-        title: "Error loading data",
-        description: `Failed to load performance table data: ${errorMessage}`,
-        variant: "destructive",
-      });
       setTableData([]);
       setTotalData({});
       setTotalCompareData({});
       setTotalChangeData({});
+      
+      toast({
+        title: "Data Loading Error",
+        description: `Failed to load data: ${errorMessage}. ${retryCount >= 2 ? 'Please refresh the page.' : 'Retrying...'}`,
+        variant: "destructive",
+      });
     } finally {
       setIsLoadingData(false);
       onLoadingComplete?.();
     }
   }, [
+    validatePrerequisites,
     reportId,
     reportIds,
-    accountId,
+    loadDataViaEdgeFunction,
+    loadDataViaDirectQuery,
+    loadDataViaMinimalQuery,
+    dimensions,
+    filters,
+    vlookupMappings,
+    retryCount,
+    onLoadingComplete,
+  ]);
+
+  // Auto-load when dependencies change
+  useEffect(() => {
+    const validation = validatePrerequisites();
+    if (validation.valid) {
+      loadPerformanceData();
+    }
+  }, [
+    reportId,
+    JSON.stringify(reportIds),
     JSON.stringify(groupByDimensions),
     JSON.stringify(breakdownByDimensions),
     JSON.stringify(thenByDimensions),
@@ -358,17 +474,10 @@ export function usePerformanceTableDataFixed({
     JSON.stringify(filters.dimensionFilters),
     filters.dateRange?.from?.toISOString(),
     filters.dateRange?.to?.toISOString(),
-    filters.datePreset,
-    filters.compareEnabled,
-    filters.compareType,
-    filters.compareDateRange?.from?.toISOString(),
-    filters.compareDateRange?.to?.toISOString(),
-    activeDateTab,
-    dateOrder,
     dimensions.length,
     vlookupMappings.length,
-    onLoadingComplete,
-    createDimensionMapping,
+    activeDateTab,
+    dateOrder,
   ]);
 
   return {
@@ -377,8 +486,10 @@ export function usePerformanceTableDataFixed({
     totalCompareData,
     totalChangeData,
     isLoadingData,
+    loadError,
+    retryCount,
+    loadingStrategy,
     loadPerformanceData,
     setIsLoadingData,
-    loadError,
   };
 }
