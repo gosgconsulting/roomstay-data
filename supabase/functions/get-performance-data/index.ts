@@ -175,7 +175,41 @@ Deno.serve(async (req) => {
 
     const dateDimensions = allDimensions.filter((d: any) => d.type === 'date');
 
-    // Fetch dimension_data
+    // Determine which date dimension to use for filtering (before fetching data)
+    let dateDimIdToUse: string | null = null;
+    
+    // Priority 1: report-specific date dimension
+    if (reportId) {
+      const reportDateDim = dateDimensions.find((d: any) => d.report_id === reportId);
+      if (reportDateDim) {
+        dateDimIdToUse = reportDateDim.id;
+        console.log(`[GET-PERFORMANCE-DATA] Using report-specific date dimension: ${reportDateDim.name} (${dateDimIdToUse})`);
+      }
+    }
+    
+    // Priority 2: account-specific date dimension
+    if (!dateDimIdToUse && accountId) {
+      const accountDateDim = dateDimensions.find((d: any) => d.account_id === accountId);
+      if (accountDateDim) {
+        dateDimIdToUse = accountDateDim.id;
+        console.log(`[GET-PERFORMANCE-DATA] Using account-specific date dimension: ${accountDateDim.name} (${dateDimIdToUse})`);
+      }
+    }
+    
+    // Priority 3: global date dimension
+    if (!dateDimIdToUse && dateDimensions.length > 0) {
+      const globalDateDim = dateDimensions.find((d: any) => d.scope === 'global');
+      if (globalDateDim) {
+        dateDimIdToUse = globalDateDim.id;
+        console.log(`[GET-PERFORMANCE-DATA] Using global date dimension: ${globalDateDim.name} (${dateDimIdToUse})`);
+      } else {
+        // Fallback to first date dimension
+        dateDimIdToUse = dateDimensions[0].id;
+        console.log(`[GET-PERFORMANCE-DATA] Using first available date dimension: ${dateDimensions[0].name} (${dateDimIdToUse})`);
+      }
+    }
+
+    // Build query with SQL-level date filtering BEFORE pagination
     let query = supabase
       .from('dimension_data')
       .select('dimension_values, row_number, data_source_id');
@@ -187,9 +221,26 @@ Deno.serve(async (req) => {
       query = query.in('report_id', reportIds);
     }
     
+    // Apply date filters at SQL level if we have a date dimension
+    if (dateDimIdToUse && (dateFrom || dateTo)) {
+      console.log(`[GET-PERFORMANCE-DATA] Applying SQL date filter on dimension ${dateDimIdToUse}: ${dateFrom} to ${dateTo}`);
+      
+      if (dateFrom) {
+        query = query.gte(`dimension_values->>${dateDimIdToUse}`, dateFrom);
+      }
+      
+      if (dateTo) {
+        // Make dateTo inclusive by adding one day
+        const toDate = new Date(dateTo);
+        const adjustedToDate = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1);
+        const adjustedToDateStr = adjustedToDate.toISOString().split('T')[0];
+        query = query.lt(`dimension_values->>${dateDimIdToUse}`, adjustedToDateStr);
+      }
+    }
+    
     query = query.order('row_number', { ascending: true });
 
-    // Apply range (offset/limit)
+    // Apply range (offset/limit) AFTER date filtering
     if (typeof offset === 'number' && typeof limit === 'number') {
       query = query.range(offset, Math.max(offset, 0) + Math.max(limit, 1) - 1);
     }
@@ -197,7 +248,6 @@ Deno.serve(async (req) => {
     const { data: rawRows, error: rowsErr } = await query;
     if (rowsErr) {
       console.error('[GET-PERFORMANCE-DATA] Error fetching rows:', rowsErr);
-      // Return empty data instead of throwing error
       return new Response(
         JSON.stringify({ 
           error: 'Error fetching data rows',
@@ -213,46 +263,21 @@ Deno.serve(async (req) => {
     }
 
     const rows = rawRows || [];
-    console.log(`[GET-PERFORMANCE-DATA] Fetched ${rows.length} rows`);
+    console.log(`[GET-PERFORMANCE-DATA] Fetched ${rows.length} rows after SQL-level filtering`);
 
-    // Detect which date dimension actually appears in data
-    let dateDimInUse: { id: string; name: string } | null = null;
-    for (const d of dateDimensions) {
-      const found = rows.some((r: any) => {
-        const dv = r.dimension_values || {};
-        return dv[d.id] !== undefined && dv[d.id] !== null && dv[d.id] !== '';
-      });
-      if (found) {
-        dateDimInUse = { id: d.id, name: d.name };
-        break;
-      }
-    }
-
-    // Apply date filter (inclusive end)
+    // No need for additional JavaScript date filtering since it's done in SQL
     let filteredData = rows;
-    if (dateDimInUse && (dateFrom || dateTo)) {
-      const fromDate = dateFrom ? new Date(dateFrom) : null;
-      const toDate = dateTo ? new Date(dateTo) : null;
-      const adjustedToDate = toDate
-        ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1)
-        : null;
-
-      filteredData = filteredData.filter((row: any) => {
-        const dv = row.dimension_values || {};
-        const val = dv[dateDimInUse!.id];
-        if (!val) return true; // keep rows without date
-        const rowDate = new Date(String(val));
-        if (fromDate && rowDate < fromDate) return false;
-        if (adjustedToDate && rowDate >= adjustedToDate) return false;
-        return true;
-      });
-    }
 
     // Normalize dimensionFilters to arrays and apply filtering by dimension IDs
     const normalizedFilters: Record<string, string[]> = {};
     for (const [k, v] of Object.entries(dimensionFilters || {})) {
       if (Array.isArray(v)) normalizedFilters[k] = v.map((x) => String(x));
       else if (v !== undefined && v !== null) normalizedFilters[k] = [String(v)];
+    }
+
+    // Log dimension filters for debugging
+    if (Object.keys(normalizedFilters).length > 0) {
+      console.log(`[GET-PERFORMANCE-DATA] Applying dimension filters:`, JSON.stringify(normalizedFilters));
     }
 
     if (Object.keys(normalizedFilters).length > 0) {
@@ -279,7 +304,7 @@ Deno.serve(async (req) => {
     }));
 
     const total = filteredData.length;
-    console.log(`[GET-PERFORMANCE-DATA] Returning ${total} filtered rows`);
+    console.log(`[GET-PERFORMANCE-DATA] Returning ${total} rows after all filters (SQL date + dimension filters)`);
 
     const response = {
       data,
@@ -288,7 +313,7 @@ Deno.serve(async (req) => {
       totalCount: total, // keep for compatibility
       hasMore: false,
       meta: {
-        dateDimensionId: dateDimInUse?.id || null,
+        dateDimensionId: dateDimIdToUse || null,
         dimensionsCount: allDimensions.length,
       },
     };
