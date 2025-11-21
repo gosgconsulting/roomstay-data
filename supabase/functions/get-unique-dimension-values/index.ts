@@ -74,8 +74,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fetch dimension_data rows for the report(s)
-    let query = supabase.from('dimension_data').select('dimension_values, report_id').limit(50000);
+    // Fetch dimension_data rows for the report(s) - increased limit for large datasets
+    let query = supabase.from('dimension_data').select('dimension_values, report_id').limit(200000);
     if (reportId) {
       query = query.eq('report_id', reportId);
     } else if (reportIds && reportIds.length > 0) {

@@ -681,39 +681,47 @@ export const FiltersBar = ({
     if (!reportId || activeDimensions.length === 0) return;
     setIsLoadingFilters(true);
     try {
-      const data = await retryWithBackoff(
-        async () => {
-          const { data, error } = await supabase
-            .from("dimension_data")
-            .select("dimension_values")
-            .eq("report_id", reportId)
-            .limit(10000);
-          if (error) throw error;
-          return data;
-        },
-        3,
-        500
+      // Use edge function to get unique values for each dimension (handles large datasets)
+      const valuesArray: Record<string, string[]> = {};
+      
+      // Load values for each active dimension in parallel
+      await Promise.all(
+        activeDimensions.map(async (dimId) => {
+          try {
+            const { data, error } = await supabase.functions.invoke('get-unique-dimension-values', {
+              body: {
+                reportId,
+                dimensionId: dimId,
+                limit: 10000, // Reasonable limit for dropdown UX
+              },
+            });
+
+            if (error) {
+              console.error(`Error loading values for dimension ${dimId}:`, error);
+              valuesArray[dimId] = [];
+              return;
+            }
+
+            const values = (data?.values || []) as string[];
+            
+            // Apply vlookup mappings
+            const valuesSet = new Set<string>();
+            values.forEach(value => {
+              valuesSet.add(value);
+              const mappedValue = getMappedValue(value, vlookupMappings, dimId);
+              if (mappedValue !== value) {
+                valuesSet.add(mappedValue);
+              }
+            });
+            
+            valuesArray[dimId] = Array.from(valuesSet).sort();
+          } catch (err) {
+            console.error(`Exception loading values for dimension ${dimId}:`, err);
+            valuesArray[dimId] = [];
+          }
+        })
       );
 
-      const valuesMap: Record<string, Set<string>> = {};
-      data?.forEach(row => {
-        const dv = row.dimension_values as Record<string, string | number | boolean>;
-        activeDimensions.forEach(dimId => {
-          const value = dv[dimId];
-          if (value) {
-            if (!valuesMap[dimId]) valuesMap[dimId] = new Set();
-            const valueStr = String(value);
-            valuesMap[dimId].add(valueStr);
-            const mappedValue = getMappedValue(valueStr, vlookupMappings, dimId);
-            if (mappedValue !== valueStr) valuesMap[dimId].add(mappedValue);
-          }
-        });
-      });
-
-      const valuesArray: Record<string, string[]> = {};
-      Object.keys(valuesMap).forEach(dimId => {
-        valuesArray[dimId] = Array.from(valuesMap[dimId]).sort();
-      });
       setDimensionValues(valuesArray);
     } catch (e) {
       console.error("Error loading dimension values:", e);
