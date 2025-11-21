@@ -368,10 +368,10 @@ export type Database = {
       }
       forecasts: {
         Row: {
-          email: string | null
           conversion_rate: number | null
           cost_of_sell: number | null
           created_at: string | null
+          email: string | null
           id: string
           name: string
           paid_revenue_share: number | null
@@ -382,10 +382,10 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
-          email?: string | null
           conversion_rate?: number | null
           cost_of_sell?: number | null
           created_at?: string | null
+          email?: string | null
           id?: string
           name?: string
           paid_revenue_share?: number | null
@@ -396,10 +396,10 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
-          email?: string | null
           conversion_rate?: number | null
           cost_of_sell?: number | null
           created_at?: string | null
+          email?: string | null
           id?: string
           name?: string
           paid_revenue_share?: number | null
