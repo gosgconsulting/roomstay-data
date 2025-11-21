@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
-import { KPIMetricsCards } from "@/components/KPIMetricsCards";
-import { KPIChart } from "@/components/KPIChart";
+import { KPIMetricsCards } from "@/components/KPIMetricsCardsFixed";
+import { KPIChart } from "@/components/KPIChartFixed";
 import { PerformanceTable } from "@/components/PerformanceTable";
 import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
@@ -385,7 +385,6 @@ export default function ReportDashboard() {
                 filters={filters}
                 accountId={accountId}
                 visibilityRefreshTrigger={visibilityRefreshTrigger}
-                dimensions={dimensions}
                 key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
                 onLoadingComplete={() => markComponentLoaded('metrics')}
               />
@@ -395,7 +394,6 @@ export default function ReportDashboard() {
               filters={filters}
               accountId={accountId}
               visibilityRefreshTrigger={visibilityRefreshTrigger}
-              dimensions={dimensions}
               key={`charts-${dataRefreshKey}-${loadingGeneration}`}
               onLoadingComplete={() => markComponentLoaded('chart')}
             />

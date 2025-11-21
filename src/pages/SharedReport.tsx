@@ -9,8 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Lock, Eye, EyeOff } from "lucide-react";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
-import { KPIMetricsCards } from "@/components/KPIMetricsCards";
-import { KPIChart } from "@/components/KPIChart";
+import { KPIMetricsCards } from "@/components/KPIMetricsCardsFixed";
+import { KPIChart } from "@/components/KPIChartFixed";
 import { PerformanceTable } from "@/components/PerformanceTable";
 import { LoadingToast } from "@/components/LoadingToast";
 
@@ -312,7 +312,6 @@ export default function SharedReport() {
           reportId={reportId}
           filters={filters}
           accountId={account?.id}
-          dimensions={[]}
           key={`charts-${dataRefreshKey}-${loadingGeneration}`}
           onLoadingComplete={() => markComponentLoaded('chart')}
         />
