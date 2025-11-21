@@ -4,9 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
-import { LogOut, BarChart3, TrendingUp, Plus, DollarSign, Rocket } from "lucide-react";
+import { LogOut, BarChart3, TrendingUp, Plus, DollarSign, Rocket, ChevronRight, Trash2, ArrowLeft } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { CreateAccountModal } from "@/components/CreateAccountModal";
+import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
 
 interface Account {
   id: string;
@@ -30,6 +32,10 @@ export default function Landing() {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+  const [createAccountOpen, setCreateAccountOpen] = useState(false);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [accountToDelete, setAccountToDelete] = useState<Account | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -85,12 +91,75 @@ export default function Landing() {
     }
   };
 
+  const handleCreateAccount = async (name: string, description: string) => {
+    if (!session?.user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('accounts')
+        .insert({
+          user_id: session.user.id,
+          name,
+          description: description || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setAccounts(prev => [data, ...prev]);
+      setCreateAccountOpen(false);
+      toast({
+        title: "Success",
+        description: "Account created successfully.",
+      });
+    } catch (error) {
+      console.error('Error creating account:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create account.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!accountToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('accounts')
+        .delete()
+        .eq('id', accountToDelete.id);
+
+      if (error) throw error;
+
+      setAccounts(prev => prev.filter(a => a.id !== accountToDelete.id));
+      if (selectedAccount?.id === accountToDelete.id) {
+        setSelectedAccount(null);
+      }
+      setDeleteAccountOpen(false);
+      setAccountToDelete(null);
+      toast({
+        title: "Success",
+        description: "Account deleted successfully.",
+      });
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete account.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const tools: Tool[] = [
     {
       id: "report",
       name: "Reports",
       description: "Analyze performance metrics and KPIs",
-      icon: <BarChart3 className="h-5 w-5" />,
+      icon: <BarChart3 className="h-6 w-6" />,
       getPath: (accountId: string) => `/tools/report/${accountId}`,
       available: true,
     },
@@ -98,7 +167,7 @@ export default function Landing() {
       id: "forecasting",
       name: "Forecasting",
       description: "Predict future trends and performance",
-      icon: <TrendingUp className="h-5 w-5" />,
+      icon: <TrendingUp className="h-6 w-6" />,
       getPath: (accountId: string) => `/tools/forecasting/${accountId}`,
       available: true,
     },
@@ -106,7 +175,7 @@ export default function Landing() {
       id: "budget",
       name: "Budget",
       description: "Manage budgets and allocations",
-      icon: <DollarSign className="h-5 w-5" />,
+      icon: <DollarSign className="h-6 w-6" />,
       getPath: (accountId: string) => `/tools/budget/${accountId}`,
       available: true,
     },
@@ -114,7 +183,7 @@ export default function Landing() {
       id: "alerts",
       name: "Alerts",
       description: "Get notified of important changes",
-      icon: <Rocket className="h-5 w-5" />,
+      icon: <Rocket className="h-6 w-6" />,
       getPath: (accountId: string) => `#`,
       available: false,
       badge: "Soon",
@@ -160,98 +229,165 @@ export default function Landing() {
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-12">
-        <div className="max-w-6xl mx-auto">
-          {/* Welcome Section */}
-          <div className="mb-12">
-            <h2 className="text-3xl font-bold mb-2">Welcome to Analytics</h2>
-            <p className="text-muted-foreground">Select an account to access your tools</p>
-          </div>
+        <div className="max-w-4xl mx-auto">
+          {/* Back button when viewing tools */}
+          {selectedAccount && (
+            <Button
+              variant="ghost"
+              className="mb-6"
+              onClick={() => setSelectedAccount(null)}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Accounts
+            </Button>
+          )}
 
-          {accounts.length > 0 ? (
-            <div className="space-y-6">
-              {accounts.map((account) => (
-                <Card key={account.id} className="overflow-hidden">
-                  <CardHeader className="bg-muted/50 pb-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="text-xl">{account.name}</CardTitle>
-                        {account.description && (
-                          <CardDescription className="mt-1">
-                            {account.description}
-                          </CardDescription>
-                        )}
-                      </div>
-                    </div>
+          {!selectedAccount ? (
+            <>
+              {/* Account Selection View */}
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-3xl font-bold">Select Account</h2>
+                    <p className="text-muted-foreground mt-1">Choose an account to access your analytics tools</p>
+                  </div>
+                  <Button onClick={() => setCreateAccountOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Account
+                  </Button>
+                </div>
+              </div>
+
+              {accounts.length > 0 ? (
+                <div className="grid grid-cols-1 gap-4">
+                  {accounts.map((account) => (
+                    <Card
+                      key={account.id}
+                      className="hover:shadow-lg hover:border-primary/50 cursor-pointer transition-all group"
+                    >
+                      <CardHeader>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1" onClick={() => setSelectedAccount(account)}>
+                            <CardTitle className="text-xl group-hover:text-primary transition-colors">
+                              {account.name}
+                            </CardTitle>
+                            {account.description && (
+                              <CardDescription className="mt-2">
+                                {account.description}
+                              </CardDescription>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAccountToDelete(account);
+                                setDeleteAccountOpen(true);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                          </div>
+                        </div>
+                      </CardHeader>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <Card className="text-center py-12">
+                  <CardHeader>
+                    <CardTitle>No Accounts Found</CardTitle>
+                    <CardDescription>
+                      Create your first account to start using the analytics tools
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="pt-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {tools.map((tool) => (
-                        <Card
-                          key={tool.id}
-                          className={`relative ${
-                            tool.available
-                              ? "hover:shadow-md hover:border-primary/50 cursor-pointer transition-all"
-                              : "opacity-60 cursor-not-allowed"
-                          }`}
-                          onClick={() => {
-                            if (tool.available) {
-                              navigate(tool.getPath(account.id));
-                            }
-                          }}
-                        >
-                          <CardHeader className="pb-3">
-                            <div className="flex items-center gap-3">
-                              <div className={`${tool.available ? "text-primary" : "text-muted-foreground"}`}>
-                                {tool.icon}
-                              </div>
-                              <div className="flex-1">
-                                <CardTitle className="text-base flex items-center gap-2">
-                                  {tool.name}
-                                  {tool.badge && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      {tool.badge}
-                                    </Badge>
-                                  )}
-                                </CardTitle>
-                              </div>
-                            </div>
-                          </CardHeader>
-                          <CardContent className="pb-4 pt-0">
-                            <p className="text-xs text-muted-foreground">
-                              {tool.description}
-                            </p>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
+                  <CardContent>
+                    <Button onClick={() => setCreateAccountOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Account
+                    </Button>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
+              )}
+            </>
           ) : (
-            <Card className="text-center py-12">
-              <CardHeader>
-                <CardTitle>No Accounts Found</CardTitle>
-                <CardDescription>
-                  Create your first account to start using the analytics tools
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button onClick={() => {
-                  // TODO: Add create account modal
-                  toast({
-                    title: "Coming Soon",
-                    description: "Account creation will be available soon.",
-                  });
-                }}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Account
-                </Button>
-              </CardContent>
-            </Card>
+            <>
+              {/* Tools View */}
+              <div className="mb-8">
+                <h2 className="text-3xl font-bold">{selectedAccount.name}</h2>
+                <p className="text-muted-foreground mt-1">
+                  {selectedAccount.description || "Select a tool to get started"}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {tools.map((tool) => (
+                  <Card
+                    key={tool.id}
+                    className={`${
+                      tool.available
+                        ? "hover:shadow-lg hover:border-primary/50 cursor-pointer transition-all group"
+                        : "opacity-60 cursor-not-allowed"
+                    }`}
+                    onClick={() => {
+                      if (tool.available) {
+                        navigate(tool.getPath(selectedAccount.id));
+                      }
+                    }}
+                  >
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className={`p-3 rounded-lg ${tool.available ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                          {tool.icon}
+                        </div>
+                        {tool.badge && (
+                          <Badge variant="secondary" className="text-xs">
+                            {tool.badge}
+                          </Badge>
+                        )}
+                      </div>
+                      <CardTitle className="mt-4 flex items-center gap-2">
+                        {tool.name}
+                      </CardTitle>
+                      <CardDescription>{tool.description}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {tool.available ? (
+                        <Button className="w-full">
+                          Open {tool.name}
+                          <ChevronRight className="h-4 w-4 ml-2" />
+                        </Button>
+                      ) : (
+                        <Button disabled className="w-full">
+                          Coming Soon
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </main>
+
+      {/* Modals */}
+      <CreateAccountModal
+        open={createAccountOpen}
+        onOpenChange={setCreateAccountOpen}
+        onCreate={handleCreateAccount}
+      />
+
+      <DeleteAccountDialog
+        open={deleteAccountOpen}
+        onOpenChange={setDeleteAccountOpen}
+        accountName={accountToDelete?.name || ""}
+        onDelete={handleDeleteAccount}
+      />
     </div>
   );
 }
