@@ -310,8 +310,8 @@ export default function ReportDashboard() {
         loadingComponents={loadingComponents}
       />
       
-      {/* Header with back button and account info */}
-      <header className="border-b">
+      {/* Header with account selector and status badge */}
+      <header className="border-b bg-card">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button
@@ -323,13 +323,16 @@ export default function ReportDashboard() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h1 className="text-2xl font-bold">{account?.name}</h1>
+              <h1 className="text-2xl font-bold text-foreground">{account?.name}</h1>
               {account?.description && (
                 <p className="text-sm text-muted-foreground">{account.description}</p>
               )}
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <div className="px-3 py-1 rounded-md bg-success/10 border border-success/20">
+              <span className="text-xs font-medium text-success">Production</span>
+            </div>
             <Button
               variant={isEditMode ? "default" : "outline"}
               size="sm"

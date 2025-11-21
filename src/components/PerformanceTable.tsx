@@ -550,8 +550,8 @@ export const PerformanceTable = ({
 
   return (
     <>
-      <Card>
-        <CardHeader className="pb-3">
+      <Card className="shadow-sm">
+        <CardHeader className="pb-3 border-b">
           <TableHeader
             activeDateTab={activeDateTab}
             onDateTabChange={handleDateTabChange}
@@ -577,7 +577,7 @@ export const PerformanceTable = ({
             availableSelectorDimensions={selectorDimensions} // NEW: restrict dropdowns to configured list
           />
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {groupByDimensions.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               {isLoadingDimensions ? (
