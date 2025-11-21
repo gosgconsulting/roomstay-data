@@ -381,29 +381,7 @@ export function usePerformanceTableViews({
       }
 
       const dateDimension = dimensions.find(d => d.type === 'date');
-      const textDimensions = dimensions.filter(d => d.type === 'text');
-      const defaultGroupDimension = dateDimension || textDimensions[0];
-      
-      // Always set up breakdown dimension if we have multiple dimensions
-      const defaultBreakdownDimension = dateDimension && textDimensions.length > 0 
-        ? textDimensions[0] 
-        : textDimensions.length > 1 
-          ? textDimensions[1] 
-          : null;
-
-      // Set up then by dimension if we have 3+ dimensions available
-      let defaultThenByDimension = null;
-      if (dimensions.length >= 3) {
-        const usedDimensions = [defaultGroupDimension?.id, defaultBreakdownDimension?.id].filter(Boolean);
-        const availableForThenBy = dimensions.filter(d => !usedDimensions.includes(d.id));
-        
-        if (availableForThenBy.length > 0) {
-          // Prefer text dimensions for then by, then date, then any other
-          defaultThenByDimension = availableForThenBy.find(d => d.type === 'text') || 
-                                   availableForThenBy.find(d => d.type === 'date') || 
-                                   availableForThenBy[0];
-        }
-      }
+      const defaultGroupDimension = dateDimension || dimensions.find(d => d.type === 'text');
 
       const hiddenColumns = ['Impression Share', 'CPM', 'Leads'];
       const defaultVisibleIds = dimensions
@@ -422,23 +400,10 @@ export function usePerformanceTableViews({
           .map(d => d.name)
       );
 
-      // ENHANCED: Comprehensive default selector options for filter settings
+      // NEW: default selector options = all text/date dimensions
       const defaultSelectorIds = dimensions
         .filter(d => d.type === 'text' || d.type === 'date')
         .map(d => d.id);
-
-      // Ensure Date is always included if available
-      const dateId = dimensions.find(d => d.type === 'date')?.id;
-      const ensuredSelectorIds = dateId 
-        ? Array.from(new Set([dateId, ...defaultSelectorIds]))
-        : defaultSelectorIds;
-
-      console.log('[VIEWS] Creating default views with filter settings:', {
-        selectorIds: ensuredSelectorIds,
-        groupBy: defaultGroupDimension?.name,
-        breakdownBy: defaultBreakdownDimension?.name,
-        thenBy: defaultThenByDimension?.name
-      });
 
       const dateGranularities: Array<{name: string, granularity: 'day' | 'week' | 'month' | 'year', isDefault: boolean}> = [
         { name: "Day", granularity: 'day', isDefault: true },
@@ -458,17 +423,17 @@ export function usePerformanceTableViews({
             name: dateConfig.name,
             is_default: dateConfig.isDefault,
             group_by_dimensions: defaultGroupDimension ? [defaultGroupDimension.id] : [],
-            breakdown_by_dimensions: defaultBreakdownDimension ? [defaultBreakdownDimension.id] : [],
-            then_by_dimensions: defaultThenByDimension ? [defaultThenByDimension.id] : [],
+            breakdown_by_dimensions: dateDimension && defaultGroupDimension?.id !== dateDimension.id 
+              ? [dateDimension.id] 
+              : [],
+            then_by_dimensions: [],
             visible_columns: defaultVisibleIds,
             column_order: defaultColumnOrder,
             visible_kpis: defaultKPIs,
             kpi_order: defaultKPIs,
             date_granularity: dateConfig.granularity,
             date_order: 'desc',
-            filter_dimensions: ensuredSelectorIds, // ENHANCED: Include comprehensive filter settings
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            filter_dimensions: defaultSelectorIds, // NEW
           })
           .select()
           .single();
@@ -480,7 +445,6 @@ export function usePerformanceTableViews({
 
         if (newView) {
           createdViews.push(newView);
-          console.log(`[VIEWS] Created ${dateConfig.name} view with filter settings:`, newView.filter_dimensions);
         }
       }
 
@@ -488,8 +452,7 @@ export function usePerformanceTableViews({
         setTableViews(createdViews);
         const defaultView = createdViews.find(v => v.is_default) || createdViews[0];
         setActiveViewId(defaultView.id);
-        await loadViewSettingsFromData(defaultView);
-        console.log('[VIEWS] Default views created with persistent filter settings');
+        loadViewSettingsFromData(defaultView);
       }
     } catch (error) {
       console.error("Error creating default view:", error);

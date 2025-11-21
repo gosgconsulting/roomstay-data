@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2 } from "lucide-react";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
@@ -35,8 +34,6 @@ export function PerformanceSettingsModal({
   accountId,
 }: PerformanceSettingsModalProps) {
   const [localDimensions, setLocalDimensions] = useState<Dimension[]>(dimensions || []);
-  const [isSaving, setIsSaving] = useState(false);
-  
   const textDateDims = useMemo(
     () => localDimensions.filter(d => d.type === "text" || d.type === "date"),
     [localDimensions]
@@ -69,61 +66,30 @@ export function PerformanceSettingsModal({
   useEffect(() => {
     if (open) {
       setLocalDimensions(dimensions || []);
-      console.log('[SETTINGS-MODAL] Modal opened with dimensions:', dimensions.length);
     }
   }, [open, dimensions]);
 
   useEffect(() => {
     if (open) {
-      const initial = buildInitial();
-      setSelectedDims(initial);
-      console.log('[SETTINGS-MODAL] Initial selection:', initial);
+      setSelectedDims(buildInitial());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, selectedDimensionIds.join(','), groupBy[0], breakdownBy[0], thenBy[0]]);
 
   const toggleSelection = (id: string) => {
-    if (dateDimId && id === dateDimId) {
-      console.log('[SETTINGS-MODAL] Cannot toggle Date dimension - it is required');
-      return; // Date cannot be toggled off
-    }
-    
+    if (dateDimId && id === dateDimId) return; // Date cannot be toggled off
     setSelectedDims(prev => {
       const exists = prev.includes(id);
       const next = exists ? prev.filter(d => d !== id) : [...prev, id];
       // Keep Date at the front if present
       if (dateDimId && !next.includes(dateDimId)) next.unshift(dateDimId);
-      console.log('[SETTINGS-MODAL] Selection changed:', next);
       return next;
     });
   };
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const final = dateDimId ? Array.from(new Set([dateDimId, ...selectedDims])) : selectedDims;
-      console.log('[SETTINGS-MODAL] Saving filter settings:', final);
-      
-      // Call the parent save function which handles the persistence
-      await onSave(final);
-      
-      console.log('[SETTINGS-MODAL] Filter settings saved successfully');
-      onOpenChange(false);
-    } catch (error) {
-      console.error('[SETTINGS-MODAL] Error saving filter settings:', error);
-      toast({
-        title: "Save Failed",
-        description: "Failed to save filter settings. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleCancel = () => {
-    // Reset to initial state
-    setSelectedDims(buildInitial());
+  const handleSave = () => {
+    const final = dateDimId ? Array.from(new Set([dateDimId, ...selectedDims])) : selectedDims;
+    onSave(final);
     onOpenChange(false);
   };
 
@@ -155,7 +121,7 @@ export function PerformanceSettingsModal({
                         <Checkbox
                           checked={checked}
                           onCheckedChange={() => toggleSelection(dim.id)}
-                          disabled={!!isDate || isSaving}
+                          disabled={!!isDate}
                         />
                         <div className="flex items-center gap-2">
                           <span className="text-sm">{dim.name}</span>
@@ -172,7 +138,7 @@ export function PerformanceSettingsModal({
                         </div>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {isDate ? "Required" : checked ? "Selected" : "Not selected"}
+                        {isDate ? "Pinned" : checked ? "Selected" : "Not selected"}
                       </div>
                     </div>
                   );
@@ -191,20 +157,8 @@ export function PerformanceSettingsModal({
         </div>
 
         <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button 
-            variant="outline" 
-            onClick={handleCancel}
-            disabled={isSaving}
-          >
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleSave}
-            disabled={isSaving}
-          >
-            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Save
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSave}>Save</Button>
         </div>
       </DialogContent>
     </Dialog>
