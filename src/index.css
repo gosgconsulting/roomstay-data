@@ -17,10 +17,10 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 15%;
 
-    --primary: 330 85% 55%;
+    --primary: 262 83% 58%;
     --primary-foreground: 0 0% 100%;
-    --primary-light: 330 85% 65%;
-    --primary-lighter: 330 70% 85%;
+    --primary-light: 262 83% 68%;
+    --primary-lighter: 262 70% 85%;
 
     --secondary: 240 5% 96%;
     --secondary-foreground: 240 10% 15%;
@@ -28,18 +28,21 @@ All colors MUST be HSL.
     --muted: 240 5% 96%;
     --muted-foreground: 240 5% 45%;
 
-    --accent: 330 85% 55%;
+    --accent: 262 83% 58%;
     --accent-foreground: 0 0% 100%;
+
+    --success: 158 64% 52%;
+    --success-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 240 6% 90%;
     --input: 240 6% 90%;
-    --ring: 330 85% 55%;
+    --ring: 262 83% 58%;
     
-    --chart-gradient-start: 330 85% 55%;
-    --chart-gradient-end: 330 70% 85%;
+    --chart-gradient-start: 262 83% 58%;
+    --chart-gradient-end: 262 70% 85%;
 
     --radius: 0.5rem;
 
@@ -70,10 +73,10 @@ All colors MUST be HSL.
     --popover: 240 10% 13%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 330 85% 55%;
+    --primary: 262 83% 58%;
     --primary-foreground: 0 0% 100%;
-    --primary-light: 330 85% 65%;
-    --primary-lighter: 330 50% 30%;
+    --primary-light: 262 83% 68%;
+    --primary-lighter: 262 50% 30%;
 
     --secondary: 240 5% 20%;
     --secondary-foreground: 0 0% 98%;
@@ -81,18 +84,21 @@ All colors MUST be HSL.
     --muted: 240 5% 20%;
     --muted-foreground: 240 5% 65%;
 
-    --accent: 330 85% 55%;
+    --accent: 262 83% 58%;
     --accent-foreground: 0 0% 100%;
+
+    --success: 158 64% 52%;
+    --success-foreground: 0 0% 100%;
 
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 240 5% 25%;
     --input: 240 5% 25%;
-    --ring: 330 85% 55%;
+    --ring: 262 83% 58%;
     
-    --chart-gradient-start: 330 85% 55%;
-    --chart-gradient-end: 330 50% 30%;
+    --chart-gradient-start: 262 83% 58%;
+    --chart-gradient-end: 262 50% 30%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;

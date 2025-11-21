@@ -250,13 +250,13 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete }: KP
 
   if (isLoading) {
     return (
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle>Performance Chart</CardTitle>
+          <CardTitle className="text-lg font-semibold">Performance over time</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-80 flex items-center justify-center">
-            <div className="animate-pulse text-gray-500">Loading chart data...</div>
+            <div className="animate-pulse text-muted-foreground">Loading chart data...</div>
           </div>
         </CardContent>
       </Card>
@@ -265,12 +265,56 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete }: KP
 
   if (chartData.length === 0) {
     return (
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Performance Chart</CardTitle>
+          <CardTitle className="text-lg font-semibold">Performance over time</CardTitle>
           {availableMetrics.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase font-medium text-muted-foreground">Breakdown by:</span>
+              <Select value={selectedMetric} onValueChange={setSelectedMetric}>
+                <SelectTrigger className="w-40 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableMetrics.map((metric) => (
+                    <SelectItem key={metric} value={metric}>
+                      {metric}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </CardHeader>
+        <CardContent>
+          <div className="h-80 flex items-center justify-center text-muted-foreground">
+            No chart data for selected date range
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="shadow-sm">
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-lg font-semibold">Performance over time</CardTitle>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase font-medium text-muted-foreground">View results by:</span>
+            <Select value="Month" disabled>
+              <SelectTrigger className="w-28 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Month">Month</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase font-medium text-muted-foreground">Breakdown by:</span>
             <Select value={selectedMetric} onValueChange={setSelectedMetric}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-40 h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -281,61 +325,49 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete }: KP
                 ))}
               </SelectContent>
             </Select>
-          )}
-        </CardHeader>
-        <CardContent>
-          <div className="h-80 flex items-center justify-center text-gray-500">
-            No chart data for selected date range
           </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Performance Chart</CardTitle>
-        <Select value={selectedMetric} onValueChange={setSelectedMetric}>
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {availableMetrics.map((metric) => (
-              <SelectItem key={metric} value={metric}>
-                {metric}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
+              <defs>
+                <linearGradient id="colorPrimary" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis 
                 dataKey="formattedDate" 
-                tick={{ fontSize: 12 }}
+                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
                 angle={-45}
                 textAnchor="end"
                 height={60}
+                stroke="hsl(var(--border))"
               />
-              <YAxis tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} stroke="hsl(var(--border))" />
               <Tooltip 
                 formatter={(value: number, name: string) => [
                   formatTooltipValue(value, name),
                   name
                 ]}
                 labelFormatter={(label) => `Date: ${label}`}
+                contentStyle={{
+                  backgroundColor: 'hsl(var(--popover))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '6px',
+                }}
               />
               <Legend />
               <Line 
                 type="monotone" 
                 dataKey={selectedMetric} 
-                stroke="#e91e63" 
+                stroke="hsl(var(--primary))" 
                 strokeWidth={3}
-                dot={{ fill: '#e91e63', strokeWidth: 2, r: 4 }}
+                fill="url(#colorPrimary)"
+                dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
                 activeDot={{ r: 6 }}
                 name="Current Period"
               />
@@ -343,9 +375,9 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete }: KP
                 <Line 
                   type="monotone" 
                   dataKey={`${selectedMetric}_previous`} 
-                  stroke="#eab308" 
-                  strokeWidth={3}
-                  dot={{ fill: '#eab308', strokeWidth: 2, r: 4 }}
+                  stroke="hsl(var(--muted-foreground))" 
+                  strokeWidth={2}
+                  dot={{ fill: 'hsl(var(--muted-foreground))', strokeWidth: 2, r: 4 }}
                   activeDot={{ r: 6 }}
                   name="Previous Period"
                   strokeDasharray="5 5"

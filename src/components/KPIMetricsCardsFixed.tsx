@@ -371,18 +371,17 @@ export function KPIMetricsCards({
     console.log('[KPI-FIXED] KPIMetricsCards - Rendering loading state');
     return (
       <div>
-        <h2 className="text-lg font-semibold mb-4">Analytics & Insights</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <Card key={i} className="animate-pulse">
+        <h2 className="text-lg font-semibold mb-4">Key Performance Indicators</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Card key={i} className="animate-pulse shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  <div className="h-4 bg-gray-200 rounded w-20"></div>
+                <CardTitle className="text-xs font-medium uppercase text-muted-foreground">
+                  <div className="h-3 bg-muted rounded w-20"></div>
                 </CardTitle>
-                <div className="h-4 w-4 bg-gray-200 rounded"></div>
               </CardHeader>
               <CardContent>
-                <div className="h-8 bg-gray-200 rounded w-16 mb-1"></div>
+                <div className="h-10 bg-muted rounded w-24 mb-1"></div>
               </CardContent>
             </Card>
           ))}
@@ -397,10 +396,10 @@ export function KPIMetricsCards({
     return (
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Analytics & Insights</h2>
+          <h2 className="text-lg font-semibold">Key Performance Indicators</h2>
           {headerAction}
         </div>
-        <div className="text-center py-8 text-gray-500">
+        <div className="text-center py-8 text-muted-foreground">
           No data available for the selected filters
         </div>
       </div>
@@ -411,31 +410,30 @@ export function KPIMetricsCards({
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">Analytics & Insights</h2>
+        <h2 className="text-lg font-semibold">Key Performance Indicators</h2>
         {headerAction}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {metrics.map((metric, index) => {
           const IconComponent = metric.icon;
           return (
-            <Card key={index}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{metric.label}</CardTitle>
-                <IconComponent className={`h-4 w-4 ${metric.color}`} />
+            <Card key={index} className="shadow-sm border-border bg-card">
+              <CardHeader className="space-y-0 pb-3">
+                <CardTitle className="text-xs font-medium uppercase text-muted-foreground tracking-wide">{metric.label}</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{metric.value}</div>
+              <CardContent className="pt-0">
+                <div className="text-3xl font-bold text-foreground mb-2">{metric.value}</div>
                 {metric.change !== undefined && metric.compareValue !== undefined && (
                   <p className={cn(
-                    "text-xs flex items-center gap-1",
-                    metric.change >= 0 ? 'text-green-600' : 'text-red-600'
+                    "text-xs flex items-center gap-1 font-medium",
+                    metric.change >= 0 ? 'text-success' : 'text-destructive'
                   )}>
                     {metric.change >= 0 ? (
                       <TrendingUp className="h-3 w-3" />
                     ) : (
                       <TrendingDown className="h-3 w-3" />
                     )}
-                    {metric.change >= 0 ? '+' : ''}{metric.change.toFixed(1)}% vs {metric.compareValue}
+                    {metric.change >= 0 ? '+' : ''}{metric.change.toFixed(1)}%
                   </p>
                 )}
               </CardContent>
