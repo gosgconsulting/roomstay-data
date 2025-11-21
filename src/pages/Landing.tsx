@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
-import { LogOut, BarChart3, TrendingUp, Plus, DollarSign, Rocket, ChevronRight, Trash2, ArrowLeft } from "lucide-react";
+import { LogOut, BarChart3, TrendingUp, Plus, DollarSign, Rocket, ChevronRight, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { CreateAccountModal } from "@/components/CreateAccountModal";
@@ -40,6 +40,19 @@ export default function Landing() {
   useEffect(() => {
     checkAuth();
   }, []);
+
+  // Check for account query parameter and auto-select account
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const accountParam = urlParams.get('account');
+    
+    if (accountParam && accounts.length > 0 && !selectedAccount) {
+      const account = accounts.find(a => a.id === accountParam);
+      if (account) {
+        setSelectedAccount(account);
+      }
+    }
+  }, [accounts]);
 
   const checkAuth = async () => {
     try {
@@ -230,18 +243,6 @@ export default function Landing() {
       {/* Main Content */}
       <main className="container mx-auto px-6 py-12">
         <div className="max-w-4xl mx-auto">
-          {/* Back button when viewing tools */}
-          {selectedAccount && (
-            <Button
-              variant="ghost"
-              className="mb-6"
-              onClick={() => setSelectedAccount(null)}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Accounts
-            </Button>
-          )}
-
           {!selectedAccount ? (
             <>
               {/* Account Selection View */}
@@ -316,59 +317,122 @@ export default function Landing() {
             </>
           ) : (
             <>
-              {/* Tools View */}
-              <div className="mb-8">
-                <h2 className="text-3xl font-bold">{selectedAccount.name}</h2>
-                <p className="text-muted-foreground mt-1">
-                  {selectedAccount.description || "Select a tool to get started"}
-                </p>
-              </div>
+              {/* Show both account list and tools when an account is selected */}
+              <div className="space-y-8">
+                {/* Account List Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl font-bold">Accounts</h2>
+                    <Button onClick={() => setCreateAccountOpen(true)} size="sm">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Account
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3">
+                    {accounts.map((account) => (
+                      <Card
+                        key={account.id}
+                        className={`cursor-pointer transition-all group ${
+                          selectedAccount?.id === account.id
+                            ? "border-primary shadow-md"
+                            : "hover:shadow-md hover:border-primary/50"
+                        }`}
+                        onClick={() => setSelectedAccount(account)}
+                      >
+                        <CardHeader className="py-3">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <CardTitle className={`text-base ${
+                                selectedAccount?.id === account.id ? "text-primary" : ""
+                              }`}>
+                                {account.name}
+                              </CardTitle>
+                              {account.description && (
+                                <CardDescription className="text-xs mt-1">
+                                  {account.description}
+                                </CardDescription>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAccountToDelete(account);
+                                  setDeleteAccountOpen(true);
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                              </Button>
+                              {selectedAccount?.id === account.id && (
+                                <ChevronRight className="h-4 w-4 text-primary" />
+                              )}
+                            </div>
+                          </div>
+                        </CardHeader>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                {tools.map((tool) => (
-                  <Card
-                    key={tool.id}
-                    className={`${
-                      tool.available
-                        ? "hover:shadow-lg hover:border-primary/50 cursor-pointer transition-all group"
-                        : "opacity-60 cursor-not-allowed"
-                    }`}
-                    onClick={() => {
-                      if (tool.available) {
-                        navigate(tool.getPath(selectedAccount.id));
-                      }
-                    }}
-                  >
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className={`p-3 rounded-lg ${tool.available ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
-                          {tool.icon}
-                        </div>
-                        {tool.badge && (
-                          <Badge variant="secondary" className="text-xs">
-                            {tool.badge}
-                          </Badge>
-                        )}
-                      </div>
-                      <CardTitle className="mt-4 flex items-center gap-2">
-                        {tool.name}
-                      </CardTitle>
-                      <CardDescription>{tool.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      {tool.available ? (
-                        <Button className="w-full">
-                          Open {tool.name}
-                          <ChevronRight className="h-4 w-4 ml-2" />
-                        </Button>
-                      ) : (
-                        <Button disabled className="w-full">
-                          Coming Soon
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
+                {/* Tools Section */}
+                <div>
+                  <div className="mb-4">
+                    <h2 className="text-2xl font-bold">{selectedAccount.name}</h2>
+                    <p className="text-muted-foreground mt-1">
+                      {selectedAccount.description || "Select a tool to get started"}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {tools.map((tool) => (
+                      <Card
+                        key={tool.id}
+                        className={`${
+                          tool.available
+                            ? "hover:shadow-lg hover:border-primary/50 cursor-pointer transition-all group"
+                            : "opacity-60 cursor-not-allowed"
+                        }`}
+                        onClick={() => {
+                          if (tool.available) {
+                            navigate(tool.getPath(selectedAccount.id));
+                          }
+                        }}
+                      >
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div className={`p-3 rounded-lg ${tool.available ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                              {tool.icon}
+                            </div>
+                            {tool.badge && (
+                              <Badge variant="secondary" className="text-xs">
+                                {tool.badge}
+                              </Badge>
+                            )}
+                          </div>
+                          <CardTitle className="mt-4 flex items-center gap-2">
+                            {tool.name}
+                          </CardTitle>
+                          <CardDescription>{tool.description}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          {tool.available ? (
+                            <Button className="w-full">
+                              Open {tool.name}
+                              <ChevronRight className="h-4 w-4 ml-2" />
+                            </Button>
+                          ) : (
+                            <Button disabled className="w-full">
+                              Coming Soon
+                            </Button>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
               </div>
             </>
           )}

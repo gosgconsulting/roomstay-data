@@ -143,7 +143,7 @@ export default function ForecastingDashboard() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate('/tools/forecasting')}
+              onClick={() => navigate(`/?account=${accountId}`)}
               title="Back to accounts"
             >
               <ArrowLeft className="h-4 w-4" />
