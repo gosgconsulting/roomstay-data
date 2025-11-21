@@ -35,21 +35,19 @@ export interface DataLoadingResult {
 /**
  * Load dimensions for account with proper priority
  */
-export async function loadAccountDimensions(accountId: string, userId?: string): Promise<Dimension[]> {
+export async function loadAccountDimensions(accountId: string, userId?: string, reportId?: string): Promise<Dimension[]> {
   try {
-    console.log('[DATA-LOADING-FIX] Loading dimensions for account:', accountId, 'user:', userId);
+    console.log('[DATA-LOADING-FIX] Loading dimensions for account:', accountId, 'user:', userId, 'report:', reportId);
 
-    // Use centralized dimension loader if userId is provided
+    // Use centralized dimension loader with reportId to include account-scoped dimensions
     if (userId) {
-      // For account view, we don't have a specific reportId, so pass undefined
-      const dimensions = await loadDimensionsForUser(userId);
+      const dimensions = await loadDimensionsForUser(userId, reportId);
       
-      // Convert to local Dimension interface and filter
       const accountDimensions = dimensions
         .map(dim => ({
           id: dim.id,
           name: dim.name,
-          type: dim.type,
+          type: (dim as any).type,
           scope: (dim as any).scope,
           account_id: (dim as any).account_id,
           report_id: (dim as any).report_id,
@@ -58,7 +56,7 @@ export async function loadAccountDimensions(accountId: string, userId?: string):
         .filter(dim => 
           dim.scope === 'account' || 
           dim.scope === 'global' || 
-          (dim.scope === 'custom' && !dim.report_id) // Include global custom dimensions
+          (dim.scope === 'custom' && (!dim.report_id || dim.report_id === reportId)) // Include global/custom appropriately
         );
       
       console.log('[DATA-LOADING-FIX] Loaded dimensions via centralized loader:', accountDimensions.length);
@@ -124,8 +122,8 @@ export async function loadReportData(
   console.log('[DATA-FIX] Loading report data via edge function:', { reportId, accountId, filters });
   
   try {
-    // 1. Load dimensions first
-    const dimensions = await loadAccountDimensions(accountId, userId);
+    // 1. Load dimensions first (include reportId to resolve account-scoped dims)
+    const dimensions = await loadAccountDimensions(accountId, userId, reportId);
     
     if (dimensions.length === 0) {
       throw new Error('No dimensions found for account');

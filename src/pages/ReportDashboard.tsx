@@ -366,20 +366,6 @@ export default function ReportDashboard() {
           />
           <main className="container mx-auto px-6 py-6 space-y-6">
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">Analytics & Insights</h2>
-                {!isSharedView && isEditMode && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setKpiSettingsOpen(true)}
-                    className="gap-2"
-                  >
-                    <Settings className="h-4 w-4" />
-                    KPI Settings
-                  </Button>
-                )}
-              </div>
               <KPIMetricsCards
                 reportId={reportId}
                 filters={filters}
@@ -387,6 +373,19 @@ export default function ReportDashboard() {
                 visibilityRefreshTrigger={visibilityRefreshTrigger}
                 key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
                 onLoadingComplete={() => markComponentLoaded('metrics')}
+                headerAction={
+                  !isSharedView && isEditMode ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setKpiSettingsOpen(true)}
+                      className="gap-2"
+                    >
+                      <Settings className="h-4 w-4" />
+                      KPI Settings
+                    </Button>
+                  ) : null
+                }
               />
             </div>
             <KPIChart
