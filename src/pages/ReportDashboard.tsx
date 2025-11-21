@@ -8,6 +8,7 @@ import { PerformanceTable } from "@/components/PerformanceTable";
 import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
 import { SystemHealthMonitor } from "@/components/SystemHealthMonitor";
+import { MasterFilter } from "@/components/MasterFilter";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Session } from "@supabase/supabase-js";
@@ -368,40 +369,36 @@ export default function ReportDashboard() {
       />
 
       <div className="container mx-auto p-6 space-y-6">
-        {/* Add System Health Monitor */}
         <SystemHealthMonitor 
           reportId={reportId || undefined}
           onIssueDetected={handleHealthIssues}
         />
 
-        {/* Master Filter */}
         <MasterFilter
-          reportId={reportId}
           accountId={accountId}
-          onFiltersChange={handleMasterFiltersChange}
+          onFilterChange={handleFiltersChange}
+          selectedDimension={selectedMasterDimension}
+          selectedValues={selectedMasterValues}
         />
 
-        {/* KPI Metrics Cards */}
-        <KPIMetricsCardsFixed
+        <KPIMetricsCards
           reportId={reportId}
-          reportIds={reportIds}
           accountId={accountId}
           filters={filters}
           dimensions={dimensions}
-          vlookupMappings={vlookupMappings}
           onLoadingComplete={() => setIsKPILoading(false)}
         />
 
-        {/* Performance Table */}
         <PerformanceTable
           reportId={reportId}
           reportIds={reportIds}
           accountId={accountId}
-          onVisibilityChange={handleVisibilityChange}
+          filters={filters}
+          onFiltersChange={handleFiltersChange}
           visibilityRefreshTrigger={visibilityRefreshTrigger}
           isSharedView={false}
-          allowedReportIds={allowedReportIds}
           onLoadingComplete={() => setIsTableLoading(false)}
+          isEditMode={isEditMode}
         />
       </div>
     </div>

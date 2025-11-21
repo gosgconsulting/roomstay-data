@@ -511,7 +511,7 @@ export function PerformanceTable({
                   getOrderedDimensions={getOrderedDimensions}
                   onToggleColumn={toggleColumn}
                   onColumnReorder={handleColumnReorder}
-                  hasUnsavedColumnChanges={hasUnsavedColumnChanges}
+                  hasUnsavedColumnChanges={hasUnsavedColumnChanges()}
                   isSavingColumnSettings={isSavingColumnSettings}
                   onApplyColumnSettings={applyColumnSettings}
                   onCancelColumnSettings={cancelColumnSettings}
