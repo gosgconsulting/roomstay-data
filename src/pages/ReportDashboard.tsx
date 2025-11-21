@@ -43,13 +43,17 @@ export default function ReportDashboard() {
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
-  const [isEditMode, setIsEditMode] = useState(false); // View mode by default
+  const [isEditMode, setIsEditMode] = useState(false);
   const [isKPILoading, setIsKPILoading] = useState(false);
   const [isTableLoading, setIsTableLoading] = useState(false);
   const [reportIds, setReportIds] = useState<string[]>([]);
   const [vlookupMappings, setVlookupMappings] = useState<Record<string, any>>({});
   const [showVlookupModal, setShowVlookupModal] = useState(false);
   const [allowedReportIds, setAllowedReportIds] = useState<string[]>([]);
+
+  // Master filter state - ensure these are properly defined
+  const [selectedMasterDimension, setSelectedMasterDimension] = useState<string | null>(null);
+  const [selectedMasterValues, setSelectedMasterValues] = useState<string[]>([]);
 
   // Load dimensions using the same hook as PerformanceTable
   const {
