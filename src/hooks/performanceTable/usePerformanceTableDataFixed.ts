@@ -122,24 +122,46 @@ export function usePerformanceTableDataFixed({
 
       console.log('[PERF-DATA-FIXED] Edge function returned', rawRows.length, 'rows');
 
-      // Edge function returns pre-processed data, just transform to TableRow format
+      // Transform edge function rows: dimension_values keyed by IDs -> row.data keyed by dimension names
       const firstDimId = groupByDimensions[0];
       const firstDimension = dimensions.find(d => d.id === firstDimId);
 
       const transformedRows: TableRow[] = rawRows.map((row: any, idx: number) => {
-        const rowData: Record<string, any> = { ...row };
+        const dv: Record<string, any> = row.dimension_values || {};
         
-        // Remove metadata fields
-        delete rowData.id;
-        delete rowData.report_id;
-        delete rowData.data_source_id;
-        
-        const originalDate = firstDimension?.type === 'date' ? row[firstDimension.name] : undefined;
-        const name = row[firstDimension?.name || groupByDimensions[0]] || 'Unknown';
+        // Apply vlookup mappings (client-side) if present
+        if (vlookupMappings.length > 0) {
+          for (const m of vlookupMappings) {
+            const src = dv[m.sourceDimensionId];
+            if (src !== undefined && src !== null) {
+              if (String(src).toLowerCase() === m.sourceValue.toLowerCase()) {
+                dv[m.targetDimensionId] = m.targetValue;
+              }
+            }
+          }
+        }
+
+        // Build row.data keyed by dimension names with numeric conversion
+        const rowData: Record<string, any> = {};
+        dimensions.forEach(dim => {
+          if (dv[dim.id] !== undefined) {
+            const val = dv[dim.id];
+            if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
+              const numValue = parseFloat(String(val));
+              rowData[dim.name] = !isNaN(numValue) ? numValue : val;
+            } else {
+              rowData[dim.name] = val;
+            }
+          }
+        });
+
+        const originalDate = firstDimension?.type === 'date' ? dv[firstDimId] : undefined;
+        const nameValue = dv[firstDimId];
+        const name = nameValue !== undefined && nameValue !== null && nameValue !== '' ? String(nameValue) : 'Unknown';
 
         return {
           id: `row-${idx + 1}`,
-          name: String(name),
+          name,
           level: 0,
           data: rowData,
           originalDate,
@@ -148,18 +170,23 @@ export function usePerformanceTableDataFixed({
 
       setTableData(transformedRows);
 
-      // Calculate totals from edge function totals if available
-      const totalsFromEdge = edgeFunctionData?.totals || {};
+      // Compute totals client-side from transformed rows (edge function doesn't return totals)
       const calculatedTotalData: Record<string, any> = {};
-      
-      // Map dimension IDs to names for totals
-      Object.entries(totalsFromEdge).forEach(([dimId, value]) => {
-        const dim = dimensions.find(d => d.id === dimId);
-        if (dim) {
-          calculatedTotalData[dim.name] = value;
-        }
-      });
-      
+      if (transformedRows.length > 0 && dimensions.length > 0) {
+        transformedRows.forEach((row: TableRow) => {
+          if (row.data) {
+            Object.keys(row.data).forEach((dimName: string) => {
+              const dim = dimensions.find(d => d.name === dimName);
+              if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+                const value = parseFloat(String(row.data[dimName] ?? '0'));
+                if (!isNaN(value)) {
+                  calculatedTotalData[dimName] = (calculatedTotalData[dimName] || 0) + value;
+                }
+              }
+            });
+          }
+        });
+      }
       setTotalData(calculatedTotalData);
       setTotalCompareData({});
       setTotalChangeData({});
@@ -203,6 +230,7 @@ export function usePerformanceTableDataFixed({
     dateOrder,
     dimensions.length,
     onLoadingComplete,
+    vlookupMappings.length
   ]);
 
   return {
