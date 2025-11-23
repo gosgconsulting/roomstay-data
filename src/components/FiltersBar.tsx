@@ -287,54 +287,31 @@ export const FiltersBar = ({
     }
   };
 
-  // Helper: prefer Account dimension as default (account-scoped > custom/global), fallback to Date
+  // Helper: Find best default filter dimension that actually has data
   const getAccountDimensionId = async (): Promise<string | null> => {
+    if (!reportId) return await getDateDimensionId();
+    
     try {
       const resolvedAccountId = accountId || (await getReportAccountId());
-      // 1) Prefer account-scoped "Account" dimension for the report's account
-      if (resolvedAccountId) {
-        const { data: acctDim, error: acctErr } = await supabase
-          .from("dimensions")
-          .select("id")
-          .eq("name", "Account")
-          .eq("type", "text")
-          .eq("scope", "account")
-          .eq("account_id", resolvedAccountId)
-          .order("created_at", { ascending: false })
-          .maybeSingle();
-        if (!acctErr && acctDim?.id) return acctDim.id;
+      
+      // Use the new utility to find a dimension with actual data
+      const { findBestDefaultFilterDimension } = await import("@/lib/dimensionDataChecker");
+      const dimensionWithData = await findBestDefaultFilterDimension(
+        reportId,
+        resolvedAccountId,
+        ["Account", "Campaign", "Ad Group", "Hotel", "Channel"]
+      );
+      
+      if (dimensionWithData) {
+        console.log("[FiltersBar] Using dimension with data:", dimensionWithData);
+        return dimensionWithData;
       }
-
-      // 2) Fall back to a user custom "Account" dimension (global custom or report-specific)
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: customDim, error: customErr } = await supabase
-          .from("dimensions")
-          .select("id")
-          .eq("name", "Account")
-          .eq("type", "text")
-          .eq("scope", "custom")
-          .eq("user_id", user.id)
-          .or(`report_id.is.null,report_id.eq.${reportId || ''}`)
-          .order("created_at", { ascending: false })
-          .maybeSingle();
-        if (!customErr && customDim?.id) return customDim.id;
-      }
-
-      // 3) Fall back to a global "Account" dimension if present
-      const { data: globalDim, error: globalErr } = await supabase
-        .from("dimensions")
-        .select("id")
-        .eq("name", "Account")
-        .eq("type", "text")
-        .eq("scope", "global")
-        .order("created_at", { ascending: false })
-        .maybeSingle();
-      if (!globalErr && globalDim?.id) return globalDim.id;
-
-      // 4) Final fallback: Date dimension
+      
+      // Final fallback: Date dimension (even if it has no data, it's a safe default)
+      console.log("[FiltersBar] No dimensions with data found, falling back to Date");
       return await getDateDimensionId();
-    } catch {
+    } catch (error) {
+      console.error("[FiltersBar] Error finding default dimension:", error);
       return await getDateDimensionId();
     }
   };
