@@ -113,9 +113,19 @@ export function TableBody({
                 className="py-3 px-4 text-left font-medium text-sm"
                 onContextMenu={(e) => onContextMenu(e, "name")}
               >
-                {groupByDimensions[0] 
-                  ? dimensions.find(d => d.id === groupByDimensions[0])?.name || "Name"
-                  : "Name"}
+                <span
+                  className="block whitespace-normal break-words leading-tight max-w-[180px] sm:max-w-[220px] xl:max-w-[260px]"
+                  style={{
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {groupByDimensions[0] 
+                    ? dimensions.find(d => d.id === groupByDimensions[0])?.name || "Name"
+                    : "Name"}
+                </span>
               </th>
               {getOrderedDimensions()
                 .filter(d => visibleColumns.has(d.id))
@@ -135,7 +145,17 @@ export function TableBody({
                       onContextMenu={(e) => onContextMenu(e, dimension.name)}
                     >
                       <div className="flex items-center justify-end gap-1">
-                        <span>{dimension.name}</span>
+                        <span
+                          className="block whitespace-normal break-words leading-tight text-right max-w-[140px] sm:max-w-[180px] xl:max-w-[220px]"
+                          style={{
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          {dimension.name}
+                        </span>
                         {isDesc && <ArrowDown className="h-4 w-4" />}
                         {isAsc && <ArrowUp className="h-4 w-4" />}
                         {!isSorted && onSort && (
