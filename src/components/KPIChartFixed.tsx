@@ -20,10 +20,20 @@ interface KPIChartProps {
   visibilityRefreshTrigger?: number;
   onLoadingComplete?: () => void;
   initialMetric?: string;
-  hideHeaderControls?: boolean;
+  isEditMode?: boolean;
+  onMetricChange?: (metric: string) => void;
 }
 
-export function KPIChart({ reportId, accountId, filters, onLoadingComplete, initialMetric, hideHeaderControls }: KPIChartProps) {
+export function KPIChart({
+  reportId,
+  accountId,
+  filters,
+  visibilityRefreshTrigger,
+  onLoadingComplete,
+  initialMetric,
+  isEditMode = false,
+  onMetricChange,
+}: KPIChartProps) {
   const [chartData, setChartData] = useState<any[]>([]);
   const [selectedMetric, setSelectedMetric] = useState<string>(initialMetric || "Revenue");
   const [isLoading, setIsLoading] = useState(true);
@@ -58,6 +68,21 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete, init
       onLoadingComplete?.();
     }
   }, [reportId, accountId, stableFilters, selectedMetric]);
+
+  // Keep selectedMetric in sync if parent changes initialMetric
+  useEffect(() => {
+    if (initialMetric && initialMetric !== selectedMetric) {
+      setSelectedMetric(initialMetric);
+    }
+  }, [initialMetric]);
+
+  // Handler to update selection and notify parent (for persistence)
+  const handleMetricChange = (m: string) => {
+    setSelectedMetric(m);
+    if (isEditMode) {
+      onMetricChange?.(m);
+    }
+  };
 
   const loadChartData = async () => {
     console.log('[CHART-FIXED] Loading chart data for metric:', selectedMetric);
@@ -253,8 +278,23 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete, init
   if (isLoading) {
     return (
       <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold">Performance over time</CardTitle>
+        <CardHeader className="flex items-center justify-between">
+          {isEditMode && (
+            <div className="flex items-center gap-2">
+              <Select value={selectedMetric} onValueChange={handleMetricChange}>
+                <SelectTrigger className="w-40 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableMetrics.map((metric) => (
+                    <SelectItem key={metric} value={metric}>
+                      {metric}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           <div className="h-80 flex items-center justify-center">
@@ -268,11 +308,10 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete, init
   if (chartData.length === 0) {
     return (
       <Card className="shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-lg font-semibold">Performance over time</CardTitle>
-          {!hideHeaderControls && availableMetrics.length > 0 && (
+        <CardHeader className="flex items-center justify-between">
+          {isEditMode && (
             <div className="flex items-center gap-2">
-              <Select value={selectedMetric} onValueChange={setSelectedMetric}>
+              <Select value={selectedMetric} onValueChange={handleMetricChange}>
                 <SelectTrigger className="w-40 h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
@@ -298,24 +337,21 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete, init
 
   return (
     <Card className="shadow-sm">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-lg font-semibold">Performance over time</CardTitle>
-        {!hideHeaderControls && (
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Select value={selectedMetric} onValueChange={setSelectedMetric}>
-                <SelectTrigger className="w-40 h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableMetrics.map((metric) => (
-                    <SelectItem key={metric} value={metric}>
-                      {metric}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      <CardHeader className="flex items-center justify-between">
+        {isEditMode && (
+          <div className="flex items-center gap-2">
+            <Select value={selectedMetric} onValueChange={handleMetricChange}>
+              <SelectTrigger className="w-40 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableMetrics.map((metric) => (
+                  <SelectItem key={metric} value={metric}>
+                    {metric}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
       </CardHeader>

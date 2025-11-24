@@ -15,6 +15,9 @@ interface KPIChartsGridProps {
   };
   visibilityRefreshTrigger?: number;
   onLoadingComplete?: () => void;
+  isEditMode?: boolean;
+  metrics: string[]; // array of 4 metric names in order
+  onMetricChange?: (index: number, metric: string) => void;
 }
 
 const KPIChartsGrid: React.FC<KPIChartsGridProps> = ({
@@ -23,6 +26,9 @@ const KPIChartsGrid: React.FC<KPIChartsGridProps> = ({
   filters,
   visibilityRefreshTrigger,
   onLoadingComplete,
+  isEditMode = false,
+  metrics,
+  onMetricChange,
 }) => {
   const [loaded, setLoaded] = useState(0);
 
@@ -34,20 +40,19 @@ const KPIChartsGrid: React.FC<KPIChartsGridProps> = ({
     }
   };
 
-  const metrics = ["Clicks", "Cost", "Bookings", "Revenue"];
-
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {metrics.map((metric) => (
+      {metrics.map((metric, index) => (
         <KPIChart
-          key={metric}
+          key={`${metric}-${index}`}
           reportId={reportId}
           accountId={accountId}
           filters={filters}
           visibilityRefreshTrigger={visibilityRefreshTrigger}
           onLoadingComplete={handleChildLoaded}
           initialMetric={metric}
-          hideHeaderControls
+          isEditMode={isEditMode}
+          onMetricChange={(m) => onMetricChange?.(index, m)}
         />
       ))}
     </div>

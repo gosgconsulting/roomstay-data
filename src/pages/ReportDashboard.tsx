@@ -50,8 +50,24 @@ export default function ReportDashboard() {
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   const [isEditMode, setIsEditMode] = useState(false); // View mode by default
+
+  // FIX: Add missing state for sidebar reports list
   const [reportsList, setReportsList] = useState<SidebarReport[]>([]);
+
+  // FIX: Add missing state for local Share modal
   const [showShareModal, setShowShareModal] = useState(false);
+
+  // NEW: Persisted chart metrics (defaults)
+  const [chartMetrics, setChartMetrics] = useState<string[]>([
+    "Clicks",
+    "Cost",
+    "Bookings",
+    "Revenue",
+  ]);
+
+  const handleGridMetricChange = (index: number, metric: string) => {
+    setChartMetrics((prev) => prev.map((m, i) => (i === index ? metric : m)));
+  };
 
   // NEW: local modals for Looker-style controls
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
@@ -541,14 +557,20 @@ export default function ReportDashboard() {
                     }
                   />
                 </div>
+
+                {/* 4-chart grid with persisted metrics and edit-mode dropdowns */}
                 <KPIChartsGrid
                   reportId={reportId}
                   accountId={accountId}
                   filters={filters}
                   visibilityRefreshTrigger={visibilityRefreshTrigger}
-                  key={`charts-${dataRefreshKey}-${loadingGeneration}`}
+                  key={`charts-${dataRefreshKey}-${loadingGeneration}-${chartMetrics.join(",")}`}
                   onLoadingComplete={() => markComponentLoaded('chart')}
+                  isEditMode={isEditMode}
+                  metrics={chartMetrics}
+                  onMetricChange={handleGridMetricChange}
                 />
+
                 <PerformanceTable 
                   reportId={reportId} 
                   filters={filters} 
