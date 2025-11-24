@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.apply-vlookup-mappings]
 verify_jwt = true
+
+[functions.update-user-password]
+verify_jwt = false
