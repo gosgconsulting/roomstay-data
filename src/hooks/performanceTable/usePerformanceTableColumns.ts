@@ -61,8 +61,22 @@ export function usePerformanceTableColumns({
   }, []);
 
   const applyColumnSettings = useCallback(async () => {
-    if (!reportId || !activeViewId || isSharedView) {
-      console.log('[COLUMNS] Cannot apply column settings:', { reportId: !!reportId, activeViewId: !!activeViewId, isSharedView });
+    if (!reportId) {
+      console.log('[COLUMNS] Cannot apply column settings: No reportId');
+      return;
+    }
+
+    // Budget Tracker path: no views -> commit locally and skip DB save
+    if (!activeViewId || isSharedView) {
+      console.log('[COLUMNS] Applying column settings locally (no view/save)');
+      setInitialVisibleColumns(new Set(visibleColumns));
+      setInitialColumnOrder([...columnOrder]);
+
+      toast({
+        title: "Success",
+        description: "Column visibility updated",
+      });
+
       return;
     }
 
@@ -81,7 +95,7 @@ export function usePerformanceTableColumns({
         .from("report_views")
         .update({
           ...viewData,
-          name: "Default View", // Add required name field
+          name: "Default View",
         })
         .eq("id", activeViewId);
 
@@ -92,13 +106,9 @@ export function usePerformanceTableColumns({
 
       console.log('[COLUMNS] Successfully updated report_views');
 
-      // Update initial state to match current state
       setInitialVisibleColumns(new Set(visibleColumns));
       setInitialColumnOrder([...columnOrder]);
 
-      console.log('[COLUMNS] Updated initial state - visible columns:', visibleColumns.size, 'column order:', columnOrder.length);
-
-      // Only show toast for manual saves, not auto-saves
       if (arguments.length > 0) {
         toast({
           title: "Success",
