@@ -46,6 +46,12 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
     return "This Month";
   };
 
+  // Ensure the calendar displays the earlier month on the left when showing two months.
+  const displayMonth = dateRange?.from
+    ? new Date(dateRange.from.getFullYear(), dateRange.from.getMonth(), 1)
+    : new Date();
+  const displayMonthKey = `${displayMonth.getFullYear()}-${displayMonth.getMonth()}`;
+
   return (
     <div className="flex flex-col gap-1">
       <label className="text-xs text-muted-foreground">Date Range</label>
@@ -151,6 +157,8 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
               onDateRangeChange(range);
             }}
             numberOfMonths={2}
+            defaultMonth={displayMonth}
+            key={displayMonthKey}
             className={cn("p-3 pointer-events-auto")}
           />
 
