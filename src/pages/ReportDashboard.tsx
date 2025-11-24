@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCardsFixed";
-import { KPIChart } from "@/components/KPIChartFixed";
+import KPIChartsGrid from "@/components/KPIChartsGrid";
 import { PerformanceTable } from "@/components/PerformanceTable";
 import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
@@ -13,7 +13,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { Settings, ArrowLeft, Database, Grid3x3, GitCompare, Wallet } from "lucide-react";
+import { Settings, ArrowLeft, Database, Grid3x3, GitCompare, Wallet, Eye, Pencil } from "lucide-react";
 import { ShareModal } from "@/components/ShareModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
@@ -477,7 +477,17 @@ export default function ReportDashboard() {
                   className="gap-2"
                   title="Toggle Edit/View mode"
                 >
-                  {isEditMode ? "Edit mode" : "View mode"}
+                  {isEditMode ? (
+                    <>
+                      <Pencil className="h-4 w-4" />
+                      Edit
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-4 w-4" />
+                      View
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -531,10 +541,10 @@ export default function ReportDashboard() {
                     }
                   />
                 </div>
-                <KPIChart
+                <KPIChartsGrid
                   reportId={reportId}
-                  filters={filters}
                   accountId={accountId}
+                  filters={filters}
                   visibilityRefreshTrigger={visibilityRefreshTrigger}
                   key={`charts-${dataRefreshKey}-${loadingGeneration}`}
                   onLoadingComplete={() => markComponentLoaded('chart')}

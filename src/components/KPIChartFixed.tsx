@@ -19,11 +19,13 @@ interface KPIChartProps {
   };
   visibilityRefreshTrigger?: number;
   onLoadingComplete?: () => void;
+  initialMetric?: string;
+  hideHeaderControls?: boolean;
 }
 
-export function KPIChart({ reportId, accountId, filters, onLoadingComplete }: KPIChartProps) {
+export function KPIChart({ reportId, accountId, filters, onLoadingComplete, initialMetric, hideHeaderControls }: KPIChartProps) {
   const [chartData, setChartData] = useState<any[]>([]);
-  const [selectedMetric, setSelectedMetric] = useState<string>("Revenue");
+  const [selectedMetric, setSelectedMetric] = useState<string>(initialMetric || "Revenue");
   const [isLoading, setIsLoading] = useState(true);
   const [availableMetrics, setAvailableMetrics] = useState<string[]>([]);
 
@@ -268,9 +270,8 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete }: KP
       <Card className="shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg font-semibold">Performance over time</CardTitle>
-          {availableMetrics.length > 0 && (
+          {!hideHeaderControls && availableMetrics.length > 0 && (
             <div className="flex items-center gap-2">
-              <span className="text-xs uppercase font-medium text-muted-foreground">Breakdown by:</span>
               <Select value={selectedMetric} onValueChange={setSelectedMetric}>
                 <SelectTrigger className="w-40 h-8 text-xs">
                   <SelectValue />
@@ -299,34 +300,24 @@ export function KPIChart({ reportId, accountId, filters, onLoadingComplete }: KP
     <Card className="shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-lg font-semibold">Performance over time</CardTitle>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-medium text-muted-foreground">View results by:</span>
-            <Select value="Month" disabled>
-              <SelectTrigger className="w-28 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Month">Month</SelectItem>
-              </SelectContent>
-            </Select>
+        {!hideHeaderControls && (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Select value={selectedMetric} onValueChange={setSelectedMetric}>
+                <SelectTrigger className="w-40 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableMetrics.map((metric) => (
+                    <SelectItem key={metric} value={metric}>
+                      {metric}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-medium text-muted-foreground">Breakdown by:</span>
-            <Select value={selectedMetric} onValueChange={setSelectedMetric}>
-              <SelectTrigger className="w-40 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availableMetrics.map((metric) => (
-                  <SelectItem key={metric} value={metric}>
-                    {metric}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+        )}
       </CardHeader>
       <CardContent>
         <div className="h-80">

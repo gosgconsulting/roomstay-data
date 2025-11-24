@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Filter, Settings, RotateCcw } from "lucide-react";
+import { Settings, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -836,112 +836,105 @@ export const FiltersBar = ({
     <>
       <div className="border-b bg-card">
         <div className="container mx-auto px-6 py-3">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Filter className="h-4 w-4" />
-              <span>Filters</span>
-            </div>
-
-            <div className="flex items-center gap-3 flex-1">
-              {showMasterDimensionFilter && (
-                <div className="flex items-end gap-2">
-                  <MasterDimensionButton
-                    dimensions={dimensions}
-                    masterDimensionId={masterDimensionId}
-                    count={masterDimensionValues.length}
-                    onOpen={() => setMasterDimensionPopoverOpen(true)}
-                  />
-                </div>
-              )}
-
-              {showReportFilter && availableReports.length > 0 && (
-                <ReportSelector
-                  availableReports={availableReports}
-                  selectedReportIds={selectedReportIds}
-                  onChange={(ids) => onReportSelectionChange?.(ids)}
+          <div className="flex items-center justify-center gap-3">
+            {showMasterDimensionFilter && (
+              <div className="flex items-end gap-2">
+                <MasterDimensionButton
+                  dimensions={dimensions}
+                  masterDimensionId={masterDimensionId}
+                  count={masterDimensionValues.length}
+                  onOpen={() => setMasterDimensionPopoverOpen(true)}
                 />
-              )}
+              </div>
+            )}
 
-              {activeDimensions.map((dimId) => {
-                const dimension = dimensions.find(d => d.id === dimId);
-                if (!dimension) return null;
-                return (
-                  <DimensionFilter
-                    key={dimId}
-                    dimension={{ id: dimId, name: dimension.name }}
-                    isLoading={isLoadingFilters}
-                    values={dimensionValues[dimId] || []}
-                    searchTerm={searchTerms[dimId] || ""}
-                    selectedValues={selectedFilters[dimId] || []}
-                    open={!!openPopovers[dimId]}
-                    onOpenChange={(o) => setOpenPopovers({ ...openPopovers, [dimId]: o })}
-                    onSearchTermChange={(term) => setSearchTerms({ ...searchTerms, [dimId]: term })}
-                    onSelectAll={() => handleSelectAll(dimId)}
-                    onDeselectAll={() => handleDeselectAll(dimId)}
-                    onToggleValue={(value) => handleFilterChange(dimId, value)}
-                  />
-                );
-              })}
-
-              <DateRangeFilter
-                dateRange={dateRange}
-                datePreset={datePreset}
-                compareEnabled={compareEnabled}
-                compareType={compareType}
-                onDatePresetChange={(preset) => {
-                  if (preset === "all_time") {
-                    setDateRange(undefined);
-                    setDatePreset("all_time");
-                  } else {
-                    applyDatePreset(preset);
-                  }
-                }}
-                onDateRangeChange={(range) => {
-                  setDateRange(range);
-                  setDatePreset("custom");
-                }}
-                onCompareEnabledChange={setCompareEnabled}
-                onCompareTypeChange={setCompareType}
+            {showReportFilter && availableReports.length > 0 && (
+              <ReportSelector
+                availableReports={availableReports}
+                selectedReportIds={selectedReportIds}
+                onChange={(ids) => onReportSelectionChange?.(ids)}
               />
+            )}
 
-              {activeDimensions.length === 0 && !isSharedView && !showMasterDimensionFilter && isEditMode && (
-                <Button
-                  variant="outline"
-                  className="gap-2"
-                  onContextMenu={handleContextMenu}
-                  onClick={handleContextMenu}
-                >
-                  Right-click to configure filters
-                </Button>
-              )}
-            </div>
+            {activeDimensions.map((dimId) => {
+              const dimension = dimensions.find(d => d.id === dimId);
+              if (!dimension) return null;
+              return (
+                <DimensionFilter
+                  key={dimId}
+                  dimension={{ id: dimId, name: dimension.name }}
+                  isLoading={isLoadingFilters}
+                  values={dimensionValues[dimId] || []}
+                  searchTerm={searchTerms[dimId] || ""}
+                  selectedValues={selectedFilters[dimId] || []}
+                  open={!!openPopovers[dimId]}
+                  onOpenChange={(o) => setOpenPopovers({ ...openPopovers, [dimId]: o })}
+                  onSearchTermChange={(term) => setSearchTerms({ ...searchTerms, [dimId]: term })}
+                  onSelectAll={() => handleSelectAll(dimId)}
+                  onDeselectAll={() => handleDeselectAll(dimId)}
+                  onToggleValue={(value) => handleFilterChange(dimId, value)}
+                />
+              );
+            })}
 
-            <div className="flex items-center gap-2 ml-auto">
-              {hasActiveFilters() && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleResetFilters}
-                  className="gap-2 text-muted-foreground hover:text-foreground"
-                  title={`Reset ${getActiveFiltersCount()} active filter${getActiveFiltersCount() > 1 ? "s" : ""}`}
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  Reset Filters ({getActiveFiltersCount()})
-                </Button>
-              )}
+            <DateRangeFilter
+              dateRange={dateRange}
+              datePreset={datePreset}
+              compareEnabled={compareEnabled}
+              compareType={compareType}
+              onDatePresetChange={(preset) => {
+                if (preset === "all_time") {
+                  setDateRange(undefined);
+                  setDatePreset("all_time");
+                } else {
+                  applyDatePreset(preset);
+                }
+              }}
+              onDateRangeChange={(range) => {
+                setDateRange(range);
+                setDatePreset("custom");
+              }}
+              onCompareEnabledChange={setCompareEnabled}
+              onCompareTypeChange={setCompareType}
+            />
 
-              {activeDimensions.length > 0 && !isSharedView && isEditMode && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSettingsOpen(true)}
-                  title="Edit filter dimensions"
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
+            {activeDimensions.length === 0 && !isSharedView && !showMasterDimensionFilter && isEditMode && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                onContextMenu={handleContextMenu}
+                onClick={handleContextMenu}
+              >
+                Right-click to configure filters
+              </Button>
+            )}
+
+            {activeDimensions.length > 0 && !isSharedView && isEditMode && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSettingsOpen(true)}
+                title="Edit filter dimensions"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            )}
           </div>
+
+          {hasActiveFilters() && (
+            <div className="flex items-center justify-center mt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResetFilters}
+                className="gap-2 text-muted-foreground hover:text-foreground"
+                title={`Reset ${getActiveFiltersCount()} active filter${getActiveFiltersCount() > 1 ? "s" : ""}`}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset Filters ({getActiveFiltersCount()})
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 

@@ -371,7 +371,6 @@ export function KPIMetricsCards({
     console.log('[KPI-FIXED] KPIMetricsCards - Rendering loading state');
     return (
       <div>
-        <h2 className="text-lg font-semibold mb-4">Key Performance Indicators</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {Array.from({ length: 8 }).map((_, i) => (
             <Card key={i} className="animate-pulse shadow-sm">
@@ -395,8 +394,7 @@ export function KPIMetricsCards({
     console.log('[KPI-FIXED] KPIMetricsCards - Rendering empty state (no metrics)');
     return (
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Key Performance Indicators</h2>
+        <div className="flex items-center justify-end mb-4">
           {headerAction}
         </div>
         <div className="text-center py-8 text-muted-foreground">
@@ -409,8 +407,7 @@ export function KPIMetricsCards({
   console.log('[KPI-FIXED] KPIMetricsCards - Rendering metrics cards:', metrics.length);
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">Key Performance Indicators</h2>
+      <div className="flex items-center justify-end mb-4">
         {headerAction}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
