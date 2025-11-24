@@ -54,6 +54,7 @@ interface Dimension {
   name: string;
   type: string;
   scope?: 'global' | 'account' | 'custom';
+  conditions?: import("@/types/dimensions").DimensionCondition[];
 }
 
 export const FiltersBar = ({
@@ -593,7 +594,10 @@ export const FiltersBar = ({
           .eq("account_id", accountId)
           .order("created_at", { ascending: false });
         if (error) throw error;
-        accountData = (data || []) as Dimension[];
+        accountData = ((data || []).map(d => ({
+          ...d,
+          conditions: (Array.isArray(d.conditions) ? d.conditions : []) as unknown as import("@/types/dimensions").DimensionCondition[]
+        })) as unknown) as Dimension[];
       }
 
       let customData: Dimension[] = [];
@@ -605,7 +609,10 @@ export const FiltersBar = ({
           .or(`report_id.is.null,report_id.eq.${reportId}`)
           .order("created_at", { ascending: false });
         if (error) throw error;
-        customData = (data || []) as Dimension[];
+        customData = ((data || []).map(d => ({
+          ...d,
+          conditions: (Array.isArray(d.conditions) ? d.conditions : []) as unknown as import("@/types/dimensions").DimensionCondition[]
+        })) as unknown) as Dimension[];
       } else {
         const { data, error } = await supabase
           .from("dimensions").select("*")
@@ -614,7 +621,10 @@ export const FiltersBar = ({
           .is("report_id", null)
           .order("created_at", { ascending: false });
         if (error) throw error;
-        customData = (data || []) as Dimension[];
+        customData = ((data || []).map(d => ({
+          ...d,
+          conditions: (Array.isArray(d.conditions) ? d.conditions : []) as unknown as import("@/types/dimensions").DimensionCondition[]
+        })) as unknown) as Dimension[];
       }
 
       const { data: globalData, error: globalError } = await supabase
@@ -628,7 +638,10 @@ export const FiltersBar = ({
         ...(accountData || []),
         ...(customData || []),
         ...(globalData || [])
-      ] as Dimension[];
+      ].map(d => ({
+        ...d,
+        conditions: (Array.isArray(d.conditions) ? d.conditions : []) as unknown as import("@/types/dimensions").DimensionCondition[]
+      })) as Dimension[];
       // FIX: Deduplicate by id (not by name) so newly added dimensions aren't dropped
       const seenIds = new Set<string>();
       const unique = all.filter(d => {

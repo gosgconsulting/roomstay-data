@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { checkDimensionsHaveData } from "@/lib/dimensionUtils";
+import type { DimensionCondition } from "@/types/dimensions";
 
 export interface Dimension {
   id: string;
@@ -11,6 +12,7 @@ export interface Dimension {
   is_system?: boolean;
   scope?: 'global' | 'custom' | 'account';
   account_id?: string;
+  conditions?: DimensionCondition[];
 }
 
 interface UsePerformanceTableDimensionsOptions {
@@ -156,7 +158,10 @@ export function usePerformanceTableDimensions({
         ...accountData,
         ...globalData,
         ...customData
-      ];
+      ].map(d => ({
+        ...d,
+        conditions: (Array.isArray(d.conditions) ? d.conditions : []) as unknown as DimensionCondition[]
+      }));
 
       // Deduplicate dimensions by name (keep first occurrence, which prioritizes account-scoped)
       const seenNames = new Set<string>();
