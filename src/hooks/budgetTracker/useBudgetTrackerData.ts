@@ -107,7 +107,7 @@ export function useBudgetTrackerData({
             reportIds: reportIds || undefined,
             accountId: accountId,
             groupByDims: groupByDimensions,
-            breakdownDims: [],
+            breakdownDims: breakdownByDimensions, // include breakdown to fetch per-item rows
             thenByDims: [],
             visibleDimensionIds: Array.from(visibleColumns),
             dimensionFilters: {}, // No dimension filters for budget tracker
@@ -200,10 +200,12 @@ export function useBudgetTrackerData({
       const finalTableData: BudgetTableRow[] = [];
       
       if (activeDateTab === 'year') {
-        // Year view: show single row for the entire year
+        // Year view: show single row for the entire year with breakdown children if selected
         const yearRowData: Record<string, any> = {};
-        
-        // Initialize all dimensions with 0
+        const breakdownDimId = breakdownByDimensions[0];
+        const breakdownDim = breakdownDimId ? dimensions.find(d => d.id === breakdownDimId) : undefined;
+
+        // Initialize all dimensions
         dimensions.forEach(dim => {
           if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
             yearRowData[dim.name] = 0;
@@ -212,7 +214,8 @@ export function useBudgetTrackerData({
           }
         });
 
-        // Aggregate all month data into year totals
+        // Aggregate all months into year totals and collect breakdowns
+        const breakdownAggregate: Record<string, Record<string, number>> = {}; // name -> dimName -> total
         dataByMonth.forEach((monthRows) => {
           monthRows.forEach(row => {
             Object.keys(row.data).forEach(dimName => {
@@ -224,8 +227,41 @@ export function useBudgetTrackerData({
                 }
               }
             });
+
+            // Collect breakdown per item
+            if (breakdownDim) {
+              const itemName = String(row.data[breakdownDim.name] ?? '').trim();
+              if (itemName) {
+                breakdownAggregate[itemName] = breakdownAggregate[itemName] || {};
+                Object.keys(row.data).forEach(dimName => {
+                  const dim = dimensions.find(d => d.name === dimName);
+                  if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+                    const v = parseFloat(String(row.data[dimName] ?? '0'));
+                    if (!isNaN(v)) {
+                      breakdownAggregate[itemName][dimName] = (breakdownAggregate[itemName][dimName] || 0) + v;
+                    }
+                  }
+                });
+              }
+            }
           });
         });
+
+        // Build children from breakdown aggregate
+        const children: BudgetTableRow[] = [];
+        if (breakdownDim) {
+          Object.keys(breakdownAggregate)
+            .sort((a, b) => a.localeCompare(b))
+            .forEach(itemName => {
+              children.push({
+                id: `year-${filters.selectedYear}-${breakdownDim.id}-${itemName}`,
+                name: itemName,
+                level: 1,
+                parentId: `budget-year-${filters.selectedYear}`,
+                data: breakdownAggregate[itemName],
+              });
+            });
+        }
 
         finalTableData.push({
           id: `budget-year-${filters.selectedYear}`,
@@ -233,17 +269,19 @@ export function useBudgetTrackerData({
           level: 0,
           data: yearRowData,
           originalDate: `${filters.selectedYear}-01-01`,
+          children: children.length > 0 ? children : undefined,
         });
       } else {
-        // Month view: show all 12 months
+        // Month view: show all 12 months, with children per breakdown item if selected
+        const breakdownDimId = breakdownByDimensions[0];
+        const breakdownDim = breakdownDimId ? dimensions.find(d => d.id === breakdownDimId) : undefined;
+
         yearMonths.forEach(month => {
           const monthRows = dataByMonth.get(month.key) || [];
           
           if (monthRows.length > 0) {
-            // Aggregate month data if multiple rows exist
+            // Aggregate month data
             const monthRowData: Record<string, any> = {};
-            
-            // Initialize with first row data
             dimensions.forEach(dim => {
               if (dim.type === 'date') {
                 monthRowData[dim.name] = month.key;
@@ -252,7 +290,9 @@ export function useBudgetTrackerData({
               }
             });
 
-            // Aggregate all rows for this month
+            // Aggregate per breakdown item
+            const breakdownAggregate: Record<string, Record<string, number>> = {}; // item -> dimName -> total
+
             monthRows.forEach(row => {
               Object.keys(row.data).forEach(dimName => {
                 const dim = dimensions.find(d => d.name === dimName);
@@ -263,7 +303,37 @@ export function useBudgetTrackerData({
                   }
                 }
               });
+
+              if (breakdownDim) {
+                const itemName = String(row.data[breakdownDim.name] ?? '').trim();
+                if (itemName) {
+                  breakdownAggregate[itemName] = breakdownAggregate[itemName] || {};
+                  Object.keys(row.data).forEach(dimName => {
+                    const dim = dimensions.find(d => d.name === dimName);
+                    if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+                      const v = parseFloat(String(row.data[dimName] ?? '0'));
+                      if (!isNaN(v)) {
+                        breakdownAggregate[itemName][dimName] = (breakdownAggregate[itemName][dimName] || 0) + v;
+                      }
+                    }
+                  });
+                }
+              }
             });
+
+            // Build children rows
+            let children: BudgetTableRow[] | undefined = undefined;
+            if (breakdownDim && Object.keys(breakdownAggregate).length > 0) {
+              children = Object.keys(breakdownAggregate)
+                .sort((a, b) => a.localeCompare(b))
+                .map(itemName => ({
+                  id: `budget-month-${month.key}-${breakdownDim.id}-${itemName}`,
+                  name: itemName,
+                  level: 1,
+                  parentId: `budget-month-${month.key}`,
+                  data: breakdownAggregate[itemName],
+                }));
+            }
 
             finalTableData.push({
               id: `budget-month-${month.key}`,
@@ -271,6 +341,7 @@ export function useBudgetTrackerData({
               level: 0,
               data: monthRowData,
               originalDate: month.date,
+              children,
             });
           } else {
             // No data for this month - create empty row
