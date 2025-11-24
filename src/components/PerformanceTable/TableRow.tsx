@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useState, useRef } from "react";
 import { ChevronDown, ChevronRight, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatRowName, formatValue } from "@/lib/performanceTable/formatters";
@@ -57,6 +57,9 @@ export function TableRow({
   accountId = null,
 }: TableRowProps) {
   const [localBudget, setLocalBudget] = useState<number | null>(typeof (row as any)?.data?.Budget === 'number' ? (row as any).data.Budget : null);
+  // NEW: editing state and ref to focus input
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const budgetInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleRowClick = () => {
     if (hasChildren) {
@@ -156,9 +159,13 @@ export function TableRow({
     }
 
     setLocalBudget(value);
+    setIsEditingBudget(false);
     // NEW: use formatter-compatible dimension
     toast({ title: "Budget saved", description: `Saved ${formatValue(value, budgetDimForFormatValue)} for ${itemName}` });
   };
+
+  // NEW: computed display budget
+  const displayBudget = localBudget ?? (row as any)?.data?.Budget ?? 0;
 
   return (
     <>
@@ -200,8 +207,9 @@ export function TableRow({
         {showBudgetColumn && (
           <td className="py-3 px-4 text-right">
             <div className="flex items-center justify-end">
-              {isEditMode && isMonthView && isBreakdownChild ? (
+              {isEditMode && isMonthView && isBreakdownChild && isEditingBudget ? (
                 <input
+                  ref={budgetInputRef}
                   type="number"
                   step="0.01"
                   className="w-28 px-2 py-1 border rounded text-right"
@@ -215,16 +223,36 @@ export function TableRow({
                     if (localBudget !== null && !isNaN(localBudget)) {
                       saveBudget(localBudget);
                     }
+                    setIsEditingBudget(false);
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && localBudget !== null && !isNaN(localBudget)) {
                       saveBudget(localBudget);
+                    } else if (e.key === 'Escape') {
+                      setIsEditingBudget(false);
                     }
                   }}
                 />
               ) : (
-                // NEW: use formatter-compatible dimension
-                <span>{formatValue(localBudget ?? (row as any)?.data?.Budget ?? 0, budgetDimForFormatValue)}</span>
+                // NEW: clickable display; show "Set" when budget is 0
+                <span
+                  className={cn(
+                    "select-none",
+                    isEditMode && isMonthView && isBreakdownChild && "cursor-pointer",
+                    displayBudget === 0 && "text-muted-foreground underline"
+                  )}
+                  onClick={(e) => {
+                    if (isEditMode && isMonthView && isBreakdownChild) {
+                      e.stopPropagation();
+                      setIsEditingBudget(true);
+                      // focus after render
+                      setTimeout(() => budgetInputRef.current?.focus(), 0);
+                    }
+                  }}
+                  title={isEditMode && isMonthView && isBreakdownChild ? "Click to set budget" : undefined}
+                >
+                  {displayBudget === 0 ? "Set" : formatValue(displayBudget, budgetDimForFormatValue)}
+                </span>
               )}
             </div>
           </td>
