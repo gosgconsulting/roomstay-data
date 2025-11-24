@@ -394,10 +394,10 @@ export default function ReportDashboard() {
             loadingComponents={loadingComponents}
           />
           
-          {/* Top header now shows report name, not account info */}
+          {/* Header container: allow wrapping and add gaps */}
           <header className="border-b bg-card">
-            <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
+            <div className="container mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-4">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -465,7 +465,7 @@ export default function ReportDashboard() {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <Button 
                   variant="outline" 
                   size="sm" 

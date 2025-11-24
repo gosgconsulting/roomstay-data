@@ -836,7 +836,7 @@ export const FiltersBar = ({
     <>
       <div className="bg-card">
         <div className="container mx-auto px-6 py-3">
-          <div className="flex items-center justify-start gap-3">
+          <div className="flex flex-wrap items-center justify-start gap-3">
             {showMasterDimensionFilter && (
               <div className="flex items-end gap-2">
                 <MasterDimensionButton

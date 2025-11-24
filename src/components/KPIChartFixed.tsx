@@ -278,67 +278,7 @@ export function KPIChart({
   if (isLoading) {
     return (
       <Card className="shadow-sm">
-        <CardHeader className="flex items-center justify-between">
-          {isEditMode && (
-            <div className="flex items-center gap-2">
-              <Select value={selectedMetric} onValueChange={handleMetricChange}>
-                <SelectTrigger className="w-40 h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableMetrics.map((metric) => (
-                    <SelectItem key={metric} value={metric}>
-                      {metric}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </CardHeader>
-        <CardContent>
-          <div className="h-56 flex items-center justify-center">
-            <div className="animate-pulse text-muted-foreground">Loading chart data...</div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (chartData.length === 0) {
-    return (
-      <Card className="shadow-sm">
-        <CardHeader className="flex items-center justify-between">
-          {isEditMode && (
-            <div className="flex items-center gap-2">
-              <Select value={selectedMetric} onValueChange={handleMetricChange}>
-                <SelectTrigger className="w-40 h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableMetrics.map((metric) => (
-                    <SelectItem key={metric} value={metric}>
-                      {metric}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </CardHeader>
-        <CardContent>
-          <div className="h-56 flex items-center justify-center text-muted-foreground">
-            No chart data for selected date range
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="shadow-sm">
-      <CardHeader className="flex items-center justify-between">
-        {isEditMode && (
+        <CardHeader className="flex items-center justify-start">
           <div className="flex items-center gap-2">
             <Select value={selectedMetric} onValueChange={handleMetricChange}>
               <SelectTrigger className="w-40 h-8 text-xs">
@@ -353,7 +293,61 @@ export function KPIChart({
               </SelectContent>
             </Select>
           </div>
-        )}
+        </CardHeader>
+        <CardContent>
+          <div className="h-56 flex items-center justify-center">
+            <div className="animate-pulse text-muted-foreground">Loading chart data...</div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (chartData.length === 0) {
+    return (
+      <Card className="shadow-sm">
+        <CardHeader className="flex items-center justify-start">
+          <div className="flex items-center gap-2">
+            <Select value={selectedMetric} onValueChange={handleMetricChange}>
+              <SelectTrigger className="w-40 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableMetrics.map((metric) => (
+                  <SelectItem key={metric} value={metric}>
+                    {metric}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="h-56 flex items-center justify-center text-muted-foreground">
+            No chart data for selected date range
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="shadow-sm">
+      <CardHeader className="flex items-center justify-start">
+        <div className="flex items-center gap-2">
+          <Select value={selectedMetric} onValueChange={handleMetricChange}>
+            <SelectTrigger className="w-40 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableMetrics.map((metric) => (
+                <SelectItem key={metric} value={metric}>
+                  {metric}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="h-56 md:h-64">
