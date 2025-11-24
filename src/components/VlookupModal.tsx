@@ -385,23 +385,51 @@ export default function VlookupModal({
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Check for existing cluster dimension with same source and target
-    let query = supabase
+    const clusterName = (newName || 'Cluster').trim();
+
+    // First, check for an existing cluster dimension using uniqueness on:
+    // cluster_dimension_name + source_dimension_id + (account/report scope)
+    let checkQuery = supabase
+      .from('cluster_dimensions')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('source_dimension_id', sourceDimensionId)
+      .eq('cluster_dimension_name', clusterName);
+
+    if (accountId) {
+      checkQuery = checkQuery.eq('account_id', accountId).is('report_id', null);
+    } else if (reportId) {
+      checkQuery = checkQuery.eq('report_id', reportId).is('account_id', null);
+    } else {
+      // No scope provided: safest is to match nulls
+      checkQuery = checkQuery.is('account_id', null).is('report_id', null);
+    }
+
+    const { data: existingByName } = await checkQuery.limit(1);
+    if (existingByName && existingByName.length > 0) {
+      return existingByName[0].id;
+    }
+
+    // Next, check by source + target combo (legacy path)
+    let legacyQuery = supabase
       .from('cluster_dimensions')
       .select('id')
       .eq('user_id', user.id)
       .eq('source_dimension_id', sourceDimensionId)
       .eq('created_dimension_id', targetDimensionId);
 
-    if (accountId) query = query.eq('account_id', accountId);
-    if (reportId) query = query.eq('report_id', reportId);
+    if (accountId) legacyQuery = legacyQuery.eq('account_id', accountId).is('report_id', null);
+    else if (reportId) legacyQuery = legacyQuery.eq('report_id', reportId).is('account_id', null);
+    else legacyQuery = legacyQuery.is('account_id', null).is('report_id', null);
 
-    const { data: existing } = await query.limit(1);
-    if (existing && existing.length > 0) return existing[0].id;
+    const { data: existingLegacy } = await legacyQuery.limit(1);
+    if (existingLegacy && existingLegacy.length > 0) {
+      return existingLegacy[0].id;
+    }
 
-    // Create new cluster dimension
+    // Create new cluster dimension (account-scoped preferred)
     const insertData: any = {
-      cluster_dimension_name: newName || 'Cluster',
+      cluster_dimension_name: clusterName,
       source_dimension_id: sourceDimensionId,
       created_dimension_id: targetDimensionId,
       user_id: user.id,

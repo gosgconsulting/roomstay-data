@@ -169,8 +169,11 @@ export function usePerformanceTableFilters({
     }
 
     // Check if any group dimension is a vlookup dimension (pivot dimension)
-    const vlookupDimensions = groupDimensions.filter(dim => 
-      dim.type === 'text' && dim.scope === 'custom'
+    const vlookupDimensions = groupDimensions.filter(dim =>
+      dim.type === 'text' && (
+        // Recognize account-scoped or custom if targeted by vlookup mappings
+        vlookupMappings.some(m => m.targetDimensionId === dim.id)
+      )
     );
 
     if (vlookupDimensions.length > 0) {
@@ -311,7 +314,7 @@ export function usePerformanceTableFilters({
       if (groupDimensions.length > 1) {
         const secondDimension = groupDimensions[1];
         const isSecondDimDate = secondDimension.type === 'date';
-        const isSecondDimVlookup = secondDimension.type === 'text' && secondDimension.scope === 'custom';
+        const isSecondDimVlookup = vlookupMappings.some(m => m.targetDimensionId === secondDimension.id);
         const secondLevelValue = row.data[secondDimension.name];
         
         if (secondLevelValue !== undefined && secondLevelValue !== null) {
@@ -354,7 +357,7 @@ export function usePerformanceTableFilters({
           if (groupDimensions.length > 2) {
             const thirdDimension = groupDimensions[2];
             const isThirdDimDate = thirdDimension.type === 'date';
-            const isThirdDimVlookup = thirdDimension.type === 'text' && thirdDimension.scope === 'custom';
+            const isThirdDimVlookup = vlookupMappings.some(m => m.targetDimensionId === thirdDimension.id);
             const thirdLevelValue = row.data[thirdDimension.name];
             
             if (thirdLevelValue !== undefined && thirdLevelValue !== null) {
