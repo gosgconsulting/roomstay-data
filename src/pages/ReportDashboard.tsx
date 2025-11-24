@@ -395,8 +395,8 @@ export default function ReportDashboard() {
           />
           
           {/* Header container: allow wrapping and add gaps */}
-          <header className="border-b bg-card">
-            <div className="container mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+          <header className="bg-card">
+            <div className="container mx-auto px-6 py-2 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-4">
                 <Button
                   variant="ghost"
@@ -533,7 +533,7 @@ export default function ReportDashboard() {
                 refreshTrigger={loadingGeneration}
                 isEditMode={isEditMode}
               />
-              <main className="container mx-auto px-6 py-6 space-y-6">
+              <main className="container mx-auto px-6 py-4 space-y-6">
                 <div>
                   <KPIMetricsCards
                     reportId={reportId}

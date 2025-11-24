@@ -630,7 +630,7 @@ export function DashboardHeader({
 
   if (isLoading) {
     return (
-      <header className="border-b bg-card px-6 py-3 flex items-center justify-between">
+      <header className="bg-card px-6 py-3 flex items-center justify-between">
         <div className="text-muted-foreground">Loading...</div>
       </header>
     );
@@ -638,8 +638,8 @@ export function DashboardHeader({
 
   return (
     <>
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
+      <header className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {/* Removed Looker-style action buttons from here; they'll live next to the title in ReportDashboard */}

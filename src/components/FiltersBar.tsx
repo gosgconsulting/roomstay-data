@@ -836,7 +836,7 @@ export const FiltersBar = ({
     <>
       {/* Remove top bar styling from filter area */}
       <div className="bg-transparent border-0">
-        <div className="container mx-auto px-6 py-2">
+        <div className="container mx-auto px-4 py-1">
           {/* Filters row: enable wrapping and bottom-align items */}
           <div className="flex flex-wrap items-end justify-start gap-3">
             {showMasterDimensionFilter && (
