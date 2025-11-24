@@ -13,12 +13,15 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { Settings, ArrowLeft } from "lucide-react";
+import { Settings, ArrowLeft, Database, Grid3x3, GitCompare, Wallet } from "lucide-react";
 import { ShareModal } from "@/components/ShareModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
 import { resyncReportViews } from "@/lib/resync-report-views";
 import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
+import { DataSourcesListModal } from "@/components/DataSourcesListModal";
+import { DimensionsListModal } from "@/components/DimensionsListModal";
+import VlookupModal from "@/components/VlookupModal";
 
 interface Account {
   id: string;
@@ -49,6 +52,11 @@ export default function ReportDashboard() {
   const [isEditMode, setIsEditMode] = useState(false); // View mode by default
   const [reportsList, setReportsList] = useState<SidebarReport[]>([]);
   const [showShareModal, setShowShareModal] = useState(false);
+
+  // NEW: local modals for Looker-style controls
+  const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
+  const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
+  const [showVlookupModal, setShowVlookupModal] = useState(false);
 
   // Derive current report name
   const currentReportName = reportsList.find(r => r.id === reportId)?.name || "Reports";
@@ -382,8 +390,63 @@ export default function ReportDashboard() {
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
-                <div>
+                <div className="flex items-center gap-3">
                   <h1 className="text-2xl font-bold text-foreground">{currentReportName}</h1>
+
+                  {/* Looker-style controls next to title (only in Edit mode) */}
+                  {isEditMode && (
+                    <div className="flex items-center gap-2 ml-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => setShowDataSourcesListModal(true)}
+                        title="Data sources"
+                      >
+                        <Database className="h-4 w-4" />
+                        Data sources
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => setShowDimensionsListModal(true)}
+                        title="Dimensions"
+                      >
+                        <Grid3x3 className="h-4 w-4" />
+                        Dimensions
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => setShowVlookupModal(true)}
+                        title="Vlookup"
+                      >
+                        <GitCompare className="h-4 w-4" />
+                        Vlookup
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => {
+                          if (accountId) {
+                            navigate(`/tools/budget/${accountId}`);
+                          } else {
+                            navigate('/tools/budget');
+                          }
+                        }}
+                        title="Budget"
+                      >
+                        <Wallet className="h-4 w-4" />
+                        Budget
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -515,6 +578,35 @@ export default function ReportDashboard() {
             onOpenChange={setShowShareModal}
             reportId={reportId || ""}
             reportName={currentReportName}
+            accountId={accountId}
+          />
+
+          {/* Looker-style modals triggered from title area */}
+          <DataSourcesListModal
+            open={showDataSourcesListModal}
+            onOpenChange={setShowDataSourcesListModal}
+            reportId={reportId || ""}
+            accountId={accountId}
+            onAddNew={() => navigate(accountId ? `/tools/report/${accountId}?reportId=${reportId}` : `/tools/report?reportId=${reportId}`)}
+            onDataSync={() => refreshData()}
+            onRefreshData={() => refreshData()}
+          />
+
+          <DimensionsListModal
+            open={showDimensionsListModal}
+            onOpenChange={setShowDimensionsListModal}
+            onAddNew={() => navigate(accountId ? `/tools/report/${accountId}?reportId=${reportId}` : `/tools/report?reportId=${reportId}`)}
+            onEdit={() => navigate(accountId ? `/tools/report/${accountId}?reportId=${reportId}` : `/tools/report?reportId=${reportId}`)}
+            refreshTrigger={loadingGeneration}
+            reportId={reportId}
+            accountId={accountId}
+            onVisibilityChange={() => setVisibilityRefreshTrigger(prev => prev + 1)}
+          />
+
+          <VlookupModal
+            open={showVlookupModal}
+            onOpenChange={setShowVlookupModal}
+            reportId={reportId || null}
             accountId={accountId}
           />
         </SidebarInset>

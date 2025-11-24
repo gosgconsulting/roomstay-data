@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, Pencil, Database, Grid3x3, Wallet, RefreshCw, GitCompare } from "lucide-react";
+import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, Pencil } from "lucide-react";
 import { DataSourceSelectionModal } from "./DataSourceSelectionModal";
 import { DataSourcesListModal } from "./DataSourcesListModal";
 import { CSVImportChoiceModal } from "./CSVImportChoiceModal";
@@ -642,68 +642,12 @@ export function DashboardHeader({
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => setShowDataSourcesListModal(true)}
-                disabled={!currentReport}
-              >
-                <Database className="h-4 w-4" />
-                Data sources
-              </Button>
-
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => setShowDimensionsListModal(true)}
-              >
-                <Grid3x3 className="h-4 w-4" />
-                Dimensions
-              </Button>
-
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => setShowVlookupModal(true)}
-              >
-                <GitCompare className="h-4 w-4" />
-                Vlookup
-              </Button>
-
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => {
-                  if (accountId) {
-                    navigate(`/tools/budget/${accountId}`);
-                  } else {
-                    navigate('/tools/budget');
-                  }
-                }}
-              >
-                <Wallet className="h-4 w-4" />
-                Budget
-              </Button>
-              
-              {!isSharedView && onVlookupClick && (
-                <Button
-                  onClick={onVlookupClick}
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  Create Pivot
-                </Button>
-              )}
+              {/* Removed Looker-style action buttons from here; they'll live next to the title in ReportDashboard */}
             </div>
 
             <div className="flex items-center gap-3">
-              {lastUpdateDate && (
-                <span className="text-sm text-muted-foreground">
-                  Last update: {lastUpdateDate}
-                </span>
-              )}
+              {/* REMOVED: Last update text */}
+              {/* <span className="text-sm text-muted-foreground">Last update: {lastUpdateDate}</span> */}
             </div>
           </div>
         </div>
