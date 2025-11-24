@@ -123,7 +123,7 @@ export function TableHeader({
           )}
         </div>
         
-        {!isSharedView && isEditMode && (
+        {!isSharedView && (
           <div className="flex items-center gap-2">
             <ColumnVisibilitySheet
               dimensions={dimensions}
@@ -137,15 +137,17 @@ export function TableHeader({
               onCancel={onCancelColumnSettings}
               onRefreshDimensions={onRefreshDimensions}
             />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-2"
-              onClick={onOpenSettings}
-              title="Table settings"
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
+            {isEditMode && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2"
+                onClick={onOpenSettings}
+                title="Table settings"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         )}
       </div>
