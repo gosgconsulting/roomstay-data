@@ -834,9 +834,11 @@ export const FiltersBar = ({
 
   return (
     <>
-      <div className="bg-card">
-        <div className="container mx-auto px-6 py-3">
-          <div className="flex flex-wrap items-center justify-start gap-3">
+      {/* Remove top bar styling from filter area */}
+      <div className="bg-transparent border-0">
+        <div className="container mx-auto px-6 py-2">
+          {/* Filters row: enable wrapping and bottom-align items */}
+          <div className="flex flex-wrap items-end justify-start gap-3">
             {showMasterDimensionFilter && (
               <div className="flex items-end gap-2">
                 <MasterDimensionButton
@@ -898,6 +900,7 @@ export const FiltersBar = ({
               onCompareTypeChange={setCompareType}
             />
 
+            {/* Inline icon-only Reset Filters, bottom-aligned */}
             {hasActiveFilters() && (
               <Button
                 variant="outline"
@@ -905,7 +908,7 @@ export const FiltersBar = ({
                 onClick={handleResetFilters}
                 title={`Reset filters (${getActiveFiltersCount()})`}
                 aria-label={`Reset filters (${getActiveFiltersCount()})`}
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover:text-foreground self-end"
               >
                 <RotateCcw className="h-4 w-4" />
               </Button>
@@ -928,6 +931,7 @@ export const FiltersBar = ({
                 size="icon"
                 onClick={() => setSettingsOpen(true)}
                 title="Edit filter dimensions"
+                className="self-end"
               >
                 <Settings className="h-4 w-4" />
               </Button>
