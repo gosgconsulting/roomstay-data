@@ -9,6 +9,8 @@ import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 import { Settings, ArrowLeft } from "lucide-react";
@@ -24,6 +26,8 @@ interface Account {
   created_at: string;
   user_id: string;
 }
+
+type SidebarReport = { id: string; name: string; account_id: string | null; created_at: string; updated_at: string };
 
 export default function ReportDashboard() {
   const navigate = useNavigate();
@@ -42,6 +46,7 @@ export default function ReportDashboard() {
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   const [isEditMode, setIsEditMode] = useState(false); // View mode by default
+  const [reportsList, setReportsList] = useState<SidebarReport[]>([]);
 
   // Load dimensions using the same hook as PerformanceTable
   const {
@@ -220,6 +225,8 @@ export default function ReportDashboard() {
       
       // If user has reports for this account, select the first one or the one from URL params
       if (reports && reports.length > 0) {
+        // Save for sidebar
+        setReportsList(reports as SidebarReport[]);
         const reportIdFromUrl = searchParams.get('reportId');
         const selectedReportId = reportIdFromUrl && reports.find(r => r.id === reportIdFromUrl)
           ? reportIdFromUrl
@@ -291,6 +298,45 @@ export default function ReportDashboard() {
     setDataRefreshKey(prev => prev + 1);
   };
   
+  const handleEditReport = (id: string) => {
+    // Navigate to the report tool for editing the selected report
+    const url = accountId
+      ? `/tools/report/${accountId}?reportId=${id}`
+      : `/tools/report?reportId=${id}`;
+    navigate(url);
+  };
+
+  const handleDeleteReport = async (report: SidebarReport) => {
+    const { error } = await supabase
+      .from('reports')
+      .delete()
+      .eq('id', report.id);
+
+    if (error) {
+      console.error('Error deleting report:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete report.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Update sidebar list and current selection
+    setReportsList((prev) => {
+      const next = prev.filter((r) => r.id !== report.id);
+      if (reportId === report.id) {
+        setReportId(next[0]?.id ?? null);
+      }
+      return next;
+    });
+
+    toast({
+      title: "Report deleted",
+      description: "The report has been removed.",
+    });
+  };
+  
   if (isLoading) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
@@ -303,134 +349,148 @@ export default function ReportDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Loading toast for data loading */}
-      <LoadingToast 
-        isVisible={isDataLoading} 
-        loadingComponents={loadingComponents}
-      />
-      
-      {/* Header with account selector and status badge */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate(`/?account=${accountId}`)}
-              title="Back to accounts"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">{account?.name}</h1>
-              {account?.description && (
-                <p className="text-sm text-muted-foreground">{account.description}</p>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="px-3 py-1 rounded-md bg-success/10 border border-success/20">
-              <span className="text-xs font-medium text-success">Production</span>
-            </div>
-            <Button
-              variant={isEditMode ? "default" : "outline"}
-              size="sm"
-              onClick={() => setIsEditMode((prev) => !prev)}
-              className="gap-2"
-              title="Toggle Edit/View mode"
-            >
-              {isEditMode ? "Edit" : "View"}
-            </Button>
-          </div>
-        </div>
-      </header>
-      
-      <DashboardHeader
-        reportId={reportId}
-        accountId={accountId}
-        onReportChange={setReportId}
-        onRefreshData={refreshData}
-        onVisibilityChange={() => setVisibilityRefreshTrigger(prev => prev + 1)}
-        session={session}
-        onSignOut={handleSignOut}
-        isSharedView={isSharedView}
-      />
-      
-      {reportId ? (
-        <>
-          <FiltersBar 
-            reportId={reportId} 
-            onFiltersChange={handleFiltersChange} 
-            isSharedView={isSharedView} 
-            accountId={accountId} 
-            refreshTrigger={loadingGeneration}
-            isEditMode={isEditMode}
+    <SidebarProvider>
+      <div className="min-h-screen bg-background flex">
+        <ReportsSidebar
+          reports={reportsList}
+          accountId={accountId}
+          onEditReport={(id) => handleEditReport(id)}
+          onDeleteReport={(id) => handleDeleteReport({ id, name: "", account_id: accountId || null, created_at: "", updated_at: "" } as any)}
+          onAddNewReport={() => navigate(accountId ? `/tools/report/${accountId}` : '/tools/report')}
+        />
+        <SidebarInset className="flex-1">
+          {/* Loading toast for data loading */}
+          <LoadingToast 
+            isVisible={isDataLoading} 
+            loadingComponents={loadingComponents}
           />
-          <main className="container mx-auto px-6 py-6 space-y-6">
-            <div>
-              <KPIMetricsCards
-                reportId={reportId}
-                filters={filters}
-                accountId={accountId}
-                visibilityRefreshTrigger={visibilityRefreshTrigger}
-                key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
-                onLoadingComplete={() => markComponentLoaded('metrics')}
-                headerAction={
-                  !isSharedView && isEditMode ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setKpiSettingsOpen(true)}
-                      className="gap-2"
-                    >
-                      <Settings className="h-4 w-4" />
-                      KPI Settings
-                    </Button>
-                  ) : null
-                }
-              />
-            </div>
-            <KPIChart
-              reportId={reportId}
-              filters={filters}
-              accountId={accountId}
-              visibilityRefreshTrigger={visibilityRefreshTrigger}
-              key={`charts-${dataRefreshKey}-${loadingGeneration}`}
-              onLoadingComplete={() => markComponentLoaded('chart')}
-            />
-            <PerformanceTable 
-              reportId={reportId} 
-              filters={filters} 
-              isSharedView={isSharedView} 
-              accountId={accountId} 
-              visibilityRefreshTrigger={visibilityRefreshTrigger}
-              isEditMode={isEditMode}
-              key={`table-${dataRefreshKey}-${loadingGeneration}`}
-              onLoadingComplete={() => markComponentLoaded('table')}
-            />
-          </main>
           
-          <KPISettingsModal
-            open={kpiSettingsOpen}
-            onOpenChange={setKpiSettingsOpen}
+          {/* Top header with account info */}
+          <header className="border-b bg-card">
+            <div className="container mx-auto px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => navigate(`/?account=${accountId}`)}
+                  title="Back to accounts"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div>
+                  <h1 className="text-2xl font-bold text-foreground">{account?.name}</h1>
+                  {account?.description && (
+                    <p className="text-sm text-muted-foreground">{account.description}</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="px-3 py-1 rounded-md bg-success/10 border border-success/20">
+                  <span className="text-xs font-medium text-success">Production</span>
+                </div>
+                <Button
+                  variant={isEditMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setIsEditMode((prev) => !prev)}
+                  className="gap-2"
+                  title="Toggle Edit/View mode"
+                >
+                  {isEditMode ? "Edit" : "View"}
+                </Button>
+              </div>
+            </div>
+          </header>
+          
+          <DashboardHeader
             reportId={reportId}
-            onSettingsChange={refreshData}
-            visibilityRefreshTrigger={visibilityRefreshTrigger}
-            isEditMode={isEditMode}
+            accountId={accountId}
+            onReportChange={setReportId}
+            onRefreshData={() => {
+              refreshData();
+              setVisibilityRefreshTrigger(prev => prev + 1);
+            }}
+            onVisibilityChange={() => setVisibilityRefreshTrigger(prev => prev + 1)}
+            session={session}
+            onSignOut={handleSignOut}
+            isSharedView={isSharedView}
           />
-        </>
-      ) : (
-        <main className="container mx-auto px-6 py-6">
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold mb-4">No Reports Found</h2>
-            <p className="text-muted-foreground mb-6">
-              You don't have any reports for this account yet. Create your first report to get started.
-            </p>
-            <Button>Create Report</Button>
-          </div>
-        </main>
-      )}
-    </div>
+          
+          {reportId ? (
+            <>
+              <FiltersBar 
+                reportId={reportId} 
+                onFiltersChange={handleFiltersChange} 
+                isSharedView={isSharedView} 
+                accountId={accountId} 
+                refreshTrigger={loadingGeneration}
+                isEditMode={isEditMode}
+              />
+              <main className="container mx-auto px-6 py-6 space-y-6">
+                <div>
+                  <KPIMetricsCards
+                    reportId={reportId}
+                    filters={filters}
+                    accountId={accountId}
+                    visibilityRefreshTrigger={visibilityRefreshTrigger}
+                    key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
+                    onLoadingComplete={() => markComponentLoaded('metrics')}
+                    headerAction={
+                      !isSharedView && isEditMode ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setKpiSettingsOpen(true)}
+                          className="gap-2"
+                        >
+                          <Settings className="h-4 w-4" />
+                          KPI Settings
+                        </Button>
+                      ) : null
+                    }
+                  />
+                </div>
+                <KPIChart
+                  reportId={reportId}
+                  filters={filters}
+                  accountId={accountId}
+                  visibilityRefreshTrigger={visibilityRefreshTrigger}
+                  key={`charts-${dataRefreshKey}-${loadingGeneration}`}
+                  onLoadingComplete={() => markComponentLoaded('chart')}
+                />
+                <PerformanceTable 
+                  reportId={reportId} 
+                  filters={filters} 
+                  isSharedView={isSharedView} 
+                  accountId={accountId} 
+                  visibilityRefreshTrigger={visibilityRefreshTrigger}
+                  isEditMode={isEditMode}
+                  key={`table-${dataRefreshKey}-${loadingGeneration}`}
+                  onLoadingComplete={() => markComponentLoaded('table')}
+                />
+              </main>
+              
+              <KPISettingsModal
+                open={kpiSettingsOpen}
+                onOpenChange={setKpiSettingsOpen}
+                reportId={reportId}
+                onSettingsChange={refreshData}
+                visibilityRefreshTrigger={visibilityRefreshTrigger}
+                isEditMode={isEditMode}
+              />
+            </>
+          ) : (
+            <main className="container mx-auto px-6 py-6">
+              <div className="text-center py-12">
+                <h2 className="text-2xl font-bold mb-4">No Reports Found</h2>
+                <p className="text-muted-foreground mb-6">
+                  You don't have any reports for this account yet. Create your first report to get started.
+                </p>
+                <Button>Create Report</Button>
+              </div>
+            </main>
+          )}
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
   );
 }

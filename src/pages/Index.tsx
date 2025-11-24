@@ -9,11 +9,17 @@ import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 import { Settings } from "lucide-react";
 import { fallbackAuth, clearAuthAndReload, checkCORSIssues } from "@/lib/auth-fallback";
 import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
+
+// ADD: Minimal Report type and state to populate sidebar
+type SidebarReport = { id: string; name: string; account_id: string | null; created_at: string; updated_at: string };
+const [reportsList, setReportsList] = useState<SidebarReport[]>([]);
 
 export default function Index() {
   const navigate = useNavigate();
@@ -231,6 +237,8 @@ export default function Index() {
       console.log('[AUTH] Loaded reports:', reports?.length || 0);
 
       if (reports && reports.length > 0) {
+        // Save to sidebar
+        setReportsList(reports as SidebarReport[]);
         // Check if there's a reportId in the URL
         const urlParams = new URLSearchParams(location.search);
         const urlReportId = urlParams.get('reportId');
@@ -340,103 +348,107 @@ export default function Index() {
       </div>
     );
   }
-  
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Loading toast for data loading */}
-      <LoadingToast 
-        isVisible={isDataLoading} 
-        loadingComponents={loadingComponents}
-      />
-      
-      <DashboardHeader 
-        reportId={reportId} 
-        onReportChange={(newReportId) => {
-          setReportId(newReportId);
-          // Load account_id for the new report
-          if (newReportId) {
-            supabase
-              .from('reports')
-              .select('account_id')
-              .eq('id', newReportId)
-              .single()
-              .then(({ data }) => setAccountId(data?.account_id || null));
-          }
-        }}
-        onRefreshData={refreshData}
-        onVisibilityChange={() => setVisibilityRefreshTrigger(prev => prev + 1)}
-        session={session}
-        onSignOut={handleSignOut}
-        isSharedView={false}
-      />
-      
-      {reportId ? (
-        <>
-          <FiltersBar 
-            reportId={reportId} 
-            onFiltersChange={setFilters} 
-            isSharedView={false} 
-            accountId={accountId || undefined}
-            refreshTrigger={loadingGeneration} 
+    <SidebarProvider>
+      <div className="min-h-screen bg-background flex">
+        <ReportsSidebar reports={reportsList} accountId={accountId || undefined} />
+        <SidebarInset className="flex-1">
+          {/* Loading toast */}
+          <LoadingToast 
+            isVisible={isDataLoading} 
+            loadingComponents={loadingComponents}
           />
-          <main className="container mx-auto px-6 py-6 space-y-6">
-            <div className="relative">
-              <div className="absolute right-0 -top-2 z-10">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setKpiSettingsOpen(true)}
-                  className="gap-2"
-                >
-                  <Settings className="h-4 w-4" />
-                  KPI Settings
-                </Button>
-              </div>
-              <KPIMetricsCards 
-                reportId={reportId} 
-                filters={filters}
-                accountId={accountId || undefined}
-                key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
-                onLoadingComplete={() => markComponentLoaded('metrics')}
-                visibilityRefreshTrigger={visibilityRefreshTrigger}
-              />
-            </div>
-            <KPIChart
-              reportId={reportId}
-              filters={filters}
-              accountId={accountId}
-              key={`charts-${dataRefreshKey}-${loadingGeneration}`}
-            />
-            <PerformanceTable 
-              reportId={reportId} 
-              filters={filters} 
-              isSharedView={false}
-              accountId={accountId || undefined}
-              onFiltersChange={setFilters}
-              key={`table-${dataRefreshKey}-${loadingGeneration}`}
-              onLoadingComplete={() => markComponentLoaded('table')}
-              visibilityRefreshTrigger={visibilityRefreshTrigger}
-            />
-          </main>
           
-          <KPISettingsModal
-            open={kpiSettingsOpen}
-            onOpenChange={setKpiSettingsOpen}
-            reportId={reportId}
-            onSettingsChange={refreshData}
+          <DashboardHeader 
+            reportId={reportId} 
+            onReportChange={(newReportId) => {
+              setReportId(newReportId);
+              if (newReportId) {
+                supabase
+                  .from('reports')
+                  .select('account_id')
+                  .eq('id', newReportId)
+                  .single()
+                  .then(({ data }) => setAccountId(data?.account_id || null));
+              }
+            }}
+            onRefreshData={refreshData}
+            onVisibilityChange={() => setVisibilityRefreshTrigger(prev => prev + 1)}
+            session={session}
+            onSignOut={handleSignOut}
+            isSharedView={false}
           />
-        </>
-      ) : (
-        <main className="container mx-auto px-6 py-6">
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold mb-4">No Reports Found</h2>
-            <p className="text-muted-foreground mb-6">
-              You don't have any reports yet. Create your first report to get started.
-            </p>
-            <Button>Create Report</Button>
-          </div>
-        </main>
-      )}
-    </div>
+          
+          {reportId ? (
+            <>
+              <FiltersBar 
+                reportId={reportId} 
+                onFiltersChange={setFilters} 
+                isSharedView={false} 
+                accountId={accountId || undefined}
+                refreshTrigger={loadingGeneration} 
+              />
+              <main className="container mx-auto px-6 py-6 space-y-6">
+                <div className="relative">
+                  <div className="absolute right-0 -top-2 z-10">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setKpiSettingsOpen(true)}
+                      className="gap-2"
+                    >
+                      <Settings className="h-4 w-4" />
+                      KPI Settings
+                    </Button>
+                  </div>
+                  <KPIMetricsCards 
+                    reportId={reportId} 
+                    filters={filters}
+                    accountId={accountId || undefined}
+                    key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
+                    onLoadingComplete={() => markComponentLoaded('metrics')}
+                    visibilityRefreshTrigger={visibilityRefreshTrigger}
+                  />
+                </div>
+                <KPIChart
+                  reportId={reportId}
+                  filters={filters}
+                  accountId={accountId}
+                  key={`charts-${dataRefreshKey}-${loadingGeneration}`}
+                />
+                <PerformanceTable 
+                  reportId={reportId} 
+                  filters={filters} 
+                  isSharedView={false}
+                  accountId={accountId || undefined}
+                  onFiltersChange={setFilters}
+                  key={`table-${dataRefreshKey}-${loadingGeneration}`}
+                  onLoadingComplete={() => markComponentLoaded('table')}
+                  visibilityRefreshTrigger={visibilityRefreshTrigger}
+                />
+              </main>
+              
+              <KPISettingsModal
+                open={kpiSettingsOpen}
+                onOpenChange={setKpiSettingsOpen}
+                reportId={reportId}
+                onSettingsChange={refreshData}
+              />
+            </>
+          ) : (
+            <main className="container mx-auto px-6 py-6">
+              <div className="text-center py-12">
+                <h2 className="text-2xl font-bold mb-4">No Reports Found</h2>
+                <p className="text-muted-foreground mb-6">
+                  You don't have any reports yet. Create your first report to get started.
+                </p>
+                <Button>Create Report</Button>
+              </div>
+            </main>
+          )}
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
   );
 }

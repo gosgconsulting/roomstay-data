@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, ChevronDown, Pencil, Database, Grid3x3, Wallet, RefreshCw, GitCompare } from "lucide-react";
+import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, Pencil, Database, Grid3x3, Wallet, RefreshCw, GitCompare } from "lucide-react";
 import { DataSourceSelectionModal } from "./DataSourceSelectionModal";
 import { DataSourcesListModal } from "./DataSourcesListModal";
 import { CSVImportChoiceModal } from "./CSVImportChoiceModal";
@@ -17,20 +17,7 @@ import type { Dimension } from "@/types/dimensions";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 interface Report {
   id: string;
@@ -98,7 +85,6 @@ export function DashboardHeader({
   const [lastUpdateDate, setLastUpdateDate] = useState<string | null>(null);
   const [totalRows, setTotalRows] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isCreatingDimensions, setIsCreatingDimensions] = useState(false);
 
   // Load reports on mount and when accountId changes
@@ -657,101 +643,14 @@ export function DashboardHeader({
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
+              <SidebarTrigger className="mr-1" />
+
               {title && !isAllReportsPage ? (
                 <h1 className="text-2xl font-bold text-foreground">{title}</h1>
               ) : (
-                <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="gap-2">
-                      {isAllReportsPage ? "All Reports" : (currentReport?.name || "Select Report")} <ChevronDown className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-80 bg-background z-50">
-                    <DropdownMenuItem 
-                      className={`text-primary font-semibold ${!reportId || isAllReportsPage ? 'bg-accent' : ''}`}
-                      onSelect={(e) => {
-                        e.preventDefault();
-                        if (accountId) {
-                          navigate(`/all-reports/${accountId}`);
-                        } else {
-                          navigate('/all-reports');
-                        }
-                      }}
-                    >
-                      <Grid3x3 className="h-4 w-4 mr-2" />
-                      All Reports
-                    </DropdownMenuItem>
-                    {reports.length > 0 && <DropdownMenuSeparator />}
-                    {reports.map((report) => (
-                      <DropdownMenuItem 
-                        key={report.id}
-                        className={`justify-between group ${report.is_shared ? 'flex-col items-start' : ''} ${reportId === report.id ? 'bg-accent' : ''}`}
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          setCurrentReport(report);
-                          onReportChange(report.id);
-                          setDropdownOpen(false);
-                        }}
-                      >
-                        <div className="flex items-center justify-between w-full">
-                          <span 
-                            className="flex-1 cursor-pointer"
-                            onClick={() => {
-                              setCurrentReport(report);
-                              onReportChange(report.id);
-                              setDropdownOpen(false);
-                            }}
-                          >
-                            {report.name}
-                          </span>
-                          {!report.is_shared && (
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingReport(report);
-                                  setShowReportModal(true);
-                                }}
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-destructive"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteReport(report);
-                                }}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                        {report.is_shared && report.owner_email && (
-                          <span className="text-xs text-muted-foreground mt-1">
-                            Owner: {report.owner_email}
-                          </span>
-                        )}
-                      </DropdownMenuItem>
-                    ))}
-                    {reports.length > 0 && <DropdownMenuSeparator />}
-                    <DropdownMenuItem 
-                      className="text-primary" 
-                      onClick={() => {
-                        setEditingReport(null);
-                        setShowReportModal(true);
-                      }}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add new
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <h1 className="text-2xl font-bold text-foreground">
+                  {isAllReportsPage ? "All Reports" : (currentReport?.name || "Reports")}
+                </h1>
               )}
 
               <Button
