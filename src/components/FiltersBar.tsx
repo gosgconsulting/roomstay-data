@@ -699,6 +699,9 @@ export const FiltersBar = ({
       
       console.log('[FiltersBar] loadDimensions - After filter settings:', final.map(d => d.name));
       setDimensions(final);
+      
+      // Store all dimensions for settings modal (including vlookup dimensions)
+      setAllDimensions(unique);
     } catch (e) {
       console.error("Error loading dimensions:", e);
     } finally {
@@ -707,7 +710,7 @@ export const FiltersBar = ({
   };
 
   const loadDimensionValues = async () => {
-    if (!reportId || activeDimensions.length === 0) return;
+    if ((!reportId && !accountId) || activeDimensions.length === 0) return;
     setIsLoadingFilters(true);
     try {
       const valuesArray: Record<string, string[]> = {};
@@ -717,16 +720,24 @@ export const FiltersBar = ({
           // If this dimension is a vlookup target, list cluster names directly
           const mappingsForDim = (vlookupMappings || []).filter(m => m.targetDimensionId === dimId);
           if (mappingsForDim.length > 0) {
+            console.log('[FiltersBar] Loading vlookup values for dimension:', dimId, 'mappings:', mappingsForDim.length);
             const namesSet = new Set<string>();
             mappingsForDim.forEach(m => {
               const name = String(m.targetValue || '').trim();
               if (name) namesSet.add(name);
             });
             valuesArray[dimId] = Array.from(namesSet).sort();
+            console.log('[FiltersBar] Vlookup values loaded:', valuesArray[dimId]);
             return;
           }
 
-          // Otherwise, load unique values via edge function
+          // Otherwise, load unique values via edge function (only if reportId is available)
+          if (!reportId) {
+            console.log('[FiltersBar] Skipping dimension values load for dimension without reportId:', dimId);
+            valuesArray[dimId] = [];
+            return;
+          }
+
           try {
             const { data, error } = await supabase.functions.invoke('get-unique-dimension-values', {
               body: {

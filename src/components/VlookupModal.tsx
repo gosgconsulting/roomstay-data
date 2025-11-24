@@ -62,6 +62,27 @@ export default function VlookupModal({
 
   // Loading state for save operation
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Loading state for existing mappings
+  const [isLoadingExisting, setIsLoadingExisting] = useState(false);
+
+  // Reset all modal state when modal closes
+  const resetModalState = () => {
+    console.log('[VlookupModal] Resetting modal state');
+    setRows([{ valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
+    setOptionsMap({});
+    setLoadingOptionsMap({});
+    setTargetDimensions([]);
+    setIsSaving(false);
+    setIsLoadingExisting(false);
+  };
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!open) {
+      resetModalState();
+    }
+  }, [open]);
 
   // Load dimensions when modal opens
   useEffect(() => {
@@ -204,75 +225,119 @@ export default function VlookupModal({
   // Load existing mappings and prefill rows on open
   useEffect(() => {
     let cancelled = false;
+    
     async function loadExistingMappings() {
       if (!open) return;
+      
+      setIsLoadingExisting(true);
+      console.log('[VlookupModal] Loading existing mappings for accountId:', accountId, 'reportId:', reportId);
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-      // cluster_dimensions in scope
-      let cdQuery = supabase
-        .from('cluster_dimensions')
-        .select('id, source_dimension_id, created_dimension_id, cluster_dimension_name, report_id, account_id, user_id')
-        .eq('user_id', user.id);
+        // Query cluster_dimensions with prioritized scope logic (same as save logic)
+        let cdQuery = supabase
+          .from('cluster_dimensions')
+          .select('id, source_dimension_id, created_dimension_id, cluster_dimension_name, report_id, account_id, user_id')
+          .eq('user_id', user.id);
 
-      if (accountId) cdQuery = cdQuery.eq('account_id', accountId);
-      if (reportId) cdQuery = cdQuery.eq('report_id', reportId);
-
-      const { data: cds, error: cdErr } = await cdQuery;
-      if (cdErr) {
-        console.error('[VlookupModal] Error loading cluster_dimensions:', cdErr);
-        return;
-      }
-
-      if (!cds || cds.length === 0) {
-        if (!cancelled) {
-          setRows([{ valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
+        // Prioritize account-scoped over report-scoped (same logic as save)
+        if (accountId) {
+          cdQuery = cdQuery.eq('account_id', accountId);
+        } else if (reportId) {
+          cdQuery = cdQuery.eq('report_id', reportId);
         }
-        return;
-      }
 
-      const cdIds = cds.map((c: any) => c.id);
-      const { data: cms, error: cmErr } = await supabase
-        .from('cluster_mappings')
-        .select('cluster_dimension_id, source_values, cluster_name')
-        .in('cluster_dimension_id', cdIds);
+        const { data: cds, error: cdErr } = await cdQuery;
+        if (cdErr) {
+          console.error('[VlookupModal] Error loading cluster_dimensions:', cdErr);
+          return;
+        }
 
-      if (cmErr) {
-        console.error('[VlookupModal] Error loading cluster_mappings:', cmErr);
-        return;
-      }
+        console.log('[VlookupModal] Found cluster_dimensions:', cds?.length || 0);
 
-      const cdById = new Map(cds.map((c: any) => [c.id, c]));
-      const nextRows: Row[] = [];
+        if (!cds || cds.length === 0) {
+          console.log('[VlookupModal] No existing cluster dimensions found, using default empty row');
+          if (!cancelled) {
+            setRows([{ valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
+          }
+          return;
+        }
 
-      (cms || []).forEach((m: any) => {
-        const cd = cdById.get(m.cluster_dimension_id);
-        if (!cd) return;
-        const values = Array.isArray(m.source_values) ? m.source_values : [];
+        // Load cluster mappings
+        const cdIds = cds.map((c: any) => c.id);
+        const { data: cms, error: cmErr } = await supabase
+          .from('cluster_mappings')
+          .select('cluster_dimension_id, source_values, cluster_name')
+          .in('cluster_dimension_id', cdIds);
+
+        if (cmErr) {
+          console.error('[VlookupModal] Error loading cluster_mappings:', cmErr);
+          return;
+        }
+
+        console.log('[VlookupModal] Found cluster_mappings:', cms?.length || 0);
+
+        // Load target dimensions to get names
+        const targetDimIds = cds.map((c: any) => c.created_dimension_id).filter(Boolean);
+        let targetDims: any[] = [];
         
-        // Find the target dimension name for display
-        const targetDim = targetDimensions.find(d => d.id === cd.created_dimension_id);
-        
-        nextRows.push({
-          sourceDimensionId: cd.source_dimension_id,
-          valuesToMap: values,
-          targetDimensionId: cd.created_dimension_id || undefined,
-          creatingNew: false,
-          newDimensionName: targetDim?.name || "",
-          groupedValue: m.cluster_name || "",
+        if (targetDimIds.length > 0) {
+          const { data: targetDimsData, error: targetErr } = await supabase
+            .from('dimensions')
+            .select('id, name')
+            .in('id', targetDimIds);
+          
+          if (targetErr) {
+            console.error('[VlookupModal] Error loading target dimensions:', targetErr);
+          } else {
+            targetDims = targetDimsData || [];
+          }
+        }
+
+        const cdById = new Map(cds.map((c: any) => [c.id, c]));
+        const targetDimById = new Map(targetDims.map((d: any) => [d.id, d]));
+        const nextRows: Row[] = [];
+
+        (cms || []).forEach((m: any) => {
+          const cd = cdById.get(m.cluster_dimension_id);
+          if (!cd) return;
+          
+          const values = Array.isArray(m.source_values) ? m.source_values : [];
+          const targetDim = targetDimById.get(cd.created_dimension_id);
+          
+          nextRows.push({
+            sourceDimensionId: cd.source_dimension_id,
+            valuesToMap: values,
+            targetDimensionId: cd.created_dimension_id || undefined,
+            creatingNew: false,
+            newDimensionName: targetDim?.name || cd.cluster_dimension_name || "",
+            groupedValue: m.cluster_name || "",
+          });
         });
-      });
 
-      if (!cancelled) {
-        setRows(nextRows.length > 0 ? nextRows : [{ valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
+        console.log('[VlookupModal] Loaded existing mappings into rows:', nextRows.length);
+
+        if (!cancelled) {
+          setRows(nextRows.length > 0 ? nextRows : [{ valuesToMap: [], newDimensionName: "", groupedValue: "" }]);
+        }
+      } catch (error) {
+        console.error('[VlookupModal] Error in loadExistingMappings:', error);
+      } finally {
+        if (!cancelled) {
+          setIsLoadingExisting(false);
+        }
       }
     }
 
-    if (targetDimensions.length > 0) {
+    // Load existing mappings when modal opens (don't wait for targetDimensions)
+    if (open) {
       loadExistingMappings();
     }
-  }, [open, accountId, reportId, targetDimensions]);
+    
+    return () => { cancelled = true; };
+  }, [open, accountId, reportId]);
 
   // Load "Values to Map" options for all unique source dimensions present in rows
   useEffect(() => {
@@ -516,9 +581,73 @@ export default function VlookupModal({
         await upsertClusterMapping(clusterDimId, r.groupedValue, r.valuesToMap);
       }
 
-      await queryClient.invalidateQueries({ queryKey: ['vlookup-mappings', reportId ?? undefined, accountId ?? undefined] });
+      // Add newly created target dimensions to filter settings so they appear in FiltersBar
+      if (reportId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          // Get unique target dimension IDs from valid rows
+          const targetDimensionIds = Array.from(new Set(
+            valid.map(r => r.targetDimensionId).filter(Boolean)
+          ));
 
-      toast({ title: "Mappings saved", description: "Your pivot mappings were saved successfully." });
+          if (targetDimensionIds.length > 0) {
+            console.log('[VlookupModal] Adding target dimensions to filter settings:', targetDimensionIds);
+            
+            // Get current filter settings
+            const { data: currentView } = await supabase
+              .from('report_views')
+              .select('filter_dimensions')
+              .eq('report_id', reportId)
+              .eq('user_id', user.id)
+              .eq('is_default', true)
+              .maybeSingle();
+
+            const currentFilterDims = Array.isArray(currentView?.filter_dimensions) 
+              ? currentView.filter_dimensions 
+              : [];
+
+            // Add new target dimensions to filter_dimensions if not already present
+            const updatedFilterDims = Array.from(new Set([
+              ...currentFilterDims,
+              ...targetDimensionIds
+            ]));
+
+            if (updatedFilterDims.length > currentFilterDims.length) {
+              await supabase
+                .from('report_views')
+                .upsert({
+                  report_id: reportId,
+                  user_id: user.id,
+                  is_default: true,
+                  filter_dimensions: updatedFilterDims,
+                  name: 'Default View'
+                }, {
+                  onConflict: 'report_id,user_id,is_default'
+                });
+              
+              console.log('[VlookupModal] Updated filter_dimensions:', updatedFilterDims);
+            }
+          }
+        }
+      }
+
+      // Invalidate all relevant caches
+      await Promise.all([
+        // Invalidate vlookup mappings
+        queryClient.invalidateQueries({ queryKey: ['vlookup-mappings', reportId ?? undefined, accountId ?? undefined] }),
+        queryClient.invalidateQueries({ queryKey: ['vlookup-mappings'] }),
+        
+        // Invalidate dimensions cache to refresh FiltersBar
+        queryClient.invalidateQueries({ queryKey: ['dimensions'] }),
+        queryClient.invalidateQueries({ queryKey: ['performance-table-dimensions'] }),
+        
+        // Invalidate performance data to refresh with new mappings
+        queryClient.invalidateQueries({ queryKey: ['performance-table-data'] }),
+        queryClient.invalidateQueries({ queryKey: ['performance-table-filters'] }),
+      ]);
+
+      console.log('[VlookupModal] Cache invalidation completed after saving vlookup mappings');
+      toast({ title: "Mappings saved", description: "Your pivot mappings were saved successfully. The new cluster dimension is now available in filters." });
 
       onCreate?.(valid as Row[]);
       onOpenChange(false);
@@ -546,6 +675,13 @@ export default function VlookupModal({
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* Loading indicator */}
+          {isLoadingExisting && (
+            <div className="text-center py-4">
+              <div className="text-sm text-muted-foreground">Loading existing mappings...</div>
+            </div>
+          )}
+          
           {/* Header row */}
           <div className="grid grid-cols-12 gap-4 text-sm font-medium text-muted-foreground border-b pb-2">
             <div className="col-span-3">Source Dimension</div>

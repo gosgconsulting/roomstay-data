@@ -21,15 +21,26 @@ export function useVlookupMappings(reportId?: string, accountId?: string) {
         .select('id, source_dimension_id, created_dimension_id, cluster_dimension_name, report_id, account_id, user_id')
         .eq('user_id', user.id);
 
-      if (reportId) {
-        cdQuery = cdQuery.eq('report_id', reportId);
-      }
+      // Query based on scope - prioritize account-scoped over report-scoped
       if (accountId) {
         cdQuery = cdQuery.eq('account_id', accountId);
+      } else if (reportId) {
+        cdQuery = cdQuery.eq('report_id', reportId);
       }
+      
+      console.log('[useVlookupMappings] Querying cluster_dimensions with accountId:', accountId, 'reportId:', reportId);
 
       const { data: cds, error: cdError } = await cdQuery;
-      if (cdError || !cds || cds.length === 0) return [];
+      if (cdError) {
+        console.error('[useVlookupMappings] Error loading cluster_dimensions:', cdError);
+        return [];
+      }
+      if (!cds || cds.length === 0) {
+        console.log('[useVlookupMappings] No cluster_dimensions found for user');
+        return [];
+      }
+      
+      console.log('[useVlookupMappings] Found cluster_dimensions:', cds.length);
 
       const clusterIds = cds.map(c => c.id);
       const { data: cms, error: cmError } = await supabase
@@ -37,7 +48,16 @@ export function useVlookupMappings(reportId?: string, accountId?: string) {
         .select('id, cluster_dimension_id, source_values, cluster_name')
         .in('cluster_dimension_id', clusterIds);
 
-      if (cmError || !cms) return [];
+      if (cmError) {
+        console.error('[useVlookupMappings] Error loading cluster_mappings:', cmError);
+        return [];
+      }
+      if (!cms) {
+        console.log('[useVlookupMappings] No cluster_mappings found');
+        return [];
+      }
+      
+      console.log('[useVlookupMappings] Found cluster_mappings:', cms.length);
 
       // Build mapping entries, one per source value, preserving API shape
       const mappings: VlookupMapping[] = [];
@@ -66,6 +86,7 @@ export function useVlookupMappings(reportId?: string, accountId?: string) {
         }
       }
 
+      console.log('[useVlookupMappings] Generated mappings:', mappings.length);
       return mappings;
     },
     enabled: !!reportId || !!accountId,

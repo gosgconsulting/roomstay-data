@@ -159,12 +159,22 @@ export default function ReportDashboard() {
   // Reset filters and mark loading when report changes
   useEffect(() => {
     if (reportId) {
+      console.log('[testing] ReportDashboard - reportId changed to:', reportId);
+      
       // Cancel previous loading by incrementing generation
       setLoadingGeneration(prev => prev + 1);
       
       // Clear previous loading states immediately
       setLoadingComponents(new Set());
       setIsDataLoading(false);
+      
+      // Invalidate all report-specific caches to prevent cross-contamination
+      queryClient.invalidateQueries({ queryKey: ['performance-table-data'] });
+      queryClient.invalidateQueries({ queryKey: ['performance-table-filters'] });
+      queryClient.invalidateQueries({ queryKey: ['performance-table-dimensions'] });
+      queryClient.invalidateQueries({ queryKey: ['dimensions'] });
+      queryClient.invalidateQueries({ queryKey: ['vlookup-mappings'] });
+      console.log('[testing] ReportDashboard - Invalidated all caches for report change');
       
       // Start new loading cycle
       markComponentLoading('metrics');
@@ -183,7 +193,7 @@ export default function ReportDashboard() {
       // Load dimensions when reportId changes
       loadDimensions();
     }
-  }, [reportId, loadDimensions]);
+  }, [reportId, loadDimensions, queryClient]);
   
   useEffect(() => {
     checkAuth();
@@ -391,11 +401,11 @@ export default function ReportDashboard() {
           onSelectReport={(id) => setReportId(id)} // NEW: local switch
         />
         <SidebarInset className="flex-1 overflow-x-hidden">
-          {/* Loading toast for data loading */}
-          <LoadingToast 
+          {/* Loading toast for data loading - HIDDEN: Individual components show their own loading states */}
+          {/* <LoadingToast 
             isVisible={isDataLoading} 
             loadingComponents={loadingComponents}
-          />
+          /> */}
           
           {/* Header container: allow wrapping and add gaps */}
           <header className="bg-card">

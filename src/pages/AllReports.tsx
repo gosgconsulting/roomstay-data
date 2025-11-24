@@ -305,11 +305,11 @@ export default function AllReports() {
   return (
     <SidebarProvider>
       <div className="min-h-screen bg-background flex">
-        {/* Loading toast for data loading */}
-        <LoadingToast 
+        {/* Loading toast for data loading - HIDDEN: Individual components show their own loading states */}
+        {/* <LoadingToast 
           isVisible={isDataLoading} 
           loadingComponents={loadingComponents}
-        />
+        /> */}
         
         {/* Sidebar */}
         <ReportsSidebar

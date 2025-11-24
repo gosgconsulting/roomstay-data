@@ -125,12 +125,22 @@ export default function Index() {
   // When reportId changes, refresh all components
   useEffect(() => {
     if (reportId) {
+      console.log('[testing] Index - reportId changed to:', reportId);
+      
       // Cancel previous loading by incrementing generation
       setLoadingGeneration(prev => prev + 1);
       
       // Clear previous loading states immediately
       setLoadingComponents(new Set());
       setIsDataLoading(false);
+      
+      // Invalidate all report-specific caches to prevent cross-contamination
+      queryClient.invalidateQueries({ queryKey: ['performance-table-data'] });
+      queryClient.invalidateQueries({ queryKey: ['performance-table-filters'] });
+      queryClient.invalidateQueries({ queryKey: ['performance-table-dimensions'] });
+      queryClient.invalidateQueries({ queryKey: ['dimensions'] });
+      queryClient.invalidateQueries({ queryKey: ['vlookup-mappings'] });
+      console.log('[testing] Index - Invalidated all caches for report change');
       
       // Start new loading cycle
       markComponentLoading('metrics');
@@ -141,7 +151,7 @@ export default function Index() {
       // Load dimensions when reportId changes
       loadDimensions();
     }
-  }, [reportId, loadDimensions]);
+  }, [reportId, loadDimensions, queryClient]);
 
   const checkAuth = async () => {
     let authCompleted = false;
@@ -365,11 +375,11 @@ export default function Index() {
           }}
         />
         <SidebarInset className="flex-1">
-          {/* Loading toast */}
-          <LoadingToast 
+          {/* Loading toast - HIDDEN: Individual components show their own loading states */}
+          {/* <LoadingToast 
             isVisible={isDataLoading} 
             loadingComponents={loadingComponents}
-          />
+          /> */}
           
           <DashboardHeader 
             reportId={reportId} 

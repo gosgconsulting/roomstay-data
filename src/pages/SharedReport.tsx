@@ -269,11 +269,11 @@ export default function SharedReport() {
   // Render the full report dashboard
   return (
     <div className="min-h-screen bg-background">
-      {/* Loading toast for data loading */}
-      <LoadingToast 
+      {/* Loading toast for data loading - HIDDEN: Individual components show their own loading states */}
+      {/* <LoadingToast 
         isVisible={isDataLoading} 
         loadingComponents={loadingComponents}
-      />
+      /> */}
 
       <DashboardHeader 
         reportId={reportId}
