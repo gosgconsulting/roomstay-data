@@ -58,12 +58,14 @@ export function useBudgetTrackerData({
     const yearStart = startOfYear(new Date(filters.selectedYear, 0, 1));
     const yearEnd = endOfYear(new Date(filters.selectedYear, 0, 1));
     
-    return eachMonthOfInterval({ start: yearStart, end: yearEnd }).map(date => ({
+    const monthsAsc = eachMonthOfInterval({ start: yearStart, end: yearEnd }).map(date => ({
       date,
       key: format(date, 'yyyy-MM-dd'),
       name: format(date, 'MMMM yyyy'),
       shortName: format(date, 'MMM'),
     }));
+    // Show latest to earliest (e.g., Dec → Jan)
+    return monthsAsc.reverse();
   }, [filters.selectedYear]);
 
   const loadBudgetTrackerData = useCallback(async () => {
@@ -116,7 +118,7 @@ export function useBudgetTrackerData({
             dateFrom: dateFromFormatted,
             dateTo: dateToFormatted,
             dateGranularity: activeDateTab === 'year' ? 'year' : 'month',
-            dateOrder: 'asc', // Always ascending for budget tracker
+            dateOrder: 'desc', // Latest to earliest for Budget Tracker
             limit: 50000,
             offset: 0
           }
