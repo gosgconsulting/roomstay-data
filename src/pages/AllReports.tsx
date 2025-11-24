@@ -6,12 +6,14 @@ import { PerformanceTable } from "@/components/PerformanceTable";
 import { LoadingToast } from "@/components/LoadingToast";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import { KPIChart } from "@/components/KPIChart";
+import { ReportsSidebar } from "@/components/ReportsSidebar";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 
 interface Report {
   id: string;
@@ -238,6 +240,59 @@ export default function AllReports() {
     markComponentLoading('table-consolidated');
   };
 
+  const handleEditReport = (reportId: string) => {
+    console.log('[testing] AllReports - Edit report:', reportId);
+    // Navigate to report edit page
+    const report = reports.find(r => r.id === reportId);
+    if (report?.account_id) {
+      navigate(`/tools/report/${report.account_id}?reportId=${reportId}&edit=true`);
+    } else if (accountId) {
+      navigate(`/tools/report/${accountId}?reportId=${reportId}&edit=true`);
+    }
+  };
+
+  const handleDeleteReport = async (reportId: string) => {
+    console.log('[testing] AllReports - Delete report:', reportId);
+    
+    if (!confirm('Are you sure you want to delete this report? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('reports')
+        .delete()
+        .eq('id', reportId);
+
+      if (error) throw error;
+
+      // Remove from local state
+      setReports(prev => prev.filter(r => r.id !== reportId));
+      setSelectedReportIds(prev => prev.filter(id => id !== reportId));
+      
+      toast({
+        title: "Success",
+        description: "Report deleted successfully.",
+      });
+    } catch (error) {
+      console.error('Error deleting report:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete report. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAddNewReport = () => {
+    console.log('[testing] AllReports - Add new report');
+    if (accountId) {
+      navigate(`/tools/report/${accountId}`);
+    } else {
+      navigate('/tools/report');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
@@ -250,114 +305,128 @@ export default function AllReports() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Loading toast for data loading */}
-      <LoadingToast 
-        isVisible={isDataLoading} 
-        loadingComponents={loadingComponents}
-      />
-      
-      <DashboardHeader 
-        reportId={null} // No single report selected in consolidated view
-        accountId={accountId || undefined}
-        onReportChange={(selectedReportId) => {
-          // Navigate back to individual report view
-          if (accountId) {
-            navigate(`/tools/report/${accountId}?reportId=${selectedReportId}`);
-          } else {
-            // If no accountId, try to find the report's account_id
-            const selectedReport = reports.find(r => r.id === selectedReportId);
-            if (selectedReport?.account_id) {
-              navigate(`/tools/report/${selectedReport.account_id}?reportId=${selectedReportId}`);
-            }
-          }
-        }}
-        session={session}
-        onSignOut={handleSignOut}
-        onRefreshData={refreshData}
-        // Don't set title so dropdown shows
-      />
-      
-      {reports.length > 0 ? (
-        <main className="container mx-auto px-6 py-6 space-y-8">
-          {/* Consolidated Analytics Section */}
-          <Card className="p-6 space-y-6">
-            {/* Section Header */}
-            <div className="border-b pb-4">
-              <h2 className="text-2xl font-bold text-foreground">
-                {account?.name || 'All Reports'} - Consolidated Analytics
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Combined data from {reports.length} report{reports.length !== 1 ? 's' : ''}
-              </p>
-            </div>
-            
-            {/* Filters */}
-            <FiltersBar 
-              reportId={null}
-              onFiltersChange={(filters) => handleFiltersChange('consolidated', filters)}
-              isSharedView={false} 
-              accountId={accountId}
-              refreshTrigger={loadingGeneration}
-              showMasterDimensionFilter={true}
-              showReportFilter={true}
-              availableReports={reports}
-              selectedReportIds={selectedReportIds}
-              onReportSelectionChange={handleReportSelectionChange}
-            />
-            
-            {/* KPI Metrics Cards */}
-            <div className="space-y-2">
-              <h3 className="text-base font-semibold text-foreground">Analytics & Insights</h3>
-              <KPIMetricsCards
-                reportId="consolidated"
-                filters={getCombinedFilters('consolidated')}
-                accountId={accountId}
-                visibilityRefreshTrigger={loadingGeneration}
-                key={`metrics-consolidated-${loadingGeneration}`}
-                onLoadingComplete={() => markComponentLoaded('metrics-consolidated')}
-              />
-            </div>
-            
-            {/* KPI Chart */}
-            <div className="space-y-2">
-              <h3 className="text-base font-semibold text-foreground">Performance Chart</h3>
-              <KPIChart
-                reportId="consolidated"
-                filters={getCombinedFilters('consolidated')}
-                accountId={accountId}
-                dimensions={[]}
-                key={`charts-${loadingGeneration}`}
-                onLoadingComplete={() => markComponentLoaded('chart')}
-              />
-            </div>
-            
-            {/* Performance Table */}
-            <PerformanceTable 
-              reportId={null}
-              reportIds={selectedReportIds.length > 0 ? selectedReportIds : reports.map(r => r.id)}
-              filters={getCombinedFilters('consolidated')} 
-              isSharedView={false}
-              accountId={accountId}
-              onFiltersChange={(filters) => handleFiltersChange('consolidated', filters)}
-              key={`table-consolidated-${loadingGeneration}`}
-              onLoadingComplete={() => markComponentLoaded('table-consolidated')}
-              visibilityRefreshTrigger={loadingGeneration}
-            />
-          </Card>
-        </main>
-      ) : (
-        <main className="container mx-auto px-6 py-6">
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold mb-4">No Reports Found</h2>
-            <p className="text-muted-foreground mb-6">
-              {accountId 
-                ? `No reports found for ${account?.name || 'this account'}. Create a report to get started.`
-                : "You don't have any reports yet. Create your first report to get started."}
-            </p>
-          </div>
-        </main>
-      )}
-    </div>
+    <SidebarProvider>
+      <div className="min-h-screen bg-background flex">
+        {/* Loading toast for data loading */}
+        <LoadingToast 
+          isVisible={isDataLoading} 
+          loadingComponents={loadingComponents}
+        />
+        
+        {/* Sidebar */}
+        <ReportsSidebar
+          reports={reports}
+          accountId={accountId}
+          onEditReport={handleEditReport}
+          onDeleteReport={handleDeleteReport}
+          onAddNewReport={handleAddNewReport}
+        />
+        
+        {/* Main Content */}
+        <SidebarInset className="flex-1">
+          <DashboardHeader 
+            reportId={null} // No single report selected in consolidated view
+            accountId={accountId || undefined}
+            onReportChange={(selectedReportId) => {
+              // Navigate back to individual report view
+              if (accountId) {
+                navigate(`/tools/report/${accountId}?reportId=${selectedReportId}`);
+              } else {
+                // If no accountId, try to find the report's account_id
+                const selectedReport = reports.find(r => r.id === selectedReportId);
+                if (selectedReport?.account_id) {
+                  navigate(`/tools/report/${selectedReport.account_id}?reportId=${selectedReportId}`);
+                }
+              }
+            }}
+            session={session}
+            onSignOut={handleSignOut}
+            onRefreshData={refreshData}
+            // Don't set title so dropdown shows
+          />
+          
+          {reports.length > 0 ? (
+            <main className="container mx-auto px-6 py-6 space-y-8">
+              {/* Consolidated Analytics Section */}
+              <Card className="p-6 space-y-6">
+                {/* Section Header */}
+                <div className="border-b pb-4">
+                  <h2 className="text-2xl font-bold text-foreground">
+                    {account?.name || 'All Reports'} - Consolidated Analytics
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Combined data from {reports.length} report{reports.length !== 1 ? 's' : ''}
+                  </p>
+                </div>
+                
+                {/* Filters */}
+                <FiltersBar 
+                  reportId={null}
+                  onFiltersChange={(filters) => handleFiltersChange('consolidated', filters)}
+                  isSharedView={false} 
+                  accountId={accountId}
+                  refreshTrigger={loadingGeneration}
+                  showMasterDimensionFilter={true}
+                  showReportFilter={true}
+                  availableReports={reports}
+                  selectedReportIds={selectedReportIds}
+                  onReportSelectionChange={handleReportSelectionChange}
+                />
+                
+                {/* KPI Metrics Cards */}
+                <div className="space-y-2">
+                  <h3 className="text-base font-semibold text-foreground">Analytics & Insights</h3>
+                  <KPIMetricsCards
+                    reportId="consolidated"
+                    filters={getCombinedFilters('consolidated')}
+                    accountId={accountId}
+                    visibilityRefreshTrigger={loadingGeneration}
+                    key={`metrics-consolidated-${loadingGeneration}`}
+                    onLoadingComplete={() => markComponentLoaded('metrics-consolidated')}
+                  />
+                </div>
+                
+                {/* KPI Chart */}
+                <div className="space-y-2">
+                  <h3 className="text-base font-semibold text-foreground">Performance Chart</h3>
+                  <KPIChart
+                    reportId="consolidated"
+                    filters={getCombinedFilters('consolidated')}
+                    accountId={accountId}
+                    dimensions={[]}
+                    key={`charts-${loadingGeneration}`}
+                    onLoadingComplete={() => markComponentLoaded('chart')}
+                  />
+                </div>
+                
+                {/* Performance Table */}
+                <PerformanceTable 
+                  reportId={null}
+                  reportIds={selectedReportIds.length > 0 ? selectedReportIds : reports.map(r => r.id)}
+                  filters={getCombinedFilters('consolidated')} 
+                  isSharedView={false}
+                  accountId={accountId}
+                  onFiltersChange={(filters) => handleFiltersChange('consolidated', filters)}
+                  key={`table-consolidated-${loadingGeneration}`}
+                  onLoadingComplete={() => markComponentLoaded('table-consolidated')}
+                  visibilityRefreshTrigger={loadingGeneration}
+                />
+              </Card>
+            </main>
+          ) : (
+            <main className="container mx-auto px-6 py-6">
+              <div className="text-center py-12">
+                <h2 className="text-2xl font-bold mb-4">No Reports Found</h2>
+                <p className="text-muted-foreground mb-6">
+                  {accountId 
+                    ? `No reports found for ${account?.name || 'this account'}. Create a report to get started.`
+                    : "You don't have any reports yet. Create your first report to get started."}
+                </p>
+              </div>
+            </main>
+          )}
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
   );
 }

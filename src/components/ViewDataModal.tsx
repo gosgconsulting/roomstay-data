@@ -130,7 +130,13 @@ export const ViewDataModal = ({
 
         // Calculate formula dimensions
         dimensionsData?.forEach(dim => {
-          if (dim.formula) {
+          // Handle new multiple formula-condition pairs structure
+          if (dim.formula_condition_pairs && dim.formula_condition_pairs.length > 0) {
+            const calculatedValue = calculateMultipleFormulas(dim.formula_condition_pairs, valuesByName, dimensionsData || []);
+            dimensionValues[dim.id] = calculatedValue;
+          }
+          // Handle backward compatibility with old single formula structure
+          else if (dim.formula) {
             const calculatedValue = calculateFormula(dim.formula, valuesByName, dimensionsData || []);
             dimensionValues[dim.id] = calculatedValue;
           }
@@ -201,6 +207,63 @@ export const ViewDataModal = ({
     } catch (error) {
       return null;
     }
+  };
+
+  const calculateMultipleFormulas = (
+    formulaConditionPairs: any[],
+    data: Record<string, any>,
+    dimensions: any[]
+  ): number | null => {
+    if (!formulaConditionPairs || formulaConditionPairs.length === 0) return null;
+    
+    // Iterate through formula-condition pairs in order
+    for (const pair of formulaConditionPairs) {
+      if (!pair.formula) continue;
+      
+      // Check if all conditions for this pair are met
+      let conditionsMatch = true;
+      
+      if (pair.conditions && pair.conditions.length > 0) {
+        for (const condition of pair.conditions) {
+          // Find the dimension being filtered
+          const filterDim = dimensions.find(d => d.id === condition.dimension_id);
+          if (!filterDim) continue;
+          
+          const rowValue = String(data[filterDim.name] || '').toLowerCase();
+          const conditionValue = condition.value.toLowerCase();
+          
+          // Check condition based on operator
+          let matches = false;
+          switch (condition.operator) {
+            case 'equals':
+              matches = rowValue === conditionValue;
+              break;
+            case 'not_equals':
+              matches = rowValue !== conditionValue;
+              break;
+            case 'contains':
+              matches = rowValue.includes(conditionValue);
+              break;
+            case 'not_contains':
+              matches = !rowValue.includes(conditionValue);
+              break;
+          }
+          
+          if (!matches) {
+            conditionsMatch = false;
+            break;
+          }
+        }
+      }
+      
+      // If conditions match (or no conditions), apply this formula
+      if (conditionsMatch) {
+        return calculateFormula(pair.formula, data, dimensions);
+      }
+    }
+    
+    // If no formula matched, return 0
+    return 0;
   };
 
   return (

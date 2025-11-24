@@ -13,6 +13,7 @@ import SharedReport from "./pages/SharedReport";
 import NotFound from "./pages/NotFound";
 import AllReports from "./pages/AllReports";
 import BudgetPage from "./pages/BudgetPage";
+import { ReportsSidebarDemo } from "./components/ReportsSidebarDemo";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ const App = () => (
           <Route path="/tools/forecasting/:accountId" element={<ForecastingDashboard />} />
           <Route path="/tools/budget" element={<BudgetPage />} />
           <Route path="/tools/budget/:accountId" element={<BudgetPage />} />
+          <Route path="/demo/sidebar" element={<ReportsSidebarDemo />} />
           <Route path="/shared/:slug" element={<SharedReport />} />
           <Route path="/:slug" element={<SharedReport />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

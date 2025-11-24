@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Totals Calculation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .result {
+            background: #d4edda;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .error {
+            background: #f8d7da;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            color: #721c24;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: right;
+        }
+        th {
+            background: #f8f9fa;
+        }
+        .highlight {
+            background: #fff3cd;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Debug: Multiple Formulas Totals Calculation</h1>
+    
+    <div class="test-section">
+        <h2>Test Data (Based on Screenshot)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Revenue</th>
+                    <th>Cost</th>
+                    <th>RS Profit (Expected)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Google Organic</td>
+                    <td>$188</td>
+                    <td>$0</td>
+                    <td class="highlight">$5.64</td>
+                </tr>
+                <tr>
+                    <td>Paid</td>
+                    <td>$1,961</td>
+                    <td>$74</td>
+                    <td class="highlight">$220.57</td>
+                </tr>
+                <tr class="highlight">
+                    <td><strong>TOTAL</strong></td>
+                    <td><strong>$2,149</strong></td>
+                    <td><strong>$74</strong></td>
+                    <td><strong>$226.21</strong> (5.64 + 220.57)</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="test-section">
+        <h2>RS Profit Formula Configuration</h2>
+        <p>Based on your multiple formulas setup:</p>
+        <ul>
+            <li><strong>Formula 1:</strong> <code>(Revenue * 15%) - Cost</code> when <code>Link Type = "Paid"</code></li>
+            <li><strong>Formula 2:</strong> <code>(Revenue * 3%) - Cost</code> when <code>Link Type = "Organic"</code></li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>Calculation Test</h2>
+        <div id="calculation-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Totals Calculation Logic Test</h2>
+        <div id="totals-test"></div>
+    </div>
+
+    <script>
+        console.log('[testing] Starting totals calculation debug');
+
+        // Simulate the data structure
+        const testData = [
+            {
+                data: {
+                    'Link Type': 'Google Organic',
+                    'Revenue': 188,
+                    'Cost': 0,
+                    'RS Profit': null // Will be calculated
+                },
+                children: []
+            },
+            {
+                data: {
+                    'Link Type': 'Paid',
+                    'Revenue': 1961,
+                    'Cost': 74,
+                    'RS Profit': null // Will be calculated
+                },
+                children: []
+            }
+        ];
+
+        const dimensions = [
+            { id: '1', name: 'Revenue', type: 'currency' },
+            { id: '2', name: 'Cost', type: 'currency' },
+            { id: '3', name: 'Link Type', type: 'text' },
+            { 
+                id: '4', 
+                name: 'RS Profit', 
+                type: 'currency',
+                formula_condition_pairs: [
+                    {
+                        id: 'pair1',
+                        formula: '(Revenue * 15%) - Cost',
+                        conditions: [
+                            { dimension_id: '3', operator: 'equals', value: 'Paid' }
+                        ]
+                    },
+                    {
+                        id: 'pair2',
+                        formula: '(Revenue * 3%) - Cost',
+                        conditions: [
+                            { dimension_id: '3', operator: 'equals', value: 'Google Organic' }
+                        ]
+                    }
+                ]
+            }
+        ];
+
+        // Function to calculate multiple formulas (same as in the app)
+        function calculateMultipleFormulasForRow(row, formulaConditionPairs, dimensions) {
+            console.log('[testing] Calculating for row:', row.data);
+            
+            // Iterate through formula-condition pairs in order
+            for (const pair of formulaConditionPairs) {
+                if (!pair.formula) continue;
+                
+                console.log('[testing] Checking formula pair:', pair);
+                
+                // Check if all conditions for this pair are met
+                let conditionsMatch = true;
+                
+                if (pair.conditions && pair.conditions.length > 0) {
+                    for (const condition of pair.conditions) {
+                        // Find the dimension being filtered
+                        const filterDim = dimensions.find(d => d.id === condition.dimension_id);
+                        if (!filterDim) continue;
+                        
+                        const rowValue = String(row.data[filterDim.name] || '').toLowerCase();
+                        const conditionValue = condition.value.toLowerCase();
+                        
+                        console.log('[testing] Checking condition:', {
+                            dimension: filterDim.name,
+                            rowValue,
+                            operator: condition.operator,
+                            conditionValue
+                        });
+                        
+                        // Check condition based on operator
+                        let matches = false;
+                        switch (condition.operator) {
+                            case 'equals':
+                                matches = rowValue === conditionValue;
+                                break;
+                            case 'not_equals':
+                                matches = rowValue !== conditionValue;
+                                break;
+                            case 'contains':
+                                matches = rowValue.includes(conditionValue);
+                                break;
+                            case 'not_contains':
+                                matches = !rowValue.includes(conditionValue);
+                                break;
+                        }
+                        
+                        console.log('[testing] Condition match result:', matches);
+                        
+                        if (!matches) {
+                            conditionsMatch = false;
+                            break;
+                        }
+                    }
+                }
+                
+                // If conditions match (or no conditions), apply this formula
+                if (conditionsMatch) {
+                    console.log('[testing] Conditions matched, applying formula:', pair.formula);
+                    
+                    // Prepare expression
+                    let expression = pair.formula;
+
+                    // Convert percentage notation (e.g., "15%" to "0.15")
+                    expression = expression.replace(/(\d+(?:\.\d+)?)%/g, (match, num) => {
+                        return String(parseFloat(num) / 100);
+                    });
+
+                    // Replace dimension names with values
+                    const dimensionNames = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
+                    for (const dimName of dimensionNames) {
+                        if (expression.includes(dimName)) {
+                            const value = row.data[dimName] || 0;
+                            expression = expression.replace(
+                                new RegExp(`\\b${dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'),
+                                String(value)
+                            );
+                        }
+                    }
+
+                    console.log('[testing] Final expression:', expression);
+
+                    // Evaluate the expression
+                    const result = eval(expression);
+                    console.log('[testing] Formula result:', result);
+                    
+                    if (!isNaN(result) && isFinite(result)) {
+                        return result;
+                    }
+                }
+            }
+            
+            // If no formula was applied, return 0
+            console.log('[testing] No formula matched, returning 0');
+            return 0;
+        }
+
+        // Calculate RS Profit for each row
+        const rsProfitDim = dimensions.find(d => d.name === 'RS Profit');
+        testData.forEach((row, index) => {
+            const result = calculateMultipleFormulasForRow(row, rsProfitDim.formula_condition_pairs, dimensions);
+            row.data['RS Profit'] = result;
+            
+            console.log(`[testing] Row ${index + 1} (${row.data['Link Type']}): RS Profit = ${result}`);
+        });
+
+        // Calculate totals (sum of individual row values)
+        function calculateTotals(filteredTableData, dimensions) {
+            const filteredTotals = {};
+            
+            for (const dim of dimensions) {
+                // Handle multiple formula-condition pairs structure
+                if (dim.formula_condition_pairs && dim.formula_condition_pairs.length > 0) {
+                    // For multiple formulas, always sum up the filtered row values since conditions are row-specific
+                    let sum = 0;
+                    const calculateRowTotal = (rows) => {
+                        rows.forEach(row => {
+                            if (!row || !row.data) return;
+                            
+                            const hasChildren = row.children && row.children.length > 0;
+                            if (!hasChildren) {
+                                const value = row.data[dim.name];
+                                if (value !== undefined && value !== null) {
+                                    const numValue = parseFloat(String(value));
+                                    if (!isNaN(numValue)) {
+                                        sum += numValue;
+                                    }
+                                }
+                            }
+                            if (row.children) {
+                                calculateRowTotal(row.children);
+                            }
+                        });
+                    };
+                    calculateRowTotal(filteredTableData);
+                    filteredTotals[dim.name] = sum;
+                    
+                    console.log(`[testing] Total for ${dim.name}: ${sum}`);
+                }
+                // Handle regular dimensions (non-formula)
+                else if (!dim.formula && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+                    let sum = 0;
+                    filteredTableData.forEach(row => {
+                        if (!row || !row.data) return;
+                        const hasChildren = row.children && row.children.length > 0;
+                        if (!hasChildren) {
+                            const value = row.data[dim.name];
+                            if (value !== undefined && value !== null) {
+                                const numValue = parseFloat(String(value));
+                                if (!isNaN(numValue)) {
+                                    sum += numValue;
+                                }
+                            }
+                        }
+                    });
+                    filteredTotals[dim.name] = sum;
+                    console.log(`[testing] Total for ${dim.name}: ${sum}`);
+                }
+            }
+            
+            return filteredTotals;
+        }
+
+        // Display results
+        const calculationDiv = document.getElementById('calculation-results');
+        let calculationHtml = '<h3>Individual Row Calculations:</h3>';
+        
+        testData.forEach((row, index) => {
+            const linkType = row.data['Link Type'];
+            const revenue = row.data['Revenue'];
+            const cost = row.data['Cost'];
+            const rsProfit = row.data['RS Profit'];
+            
+            calculationHtml += `
+                <div class="result">
+                    <strong>Row ${index + 1}: ${linkType}</strong><br>
+                    Revenue: $${revenue}, Cost: $${cost}<br>
+                    RS Profit: $${rsProfit.toFixed(2)}
+                </div>
+            `;
+        });
+        
+        calculationDiv.innerHTML = calculationHtml;
+
+        // Test totals calculation
+        const totals = calculateTotals(testData, dimensions);
+        const totalsDiv = document.getElementById('totals-test');
+        
+        const expectedTotal = 5.64 + 220.57;
+        const actualTotal = totals['RS Profit'];
+        const isCorrect = Math.abs(actualTotal - expectedTotal) < 0.01;
+        
+        totalsDiv.innerHTML = `
+            <div class="${isCorrect ? 'result' : 'error'}">
+                <h3>Totals Calculation Result:</h3>
+                <p><strong>Expected Total:</strong> $${expectedTotal.toFixed(2)} (5.64 + 220.57)</p>
+                <p><strong>Actual Total:</strong> $${actualTotal.toFixed(2)}</p>
+                <p><strong>Status:</strong> ${isCorrect ? '✅ CORRECT' : '❌ INCORRECT'}</p>
+                ${!isCorrect ? `<p><strong>Difference:</strong> $${Math.abs(actualTotal - expectedTotal).toFixed(2)}</p>` : ''}
+            </div>
+            
+            <h3>All Totals:</h3>
+            <ul>
+                ${Object.entries(totals).map(([key, value]) => 
+                    `<li><strong>${key}:</strong> ${typeof value === 'number' ? '$' + value.toFixed(2) : value}</li>`
+                ).join('')}
+            </ul>
+        `;
+    </script>
+</body>
+</html>

@@ -393,9 +393,22 @@ export async function calculateKPIMetrics(
   }
 
   // Calculate derived metrics with formulas
-  const derivedDimensions = dimensions.filter(d => d.formula);
+  const derivedDimensions = dimensions.filter(d => d.formula || (d.formula_condition_pairs && d.formula_condition_pairs.length > 0));
   derivedDimensions.forEach(dimension => {
-    if (dimension.formula) {
+    // Handle new multiple formula-condition pairs structure
+    if (dimension.formula_condition_pairs && dimension.formula_condition_pairs.length > 0) {
+      // For KPI metrics, we use the first formula without conditions, or the first formula overall
+      const firstFormula = dimension.formula_condition_pairs.find(pair => !pair.conditions || pair.conditions.length === 0) 
+                          || dimension.formula_condition_pairs[0];
+      if (firstFormula && firstFormula.formula) {
+        const calculatedValue = calculateFormula(firstFormula.formula, metrics, dimensions);
+        if (calculatedValue !== null) {
+          metrics[dimension.name] = calculatedValue;
+        }
+      }
+    }
+    // Handle backward compatibility with old single formula structure
+    else if (dimension.formula) {
       const calculatedValue = calculateFormula(dimension.formula, metrics, dimensions);
       if (calculatedValue !== null) {
         metrics[dimension.name] = calculatedValue;

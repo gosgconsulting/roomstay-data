@@ -12,6 +12,15 @@ export interface DimensionCondition {
 }
 
 /**
+ * Formula-condition pair for multiple formulas within a dimension
+ */
+export interface FormulaConditionPair {
+  id: string;
+  formula: string;
+  conditions: DimensionCondition[];
+}
+
+/**
  * Base dimension interface
  */
 export interface Dimension {
@@ -19,12 +28,13 @@ export interface Dimension {
   name: string;
   type: 'text' | 'date' | 'number' | 'currency' | 'percentage' | 'vlookup';
   user_id?: string;
-  formula?: string | null;
+  formula?: string | null; // Keep for backward compatibility
   is_system?: boolean;
   scope?: 'global' | 'custom' | 'account';
   report_id?: string | null;
   account_id?: string | null;
-  conditions?: DimensionCondition[];
+  conditions?: DimensionCondition[]; // Keep for backward compatibility
+  formula_condition_pairs?: FormulaConditionPair[]; // New field for multiple formulas
 }
 
 /**

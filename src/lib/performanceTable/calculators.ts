@@ -65,7 +65,34 @@ export function calculateTotals(
   
   // Calculate formula totals
   for (const dim of dimensions) {
-    if (dim.formula) {
+    // Handle new multiple formula-condition pairs structure
+    if (dim.formula_condition_pairs && dim.formula_condition_pairs.length > 0) {
+      // For multiple formulas, always sum up the filtered row values since conditions are row-specific
+      let sum = 0;
+      const calculateRowTotal = (rows: TableRow[]) => {
+        rows.forEach(row => {
+          if (!row || !row.data) return;
+          
+          const hasChildren = row.children && row.children.length > 0;
+          if (!hasChildren) {
+            const value = row.data[dim.name];
+            if (value !== undefined && value !== null) {
+              const numValue = parseFloat(String(value));
+              if (!isNaN(numValue)) {
+                sum += numValue;
+              }
+            }
+          }
+          if (row.children) {
+            calculateRowTotal(row.children);
+          }
+        });
+      };
+      calculateRowTotal(filteredTableData);
+      filteredTotals[dim.name] = sum;
+    }
+    // Handle backward compatibility with old single formula structure
+    else if (dim.formula) {
       // If dimension has conditions, sum up the filtered row values instead of re-evaluating
       if (dim.conditions && dim.conditions.length > 0) {
         let sum = 0;
@@ -168,7 +195,34 @@ export function calculateComparisonTotalsAndChanges(
 
   // Calculate formula comparison totals
   for (const dim of dimensions) {
-    if (dim.formula) {
+    // Handle new multiple formula-condition pairs structure
+    if (dim.formula_condition_pairs && dim.formula_condition_pairs.length > 0) {
+      // For multiple formulas, always sum up the filtered row values since conditions are row-specific
+      let sum = 0;
+      const calculateRowTotal = (rows: TableRow[]) => {
+        rows.forEach(row => {
+          if (!row) return;
+          
+          const hasChildren = row.children && row.children.length > 0;
+          if (!hasChildren && row.compareData) {
+            const value = row.compareData[dim.name];
+            if (value !== undefined && value !== null) {
+              const numValue = parseFloat(String(value));
+              if (!isNaN(numValue)) {
+                sum += numValue;
+              }
+            }
+          }
+          if (row.children) {
+            calculateRowTotal(row.children);
+          }
+        });
+      };
+      calculateRowTotal(filteredTableData);
+      filteredCompareTotals[dim.name] = sum;
+    }
+    // Handle backward compatibility with old single formula structure
+    else if (dim.formula) {
       // If dimension has conditions, sum up the filtered row values instead of re-evaluating
       if (dim.conditions && dim.conditions.length > 0) {
         let sum = 0;

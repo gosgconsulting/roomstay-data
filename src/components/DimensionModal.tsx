@@ -19,7 +19,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import type { Dimension, DimensionCondition } from "@/types/dimensions";
+import type { Dimension, DimensionCondition, FormulaConditionPair } from "@/types/dimensions";
 
 interface DimensionModalProps {
   open: boolean;
@@ -44,6 +44,7 @@ export const DimensionModal = ({
   const [type, setType] = useState("number");
   const [formula, setFormula] = useState("");
   const [conditions, setConditions] = useState<DimensionCondition[]>([]);
+  const [formulaConditionPairs, setFormulaConditionPairs] = useState<FormulaConditionPair[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const [availableDimensions, setAvailableDimensions] = useState<Dimension[]>([]);
@@ -148,14 +149,34 @@ export const DimensionModal = ({
       console.log('[DIMENSION-MODAL] Populating form for edit mode:', dimension);
       setName(dimension.name);
       setType(dimension.type);
-      setFormula(dimension.formula || "");
-      setConditions(dimension.conditions || []);
+      
+      // Handle backward compatibility: if dimension has old formula/conditions structure, convert it
+      if (dimension.formula_condition_pairs && dimension.formula_condition_pairs.length > 0) {
+        setFormulaConditionPairs(dimension.formula_condition_pairs);
+        setFormula("");
+        setConditions([]);
+      } else if (dimension.formula || (dimension.conditions && dimension.conditions.length > 0)) {
+        // Convert old structure to new structure
+        const pair: FormulaConditionPair = {
+          id: crypto.randomUUID(),
+          formula: dimension.formula || "",
+          conditions: dimension.conditions || []
+        };
+        setFormulaConditionPairs([pair]);
+        setFormula("");
+        setConditions([]);
+      } else {
+        setFormulaConditionPairs([]);
+        setFormula("");
+        setConditions([]);
+      }
     } else if (open && mode === 'add') {
       console.log('[DIMENSION-MODAL] Resetting form for add mode');
       setName("");
       setType("number");
       setFormula("");
       setConditions([]);
+      setFormulaConditionPairs([]);
     }
   }, [open, mode, dimension]);
 
@@ -214,8 +235,59 @@ export const DimensionModal = ({
     }
   };
 
-  const testFormula = () => {
-    if (!formula.trim()) {
+  // Functions for managing formula-condition pairs
+  const addFormulaConditionPair = () => {
+    const newPair: FormulaConditionPair = {
+      id: crypto.randomUUID(),
+      formula: "",
+      conditions: []
+    };
+    setFormulaConditionPairs([...formulaConditionPairs, newPair]);
+  };
+
+  const updateFormulaConditionPair = (pairId: string, updates: Partial<FormulaConditionPair>) => {
+    setFormulaConditionPairs(pairs => 
+      pairs.map(pair => 
+        pair.id === pairId ? { ...pair, ...updates } : pair
+      )
+    );
+  };
+
+  const removeFormulaConditionPair = (pairId: string) => {
+    setFormulaConditionPairs(pairs => pairs.filter(pair => pair.id !== pairId));
+  };
+
+  const addConditionToPair = (pairId: string) => {
+    const newCondition: DimensionCondition = {
+      dimension_id: '',
+      operator: 'equals',
+      value: ''
+    };
+    updateFormulaConditionPair(pairId, {
+      conditions: [...(formulaConditionPairs.find(p => p.id === pairId)?.conditions || []), newCondition]
+    });
+  };
+
+  const updateConditionInPair = (pairId: string, conditionIndex: number, updates: Partial<DimensionCondition>) => {
+    const pair = formulaConditionPairs.find(p => p.id === pairId);
+    if (!pair) return;
+    
+    const updatedConditions = [...pair.conditions];
+    updatedConditions[conditionIndex] = { ...updatedConditions[conditionIndex], ...updates };
+    updateFormulaConditionPair(pairId, { conditions: updatedConditions });
+  };
+
+  const removeConditionFromPair = (pairId: string, conditionIndex: number) => {
+    const pair = formulaConditionPairs.find(p => p.id === pairId);
+    if (!pair) return;
+    
+    const updatedConditions = pair.conditions.filter((_, index) => index !== conditionIndex);
+    updateFormulaConditionPair(pairId, { conditions: updatedConditions });
+  };
+
+  const testFormula = (formulaToTest?: string) => {
+    const testFormula = formulaToTest || formula;
+    if (!testFormula.trim()) {
       toast({
         title: "No formula",
         description: "Please enter a formula to test",
@@ -236,30 +308,30 @@ export const DimensionModal = ({
       });
 
       // Replace dimension names with test values
-      let testFormula = formula;
+      let testFormulaExpression = testFormula;
       availableDimensions.forEach((dim) => {
         // Escape special regex characters in dimension name
         const escapedName = dim.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        testFormula = testFormula.replace(new RegExp(escapedName, 'g'), '100');
+        testFormulaExpression = testFormulaExpression.replace(new RegExp(escapedName, 'g'), '100');
       });
 
       // Remove any remaining @ symbols
-      testFormula = testFormula.replace(/@/g, '');
+      testFormulaExpression = testFormulaExpression.replace(/@/g, '');
 
       // Simple evaluation - allow basic math operations, parentheses, and percentage symbol
       // Check BEFORE converting percentages so the % symbol is allowed
-      const cleanedFormulaForValidation = formula.replace(/@/g, '').replace(/[a-zA-Z_][a-zA-Z0-9_\s]*/g, '100');
+      const cleanedFormulaForValidation = testFormula.replace(/@/g, '').replace(/[a-zA-Z_][a-zA-Z0-9_\s]*/g, '100');
       if (!/^[\d\s+\-*/.()%]+$/.test(cleanedFormulaForValidation)) {
         throw new Error("Formula contains invalid characters. Only numbers and operators (+, -, *, /, %, parentheses) are allowed.");
       }
 
       // Handle percentage notation (e.g., "15%" becomes "0.15")
-      testFormula = testFormula.replace(/(\d+(?:\.\d+)?)\s*%/g, (match, num) => {
+      testFormulaExpression = testFormulaExpression.replace(/(\d+(?:\.\d+)?)\s*%/g, (match, num) => {
         return `(${parseFloat(num) / 100})`;
       });
 
       // Evaluate the formula safely
-      const result = Function('"use strict"; return (' + testFormula + ')')();
+      const result = Function('"use strict"; return (' + testFormulaExpression + ')')();
 
       toast({
         title: "Formula test successful",
@@ -298,8 +370,11 @@ export const DimensionModal = ({
         const updateData: any = {
           name: name.trim(),
           type,
-          formula: formula.trim() || null,
-          conditions: conditions.length > 0 ? JSON.parse(JSON.stringify(conditions)) : [],
+          // For backward compatibility, keep old fields if no new pairs exist
+          formula: formulaConditionPairs.length === 0 ? (formula.trim() || null) : null,
+          conditions: formulaConditionPairs.length === 0 ? (conditions.length > 0 ? JSON.parse(JSON.stringify(conditions)) : []) : [],
+          // Add new field for multiple formula-condition pairs
+          formula_condition_pairs: formulaConditionPairs.length > 0 ? JSON.parse(JSON.stringify(formulaConditionPairs)) : [],
         };
 
         console.log('[DIMENSION-MODAL] Updating dimension with data:', updateData);
@@ -346,8 +421,11 @@ export const DimensionModal = ({
         const dimensionData: any = {
           name: name.trim(),
           type,
-          formula: formula.trim() || null,
-          conditions: conditions.length > 0 ? JSON.parse(JSON.stringify(conditions)) : [],
+          // For backward compatibility, keep old fields if no new pairs exist
+          formula: formulaConditionPairs.length === 0 ? (formula.trim() || null) : null,
+          conditions: formulaConditionPairs.length === 0 ? (conditions.length > 0 ? JSON.parse(JSON.stringify(conditions)) : []) : [],
+          // Add new field for multiple formula-condition pairs
+          formula_condition_pairs: formulaConditionPairs.length > 0 ? JSON.parse(JSON.stringify(formulaConditionPairs)) : [],
           user_id: user.id,
           scope,
           account_id: dimensionAccountId,
@@ -374,6 +452,7 @@ export const DimensionModal = ({
       setType("number");
       setFormula("");
       setConditions([]);
+      setFormulaConditionPairs([]);
     } catch (error) {
       // Properly serialize error for logging
       let errorMessage = '';
@@ -446,154 +525,234 @@ export const DimensionModal = ({
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="formula">Formula (optional)</Label>
-            <div className="relative">
-              <Textarea
-                ref={formulaInputRef}
-                id="formula"
-                placeholder="e.g., Cost / Clicks, Revenue / Cost. Type @ to insert a dimension"
-                value={formula}
-                onChange={handleFormulaChange}
-                rows={3}
-                className="resize-none"
-              />
-
-              {showMentionDropdown && (
-                <div className="absolute left-0 top-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-48 overflow-y-auto w-full">
-                  {availableDimensions
-                    .filter((d) =>
-                      d.name
-                        .toLowerCase()
-                        .includes(mentionSearchTerm.toLowerCase())
-                    )
-                    .map((dim) => (
-                      <button
-                        key={dim.id}
-                        onClick={() => insertDimensionMention(dim.name)}
-                        className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm flex items-center justify-between"
-                      >
-                        <span className="font-medium">{dim.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          ({dim.type}) {dim.scope && `- ${dim.scope}`}
-                        </span>
-                      </button>
-                    ))}
-                  {availableDimensions.filter((d) =>
-                    d.name
-                      .toLowerCase()
-                      .includes(mentionSearchTerm.toLowerCase())
-                  ).length === 0 && (
-                    <div className="px-3 py-2 text-xs text-muted-foreground">
-                      No dimensions found
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">
-                Use metric names for calculations. Type @ to insert a dimension. Leave empty for base metrics.
-              </p>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label>Formulas with Conditions</Label>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={testFormula}
-                disabled={!formula.trim()}
+                onClick={addFormulaConditionPair}
               >
-                Test
+                + Add Formula
               </Button>
             </div>
-          </div>
+            
+            {formulaConditionPairs.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No formulas added yet.</p>
+                <p className="text-xs">Click "Add Formula" to create a formula with specific conditions.</p>
+              </div>
+            )}
 
-          <div className="space-y-2">
-            <Label>Conditions</Label>
-            <div className="space-y-2">
-              {conditions.map((condition, index) => (
-                <div key={index} className="flex gap-2 items-start">
-                  <div className="flex-1">
-                    <Select
-                      value={condition.dimension_id}
-                      onValueChange={(value) => {
-                        const newConditions = [...conditions];
-                        newConditions[index].dimension_id = value;
-                        setConditions(newConditions);
-                      }}
-                    >
-                      <SelectTrigger className="bg-background">
-                        <SelectValue placeholder="Select dimension" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-background z-50">
-                        {availableDimensions.map((dim) => (
-                          <SelectItem key={dim.id} value={dim.id}>
-                            {dim.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="w-32">
-                    <Select
-                      value={condition.operator}
-                      onValueChange={(value: string) => {
-                        const newConditions = [...conditions];
-                        newConditions[index].operator = value as DimensionCondition['operator'];
-                        setConditions(newConditions);
-                      }}
-                    >
-                      <SelectTrigger className="bg-background">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-background z-50">
-                        <SelectItem value="equals">Equal to</SelectItem>
-                        <SelectItem value="not_equals">Not equal to</SelectItem>
-                        <SelectItem value="contains">Contains</SelectItem>
-                        <SelectItem value="not_contains">Not contains</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex-1">
-                    <Input
-                      placeholder="Value"
-                      value={condition.value}
-                      onChange={(e) => {
-                        const newConditions = [...conditions];
-                        newConditions[index].value = e.target.value;
-                        setConditions(newConditions);
-                      }}
-                    />
-                  </div>
+            <div className="max-h-96 overflow-y-auto space-y-4 pr-2">
+              {formulaConditionPairs.map((pair, pairIndex) => (
+              <div key={pair.id} className="border rounded-lg p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Formula #{pairIndex + 1}</Label>
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      setConditions(conditions.filter((_, i) => i !== index));
-                    }}
+                    size="sm"
+                    onClick={() => removeFormulaConditionPair(pair.id)}
                   >
-                    ✕
+                    Remove
                   </Button>
                 </div>
+
+                {/* Formula Input */}
+                <div className="space-y-2">
+                  <Label htmlFor={`formula-${pair.id}`}>Formula</Label>
+                  <div className="relative">
+                    <Textarea
+                      id={`formula-${pair.id}`}
+                      placeholder="e.g., (Revenue * 15%) - Cost"
+                      value={pair.formula}
+                      onChange={(e) => {
+                        updateFormulaConditionPair(pair.id, { formula: e.target.value });
+                        // Handle @ mentions for this specific formula
+                        const text = e.target.value;
+                        const cursorPos = e.target.selectionStart;
+                        setMentionCursorPos(cursorPos);
+                        setFormula(text); // Set for mention dropdown
+
+                        const textBeforeCursor = text.substring(0, cursorPos);
+                        const lastAtIndex = textBeforeCursor.lastIndexOf("@");
+
+                        if (lastAtIndex !== -1) {
+                          const searchTerm = textBeforeCursor.substring(lastAtIndex + 1).trim();
+                          if (!textBeforeCursor.substring(lastAtIndex).includes(" ") || searchTerm === "") {
+                            setMentionSearchTerm(searchTerm);
+                            setShowMentionDropdown(true);
+                            formulaInputRef.current = e.target as HTMLTextAreaElement;
+                          } else {
+                            setShowMentionDropdown(false);
+                          }
+                        } else {
+                          setShowMentionDropdown(false);
+                        }
+                      }}
+                      rows={2}
+                      className="resize-none"
+                    />
+
+                    {showMentionDropdown && (
+                      <div className="absolute left-0 top-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-48 overflow-y-auto w-full">
+                        {availableDimensions
+                          .filter((d) =>
+                            d.name
+                              .toLowerCase()
+                              .includes(mentionSearchTerm.toLowerCase())
+                          )
+                          .map((dim) => (
+                            <button
+                              key={dim.id}
+                              onClick={() => {
+                                const text = pair.formula;
+                                const cursorPos = mentionCursorPos;
+                                const textBeforeCursor = text.substring(0, cursorPos);
+                                const lastAtIndex = textBeforeCursor.lastIndexOf("@");
+
+                                if (lastAtIndex !== -1) {
+                                  const textAfterCursor = text.substring(cursorPos);
+                                  const newFormula =
+                                    text.substring(0, lastAtIndex) +
+                                    dim.name +
+                                    " " +
+                                    textAfterCursor;
+
+                                  updateFormulaConditionPair(pair.id, { formula: newFormula });
+                                  setShowMentionDropdown(false);
+                                  setMentionSearchTerm("");
+                                }
+                              }}
+                              className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm flex items-center justify-between"
+                            >
+                              <span className="font-medium">{dim.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                ({dim.type}) {dim.scope && `- ${dim.scope}`}
+                              </span>
+                            </button>
+                          ))}
+                        {availableDimensions.filter((d) =>
+                          d.name
+                            .toLowerCase()
+                            .includes(mentionSearchTerm.toLowerCase())
+                        ).length === 0 && (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">
+                            No dimensions found
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      Type @ to insert a dimension. Use % for percentages.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => testFormula(pair.formula)}
+                      disabled={!pair.formula.trim()}
+                    >
+                      Test
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Conditions for this formula */}
+                <div className="space-y-2">
+                  <Label>Conditions (when to apply this formula)</Label>
+                  <div className="space-y-2">
+                    {pair.conditions.map((condition, conditionIndex) => (
+                      <div key={conditionIndex} className="flex gap-2 items-start">
+                        <div className="flex-1">
+                          <Select
+                            value={condition.dimension_id}
+                            onValueChange={(value) => {
+                              updateConditionInPair(pair.id, conditionIndex, { dimension_id: value });
+                            }}
+                          >
+                            <SelectTrigger className="bg-background">
+                              <SelectValue placeholder="Select dimension" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-background z-50">
+                              {availableDimensions.map((dim) => (
+                                <SelectItem key={dim.id} value={dim.id}>
+                                  {dim.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="w-32">
+                          <Select
+                            value={condition.operator}
+                            onValueChange={(value: string) => {
+                              updateConditionInPair(pair.id, conditionIndex, { 
+                                operator: value as DimensionCondition['operator'] 
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="bg-background">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-background z-50">
+                              <SelectItem value="equals">Equal to</SelectItem>
+                              <SelectItem value="not_equals">Not equal to</SelectItem>
+                              <SelectItem value="contains">Contains</SelectItem>
+                              <SelectItem value="not_contains">Not contains</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex-1">
+                          <Input
+                            placeholder="Value"
+                            value={condition.value}
+                            onChange={(e) => {
+                              updateConditionInPair(pair.id, conditionIndex, { value: e.target.value });
+                            }}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            removeConditionFromPair(pair.id, conditionIndex);
+                          }}
+                        >
+                          ✕
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addConditionToPair(pair.id)}
+                      className="w-full"
+                    >
+                      + Add Condition
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    This formula will only be applied when ALL conditions are met. Leave empty to apply to all rows.
+                  </p>
+                </div>
+              </div>
               ))}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setConditions([
-                    ...conditions,
-                    { dimension_id: '', operator: 'equals' as const, value: '' }
-                  ]);
-                }}
-                className="w-full"
-              >
-                + Add Condition
-              </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Filter data based on dimension values. Only rows matching all conditions will be included.
-            </p>
+
+            {formulaConditionPairs.length > 0 && (
+              <div className="bg-blue-50 p-3 rounded-md">
+                <p className="text-sm text-blue-800">
+                  <strong>Multiple Formulas:</strong> Each formula will be evaluated in order. The first formula whose conditions match will be used for each row.
+                </p>
+              </div>
+            )}
           </div>
 
           {accountId && mode === 'add' && (
