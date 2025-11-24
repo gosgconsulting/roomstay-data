@@ -834,7 +834,7 @@ export const FiltersBar = ({
 
   return (
     <>
-      <div className="border-b bg-card">
+      <div className="bg-card">
         <div className="container mx-auto px-6 py-3">
           <div className="flex items-center justify-start gap-3">
             {showMasterDimensionFilter && (
@@ -901,13 +901,13 @@ export const FiltersBar = ({
             {hasActiveFilters() && (
               <Button
                 variant="outline"
-                size="sm"
+                size="icon"
                 onClick={handleResetFilters}
-                className="gap-2 text-muted-foreground hover:text-foreground"
-                title={`Reset ${getActiveFiltersCount()} active filter${getActiveFiltersCount() > 1 ? "s" : ""}`}
+                title={`Reset filters (${getActiveFiltersCount()})`}
+                aria-label={`Reset filters (${getActiveFiltersCount()})`}
+                className="text-muted-foreground hover:text-foreground"
               >
                 <RotateCcw className="h-4 w-4" />
-                Reset Filters ({getActiveFiltersCount()})
               </Button>
             )}
 
