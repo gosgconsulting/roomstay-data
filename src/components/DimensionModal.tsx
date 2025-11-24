@@ -19,16 +19,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-
-interface Dimension {
-  id: string;
-  name: string;
-  type: string;
-  formula: string | null;
-  is_system?: boolean;
-  scope?: 'global' | 'custom' | 'account';
-  account_id?: string;
-}
+import type { Dimension, DimensionCondition } from "@/types/dimensions";
 
 interface DimensionModalProps {
   open: boolean;
@@ -52,6 +43,7 @@ export const DimensionModal = ({
   const [name, setName] = useState("");
   const [type, setType] = useState("number");
   const [formula, setFormula] = useState("");
+  const [conditions, setConditions] = useState<DimensionCondition[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const [availableDimensions, setAvailableDimensions] = useState<Dimension[]>([]);
@@ -85,7 +77,10 @@ export const DimensionModal = ({
           .order("created_at", { ascending: false });
 
         if (error) throw error;
-        accountData = (data || []) as Dimension[];
+        accountData = ((data || []) as any[]).map(d => ({
+          ...d,
+          conditions: Array.isArray(d.conditions) ? d.conditions : []
+        })) as Dimension[];
       }
 
       // Load global dimensions
@@ -109,13 +104,19 @@ export const DimensionModal = ({
           .order("created_at", { ascending: false });
 
         if (customError) throw customError;
-        customData = (data || []) as Dimension[];
+        customData = ((data || []) as any[]).map(d => ({
+          ...d,
+          conditions: Array.isArray(d.conditions) ? d.conditions : []
+        })) as Dimension[];
       }
 
       // Combine dimensions with priority: account > global > custom
       const allDimensions = [
         ...(accountData || []),
-        ...(globalData || []),
+        ...((globalData || []) as any[]).map(d => ({
+          ...d,
+          conditions: Array.isArray(d.conditions) ? d.conditions : []
+        })),
         ...(customData || [])
       ] as Dimension[];
 
@@ -148,11 +149,13 @@ export const DimensionModal = ({
       setName(dimension.name);
       setType(dimension.type);
       setFormula(dimension.formula || "");
+      setConditions(dimension.conditions || []);
     } else if (open && mode === 'add') {
       console.log('[DIMENSION-MODAL] Resetting form for add mode');
       setName("");
       setType("number");
       setFormula("");
+      setConditions([]);
     }
   }, [open, mode, dimension]);
 
@@ -292,10 +295,11 @@ export const DimensionModal = ({
         console.log('[DIMENSION-MODAL] Updating dimension:', dimension.id);
 
         // Update the dimension directly
-        const updateData = {
+        const updateData: any = {
           name: name.trim(),
           type,
           formula: formula.trim() || null,
+          conditions: conditions.length > 0 ? JSON.parse(JSON.stringify(conditions)) : [],
         };
 
         console.log('[DIMENSION-MODAL] Updating dimension with data:', updateData);
@@ -339,10 +343,11 @@ export const DimensionModal = ({
           console.log('[DIMENSION-MODAL] Creating user-level custom dimension');
         }
 
-        const dimensionData = {
+        const dimensionData: any = {
           name: name.trim(),
           type,
           formula: formula.trim() || null,
+          conditions: conditions.length > 0 ? JSON.parse(JSON.stringify(conditions)) : [],
           user_id: user.id,
           scope,
           account_id: dimensionAccountId,
@@ -368,6 +373,7 @@ export const DimensionModal = ({
       setName("");
       setType("number");
       setFormula("");
+      setConditions([]);
     } catch (error) {
       // Properly serialize error for logging
       let errorMessage = '';
@@ -499,6 +505,95 @@ export const DimensionModal = ({
                 Test
               </Button>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Conditions</Label>
+            <div className="space-y-2">
+              {conditions.map((condition, index) => (
+                <div key={index} className="flex gap-2 items-start">
+                  <div className="flex-1">
+                    <Select
+                      value={condition.dimension_id}
+                      onValueChange={(value) => {
+                        const newConditions = [...conditions];
+                        newConditions[index].dimension_id = value;
+                        setConditions(newConditions);
+                      }}
+                    >
+                      <SelectTrigger className="bg-background">
+                        <SelectValue placeholder="Select dimension" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background z-50">
+                        {availableDimensions.map((dim) => (
+                          <SelectItem key={dim.id} value={dim.id}>
+                            {dim.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="w-32">
+                    <Select
+                      value={condition.operator}
+                      onValueChange={(value: string) => {
+                        const newConditions = [...conditions];
+                        newConditions[index].operator = value as DimensionCondition['operator'];
+                        setConditions(newConditions);
+                      }}
+                    >
+                      <SelectTrigger className="bg-background">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background z-50">
+                        <SelectItem value="equals">Equal to</SelectItem>
+                        <SelectItem value="not_equals">Not equal to</SelectItem>
+                        <SelectItem value="contains">Contains</SelectItem>
+                        <SelectItem value="not_contains">Not contains</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex-1">
+                    <Input
+                      placeholder="Value"
+                      value={condition.value}
+                      onChange={(e) => {
+                        const newConditions = [...conditions];
+                        newConditions[index].value = e.target.value;
+                        setConditions(newConditions);
+                      }}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      setConditions(conditions.filter((_, i) => i !== index));
+                    }}
+                  >
+                    ✕
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setConditions([
+                    ...conditions,
+                    { dimension_id: '', operator: 'equals' as const, value: '' }
+                  ]);
+                }}
+                className="w-full"
+              >
+                + Add Condition
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Filter data based on dimension values. Only rows matching all conditions will be included.
+            </p>
           </div>
 
           {accountId && mode === 'add' && (

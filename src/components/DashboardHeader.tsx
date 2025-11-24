@@ -13,6 +13,7 @@ import { ShareModal } from "./ShareModal";
 import { SyncModeModal } from "./SyncModeModal";
 import VlookupModal from "./VlookupModal";
 import { Session } from "@supabase/supabase-js";
+import type { Dimension } from "@/types/dimensions";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -30,15 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-interface Dimension {
-  id: string;
-  name: string;
-  type: string;
-  formula: string | null;
-  scope?: 'global' | 'custom' | 'account';
-  account_id?: string;
-}
 
 interface Report {
   id: string;
