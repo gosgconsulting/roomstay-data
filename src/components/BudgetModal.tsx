@@ -31,7 +31,9 @@ interface Budget {
   id: string;
   dimension_name: string;
   dimension_item: string;
-  budget_data: Record<string, Record<string, number>>; // { "2025": { "1": 2000, "2": 2000, ... } }
+  // NOTE: modal still uses nested state internally;
+  // saving will flatten to YYYY-MM keys.
+  budget_data: Record<string, Record<string, number>>;
 }
 
 interface BudgetModalProps {
@@ -41,6 +43,11 @@ interface BudgetModalProps {
   reportId?: string | null;
   accountId?: string | null;
   onSuccess?: () => void;
+  // NEW: preset context from Budget Tracker cell
+  presetDimensionName?: string;
+  presetItemName?: string;
+  // 'YYYY-MM' format
+  presetYearMonth?: string;
 }
 
 const MONTHS = [
@@ -65,6 +72,9 @@ export const BudgetModal = ({
   reportId,
   accountId,
   onSuccess,
+  presetDimensionName,
+  presetItemName,
+  presetYearMonth,
 }: BudgetModalProps) => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -99,19 +109,19 @@ export const BudgetModal = ({
         setSelectedDimension(budget.dimension_name);
         setSelectedItem(budget.dimension_item);
         setBudgetData(budget.budget_data || {});
-        // Set selected year to first available year or current year
         const years = Object.keys(budget.budget_data || {});
         setSelectedYear(years.length > 0 ? years[0] : currentYear.toString());
       } else {
-        // Creating new budget
-        setSelectedDimension("");
-        setSelectedItem("");
+        // Creating new budget (with presets if provided)
+        setSelectedDimension(presetDimensionName || "");
+        setSelectedItem(presetItemName || "");
         setBudgetData({});
-        setSelectedYear(currentYear.toString());
+        const presetYear = presetYearMonth?.slice(0, 4);
+        setSelectedYear(presetYear || currentYear.toString());
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, budget]);
+  }, [open, budget, presetDimensionName, presetItemName, presetYearMonth]);
 
   // Load dimension items when dimension is selected
   useEffect(() => {
@@ -186,7 +196,6 @@ export const BudgetModal = ({
 
       // Filter based on accountId or reportId
       if (accountId) {
-        // Get dimensions for account
         const { data: accountDims } = await supabase
           .from("dimensions")
           .select("id, name, report_id, account_id, scope")
@@ -194,7 +203,6 @@ export const BudgetModal = ({
         
         let allDims = [...(accountDims || [])];
         
-        // If there are reports, also get dimensions from those reports
         if (reportsList.length > 0) {
           const reportIds = reportsList.map(r => r.id);
           const { data: reportDims } = await supabase
@@ -205,7 +213,6 @@ export const BudgetModal = ({
           allDims = [...allDims, ...(reportDims || [])];
         }
 
-        // Deduplicate
         const uniqueDims = new Map();
         allDims.forEach(dim => {
           if (!uniqueDims.has(dim.id)) {
@@ -220,7 +227,6 @@ export const BudgetModal = ({
           .eq("report_id", reportId);
         dimensionsData = reportDims || [];
       } else {
-        // No accountId or reportId, load user's custom dimensions
         const { data: customDims } = await supabase
           .from("dimensions")
           .select("id, name, report_id, account_id, scope")
@@ -229,7 +235,6 @@ export const BudgetModal = ({
         dimensionsData = customDims || [];
       }
 
-      // Process dimensions and create display names
       dimensionsData?.forEach((dim) => {
         const dimId = dim.id;
         const dimName = dim.name;
@@ -237,21 +242,16 @@ export const BudgetModal = ({
         let reportNameForDim: string | null = null;
         let accountNameForDim: string | null = dim.account_id === accountId ? accountName : null;
 
-        // If dimension has report_id, get report name
         if (reportIdForDim) {
           const report = reportsList.find(r => r.id === reportIdForDim);
           reportNameForDim = report?.name || null;
-          
-          // If report has account_id but dimension doesn't, use account name from report
           if (!accountNameForDim && report?.account_id) {
             accountNameForDim = report.account_id === accountId ? accountName : null;
           }
         } else if (dim.account_id) {
-          // Account-specific dimension
           accountNameForDim = dim.account_id === accountId ? accountName : null;
         }
 
-        // Build display name: "Account - Report - Dimension" or just "Dimension" if no context
         let displayName = dimName;
         if (accountNameForDim && reportNameForDim) {
           displayName = `${accountNameForDim} - ${reportNameForDim} - ${dimName}`;
@@ -261,7 +261,6 @@ export const BudgetModal = ({
           displayName = `${reportNameForDim} - ${dimName}`;
         }
 
-        // Use dimension name as key to avoid duplicates, but keep the most specific one
         const key = dimName;
         if (!dimensionMap.has(key) || (reportIdForDim && !dimensionMap.get(key)?.reportId)) {
           dimensionMap.set(key, {
@@ -274,7 +273,6 @@ export const BudgetModal = ({
         }
       });
 
-      // Convert map to array and create display names
       dimensionsList.push(...Array.from(dimensionMap.values()).map(dim => ({
         ...dim,
         displayName: dim.accountName && dim.reportName
@@ -286,18 +284,10 @@ export const BudgetModal = ({
           : dim.name,
       })));
 
-      // Sort by display name
       dimensionsList.sort((a, b) => a.displayName.localeCompare(b.displayName));
-
       setDimensions(dimensionsList);
 
-      // Check data availability for dimensions
       if (dimensionsList.length > 0) {
-        const dimensionIds = dimensionsList
-          .map(d => d.id)
-          .filter((id): id is string => id !== null);
-        
-        // Check data for each report that has dimensions
         const reportIds = new Set<string>();
         dimensionsList.forEach(dim => {
           if (dim.reportId) {
@@ -305,7 +295,6 @@ export const BudgetModal = ({
           }
         });
 
-        // Check data availability for each report
         const hasDataMap: Record<string, boolean> = {};
         for (const reportIdToCheck of reportIds) {
           const dimsForReport = dimensionsList.filter(d => d.reportId === reportIdToCheck);
@@ -313,7 +302,6 @@ export const BudgetModal = ({
           const reportHasData = await checkDimensionsHaveData(dimIdsForReport, reportIdToCheck);
           Object.assign(hasDataMap, reportHasData);
         }
-
         setDimensionHasData(hasDataMap);
       }
     } catch (error) {
@@ -332,10 +320,7 @@ export const BudgetModal = ({
       const selectedDim = dimensions.find(d => d.name === dimensionName);
       const reportIdToUse = selectedDim?.reportId || reportId;
 
-      // If we have a specific report from the dimension, use it
       if (reportIdToUse) {
-        // Get unique values for the selected dimension from dimension_data
-        // Use dimension ID instead of name for more accurate matching
         const { data, error } = await supabase
           .from("dimension_data")
           .select("dimension_values")
@@ -343,13 +328,9 @@ export const BudgetModal = ({
 
         if (error) throw error;
 
-        // Extract unique values for the selected dimension
-        // Try both dimension name and dimension ID
         data?.forEach((row) => {
           const values = row.dimension_values as Record<string, unknown>;
-          // Try dimension ID first
           let value = selectedDim?.id ? values[selectedDim.id] : undefined;
-          // Fallback to dimension name
           if (value === undefined || value === null) {
             value = values[dimensionName];
           }
@@ -358,7 +339,6 @@ export const BudgetModal = ({
           }
         });
 
-        // If no items found, try monthly_dimension_data as fallback
         if (items.size === 0) {
           const { data: monthlyData } = await (supabase as any)
             .from("monthly_dimension_data")
@@ -379,9 +359,7 @@ export const BudgetModal = ({
         }
       }
 
-      // If accountId is available but no reportId, try to get items from all reports in the account
       if (accountId && items.size === 0) {
-        // Get all reports for this account
         const { data: reports } = await supabase
           .from("reports")
           .select("id")
@@ -390,12 +368,11 @@ export const BudgetModal = ({
         if (reports && reports.length > 0) {
           const reportIds = reports.map(r => r.id);
           
-          // Get dimension items from all reports in the account
           const { data: dimensionData } = await supabase
             .from("dimension_data")
             .select("dimension_values")
             .in("report_id", reportIds)
-            .limit(500); // Limit to avoid performance issues
+            .limit(500);
 
           dimensionData?.forEach((row) => {
             const values = row.dimension_values as Record<string, unknown>;
@@ -433,6 +410,17 @@ export const BudgetModal = ({
     }));
   };
 
+  // NEW: flatten nested {year: {month: value}} into { 'YYYY-MM': value }
+  const flattenBudgetData = (nested: Record<string, Record<string, number>>) => {
+    const flat: Record<string, number> = {};
+    Object.entries(nested).forEach(([year, months]) => {
+      Object.entries(months || {}).forEach(([m, v]) => {
+        const mm = String(m).padStart(2, "0");
+        flat[`${year}-${mm}`] = v;
+      });
+    });
+    return flat;
+  };
 
   const handleSave = async () => {
     if (!selectedDimension || !selectedItem) {
@@ -451,43 +439,66 @@ export const BudgetModal = ({
         throw new Error("User not authenticated");
       }
 
-      if (budget) {
-        // Update existing budget
+      // Build flat YYYY-MM map for saving
+      const flatBudget = flattenBudgetData(budgetData);
+
+      // If editing existing budget via prop, update by id
+      if (budget?.id) {
         const { error } = await (supabase as any)
           .from("budgets")
           .update({
             dimension_name: selectedDimension,
             dimension_item: selectedItem,
-            budget_data: budgetData,
+            budget_data: flatBudget,
             updated_at: new Date().toISOString(),
           })
           .eq("id", budget.id);
 
         if (error) throw error;
 
-        toast({
-          title: "Success",
-          description: "Budget updated successfully",
-        });
+        toast({ title: "Success", description: "Budget updated successfully" });
       } else {
-        // Create new budget
-        const { error } = await (supabase as any)
+        // Upsert: look for existing budget record for this user + context
+        let selectQuery = supabase
           .from("budgets")
-          .insert({
-            report_id: reportId,
-            account_id: accountId,
-            user_id: user.id,
-            dimension_name: selectedDimension,
-            dimension_item: selectedItem,
-            budget_data: budgetData,
-          });
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("dimension_name", selectedDimension)
+          .eq("dimension_item", selectedItem)
+          .limit(1);
 
-        if (error) throw error;
+        if (accountId) selectQuery = selectQuery.eq("account_id", accountId);
+        else if (reportId) selectQuery = selectQuery.eq("report_id", reportId);
 
-        toast({
-          title: "Success",
-          description: "Budget created successfully",
-        });
+        const { data: existing, error: selErr } = await selectQuery;
+        if (selErr) throw selErr;
+
+        if (existing && existing.length > 0) {
+          const { error } = await (supabase as any)
+            .from("budgets")
+            .update({
+              budget_data: flatBudget,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", existing[0].id);
+          if (error) throw error;
+
+          toast({ title: "Success", description: "Budget updated successfully" });
+        } else {
+          const { error } = await (supabase as any)
+            .from("budgets")
+            .insert({
+              report_id: reportId,
+              account_id: accountId,
+              user_id: user.id,
+              dimension_name: selectedDimension,
+              dimension_item: selectedItem,
+              budget_data: flatBudget,
+            });
+          if (error) throw error;
+
+          toast({ title: "Success", description: "Budget created successfully" });
+        }
       }
 
       onSuccess?.();
@@ -530,7 +541,6 @@ export const BudgetModal = ({
             <Select
               value={selectedDimension}
               onValueChange={setSelectedDimension}
-              disabled={!!budget} // Disable when editing
             >
               <SelectTrigger id="dimension">
                 <SelectValue placeholder="Select dimension (e.g., Roomstay - Diji - SEM - Account)" />
@@ -566,7 +576,7 @@ export const BudgetModal = ({
               <Select
                 value={selectedItem}
                 onValueChange={setSelectedItem}
-                disabled={!!budget || !selectedDimension || dimensionItems.length === 0}
+                disabled={!selectedDimension || dimensionItems.length === 0}
               >
                 <SelectTrigger id="item">
                   <SelectValue placeholder="Select item from chosen dimension" />
@@ -610,7 +620,10 @@ export const BudgetModal = ({
                               step="0.01"
                               placeholder="0"
                               value={getMonthValue(month.value)}
-                              onChange={(e) => handleMonthChange(month.value, e.target.value)}
+                              onChange={(e) => {
+                                setSelectedYear(year.value);
+                                handleMonthChange(month.value, e.target.value);
+                              }}
                               className="flex-1"
                             />
                           </div>
@@ -637,4 +650,3 @@ export const BudgetModal = ({
     </Dialog>
   );
 };
-

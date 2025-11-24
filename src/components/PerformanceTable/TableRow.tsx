@@ -9,6 +9,8 @@ import type { TableRow as TableRowType } from "@/hooks/performanceTable/usePerfo
 import type { FilterState } from "@/components/FiltersBar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+// NEW: import BudgetModal for popup editing
+import { BudgetModal } from "@/components/BudgetModal";
 
 interface TableRowProps {
   row: TableRowType;
@@ -57,9 +59,14 @@ export function TableRow({
   accountId = null,
 }: TableRowProps) {
   const [localBudget, setLocalBudget] = useState<number | null>(typeof (row as any)?.data?.Budget === 'number' ? (row as any).data.Budget : null);
-  // NEW: editing state and ref to focus input
+  // NEW: editing state and ref to focus input (kept for future inline edit use)
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const budgetInputRef = useRef<HTMLInputElement | null>(null);
+  // NEW: modal state + presets
+  const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+  const [presetDimensionName, setPresetDimensionName] = useState<string>('');
+  const [presetItemName, setPresetItemName] = useState<string>('');
+  const [presetYearMonth, setPresetYearMonth] = useState<string>('');
 
   const handleRowClick = () => {
     if (hasChildren) {
@@ -98,7 +105,6 @@ export function TableRow({
       toast({ title: "Cannot save", description: "Missing month or breakdown dimension", variant: "destructive" });
       return;
     }
-    // NEW: narrow month key so TS knows it's a string
     const monthKey = monthYM as string;
 
     const itemName = String(row.name).trim();
@@ -128,7 +134,6 @@ export function TableRow({
       return;
     }
 
-    // NEW: cast to an object record before spreading
     const existingData = (existing?.[0]?.budget_data ?? {}) as Record<string, number>;
     const newBudgetData: Record<string, number> = { ...existingData, [monthKey]: value };
 
@@ -160,12 +165,55 @@ export function TableRow({
 
     setLocalBudget(value);
     setIsEditingBudget(false);
-    // NEW: use formatter-compatible dimension
     toast({ title: "Budget saved", description: `Saved ${formatValue(value, budgetDimForFormatValue)} for ${itemName}` });
   };
 
   // NEW: computed display budget
   const displayBudget = localBudget ?? (row as any)?.data?.Budget ?? 0;
+
+  // NEW: handle opening modal with presets and refresh after save
+  const openBudgetModal = async () => {
+    if (!isMonthView || !isBreakdownChild) return;
+
+    const breakdownDimId = breakdownByDimensions[0];
+    const breakdownDim = breakdownDimId ? dimensions.find(d => d.id === breakdownDimId) : undefined;
+    const monthYM = extractMonthKey();
+    if (!breakdownDim || !monthYM) return;
+
+    setPresetDimensionName(breakdownDim.name);
+    setPresetItemName(String((row as any).name).trim());
+    setPresetYearMonth(monthYM);
+    setIsBudgetModalOpen(true);
+  };
+
+  const refreshBudgetFromDb = async () => {
+    const monthYM = extractMonthKey();
+    const breakdownDimId = breakdownByDimensions[0];
+    const breakdownDim = breakdownDimId ? dimensions.find(d => d.id === breakdownDimId) : undefined;
+    const itemName = String(row.name).trim();
+    if (!monthYM || !breakdownDim) return;
+
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData?.user?.id;
+    if (!userId) return;
+
+    let query = supabase
+      .from('budgets')
+      .select('budget_data')
+      .eq('user_id', userId)
+      .eq('dimension_name', breakdownDim.name)
+      .eq('dimension_item', itemName)
+      .limit(1);
+
+    if (accountId) query = query.eq('account_id', accountId);
+    else if (reportId) query = query.eq('report_id', reportId);
+
+    const { data: existing } = await query;
+    const val = (existing?.[0]?.budget_data ?? {})[monthYM];
+    if (typeof val === 'number') {
+      setLocalBudget(val);
+    }
+  };
 
   return (
     <>
@@ -234,7 +282,7 @@ export function TableRow({
                   }}
                 />
               ) : (
-                // NEW: clickable display; show "Set" when budget is 0
+                // NEW: clickable display; show "Set" when budget is 0, opens modal
                 <span
                   className={cn(
                     "select-none",
@@ -244,9 +292,7 @@ export function TableRow({
                   onClick={(e) => {
                     if (isEditMode && isMonthView && isBreakdownChild) {
                       e.stopPropagation();
-                      setIsEditingBudget(true);
-                      // focus after render
-                      setTimeout(() => budgetInputRef.current?.focus(), 0);
+                      openBudgetModal();
                     }
                   }}
                   title={isEditMode && isMonthView && isBreakdownChild ? "Click to set budget" : undefined}
@@ -318,6 +364,28 @@ export function TableRow({
             </Fragment>
           );
         })}
+      {/* NEW: BudgetModal wired with presets */}
+      {isBudgetModalOpen && (
+        <BudgetModal
+          open={isBudgetModalOpen}
+          onOpenChange={(o) => {
+            setIsBudgetModalOpen(o);
+            if (!o) {
+              refreshBudgetFromDb();
+            }
+          }}
+          reportId={reportId ?? null}
+          accountId={accountId ?? null}
+          // presets from clicked cell
+          presetDimensionName={presetDimensionName}
+          presetItemName={presetItemName}
+          presetYearMonth={presetYearMonth}
+          onSuccess={() => {
+            setIsBudgetModalOpen(false);
+            refreshBudgetFromDb();
+          }}
+        />
+      )}
     </>
   );
 }
