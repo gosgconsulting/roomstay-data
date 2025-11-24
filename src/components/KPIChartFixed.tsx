@@ -358,7 +358,7 @@ export function KPIChart({
   if (isLoading) {
     return (
       <Card className="shadow-sm">
-        <CardHeader className="flex items-center justify-start">
+        <CardHeader className="flex items-center justify-end">
           <div className="flex items-center gap-2">
             <Select value={selectedMetric} onValueChange={handleMetricChange}>
               <SelectTrigger className="w-40 h-8 text-xs">
@@ -386,7 +386,7 @@ export function KPIChart({
   if (chartData.length === 0) {
     return (
       <Card className="shadow-sm">
-        <CardHeader className="flex items-center justify-start">
+        <CardHeader className="flex items-center justify-end">
           <div className="flex items-center gap-2">
             <Select value={selectedMetric} onValueChange={handleMetricChange}>
               <SelectTrigger className="w-40 h-8 text-xs">
@@ -413,7 +413,7 @@ export function KPIChart({
 
   return (
     <Card className="shadow-sm">
-      <CardHeader className="flex items-center justify-start">
+      <CardHeader className="flex items-center justify-end">
         <div className="flex items-center gap-2">
           <Select value={selectedMetric} onValueChange={handleMetricChange}>
             <SelectTrigger className="w-40 h-8 text-xs">
