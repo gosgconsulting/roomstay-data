@@ -12,6 +12,7 @@ import { usePerformanceTableColumns } from "@/hooks/performanceTable/usePerforma
 import { useBudgetTrackerData } from "@/hooks/budgetTracker/useBudgetTrackerData";
 import { useBudgetTrackerFilters } from "@/hooks/budgetTracker/useBudgetTrackerFilters";
 import { checkDataSources } from "@/lib/performanceTable/dataSourceUtils";
+import PerformanceSettingsModal from "./PerformanceSettingsModal";
 
 interface BudgetTrackerTableProps {
   reportId: string | null;
@@ -36,6 +37,10 @@ export const BudgetTrackerTable = ({
   const [activeDateTab, setActiveDateTab] = useState<'month' | 'year'>('month');
   const [accountName, setAccountName] = useState<string | undefined>(undefined);
   
+  // Settings modal + selector config
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [selectorDimensions, setSelectorDimensions] = useState<string[]>([]);
+
   // Data source state
   const [hasDataSources, setHasDataSources] = useState<boolean>(false);
 
@@ -87,9 +92,11 @@ export const BudgetTrackerTable = ({
     filterState,
     selectedYear,
     breakdownByDimensions,
+    thenByDimensions,
     yearDateRange,
     handleYearChange,
     handleBreakdownDimensionChange,
+    handleThenByDimensionChange,
     resetFilters,
   } = useBudgetTrackerFilters({
     reportId: reportId || undefined,
@@ -134,6 +141,7 @@ export const BudgetTrackerTable = ({
     reportIds,
     accountId,
     breakdownByDimensions,
+    thenByDimensions,
     visibleColumns,
     filters: filterState,
     activeDateTab,
@@ -160,7 +168,7 @@ export const BudgetTrackerTable = ({
     } else {
       setIsLoadingData(false);
     }
-  }, [reportId, selectedYear, JSON.stringify(breakdownByDimensions), activeDateTab, dimensions.length, visibilityRefreshTrigger]);
+  }, [reportId, selectedYear, JSON.stringify(breakdownByDimensions), JSON.stringify(thenByDimensions), activeDateTab, dimensions.length, visibilityRefreshTrigger]);
 
   // Always group by Date (mandatory for budget tracker)
   const groupByDimensions = useMemo(() => {
@@ -176,25 +184,36 @@ export const BudgetTrackerTable = ({
     }
   }, []);
 
-  // Handle breakdown dimension change
-  const handleDimensionChange = useCallback((value: string, type: string) => {
+  // Handle dimension change
+  const handleDimensionChange = useCallback((value: string, type: "breakdown" | "then") => {
     if (type === "breakdown") {
       console.log('[BUDGET-TRACKER] Breakdown dimension changed:', value);
       handleBreakdownDimensionChange([value]);
+    } else if (type === "then") {
+      console.log('[BUDGET-TRACKER] Then-by dimension changed:', value);
+      handleThenByDimensionChange([value]);
     }
-    // Group by is always Date and cannot be changed
-    // Then by is not supported in budget tracker
-  }, [handleBreakdownDimensionChange]);
+  }, [handleBreakdownDimensionChange, handleThenByDimensionChange]);
 
-  // Create mock totals for table display
+  // Create totals for table display
   const totals = useMemo(() => {
     return totalData;
   }, [totalData]);
 
-  // No filtering for budget tracker - show all data
+  // No additional filtering for budget tracker - show all data
   const filteredTableData = useMemo(() => {
     return tableData;
   }, [tableData]);
+
+  // Settings modal save handler (stores configured selector dimensions)
+  const handleSettingsSave = useCallback((selected: string[]) => {
+    setSelectorDimensions(selected);
+    setSettingsOpen(false);
+    toast({
+      title: "Settings saved",
+      description: "Breakdown/Then-by dropdowns updated",
+    });
+  }, []);
 
   return (
     <>
@@ -225,6 +244,7 @@ export const BudgetTrackerTable = ({
           
           <BudgetTrackerHeader
             breakdownByDimensions={breakdownByDimensions}
+            thenByDimensions={thenByDimensions}
             dimensions={dimensions}
             dimensionHasData={dimensionHasData}
             reportId={reportId}
@@ -240,6 +260,8 @@ export const BudgetTrackerTable = ({
             onApplyColumnSettings={applyColumnSettings}
             onCancelColumnSettings={cancelColumnSettings}
             onRefreshDimensions={loadDimensions}
+            availableSelectorDimensions={selectorDimensions}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
         </CardHeader>
         <CardContent className="pt-6">
@@ -268,7 +290,7 @@ export const BudgetTrackerTable = ({
               totals={totals}
               groupByDimensions={groupByDimensions}
               breakdownByDimensions={breakdownByDimensions}
-              thenByDimensions={[]}
+              thenByDimensions={thenByDimensions}
               activeDateTab={activeDateTab as any} // Cast to match expected type
               filters={{} as any} // No filters for budget tracker
               onContextMenu={() => {}} // No context menu
@@ -281,6 +303,20 @@ export const BudgetTrackerTable = ({
           )}
         </CardContent>
       </Card>
+
+      {/* Settings modal for configuring selector dimensions */}
+      <PerformanceSettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        dimensions={dimensions}
+        groupBy={groupByDimensions}
+        breakdownBy={breakdownByDimensions}
+        thenBy={thenByDimensions}
+        selectedDimensionIds={selectorDimensions}
+        onSave={handleSettingsSave}
+        reportId={reportId || undefined}
+        accountId={accountId}
+      />
     </>
   );
 };

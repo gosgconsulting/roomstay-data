@@ -2,15 +2,20 @@ import { DimensionSelectorGroup } from "../PerformanceTable/DimensionSelectorGro
 import { ColumnVisibilitySheet } from "../PerformanceTable/ColumnVisibilitySheet";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import type { DragEndEvent } from '@dnd-kit/core';
+import { Button } from "@/components/ui/button";
+import { Settings } from "lucide-react";
 
 interface BudgetTrackerHeaderProps {
   breakdownByDimensions: string[];
+  // NEW: Then-by dimensions
+  thenByDimensions: string[];
   dimensions: Dimension[];
   dimensionHasData: Record<string, boolean>;
   reportId: string | null;
   isSharedView: boolean;
   isEditMode?: boolean;
-  onDimensionChange: (value: string, selector: string) => void;
+  // Updated: selector can be "breakdown" or "then"
+  onDimensionChange: (value: string, selector: "breakdown" | "then") => void;
   visibleColumns: Set<string>;
   getOrderedDimensions: () => Dimension[];
   onToggleColumn: (dimensionId: string) => void;
@@ -20,13 +25,18 @@ interface BudgetTrackerHeaderProps {
   onApplyColumnSettings: () => void;
   onCancelColumnSettings: () => void;
   onRefreshDimensions?: () => void;
+  // NEW: configured list for dropdowns
+  availableSelectorDimensions?: string[];
+  // NEW: open settings modal
+  onOpenSettings?: () => void;
 }
 
 /**
- * Budget tracker header component with breakdown dimension selector and column visibility
+ * Budget tracker header component with breakdown and then-by selectors and column visibility
  */
 export function BudgetTrackerHeader({
   breakdownByDimensions,
+  thenByDimensions,
   dimensions,
   dimensionHasData,
   reportId,
@@ -42,11 +52,16 @@ export function BudgetTrackerHeader({
   onApplyColumnSettings,
   onCancelColumnSettings,
   onRefreshDimensions,
+  availableSelectorDimensions,
+  onOpenSettings,
 }: BudgetTrackerHeaderProps) {
-  // Build selector options for breakdown by (exclude date since it's always group by)
-  const selectorOptions = dimensions
-    .filter(d => d.type !== 'date') // Exclude date dimension
-    .map(d => d.id);
+  // Build selector options (exclude date for breakdown/then)
+  const configured = (availableSelectorDimensions && availableSelectorDimensions.length > 0)
+    ? availableSelectorDimensions
+    : dimensions.map(d => d.id);
+
+  const dateId = dimensions.find(d => d.type === 'date')?.id;
+  const selectorOptions = configured.filter(id => id !== dateId);
 
   return (
     <div className="flex items-center justify-between">
@@ -73,9 +88,24 @@ export function BudgetTrackerHeader({
             onValueChange={(value) => onDimensionChange(value, "breakdown")}
           />
         )}
+
+        {/* Then by selector */}
+        {(breakdownByDimensions.length >= 1 || dimensions.length >= 3) && (
+          <DimensionSelectorGroup
+            label="Then by"
+            dimensions={thenByDimensions}
+            availableDimensions={selectorOptions}
+            allDimensions={dimensions}
+            dimensionHasData={dimensionHasData}
+            reportId={reportId}
+            isSharedView={isSharedView}
+            isEditMode={isEditMode}
+            onValueChange={(value) => onDimensionChange(value, "then")}
+          />
+        )}
       </div>
       
-      {/* Column visibility controls */}
+      {/* Column visibility controls + Settings (edit mode only) */}
       <div className="flex items-center gap-2">
         <ColumnVisibilitySheet
           visibleColumns={visibleColumns}
@@ -89,6 +119,17 @@ export function BudgetTrackerHeader({
           onCancel={onCancelColumnSettings}
           onRefreshDimensions={onRefreshDimensions}
         />
+        {isEditMode && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2"
+            onClick={onOpenSettings}
+            title="Table settings"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -3,6 +3,8 @@ import { useState, useCallback, useMemo } from "react";
 export interface BudgetTrackerFilterState {
   selectedYear: number;
   breakdownByDimensions: string[];
+  // NEW: support a third level
+  thenByDimensions: string[];
 }
 
 interface UseBudgetTrackerFiltersOptions {
@@ -22,12 +24,15 @@ export function useBudgetTrackerFilters({
   // Filter state
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [breakdownByDimensions, setBreakdownByDimensions] = useState<string[]>([]);
+  // NEW: Then-by state
+  const [thenByDimensions, setThenByDimensions] = useState<string[]>([]);
 
   // Create filter state object
   const filterState = useMemo((): BudgetTrackerFilterState => ({
     selectedYear,
     breakdownByDimensions,
-  }), [selectedYear, breakdownByDimensions]);
+    thenByDimensions,
+  }), [selectedYear, breakdownByDimensions, thenByDimensions]);
 
   // Year change handler
   const handleYearChange = useCallback((year: number) => {
@@ -41,11 +46,18 @@ export function useBudgetTrackerFilters({
     setBreakdownByDimensions(dimensions);
   }, []);
 
+  // NEW: Then-by handler
+  const handleThenByDimensionChange = useCallback((dimensions: string[]) => {
+    console.log('[BUDGET-TRACKER] Then-by dimensions changed to:', dimensions);
+    setThenByDimensions(dimensions);
+  }, []);
+
   // Reset filters to defaults
   const resetFilters = useCallback(() => {
     console.log('[BUDGET-TRACKER] Resetting filters to defaults');
     setSelectedYear(currentYear);
     setBreakdownByDimensions([]);
+    setThenByDimensions([]);
   }, [currentYear]);
 
   // Generate date range for the selected year (Jan 1 - Dec 31)
@@ -63,9 +75,11 @@ export function useBudgetTrackerFilters({
     filterState,
     selectedYear,
     breakdownByDimensions,
+    thenByDimensions,
     yearDateRange,
     handleYearChange,
     handleBreakdownDimensionChange,
+    handleThenByDimensionChange,
     resetFilters,
   };
 }
