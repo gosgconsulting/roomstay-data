@@ -431,6 +431,10 @@ export const BudgetTrackerTable = ({
               sortDirection={null}
               onSort={() => {}} // No sorting
               onResetSort={() => {}} // No sorting
+              showBudgetColumn={true}
+              isEditMode={isEditMode}
+              reportId={reportId}
+              accountId={accountId}
             />
           )}
         </CardContent>

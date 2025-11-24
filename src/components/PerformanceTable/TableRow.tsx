@@ -1,10 +1,14 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { ChevronDown, ChevronRight, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatRowName, formatValue } from "@/lib/performanceTable/formatters";
+// NEW: import formatter-compatible Dimension type
+import type { Dimension as FormatterDimension } from "@/lib/performanceTable/formatters";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import type { TableRow as TableRowType } from "@/hooks/performanceTable/usePerformanceTableData";
 import type { FilterState } from "@/components/FiltersBar";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 interface TableRowProps {
   row: TableRowType;
@@ -22,6 +26,10 @@ interface TableRowProps {
   onRowClick?: (row: TableRowType) => void;
   expandedRows?: Set<string>;
   onToggleRow?: (id: string) => void;
+  showBudgetColumn?: boolean;
+  isEditMode?: boolean;
+  reportId?: string | null;
+  accountId?: string | null;
 }
 
 /**
@@ -43,13 +51,113 @@ export function TableRow({
   onRowClick,
   expandedRows,
   onToggleRow,
+  showBudgetColumn = false,
+  isEditMode = false,
+  reportId = null,
+  accountId = null,
 }: TableRowProps) {
+  const [localBudget, setLocalBudget] = useState<number | null>(typeof (row as any)?.data?.Budget === 'number' ? (row as any).data.Budget : null);
+
   const handleRowClick = () => {
     if (hasChildren) {
       onToggle();
     } else if (onRowClick) {
       onRowClick(row);
     }
+  };
+
+  // Helpers to detect editable Budget cell: month view + level 1 breakdown rows
+  const isBreakdownChild = row.level === 1 && !!breakdownByDimensions[0];
+  const isMonthView = activeDateTab === 'month';
+
+  const budgetDimension = dimensions.find(d => d.name === 'Budget') || { id: 'virtual-budget', name: 'Budget', type: 'currency' } as Dimension;
+  // formatter-compatible version (formula is required)
+  const budgetDimForFormatValue: FormatterDimension = {
+    id: (budgetDimension as any).id,
+    name: (budgetDimension as any).name,
+    type: (budgetDimension as any).type,
+    formula: (budgetDimension as any).formula ?? null,
+  };
+
+  const extractMonthKey = () => {
+    // parentId like "budget-month-YYYY-MM-01"
+    const parentId = (row as any).parentId as string | undefined;
+    if (!parentId) return null;
+    const match = parentId.match(/budget-month-(\d{4}-\d{2})/);
+    return match ? match[1] : null; // YYYY-MM
+  };
+
+  const saveBudget = async (value: number) => {
+    const monthYM = extractMonthKey();
+    const breakdownDimId = breakdownByDimensions[0];
+    const breakdownDim = breakdownDimId ? dimensions.find(d => d.id === breakdownDimId) : undefined;
+    if (!monthYM || !breakdownDim) {
+      toast({ title: "Cannot save", description: "Missing month or breakdown dimension", variant: "destructive" });
+      return;
+    }
+    // NEW: narrow month key so TS knows it's a string
+    const monthKey = monthYM as string;
+
+    const itemName = String(row.name).trim();
+
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+    if (userErr || !userData?.user) {
+      toast({ title: "Not signed in", description: "Please log in to save budgets", variant: "destructive" });
+      return;
+    }
+    const userId = userData.user.id;
+
+    // Find existing budget row for this (user, account/report, dimension_name, dimension_item)
+    let query = supabase
+      .from('budgets')
+      .select('id, budget_data')
+      .eq('user_id', userId)
+      .eq('dimension_name', breakdownDim.name)
+      .eq('dimension_item', itemName)
+      .limit(1);
+
+    if (accountId) query = query.eq('account_id', accountId);
+    else if (reportId) query = query.eq('report_id', reportId);
+
+    const { data: existing, error: selErr } = await query;
+    if (selErr) {
+      toast({ title: "Error", description: "Failed to load existing budget", variant: "destructive" });
+      return;
+    }
+
+    // NEW: cast to an object record before spreading
+    const existingData = (existing?.[0]?.budget_data ?? {}) as Record<string, number>;
+    const newBudgetData: Record<string, number> = { ...existingData, [monthKey]: value };
+
+    if (existing && existing.length > 0) {
+      const { error: updErr } = await supabase
+        .from('budgets')
+        .update({ budget_data: newBudgetData })
+        .eq('id', existing[0].id);
+      if (updErr) {
+        toast({ title: "Save failed", description: "Could not update budget", variant: "destructive" });
+        return;
+      }
+    } else {
+      const payload: any = {
+        user_id: userId,
+        dimension_name: breakdownDim.name,
+        dimension_item: itemName,
+        budget_data: newBudgetData,
+      };
+      if (accountId) payload.account_id = accountId;
+      if (reportId) payload.report_id = reportId;
+
+      const { error: insErr } = await supabase.from('budgets').insert(payload);
+      if (insErr) {
+        toast({ title: "Save failed", description: "Could not create budget", variant: "destructive" });
+        return;
+      }
+    }
+
+    setLocalBudget(value);
+    // NEW: use formatter-compatible dimension
+    toast({ title: "Budget saved", description: `Saved ${formatValue(value, budgetDimForFormatValue)} for ${itemName}` });
   };
 
   return (
@@ -62,7 +170,7 @@ export function TableRow({
         )}
         onClick={handleRowClick}
       >
-        <td className="py-3 px-4" style={{ paddingLeft: `${row.level * 2 + 1}rem` }}>
+        <td className="py-3 px-4" style={{ paddingLeft: `${(row as any).level * 2 + 1}rem` }}>
           <div className="flex items-center gap-2">
             {hasChildren ? (
               <div className="text-muted-foreground">
@@ -75,10 +183,10 @@ export function TableRow({
             ) : (
               <div className="w-4" />
             )}
-            <span className={cn("font-medium", row.level > 0 && "font-normal")}>
+            <span className={cn("font-medium", (row as any).level > 0 && "font-normal")}>
               {formatRowName(
-                row.name,
-                row.level,
+                (row as any).name,
+                (row as any).level,
                 groupByDimensions,
                 breakdownByDimensions,
                 thenByDimensions,
@@ -88,15 +196,47 @@ export function TableRow({
             </span>
           </div>
         </td>
+
+        {showBudgetColumn && (
+          <td className="py-3 px-4 text-right">
+            <div className="flex items-center justify-end">
+              {isEditMode && isMonthView && isBreakdownChild ? (
+                <input
+                  type="number"
+                  step="0.01"
+                  className="w-28 px-2 py-1 border rounded text-right"
+                  value={localBudget ?? ''}
+                  placeholder="0"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setLocalBudget(v === '' ? null : parseFloat(v));
+                  }}
+                  onBlur={() => {
+                    if (localBudget !== null && !isNaN(localBudget)) {
+                      saveBudget(localBudget);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && localBudget !== null && !isNaN(localBudget)) {
+                      saveBudget(localBudget);
+                    }
+                  }}
+                />
+              ) : (
+                // NEW: use formatter-compatible dimension
+                <span>{formatValue(localBudget ?? (row as any)?.data?.Budget ?? 0, budgetDimForFormatValue)}</span>
+              )}
+            </div>
+          </td>
+        )}
+
         {getOrderedDimensions()
           .filter(d => visibleColumns.has(d.id))
+          .filter(d => !(showBudgetColumn && d.name === 'Budget'))
           .map((dimension) => {
-            // Safely access row data with fallbacks
-            const value = row.data && dimension.name in row.data ? row.data[dimension.name] : null;
-            const change = row.changeData && dimension.name in row.changeData ? row.changeData[dimension.name] : undefined;
-            const hasComparison = filters.compareEnabled && change !== undefined;
-            
-            // Check if value is negative for styling
+            const value = (row as any).data && dimension.name in (row as any).data ? (row as any).data[dimension.name] : null;
+            const change = (row as any).changeData && dimension.name in (row as any).changeData ? (row as any).changeData[dimension.name] : undefined;
+            const hasComparison = (filters as any).compareEnabled && change !== undefined;
             const numValue = typeof value === 'number' ? value : parseFloat(String(value || 0));
             const isNegative = !isNaN(numValue) && numValue < 0;
             
@@ -107,12 +247,12 @@ export function TableRow({
                   {hasComparison && (
                     <span className={cn(
                       "text-xs flex items-center gap-1",
-                      change > 0 ? "text-green-600" : change < 0 ? "text-red-600" : "text-muted-foreground"
+                      (change as number) > 0 ? "text-green-600" : (change as number) < 0 ? "text-red-600" : "text-muted-foreground"
                     )}>
-                      {change > 0 && <ArrowUp className="h-3 w-3" />}
-                      {change < 0 && <ArrowDown className="h-3 w-3" />}
-                      {change === 0 && <Minus className="h-3 w-3" />}
-                      {Math.abs(change).toFixed(1)}%
+                      {(change as number) > 0 && <ArrowUp className="h-3 w-3" />}
+                      {(change as number) < 0 && <ArrowDown className="h-3 w-3" />}
+                      {(change as number) === 0 && <Minus className="h-3 w-3" />}
+                      {Math.abs(change as number).toFixed(1)}%
                     </span>
                   )}
                 </div>
@@ -121,7 +261,7 @@ export function TableRow({
           })}
       </tr>
       {isExpanded &&
-        row.children?.map((child) => {
+        (row as any).children?.map((child: any) => {
           const childIsExpanded = expandedRows?.has(child.id) ?? false;
           const childHasChildren = !!(child.children && child.children.length > 0);
           return (
@@ -142,6 +282,10 @@ export function TableRow({
                 onRowClick={onRowClick}
                 expandedRows={expandedRows}
                 onToggleRow={onToggleRow}
+                showBudgetColumn={showBudgetColumn}
+                isEditMode={isEditMode}
+                reportId={reportId}
+                accountId={accountId}
               />
             </Fragment>
           );

@@ -35,6 +35,10 @@ interface TableBodyProps {
   sortDirection?: 'asc' | 'desc' | null;
   onSort?: (dimensionName: string) => void;
   onResetSort?: () => void;
+  showBudgetColumn?: boolean;
+  isEditMode?: boolean;
+  reportId?: string | null;
+  accountId?: string | null;
 }
 
 /**
@@ -58,6 +62,10 @@ export function TableBody({
   sortDirection,
   onSort,
   onResetSort,
+  showBudgetColumn = false,
+  isEditMode = false,
+  reportId = null,
+  accountId = null,
 }: TableBodyProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -86,6 +94,9 @@ export function TableBody({
   );
   
   const totalPages = Math.ceil(filteredTableData.length / itemsPerPage);
+
+  // NEW: formatter-compatible Budget dimension
+  const budgetFormatDim = { id: 'virtual-budget', name: 'Budget', type: 'currency', formula: null };
 
   return (
     <>
@@ -127,8 +138,19 @@ export function TableBody({
                     : "Name"}
                 </span>
               </th>
+              {showBudgetColumn && (
+                <th
+                  className="py-3 px-4 text-right font-medium text-sm"
+                  onContextMenu={(e) => onContextMenu(e, "Budget")}
+                >
+                  <div className="flex items-center justify-end">
+                    <span className="block leading-tight text-right">Budget</span>
+                  </div>
+                </th>
+              )}
               {getOrderedDimensions()
                 .filter(d => visibleColumns.has(d.id))
+                .filter(d => !(showBudgetColumn && d.name === 'Budget'))
                 .map((dimension) => {
                   const isSorted = sortColumn === dimension.name;
                   const isAsc = isSorted && sortDirection === 'asc';
@@ -192,6 +214,10 @@ export function TableBody({
                     onRowClick={onRowClick}
                     expandedRows={expandedRows}
                     onToggleRow={toggleRow}
+                    showBudgetColumn={showBudgetColumn}
+                    isEditMode={isEditMode}
+                    reportId={reportId}
+                    accountId={accountId}
                   />
                 </Fragment>
               );
@@ -199,18 +225,24 @@ export function TableBody({
             {/* Total row */}
             <tr className="border-t-2 border-primary/20 bg-muted/50 font-semibold">
               <td className="py-3 px-4">Total</td>
+              {showBudgetColumn && (
+                <td className="py-3 px-4 text-right">
+                  <span>{formatValue(totals['Budget'] ?? 0, budgetFormatDim)}</span>
+                </td>
+              )}
               {getOrderedDimensions()
                 .filter(d => visibleColumns.has(d.id))
+                .filter(d => !(showBudgetColumn && d.name === 'Budget'))
                 .map((dimension) => {
                   const value = totals[dimension.name];
-                  
-                  // Check if value is negative for styling
                   const numValue = typeof value === 'number' ? value : parseFloat(String(value));
                   const isNegative = !isNaN(numValue) && numValue < 0;
                   
                   return (
                     <td key={dimension.id} className="py-3 px-4 text-right">
-                      <span className={cn(isNegative && "text-red-600")}>{formatValue(value, { ...dimension, formula: dimension.formula || null })}</span>
+                      <span className={cn(isNegative && "text-red-600")}>
+                        {formatValue(value, { ...dimension, formula: dimension.formula || null })}
+                      </span>
                     </td>
                   );
                 })}

@@ -102,6 +102,38 @@ export function useBudgetTrackerData({
 
       const groupByDimensions = [dateId, ...breakdownByDimensions];
 
+      // Preload budgets map keyed by item -> YYYY-MM -> value
+      const budgetsMap: Record<string, Record<string, number>> = {};
+      const breakdownDimId = breakdownByDimensions[0];
+      const breakdownDim = breakdownDimId ? dimensions.find(d => d.id === breakdownDimId) : undefined;
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id || null;
+
+      if (userId && breakdownDim) {
+        let q = supabase
+          .from('budgets')
+          .select('dimension_item, budget_data')
+          .eq('user_id', userId)
+          .eq('dimension_name', breakdownDim.name);
+        if (accountId) q = q.eq('account_id', accountId);
+        else if (reportId) q = q.eq('report_id', reportId);
+        const { data: budgetRows, error: budgetErr } = await q;
+        if (!budgetErr && Array.isArray(budgetRows)) {
+          for (const row of budgetRows) {
+            const item = String(row.dimension_item || '').trim();
+            const bd = row.budget_data || {};
+            const itemMap: Record<string, number> = {};
+            Object.keys(bd).forEach((k) => {
+              if (k.startsWith(String(filters.selectedYear))) {
+                const num = parseFloat(String(bd[k]));
+                if (!isNaN(num)) itemMap[k] = num;
+              }
+            });
+            budgetsMap[item] = itemMap;
+          }
+        }
+      }
+
       // Use edge function for optimized, server-side data loading
       const { data: edgeFunctionData, error: fetchError } = await supabase.functions.invoke(
         'get-performance-data',
@@ -111,14 +143,14 @@ export function useBudgetTrackerData({
             reportIds: reportIds || undefined,
             accountId: accountId,
             groupByDims: groupByDimensions,
-            breakdownDims: breakdownByDimensions, // include breakdown to fetch per-item rows
+            breakdownDims: breakdownByDimensions,
             thenByDims: thenByDimensions,
             visibleDimensionIds: Array.from(visibleColumns),
-            dimensionFilters: {}, // No dimension filters for budget tracker
+            dimensionFilters: {},
             dateFrom: dateFromFormatted,
             dateTo: dateToFormatted,
             dateGranularity: activeDateTab === 'year' ? 'year' : 'month',
-            dateOrder: 'desc', // Latest to earliest for Budget Tracker
+            dateOrder: 'desc',
             limit: 50000,
             offset: 0
           }
@@ -206,10 +238,10 @@ export function useBudgetTrackerData({
       if (activeDateTab === 'year') {
         // Year view: show single row for the entire year with breakdown children if selected
         const yearRowData: Record<string, any> = {};
-        const breakdownDimId = breakdownByDimensions[0];
-        const thenDimId = thenByDimensions[0];
-        const breakdownDim = breakdownDimId ? dimensions.find(d => d.id === breakdownDimId) : undefined;
-        const thenDim = thenDimId ? dimensions.find(d => d.id === thenDimId) : undefined;
+        const breakdownDimId2 = breakdownByDimensions[0];
+        const thenDimId2 = thenByDimensions[0];
+        const breakdownDim2 = breakdownDimId2 ? dimensions.find(d => d.id === breakdownDimId2) : undefined;
+        const thenDim2 = thenDimId2 ? dimensions.find(d => d.id === thenDimId2) : undefined;
 
         // Initialize all dimensions
         dimensions.forEach(dim => {
@@ -224,7 +256,21 @@ export function useBudgetTrackerData({
         const breakdownAggregate: Record<string, Record<string, number>> = {};
         const nestedAggregate: Record<string, Record<string, Record<string, number>>> = {};
         
-        dataByMonth.forEach((monthRows) => {
+        dataByMonth.forEach((monthRows, monthKey) => {
+          // Add budgets into aggregates per item for this month
+          if (breakdownDim2) {
+            Object.keys(budgetsMap).forEach((itemName) => {
+              const v = budgetsMap[itemName]?.[monthKey.replace(/-\d{2}$/, '')] // no day part; handled below
+              // monthKey is yyyy-MM-dd; convert to YYYY-MM
+              const ym = monthKey.slice(0, 7);
+              const val = budgetsMap[itemName]?.[ym];
+              if (val !== undefined) {
+                breakdownAggregate[itemName] = breakdownAggregate[itemName] || {};
+                breakdownAggregate[itemName]['Budget'] = (breakdownAggregate[itemName]['Budget'] || 0) + val;
+                yearRowData['Budget'] = (yearRowData['Budget'] || 0) + val;
+              }
+            });
+          }
           monthRows.forEach(row => {
             Object.keys(row.data).forEach(dimName => {
               const dim = dimensions.find(d => d.name === dimName);
@@ -235,9 +281,8 @@ export function useBudgetTrackerData({
                 }
               }
             });
-
-            if (breakdownDim) {
-              const itemName = String(row.data[breakdownDim.name] ?? '').trim();
+            if (breakdownDim2) {
+              const itemName = String(row.data[breakdownDim2.name] ?? '').trim();
               if (itemName) {
                 breakdownAggregate[itemName] = breakdownAggregate[itemName] || {};
                 Object.keys(row.data).forEach(dimName => {
@@ -249,9 +294,8 @@ export function useBudgetTrackerData({
                     }
                   }
                 });
-
-                if (thenDim) {
-                  const thenName = String(row.data[thenDim.name] ?? '').trim();
+                if (thenDim2) {
+                  const thenName = String(row.data[thenDim2.name] ?? '').trim();
                   if (thenName) {
                     nestedAggregate[itemName] = nestedAggregate[itemName] || {};
                     nestedAggregate[itemName][thenName] = nestedAggregate[itemName][thenName] || {};
@@ -273,24 +317,25 @@ export function useBudgetTrackerData({
 
         // Build children from breakdown aggregate
         const children: BudgetTableRow[] = [];
-        if (breakdownDim) {
+        if (breakdownDim2) {
           Object.keys(breakdownAggregate)
             .sort((a, b) => a.localeCompare(b))
             .forEach(itemName => {
-              const childId = `year-${filters.selectedYear}-${breakdownDim.id}-${itemName}`;
+              const childId = `year-${filters.selectedYear}-${breakdownDim2.id}-${itemName}`;
+              const childData = breakdownAggregate[itemName];
               const child: BudgetTableRow = {
                 id: childId,
                 name: itemName,
                 level: 1,
                 parentId: `budget-year-${filters.selectedYear}`,
-                data: breakdownAggregate[itemName],
+                data: childData,
               };
               
-              if (thenDim && nestedAggregate[itemName]) {
+              if (thenDim2 && nestedAggregate[itemName]) {
                 const grandChildren: BudgetTableRow[] = Object.keys(nestedAggregate[itemName])
                   .sort((a, b) => a.localeCompare(b))
                   .map(thenName => ({
-                    id: `${childId}-${thenDim.id}-${thenName}`,
+                    id: `${childId}-${thenDim2.id}-${thenName}`,
                     name: thenName,
                     level: 2,
                     parentId: childId,
@@ -314,7 +359,6 @@ export function useBudgetTrackerData({
           children: children.length > 0 ? children : undefined,
         });
       } else {
-        // Month view: show all 12 months, with children per breakdown item if selected
         const breakdownDimId = breakdownByDimensions[0];
         const thenDimId = thenByDimensions[0];
         const breakdownDim = breakdownDimId ? dimensions.find(d => d.id === breakdownDimId) : undefined;
@@ -323,6 +367,8 @@ export function useBudgetTrackerData({
         yearMonths.forEach(month => {
           const monthRows = dataByMonth.get(month.key) || [];
           
+          const ym = format(month.date, 'yyyy-MM');
+
           if (monthRows.length > 0) {
             const monthRowData: Record<string, any> = {};
             dimensions.forEach(dim => {
@@ -346,7 +392,6 @@ export function useBudgetTrackerData({
                   }
                 }
               });
-
               if (breakdownDim) {
                 const itemName = String(row.data[breakdownDim.name] ?? '').trim();
                 if (itemName) {
@@ -360,26 +405,21 @@ export function useBudgetTrackerData({
                       }
                     }
                   });
-
-                  if (thenDim) {
-                    const thenName = String(row.data[thenDim.name] ?? '').trim();
-                    if (thenName) {
-                      nestedAggregate[itemName] = nestedAggregate[itemName] || {};
-                      nestedAggregate[itemName][thenName] = nestedAggregate[itemName][thenName] || {};
-                      Object.keys(row.data).forEach(dimName => {
-                        const dim = dimensions.find(d => d.name === dimName);
-                        if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
-                          const v = parseFloat(String(row.data[dimName] ?? '0'));
-                          if (!isNaN(v)) {
-                            nestedAggregate[itemName][thenName][dimName] = (nestedAggregate[itemName][thenName][dimName] || 0) + v;
-                          }
-                        }
-                      });
-                    }
-                  }
                 }
               }
             });
+
+            // Inject budgets into breakdown aggregates and sum to month
+            if (breakdownDim) {
+              Object.keys(budgetsMap).forEach((itemName) => {
+                const val = budgetsMap[itemName]?.[ym];
+                if (val !== undefined) {
+                  breakdownAggregate[itemName] = breakdownAggregate[itemName] || {};
+                  breakdownAggregate[itemName]['Budget'] = (breakdownAggregate[itemName]['Budget'] || 0) + val;
+                  monthRowData['Budget'] = (monthRowData['Budget'] || 0) + val;
+                }
+              });
+            }
 
             // Build children rows
             let children: BudgetTableRow[] | undefined = undefined;
@@ -388,14 +428,14 @@ export function useBudgetTrackerData({
                 .sort((a, b) => a.localeCompare(b))
                 .map(itemName => {
                   const childId = `budget-month-${month.key}-${breakdownDim.id}-${itemName}`;
+                  const childData = breakdownAggregate[itemName];
                   const child: BudgetTableRow = {
                     id: childId,
                     name: itemName,
                     level: 1,
                     parentId: `budget-month-${month.key}`,
-                    data: breakdownAggregate[itemName],
+                    data: childData,
                   };
-                  
                   if (thenDim && nestedAggregate[itemName]) {
                     const grandChildren: BudgetTableRow[] = Object.keys(nestedAggregate[itemName])
                       .sort((a, b) => a.localeCompare(b))
@@ -410,14 +450,10 @@ export function useBudgetTrackerData({
                       child.children = grandChildren;
                     }
                   }
-                  
                   return child;
                 });
             }
 
-            setTimeout(() => {}, 0); // noop to keep code blocks aligned
-
-            // Push month row
             const monthRow: BudgetTableRow = {
               id: `budget-month-${month.key}`,
               name: month.name,
@@ -429,7 +465,6 @@ export function useBudgetTrackerData({
 
             finalTableData.push(monthRow);
           } else {
-            // No data for this month - create empty row
             const emptyRowData: Record<string, any> = {};
             dimensions.forEach(dim => {
               if (dim.type === 'date') {
@@ -440,6 +475,8 @@ export function useBudgetTrackerData({
                 emptyRowData[dim.name] = '';
               }
             });
+            // Ensure Budget visible even without data
+            emptyRowData['Budget'] = 0;
 
             finalTableData.push({
               id: `budget-month-empty-${month.key}`,
@@ -454,14 +491,14 @@ export function useBudgetTrackerData({
 
       setTableData(finalTableData);
 
-      // Compute totals
+      // Compute totals including Budget
       const calculatedTotalData: Record<string, any> = {};
       if (finalTableData.length > 0 && dimensions.length > 0) {
         finalTableData.forEach((row: BudgetTableRow) => {
           if (row.data) {
             Object.keys(row.data).forEach((dimName: string) => {
-              const dim = dimensions.find(d => d.name === dimName);
-              if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+              const dim = dimensions.find(d => d.name === dimName) || (dimName === 'Budget' ? { name: 'Budget', type: 'currency' } as any : null);
+              if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage' || dimName === 'Budget')) {
                 const value = parseFloat(String(row.data[dimName] ?? '0'));
                 if (!isNaN(value)) {
                   calculatedTotalData[dimName] = (calculatedTotalData[dimName] || 0) + value;
