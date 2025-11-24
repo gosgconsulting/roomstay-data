@@ -40,6 +40,8 @@ export const BudgetTrackerTable = ({
   // Settings modal + selector config
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectorDimensions, setSelectorDimensions] = useState<string[]>([]);
+  // NEW: Budget Tracker view id for persistence
+  const [budgetViewId, setBudgetViewId] = useState<string | null>(null);
 
   // Data source state
   const [hasDataSources, setHasDataSources] = useState<boolean>(false);
@@ -103,7 +105,87 @@ export const BudgetTrackerTable = ({
     accountId,
   });
 
-  // Column management hook (reuse from PerformanceTable)
+  // Load or create dedicated Budget Tracker view for this user/report
+  useEffect(() => {
+    const initBudgetView = async () => {
+      if (!reportId) {
+        setBudgetViewId(null);
+        return;
+      }
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+      if (userErr || !userData?.user) {
+        console.warn('[BUDGET-TRACKER] No authenticated user, skipping view init');
+        setBudgetViewId(null);
+        return;
+      }
+      const userId = userData.user.id;
+
+      const { data: existingViews, error: loadErr } = await supabase
+        .from('report_views')
+        .select('*')
+        .eq('report_id', reportId)
+        .eq('user_id', userId)
+        .eq('name', 'Budget Tracker')
+        .limit(1);
+
+      if (loadErr) {
+        console.error('[BUDGET-TRACKER] Error loading Budget Tracker view:', loadErr);
+        return;
+      }
+
+      if (existingViews && existingViews.length > 0) {
+        const view = existingViews[0] as any;
+        setBudgetViewId(view.id);
+
+        // Initialize local state from saved settings
+        const savedVisible = Array.isArray(view.visible_columns) ? view.visible_columns : [];
+        const savedOrder = Array.isArray(view.column_order) ? view.column_order : [];
+        setVisibleColumns(new Set(savedVisible));
+        setInitialVisibleColumns(new Set(savedVisible));
+        setColumnOrder(savedOrder);
+        setInitialColumnOrder(savedOrder);
+
+        const savedSelectorDims = Array.isArray(view.visible_dimensions) ? view.visible_dimensions : [];
+        setSelectorDimensions(savedSelectorDims);
+
+        const savedBreakdown = Array.isArray(view.breakdown_by_dimensions) ? view.breakdown_by_dimensions : [];
+        const savedThenBy = Array.isArray(view.then_by_dimensions) ? view.then_by_dimensions : [];
+        if (savedBreakdown.length > 0) handleBreakdownDimensionChange(savedBreakdown);
+        if (savedThenBy.length > 0) handleThenByDimensionChange(savedThenBy);
+
+        console.log('[BUDGET-TRACKER] Initialized from existing view');
+      } else {
+        // Create a new dedicated Budget Tracker view
+        const { data: inserted, error: insertErr } = await supabase
+          .from('report_views')
+          .insert({
+            report_id: reportId,
+            user_id: userId,
+            name: 'Budget Tracker',
+            is_default: false,
+            visible_columns: [],
+            column_order: [],
+            breakdown_by_dimensions: [],
+            then_by_dimensions: [],
+            visible_dimensions: [],
+            date_order: 'asc',
+          })
+          .select('id')
+          .single();
+
+        if (insertErr) {
+          console.error('[BUDGET-TRACKER] Error creating Budget Tracker view:', insertErr);
+          return;
+        }
+        setBudgetViewId(inserted.id);
+        console.log('[BUDGET-TRACKER] Created new Budget Tracker view');
+      }
+    };
+
+    initBudgetView();
+  }, [reportId]);
+
+  // Column management hook: use Budget Tracker view id for persistence
   const {
     visibleColumns,
     initialVisibleColumns,
@@ -122,7 +204,7 @@ export const BudgetTrackerTable = ({
     handleColumnReorder,
   } = usePerformanceTableColumns({
     reportId,
-    activeViewId: null, // Budget tracker doesn't use views
+    activeViewId: budgetViewId, // was null; now persist to budget view
     isSharedView,
     dimensions,
   });
@@ -184,16 +266,41 @@ export const BudgetTrackerTable = ({
     }
   }, []);
 
-  // Handle dimension change
-  const handleDimensionChange = useCallback((value: string, type: "breakdown" | "then") => {
-    if (type === "breakdown") {
-      console.log('[BUDGET-TRACKER] Breakdown dimension changed:', value);
-      handleBreakdownDimensionChange([value]);
-    } else if (type === "then") {
-      console.log('[BUDGET-TRACKER] Then-by dimension changed:', value);
-      handleThenByDimensionChange([value]);
-    }
-  }, [handleBreakdownDimensionChange, handleThenByDimensionChange]);
+  // Handle dimension change (persist breakdown/then-by in edit mode)
+  const handleDimensionChange = useCallback(
+    async (value: string, type: "breakdown" | "then") => {
+      if (type === "breakdown") {
+        console.log('[BUDGET-TRACKER] Breakdown dimension changed:', value);
+        handleBreakdownDimensionChange([value]);
+        if (isEditMode && budgetViewId) {
+          const { error } = await supabase
+            .from('report_views')
+            .update({ breakdown_by_dimensions: [value] })
+            .eq('id', budgetViewId);
+          if (!error) {
+            toast({ title: "Saved", description: "Breakdown setting updated" });
+          } else {
+            console.error('[BUDGET-TRACKER] Failed to save breakdown:', error);
+          }
+        }
+      } else if (type === "then") {
+        console.log('[BUDGET-TRACKER] Then-by dimension changed:', value);
+        handleThenByDimensionChange([value]);
+        if (isEditMode && budgetViewId) {
+          const { error } = await supabase
+            .from('report_views')
+            .update({ then_by_dimensions: [value] })
+            .eq('id', budgetViewId);
+          if (!error) {
+            toast({ title: "Saved", description: "Then-by setting updated" });
+          } else {
+            console.error('[BUDGET-TRACKER] Failed to save then-by:', error);
+          }
+        }
+      }
+    },
+    [handleBreakdownDimensionChange, handleThenByDimensionChange, isEditMode, budgetViewId]
+  );
 
   // Create totals for table display
   const totals = useMemo(() => {
@@ -205,15 +312,40 @@ export const BudgetTrackerTable = ({
     return tableData;
   }, [tableData]);
 
-  // Settings modal save handler (stores configured selector dimensions)
-  const handleSettingsSave = useCallback((selected: string[]) => {
-    setSelectorDimensions(selected);
-    setSettingsOpen(false);
-    toast({
-      title: "Settings saved",
-      description: "Breakdown/Then-by dropdowns updated",
-    });
-  }, []);
+  // Settings modal save handler: persist selector dimensions to view
+  const handleSettingsSave = useCallback(
+    async (selected: string[]) => {
+      setSelectorDimensions(selected);
+      setSettingsOpen(false);
+
+      if (budgetViewId) {
+        const { error } = await supabase
+          .from('report_views')
+          .update({ visible_dimensions: selected })
+          .eq('id', budgetViewId);
+
+        if (error) {
+          console.error('[BUDGET-TRACKER] Failed to save selector dimensions:', error);
+          toast({
+            title: "Error",
+            description: "Failed to save filter settings",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Settings saved",
+            description: "Breakdown/Then-by dropdowns updated",
+          });
+        }
+      } else {
+        toast({
+          title: "Settings saved",
+          description: "Breakdown/Then-by dropdowns updated",
+        });
+      }
+    },
+    [budgetViewId]
+  );
 
   return (
     <>
