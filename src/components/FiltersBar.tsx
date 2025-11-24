@@ -227,6 +227,44 @@ export const FiltersBar = ({
     ...allDimensions, // Use allDimensions instead of dimensions
   ];
 
+  // Helper: expand Cluster (vlookup target) filters to their source values
+  const expandFiltersWithVlookup = (filters: Record<string, string[]>) => {
+    const expanded: Record<string, string[]> = { ...filters };
+
+    // For each selected dimension that is a vlookup target, replace with its source values
+    Object.keys(filters).forEach((targetDimId) => {
+      const selectedClusters = filters[targetDimId];
+      if (!selectedClusters || selectedClusters.length === 0) return;
+
+      const mappingsForTarget = (vlookupMappings || []).filter(m => m.targetDimensionId === targetDimId);
+      if (mappingsForTarget.length === 0) return;
+
+      // Group by sourceDimensionId and collect source values for selected cluster names
+      const selectedSet = new Set(selectedClusters.map(s => String(s).trim()));
+      const bySource: Record<string, Set<string>> = {};
+
+      mappingsForTarget.forEach(m => {
+        if (selectedSet.has(String(m.targetValue).trim())) {
+          const srcId = m.sourceDimensionId;
+          if (!bySource[srcId]) bySource[srcId] = new Set<string>();
+          bySource[srcId].add(String(m.sourceValue).trim());
+        }
+      });
+
+      // Merge into expanded filters under source dimension(s)
+      Object.entries(bySource).forEach(([srcId, srcSet]) => {
+        const existing = expanded[srcId] || [];
+        const merged = Array.from(new Set([...existing, ...Array.from(srcSet)]));
+        expanded[srcId] = merged;
+      });
+
+      // Remove the target dim filter itself (no raw data column exists for it)
+      delete expanded[targetDimId];
+    });
+
+    return expanded;
+  };
+
   // Persist filter settings after changes (only in Edit mode)
   useEffect(() => {
     if (reportId && !isLoading && !isInitialLoad && isEditMode) {
@@ -244,8 +282,9 @@ export const FiltersBar = ({
 
   // Notify parent
   useEffect(() => {
+    const effectiveFilters = expandFiltersWithVlookup(selectedFilters);
     onFiltersChange?.({
-      dimensionFilters: selectedFilters,
+      dimensionFilters: effectiveFilters,
       dateRange,
       datePreset,
       compareEnabled,
@@ -254,7 +293,7 @@ export const FiltersBar = ({
       masterDimensionId,
       masterDimensionValues,
     });
-  }, [onFiltersChange, selectedFilters, dateRange, datePreset, compareEnabled, compareType, compareDateRange, masterDimensionId, masterDimensionValues]);
+  }, [onFiltersChange, selectedFilters, dateRange, datePreset, compareEnabled, compareType, compareDateRange, masterDimensionId, masterDimensionValues, vlookupMappings]);
 
   const getDateDimensionId = async (): Promise<string | null> => {
     try {
@@ -671,18 +710,29 @@ export const FiltersBar = ({
     if (!reportId || activeDimensions.length === 0) return;
     setIsLoadingFilters(true);
     try {
-      // Use edge function to get unique values for each dimension (handles large datasets)
       const valuesArray: Record<string, string[]> = {};
       
-      // Load values for each active dimension in parallel
       await Promise.all(
         activeDimensions.map(async (dimId) => {
+          // If this dimension is a vlookup target, list cluster names directly
+          const mappingsForDim = (vlookupMappings || []).filter(m => m.targetDimensionId === dimId);
+          if (mappingsForDim.length > 0) {
+            const namesSet = new Set<string>();
+            mappingsForDim.forEach(m => {
+              const name = String(m.targetValue || '').trim();
+              if (name) namesSet.add(name);
+            });
+            valuesArray[dimId] = Array.from(namesSet).sort();
+            return;
+          }
+
+          // Otherwise, load unique values via edge function
           try {
             const { data, error } = await supabase.functions.invoke('get-unique-dimension-values', {
               body: {
                 reportId,
                 dimensionId: dimId,
-                limit: 10000, // Reasonable limit for dropdown UX
+                limit: 10000,
               },
             });
 
@@ -694,7 +744,7 @@ export const FiltersBar = ({
 
             const values = (data?.values || []) as string[];
             
-            // Apply vlookup mappings
+            // Apply vlookup mapping for non-target dimensions if relevant (kept for compatibility)
             const valuesSet = new Set<string>();
             values.forEach(value => {
               valuesSet.add(value);
