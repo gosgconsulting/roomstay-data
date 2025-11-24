@@ -84,6 +84,88 @@ export function KPIChart({
     }
   };
 
+  // Helper: evaluate conditions for a formula-condition pair against a row
+  const meetsConditions = (dv: Record<string, any>, conditions?: { dimension_id: string; operator: 'equals' | 'not_equals' | 'contains' | 'not_contains'; value: string }[]) => {
+    if (!conditions || conditions.length === 0) return true;
+    return conditions.every(cond => {
+      const raw = dv[cond.dimension_id];
+      if (raw === undefined || raw === null) return false;
+      const rowVal = String(raw).trim().toLowerCase();
+      const target = String(cond.value).trim().toLowerCase();
+      switch (cond.operator) {
+        case 'equals': return rowVal === target;
+        case 'not_equals': return rowVal !== target;
+        case 'contains': return rowVal.includes(target);
+        case 'not_contains': return !rowVal.includes(target);
+        default: return false;
+      }
+    });
+  };
+
+  // Helper: evaluate a formula string for a row using dimension names
+  const evaluateFormulaForRow = (formula: string, dv: Record<string, any>, dimensions: Dimension[]): number | null => {
+    if (!formula) return null;
+
+    // Map dimension names to numeric values from the row
+    let expr = formula;
+
+    // Replace percentage literals like "15%" with "(0.15)"
+    expr = expr.replace(/(\d+(?:\.\d+)?)\s*%/g, (_, num) => `(${parseFloat(num) / 100})`);
+
+    // Replace dimension names with values
+    for (const dim of dimensions) {
+      const val = dv[dim.id];
+      const numeric = typeof val === 'number' ? val : (val !== undefined && val !== null ? parseFloat(String(val)) : 0);
+      // word-boundary replacement to avoid partial name matches
+      const re = new RegExp(`\\b${dim.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
+      expr = expr.replace(re, String(isFinite(numeric) ? numeric : 0));
+    }
+
+    // Avoid / 0
+    if (expr.includes('/ 0')) return 0;
+
+    try {
+      const result = Function(`"use strict"; return (${expr})`)();
+      return isFinite(result) ? Number(result) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Helper: compute metric value for a row (direct value or derived via formula)
+  const getMetricValueForRow = (
+    dv: Record<string, any>,
+    metricDimension: Dimension,
+    dimensions: Dimension[]
+  ): number | null => {
+    // Use direct value if present
+    const direct = dv[metricDimension.id];
+    if (direct !== undefined && direct !== null) {
+      return typeof direct === 'number' ? direct : parseFloat(String(direct)) || 0;
+    }
+
+    // Try multiple formula-condition pairs first
+    const pairs = (metricDimension as any).formula_condition_pairs as
+      { formula: string; conditions?: { dimension_id: string; operator: any; value: string }[] }[] | undefined;
+
+    if (pairs && pairs.length > 0) {
+      // Prefer a pair whose conditions match; otherwise fallback to first pair
+      const matched = pairs.find(p => meetsConditions(dv, p.conditions)) || pairs[0];
+      const val = evaluateFormulaForRow(matched?.formula || '', dv, dimensions);
+      return val ?? null;
+    }
+
+    // Fallback to single formula
+    const singleFormula = (metricDimension as any).formula as string | undefined;
+    if (singleFormula) {
+      const val = evaluateFormulaForRow(singleFormula, dv, dimensions);
+      return val ?? null;
+    }
+
+    // No data or formula
+    return null;
+  };
+
   const loadChartData = async () => {
     console.log('[CHART-FIXED] Loading chart data for metric:', selectedMetric);
     setIsLoading(true);
@@ -156,15 +238,15 @@ export function KPIChart({
         return;
       }
 
-      // Group current period data by date
+      // Group current period data by date (supports derived metrics via formulas)
       const currentDateGroups = new Map<string, number>();
       filteredData.forEach(row => {
-        const dimensionValues = row.dimension_values;
-        const dateStr = dimensionValues[dateDimension.id];
-        const metricValue = dimensionValues[metricDimension.id];
+        const dv = row.dimension_values;
+        const dateStr = dv[dateDimension.id];
+        const metricValue = getMetricValueForRow(dv, metricDimension, dimensions);
 
-        if (dateStr && metricValue !== undefined && metricValue !== null) {
-          const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(metricValue) || 0;
+        if (dateStr && metricValue !== null && metricValue !== undefined) {
+          const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(String(metricValue)) || 0;
           const currentTotal = currentDateGroups.get(dateStr) || 0;
           currentDateGroups.set(dateStr, currentTotal + numericValue);
         }
@@ -177,8 +259,8 @@ export function KPIChart({
         console.log('[CHART-FIXED] Comparison enabled, loading previous period data');
         
         // Calculate date ranges for current and previous periods
-        const currentPeriod = dataFilters.dateRange;
-        const daysDiff = Math.ceil((currentPeriod.to.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
+        const currentPeriod = dataFilters.dateRange!;
+        const daysDiff = Math.ceil((currentPeriod.to!.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
         
         const previousPeriodEnd = new Date(currentPeriod.from);
         previousPeriodEnd.setDate(previousPeriodEnd.getDate() - 1);
@@ -186,7 +268,7 @@ export function KPIChart({
         previousPeriodStart.setDate(previousPeriodStart.getDate() - daysDiff + 1);
 
         console.log('[CHART-FIXED] Period comparison:', {
-          current: { from: currentPeriod.from.toISOString(), to: currentPeriod.to.toISOString() },
+          current: { from: currentPeriod.from.toISOString(), to: currentPeriod.to?.toISOString() },
           previous: { from: previousPeriodStart.toISOString(), to: previousPeriodEnd.toISOString() },
           daysDiff
         });
@@ -197,20 +279,19 @@ export function KPIChart({
           dimensionFilters: dataFilters.dimensionFilters
         };
 
-        const previousResult = await loadReportData(reportId, accountId, user.id, previousPeriodFilters);
+        const previousResult = await loadReportData(reportId, accountId, user?.id, previousPeriodFilters);
         const previousData = previousResult.success ? previousResult.data : [];
 
         // Group previous period data by date (offset by the period difference)
         previousData.forEach(row => {
-          const dimensionValues = row.dimension_values;
-          const dateStr = dimensionValues[dateDimension.id];
-          const metricValue = dimensionValues[metricDimension.id];
+          const dv = row.dimension_values;
+          const dateStr = dv[dateDimension.id];
+          const metricValue = getMetricValueForRow(dv, metricDimension, dimensions);
 
-          if (dateStr && metricValue !== undefined && metricValue !== null) {
-            const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(metricValue) || 0;
+          if (dateStr && metricValue !== null && metricValue !== undefined) {
+            const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(String(metricValue)) || 0;
             
-            // Calculate the corresponding date in the current period
-            const originalDate = parseISO(dateStr);
+            const originalDate = parseISO(String(dateStr));
             const offsetDate = new Date(originalDate);
             offsetDate.setDate(offsetDate.getDate() + daysDiff + 1);
             const offsetDateStr = offsetDate.toISOString().split('T')[0];
@@ -233,7 +314,6 @@ export function KPIChart({
             [selectedMetric]: currentDateGroups.get(dateStr) || 0,
           };
           
-          // Only add previous period data if comparison is enabled
           if (stableFilters.compareEnabled) {
             dataPoint[`${selectedMetric}_previous`] = previousDateGroups.get(dateStr) || 0;
           }
