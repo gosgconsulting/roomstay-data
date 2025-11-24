@@ -1,8 +1,11 @@
+import type { DimensionCondition } from "@/types/dimensions";
+
 export interface Dimension {
   id: string;
   name: string;
   type: string;
   formula: string | null;
+  conditions?: DimensionCondition[];
 }
 
 export interface TableRow {

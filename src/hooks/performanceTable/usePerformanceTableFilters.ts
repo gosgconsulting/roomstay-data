@@ -481,6 +481,48 @@ export function usePerformanceTableFilters({
       dimensions.forEach(dim => {
         if (dim.formula) {
           try {
+            // Check if dimension has conditions that need to be met
+            if (dim.conditions && dim.conditions.length > 0) {
+              let conditionsMatch = true;
+              
+              for (const condition of dim.conditions) {
+                // Find the dimension being filtered
+                const filterDim = dimensions.find(d => d.id === condition.dimension_id);
+                if (!filterDim) continue;
+                
+                const rowValue = String(row.data?.[filterDim.name] || '').toLowerCase();
+                const conditionValue = condition.value.toLowerCase();
+                
+                // Check condition based on operator
+                let matches = false;
+                switch (condition.operator) {
+                  case 'equals':
+                    matches = rowValue === conditionValue;
+                    break;
+                  case 'not_equals':
+                    matches = rowValue !== conditionValue;
+                    break;
+                  case 'contains':
+                    matches = rowValue.includes(conditionValue);
+                    break;
+                  case 'not_contains':
+                    matches = !rowValue.includes(conditionValue);
+                    break;
+                }
+                
+                if (!matches) {
+                  conditionsMatch = false;
+                  break;
+                }
+              }
+              
+              // If conditions don't match, set value to 0 and skip formula calculation
+              if (!conditionsMatch) {
+                row.data[dim.name] = 0;
+                return;
+              }
+            }
+            
             // Prepare expression
             let expression = dim.formula;
 
