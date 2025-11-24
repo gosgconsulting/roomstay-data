@@ -836,7 +836,7 @@ export const FiltersBar = ({
     <>
       <div className="border-b bg-card">
         <div className="container mx-auto px-6 py-3">
-          <div className="flex items-center justify-center gap-3">
+          <div className="flex items-center justify-start gap-3">
             {showMasterDimensionFilter && (
               <div className="flex items-end gap-2">
                 <MasterDimensionButton
@@ -898,6 +898,19 @@ export const FiltersBar = ({
               onCompareTypeChange={setCompareType}
             />
 
+            {hasActiveFilters() && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResetFilters}
+                className="gap-2 text-muted-foreground hover:text-foreground"
+                title={`Reset ${getActiveFiltersCount()} active filter${getActiveFiltersCount() > 1 ? "s" : ""}`}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset Filters ({getActiveFiltersCount()})
+              </Button>
+            )}
+
             {activeDimensions.length === 0 && !isSharedView && !showMasterDimensionFilter && isEditMode && (
               <Button
                 variant="outline"
@@ -920,21 +933,6 @@ export const FiltersBar = ({
               </Button>
             )}
           </div>
-
-          {hasActiveFilters() && (
-            <div className="flex items-center justify-center mt-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleResetFilters}
-                className="gap-2 text-muted-foreground hover:text-foreground"
-                title={`Reset ${getActiveFiltersCount()} active filter${getActiveFiltersCount() > 1 ? "s" : ""}`}
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset Filters ({getActiveFiltersCount()})
-              </Button>
-            </div>
-          )}
         </div>
       </div>
 
