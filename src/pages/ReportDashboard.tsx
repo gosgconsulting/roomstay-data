@@ -14,6 +14,7 @@ import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 import { Settings, ArrowLeft } from "lucide-react";
+import { ShareModal } from "@/components/ShareModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
 import { resyncReportViews } from "@/lib/resync-report-views";
@@ -47,6 +48,10 @@ export default function ReportDashboard() {
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   const [isEditMode, setIsEditMode] = useState(false); // View mode by default
   const [reportsList, setReportsList] = useState<SidebarReport[]>([]);
+  const [showShareModal, setShowShareModal] = useState(false);
+
+  // Derive current report name
+  const currentReportName = reportsList.find(r => r.id === reportId)?.name || "Reports";
 
   // Load dimensions using the same hook as PerformanceTable
   const {
@@ -365,7 +370,7 @@ export default function ReportDashboard() {
             loadingComponents={loadingComponents}
           />
           
-          {/* Top header with account info */}
+          {/* Top header now shows report name, not account info */}
           <header className="border-b bg-card">
             <div className="container mx-auto px-6 py-4 flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -378,16 +383,30 @@ export default function ReportDashboard() {
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
                 <div>
-                  <h1 className="text-2xl font-bold text-foreground">{account?.name}</h1>
-                  {account?.description && (
-                    <p className="text-sm text-muted-foreground">{account.description}</p>
-                  )}
+                  <h1 className="text-2xl font-bold text-foreground">{currentReportName}</h1>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="px-3 py-1 rounded-md bg-success/10 border border-success/20">
-                  <span className="text-xs font-medium text-success">Production</span>
-                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="gap-2"
+                  onClick={() => {
+                    refreshData();
+                  }}
+                  title="Reload data"
+                >
+                  Reload
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="gap-2"
+                  onClick={() => setShowShareModal(true)}
+                  title="Share"
+                >
+                  Share
+                </Button>
                 <Button
                   variant={isEditMode ? "default" : "outline"}
                   size="sm"
@@ -395,7 +414,7 @@ export default function ReportDashboard() {
                   className="gap-2"
                   title="Toggle Edit/View mode"
                 >
-                  {isEditMode ? "Edit" : "View"}
+                  {isEditMode ? "Edit mode" : "View mode"}
                 </Button>
               </div>
             </div>
@@ -489,6 +508,15 @@ export default function ReportDashboard() {
               </div>
             </main>
           )}
+
+          {/* Local Share modal (moved from DashboardHeader) */}
+          <ShareModal
+            open={showShareModal}
+            onOpenChange={setShowShareModal}
+            reportId={reportId || ""}
+            reportName={currentReportName}
+            accountId={accountId}
+          />
         </SidebarInset>
       </div>
     </SidebarProvider>

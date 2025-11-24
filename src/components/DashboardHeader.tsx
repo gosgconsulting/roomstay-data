@@ -17,7 +17,6 @@ import type { Dimension } from "@/types/dimensions";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 
 interface Report {
   id: string;
@@ -643,16 +642,6 @@ export function DashboardHeader({
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <SidebarTrigger className="mr-1" />
-
-              {title && !isAllReportsPage ? (
-                <h1 className="text-2xl font-bold text-foreground">{title}</h1>
-              ) : (
-                <h1 className="text-2xl font-bold text-foreground">
-                  {isAllReportsPage ? "All Reports" : (currentReport?.name || "Reports")}
-                </h1>
-              )}
-
               <Button
                 variant="outline"
                 className="gap-2"
@@ -715,34 +704,6 @@ export function DashboardHeader({
                   Last update: {lastUpdateDate}
                 </span>
               )}
-              <Button 
-                variant="outline" 
-                className="gap-2"
-                onClick={() => {
-                  if (onRefreshData) {
-                    onRefreshData();
-                  }
-                  if (currentReport?.name?.includes('Social')) {
-                    setTimeout(() => {
-                      window.location.reload();
-                    }, 1000);
-                  }
-                }}
-                disabled={!currentReport}
-                title="Refresh report data"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Reload
-              </Button>
-              <Button 
-                variant="outline" 
-                className="gap-2"
-                onClick={() => setShowShareModal(true)}
-                disabled={!currentReport}
-              >
-                <Share2 className="h-4 w-4" />
-                Share
-              </Button>
             </div>
           </div>
         </div>
