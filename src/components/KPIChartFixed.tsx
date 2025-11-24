@@ -297,7 +297,7 @@ export function KPIChart({
           )}
         </CardHeader>
         <CardContent>
-          <div className="h-80 flex items-center justify-center">
+          <div className="h-56 flex items-center justify-center">
             <div className="animate-pulse text-muted-foreground">Loading chart data...</div>
           </div>
         </CardContent>
@@ -327,7 +327,7 @@ export function KPIChart({
           )}
         </CardHeader>
         <CardContent>
-          <div className="h-80 flex items-center justify-center text-muted-foreground">
+          <div className="h-56 flex items-center justify-center text-muted-foreground">
             No chart data for selected date range
           </div>
         </CardContent>
@@ -356,7 +356,7 @@ export function KPIChart({
         )}
       </CardHeader>
       <CardContent>
-        <div className="h-80">
+        <div className="h-56 md:h-64">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
               <defs>
@@ -371,7 +371,7 @@ export function KPIChart({
                 tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
                 angle={-45}
                 textAnchor="end"
-                height={60}
+                height={50}
                 stroke="hsl(var(--border))"
               />
               <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} stroke="hsl(var(--border))" />
@@ -392,10 +392,10 @@ export function KPIChart({
                 type="monotone" 
                 dataKey={selectedMetric} 
                 stroke="hsl(var(--primary))" 
-                strokeWidth={3}
+                strokeWidth={2}
                 fill="url(#colorPrimary)"
-                dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
-                activeDot={{ r: 6 }}
+                dot={{ fill: 'hsl(var(--primary))', strokeWidth: 1.5, r: 3 }}
+                activeDot={{ r: 5 }}
                 name="Current Period"
               />
               {stableFilters.compareEnabled && (
@@ -403,9 +403,9 @@ export function KPIChart({
                   type="monotone" 
                   dataKey={`${selectedMetric}_previous`} 
                   stroke="hsl(var(--muted-foreground))" 
-                  strokeWidth={2}
-                  dot={{ fill: 'hsl(var(--muted-foreground))', strokeWidth: 2, r: 4 }}
-                  activeDot={{ r: 6 }}
+                  strokeWidth={1.5}
+                  dot={{ fill: 'hsl(var(--muted-foreground))', strokeWidth: 1.5, r: 3 }}
+                  activeDot={{ r: 5 }}
                   name="Previous Period"
                   strokeDasharray="5 5"
                 />

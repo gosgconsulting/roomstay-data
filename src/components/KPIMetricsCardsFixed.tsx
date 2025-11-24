@@ -371,7 +371,7 @@ export function KPIMetricsCards({
     console.log('[KPI-FIXED] KPIMetricsCards - Rendering loading state');
     return (
       <div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 mb-2">
           {Array.from({ length: 8 }).map((_, i) => (
             <Card key={i} className="animate-pulse shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -410,16 +410,16 @@ export function KPIMetricsCards({
       <div className="flex items-center justify-end mb-4">
         {headerAction}
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 mb-2">
         {metrics.map((metric, index) => {
           const IconComponent = metric.icon;
           return (
             <Card key={index} className="shadow-sm border-border bg-card">
-              <CardHeader className="space-y-0 pb-3">
+              <CardHeader className="space-y-0 pb-2">
                 <CardTitle className="text-xs font-medium uppercase text-muted-foreground tracking-wide">{metric.label}</CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="text-3xl font-bold text-foreground mb-2">{metric.value}</div>
+                <div className="text-2xl font-bold text-foreground mb-1">{metric.value}</div>
                 {metric.change !== undefined && metric.compareValue !== undefined && (
                   <p className={cn(
                     "text-xs flex items-center gap-1 font-medium",

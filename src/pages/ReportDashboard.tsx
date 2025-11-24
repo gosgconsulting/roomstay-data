@@ -379,7 +379,7 @@ export default function ReportDashboard() {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen bg-background flex">
+      <div className="min-h-screen bg-background flex overflow-x-hidden">
         <ReportsSidebar
           reports={reportsList}
           accountId={accountId}
@@ -387,7 +387,7 @@ export default function ReportDashboard() {
           onDeleteReport={(id) => handleDeleteReport({ id, name: "", account_id: accountId || null, created_at: "", updated_at: "" } as any)}
           onAddNewReport={() => navigate(accountId ? `/tools/report/${accountId}` : '/tools/report')}
         />
-        <SidebarInset className="flex-1">
+        <SidebarInset className="flex-1 overflow-x-hidden">
           {/* Loading toast for data loading */}
           <LoadingToast 
             isVisible={isDataLoading} 
