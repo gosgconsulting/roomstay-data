@@ -79,13 +79,14 @@ export function BudgetTrackerHeader({
       <div className="flex items-center gap-2">
         <ColumnVisibilitySheet
           visibleColumns={visibleColumns}
-          dimensions={getOrderedDimensions()}
+          dimensions={dimensions}
+          getOrderedDimensions={getOrderedDimensions}
           onToggleColumn={onToggleColumn}
           onColumnReorder={onColumnReorder}
           hasUnsavedChanges={hasUnsavedColumnChanges}
           isSaving={isSavingColumnSettings}
-          onApplyChanges={onApplyColumnSettings}
-          onCancelChanges={onCancelColumnSettings}
+          onApply={onApplyColumnSettings}
+          onCancel={onCancelColumnSettings}
           onRefreshDimensions={onRefreshDimensions}
         />
       </div>

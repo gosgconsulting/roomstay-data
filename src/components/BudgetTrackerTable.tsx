@@ -146,7 +146,7 @@ export const BudgetTrackerTable = ({
     const checkSources = async () => {
       if (reportId) {
         const hasData = await checkDataSources(reportId);
-        setHasDataSources(hasData);
+        setHasDataSources(hasData.hasDataSources); // use boolean field from result
       }
     };
     checkSources();

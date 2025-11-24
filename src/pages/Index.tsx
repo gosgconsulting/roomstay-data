@@ -18,6 +18,7 @@ import { toast } from "@/hooks/use-toast";
 import { Settings } from "lucide-react";
 import { fallbackAuth, clearAuthAndReload, checkCORSIssues } from "@/lib/auth-fallback";
 import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
+import { useQueryClient } from "@tanstack/react-query";
 
 // ADD: Minimal Report type and state to populate sidebar
 type SidebarReport = { id: string; name: string; account_id: string | null; created_at: string; updated_at: string };
@@ -26,6 +27,7 @@ const [reportsList, setReportsList] = useState<SidebarReport[]>([]);
 export default function Index() {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reportId, setReportId] = useState<string | null>(null);
