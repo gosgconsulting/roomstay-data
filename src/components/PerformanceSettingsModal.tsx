@@ -35,7 +35,7 @@ export function PerformanceSettingsModal({
 }: PerformanceSettingsModalProps) {
   const [localDimensions, setLocalDimensions] = useState<Dimension[]>(dimensions || []);
   const textDateDims = useMemo(
-    () => localDimensions.filter(d => d.type === "text" || d.type === "date"),
+    () => localDimensions.filter(d => d.type === "text" || d.type === "vlookup" || d.type === "date"),
     [localDimensions]
   );
 

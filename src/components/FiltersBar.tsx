@@ -119,9 +119,9 @@ export const FiltersBar = ({
       // Use the centralized dimension loader to get ALL dimensions
       const allAvailableDimensions = await loadDimensionsForUser(user.id, reportId);
       
-      // Filter to only text and date types (same as PerformanceSettingsModal expects)
+      // Filter to only text, vlookup, and date types (same as PerformanceSettingsModal expects)
       const textDateDimensions = allAvailableDimensions.filter(d => 
-        d.type === "text" || d.type === "date"
+        d.type === "text" || d.type === "vlookup" || d.type === "date"
       );
       
       console.log('[FiltersBar] loadAllDimensions - All available dimensions:', textDateDimensions.map(d => `${d.name} (${d.type})`));
@@ -651,7 +651,7 @@ export const FiltersBar = ({
       });
 
       console.log('[FiltersBar] loadDimensions - All unique dimensions:', unique.map(d => `${d.name} (${d.type})`));
-      const filterable = unique.filter(d => d.type === "text");
+      const filterable = unique.filter(d => d.type === "text" || d.type === "vlookup");
       console.log('[FiltersBar] loadDimensions - After type filter (text only):', filterable.map(d => d.name));
       
       const final = (user && reportId)
@@ -963,7 +963,7 @@ export const FiltersBar = ({
                     None (No master dimension)
                   </Button>
 
-                  {dimensions.filter(d => d.type === "text").map(dim => (
+                  {dimensions.filter(d => d.type === "text" || d.type === "vlookup").map(dim => (
                     <Button
                       key={dim.id}
                       variant={masterDimensionId === dim.id ? "secondary" : "ghost"}
