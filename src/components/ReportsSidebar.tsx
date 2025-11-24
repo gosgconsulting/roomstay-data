@@ -28,6 +28,7 @@ interface ReportsSidebarProps {
   onEditReport?: (reportId: string) => void;
   onDeleteReport?: (reportId: string) => void;
   onAddNewReport?: () => void;
+  onSelectReport?: (reportId: string) => void;
   className?: string;
 }
 
@@ -41,16 +42,23 @@ export function ReportsSidebar({
   onEditReport,
   onDeleteReport,
   onAddNewReport,
+  onSelectReport,
   className,
 }: ReportsSidebarProps) {
   const navigate = useNavigate();
   const [hoveredReportId, setHoveredReportId] = useState<string | null>(null);
 
   const handleReportClick = (reportId: string) => {
+    // Prefer local switch if provided
+    if (onSelectReport) {
+      onSelectReport(reportId);
+      return;
+    }
+
+    // Fallback: navigate to the report page
     if (accountId) {
       navigate(`/tools/report/${accountId}?reportId=${reportId}`);
     } else {
-      // Find the report's account_id if not provided
       const report = reports.find(r => r.id === reportId);
       if (report?.account_id) {
         navigate(`/tools/report/${report.account_id}?reportId=${reportId}`);

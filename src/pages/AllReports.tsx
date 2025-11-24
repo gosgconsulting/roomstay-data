@@ -7,6 +7,7 @@ import { LoadingToast } from "@/components/LoadingToast";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import { KPIChart } from "@/components/KPIChart";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
+import { ReportModal } from "@/components/ReportModal";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
@@ -49,6 +50,7 @@ export default function AllReports() {
   // Loading state management
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [loadingComponents, setLoadingComponents] = useState<Set<string>>(new Set());
+  const [showCreateReportModal, setShowCreateReportModal] = useState(false);
 
   const markComponentLoading = (component: string) => {
     console.log(`[testing] AllReports - Marking ${component} as loading`);
@@ -286,11 +288,7 @@ export default function AllReports() {
 
   const handleAddNewReport = () => {
     console.log('[testing] AllReports - Add new report');
-    if (accountId) {
-      navigate(`/tools/report/${accountId}`);
-    } else {
-      navigate('/tools/report');
-    }
+    setShowCreateReportModal(true);
   };
 
   if (isLoading) {
@@ -427,6 +425,39 @@ export default function AllReports() {
           )}
         </SidebarInset>
       </div>
+
+      <ReportModal
+        open={showCreateReportModal}
+        onOpenChange={setShowCreateReportModal}
+        title="Create Report"
+        description={account ? `Create a new report for ${account.name}.` : "Create a new report."}
+        onSave={async (name) => {
+          if (!session) return;
+          const { data, error } = await supabase
+            .from("reports")
+            .insert({
+              user_id: session.user.id,
+              name,
+              account_id: accountId || null,
+            })
+            .select("*")
+            .single();
+
+          if (error) {
+            console.error("Error creating report:", error);
+            toast({
+              title: "Error",
+              description: "Failed to create report.",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          setShowCreateReportModal(false);
+          setReports((prev) => [data, ...prev]);
+          toast({ title: "Report created", description: "Your report was created successfully." });
+        }}
+      />
     </SidebarProvider>
   );
 }

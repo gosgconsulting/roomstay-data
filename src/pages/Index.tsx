@@ -7,6 +7,7 @@ import { KPIChart } from "@/components/KPIChartFixed";
 import { PerformanceTable } from "@/components/PerformanceTable";
 import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
+import { ReportModal } from "@/components/ReportModal";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
@@ -32,6 +33,7 @@ export default function Index() {
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
+  const [showCreateReportModal, setShowCreateReportModal] = useState(false);
 
   // Load dimensions using the same hook as PerformanceTable
   const {
@@ -352,7 +354,16 @@ export default function Index() {
   return (
     <SidebarProvider>
       <div className="min-h-screen bg-background flex">
-        <ReportsSidebar reports={reportsList} accountId={accountId || undefined} />
+        <ReportsSidebar 
+          reports={reportsList} 
+          accountId={accountId || undefined}
+          onAddNewReport={() => setShowCreateReportModal(true)}
+          onSelectReport={(id) => {
+            setReportId(id);
+            const selected = reportsList.find(r => r.id === id);
+            setAccountId(selected?.account_id || null);
+          }}
+        />
         <SidebarInset className="flex-1">
           {/* Loading toast */}
           <LoadingToast 
@@ -449,6 +460,42 @@ export default function Index() {
           )}
         </SidebarInset>
       </div>
+
+      <ReportModal
+        open={showCreateReportModal}
+        onOpenChange={setShowCreateReportModal}
+        title="Create Report"
+        description="Name your new performance report."
+        onSave={async (name) => {
+          if (!session) return;
+          const { data, error } = await supabase
+            .from("reports")
+            .insert({
+              user_id: session.user.id,
+              name,
+              account_id: accountId || null,
+            })
+            .select("*")
+            .single();
+
+          if (error) {
+            console.error("Error creating report:", error);
+            toast({
+              title: "Error",
+              description: "Failed to create report.",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          setShowCreateReportModal(false);
+          // Prepend new report into sidebar and select it
+          setReportsList((prev) => [data, ...prev]);
+          setReportId(data.id);
+          setAccountId(data.account_id || null);
+          toast({ title: "Report created", description: "Your report was created successfully." });
+        }}
+      />
     </SidebarProvider>
   );
 }

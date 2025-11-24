@@ -22,6 +22,7 @@ import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerfo
 import { DataSourcesListModal } from "@/components/DataSourcesListModal";
 import { DimensionsListModal } from "@/components/DimensionsListModal";
 import VlookupModal from "@/components/VlookupModal";
+import { ReportModal } from "@/components/ReportModal";
 
 interface Account {
   id: string;
@@ -50,6 +51,7 @@ export default function ReportDashboard() {
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   const [isEditMode, setIsEditMode] = useState(false); // View mode by default
+  const [showCreateReportModal, setShowCreateReportModal] = useState(false); // NEW
 
   // FIX: Add missing state for sidebar reports list
   const [reportsList, setReportsList] = useState<SidebarReport[]>([]);
@@ -385,7 +387,8 @@ export default function ReportDashboard() {
           accountId={accountId}
           onEditReport={(id) => handleEditReport(id)}
           onDeleteReport={(id) => handleDeleteReport({ id, name: "", account_id: accountId || null, created_at: "", updated_at: "" } as any)}
-          onAddNewReport={() => navigate(accountId ? `/tools/report/${accountId}` : '/tools/report')}
+          onAddNewReport={() => setShowCreateReportModal(true)} // NEW: open modal
+          onSelectReport={(id) => setReportId(id)} // NEW: local switch
         />
         <SidebarInset className="flex-1 overflow-x-hidden">
           {/* Loading toast for data loading */}
@@ -643,6 +646,41 @@ export default function ReportDashboard() {
           />
         </SidebarInset>
       </div>
+
+      {/* NEW: Create Report modal */}
+      <ReportModal
+        open={showCreateReportModal}
+        onOpenChange={setShowCreateReportModal}
+        title="Create Report"
+        description="Name your new performance report for this account."
+        onSave={async (name) => {
+          if (!session || !accountId) return;
+          const { data, error } = await supabase
+            .from("reports")
+            .insert({
+              user_id: session.user.id,
+              name,
+              account_id: accountId,
+            })
+            .select("*")
+            .single();
+
+          if (error) {
+            console.error("Error creating report:", error);
+            toast({
+              title: "Error",
+              description: "Failed to create report.",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          setShowCreateReportModal(false);
+          setReportsList((prev) => [data, ...prev]);
+          setReportId(data.id);
+          toast({ title: "Report created", description: "Your report was created successfully." });
+        }}
+      />
     </SidebarProvider>
   );
 }
