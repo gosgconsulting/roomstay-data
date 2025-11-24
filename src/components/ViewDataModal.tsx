@@ -20,6 +20,7 @@ import { FileSpreadsheet } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { type DataSource } from "@/lib/sync-utils";
+import type { Dimension as AppDimension } from "@/types/dimensions";
 
 interface ViewDataModalProps {
   open: boolean;
@@ -91,18 +92,15 @@ export const ViewDataModal = ({
       // 1. Report-scoped dimensions (report_id matches)
       // 2. Account-scoped dimensions (account_id matches and report_id is null)
       // 3. Global dimensions (scope is 'global')
-      const dimensionsData = (allDimensionsData || []).filter((dim: any) => {
-        // If it's a report-scoped dimension, check report_id
+      const dimensionsData = ((allDimensionsData || []).filter((dim: any) => {
         if (dim.report_id) {
           return dim.report_id === reportId;
         }
-        // If it's an account-scoped dimension, check account_id
         if (dim.account_id) {
           return dim.account_id === accountId;
         }
-        // Global dimensions are always included
         return dim.scope === 'global';
-      });
+      })) as unknown as AppDimension[];
 
       // Fetch dimension_data for this data source
       const { data, error } = await supabase

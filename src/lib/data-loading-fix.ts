@@ -11,6 +11,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 import type { Dimension as LoaderDimension } from "@/lib/dimensionLoader";
+import type { FormulaConditionPair } from "@/types/dimensions";
 
 export interface Dimension {
   id: string;
@@ -20,6 +21,8 @@ export interface Dimension {
   account_id?: string;
   report_id?: string;
   formula?: string;
+  // Added to align with app-wide type
+  formula_condition_pairs?: FormulaConditionPair[];
 }
 
 export interface DataLoadingResult {
@@ -52,6 +55,8 @@ export async function loadAccountDimensions(accountId: string, userId?: string, 
           account_id: (dim as any).account_id,
           report_id: (dim as any).report_id,
           formula: (dim as any).formula,
+          // carry multi-formula pairs if present
+          formula_condition_pairs: (dim as any).formula_condition_pairs,
         }))
         .filter(dim => 
           dim.scope === 'account' || 

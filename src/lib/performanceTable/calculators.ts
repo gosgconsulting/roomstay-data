@@ -1,4 +1,4 @@
-import type { DimensionCondition } from "@/types/dimensions";
+import type { DimensionCondition, FormulaConditionPair } from "@/types/dimensions";
 
 export interface Dimension {
   id: string;
@@ -6,6 +6,8 @@ export interface Dimension {
   type: string;
   formula: string | null;
   conditions?: DimensionCondition[];
+  // Added for multi-formula support
+  formula_condition_pairs?: FormulaConditionPair[];
 }
 
 export interface TableRow {
