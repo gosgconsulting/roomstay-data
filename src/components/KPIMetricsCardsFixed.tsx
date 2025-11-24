@@ -371,7 +371,7 @@ export function KPIMetricsCards({
     console.log('[KPI-FIXED] KPIMetricsCards - Rendering loading state');
     return (
       <div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 mb-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <Card key={i} className="animate-pulse shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -410,7 +410,7 @@ export function KPIMetricsCards({
       <div className="flex items-center justify-end mb-4">
         {headerAction}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 mb-4">
         {metrics.map((metric, index) => {
           const IconComponent = metric.icon;
           return (
