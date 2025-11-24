@@ -305,6 +305,7 @@ export type Database = {
       dimensions: {
         Row: {
           account_id: string | null
+          conditions: Json | null
           created_at: string
           data_source_id: string | null
           formula: string | null
@@ -318,6 +319,7 @@ export type Database = {
         }
         Insert: {
           account_id?: string | null
+          conditions?: Json | null
           created_at?: string
           data_source_id?: string | null
           formula?: string | null
@@ -331,6 +333,7 @@ export type Database = {
         }
         Update: {
           account_id?: string | null
+          conditions?: Json | null
           created_at?: string
           data_source_id?: string | null
           formula?: string | null

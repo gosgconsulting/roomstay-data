@@ -23,15 +23,7 @@ import {
 import { Pencil, Trash2, Plus, Link, Eye, EyeOff, Save, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-
-interface Dimension {
-  id: string;
-  name: string;
-  type: string;
-  formula: string | null;
-  is_system?: boolean;
-  scope?: 'global' | 'custom' | 'account';
-}
+import type { Dimension } from "@/types/dimensions";
 
 interface DimensionsListModalProps {
   open: boolean;
@@ -389,7 +381,10 @@ export const DimensionsListModal = ({
           .order("created_at", { ascending: false });
 
         if (accountError) throw accountError;
-        accountData = (data || []) as Dimension[];
+        accountData = ((data || []) as any[]).map(d => ({
+          ...d,
+          conditions: Array.isArray(d.conditions) ? d.conditions : []
+        })) as Dimension[];
       }
 
       // Load custom dimensions for this user
@@ -402,7 +397,10 @@ export const DimensionsListModal = ({
         .order("created_at", { ascending: false });
 
       if (customError) throw customError;
-      customData = (data || []) as Dimension[];
+      customData = ((data || []) as any[]).map(d => ({
+        ...d,
+        conditions: Array.isArray(d.conditions) ? d.conditions : []
+      })) as Dimension[];
 
       // Load global dimensions (lowest priority, fallback)
       const { data: globalData, error: globalError } = await supabase

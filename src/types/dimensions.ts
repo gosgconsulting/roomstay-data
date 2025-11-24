@@ -3,6 +3,15 @@
  */
 
 /**
+ * Condition for filtering dimension data
+ */
+export interface DimensionCondition {
+  dimension_id: string;
+  operator: 'equals' | 'not_equals' | 'contains' | 'not_contains';
+  value: string;
+}
+
+/**
  * Base dimension interface
  */
 export interface Dimension {
@@ -15,6 +24,7 @@ export interface Dimension {
   scope?: 'global' | 'custom' | 'account';
   report_id?: string | null;
   account_id?: string | null;
+  conditions?: DimensionCondition[];
 }
 
 /**
