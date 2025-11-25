@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getAccountDefaultKPIs } from "@/lib/utils";
 import { mapDimensionIds, mapVisibleColumns } from "@/lib/performanceTable/viewSettingsMapper";
@@ -60,12 +60,21 @@ export function usePerformanceTableViews({
 }: UsePerformanceTableViewsOptions) {
   const [tableViews, setTableViews] = useState<View[]>([]);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const [isViewInitialized, setIsViewInitialized] = useState<boolean>(false);
+
+  // Reset initialization flag when reportId changes
+  useEffect(() => {
+    setIsViewInitialized(false);
+  }, [reportId]);
 
   const loadAllViews = useCallback(async () => {
     if (!reportId) {
       console.error("Cannot load views: No reportId");
+      setIsViewInitialized(false);
       return;
     }
+    
+    setIsViewInitialized(false);
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -365,6 +374,7 @@ export function usePerformanceTableViews({
     }
     
     console.log('[VIEWS] View settings loaded successfully for report:', reportId);
+    setIsViewInitialized(true);
   }, [dimensions, onGroupByChange, onBreakdownByChange, onThenByChange, onVisibleColumnsChange, onInitialVisibleColumnsChange, onColumnOrderChange, onInitialColumnOrderChange, onDateGranularityChange, onDateOrderChange, reportId, onSelectorDimensionsChange]);
 
   const createDefaultViews = useCallback(async () => {
@@ -646,6 +656,7 @@ export function usePerformanceTableViews({
   return {
     tableViews,
     activeViewId,
+    isViewInitialized,
     setTableViews,
     setActiveViewId,
     loadAllViews,

@@ -137,6 +137,7 @@ export const PerformanceTable = ({
   const {
     tableViews,
     activeViewId: viewsActiveViewId,
+    isViewInitialized,
     setTableViews,
     setActiveViewId: setViewsActiveViewId,
     loadAllViews,
@@ -335,16 +336,23 @@ export const PerformanceTable = ({
     filters.compareDateRange?.to?.toISOString(),
   ]);
 
-  // Load performance data when filters change
+  // Load performance data when filters change (wait for view initialization)
   useEffect(() => {
-    if (reportId) {
+    if (reportId && isViewInitialized) {
+      console.log('[PERF-TABLE] Loading data - view initialized, dimensions:', {
+        groupBy: groupByDimensions,
+        breakdown: breakdownByDimensions,
+        thenBy: thenByDimensions
+      });
       setIsLoadingData(true);
       loadPerformanceData();
-    } else {
+    } else if (!reportId) {
       setIsLoadingData(false);
+    } else {
+      console.log('[PERF-TABLE] Waiting for view initialization before loading data');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportId, debouncedFilters, JSON.stringify(groupByDimensions), JSON.stringify(breakdownByDimensions), JSON.stringify(thenByDimensions), dateOrder, activeDateTab, visibilityRefreshTrigger]);
+  }, [reportId, isViewInitialized, debouncedFilters, JSON.stringify(groupByDimensions), JSON.stringify(breakdownByDimensions), JSON.stringify(thenByDimensions), dateOrder, activeDateTab, visibilityRefreshTrigger]);
 
   // Save view settings whenever they change (with debounce)
   useEffect(() => {

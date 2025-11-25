@@ -11,6 +11,7 @@ import { startOfMonth, endOfMonth, startOfWeek, subDays, subMonths, startOfYear,
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff, filterDimensionsByVisibility, filterDimensionsByFilterSettings } from "@/lib/debug";
+import { filterDimensionsByDataAvailability } from "@/lib/dimensionUtils";
 import { useToast } from "@/components/ui/use-toast";
 import { useVlookupMappings, getMappedValue } from "@/hooks/useVlookupMappings";
 import PerformanceSettingsModal from "@/components/PerformanceSettingsModal";
@@ -124,8 +125,32 @@ export const FiltersBar = ({
         d.type === "text" || d.type === "vlookup" || d.type === "date"
       );
       
-      console.log('[FiltersBar] loadAllDimensions - All available dimensions:', textDateDimensions.map(d => `${d.name} (${d.type})`));
-      setAllDimensions(textDateDimensions);
+      // Filter by data availability for settings modal too
+      let finalAllDimensions = textDateDimensions;
+      if (reportId) {
+        try {
+          console.log('[FiltersBar] Filtering all dimensions by data availability...');
+          finalAllDimensions = await filterDimensionsByDataAvailability(
+            textDateDimensions, 
+            reportId,
+            {
+              alwaysIncludeDate: true,       // Include date dimensions for settings
+              alwaysIncludeCalculated: true, // Include calculated dimensions for settings
+              fallbackOnError: true          // Return all dimensions if error occurs
+            }
+          );
+          console.log('[FiltersBar] All dimensions data filtering:', {
+            original: textDateDimensions.length,
+            filtered: finalAllDimensions.length
+          });
+        } catch (filterError) {
+          console.error('[FiltersBar] Error filtering all dimensions by data availability:', filterError);
+          finalAllDimensions = textDateDimensions;
+        }
+      }
+      
+      console.log('[FiltersBar] loadAllDimensions - Final available dimensions:', finalAllDimensions.map(d => `${d.name} (${d.type})`));
+      setAllDimensions(finalAllDimensions);
     } catch (e) {
       console.error("Error loading all dimensions:", e);
       setAllDimensions([]);
@@ -693,11 +718,37 @@ export const FiltersBar = ({
       const filterable = unique.filter(d => d.type === "text" || d.type === "vlookup");
       console.log('[FiltersBar] loadDimensions - After type filter (text only):', filterable.map(d => d.name));
       
-      const final = (user && reportId)
-        ? await filterDimensionsByFilterSettings(filterable, reportId, user.id, supabase)
-        : filterable;
+      // Filter by data availability first (only for reportId-specific loading)
+      let dataFilteredDimensions = filterable;
+      if (reportId) {
+        try {
+          console.log('[FiltersBar] Filtering dimensions by data availability...');
+          dataFilteredDimensions = await filterDimensionsByDataAvailability(
+            filterable, 
+            reportId,
+            {
+              alwaysIncludeDate: false,      // Don't force include date for filters (text/vlookup only)
+              alwaysIncludeCalculated: true, // Include calculated dimensions in filters
+              fallbackOnError: true          // Return all dimensions if error occurs
+            }
+          );
+          console.log('[FiltersBar] Data availability filtering:', {
+            original: filterable.length,
+            filtered: dataFilteredDimensions.length,
+            excluded: filterable.length - dataFilteredDimensions.length
+          });
+        } catch (filterError) {
+          console.error('[FiltersBar] Error filtering by data availability:', filterError);
+          // Use all filterable dimensions as fallback
+          dataFilteredDimensions = filterable;
+        }
+      }
       
-      console.log('[FiltersBar] loadDimensions - After filter settings:', final.map(d => d.name));
+      const final = (user && reportId)
+        ? await filterDimensionsByFilterSettings(dataFilteredDimensions, reportId, user.id, supabase)
+        : dataFilteredDimensions;
+      
+      console.log('[FiltersBar] loadDimensions - Final dimensions after all filters:', final.map(d => d.name));
       setDimensions(final);
       
       // Store all dimensions for settings modal (including vlookup dimensions)

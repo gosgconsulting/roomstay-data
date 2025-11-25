@@ -34,12 +34,19 @@ export function useDimensionData(reportId?: string) {
         return;
       }
 
-      // Use centralized dimension loader (includes vlookup dimensions)
-      const loadedDimensions = await loadDimensionsForUser(user.id, reportId);
+      // Use centralized dimension loader with data availability filtering
+      const loadedDimensions = await loadDimensionsForUser(
+        user.id, 
+        reportId,
+        {
+          filterByDataAvailability: true,  // Filter to only dimensions with data
+          alwaysIncludeDate: true,         // Always include date dimensions
+          alwaysIncludeCalculated: true,   // Always include calculated/formula dimensions
+          fallbackOnError: true            // Return all dimensions if filtering fails
+        }
+      );
       
-      // REMOVED: filtering by report_views.filter_dimensions and fallback to filtering by data availability
-      // We now always expose the complete dimension list so the selector can configure the same options
-      // shown in the PerformanceTable dropdowns.
+      // Dimensions are now pre-filtered by data availability
       const filteredDimensions = loadedDimensions;
 
       setDimensions(filteredDimensions);

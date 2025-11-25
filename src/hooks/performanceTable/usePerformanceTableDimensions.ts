@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { checkDimensionsHaveData } from "@/lib/dimensionUtils";
+import { checkDimensionsHaveData, filterDimensionsByDataAvailability } from "@/lib/dimensionUtils";
 import type { DimensionCondition, FormulaConditionPair } from "@/types/dimensions";
 
 export interface Dimension {
@@ -216,13 +216,40 @@ export function usePerformanceTableDimensions({
       }
 
       // Add Budget dimension if it exists
-      const finalDimensions = budgetDimension 
+      const allDimensionsWithBudget = budgetDimension 
         ? [...allDimensions, budgetDimension]
         : allDimensions;
 
+      // Filter dimensions by data availability for this report
+      let finalDimensions = allDimensionsWithBudget;
+      
+      if (reportId && allDimensionsWithBudget.length > 0) {
+        try {
+          console.log('[DIMENSIONS] Filtering dimensions by data availability...');
+          finalDimensions = await filterDimensionsByDataAvailability(
+            allDimensionsWithBudget, 
+            reportId,
+            {
+              alwaysIncludeDate: true,      // Always include date dimensions (required for grouping)
+              alwaysIncludeCalculated: true, // Always include calculated/formula dimensions
+              fallbackOnError: true         // Return all dimensions if error occurs
+            }
+          );
+          console.log('[DIMENSIONS] Filtered dimensions:', {
+            original: allDimensionsWithBudget.length,
+            filtered: finalDimensions.length,
+            excluded: allDimensionsWithBudget.length - finalDimensions.length
+          });
+        } catch (filterError) {
+          console.error('[DIMENSIONS] Error filtering dimensions by data availability:', filterError);
+          // Use all dimensions as fallback
+          finalDimensions = allDimensionsWithBudget;
+        }
+      }
+
       // Ensure we have at least some basic dimensions
       if (finalDimensions.length === 0) {
-        console.warn('[DIMENSIONS] No dimensions loaded! This might cause issues.');
+        console.warn('[DIMENSIONS] No dimensions with data found! Using fallback.');
         // Create a fallback dimension to prevent complete failure
         const fallbackDimension = {
           id: 'fallback-dimension',
@@ -241,11 +268,11 @@ export function usePerformanceTableDimensions({
         console.log('[DIMENSIONS] Added fallback dimension to prevent complete failure');
       }
 
-      // Set all dimensions (needed for Group by/Breakdown by selectors)
-      console.log('[DIMENSIONS] Setting dimensions:', finalDimensions.length);
+      // Set filtered dimensions (only those with data for this report)
+      console.log('[DIMENSIONS] Setting filtered dimensions:', finalDimensions.length);
       setDimensions(finalDimensions);
       
-      // Check data availability for dimensions (with error handling)
+      // Check data availability for final dimensions (for UI indicators)
       if (reportId && finalDimensions.length > 0) {
         try {
           await checkDataAvailability(finalDimensions.map(d => d.id), reportId);
