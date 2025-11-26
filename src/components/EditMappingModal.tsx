@@ -5,11 +5,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { useState, useEffect, useRef } from "react";
 import { FileSpreadsheet } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { ColumnMappingStep } from "./ColumnMappingStep";
+import { ColumnMappingStep, ColumnMappingStepRef } from "./ColumnMappingStep";
 import { resyncColumnMappings } from "@/lib/resync-dimensions";
 import { resyncReportViews } from "@/lib/resync-report-views";
 import { useDataSourceHeaders } from "@/hooks/useDataSourceHeaders";
@@ -44,6 +45,7 @@ export const EditMappingModal = ({
 }: EditMappingModalProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [accountId, setAccountId] = useState<string | undefined>(propAccountId);
+  const mappingStepRef = useRef<ColumnMappingStepRef>(null);
 
   // Use react-query to fetch headers
   const {
@@ -231,8 +233,8 @@ export const EditMappingModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px]">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[900px] max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5 text-primary" />
             Edit Column Mappings
@@ -242,13 +244,14 @@ export const EditMappingModal = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-4">
+        <div className="flex-1 overflow-y-auto px-6 pb-4 min-h-0">
           {isFetchingHeaders ? (
             <div className="text-center py-8 text-muted-foreground">
               Loading headers...
             </div>
           ) : headers.length > 0 ? (
             <ColumnMappingStep
+              ref={mappingStepRef}
               headers={headers}
               sampleDataRows={sampleDataRows}
               onSave={handleSaveMappings}
@@ -257,6 +260,7 @@ export const EditMappingModal = ({
               existingMappings={dataSource?.column_mappings || []}
               accountId={accountId}
               reportId={dataSource?.report_id || undefined}
+              hideButtons={true}
             />
           ) : (
             <div className="text-center py-8 text-muted-foreground">
@@ -264,6 +268,20 @@ export const EditMappingModal = ({
             </div>
           )}
         </div>
+
+        {!isFetchingHeaders && headers.length > 0 && (
+          <div className="flex justify-between items-center px-6 py-4 flex-shrink-0 border-t bg-background sticky bottom-0">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Back
+            </Button>
+            <Button 
+              onClick={() => mappingStepRef.current?.save()} 
+              disabled={isLoading}
+            >
+              {isLoading ? "Saving..." : "Save Mappings"}
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

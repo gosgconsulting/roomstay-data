@@ -621,6 +621,27 @@ export const buildDimensionMappingWithAutoDetection = async (
   const visibleMappings = mappings.filter(m => m.visible);
   let createdCount = 0;
   
+  console.log(`[SYNC] Total mappings: ${mappings.length}, Visible mappings: ${visibleMappings.length}`);
+  console.log(`[SYNC] Headers found: ${headers.length}`, headers.slice(0, 10));
+  
+  // Diagnostic logging for mappings
+  if (mappings.length > 0) {
+    console.log(`[SYNC] Mapping visibility status:`, mappings.map(m => ({
+      column: m.column,
+      visible: m.visible,
+      dimensionId: m.dimensionId,
+      dimensionName: m.dimensionName,
+      hasMapping: !!(m.dimensionId && m.dimensionId !== 'none' && m.dimensionId !== 'create_new') || !!m.dimensionName
+    })));
+  } else {
+    console.warn(`[SYNC] No column mappings found! This data source may need to be configured.`);
+  }
+  
+  if (visibleMappings.length === 0 && mappings.length > 0) {
+    console.warn(`[SYNC] WARNING: ${mappings.length} mappings exist but none are visible. No data will be synced.`);
+    console.warn(`[SYNC] Consider enabling at least one column mapping in the data source configuration.`);
+  }
+  
   console.log(`[SYNC] Processing ${visibleMappings.length} visible column mappings with auto-detection`);
   
   // Create normalized header map for case-insensitive matching
@@ -805,25 +826,43 @@ export const insertDataInBatches = async (
 ): Promise<void> => {
   console.log(`[SYNC] Inserting ${rowsToInsert.length} rows in batches...`);
   
+  // Filter out rows with empty dimension_values
+  const rowsWithData = rowsToInsert.filter(row => {
+    const hasDimensionValues = row.dimension_values && 
+                               typeof row.dimension_values === 'object' && 
+                               Object.keys(row.dimension_values).length > 0;
+    return hasDimensionValues;
+  });
+  
+  const filteredCount = rowsToInsert.length - rowsWithData.length;
+  if (filteredCount > 0) {
+    console.log(`[SYNC] Filtered out ${filteredCount} rows with empty dimension_values`);
+  }
+  
+  if (rowsWithData.length === 0) {
+    console.log(`[SYNC] No rows with dimension_values to insert`);
+    return;
+  }
+  
   // Adaptive batch sizing based on dataset size to prevent statement timeouts
   let batchSize: number;
-  if (rowsToInsert.length > 100000) {
+  if (rowsWithData.length > 100000) {
     batchSize = 250; // Very large datasets: smaller batches
-  } else if (rowsToInsert.length > 50000) {
+  } else if (rowsWithData.length > 50000) {
     batchSize = 500; // Large datasets: medium batches
-  } else if (rowsToInsert.length > 10000) {
+  } else if (rowsWithData.length > 10000) {
     batchSize = 750; // Medium datasets: larger batches
   } else {
     batchSize = 1000; // Small datasets: standard batches
   }
   
-  console.log(`[SYNC] Using adaptive batch size: ${batchSize} (total rows: ${rowsToInsert.length})`);
+  console.log(`[SYNC] Using adaptive batch size: ${batchSize} (total rows: ${rowsWithData.length})`);
   
-  const totalBatches = Math.ceil(rowsToInsert.length / batchSize);
+  const totalBatches = Math.ceil(rowsWithData.length / batchSize);
   let successfulBatches = 0;
   
-  for (let i = 0; i < rowsToInsert.length; i += batchSize) {
-    const batch = rowsToInsert.slice(i, i + batchSize);
+  for (let i = 0; i < rowsWithData.length; i += batchSize) {
+    const batch = rowsWithData.slice(i, i + batchSize);
     const currentBatch = Math.floor(i / batchSize) + 1;
     
     const progressMessage = `Inserting batch ${currentBatch}/${totalBatches} (${batch.length} rows)`;
@@ -853,7 +892,7 @@ export const insertDataInBatches = async (
           successfulBatches++;
           
           // Add small delay between batches for large datasets to prevent overwhelming the database
-          if (rowsToInsert.length > 50000 && currentBatch % 10 === 0) {
+          if (rowsWithData.length > 50000 && currentBatch % 10 === 0) {
             await new Promise(resolve => setTimeout(resolve, 100)); // 100ms pause every 10 batches
           }
           
@@ -874,7 +913,7 @@ export const insertDataInBatches = async (
       }
       
       // Progress feedback for large datasets
-      if (rowsToInsert.length > 10000 && currentBatch % 20 === 0) {
+      if (rowsWithData.length > 10000 && currentBatch % 20 === 0) {
         const progress = Math.round((successfulBatches / totalBatches) * 100);
         console.log(`[SYNC] Progress: ${progress}% complete (${successfulBatches}/${totalBatches} batches)`);
       }
@@ -885,7 +924,7 @@ export const insertDataInBatches = async (
     }
   }
   
-  console.log(`[SYNC] Successfully inserted all ${rowsToInsert.length} rows in ${successfulBatches} batches`);
+  console.log(`[SYNC] Successfully inserted ${rowsWithData.length} rows in ${successfulBatches} batches${filteredCount > 0 ? ` (${filteredCount} rows with empty dimension_values were skipped)` : ''}`);
 };
 
 // Update column mappings with new dimension IDs
@@ -1250,7 +1289,47 @@ export const syncDataSource = async (
       }
     }
 
-    // Step 5: Build dimension mapping with auto-detection
+    // Step 5: Auto-enable mappings that have valid dimension assignments
+    const mappings = dataSource.column_mappings || [];
+    const mappingsWithValidAssignments = mappings.filter(m => {
+      const hasValidDimensionId = m.dimensionId && 
+                                  m.dimensionId !== 'none' && 
+                                  m.dimensionId !== 'create_new';
+      const hasValidDimensionName = m.dimensionName && 
+                                    m.dimensionName !== 'none' && 
+                                    m.dimensionName !== 'create_new';
+      return hasValidDimensionId || hasValidDimensionName;
+    });
+    
+    // If there are mappings with valid assignments but they're not visible, auto-enable them
+    if (mappingsWithValidAssignments.length > 0) {
+      const needsUpdate = mappingsWithValidAssignments.some(m => !m.visible);
+      if (needsUpdate) {
+        console.log(`[SYNC] Auto-enabling ${mappingsWithValidAssignments.length} mappings with valid dimension assignments`);
+        const updatedMappings = mappings.map(m => {
+          const hasValidAssignment = (m.dimensionId && m.dimensionId !== 'none' && m.dimensionId !== 'create_new') ||
+                                     (m.dimensionName && m.dimensionName !== 'none' && m.dimensionName !== 'create_new');
+          if (hasValidAssignment && !m.visible) {
+            return { ...m, visible: true };
+          }
+          return m;
+        });
+        
+        const { error: updateError } = await supabase
+          .from('data_sources')
+          .update({ column_mappings: updatedMappings as any })
+          .eq('id', dataSource.id);
+        
+        if (updateError) {
+          console.warn(`[SYNC] Could not auto-enable mappings:`, updateError);
+        } else {
+          // Update the dataSource object to reflect the change
+          dataSource.column_mappings = updatedMappings as ColumnMapping[];
+        }
+      }
+    }
+    
+    // Step 6: Build dimension mapping with auto-detection
     // Use first 10 rows as sample data for auto-detection
     const sampleDataForAutoDetection = allData.slice(0, 10);
     
@@ -1264,8 +1343,20 @@ export const syncDataSource = async (
       recreateDimensions,
       accountId
     );
+    
+    // Check if we have any mappings after processing
+    if (Object.keys(dimensionIdMap).length === 0) {
+      const visibleMappings = (dataSource.column_mappings || []).filter(m => m.visible);
+      if (visibleMappings.length === 0) {
+        throw new Error(
+          "No visible column mappings found. Please configure at least one column mapping in the data source settings and ensure it's marked as visible."
+        );
+      } else {
+        console.warn(`[SYNC] WARNING: ${visibleMappings.length} visible mappings exist but none could be resolved to dimensions. Check dimension assignments.`);
+      }
+    }
 
-    // Step 6: Transform data
+    // Step 7: Transform data
     const rowsToInsert = await transformDataRows(
       allData,
       dataSource.column_mappings || [],
@@ -1275,10 +1366,10 @@ export const syncDataSource = async (
       dataSource.id
     );
 
-    // Step 7: Insert data
+    // Step 8: Insert data
     await insertDataInBatches(rowsToInsert, onProgress);
 
-    // Step 8: Update column mappings if dimensions were created
+    // Step 9: Update column mappings if dimensions were created
     if (createdCount > 0) {
       await updateColumnMappings(dataSource.id, dataSource.column_mappings || [], dimensionIdMap);
     }

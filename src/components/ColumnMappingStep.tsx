@@ -17,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Eye, EyeOff, Check } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useImperativeHandle, forwardRef } from "react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -46,9 +46,15 @@ interface ColumnMappingStepProps {
   existingMappings?: ColumnMapping[];
   accountId?: string;
   reportId?: string;
+  hideButtons?: boolean; // Option to hide buttons for custom rendering
 }
 
-export const ColumnMappingStep = ({
+export interface ColumnMappingStepRef {
+  save: () => void;
+  getMappings: () => ColumnMapping[];
+}
+
+export const ColumnMappingStep = forwardRef<ColumnMappingStepRef, ColumnMappingStepProps>(({
   headers,
   sampleDataRows = [],
   onSave,
@@ -57,7 +63,8 @@ export const ColumnMappingStep = ({
   existingMappings,
   accountId,
   reportId,
-}: ColumnMappingStepProps) => {
+  hideButtons = false,
+}, ref) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
   const [isLoadingDimensions, setIsLoadingDimensions] = useState(true);
@@ -328,8 +335,14 @@ export const ColumnMappingStep = ({
     onSave(mappings);
   };
 
+  // Expose save handler and mappings via ref
+  useImperativeHandle(ref, () => ({
+    save: handleSave,
+    getMappings: () => mappings,
+  }));
+
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col space-y-4">
       <div className="border rounded-md overflow-hidden">
         <Table>
           <TableHeader>
@@ -437,14 +450,18 @@ export const ColumnMappingStep = ({
         </Table>
       </div>
 
-      <div className="flex justify-between">
-        <Button variant="outline" onClick={onBack}>
-          Back
-        </Button>
-        <Button onClick={handleSave} disabled={isLoading}>
-          {isLoading ? "Saving..." : "Save Mappings"}
-        </Button>
-      </div>
+      {!hideButtons && (
+        <div className="flex justify-between pt-4 flex-shrink-0 border-t mt-4">
+          <Button variant="outline" onClick={onBack}>
+            Back
+          </Button>
+          <Button onClick={handleSave} disabled={isLoading}>
+            {isLoading ? "Saving..." : "Save Mappings"}
+          </Button>
+        </div>
+      )}
     </div>
   );
-};
+});
+
+ColumnMappingStep.displayName = "ColumnMappingStep";
