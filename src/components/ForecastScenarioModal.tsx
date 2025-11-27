@@ -6,11 +6,13 @@ import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@
 type ForecastScenario = {
   id: string;
   name: string; // Hotel Name
-  email?: string | null;
-  revenue_per_month: number;
-  paid_revenue_share: number; // percentage (0-100)
+  email?: string | null; // Optional field
+  average_daily_rate?: number | null;
+  direct_bookings_percentage?: number | null; // Direct Revenue
+  direct_bookings_target?: number | null; // % Direct Revenue
+  rooms?: number | null;
+  occupancy_rate?: number | null; // New field
   cost_of_sell: number; // decimal (0-1)
-  target_average_order_value: number;
   conversion_rate: number; // decimal (0-1)
   created_at: string;
 };
@@ -47,19 +49,31 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
   }
 
   const OTA_RATE = 0.15;
-  const revMonth = Number(scenario.revenue_per_month) || 0;
-  const paidSharePct = Number(scenario.paid_revenue_share) || 0; // stored as 0-100
+  
+  // Extract hotel-specific fields
+  const averageDailyRate = Number(scenario.average_daily_rate) || 0;
+  const directRevenue = Number(scenario.direct_bookings_percentage) || 0; // Absolute dollar amount
+  const directRevenueTarget = Number(scenario.direct_bookings_target) || 0; // Percentage
+  const rooms = Number(scenario.rooms) || 0;
+  const occupancyRate = Number(scenario.occupancy_rate) || 75; // Use provided occupancy rate or default to 75%
   const costOfSell = Number(scenario.cost_of_sell) || 0; // stored as 0-1
-  const aov = Number(scenario.target_average_order_value) || 0;
+  const conversionRate = Number(scenario.conversion_rate) || 0; // stored as 0-1
+  
+  // Calculate monthly revenue from hotel metrics: ADR × Rooms × 30 days × (Occupancy Rate / 100)
+  const revMonth = averageDailyRate * rooms * 30 * (occupancyRate / 100);
 
-  // Monthly metrics
-  const paidRevenueMonth = revMonth * (paidSharePct / 100);
-  // OTA cost should also be applied to the revenue share, not total revenue
+  // Calculate paid revenue from the % Direct Revenue field: Total Revenue × (% Direct Revenue / 100)
+  const paidRevenueMonth = revMonth * (directRevenueTarget / 100);
+  const paidSharePct = directRevenueTarget; // Already a percentage
+  
+  // OTA cost applied to paid revenue (calculated from percentage)
   const otaCostMonth = paidRevenueMonth * OTA_RATE;
-  // Cost should be applied to the revenue share, not total revenue
+  // Your cost applied to paid revenue
   const yourCostMonth = paidRevenueMonth * costOfSell;
   const savingsVsOTAMonth = otaCostMonth - yourCostMonth;
-  const ordersMonth = aov > 0 ? revMonth / aov : 0;
+  
+  // Estimated bookings based on conversion rate
+  const ordersMonth = conversionRate > 0 ? revMonth * conversionRate : 0;
 
   // Yearly metrics
   const revYear = revMonth * 12;
@@ -82,24 +96,18 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
-              {scenario.email ? <>Email: <span className="text-foreground">{scenario.email}</span></> : "No email provided"}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              Cost of sell: <span className="text-foreground">{formatPercent(costOfSell)}</span> • Paid share: <span className="text-foreground">{paidSharePct.toFixed(2)}%</span>
-            </div>
-          </div>
-
-          {/* Modern header badges */}
+          {/* Hotel Details */}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">Rooms: {rooms}</Badge>
+              <Badge variant="outline">ADR: {formatCurrency2(averageDailyRate)}</Badge>
+              <Badge variant="outline">Occupancy: {occupancyRate}%</Badge>
+              <Badge variant="outline">Direct Revenue %: {paidSharePct.toFixed(2)}%</Badge>
+              <Badge variant="outline">Cost of sell: {formatPercent(costOfSell)}</Badge>
+              <Badge variant="outline">OTA rate: 15%</Badge>
               {scenario.email && (
                 <Badge variant="outline">Email: {scenario.email}</Badge>
               )}
-              <Badge variant="outline">Paid share: {paidSharePct.toFixed(2)}%</Badge>
-              <Badge variant="outline">Cost of sell: {formatPercent(costOfSell)}</Badge>
-              <Badge variant="outline">OTA rate: 15%</Badge>
             </div>
             <div className="text-xs text-muted-foreground">
               Compare monthly and yearly metrics side by side

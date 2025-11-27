@@ -15,11 +15,13 @@ import ForecastScenarioModal from "@/components/ForecastScenarioModal";
 interface ForecastScenario {
   id: string;
   name: string; // used as Hotel Name
-  email?: string;
-  revenue_per_month: number;
-  paid_revenue_share: number;
+  email?: string | null; // Optional field
+  average_daily_rate?: number | null;
+  direct_bookings_percentage?: number | null; // Now "Direct Revenue"
+  direct_bookings_target?: number | null; // Now "% Direct Revenue"
+  rooms?: number | null;
+  occupancy_rate?: number | null; // New field
   cost_of_sell: number; // stored as decimal (0-1) percentage
-  target_average_order_value: number;
   conversion_rate: number;
   created_at: string;
 }
@@ -40,10 +42,12 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
   const [rowForm, setRowForm] = useState({
     name: '',
     email: '',
-    revenue_per_month: '',
-    paid_revenue_share: '',
+    average_daily_rate: '',
+    direct_bookings_percentage: '', // Direct Revenue
+    direct_bookings_target: '', // % Direct Revenue
+    rooms: '',
+    occupancy_rate: '', // New field
     cost_of_sell: '', // percentage
-    target_average_order_value: '',
     conversion_rate: '' // percentage
   });
   const [isRowSaving, setIsRowSaving] = useState(false);
@@ -51,11 +55,13 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
   // Form state
   const [formData, setFormData] = useState({
     name: '', // Hotel Name
-    email: '',
-    revenue_per_month: '',
-    paid_revenue_share: '',
+    email: '', // Optional
+    average_daily_rate: '',
+    direct_bookings_percentage: '', // Direct Revenue
+    direct_bookings_target: '', // % Direct Revenue
+    rooms: '',
+    occupancy_rate: '', // New field
     cost_of_sell: '', // percentage input
-    target_average_order_value: '',
     conversion_rate: ''
   });
 
@@ -121,20 +127,16 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
       });
       return;
     }
-    if (!formData.email.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Please enter an email address",
-        variant: "destructive",
-      });
-      return;
-    }
+
+    // Email is now optional, so no validation needed
 
     const requiredFields = [
-      'revenue_per_month',
-      'paid_revenue_share', 
+      'average_daily_rate',
+      'direct_bookings_percentage',
+      'direct_bookings_target',
+      'rooms',
+      'occupancy_rate',
       'cost_of_sell',
-      'target_average_order_value',
       'conversion_rate'
     ];
 
@@ -164,11 +166,13 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
           report_id: reportId,
           user_id: user.id,
           name: formData.name.trim(), // Hotel Name
-          email: formData.email.trim(),
-          revenue_per_month: parseFloat(formData.revenue_per_month),
-          paid_revenue_share: parseFloat(formData.paid_revenue_share),
+          email: formData.email.trim() || null, // Optional field
+          average_daily_rate: parseFloat(formData.average_daily_rate),
+          direct_bookings_percentage: parseFloat(formData.direct_bookings_percentage),
+          direct_bookings_target: parseFloat(formData.direct_bookings_target),
+          rooms: parseInt(formData.rooms),
+          occupancy_rate: parseFloat(formData.occupancy_rate),
           cost_of_sell: parseFloat(formData.cost_of_sell) / 100, // percentage to decimal
-          target_average_order_value: parseFloat(formData.target_average_order_value),
           conversion_rate: parseFloat(formData.conversion_rate) / 100, // Convert percentage to decimal
         })
         .select()
@@ -185,10 +189,12 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
       setFormData({
         name: '',
         email: '',
-        revenue_per_month: '',
-        paid_revenue_share: '',
+        average_daily_rate: '',
+        direct_bookings_percentage: '',
+        direct_bookings_target: '',
+        rooms: '',
+        occupancy_rate: '',
         cost_of_sell: '',
-        target_average_order_value: '',
         conversion_rate: ''
       });
 
@@ -250,10 +256,12 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
     setRowForm({
       name: scenario.name || '',
       email: scenario.email || '',
-      revenue_per_month: String(scenario.revenue_per_month ?? ''),
-      paid_revenue_share: String(scenario.paid_revenue_share ?? ''),
+      average_daily_rate: String(scenario.average_daily_rate ?? ''),
+      direct_bookings_percentage: String(scenario.direct_bookings_percentage ?? ''),
+      direct_bookings_target: String(scenario.direct_bookings_target ?? ''),
+      rooms: String(scenario.rooms ?? ''),
+      occupancy_rate: String(scenario.occupancy_rate ?? ''),
       cost_of_sell: scenario.cost_of_sell != null ? String((scenario.cost_of_sell * 100).toFixed(2)) : '',
-      target_average_order_value: String(scenario.target_average_order_value ?? ''),
       conversion_rate: scenario.conversion_rate != null ? String((scenario.conversion_rate * 100).toFixed(2)) : '',
     });
   };
@@ -285,15 +293,15 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
       toast({ title: "Validation Error", description: "Please enter a hotel name", variant: "destructive" });
       return;
     }
-    if (!rowForm.email.trim()) {
-      toast({ title: "Validation Error", description: "Please enter an email address", variant: "destructive" });
-      return;
-    }
+    // Email is now optional, so no validation needed
+    
     const requiredFields = [
-      'revenue_per_month',
-      'paid_revenue_share',
+      'average_daily_rate',
+      'direct_bookings_percentage',
+      'direct_bookings_target',
+      'rooms',
+      'occupancy_rate',
       'cost_of_sell',
-      'target_average_order_value',
       'conversion_rate'
     ];
     for (const field of requiredFields) {
@@ -313,11 +321,13 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
         .from('forecasts')
         .update({
           name: rowForm.name.trim(),
-          email: rowForm.email.trim(),
-          revenue_per_month: parseFloat(rowForm.revenue_per_month),
-          paid_revenue_share: parseFloat(rowForm.paid_revenue_share),
+          email: rowForm.email.trim() || null, // Optional field
+          average_daily_rate: parseFloat(rowForm.average_daily_rate),
+          direct_bookings_percentage: parseFloat(rowForm.direct_bookings_percentage),
+          direct_bookings_target: parseFloat(rowForm.direct_bookings_target),
+          rooms: parseInt(rowForm.rooms),
+          occupancy_rate: parseFloat(rowForm.occupancy_rate),
           cost_of_sell: parseFloat(rowForm.cost_of_sell) / 100, // percentage to decimal
-          target_average_order_value: parseFloat(rowForm.target_average_order_value),
           conversion_rate: parseFloat(rowForm.conversion_rate) / 100, // percentage to decimal
         })
         .eq('id', editingRowId)
@@ -377,18 +387,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="name@example.com"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
                 <Label htmlFor="scenario-name">Hotel Name</Label>
                 <Input
                   id="scenario-name"
@@ -400,35 +398,92 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="revenue-per-month">Revenue per Month ($)</Label>
+                <Label htmlFor="rooms">Rooms</Label>
                 <Input
-                  id="revenue-per-month"
+                  id="rooms"
                   type="number"
-                  step="0.01"
-                  placeholder="50000"
-                  value={formData.revenue_per_month}
-                  onChange={(e) => handleInputChange('revenue_per_month', e.target.value)}
+                  min="1"
+                  placeholder="153"
+                  value={formData.rooms}
+                  onChange={(e) => handleInputChange('rooms', e.target.value)}
                   required
                 />
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="paid-revenue-share">Paid Revenue Share (%)</Label>
+                <Label htmlFor="occupancy-rate">% Occupancy Rate</Label>
                 <Input
-                  id="paid-revenue-share"
+                  id="occupancy-rate"
                   type="number"
                   step="0.01"
                   min="0"
                   max="100"
-                  placeholder="15"
-                  value={formData.paid_revenue_share}
-                  onChange={(e) => handleInputChange('paid_revenue_share', e.target.value)}
+                  placeholder="75.00"
+                  value={formData.occupancy_rate}
+                  onChange={(e) => handleInputChange('occupancy_rate', e.target.value)}
                   required
                 />
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="cost-of-sell">Cost of Sell (%)</Label>
+                <Label htmlFor="average-daily-rate">Average Daily Rate ($)</Label>
+                <Input
+                  id="average-daily-rate"
+                  type="number"
+                  step="0.01"
+                  placeholder="184.26"
+                  value={formData.average_daily_rate}
+                  onChange={(e) => handleInputChange('average_daily_rate', e.target.value)}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="direct-revenue">Direct Revenue</Label>
+                <Input
+                  id="direct-revenue"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="12.98"
+                  value={formData.direct_bookings_percentage}
+                  onChange={(e) => handleInputChange('direct_bookings_percentage', e.target.value)}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="direct-revenue-target">% Direct Revenue</Label>
+                <Input
+                  id="direct-revenue-target"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  placeholder="15.00"
+                  value={formData.direct_bookings_target}
+                  onChange={(e) => handleInputChange('direct_bookings_target', e.target.value)}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="conversion-rate">% Conversion Rate</Label>
+                <Input
+                  id="conversion-rate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  placeholder="2.5"
+                  value={formData.conversion_rate}
+                  onChange={(e) => handleInputChange('conversion_rate', e.target.value)}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="cost-of-sell">% Cost of Sale</Label>
                 <Input
                   id="cost-of-sell"
                   type="number"
@@ -443,30 +498,13 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="target-aov">Target Average Order Value ($)</Label>
+                <Label htmlFor="email">Email Address (Optional)</Label>
                 <Input
-                  id="target-aov"
-                  type="number"
-                  step="0.01"
-                  placeholder="250"
-                  value={formData.target_average_order_value}
-                  onChange={(e) => handleInputChange('target_average_order_value', e.target.value)}
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="conversion-rate">Conversion Rate (%)</Label>
-                <Input
-                  id="conversion-rate"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  placeholder="2.5"
-                  value={formData.conversion_rate}
-                  onChange={(e) => handleInputChange('conversion_rate', e.target.value)}
-                  required
+                  id="email"
+                  type="email"
+                  placeholder="name@example.com"
+                  value={formData.email}
+                  onChange={(e) => handleInputChange('email', e.target.value)}
                 />
               </div>
             </div>
@@ -522,12 +560,14 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                 <TableHeader>
                   <TableRow>
                     <TableHead>Hotel Name</TableHead>
+                    <TableHead>Rooms</TableHead>
+                    <TableHead>% Occupancy Rate</TableHead>
+                    <TableHead>Average Daily Rate</TableHead>
+                    <TableHead>Direct Revenue</TableHead>
+                    <TableHead>% Direct Revenue</TableHead>
+                    <TableHead>% Conversion Rate</TableHead>
+                    <TableHead>% Cost of Sale</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Revenue/Month</TableHead>
-                    <TableHead>Revenue Share</TableHead>
-                    <TableHead>Cost of Sell</TableHead>
-                    <TableHead>Target AOV</TableHead>
-                    <TableHead>Conversion Rate</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead className="w-[160px]">Actions</TableHead>
                   </TableRow>
@@ -557,38 +597,19 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                         {editingRowId === scenario.id ? (
                           <Input
                             className="h-8"
-                            type="email"
-                            value={rowForm.email}
-                            onChange={(e) => handleRowChange('email', e.target.value)}
-                            autoFocus={editingField === 'email'}
-                            onKeyDown={handleCellKeyDown}
-                          />
-                        ) : (
-                          <span
-                            className="cursor-text"
-                            onClick={() => startEditing(scenario, 'email')}
-                          >
-                            {scenario.email || '-'}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {editingRowId === scenario.id ? (
-                          <Input
-                            className="h-8"
                             type="number"
-                            step="0.01"
-                            value={rowForm.revenue_per_month}
-                            onChange={(e) => handleRowChange('revenue_per_month', e.target.value)}
-                            autoFocus={editingField === 'revenue_per_month'}
+                            min="1"
+                            value={rowForm.rooms}
+                            onChange={(e) => handleRowChange('rooms', e.target.value)}
+                            autoFocus={editingField === 'rooms'}
                             onKeyDown={handleCellKeyDown}
                           />
                         ) : (
                           <span
                             className="cursor-text"
-                            onClick={() => startEditing(scenario, 'revenue_per_month')}
+                            onClick={() => startEditing(scenario, 'rooms')}
                           >
-                            {formatCurrency(scenario.revenue_per_month)}
+                            {scenario.rooms || 0}
                           </span>
                         )}
                       </TableCell>
@@ -600,17 +621,102 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                             step="0.01"
                             min="0"
                             max="100"
-                            value={rowForm.paid_revenue_share}
-                            onChange={(e) => handleRowChange('paid_revenue_share', e.target.value)}
-                            autoFocus={editingField === 'paid_revenue_share'}
+                            value={rowForm.occupancy_rate}
+                            onChange={(e) => handleRowChange('occupancy_rate', e.target.value)}
+                            autoFocus={editingField === 'occupancy_rate'}
                             onKeyDown={handleCellKeyDown}
                           />
                         ) : (
                           <span
                             className="cursor-text"
-                            onClick={() => startEditing(scenario, 'paid_revenue_share')}
+                            onClick={() => startEditing(scenario, 'occupancy_rate')}
                           >
-                            {`${scenario.paid_revenue_share}%`}
+                            {`${scenario.occupancy_rate || 0}%`}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {editingRowId === scenario.id ? (
+                          <Input
+                            className="h-8"
+                            type="number"
+                            step="0.01"
+                            value={rowForm.average_daily_rate}
+                            onChange={(e) => handleRowChange('average_daily_rate', e.target.value)}
+                            autoFocus={editingField === 'average_daily_rate'}
+                            onKeyDown={handleCellKeyDown}
+                          />
+                        ) : (
+                          <span
+                            className="cursor-text"
+                            onClick={() => startEditing(scenario, 'average_daily_rate')}
+                          >
+                            {formatCurrency(scenario.average_daily_rate || 0)}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {editingRowId === scenario.id ? (
+                          <Input
+                            className="h-8"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={rowForm.direct_bookings_percentage}
+                            onChange={(e) => handleRowChange('direct_bookings_percentage', e.target.value)}
+                            autoFocus={editingField === 'direct_bookings_percentage'}
+                            onKeyDown={handleCellKeyDown}
+                          />
+                        ) : (
+                          <span
+                            className="cursor-text"
+                            onClick={() => startEditing(scenario, 'direct_bookings_percentage')}
+                          >
+                            {scenario.direct_bookings_percentage || 0}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {editingRowId === scenario.id ? (
+                          <Input
+                            className="h-8"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            value={rowForm.direct_bookings_target}
+                            onChange={(e) => handleRowChange('direct_bookings_target', e.target.value)}
+                            autoFocus={editingField === 'direct_bookings_target'}
+                            onKeyDown={handleCellKeyDown}
+                          />
+                        ) : (
+                          <span
+                            className="cursor-text"
+                            onClick={() => startEditing(scenario, 'direct_bookings_target')}
+                          >
+                            {`${scenario.direct_bookings_target || 0}%`}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {editingRowId === scenario.id ? (
+                          <Input
+                            className="h-8"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            value={rowForm.conversion_rate}
+                            onChange={(e) => handleRowChange('conversion_rate', e.target.value)}
+                            autoFocus={editingField === 'conversion_rate'}
+                            onKeyDown={handleCellKeyDown}
+                          />
+                        ) : (
+                          <span
+                            className="cursor-text"
+                            onClick={() => startEditing(scenario, 'conversion_rate')}
+                          >
+                            {formatPercentage(scenario.conversion_rate)}
                           </span>
                         )}
                       </TableCell>
@@ -640,41 +746,18 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                         {editingRowId === scenario.id ? (
                           <Input
                             className="h-8"
-                            type="number"
-                            step="0.01"
-                            value={rowForm.target_average_order_value}
-                            onChange={(e) => handleRowChange('target_average_order_value', e.target.value)}
-                            autoFocus={editingField === 'target_average_order_value'}
+                            type="email"
+                            value={rowForm.email}
+                            onChange={(e) => handleRowChange('email', e.target.value)}
+                            autoFocus={editingField === 'email'}
                             onKeyDown={handleCellKeyDown}
                           />
                         ) : (
                           <span
                             className="cursor-text"
-                            onClick={() => startEditing(scenario, 'target_average_order_value')}
+                            onClick={() => startEditing(scenario, 'email')}
                           >
-                            {formatCurrency(scenario.target_average_order_value)}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {editingRowId === scenario.id ? (
-                          <Input
-                            className="h-8"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            max="100"
-                            value={rowForm.conversion_rate}
-                            onChange={(e) => handleRowChange('conversion_rate', e.target.value)}
-                            autoFocus={editingField === 'conversion_rate'}
-                            onKeyDown={handleCellKeyDown}
-                          />
-                        ) : (
-                          <span
-                            className="cursor-text"
-                            onClick={() => startEditing(scenario, 'conversion_rate')}
-                          >
-                            {formatPercentage(scenario.conversion_rate)}
+                            {scenario.email || '-'}
                           </span>
                         )}
                       </TableCell>
