@@ -37,6 +37,9 @@ export const CreateShareLinkModal = ({
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  // FIX: useUser returns a UseQueryResult; get user from its data
+  const { data: userResult } = useUser();
+  const user = userResult?.user;
 
   useEffect(() => {
     if (open) {
