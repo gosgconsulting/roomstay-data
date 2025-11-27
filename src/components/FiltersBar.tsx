@@ -125,32 +125,10 @@ export const FiltersBar = ({
         d.type === "text" || d.type === "vlookup" || d.type === "date"
       );
       
-      // Filter by data availability for settings modal too
-      let finalAllDimensions = textDateDimensions;
-      if (reportId) {
-        try {
-          console.log('[FiltersBar] Filtering all dimensions by data availability...');
-          finalAllDimensions = await filterDimensionsByDataAvailability(
-            textDateDimensions, 
-            reportId,
-            {
-              alwaysIncludeDate: true,       // Include date dimensions for settings
-              alwaysIncludeCalculated: true, // Include calculated dimensions for settings
-              fallbackOnError: true          // Return all dimensions if error occurs
-            }
-          );
-          console.log('[FiltersBar] All dimensions data filtering:', {
-            original: textDateDimensions.length,
-            filtered: finalAllDimensions.length
-          });
-        } catch (filterError) {
-          console.error('[FiltersBar] Error filtering all dimensions by data availability:', filterError);
-          finalAllDimensions = textDateDimensions;
-        }
-      }
-      
-      console.log('[FiltersBar] loadAllDimensions - Final available dimensions:', finalAllDimensions.map(d => `${d.name} (${d.type})`));
-      setAllDimensions(finalAllDimensions);
+      // For the settings modal, show ALL text/date dimensions regardless of data availability
+      // This allows users to select dimensions for filtering even if they don't have data yet
+      console.log('[FiltersBar] loadAllDimensions - All available dimensions:', textDateDimensions.map(d => `${d.name} (${d.type})`));
+      setAllDimensions(textDateDimensions);
     } catch (e) {
       console.error("Error loading all dimensions:", e);
       setAllDimensions([]);

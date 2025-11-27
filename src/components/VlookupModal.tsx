@@ -204,11 +204,12 @@ export default function VlookupModal({
             console.error('[VlookupModal] Error loading target dimensions:', targetError);
           } else {
             console.log('[VlookupModal] Loaded target vlookup dimensions:', targetDims?.length || 0);
-            // Cast dimensions with proper scope type and conditions
+            // Cast dimensions with proper scope type, conditions, and formula_condition_pairs
             const typedDims = (targetDims || []).map(d => ({
               ...d,
               scope: d.scope as 'account' | 'custom' | 'global',
-              conditions: (Array.isArray(d.conditions) ? d.conditions : []) as unknown as import("@/types/dimensions").DimensionCondition[]
+              conditions: (Array.isArray(d.conditions) ? d.conditions : []) as unknown as import("@/types/dimensions").DimensionCondition[],
+              formula_condition_pairs: (Array.isArray(d.formula_condition_pairs) ? d.formula_condition_pairs : []) as unknown as import("@/types/dimensions").FormulaConditionPair[]
             }));
             if (!cancel) setTargetDimensions(typedDims);
           }
