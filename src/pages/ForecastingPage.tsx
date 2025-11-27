@@ -11,6 +11,7 @@ import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import ForecastScenarioModal from "@/components/ForecastScenarioModal";
+import { useUser } from "@/lib/auth";
 
 interface ForecastScenario {
   id: string;
@@ -32,6 +33,8 @@ interface ForecastingPageProps {
 }
 
 export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) => {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [scenarios, setScenarios] = useState<ForecastScenario[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,7 +79,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
       setIsLoading(true);
       console.log('[testing] Loading forecast scenarios for report:', reportId);
       
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         console.error('No user found');
         return;
@@ -155,7 +157,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
       setIsSubmitting(true);
       console.log('[testing] Submitting forecast scenario:', formData);
 
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         throw new Error('No user found');
       }

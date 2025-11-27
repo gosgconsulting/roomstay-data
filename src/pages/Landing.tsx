@@ -9,6 +9,8 @@ import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { CreateAccountModal } from "@/components/CreateAccountModal";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
+import { useQueryClient } from "@tanstack/react-query";
+import { authKeys } from "@/lib/auth";
 
 interface Account {
   id: string;
@@ -29,6 +31,7 @@ interface Tool {
 
 export default function Landing() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -93,6 +96,8 @@ export default function Landing() {
   const handleSignOut = async () => {
     try {
       await supabase.auth.signOut();
+      // Invalidate React Query cache on sign out
+      queryClient.invalidateQueries({ queryKey: authKeys.user() });
       navigate('/auth');
     } catch (error) {
       console.error('Error signing out:', error);

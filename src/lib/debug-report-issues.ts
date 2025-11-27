@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getUser } from "@/lib/auth";
 
 export interface ReportDiagnostics {
   reportId: string;
@@ -54,7 +55,7 @@ export async function diagnoseReportIssues(reportId: string): Promise<ReportDiag
 
     // 2. Check dimensions
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { user } = await getUser();
       if (!user) {
         diagnostics.errors.push('User not authenticated');
         return diagnostics;

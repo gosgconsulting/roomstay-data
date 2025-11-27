@@ -26,6 +26,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { checkDimensionsHaveData } from "@/lib/dimensionUtils";
+import { useUser } from "@/lib/auth";
 
 interface Budget {
   id: string;
@@ -77,6 +78,8 @@ export const BudgetModal = ({
   presetYearMonth,
 }: BudgetModalProps) => {
   const { toast } = useToast();
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [isLoading, setIsLoading] = useState(false);
   const [dimensions, setDimensions] = useState<Array<{
     id: string;
@@ -102,7 +105,7 @@ export const BudgetModal = ({
 
   // Load dimensions and dimension items
   useEffect(() => {
-    if (open) {
+    if (open && user) {
       loadDimensions();
       if (budget) {
         // Editing existing budget
@@ -136,7 +139,6 @@ export const BudgetModal = ({
 
   const loadDimensions = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const dimensionsList: Array<{
@@ -434,7 +436,6 @@ export const BudgetModal = ({
 
     setIsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         throw new Error("User not authenticated");
       }

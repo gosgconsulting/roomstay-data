@@ -13,6 +13,7 @@ import { useBudgetTrackerData } from "@/hooks/budgetTracker/useBudgetTrackerData
 import { useBudgetTrackerFilters } from "@/hooks/budgetTracker/useBudgetTrackerFilters";
 import { checkDataSources } from "@/lib/performanceTable/dataSourceUtils";
 import PerformanceSettingsModal from "./PerformanceSettingsModal";
+import { useUser } from "@/lib/auth";
 
 interface BudgetTrackerTableProps {
   reportId: string | null;
@@ -33,6 +34,8 @@ export const BudgetTrackerTable = ({
   onLoadingComplete,
   isEditMode = false,
 }: BudgetTrackerTableProps) => {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   // Date granularity state (Month/Year tabs)
   const [activeDateTab, setActiveDateTab] = useState<'month' | 'year'>('month');
   const [accountName, setAccountName] = useState<string | undefined>(undefined);
@@ -112,8 +115,7 @@ export const BudgetTrackerTable = ({
         setBudgetViewId(null);
         return;
       }
-      const { data: userData, error: userErr } = await supabase.auth.getUser();
-      if (userErr || !userData?.user) {
+      if (!user) {
         console.warn('[BUDGET-TRACKER] No authenticated user, skipping view init');
         setBudgetViewId(null);
         return;

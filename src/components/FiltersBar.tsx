@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useVlookupMappings, getMappedValue } from "@/hooks/useVlookupMappings";
 import PerformanceSettingsModal from "@/components/PerformanceSettingsModal";
 import { loadDimensionsForUser } from "@/lib/dimensionLoader";
+import { useUser } from "@/lib/auth";
 
 import { 
   DimensionFilter, 
@@ -102,6 +103,10 @@ export const FiltersBar = ({
 
   // vlookup mappings
   const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
+  
+  // Get current user
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
 
   // Initialize selected reports to all by default
   useEffect(() => {
@@ -114,7 +119,6 @@ export const FiltersBar = ({
   const loadAllDimensions = async () => {
     if (!reportId && !accountId) return;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
       // Use the centralized dimension loader to get ALL dimensions
@@ -362,7 +366,6 @@ export const FiltersBar = ({
   const loadFilterSettings = async () => {
     if (!reportId) return;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       let userId = user?.id || "";
 
       if (isSharedView && reportId) {
@@ -454,7 +457,6 @@ export const FiltersBar = ({
   const saveFilterSettings = async () => {
     if (!reportId || isSharedView || !isEditMode) return; // Add isEditMode check
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: existingView } = await supabase
@@ -625,7 +627,6 @@ export const FiltersBar = ({
   const loadDimensions = async () => {
     if (!reportId && !accountId) return;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
       let accountData: Dimension[] = [];
@@ -856,7 +857,6 @@ export const FiltersBar = ({
     if (!reportId || isSharedView || isInitialLoad || !isEditMode) return;
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: existingView } = await supabase

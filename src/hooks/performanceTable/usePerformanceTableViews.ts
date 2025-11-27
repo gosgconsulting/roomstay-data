@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getAccountDefaultKPIs } from "@/lib/utils";
 import { mapDimensionIds, mapVisibleColumns } from "@/lib/performanceTable/viewSettingsMapper";
 import type { Dimension } from "./usePerformanceTableDimensions";
+import { useUser } from "@/lib/auth";
 
 interface View {
   id: string;
@@ -58,6 +59,8 @@ export function usePerformanceTableViews({
   onDateOrderChange,
   onSelectorDimensionsChange,
 }: UsePerformanceTableViewsOptions) {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [tableViews, setTableViews] = useState<View[]>([]);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [isViewInitialized, setIsViewInitialized] = useState<boolean>(false);
@@ -77,8 +80,6 @@ export function usePerformanceTableViews({
     setIsViewInitialized(false);
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
       console.log('[VIEWS] Loading views for report:', reportId, 'isSharedView:', isSharedView);
 
       let userId = user?.id;
@@ -384,7 +385,6 @@ export function usePerformanceTableViews({
     }
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         console.error("Cannot create default views: No user");
         return;
@@ -507,8 +507,6 @@ export function usePerformanceTableViews({
     }
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
       // Only save if user is logged in
       if (!user) return;
 

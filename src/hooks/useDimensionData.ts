@@ -2,11 +2,14 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { loadDimensionsForUser, type Dimension } from "@/lib/dimensionLoader";
 import { checkDimensionsHaveData } from "@/lib/dimensionUtils";
+import { useUser } from "@/lib/auth";
 
 /**
  * Hook for loading dimensions and checking their data availability
  */
 export function useDimensionData(reportId?: string) {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +31,6 @@ export function useDimensionData(reportId?: string) {
     setIsLoading(true);
     setError(null);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         setError("User not authenticated");
         return;
@@ -63,7 +65,7 @@ export function useDimensionData(reportId?: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [reportId, checkDataAvailability]);
+  }, [reportId, checkDataAvailability, user]);
 
   // Re-check data availability when reportId or dimensions change
   useEffect(() => {

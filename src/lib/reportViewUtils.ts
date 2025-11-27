@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getUser } from "@/lib/auth";
 
 /**
  * Cleans up filter_values to remove any dimension IDs not in filter_dimensions
@@ -71,8 +72,8 @@ export async function saveDimensionSettings(
     if (!hasAccess) {
       console.log(`[DIMENSION-SELECTOR] User doesn't own report, checking shares...`);
       // Check if report is shared with user
-      const { data: userData } = await supabase.auth.getUser();
-      const userEmail = userData.user?.email;
+      const { user } = await getUser();
+      const userEmail = user?.email;
       
       if (userEmail) {
         const { data: shareData } = await supabase

@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Edit, Trash2, Loader2, ArrowLeft } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
+import { useUser } from "@/lib/auth";
 
 interface Budget {
   id: string;
@@ -31,6 +32,8 @@ export default function BudgetPage() {
   const navigate = useNavigate();
   const { accountId } = useParams<{ accountId?: string }>();
   const { toast } = useToast();
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [session, setSession] = useState<Session | null>(null);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -83,7 +86,6 @@ export default function BudgetPage() {
   const loadBudgets = async () => {
     setIsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       let query = (supabase as any)

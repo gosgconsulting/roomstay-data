@@ -5,6 +5,7 @@ import { toast } from "@/hooks/use-toast";
 import { useVlookupMappings } from "@/hooks/useVlookupMappings";
 import type { Dimension } from "../performanceTable/usePerformanceTableDimensions";
 import type { BudgetTrackerFilterState } from "./useBudgetTrackerFilters";
+import { useUser } from "@/lib/auth";
 
 export interface BudgetTableRow {
   id: string;
@@ -45,6 +46,8 @@ export function useBudgetTrackerData({
   dimensions,
   onLoadingComplete,
 }: UseBudgetTrackerDataOptions) {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [tableData, setTableData] = useState<BudgetTableRow[]>([]);
   const [totalData, setTotalData] = useState<Record<string, any>>({});
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -106,8 +109,7 @@ export function useBudgetTrackerData({
       const budgetsMap: Record<string, Record<string, number>> = {};
       const breakdownDimId = breakdownByDimensions[0];
       const breakdownDim = breakdownDimId ? dimensions.find(d => d.id === breakdownDimId) : undefined;
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id || null;
+      const userId = user?.id || null;
 
       if (userId && breakdownDim) {
         let q = supabase

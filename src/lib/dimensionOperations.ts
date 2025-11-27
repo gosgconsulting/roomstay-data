@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { saveDimensionSettings } from "./reportViewUtils";
+import { getUser } from "@/lib/auth";
 
 /**
  * Saves dimension settings for a report
@@ -9,7 +10,7 @@ export async function saveDimensionsForReport(
   dimensions: string[]
 ): Promise<void> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user } = await getUser();
     if (!user) {
       throw new Error('User not authenticated');
     }

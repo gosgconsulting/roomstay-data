@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getUser } from "@/lib/auth";
 
 /**
  * Migrate an account from using global dimensions to account-specific dimensions
@@ -8,7 +9,7 @@ export async function migrateAccountToAccountDimensions(accountId: string): Prom
   try {
     console.log('[MIGRATION] Starting migration for account:', accountId);
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user } = await getUser();
     if (!user) {
       console.error('[MIGRATION] No user found');
       return false;
@@ -57,7 +58,11 @@ export async function migrateAccountToAccountDimensions(accountId: string): Prom
 
     console.log('[MIGRATION] Creating account dimensions for:', dimensionsToCreate.map(d => d.name));
 
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    const { user: currentUser } = await getUser();
+    if (!currentUser) {
+      console.error('[MIGRATION] No user found for creating dimensions');
+      return false;
+    }
     const accountDimensions = dimensionsToCreate.map(dim => ({
       name: dim.name,
       type: dim.type,

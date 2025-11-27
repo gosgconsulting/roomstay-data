@@ -21,6 +21,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { type DataSource } from "@/lib/sync-utils";
 import type { Dimension as AppDimension } from "@/types/dimensions";
+import { useUser } from "@/lib/auth";
 
 interface ViewDataModalProps {
   open: boolean;
@@ -33,6 +34,8 @@ export const ViewDataModal = ({
   onOpenChange, 
   dataSource 
 }: ViewDataModalProps) => {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [dimensionData, setDimensionData] = useState<any[]>([]);
   const [dimensions, setDimensions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -49,8 +52,6 @@ export const ViewDataModal = ({
     setIsLoading(true);
     
     try {
-      // Get user dimensions
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
       // Fetch dimensions mapped to this data source

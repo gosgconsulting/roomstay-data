@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { checkDimensionsHaveData, filterDimensionsByDataAvailability } from "@/lib/dimensionUtils";
 import type { DimensionCondition, FormulaConditionPair } from "@/types/dimensions";
+import { useUser } from "@/lib/auth";
 
 export interface Dimension {
   id: string;
@@ -32,6 +33,8 @@ export function usePerformanceTableDimensions({
   accountId,
   onColumnOrderInit,
 }: UsePerformanceTableDimensionsOptions) {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [dimensionHasData, setDimensionHasData] = useState<Record<string, boolean>>({});
   const [isLoadingDimensions, setIsLoadingDimensions] = useState(true);
@@ -60,8 +63,6 @@ export function usePerformanceTableDimensions({
     try {
       setIsLoadingDimensions(true);
       console.log('[DIMENSIONS] Starting dimension loading for report:', reportId);
-      
-      const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
         console.error("[DIMENSIONS] User not authenticated");
@@ -305,7 +306,7 @@ export function usePerformanceTableDimensions({
     } finally {
       setIsLoadingDimensions(false);
     }
-  }, [reportId, accountId, checkDataAvailability, onColumnOrderInit]);
+  }, [reportId, accountId, checkDataAvailability, onColumnOrderInit, user]);
 
   return {
     dimensions,

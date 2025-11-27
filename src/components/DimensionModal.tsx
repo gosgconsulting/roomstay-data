@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import type { Dimension, DimensionCondition, FormulaConditionPair } from "@/types/dimensions";
+import { useUser } from "@/lib/auth";
 
 interface DimensionModalProps {
   open: boolean;
@@ -40,6 +41,8 @@ export const DimensionModal = ({
   reportId,
   accountId,
 }: DimensionModalProps) => {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [name, setName] = useState("");
   const [type, setType] = useState("number");
   const [formula, setFormula] = useState("");
@@ -62,7 +65,6 @@ export const DimensionModal = ({
 
   const loadAvailableDimensions = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       console.log('[DIMENSION-MODAL] Loading available dimensions for formula - accountId:', accountId, 'reportId:', reportId);
@@ -359,8 +361,6 @@ export const DimensionModal = ({
 
     try {
       setIsLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      
       if (!user) throw new Error("User not authenticated");
 
       if (mode === 'edit' && dimension) {

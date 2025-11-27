@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useUser } from "@/lib/auth";
 
 interface CreateShareLinkModalProps {
   open: boolean;
@@ -51,7 +52,6 @@ export const CreateShareLinkModal = ({
   }, [open, editingLink, accountId]);
 
   const loadReportsAndAutoSelect = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     // Check if user is master account
@@ -179,7 +179,6 @@ export const CreateShareLinkModal = ({
 
     setLoading(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     // Simple hash (in production, use proper bcrypt or similar)

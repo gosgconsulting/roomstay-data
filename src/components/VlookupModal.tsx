@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import MultiSelect from "@/components/MultiSelect";
+import { useUser } from "@/lib/auth";
 
 type Row = {
   sourceDimensionId?: string;
@@ -45,6 +46,8 @@ export default function VlookupModal({
 }: VlookupModalProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
 
   const [loadedDims, setLoadedDims] = useState<Dimension[]>([]);
   const allDims: Dimension[] = useMemo(() => (dimensions.length > 0 ? dimensions : loadedDims), [dimensions, loadedDims]);
@@ -89,7 +92,6 @@ export default function VlookupModal({
     let cancel = false;
     async function loadDims() {
       if (!open) return;
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       console.log('[VlookupModal] Loading dimensions for user:', user.id, 'accountId:', accountId, 'reportId:', reportId);
@@ -221,7 +223,7 @@ export default function VlookupModal({
     }
     loadDims();
     return () => { cancel = true; };
-  }, [open, accountId, reportId]);
+  }, [open, accountId, reportId, user]);
 
   // Load existing mappings and prefill rows on open
   useEffect(() => {
@@ -234,7 +236,6 @@ export default function VlookupModal({
       console.log('[VlookupModal] Loading existing mappings for accountId:', accountId, 'reportId:', reportId);
 
       try {
-        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         // Query cluster_dimensions with prioritized scope logic (same as save logic)
@@ -409,7 +410,6 @@ export default function VlookupModal({
     const name = row.newDimensionName?.trim();
     if (!name) return null;
 
-    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
     // Check if dimension with this name already exists in account scope
@@ -448,7 +448,6 @@ export default function VlookupModal({
   }
 
   async function findOrCreateClusterDimension(sourceDimensionId: string, targetDimensionId: string, newName: string): Promise<string> {
-    const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
     const clusterName = (newName || 'Cluster').trim();
@@ -584,7 +583,6 @@ export default function VlookupModal({
 
       // Add newly created target dimensions to filter settings so they appear in FiltersBar
       if (reportId) {
-        const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           // Get unique target dimension IDs from valid rows
           const targetDimensionIds = Array.from(new Set(

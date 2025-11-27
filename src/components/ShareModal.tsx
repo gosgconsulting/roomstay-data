@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Trash2, Edit, Plus, Link as LinkIcon, Copy } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CreateShareLinkModal } from "./CreateShareLinkModal";
+import { useUser } from "@/lib/auth";
 
 interface ShareModalProps {
   reportId: string;
@@ -23,6 +24,8 @@ interface ShareLink {
 }
 
 export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId }: ShareModalProps) => {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -37,8 +40,6 @@ export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId
 
   const loadShareLinks = async () => {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-
     if (!user) return;
 
     let query = supabase

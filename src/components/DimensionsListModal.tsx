@@ -24,6 +24,7 @@ import { Pencil, Trash2, Plus, Link, Eye, EyeOff, Save, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import type { Dimension } from "@/types/dimensions";
+import { useUser } from "@/lib/auth";
 
 interface DimensionsListModalProps {
   open: boolean;
@@ -55,6 +56,8 @@ export const DimensionsListModal = ({
   accountId,
   onVisibilityChange,
 }: DimensionsListModalProps) => {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [textDimensions, setTextDimensions] = useState<Dimension[]>([]);
   const [valueDimensions, setValueDimensions] = useState<Dimension[]>([]);
   const [vlookupDimensions, setVlookupDimensions] = useState<Dimension[]>([]);
@@ -101,7 +104,6 @@ export const DimensionsListModal = ({
         return;
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         setVisibleDimensions(new Set());
         setInitialVisibleDimensions(new Set());
@@ -170,7 +172,6 @@ export const DimensionsListModal = ({
         return;
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         toast({
           title: "Error",
@@ -316,7 +317,6 @@ export const DimensionsListModal = ({
 
   const loadMappedDimensions = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       // Get all data sources for the user's reports in this account
@@ -364,8 +364,6 @@ export const DimensionsListModal = ({
   const loadDimensions = async () => {
     try {
       setIsLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-
       if (!user) throw new Error("User not authenticated");
 
       console.log('[testing] Loading dimensions for user:', user.id, 'report:', reportId, 'account:', accountId);

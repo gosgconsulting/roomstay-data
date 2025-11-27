@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff } from "@/lib/debug";
 import { loadReportData, calculateKPIMetrics, getCurrentMonthDateRange, Dimension } from "@/lib/data-loading-fix";
 import { cn } from "@/lib/utils";
+import { useUser } from "@/lib/auth";
 
 interface KPIMetric {
   label: string;
@@ -38,6 +39,8 @@ export function KPIMetricsCards({
   visibilityRefreshTrigger,
   headerAction
 }: KPIMetricsCardsProps) {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -91,7 +94,6 @@ export function KPIMetricsCards({
     setIsLoading(true);
     try {
       // Get the current user (optional for public/shared views)
-      const { data: { user } } = await supabase.auth.getUser();
       console.log('[KPI-FIXED] loadMetrics - User:', user?.id);
       
       if (!reportId || !accountId) {

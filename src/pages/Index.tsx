@@ -19,6 +19,7 @@ import { Settings } from "lucide-react";
 import { fallbackAuth, clearAuthAndReload, checkCORSIssues } from "@/lib/auth-fallback";
 import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import { useQueryClient } from "@tanstack/react-query";
+import { authKeys } from "@/lib/auth";
 
 // ADD: Minimal Report type and state to populate sidebar
 type SidebarReport = { id: string; name: string; account_id: string | null; created_at: string; updated_at: string };
@@ -107,6 +108,11 @@ export default function Index() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       console.log('[AUTH] Auth state changed:', event);
       
+      // Invalidate React Query cache on auth state changes
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        queryClient.invalidateQueries({ queryKey: authKeys.user() });
+      }
+      
       // Update session when signed in
       if (event === 'SIGNED_IN' && newSession) {
         setSession(newSession);
@@ -123,7 +129,7 @@ export default function Index() {
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, queryClient]);
 
   // When reportId changes, refresh all components
   useEffect(() => {

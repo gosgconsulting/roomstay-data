@@ -14,6 +14,7 @@ import { ColumnMappingStep, ColumnMappingStepRef } from "./ColumnMappingStep";
 import { resyncColumnMappings } from "@/lib/resync-dimensions";
 import { resyncReportViews } from "@/lib/resync-report-views";
 import { useDataSourceHeaders } from "@/hooks/useDataSourceHeaders";
+import { useUser } from "@/lib/auth";
 
 interface DataSource {
   id: string;
@@ -43,6 +44,8 @@ export const EditMappingModal = ({
   onSuccess,
   accountId: propAccountId
 }: EditMappingModalProps) => {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [isLoading, setIsLoading] = useState(false);
   const [accountId, setAccountId] = useState<string | undefined>(propAccountId);
   const mappingStepRef = useRef<ColumnMappingStepRef>(null);
@@ -156,8 +159,6 @@ export const EditMappingModal = ({
     setIsLoading(true);
     
     try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
       // Get report_id from data_source

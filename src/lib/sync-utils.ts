@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getUser } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 
 // Types
@@ -1112,7 +1113,7 @@ export const syncDataSource = async (
     }
     
     // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { user, error: userError } = await getUser();
     if (userError || !user) {
       throw new Error("Authentication failed. Please refresh the page and log in again.");
     }

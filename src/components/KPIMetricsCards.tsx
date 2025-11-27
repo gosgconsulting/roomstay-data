@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import { autoFixDimensionSync } from "@/lib/dimension-sync-auto-fix";
+import { useUser } from "@/lib/auth";
 
 interface KPIMetric {
   label: string;
@@ -34,6 +35,8 @@ export const KPIMetricsCards = ({
   visibilityRefreshTrigger,
   dimensions = []
 }: KPIMetricsCardsProps) => {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -101,7 +104,6 @@ export const KPIMetricsCards = ({
       let visibleKPIs: string[] | null = null;
       let kpiOrder: string[] | null = null;
 
-      const { data: { user } } = await supabase.auth.getUser();
       if (user?.id) {
         const { data: viewSettings } = await supabase
           .from("report_views")

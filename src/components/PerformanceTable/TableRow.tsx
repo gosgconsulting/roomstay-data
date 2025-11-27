@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 // NEW: import BudgetModal for popup editing
 import { BudgetModal } from "@/components/BudgetModal";
+import { useUser } from "@/lib/auth";
 
 interface TableRowProps {
   row: TableRowType;
@@ -58,6 +59,8 @@ export function TableRow({
   reportId = null,
   accountId = null,
 }: TableRowProps) {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [localBudget, setLocalBudget] = useState<number | null>(typeof (row as any)?.data?.Budget === 'number' ? (row as any).data.Budget : null);
   // NEW: editing state and ref to focus input (kept for future inline edit use)
   const [isEditingBudget, setIsEditingBudget] = useState(false);
@@ -109,12 +112,11 @@ export function TableRow({
 
     const itemName = String(row.name).trim();
 
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userData?.user) {
+    if (!user) {
       toast({ title: "Not signed in", description: "Please log in to save budgets", variant: "destructive" });
       return;
     }
-    const userId = userData.user.id;
+    const userId = user.id;
 
     // Find existing budget row for this (user, account/report, dimension_name, dimension_item)
     let query = supabase
@@ -193,9 +195,8 @@ export function TableRow({
     const itemName = String(row.name).trim();
     if (!monthYM || !breakdownDim) return;
 
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData?.user?.id;
-    if (!userId) return;
+    if (!user) return;
+    const userId = user.id;
 
     let query = supabase
       .from('budgets')

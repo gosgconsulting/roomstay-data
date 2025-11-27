@@ -17,6 +17,7 @@ import type { Dimension } from "@/types/dimensions";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useUser } from "@/lib/auth";
 
 interface Report {
   id: string;
@@ -57,6 +58,8 @@ export function DashboardHeader({
 }: DashboardHeaderProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const location = useLocation();
   const isAllReportsPage = location.pathname.startsWith('/all-reports');
   
@@ -172,7 +175,6 @@ export function DashboardHeader({
     
     try {
       setIsCreatingDimensions(true);
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user || !reportId) {
         console.log('[DIMENSIONS] Skipping default dimensions - no user or reportId');
         return;
@@ -242,7 +244,6 @@ export function DashboardHeader({
 
   const loadReports = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         setIsLoading(false);
         return;
@@ -349,8 +350,6 @@ export function DashboardHeader({
 
   const handleCreateReport = async (name: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
       if (!user) {
         throw new Error("User not authenticated");
       }

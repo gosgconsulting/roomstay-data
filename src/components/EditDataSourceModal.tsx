@@ -20,6 +20,7 @@ import { FileSpreadsheet, ChevronLeft, RefreshCw } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ColumnMappingStep } from "./ColumnMappingStep";
+import { useUser } from "@/lib/auth";
 import { 
   syncDataSource, 
   extractSpreadsheetId, 
@@ -58,6 +59,8 @@ export const EditDataSourceModal = ({
   onRefreshData,
   accountId
 }: EditDataSourceModalProps) => {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [step, setStep] = useState(1);
   const [dataName, setDataName] = useState("");
   const [url, setUrl] = useState("");
@@ -345,8 +348,6 @@ export const EditDataSourceModal = ({
     setIsLoading(true);
     
     try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
       // Update data source metadata
@@ -469,8 +470,7 @@ export const EditDataSourceModal = ({
       }
       
       // Verify user is authenticated
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
+      if (!user) {
         throw new Error("Authentication failed. Please refresh the page and log in again.");
       }
       

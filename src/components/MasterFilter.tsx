@@ -8,6 +8,7 @@ import { Check, ChevronDown, Settings, X, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useUser } from "@/lib/auth";
 
 interface Dimension {
   id: string;
@@ -29,6 +30,8 @@ export const MasterFilter = ({
   selectedDimension, 
   selectedValues 
 }: MasterFilterProps) => {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -51,7 +54,6 @@ export const MasterFilter = ({
       setIsLoading(true);
       console.log('[MASTER-FILTER] Loading dimensions for account:', accountId);
 
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       // Load dimensions that can be used as master filters (text type only)
@@ -87,7 +89,6 @@ export const MasterFilter = ({
     try {
       console.log('[MASTER-FILTER] Loading values for dimension:', dimensionId);
 
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       // Get unique values for this dimension across all reports

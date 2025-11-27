@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useUser } from "@/lib/auth";
 import {
   DndContext,
   closestCenter,
@@ -110,6 +111,8 @@ export function KPISettingsModal({
   visibilityRefreshTrigger,
   isEditMode = false
 }: KPISettingsModalProps) {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [kpis, setKpis] = useState<KPIConfig[]>([]);
   const [initialKpis, setInitialKpis] = useState<KPIConfig[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -141,7 +144,6 @@ export function KPISettingsModal({
 
     setIsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         console.error('[KPI-SETTINGS] No authenticated user found');
         return;
@@ -296,7 +298,6 @@ export function KPISettingsModal({
     
     setIsSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const visibleKPIs = kpis.filter(item => item.visible).map(item => item.name);

@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff } from "@/lib/debug";
 import { loadReportData, getCurrentMonthDateRange, Dimension } from "@/lib/data-loading-fix";
 import { format, parseISO } from "date-fns";
+import { useUser } from "@/lib/auth";
 
 interface KPIChartProps {
   reportId: string | null;
@@ -34,6 +35,8 @@ export function KPIChart({
   isEditMode = false,
   onMetricChange,
 }: KPIChartProps) {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [chartData, setChartData] = useState<any[]>([]);
   const [selectedMetric, setSelectedMetric] = useState<string>(initialMetric || "Revenue");
   const [isLoading, setIsLoading] = useState(true);
@@ -171,8 +174,6 @@ export function KPIChart({
     setIsLoading(true);
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
       if (!reportId || !accountId) {
         console.error('[CHART-FIXED] Missing required data:', { reportId, accountId });
         setChartData([]);

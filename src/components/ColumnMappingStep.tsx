@@ -20,6 +20,7 @@ import { Eye, EyeOff, Check } from "lucide-react";
 import { useState, useEffect, useImperativeHandle, forwardRef } from "react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useUser } from "@/lib/auth";
 
 interface Dimension {
   id: string;
@@ -65,14 +66,18 @@ export const ColumnMappingStep = forwardRef<ColumnMappingStepRef, ColumnMappingS
   reportId,
   hideButtons = false,
 }, ref) => {
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
   const [isLoadingDimensions, setIsLoadingDimensions] = useState(true);
   const [creatingDimensionIndex, setCreatingDimensionIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    loadDimensions();
-  }, []);
+    if (user) {
+      loadDimensions();
+    }
+  }, [user]);
 
   useEffect(() => {
     if (dimensions.length > 0 && headers.length > 0) {
@@ -83,8 +88,6 @@ export const ColumnMappingStep = forwardRef<ColumnMappingStepRef, ColumnMappingS
   const loadDimensions = async () => {
     try {
       setIsLoadingDimensions(true);
-      const { data: { user } } = await supabase.auth.getUser();
-
       if (!user) return;
 
       if (!accountId) {

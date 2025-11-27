@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getUser } from "@/lib/auth";
 
 interface VlookupMapping {
   sourceValue: string;
@@ -12,7 +13,7 @@ export function useVlookupMappings(reportId?: string, accountId?: string) {
   return useQuery({
     queryKey: ['vlookup-mappings', reportId, accountId],
     queryFn: async (): Promise<VlookupMapping[]> => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { user } = await getUser();
       if (!user) return [];
 
       // Load cluster_dimensions for this user and scope (report or account)
