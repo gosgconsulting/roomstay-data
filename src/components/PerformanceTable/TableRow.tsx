@@ -1,4 +1,4 @@
-import { Fragment, useState, useRef } from "react";
+import { Fragment, useState, useRef, useEffect } from "react";
 import { ChevronDown, ChevronRight, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatRowName, formatValue } from "@/lib/performanceTable/formatters";
@@ -62,6 +62,7 @@ export function TableRow({
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [localBudget, setLocalBudget] = useState<number | null>(typeof (row as any)?.data?.Budget === 'number' ? (row as any).data.Budget : null);
+  const [hasLoadedFromDb, setHasLoadedFromDb] = useState(false);
   // NEW: editing state and ref to focus input (kept for future inline edit use)
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const budgetInputRef = useRef<HTMLInputElement | null>(null);
@@ -171,7 +172,15 @@ export function TableRow({
   };
 
   // NEW: computed display budget
-  const displayBudget = localBudget ?? (row as any)?.data?.Budget ?? 0;
+  // If we've loaded from DB, use localBudget (null means no budget, so show 0)
+  // Otherwise, fall back to row.data.Budget
+  const displayBudget = hasLoadedFromDb 
+    ? (localBudget ?? 0) 
+    : (localBudget ?? (row as any)?.data?.Budget ?? 0);
+  
+  // Show "Set Budget" only if we've confirmed there's no budget in DB (loaded and found null)
+  // This prevents showing "Set Budget" for a budget value of 0 before we've loaded from DB
+  const shouldShowSetBudget = hasLoadedFromDb && localBudget === null;
 
   // NEW: handle opening modal with presets and refresh after save
   const openBudgetModal = async () => {
@@ -211,10 +220,22 @@ export function TableRow({
 
     const { data: existing } = await query;
     const val = (existing?.[0]?.budget_data ?? {})[monthYM];
+    setHasLoadedFromDb(true);
     if (typeof val === 'number') {
       setLocalBudget(val);
+    } else {
+      // Reset to null if no budget found (so it shows "Set Budget")
+      setLocalBudget(null);
     }
   };
+
+  // Load budget from database on mount and when relevant props change
+  useEffect(() => {
+    if (isMonthView && isBreakdownChild && user) {
+      refreshBudgetFromDb();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMonthView, isBreakdownChild, user, reportId, accountId, breakdownByDimensions, row.name]);
 
   return (
     <>
@@ -283,12 +304,12 @@ export function TableRow({
                   }}
                 />
               ) : (isMonthView && isBreakdownChild) ? (
-                // NEW: clickable display; show "Set" when budget is 0, opens modal
+                // NEW: clickable display; show "Set Budget" when no budget exists, opens modal
                 <span
                   className={cn(
                     "select-none",
                     isEditMode && isMonthView && isBreakdownChild && "cursor-pointer",
-                    displayBudget === 0 && "text-muted-foreground underline"
+                    shouldShowSetBudget && "text-muted-foreground underline"
                   )}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -296,7 +317,7 @@ export function TableRow({
                   }}
                   title={isEditMode && isMonthView && isBreakdownChild ? "Click to set budget" : undefined}
                 >
-                  {displayBudget === 0 ? "Set Budget" : formatValue(displayBudget, budgetDimForFormatValue)}
+                  {shouldShowSetBudget ? "Set Budget" : formatValue(displayBudget, budgetDimForFormatValue)}
                 </span>
               ) : null}
             </div>

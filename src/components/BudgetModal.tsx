@@ -192,6 +192,16 @@ export const BudgetModal = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, selectedDimension, reportId, accountId, dimensions]);
 
+  // Load existing budget data when presets are provided and item is selected
+  useEffect(() => {
+    const hasPresets = !!(presetDimensionName && presetItemName && presetYearMonth);
+    if (open && hasPresets && selectedDimension && selectedItem && user && !budget) {
+      console.log("[testing] Loading existing budget for presets:", { selectedDimension, selectedItem });
+      loadExistingBudget(selectedDimension, selectedItem);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, presetDimensionName, presetItemName, presetYearMonth, selectedDimension, selectedItem, user, budget]);
+
   const loadDimensions = async () => {
     try {
       if (!user) return;
@@ -371,6 +381,54 @@ export const BudgetModal = ({
     }
   };
 
+  const loadExistingBudget = async (dimensionName: string, itemName: string) => {
+    try {
+      if (!user) return;
+
+      let query = supabase
+        .from("budgets")
+        .select("budget_data")
+        .eq("user_id", user.id)
+        .eq("dimension_name", dimensionName)
+        .eq("dimension_item", itemName)
+        .limit(1);
+
+      if (accountId) query = query.eq("account_id", accountId);
+      else if (reportId) query = query.eq("report_id", reportId);
+
+      const { data: existing, error } = await query;
+      if (error) {
+        console.error("[testing] Error loading existing budget:", error);
+        return;
+      }
+
+      if (existing && existing.length > 0) {
+        const budgetDataRaw = existing[0].budget_data || {};
+        // Check if it's flat format (has 'YYYY-MM' keys) or nested
+        const isFlatFormat = Object.keys(budgetDataRaw).some(k => /^\d{4}-\d{2}$/.test(k));
+        const nestedBudgetData = isFlatFormat 
+          ? unflattenBudgetData(budgetDataRaw as unknown as Record<string, number>)
+          : budgetDataRaw as Record<string, Record<string, number>>;
+        
+        console.log("[testing] Loaded existing budget data:", nestedBudgetData);
+        setBudgetData(nestedBudgetData);
+        
+        // Set selected year to preset year if available, otherwise use first year in data
+        if (presetYearMonth) {
+          const presetYear = presetYearMonth.slice(0, 4);
+          setSelectedYear(presetYear);
+        } else {
+          const years = Object.keys(nestedBudgetData);
+          if (years.length > 0) {
+            setSelectedYear(years[0]);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("[testing] Error loading existing budget:", error);
+    }
+  };
+
   const loadDimensionItems = async (dimensionName: string) => {
     try {
       const items = new Set<string>();
@@ -474,6 +532,10 @@ export const BudgetModal = ({
       if (presetItemName && presetDimensionName === dimensionName && sortedItems.includes(presetItemName)) {
         console.log("[testing] Auto-selecting preset item:", presetItemName);
         setSelectedItem(presetItemName);
+        // Load existing budget data for this preset
+        if (user && !budget) {
+          loadExistingBudget(dimensionName, presetItemName);
+        }
       } else if (budget?.dimension_item && budget.dimension_name === dimensionName && sortedItems.includes(budget.dimension_item)) {
         // Auto-select item when editing existing budget
         console.log("[testing] Auto-selecting budget item:", budget.dimension_item);
@@ -597,7 +659,8 @@ export const BudgetModal = ({
     const yearData = budgetData[selectedYear];
     if (!yearData) return "";
     const value = yearData[month];
-    return value === undefined || value === 0 ? "" : value.toString();
+    // Return empty string only if value is undefined, show 0 if value is actually 0
+    return value === undefined ? "" : value.toString();
   };
 
   // Parse presetYearMonth to get year and month
