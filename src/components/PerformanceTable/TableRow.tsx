@@ -400,6 +400,8 @@ export function TableRow({
           presetDimensionName={presetDimensionName}
           presetItemName={presetItemName}
           presetYearMonth={presetYearMonth}
+          // Pass existing budget value to avoid fetching from DB
+          initialBudgetValue={localBudget}
           onSuccess={() => {
             setIsBudgetModalOpen(false);
             refreshBudgetFromDb();

@@ -49,6 +49,8 @@ interface BudgetModalProps {
   presetItemName?: string;
   // 'YYYY-MM' format
   presetYearMonth?: string;
+  // NEW: initial budget value to avoid fetching from DB
+  initialBudgetValue?: number | null;
 }
 
 const MONTHS = [
@@ -76,6 +78,7 @@ export const BudgetModal = ({
   presetDimensionName,
   presetItemName,
   presetYearMonth,
+  initialBudgetValue,
 }: BudgetModalProps) => {
   const { toast } = useToast();
   const { data: userData } = useUser();
@@ -151,9 +154,22 @@ export const BudgetModal = ({
         // Creating new budget (with presets if provided)
         setSelectedDimension(presetDimensionName || "");
         setSelectedItem(presetItemName || "");
-        setBudgetData({});
         const presetYear = presetYearMonth?.slice(0, 4);
         setSelectedYear(presetYear || currentYear.toString());
+        
+        // If initialBudgetValue is provided, use it instead of fetching from DB
+        if (presetYearMonth && initialBudgetValue !== undefined && initialBudgetValue !== null) {
+          const presetMonth = presetYearMonth.slice(5, 7);
+          const monthNum = String(parseInt(presetMonth, 10)); // Remove leading zero
+          setBudgetData({
+            [presetYear]: {
+              [monthNum]: initialBudgetValue,
+            },
+          });
+          console.log("[testing] Using initial budget value:", initialBudgetValue, "for", presetYearMonth);
+        } else {
+          setBudgetData({});
+        }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -193,14 +209,15 @@ export const BudgetModal = ({
   }, [open, selectedDimension, reportId, accountId, dimensions]);
 
   // Load existing budget data when presets are provided and item is selected
+  // Skip if initialBudgetValue is provided (data already available)
   useEffect(() => {
     const hasPresets = !!(presetDimensionName && presetItemName && presetYearMonth);
-    if (open && hasPresets && selectedDimension && selectedItem && user && !budget) {
+    if (open && hasPresets && selectedDimension && selectedItem && user && !budget && initialBudgetValue === undefined) {
       console.log("[testing] Loading existing budget for presets:", { selectedDimension, selectedItem });
       loadExistingBudget(selectedDimension, selectedItem);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, presetDimensionName, presetItemName, presetYearMonth, selectedDimension, selectedItem, user, budget]);
+  }, [open, presetDimensionName, presetItemName, presetYearMonth, selectedDimension, selectedItem, user, budget, initialBudgetValue]);
 
   const loadDimensions = async () => {
     try {
@@ -532,8 +549,8 @@ export const BudgetModal = ({
       if (presetItemName && presetDimensionName === dimensionName && sortedItems.includes(presetItemName)) {
         console.log("[testing] Auto-selecting preset item:", presetItemName);
         setSelectedItem(presetItemName);
-        // Load existing budget data for this preset
-        if (user && !budget) {
+        // Load existing budget data for this preset only if initialBudgetValue is not provided
+        if (user && !budget && initialBudgetValue === undefined) {
           loadExistingBudget(dimensionName, presetItemName);
         }
       } else if (budget?.dimension_item && budget.dimension_name === dimensionName && sortedItems.includes(budget.dimension_item)) {
