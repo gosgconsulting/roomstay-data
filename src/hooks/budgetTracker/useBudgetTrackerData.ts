@@ -6,6 +6,8 @@ import { useVlookupMappings } from "@/hooks/useVlookupMappings";
 import type { Dimension } from "../performanceTable/usePerformanceTableDimensions";
 import type { BudgetTrackerFilterState } from "./useBudgetTrackerFilters";
 import { useUser } from "@/lib/auth";
+import { fetchPerformanceData } from "../performanceTable/usePerformanceData";
+import { useQueryClient } from "@tanstack/react-query";
 
 export interface BudgetTableRow {
   id: string;
@@ -46,6 +48,7 @@ export function useBudgetTrackerData({
   dimensions,
   onLoadingComplete,
 }: UseBudgetTrackerDataOptions) {
+  const queryClient = useQueryClient();
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [tableData, setTableData] = useState<BudgetTableRow[]>([]);
@@ -136,30 +139,23 @@ export function useBudgetTrackerData({
         }
       }
 
-      // Use edge function for optimized, server-side data loading
-      const { data: edgeFunctionData, error: fetchError } = await supabase.functions.invoke(
-        'get-performance-data',
-        {
-          body: {
-            reportId: reportId,
-            reportIds: reportIds || undefined,
-            accountId: accountId,
-            groupByDims: groupByDimensions,
-            breakdownDims: breakdownByDimensions,
-            thenByDims: thenByDimensions,
-            visibleDimensionIds: Array.from(visibleColumns),
-            dimensionFilters: {},
-            dateFrom: dateFromFormatted,
-            dateTo: dateToFormatted,
-            dateGranularity: activeDateTab === 'year' ? 'year' : 'month',
-            dateOrder: 'desc',
-            limit: 50000,
-            offset: 0
-          }
-        }
-      );
-
-      if (fetchError) throw fetchError;
+      // Use edge function for optimized, server-side data loading with React Query caching
+      const edgeFunctionData = await fetchPerformanceData({
+        reportId: reportId || undefined,
+        reportIds: reportIds,
+        accountId: accountId!,
+        groupByDims: groupByDimensions,
+        breakdownDims: breakdownByDimensions,
+        thenByDims: thenByDimensions,
+        visibleDimensionIds: Array.from(visibleColumns),
+        dimensionFilters: {},
+        dateFrom: dateFromFormatted,
+        dateTo: dateToFormatted,
+        dateGranularity: activeDateTab === 'year' ? 'year' : 'month',
+        dateOrder: 'desc',
+        limit: 50000,
+        offset: 0
+      }, queryClient);
       
       const rawRows = edgeFunctionData?.data || [];
 
@@ -542,7 +538,8 @@ export function useBudgetTrackerData({
     dimensions.length,
     onLoadingComplete,
     vlookupMappings.length,
-    yearMonths.length
+    yearMonths.length,
+    queryClient
   ]);
 
   return {

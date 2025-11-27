@@ -7,6 +7,7 @@ import { retryWithBackoff } from "@/lib/debug";
 import { loadReportData, getCurrentMonthDateRange, Dimension } from "@/lib/data-loading-fix";
 import { format, parseISO } from "date-fns";
 import { useUser } from "@/lib/auth";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface KPIChartProps {
   reportId: string | null;
@@ -35,6 +36,7 @@ export function KPIChart({
   isEditMode = false,
   onMetricChange,
 }: KPIChartProps) {
+  const queryClient = useQueryClient();
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [chartData, setChartData] = useState<any[]>([]);
@@ -191,8 +193,8 @@ export function KPIChart({
 
       console.log('[CHART-FIXED] Loading data with filters:', dataFilters);
 
-      // Load data using the standardized approach
-      const result = await loadReportData(reportId, accountId, user?.id, dataFilters);
+      // Load data using the standardized approach with React Query caching
+      const result = await loadReportData(reportId, accountId, user?.id, dataFilters, queryClient);
 
       if (!result.success) {
         console.error('[CHART-FIXED] Failed to load report data:', result.error);
@@ -280,7 +282,7 @@ export function KPIChart({
           dimensionFilters: dataFilters.dimensionFilters
         };
 
-        const previousResult = await loadReportData(reportId, accountId, user?.id, previousPeriodFilters);
+        const previousResult = await loadReportData(reportId, accountId, user?.id, previousPeriodFilters, queryClient);
         const previousData = previousResult.success ? previousResult.data : [];
 
         // Group previous period data by date (offset by the period difference)

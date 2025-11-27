@@ -6,6 +6,7 @@ import { retryWithBackoff } from "@/lib/debug";
 import { loadReportData, calculateKPIMetrics, getCurrentMonthDateRange, Dimension } from "@/lib/data-loading-fix";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/lib/auth";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface KPIMetric {
   label: string;
@@ -39,6 +40,7 @@ export function KPIMetricsCards({
   visibilityRefreshTrigger,
   headerAction
 }: KPIMetricsCardsProps) {
+  const queryClient = useQueryClient();
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
@@ -151,8 +153,8 @@ export function KPIMetricsCards({
         isCurrentMonth: !stableFilters.dateRange
       });
 
-      // Load data using the standardized approach
-      const result = await loadReportData(reportId, accountId, user?.id, filters);
+      // Load data using the standardized approach with React Query caching
+      const result = await loadReportData(reportId, accountId, user?.id, filters, queryClient);
 
       if (!result.success) {
         console.error('[KPI-FIXED] Failed to load report data:', result.error);
@@ -180,7 +182,7 @@ export function KPIMetricsCards({
           dimensionFilters: stableFilters.dimensionFilters
         };
 
-        const comparisonResult = await loadReportData(reportId, accountId, user?.id, comparisonFilters);
+        const comparisonResult = await loadReportData(reportId, accountId, user?.id, comparisonFilters, queryClient);
         if (comparisonResult.success) {
           comparisonMetrics = await calculateKPIMetrics(comparisonResult.data, dimensions, reportId, accountId);
           console.log('[KPI-FIXED] Comparison metrics calculated:', comparisonMetrics);

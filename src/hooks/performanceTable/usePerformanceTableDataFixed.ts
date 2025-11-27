@@ -1,10 +1,11 @@
 import { useState, useCallback } from "react";
 import { format } from "date-fns";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useVlookupMappings } from "@/hooks/useVlookupMappings";
 import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "./usePerformanceTableDimensions";
+import { fetchPerformanceData } from "./usePerformanceData";
+import { useQueryClient } from "@tanstack/react-query";
 
 export interface TableRow {
   id: string;
@@ -50,6 +51,7 @@ export function usePerformanceTableDataFixed({
   dimensions,
   onLoadingComplete,
 }: UsePerformanceTableDataOptions) {
+  const queryClient = useQueryClient();
   const [tableData, setTableData] = useState<TableRow[]>([]);
   const [totalData, setTotalData] = useState<Record<string, any>>({});
   const [totalCompareData, setTotalCompareData] = useState<Record<string, any>>({});
@@ -83,33 +85,25 @@ export function usePerformanceTableDataFixed({
     }
 
     try {
-      // Use edge function for optimized, server-side data loading
-      const { data: edgeFunctionData, error: fetchError } = await supabase.functions.invoke(
-        'get-performance-data',
-        {
-          body: {
-            reportId: reportId,
-            reportIds: reportIds || undefined,
-            accountId: accountId,
-            groupByDims: groupByDimensions,
-            breakdownDims: breakdownByDimensions,
-            thenByDims: thenByDimensions,
-            visibleDimensionIds: Array.from(visibleColumns),
-            dimensionFilters: filters.dimensionFilters,
-            dateFrom: dateFromFormatted,
-            dateTo: dateToFormatted,
-            dateGranularity: activeDateTab,
-            dateOrder: dateOrder,
-            limit: 50000,
-            offset: 0
-          }
-        }
-      );
-
-      if (fetchError) throw fetchError;
+      // Use edge function for optimized, server-side data loading with React Query caching
+      const edgeFunctionData = await fetchPerformanceData({
+        reportId: reportId || undefined,
+        reportIds: reportIds,
+        accountId: accountId!,
+        groupByDims: groupByDimensions,
+        breakdownDims: breakdownByDimensions,
+        thenByDims: thenByDimensions,
+        visibleDimensionIds: Array.from(visibleColumns),
+        dimensionFilters: filters.dimensionFilters,
+        dateFrom: dateFromFormatted,
+        dateTo: dateToFormatted,
+        dateGranularity: activeDateTab,
+        dateOrder: dateOrder,
+        limit: 50000,
+        offset: 0
+      }, queryClient);
       
       const rawRows = edgeFunctionData?.data || [];
-      if (fetchError) throw fetchError;
 
       if (!rawRows || rawRows.length === 0) {
         console.log('[PERF-DATA-FIXED] No data returned from edge function');
@@ -230,7 +224,8 @@ export function usePerformanceTableDataFixed({
     dateOrder,
     dimensions.length,
     onLoadingComplete,
-    vlookupMappings.length
+    vlookupMappings.length,
+    queryClient
   ]);
 
   return {

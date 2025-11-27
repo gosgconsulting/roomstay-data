@@ -12,6 +12,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 import type { Dimension as LoaderDimension } from "@/lib/dimensionLoader";
 import type { FormulaConditionPair } from "@/types/dimensions";
+import { fetchPerformanceData } from "@/hooks/performanceTable/usePerformanceData";
+import type { QueryClient } from "@tanstack/react-query";
 
 export interface Dimension {
   id: string;
@@ -117,6 +119,12 @@ export async function loadAccountDimensions(accountId: string, userId?: string, 
 
 /**
  * Load and filter dimension data using the edge function
+ * 
+ * @param reportId - Report ID
+ * @param accountId - Account ID
+ * @param userId - Optional user ID
+ * @param filters - Optional filters for date range and dimensions
+ * @param queryClient - Optional React Query client for caching. When provided, uses cache.
  */
 export async function loadReportData(
   reportId: string,
@@ -125,7 +133,8 @@ export async function loadReportData(
   filters?: {
     dateRange?: { from: Date; to?: Date };
     dimensionFilters?: Record<string, string[]>;
-  }
+  },
+  queryClient?: QueryClient
 ): Promise<DataLoadingResult> {
   console.log('[DATA-FIX] Loading report data via edge function:', { reportId, accountId, filters });
   
@@ -181,30 +190,18 @@ export async function loadReportData(
       visibleDimensionIds: dimensions.map(d => d.id)
     });
 
-    const { data: edgeData, error: edgeError } = await supabase.functions.invoke('get-performance-data', {
-      body: {
-        reportId,
-        accountId,
-        userId,
-        dateFrom,
-        dateTo,
-        dimensionFilters,
-        groupByDims: [], // No grouping for raw data
-        breakdownDims: [],
-        visibleDimensionIds: dimensions.map(d => d.id),
-        limit: 50000,
-        offset: 0
-      }
-    });
-
-    if (edgeError) {
-      console.error('[DATA-FIX] Edge function error:', edgeError);
-      throw edgeError;
-    }
-
-    if (!edgeData) {
-      throw new Error('No data returned from edge function');
-    }
+    // Use the centralized fetch function for consistency and React Query caching
+    const edgeData = await fetchPerformanceData({
+      reportId,
+      accountId,
+      userId,
+      dateFrom,
+      dateTo,
+      dimensionFilters,
+      visibleDimensionIds: dimensions.map(d => d.id),
+      limit: 50000,
+      offset: 0,
+    }, queryClient);
 
     console.log('[DATA-FIX] Edge function returned data:', {
       totalCount: edgeData.totalCount,
