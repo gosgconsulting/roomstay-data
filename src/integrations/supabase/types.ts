@@ -309,6 +309,7 @@ export type Database = {
           created_at: string
           data_source_id: string | null
           formula: string | null
+          formula_condition_pairs: Json | null
           id: string
           name: string
           report_id: string | null
@@ -323,6 +324,7 @@ export type Database = {
           created_at?: string
           data_source_id?: string | null
           formula?: string | null
+          formula_condition_pairs?: Json | null
           id?: string
           name: string
           report_id?: string | null
@@ -337,6 +339,7 @@ export type Database = {
           created_at?: string
           data_source_id?: string | null
           formula?: string | null
+          formula_condition_pairs?: Json | null
           id?: string
           name?: string
           report_id?: string | null
@@ -371,44 +374,50 @@ export type Database = {
       }
       forecasts: {
         Row: {
+          average_daily_rate: number | null
           conversion_rate: number | null
           cost_of_sell: number | null
           created_at: string | null
+          direct_bookings_percentage: number | null
+          direct_bookings_target: number | null
           email: string | null
           id: string
           name: string
-          paid_revenue_share: number | null
+          occupancy_rate: number | null
           report_id: string | null
-          revenue_per_month: number | null
-          target_average_order_value: number | null
+          rooms: number | null
           updated_at: string | null
           user_id: string | null
         }
         Insert: {
+          average_daily_rate?: number | null
           conversion_rate?: number | null
           cost_of_sell?: number | null
           created_at?: string | null
+          direct_bookings_percentage?: number | null
+          direct_bookings_target?: number | null
           email?: string | null
           id?: string
           name?: string
-          paid_revenue_share?: number | null
+          occupancy_rate?: number | null
           report_id?: string | null
-          revenue_per_month?: number | null
-          target_average_order_value?: number | null
+          rooms?: number | null
           updated_at?: string | null
           user_id?: string | null
         }
         Update: {
+          average_daily_rate?: number | null
           conversion_rate?: number | null
           cost_of_sell?: number | null
           created_at?: string | null
+          direct_bookings_percentage?: number | null
+          direct_bookings_target?: number | null
           email?: string | null
           id?: string
           name?: string
-          paid_revenue_share?: number | null
+          occupancy_rate?: number | null
           report_id?: string | null
-          revenue_per_month?: number | null
-          target_average_order_value?: number | null
+          rooms?: number | null
           updated_at?: string | null
           user_id?: string | null
         }

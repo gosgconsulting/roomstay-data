@@ -97,7 +97,10 @@ export async function loadAccountDimensions(accountId: string, userId?: string, 
     // Remove duplicates by name (keep first occurrence = highest priority)
     const uniqueDimensions = allDimensions.filter((dim, index, arr) => 
       arr.findIndex(d => d.name === dim.name) === index
-    );
+    ).map(d => ({
+      ...d,
+      formula_condition_pairs: (Array.isArray(d.formula_condition_pairs) ? d.formula_condition_pairs : []) as unknown as FormulaConditionPair[]
+    }));
 
     console.log('[DATA-LOADING-FIX] Loaded dimensions (fallback):', {
       account: accountData?.length || 0,
