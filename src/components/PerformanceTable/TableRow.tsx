@@ -282,7 +282,7 @@ export function TableRow({
                     }
                   }}
                 />
-              ) : (
+              ) : (isMonthView && isBreakdownChild) ? (
                 // NEW: clickable display; show "Set" when budget is 0, opens modal
                 <span
                   className={cn(
@@ -291,16 +291,14 @@ export function TableRow({
                     displayBudget === 0 && "text-muted-foreground underline"
                   )}
                   onClick={(e) => {
-                    if (isEditMode && isMonthView && isBreakdownChild) {
-                      e.stopPropagation();
-                      openBudgetModal();
-                    }
+                    e.stopPropagation();
+                    openBudgetModal();
                   }}
                   title={isEditMode && isMonthView && isBreakdownChild ? "Click to set budget" : undefined}
                 >
-                  {displayBudget === 0 ? "Set" : formatValue(displayBudget, budgetDimForFormatValue)}
+                  {displayBudget === 0 ? "Set Budget" : formatValue(displayBudget, budgetDimForFormatValue)}
                 </span>
-              )}
+              ) : null}
             </div>
           </td>
         )}

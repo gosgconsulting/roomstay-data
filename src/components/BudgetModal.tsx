@@ -103,6 +103,32 @@ export const BudgetModal = ({
     { value: (currentYear + 2).toString(), label: (currentYear + 2).toString() },
   ];
 
+  // Convert flat { 'YYYY-MM': value } into nested {year: {month: value}}
+  const unflattenBudgetData = (flat: Record<string, number>) => {
+    const nested: Record<string, Record<string, number>> = {};
+    Object.entries(flat).forEach(([key, value]) => {
+      const match = key.match(/^(\d{4})-(\d{2})$/);
+      if (match) {
+        const [, year, month] = match;
+        if (!nested[year]) nested[year] = {};
+        nested[year][String(parseInt(month, 10))] = value; // Remove leading zero from month
+      }
+    });
+    return nested;
+  };
+
+  // Flatten nested {year: {month: value}} into { 'YYYY-MM': value }
+  const flattenBudgetData = (nested: Record<string, Record<string, number>>) => {
+    const flat: Record<string, number> = {};
+    Object.entries(nested).forEach(([year, months]) => {
+      Object.entries(months || {}).forEach(([m, v]) => {
+        const mm = String(m).padStart(2, "0");
+        flat[`${year}-${mm}`] = v;
+      });
+    });
+    return flat;
+  };
+
   // Load dimensions and dimension items
   useEffect(() => {
     if (open && user) {
@@ -111,8 +137,15 @@ export const BudgetModal = ({
         // Editing existing budget
         setSelectedDimension(budget.dimension_name);
         setSelectedItem(budget.dimension_item);
-        setBudgetData(budget.budget_data || {});
-        const years = Object.keys(budget.budget_data || {});
+        // Convert flat format to nested if needed
+        const budgetDataRaw = budget.budget_data || {};
+        // Check if it's flat format (has 'YYYY-MM' keys) or nested (has year keys with month objects)
+        const isFlatFormat = Object.keys(budgetDataRaw).some(k => /^\d{4}-\d{2}$/.test(k));
+        const nestedBudgetData = isFlatFormat 
+          ? unflattenBudgetData(budgetDataRaw as unknown as Record<string, number>)
+          : budgetDataRaw as Record<string, Record<string, number>>;
+        setBudgetData(nestedBudgetData);
+        const years = Object.keys(nestedBudgetData);
         setSelectedYear(years.length > 0 ? years[0] : currentYear.toString());
       } else {
         // Creating new budget (with presets if provided)
@@ -129,13 +162,35 @@ export const BudgetModal = ({
   // Load dimension items when dimension is selected
   useEffect(() => {
     if (open && selectedDimension) {
-      loadDimensionItems(selectedDimension);
+      if (dimensions.length > 0) {
+        // Only load items if dimensions are loaded (needed to find reportId)
+        console.log("[testing] Loading items for dimension:", selectedDimension);
+        // Only reset selected item if we're changing dimensions (not initial load with preset)
+        // Preserve item if editing budget or if preset item matches current dimension
+        const shouldPreserveItem = budget?.dimension_item || 
+          (presetItemName && presetDimensionName === selectedDimension);
+        if (!shouldPreserveItem) {
+          setSelectedItem("");
+        }
+        loadDimensionItems(selectedDimension);
+      } else {
+        // If dimension is selected but dimensions aren't loaded yet, wait
+        // This will be triggered again when dimensions load
+        console.log("[testing] Waiting for dimensions to load before loading items");
+        setDimensionItems([]);
+        // Don't reset item if we have a preset or are editing
+        if (!budget?.dimension_item && !presetItemName) {
+          setSelectedItem("");
+        }
+      }
     } else {
       setDimensionItems([]);
-      setSelectedItem("");
+      if (!budget?.dimension_item && !presetItemName) {
+        setSelectedItem("");
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, selectedDimension, reportId, accountId]);
+  }, [open, selectedDimension, reportId, accountId, dimensions]);
 
   const loadDimensions = async () => {
     try {
@@ -322,6 +377,20 @@ export const BudgetModal = ({
       const selectedDim = dimensions.find(d => d.name === dimensionName);
       const reportIdToUse = selectedDim?.reportId || reportId;
 
+      console.log("[testing] loadDimensionItems:", {
+        dimensionName,
+        dimensionsCount: dimensions.length,
+        availableDimensionNames: dimensions.map(d => d.name),
+        selectedDim: selectedDim ? { id: selectedDim.id, name: selectedDim.name, reportId: selectedDim.reportId } : null,
+        reportIdToUse,
+        reportId,
+        accountId,
+      });
+
+      if (!selectedDim && dimensions.length > 0) {
+        console.warn("[testing] Dimension not found in dimensions array:", dimensionName);
+      }
+
       if (reportIdToUse) {
         const { data, error } = await supabase
           .from("dimension_data")
@@ -329,6 +398,8 @@ export const BudgetModal = ({
           .eq("report_id", reportIdToUse);
 
         if (error) throw error;
+
+        console.log("[testing] dimension_data rows:", data?.length || 0);
 
         data?.forEach((row) => {
           const values = row.dimension_values as Record<string, unknown>;
@@ -347,6 +418,8 @@ export const BudgetModal = ({
             .select("dimension_values")
             .eq("report_id", reportIdToUse)
             .limit(100);
+
+          console.log("[testing] monthly_dimension_data rows:", monthlyData?.length || 0);
 
           monthlyData?.forEach((row) => {
             const values = row.dimension_values as Record<string, unknown>;
@@ -367,6 +440,8 @@ export const BudgetModal = ({
           .select("id")
           .eq("account_id", accountId);
 
+        console.log("[testing] account reports:", reports?.length || 0);
+
         if (reports && reports.length > 0) {
           const reportIds = reports.map(r => r.id);
           
@@ -375,6 +450,8 @@ export const BudgetModal = ({
             .select("dimension_values")
             .in("report_id", reportIds)
             .limit(500);
+
+          console.log("[testing] account-level dimension_data rows:", dimensionData?.length || 0);
 
           dimensionData?.forEach((row) => {
             const values = row.dimension_values as Record<string, unknown>;
@@ -389,9 +466,21 @@ export const BudgetModal = ({
         }
       }
 
-      setDimensionItems(Array.from(items).sort());
+      console.log("[testing] total items found:", items.size);
+      const sortedItems = Array.from(items).sort();
+      setDimensionItems(sortedItems);
+      
+      // Auto-select preset item if provided and it exists in loaded items
+      if (presetItemName && presetDimensionName === dimensionName && sortedItems.includes(presetItemName)) {
+        console.log("[testing] Auto-selecting preset item:", presetItemName);
+        setSelectedItem(presetItemName);
+      } else if (budget?.dimension_item && budget.dimension_name === dimensionName && sortedItems.includes(budget.dimension_item)) {
+        // Auto-select item when editing existing budget
+        console.log("[testing] Auto-selecting budget item:", budget.dimension_item);
+        setSelectedItem(budget.dimension_item);
+      }
     } catch (error) {
-      console.error("Error loading dimension items:", error);
+      console.error("[testing] Error loading dimension items:", error);
       toast({
         title: "Error",
         description: "Failed to load dimension items",
@@ -410,18 +499,6 @@ export const BudgetModal = ({
         [month]: numValue,
       },
     }));
-  };
-
-  // NEW: flatten nested {year: {month: value}} into { 'YYYY-MM': value }
-  const flattenBudgetData = (nested: Record<string, Record<string, number>>) => {
-    const flat: Record<string, number> = {};
-    Object.entries(nested).forEach(([year, months]) => {
-      Object.entries(months || {}).forEach(([m, v]) => {
-        const mm = String(m).padStart(2, "0");
-        flat[`${year}-${mm}`] = v;
-      });
-    });
-    return flat;
   };
 
   const handleSave = async () => {
@@ -523,6 +600,12 @@ export const BudgetModal = ({
     return value === undefined || value === 0 ? "" : value.toString();
   };
 
+  // Parse presetYearMonth to get year and month
+  const presetYear = presetYearMonth ? presetYearMonth.slice(0, 4) : null;
+  const presetMonth = presetYearMonth ? presetYearMonth.slice(5, 7) : null;
+  const presetMonthName = presetMonth ? MONTHS.find(m => m.value === String(parseInt(presetMonth, 10)))?.label : null;
+  const hasPresets = !!(presetDimensionName && presetItemName && presetYearMonth);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -542,6 +625,7 @@ export const BudgetModal = ({
             <Select
               value={selectedDimension}
               onValueChange={setSelectedDimension}
+              disabled={hasPresets}
             >
               <SelectTrigger id="dimension">
                 <SelectValue placeholder="Select dimension (e.g., Roomstay - Diji - SEM - Account)" />
@@ -577,63 +661,106 @@ export const BudgetModal = ({
               <Select
                 value={selectedItem}
                 onValueChange={setSelectedItem}
-                disabled={!selectedDimension || dimensionItems.length === 0}
+                disabled={hasPresets || !selectedDimension || dimensionItems.length === 0}
               >
                 <SelectTrigger id="item">
-                  <SelectValue placeholder="Select item from chosen dimension" />
+                  <SelectValue 
+                    placeholder={
+                      dimensionItems.length === 0
+                        ? "No items found for this dimension"
+                        : "Select item from chosen dimension"
+                    } 
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  {dimensionItems.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {item}
-                    </SelectItem>
-                  ))}
+                  {dimensionItems.length === 0 ? (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      No items available. Make sure the dimension has data in dimension_data or monthly_dimension_data tables.
+                    </div>
+                  ) : (
+                    dimensionItems.map((item) => (
+                      <SelectItem key={item} value={item}>
+                        {item}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
+              {dimensionItems.length === 0 && selectedDimension && (
+                <p className="text-sm text-muted-foreground">
+                  {!reportId && !accountId
+                    ? "Note: This dimension may require a report or account context to load items."
+                    : "No dimension items found. The dimension may not have any data yet."}
+                </p>
+              )}
             </div>
           )}
 
-          {/* Step 3: Year-tabbed Calendar */}
+          {/* Step 3: Budget Amount Input */}
           {selectedDimension && selectedItem && (reportId || accountId) && (
             <div className="space-y-4">
-              <Label>Monthly Budget Amounts</Label>
-              <Tabs value={selectedYear} onValueChange={setSelectedYear}>
-                <TabsList>
-                  {availableYears.map((year) => (
-                    <TabsTrigger key={year.value} value={year.value}>
-                      {year.label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
+              {hasPresets && presetYear && presetMonth ? (
+                // Single input for preset month/year
+                <div className="space-y-2">
+                  <Label htmlFor="preset-budget">
+                    Budget Amount for {presetMonthName} {presetYear}
+                  </Label>
+                  <Input
+                    id="preset-budget"
+                    type="number"
+                    step="0.01"
+                    placeholder="0"
+                    value={getMonthValue(String(parseInt(presetMonth, 10)))}
+                    onChange={(e) => {
+                      setSelectedYear(presetYear);
+                      handleMonthChange(String(parseInt(presetMonth, 10)), e.target.value);
+                    }}
+                    className="w-full"
+                  />
+                </div>
+              ) : (
+                // Full year-tabbed calendar for manual selection
+                <div className="space-y-4">
+                  <Label>Monthly Budget Amounts</Label>
+                  <Tabs value={selectedYear} onValueChange={setSelectedYear}>
+                    <TabsList>
+                      {availableYears.map((year) => (
+                        <TabsTrigger key={year.value} value={year.value}>
+                          {year.label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
 
-                {availableYears.map((year) => (
-                  <TabsContent key={year.value} value={year.value} className="mt-4">
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-4">
-                        {MONTHS.map((month) => (
-                          <div key={month.value} className="flex items-center gap-3">
-                            <Label htmlFor={`month-${year.value}-${month.value}`} className="w-24">
-                              {month.label}
-                            </Label>
-                            <Input
-                              id={`month-${year.value}-${month.value}`}
-                              type="number"
-                              step="0.01"
-                              placeholder="0"
-                              value={getMonthValue(month.value)}
-                              onChange={(e) => {
-                                setSelectedYear(year.value);
-                                handleMonthChange(month.value, e.target.value);
-                              }}
-                              className="flex-1"
-                            />
+                    {availableYears.map((year) => (
+                      <TabsContent key={year.value} value={year.value} className="mt-4">
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-4">
+                            {MONTHS.map((month) => (
+                              <div key={month.value} className="flex items-center gap-3">
+                                <Label htmlFor={`month-${year.value}-${month.value}`} className="w-24">
+                                  {month.label}
+                                </Label>
+                                <Input
+                                  id={`month-${year.value}-${month.value}`}
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="0"
+                                  value={getMonthValue(month.value)}
+                                  onChange={(e) => {
+                                    setSelectedYear(year.value);
+                                    handleMonthChange(month.value, e.target.value);
+                                  }}
+                                  className="flex-1"
+                                />
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  </TabsContent>
-                ))}
-              </Tabs>
+                        </div>
+                      </TabsContent>
+                    ))}
+                  </Tabs>
+                </div>
+              )}
             </div>
           )}
         </div>
