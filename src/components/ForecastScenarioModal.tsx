@@ -104,7 +104,7 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
               <Badge variant="outline">ADR: {formatCurrency2(averageDailyRate)}</Badge>
               <Badge variant="outline">Occupancy: {occupancyRate}%</Badge>
               <Badge variant="outline">Direct Revenue %: {paidSharePct.toFixed(2)}%</Badge>
-              <Badge variant="outline">Cost of sell: {formatPercent(costOfSell)}</Badge>
+              <Badge variant="outline">Cost of sale: {formatPercent(costOfSell)}</Badge>
               <Badge variant="outline">OTA rate: 15%</Badge>
               {scenario.email && (
                 <Badge variant="outline">Email: {scenario.email}</Badge>
@@ -137,7 +137,7 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
                   <TableCell>{formatCurrency0(paidRevenueYear)}</TableCell>
                 </TableRow>
                 <TableRow className="hover:bg-muted/40">
-                  <TableCell className="font-medium">OTA Cost (15%)</TableCell>
+                  <TableCell className="font-medium">Commissions</TableCell>
                   <TableCell>{formatCurrency2(otaCostMonth)}</TableCell>
                   <TableCell>{formatCurrency2(otaCostYear)}</TableCell>
                 </TableRow>
