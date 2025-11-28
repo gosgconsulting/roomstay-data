@@ -48,6 +48,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
     direct_bookings_target: '', // % Direct Revenue
     rooms: '',
     occupancy_rate: '',
+    commission_rate: '15', // % Commission Rate (placeholder, defaults to 15%)
     cost_of_sell: '', // percentage
     conversion_rate: '' // percentage
   });
@@ -61,6 +62,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
     direct_bookings_target: '', // % Direct Revenue
     rooms: '',
     occupancy_rate: '',
+    commission_rate: '15', // % Commission Rate (placeholder, defaults to 15%)
     cost_of_sell: '', // percentage input
     conversion_rate: ''
   });
@@ -189,6 +191,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
         direct_bookings_target: '',
         rooms: '',
         occupancy_rate: '',
+        commission_rate: '15',
         cost_of_sell: '',
         conversion_rate: ''
       });
@@ -255,6 +258,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
       direct_bookings_target: String(scenario.direct_bookings_target ?? ''),
       rooms: String(scenario.rooms ?? ''),
       occupancy_rate: String(scenario.occupancy_rate ?? ''),
+      commission_rate: '15', // Default placeholder
       cost_of_sell: scenario.cost_of_sell != null ? String((scenario.cost_of_sell * 100).toFixed(2)) : '',
       conversion_rate: scenario.conversion_rate != null ? String((scenario.conversion_rate * 100).toFixed(2)) : '',
     });
@@ -461,9 +465,23 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="cost-of-sell">% Cost of Sale</Label>
+                <Label htmlFor="commission-rate">% Commission Rate</Label>
                 <Input
-                  id="cost-of-sell"
+                  id="commission-rate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  placeholder="15.00"
+                  value={formData.commission_rate}
+                  onChange={(e) => handleInputChange('commission_rate', e.target.value)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="cost-of-sale">% Cost of Sale</Label>
+                <Input
+                  id="cost-of-sale"
                   type="number"
                   step="0.01"
                   min="0"
@@ -543,6 +561,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                     <TableHead>Average Daily Rate</TableHead>
                     <TableHead>% Direct Revenue</TableHead>
                     <TableHead>% Conversion Rate</TableHead>
+                    <TableHead>% Commission Rate</TableHead>
                     <TableHead>% Cost of Sale</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Created</TableHead>
@@ -673,6 +692,28 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                             onClick={() => startEditing(scenario, 'conversion_rate')}
                           >
                             {formatPercentage(scenario.conversion_rate)}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {editingRowId === scenario.id ? (
+                          <Input
+                            className="h-8"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            value={rowForm.commission_rate}
+                            onChange={(e) => handleRowChange('commission_rate', e.target.value)}
+                            autoFocus={editingField === 'commission_rate'}
+                            onKeyDown={handleCellKeyDown}
+                          />
+                        ) : (
+                          <span
+                            className="cursor-text"
+                            onClick={() => startEditing(scenario, 'commission_rate')}
+                          >
+                            15.00%
                           </span>
                         )}
                       </TableCell>
