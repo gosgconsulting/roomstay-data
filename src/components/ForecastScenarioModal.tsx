@@ -8,10 +8,9 @@ type ForecastScenario = {
   name: string; // Hotel Name
   email?: string | null; // Optional field
   average_daily_rate?: number | null;
-  direct_bookings_percentage?: number | null; // Direct Revenue
   direct_bookings_target?: number | null; // % Direct Revenue
   rooms?: number | null;
-  occupancy_rate?: number | null; // New field
+  occupancy_rate?: number | null;
   cost_of_sell: number; // decimal (0-1)
   conversion_rate: number; // decimal (0-1)
   created_at: string;
@@ -52,12 +51,14 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
   
   // Extract hotel-specific fields
   const averageDailyRate = Number(scenario.average_daily_rate) || 0;
-  const directRevenue = Number(scenario.direct_bookings_percentage) || 0; // Absolute dollar amount
   const directRevenueTarget = Number(scenario.direct_bookings_target) || 0; // Percentage
   const rooms = Number(scenario.rooms) || 0;
   const occupancyRate = Number(scenario.occupancy_rate) || 75; // Use provided occupancy rate or default to 75%
   const costOfSell = Number(scenario.cost_of_sell) || 0; // stored as 0-1
   const conversionRate = Number(scenario.conversion_rate) || 0; // stored as 0-1
+  
+  // Max CPC Recommendation: (ADR × Cost of Sell) / Conversion Rate
+  const maxCpc = conversionRate > 0 ? (averageDailyRate * costOfSell) / conversionRate : 0;
   
   // Calculate monthly revenue from hotel metrics: ADR × Rooms × 30 days × (Occupancy Rate / 100)
   const revMonth = averageDailyRate * rooms * 30 * (occupancyRate / 100);
@@ -154,6 +155,11 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
                   <TableCell className="font-medium">Estimated Bookings</TableCell>
                   <TableCell>{Math.floor(ordersMonth).toLocaleString("en-US")}</TableCell>
                   <TableCell>{Math.floor(ordersYear).toLocaleString("en-US")}</TableCell>
+                </TableRow>
+                <TableRow className="hover:bg-muted/40">
+                  <TableCell className="font-medium">Max CPC Recommendation</TableCell>
+                  <TableCell>{formatCurrency2(maxCpc)}</TableCell>
+                  <TableCell>{formatCurrency2(maxCpc)}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>

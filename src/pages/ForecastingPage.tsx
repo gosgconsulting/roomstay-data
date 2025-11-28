@@ -18,10 +18,9 @@ interface ForecastScenario {
   name: string; // used as Hotel Name
   email?: string | null; // Optional field
   average_daily_rate?: number | null;
-  direct_bookings_percentage?: number | null; // Now "Direct Revenue"
-  direct_bookings_target?: number | null; // Now "% Direct Revenue"
+  direct_bookings_target?: number | null; // "% Direct Revenue"
   rooms?: number | null;
-  occupancy_rate?: number | null; // New field
+  occupancy_rate?: number | null;
   cost_of_sell: number; // stored as decimal (0-1) percentage
   conversion_rate: number;
   created_at: string;
@@ -46,10 +45,9 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
     name: '',
     email: '',
     average_daily_rate: '',
-    direct_bookings_percentage: '', // Direct Revenue
     direct_bookings_target: '', // % Direct Revenue
     rooms: '',
-    occupancy_rate: '', // New field
+    occupancy_rate: '',
     cost_of_sell: '', // percentage
     conversion_rate: '' // percentage
   });
@@ -60,10 +58,9 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
     name: '', // Hotel Name
     email: '', // Optional
     average_daily_rate: '',
-    direct_bookings_percentage: '', // Direct Revenue
     direct_bookings_target: '', // % Direct Revenue
     rooms: '',
-    occupancy_rate: '', // New field
+    occupancy_rate: '',
     cost_of_sell: '', // percentage input
     conversion_rate: ''
   });
@@ -134,7 +131,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
 
     const requiredFields = [
       'average_daily_rate',
-      'direct_bookings_percentage',
       'direct_bookings_target',
       'rooms',
       'occupancy_rate',
@@ -169,7 +165,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
           name: formData.name.trim(), // Hotel Name
           email: formData.email.trim() || null, // Optional field
           average_daily_rate: parseFloat(formData.average_daily_rate),
-          direct_bookings_percentage: parseFloat(formData.direct_bookings_percentage),
           direct_bookings_target: parseFloat(formData.direct_bookings_target),
           rooms: parseInt(formData.rooms),
           occupancy_rate: parseFloat(formData.occupancy_rate),
@@ -191,7 +186,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
         name: '',
         email: '',
         average_daily_rate: '',
-        direct_bookings_percentage: '',
         direct_bookings_target: '',
         rooms: '',
         occupancy_rate: '',
@@ -258,7 +252,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
       name: scenario.name || '',
       email: scenario.email || '',
       average_daily_rate: String(scenario.average_daily_rate ?? ''),
-      direct_bookings_percentage: String(scenario.direct_bookings_percentage ?? ''),
       direct_bookings_target: String(scenario.direct_bookings_target ?? ''),
       rooms: String(scenario.rooms ?? ''),
       occupancy_rate: String(scenario.occupancy_rate ?? ''),
@@ -298,7 +291,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
     
     const requiredFields = [
       'average_daily_rate',
-      'direct_bookings_percentage',
       'direct_bookings_target',
       'rooms',
       'occupancy_rate',
@@ -324,7 +316,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
           name: rowForm.name.trim(),
           email: rowForm.email.trim() || null, // Optional field
           average_daily_rate: parseFloat(rowForm.average_daily_rate),
-          direct_bookings_percentage: parseFloat(rowForm.direct_bookings_percentage),
           direct_bookings_target: parseFloat(rowForm.direct_bookings_target),
           rooms: parseInt(rowForm.rooms),
           occupancy_rate: parseFloat(rowForm.occupancy_rate),
@@ -440,20 +431,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="direct-revenue">Direct Revenue</Label>
-                <Input
-                  id="direct-revenue"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="12.98"
-                  value={formData.direct_bookings_percentage}
-                  onChange={(e) => handleInputChange('direct_bookings_percentage', e.target.value)}
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
                 <Label htmlFor="direct-revenue-target">% Direct Revenue</Label>
                 <Input
                   id="direct-revenue-target"
@@ -564,7 +541,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                     <TableHead>Rooms</TableHead>
                     <TableHead>% Occupancy Rate</TableHead>
                     <TableHead>Average Daily Rate</TableHead>
-                    <TableHead>Direct Revenue</TableHead>
                     <TableHead>% Direct Revenue</TableHead>
                     <TableHead>% Conversion Rate</TableHead>
                     <TableHead>% Cost of Sale</TableHead>
@@ -653,27 +629,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                             onClick={() => startEditing(scenario, 'average_daily_rate')}
                           >
                             {formatCurrency(scenario.average_daily_rate || 0)}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {editingRowId === scenario.id ? (
-                          <Input
-                            className="h-8"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={rowForm.direct_bookings_percentage}
-                            onChange={(e) => handleRowChange('direct_bookings_percentage', e.target.value)}
-                            autoFocus={editingField === 'direct_bookings_percentage'}
-                            onKeyDown={handleCellKeyDown}
-                          />
-                        ) : (
-                          <span
-                            className="cursor-text"
-                            onClick={() => startEditing(scenario, 'direct_bookings_percentage')}
-                          >
-                            {scenario.direct_bookings_percentage || 0}
                           </span>
                         )}
                       </TableCell>
