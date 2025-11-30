@@ -157,6 +157,28 @@ export default function ForecastScenarioPage() {
     });
   }, [serviceShares, base, period]);
 
+  // NEW: aggregate totals across all services
+  const servicesTotals = React.useMemo(() => {
+    const totalRevenue = perService.reduce((sum, s) => sum + s.revenue, 0);
+    const totalCost = perService.reduce((sum, s) => sum + s.cost, 0);
+    const totalRecurrentFee = perService.reduce((sum, s) => sum + s.recurrentFee, 0);
+    const totalOneOffFee = perService.reduce((sum, s) => sum + s.oneOffFee, 0);
+    const totalCostFee = perService.reduce((sum, s) => sum + s.costFee, 0);
+    const totalRevenueFee = perService.reduce((sum, s) => sum + s.revenueFee, 0);
+    const totalCostValue = totalCost + totalRecurrentFee + totalOneOffFee + totalCostFee + totalRevenueFee;
+    const totalCostPct = totalRevenue > 0 ? totalCostValue / totalRevenue : 0;
+    return {
+      totalRevenue,
+      totalCost,
+      totalRecurrentFee,
+      totalOneOffFee,
+      totalCostFee,
+      totalRevenueFee,
+      totalCostValue,
+      totalCostPct,
+    };
+  }, [perService]);
+
   // Profit KPI: sum of fees (cost %, revenue %, recurrent, one-off) minus cost, for Agency-paid budgets
   const totalProfit = React.useMemo(() => {
     return perService.reduce((sum, svc) => {
@@ -285,6 +307,46 @@ export default function ForecastScenarioPage() {
           <div className="flex items-center justify-between">
             <span>Profit</span>
             <span className="font-semibold">{formatCurrency0(totalProfit)}</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Total Services card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Total Services</CardTitle>
+          <div className="text-xs text-muted-foreground">Combined across all services</div>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <div className="flex items-center justify-between">
+            <span>Revenue</span>
+            <span className="font-medium">{formatCurrency0(servicesTotals.totalRevenue)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Cost</span>
+            <span className="font-medium">{formatCurrency2(servicesTotals.totalCost)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Recurrent Fee</span>
+            <span className="font-medium">{formatCurrency2(servicesTotals.totalRecurrentFee)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>One-off Fee</span>
+            <span className="font-medium">{formatCurrency2(servicesTotals.totalOneOffFee)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Cost Fee</span>
+            <span className="font-medium">{formatCurrency2(servicesTotals.totalCostFee)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Revenue Fee</span>
+            <span className="font-medium">{formatCurrency2(servicesTotals.totalRevenueFee)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="font-semibold">Total Cost</span>
+            <span className="font-semibold">
+              {formatCurrency2(servicesTotals.totalCostValue)} ({(servicesTotals.totalCostPct * 100).toFixed(2)}%)
+            </span>
           </div>
         </CardContent>
       </Card>
