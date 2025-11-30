@@ -1,6 +1,8 @@
 import * as React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
 interface ForecastServicesModalProps {
@@ -23,6 +25,72 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
   const [services, setServices] = React.useState<ServiceRow[]>([]);
   const [loading, setLoading] = React.useState(false);
 
+  // NEW: editing state for inline cells
+  type EditableField = keyof Pick<ServiceRow, 'name' | 'weight' | 'cost_of_sell' | 'recurrent_fee' | 'percent_cost' | 'percent_revenue'>;
+  const [editing, setEditing] = React.useState<{ id: string | null; field: EditableField | null; value: string }>({
+    id: null,
+    field: null,
+    value: ""
+  });
+
+  const startEdit = (id: string, field: EditableField, current: number | string) => {
+    setEditing({ id, field, value: String(current ?? "") });
+  };
+
+  const cancelEdit = () => {
+    setEditing({ id: null, field: null, value: "" });
+  };
+
+  const commitEdit = async () => {
+    if (!editing.id || !editing.field) return;
+    const id = editing.id;
+    const field = editing.field;
+    let valueToSave: number | string = editing.value;
+
+    // Validation + normalization
+    const percentFields: EditableField[] = ["weight", "cost_of_sell", "percent_cost", "percent_revenue"];
+    if (field === "name") {
+      valueToSave = String(valueToSave).trim();
+      if (!valueToSave) {
+        toast.error("Service name cannot be empty");
+        return;
+      }
+    } else if (field === "recurrent_fee") {
+      const num = parseFloat(String(valueToSave));
+      if (Number.isNaN(num) || num < 0) {
+        toast.error("Recurrent fee must be a non-negative number");
+        return;
+      }
+      valueToSave = num;
+    } else if (percentFields.includes(field)) {
+      const num = parseFloat(String(valueToSave));
+      if (Number.isNaN(num) || num < 0 || num > 100) {
+        toast.error("Percent values must be between 0 and 100");
+        return;
+      }
+      valueToSave = num;
+    }
+
+    // Persist to Supabase
+    const { error, data } = await (supabase as any)
+      .from("forecast_services")
+      .update({ [field]: valueToSave })
+      .eq("id", id)
+      .select()
+      .single() as { error: any; data: ServiceRow | null };
+
+    if (error) {
+      console.error("Update service error:", error);
+      toast.error("Failed to save change");
+      return;
+    }
+
+    // Optimistic UI update
+    setServices(prev => prev.map(s => s.id === id ? { ...s, [field]: valueToSave as any } : s));
+    toast.success("Saved");
+    cancelEdit();
+  };
+
   React.useEffect(() => {
     const load = async () => {
       if (!forecastId) {
@@ -41,12 +109,16 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
     load();
   }, [forecastId, open]);
 
-    return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+  // NEW: live total % weight
+  const totalWeight = services.reduce((sum, s) => sum + (Number(s.weight) || 0), 0);
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) cancelEdit(); }}>
       <DialogContent className="sm:max-w-[900px] bg-background">
         <DialogHeader>
           <DialogTitle>Services</DialogTitle>
         </DialogHeader>
+        <div className="text-xs text-muted-foreground mb-2">Tip: Click a cell to edit. Press Enter to save, Esc to cancel.</div>
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -71,17 +143,144 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
               ) : (
                 services.map(s => (
                   <TableRow key={s.id}>
-                    <TableCell>{s.name}</TableCell>
-                    <TableCell>{Number(s.weight || 0).toFixed(2)}%</TableCell>
-                    <TableCell>{Number(s.cost_of_sell || 0).toFixed(2)}%</TableCell>
-                    <TableCell>${Number(s.recurrent_fee || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</TableCell>
-                    <TableCell>{Number(s.percent_cost || 0).toFixed(2)}%</TableCell>
-                    <TableCell>{Number(s.percent_revenue || 0).toFixed(2)}%</TableCell>
+                    {/* Name */}
+                    <TableCell onClick={() => startEdit(s.id, "name", s.name)} className="cursor-pointer">
+                      {editing.id === s.id && editing.field === "name" ? (
+                        <Input
+                          autoFocus
+                          value={editing.value}
+                          onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                          onBlur={commitEdit}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitEdit();
+                            if (e.key === "Escape") cancelEdit();
+                          }}
+                        />
+                      ) : (
+                        s.name
+                      )}
+                    </TableCell>
+
+                    {/* % Weight */}
+                    <TableCell onClick={() => startEdit(s.id, "weight", s.weight)} className="cursor-pointer">
+                      {editing.id === s.id && editing.field === "weight" ? (
+                        <Input
+                          autoFocus
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          max={100}
+                          value={editing.value}
+                          onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                          onBlur={commitEdit}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitEdit();
+                            if (e.key === "Escape") cancelEdit();
+                          }}
+                        />
+                      ) : (
+                        `${Number(s.weight || 0).toFixed(2)}%`
+                      )}
+                    </TableCell>
+
+                    {/* % Cost of Sale */}
+                    <TableCell onClick={() => startEdit(s.id, "cost_of_sell", s.cost_of_sell)} className="cursor-pointer">
+                      {editing.id === s.id && editing.field === "cost_of_sell" ? (
+                        <Input
+                          autoFocus
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          max={100}
+                          value={editing.value}
+                          onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                          onBlur={commitEdit}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitEdit();
+                            if (e.key === "Escape") cancelEdit();
+                          }}
+                        />
+                      ) : (
+                        `${Number(s.cost_of_sell || 0).toFixed(2)}%`
+                      )}
+                    </TableCell>
+
+                    {/* Recurrent fee */}
+                    <TableCell onClick={() => startEdit(s.id, "recurrent_fee", s.recurrent_fee)} className="cursor-pointer">
+                      {editing.id === s.id && editing.field === "recurrent_fee" ? (
+                        <Input
+                          autoFocus
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          value={editing.value}
+                          onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                          onBlur={commitEdit}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitEdit();
+                            if (e.key === "Escape") cancelEdit();
+                          }}
+                        />
+                      ) : (
+                        `$${Number(s.recurrent_fee || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+                      )}
+                    </TableCell>
+
+                    {/* % Cost */}
+                    <TableCell onClick={() => startEdit(s.id, "percent_cost", s.percent_cost)} className="cursor-pointer">
+                      {editing.id === s.id && editing.field === "percent_cost" ? (
+                        <Input
+                          autoFocus
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          max={100}
+                          value={editing.value}
+                          onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                          onBlur={commitEdit}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitEdit();
+                            if (e.key === "Escape") cancelEdit();
+                          }}
+                        />
+                      ) : (
+                        `${Number(s.percent_cost || 0).toFixed(2)}%`
+                      )}
+                    </TableCell>
+
+                    {/* % Revenue */}
+                    <TableCell onClick={() => startEdit(s.id, "percent_revenue", s.percent_revenue)} className="cursor-pointer">
+                      {editing.id === s.id && editing.field === "percent_revenue" ? (
+                        <Input
+                          autoFocus
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          max={100}
+                          value={editing.value}
+                          onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                          onBlur={commitEdit}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitEdit();
+                            if (e.key === "Escape") cancelEdit();
+                          }}
+                        />
+                      ) : (
+                        `${Number(s.percent_revenue || 0).toFixed(2)}%`
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
+        </div>
+
+        {/* Live total % Weight indicator */}
+        <div className="flex justify-end mt-2 text-sm">
+          <span className={`${Number(totalWeight.toFixed(2)) === 100 ? "text-muted-foreground" : "text-destructive font-medium"}`}>
+            Total % Weight: {totalWeight.toFixed(2)}%
+          </span>
         </div>
       </DialogContent>
     </Dialog>
