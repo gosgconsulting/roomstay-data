@@ -167,7 +167,7 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
 
         {/* Tip + Add Service button */}
         <div className="flex items-center justify-between mb-2">
-          <div className="text-xs text-muted-foreground">Tip: Click a cell to edit. Press Enter to save, Esc to cancel.</div>
+          <div className="text-xs text-muted-foreground">Tip: Click a cell to edit. Press Enter or click Save; Esc or click Cancel.</div>
           <Button size="sm" onClick={handleAddService}>
             <Plus className="mr-2 h-4 w-4" />
             Add Service
@@ -201,16 +201,20 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                     {/* Name */}
                     <TableCell onClick={() => startEdit(s.id, "name", s.name)} className="cursor-pointer">
                       {editing.id === s.id && editing.field === "name" ? (
-                        <Input
-                          autoFocus
-                          value={editing.value}
-                          onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
-                          onBlur={commitEdit}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") commitEdit();
-                            if (e.key === "Escape") cancelEdit();
-                          }}
-                        />
+                        <div className="flex items-center gap-2">
+                          <Input
+                            autoFocus
+                            className="w-full"
+                            value={editing.value}
+                            onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitEdit();
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                          <Button size="sm" variant="secondary" onClick={commitEdit}>Save</Button>
+                          <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
+                        </div>
                       ) : (
                         s.name
                       )}
@@ -219,20 +223,24 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                     {/* % Weight */}
                     <TableCell onClick={() => startEdit(s.id, "weight", s.weight)} className="cursor-pointer">
                       {editing.id === s.id && editing.field === "weight" ? (
-                        <Input
-                          autoFocus
-                          type="number"
-                          step="0.01"
-                          min={0}
-                          max={100}
-                          value={editing.value}
-                          onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
-                          onBlur={commitEdit}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") commitEdit();
-                            if (e.key === "Escape") cancelEdit();
-                          }}
-                        />
+                        <div className="flex items-center gap-2">
+                          <Input
+                            autoFocus
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            max={100}
+                            className="w-32"
+                            value={editing.value}
+                            onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitEdit();
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                          <Button size="sm" variant="secondary" onClick={commitEdit}>Save</Button>
+                          <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
+                        </div>
                       ) : (
                         `${Number(s.weight || 0).toFixed(2)}%`
                       )}
@@ -241,20 +249,24 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                     {/* % Cost of Sale */}
                     <TableCell onClick={() => startEdit(s.id, "cost_of_sell", s.cost_of_sell)} className="cursor-pointer">
                       {editing.id === s.id && editing.field === "cost_of_sell" ? (
-                        <Input
-                          autoFocus
-                          type="number"
-                          step="0.01"
-                          min={0}
-                          max={100}
-                          value={editing.value}
-                          onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
-                          onBlur={commitEdit}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") commitEdit();
-                            if (e.key === "Escape") cancelEdit();
-                          }}
-                        />
+                        <div className="flex items-center gap-2">
+                          <Input
+                            autoFocus
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            max={100}
+                            className="w-32"
+                            value={editing.value}
+                            onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitEdit();
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                          <Button size="sm" variant="secondary" onClick={commitEdit}>Save</Button>
+                          <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
+                        </div>
                       ) : (
                         `${Number(s.cost_of_sell || 0).toFixed(2)}%`
                       )}
@@ -263,19 +275,23 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                     {/* Recurrent fee */}
                     <TableCell onClick={() => startEdit(s.id, "recurrent_fee", s.recurrent_fee)} className="cursor-pointer">
                       {editing.id === s.id && editing.field === "recurrent_fee" ? (
-                        <Input
-                          autoFocus
-                          type="number"
-                          step="0.01"
-                          min={0}
-                          value={editing.value}
-                          onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
-                          onBlur={commitEdit}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") commitEdit();
-                            if (e.key === "Escape") cancelEdit();
-                          }}
-                        />
+                        <div className="flex items-center gap-2">
+                          <Input
+                            autoFocus
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            className="w-32"
+                            value={editing.value}
+                            onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitEdit();
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                          <Button size="sm" variant="secondary" onClick={commitEdit}>Save</Button>
+                          <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
+                        </div>
                       ) : (
                         `$${Number(s.recurrent_fee || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}`
                       )}
@@ -284,20 +300,24 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                     {/* % Cost */}
                     <TableCell onClick={() => startEdit(s.id, "percent_cost", s.percent_cost)} className="cursor-pointer">
                       {editing.id === s.id && editing.field === "percent_cost" ? (
-                        <Input
-                          autoFocus
-                          type="number"
-                          step="0.01"
-                          min={0}
-                          max={100}
-                          value={editing.value}
-                          onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
-                          onBlur={commitEdit}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") commitEdit();
-                            if (e.key === "Escape") cancelEdit();
-                          }}
-                        />
+                        <div className="flex items-center gap-2">
+                          <Input
+                            autoFocus
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            max={100}
+                            className="w-32"
+                            value={editing.value}
+                            onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitEdit();
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                          <Button size="sm" variant="secondary" onClick={commitEdit}>Save</Button>
+                          <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
+                        </div>
                       ) : (
                         `${Number(s.percent_cost || 0).toFixed(2)}%`
                       )}
@@ -306,20 +326,24 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                     {/* % Revenue */}
                     <TableCell onClick={() => startEdit(s.id, "percent_revenue", s.percent_revenue)} className="cursor-pointer">
                       {editing.id === s.id && editing.field === "percent_revenue" ? (
-                        <Input
-                          autoFocus
-                          type="number"
-                          step="0.01"
-                          min={0}
-                          max={100}
-                          value={editing.value}
-                          onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
-                          onBlur={commitEdit}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") commitEdit();
-                            if (e.key === "Escape") cancelEdit();
-                          }}
-                        />
+                        <div className="flex items-center gap-2">
+                          <Input
+                            autoFocus
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            max={100}
+                            className="w-32"
+                            value={editing.value}
+                            onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitEdit();
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                          <Button size="sm" variant="secondary" onClick={commitEdit}>Save</Button>
+                          <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
+                        </div>
                       ) : (
                         `${Number(s.percent_revenue || 0).toFixed(2)}%`
                       )}
