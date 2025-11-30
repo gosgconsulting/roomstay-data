@@ -520,10 +520,10 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                     <TableRow>
                       <TableHead>Service Name</TableHead>
                       <TableHead>% Weight</TableHead>
-                      <TableHead>% Cost of Sale</TableHead>
+                      <TableHead>% Ad Spend</TableHead>
                       <TableHead>One-off</TableHead>
                       <TableHead>Recurrent fee</TableHead>
-                      <TableHead>% Cost</TableHead>
+                      <TableHead>% Ad Spend Fee</TableHead>
                       <TableHead>% Revenue</TableHead>
                       <TableHead>Budget</TableHead>
                       <TableHead className="w-[80px]">Actions</TableHead>
@@ -712,7 +712,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                     <TableHead>Average Daily Rate</TableHead>
                     <TableHead>% Direct Revenue</TableHead>
                     <TableHead>% Conversion Rate</TableHead>
-                    <TableHead>% Cost of Sale</TableHead>
+                    <TableHead>% Ad Spend</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead className="w-[160px]">Actions</TableHead>
                   </TableRow>

@@ -217,10 +217,10 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
               <TableRow>
                 <TableHead>Service Name</TableHead>
                 <TableHead>% Weight</TableHead>
-                <TableHead>% Cost of Sale</TableHead>
+                <TableHead>% Ad Spend</TableHead>
                 <TableHead>One-off</TableHead>
                 <TableHead>Recurrent fee</TableHead>
-                <TableHead>% Cost</TableHead>
+                <TableHead>% Ad Spend Fee</TableHead>
                 <TableHead>% Revenue</TableHead>
                 <TableHead>Budget</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -286,7 +286,7 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                       )}
                     </TableCell>
 
-                    {/* % Cost of Sale */}
+                    {/* % Ad Spend */}
                     <TableCell onClick={() => startEdit(s.id, "cost_of_sell", s.cost_of_sell)} className="cursor-pointer">
                       {editing.id === s.id && editing.field === "cost_of_sell" ? (
                         <div className="flex items-center gap-2">
@@ -362,7 +362,7 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                       )}
                     </TableCell>
 
-                    {/* % Cost */}
+                    {/* % Ad Spend Fee */}
                     <TableCell onClick={() => startEdit(s.id, "percent_cost", s.percent_cost)} className="cursor-pointer">
                       {editing.id === s.id && editing.field === "percent_cost" ? (
                         <div className="flex items-center gap-2">

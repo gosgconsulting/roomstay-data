@@ -331,7 +331,7 @@ export default function ForecastScenarioPage() {
             <span className="font-medium">{formatCurrency0(servicesTotals.totalRevenue)}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span>Cost</span>
+            <span>Ad Spend</span>
             <span className="font-medium">{formatCurrency2(servicesTotals.totalCost)}</span>
           </div>
           <div className="flex items-center justify-between">
@@ -343,7 +343,7 @@ export default function ForecastScenarioPage() {
             <span className="font-medium">{formatCurrency2(servicesTotals.totalOneOffFee)}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span>Cost Fee</span>
+            <span>Ad Spend Fee</span>
             <span className="font-medium">{formatCurrency2(servicesTotals.totalCostFee)}</span>
           </div>
           <div className="flex items-center justify-between">
@@ -386,7 +386,7 @@ export default function ForecastScenarioPage() {
                   <span className="font-medium">{formatCurrency0(svc.revenue)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Cost</span>
+                  <span>Ad Spend</span>
                   <span className="font-medium">{formatCurrency2(svc.cost)}</span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -398,7 +398,7 @@ export default function ForecastScenarioPage() {
                   <span className="font-medium">{formatCurrency2(svc.oneOffFee)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Cost Fee ({svc.percentCost.toFixed(2)}%)</span>
+                  <span>Ad Spend Fee ({svc.percentCost.toFixed(2)}%)</span>
                   <span className="font-medium">{formatCurrency2(svc.costFee)}</span>
                 </div>
                 <div className="flex items-center justify-between">
