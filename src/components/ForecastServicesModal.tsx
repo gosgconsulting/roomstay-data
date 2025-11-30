@@ -7,6 +7,7 @@ import { Plus } from "lucide-react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 
 interface ForecastServicesModalProps {
   open: boolean;
@@ -22,6 +23,7 @@ type ServiceRow = {
   recurrent_fee: number;
   percent_cost: number;
   percent_revenue: number;
+  budget_payer?: 'client' | 'agency';
 };
 
 export default function ForecastServicesModal({ open, onOpenChange, forecastId }: ForecastServicesModalProps) {
@@ -29,7 +31,7 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
   const [loading, setLoading] = React.useState(false);
 
   // NEW: editing state for inline cells
-  type EditableField = keyof Pick<ServiceRow, 'name' | 'weight' | 'cost_of_sell' | 'recurrent_fee' | 'percent_cost' | 'percent_revenue'>;
+  type EditableField = keyof Pick<ServiceRow, 'name' | 'weight' | 'cost_of_sell' | 'recurrent_fee' | 'percent_cost' | 'percent_revenue' | 'budget_payer'>;
   const [editing, setEditing] = React.useState<{ id: string | null; field: EditableField | null; value: string }>({
     id: null,
     field: null,
@@ -65,7 +67,8 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
         cost_of_sell: 0,
         recurrent_fee: 0,
         percent_cost: 0,
-        percent_revenue: 0
+        percent_revenue: 0,
+        budget_payer: 'client'
       })
       .select()
       .single() as { data: ServiceRow | null; error: any };
@@ -143,15 +146,20 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
         return;
       }
       valueToSave = num;
+    } else if (field === "budget_payer") {
+      const val = String(valueToSave);
+      if (val !== 'client' && val !== 'agency') {
+        toast.error("Budget must be Client or Agency");
+        return;
+      }
+      valueToSave = val;
     }
 
     // Persist to Supabase
-    const { error, data } = await (supabase as any)
+    const { error } = await (supabase as any)
       .from("forecast_services")
       .update({ [field]: valueToSave })
-      .eq("id", id)
-      .select()
-      .single() as { error: any; data: ServiceRow | null };
+      .eq("id", id);
 
     if (error) {
       console.error("Update service error:", error);
@@ -212,17 +220,18 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                 <TableHead>Recurrent fee</TableHead>
                 <TableHead>% Cost</TableHead>
                 <TableHead>% Revenue</TableHead>
+                <TableHead>Budget</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-muted-foreground">Loading services...</TableCell>
+                  <TableCell colSpan={8} className="text-muted-foreground">Loading services...</TableCell>
                 </TableRow>
               ) : services.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-muted-foreground">No services saved for this scenario.</TableCell>
+                  <TableCell colSpan={8} className="text-muted-foreground">No services saved for this scenario.</TableCell>
                 </TableRow>
               ) : (
                 services.map(s => (
@@ -375,6 +384,30 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                         </div>
                       ) : (
                         `${Number(s.percent_revenue || 0).toFixed(2)}%`
+                      )}
+                    </TableCell>
+
+                    {/* Budget */}
+                    <TableCell onClick={() => startEdit(s.id, "budget_payer", s.budget_payer ?? 'client')} className="cursor-pointer">
+                      {editing.id === s.id && editing.field === "budget_payer" ? (
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={String(editing.value || 'client')}
+                            onValueChange={(v) => setEditing(ed => ({ ...ed, value: v }))}
+                          >
+                            <SelectTrigger className="w-40 h-8">
+                              <SelectValue placeholder="Client" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="client">Client</SelectItem>
+                              <SelectItem value="agency">Agency</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button size="sm" variant="secondary" onClick={commitEdit}>Save</Button>
+                          <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
+                        </div>
+                      ) : (
+                        (s.budget_payer ?? 'client') === 'agency' ? 'Agency' : 'Client'
                       )}
                     </TableCell>
 

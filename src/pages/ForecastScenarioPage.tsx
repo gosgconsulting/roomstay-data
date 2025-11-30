@@ -26,6 +26,7 @@ type ServiceRow = {
   recurrent_fee: number;
   percent_cost: number;
   percent_revenue: number;
+  budget_payer?: 'client' | 'agency';
 };
 
 const formatCurrency0 = (value: number) =>
@@ -137,7 +138,6 @@ export default function ForecastScenarioPage() {
       const cost = revenue * ((Number(s.cost_of_sell) || 0) / 100);
       const recurrentFee = period === "year" ? (Number(s.recurrent_fee) || 0) * 12 : (Number(s.recurrent_fee) || 0);
 
-      // Cost Fee = Cost × % Cost; Revenue Fee = Revenue × % Revenue
       const costFee = cost * ((Number(s.percent_cost) || 0) / 100);
       const revenueFee = revenue * ((Number(s.percent_revenue) || 0) / 100);
 
@@ -156,9 +156,21 @@ export default function ForecastScenarioPage() {
         totalCostPct,
         percentCost: Number(s.percent_cost || 0),
         percentRevenue: Number(s.percent_revenue || 0),
+        budgetPayer: (s.budget_payer ?? 'client') as 'client' | 'agency',
       };
     });
   }, [serviceShares, base, period]);
+
+  // NEW: total profit across services where budget is Agency
+  const totalProfit = React.useMemo(() => {
+    return perService.reduce((sum, svc) => {
+      if (svc.budgetPayer === 'agency') {
+        const profit = (svc.costFee + svc.revenueFee + svc.recurrentFee) - svc.cost;
+        return sum + profit;
+      }
+      return sum;
+    }, 0);
+  }, [perService]);
 
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-4">
@@ -218,6 +230,10 @@ export default function ForecastScenarioPage() {
           <div className="flex items-center justify-between pt-2">
             <span className="font-semibold">Total Revenue</span>
             <span className="font-semibold">{formatCurrency0(base.revenue)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Profit</span>
+            <span className="font-semibold">{formatCurrency0(totalProfit)}</span>
           </div>
         </CardContent>
       </Card>
