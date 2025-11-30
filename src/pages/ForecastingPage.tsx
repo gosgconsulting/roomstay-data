@@ -32,9 +32,7 @@ interface ServiceRow {
   id: string;
   name: string; // store as string for controlled inputs; parse to number on submit
   weight: string; // store as string for controlled inputs; parse to number on submit
-  commission_rate: string; // percent input
   cost_of_sell: string; // percent input
-  // ADD: new service fields
   recurrent_fee: string; // currency input
   percent_cost: string; // percent input
   percent_revenue: string; // percent input
@@ -93,9 +91,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         name: '',
         weight: '',
-        commission_rate: '',
         cost_of_sell: '',
-        // ADD: defaults for new fields
         recurrent_fee: '',
         percent_cost: '',
         percent_revenue: ''
@@ -245,7 +241,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
           user_id: user.id,
           name: r.name.trim(),
           weight: parseFloat(r.weight) || 0,
-          commission_rate: parseFloat(r.commission_rate) || 0,
           cost_of_sell: parseFloat(r.cost_of_sell) || 0,
           recurrent_fee: parseFloat((r as any).recurrent_fee) || 0,
           percent_cost: parseFloat((r as any).percent_cost) || 0,
@@ -519,7 +514,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                     <TableRow>
                       <TableHead>Service Name</TableHead>
                       <TableHead>% Weight</TableHead>
-                      <TableHead>% Commission</TableHead>
                       <TableHead>% Cost of Sale</TableHead>
                       <TableHead>Recurrent fee</TableHead>
                       <TableHead>% Cost</TableHead>
@@ -530,7 +524,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                   <TableBody>
                     {serviceRows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-muted-foreground">
+                        <TableCell colSpan={7} className="text-muted-foreground">
                           No services added yet. Click "Add Service" to start.
                         </TableCell>
                       </TableRow>
@@ -552,21 +546,9 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                               step="0.01"
                               min="0"
                               max="100"
-                              placeholder="e.g., 1"
+                              placeholder="e.g., 40"
                               value={row.weight}
                               onChange={(e) => updateServiceRow(row.id, 'weight', e.target.value)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              className="h-8"
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              max="100"
-                              placeholder="e.g., 15"
-                              value={row.commission_rate}
-                              onChange={(e) => updateServiceRow(row.id, 'commission_rate', e.target.value)}
                             />
                           </TableCell>
                           <TableCell>

@@ -35,7 +35,15 @@ const formatPercent = (decimal: number) => `${(decimal * 100).toFixed(2)}%`;
 export default function ForecastScenarioModal({ open, onOpenChange, scenario }: ForecastScenarioModalProps) {
   const [period, setPeriod] = React.useState<"month" | "year">("month");
   // Load services for the scenario
-  type ServiceRow = { id: string; name: string; weight: number; commission_rate: number; cost_of_sell: number; recurrent_fee: number; percent_cost: number; percent_revenue: number; };
+  type ServiceRow = { 
+    id: string; 
+    name: string; 
+    weight: number; 
+    cost_of_sell: number; 
+    recurrent_fee: number; 
+    percent_cost: number; 
+    percent_revenue: number; 
+  };
   const [services, setServices] = React.useState<ServiceRow[]>([]);
 
   React.useEffect(() => {
@@ -89,7 +97,7 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
   const perService = React.useMemo(() => {
     return serviceShares.map(s => {
       const paidRevenueShare = base.paidRevenue * s.share;
-      const commissions = paidRevenueShare * ((Number(s.commission_rate) || 0) / 100);
+      const commissions = paidRevenueShare * ((Number(s.percent_revenue) || 0) / 100);
       const variableCost = paidRevenueShare * ((Number(s.cost_of_sell) || 0) / 100);
       const recurrent = period === "year" ? (Number(s.recurrent_fee) || 0) * 12 : (Number(s.recurrent_fee) || 0);
       const yourCost = variableCost + recurrent;

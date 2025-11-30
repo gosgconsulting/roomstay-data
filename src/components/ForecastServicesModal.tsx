@@ -13,7 +13,6 @@ type ServiceRow = {
   id: string;
   name: string;
   weight: number;
-  commission_rate: number;
   cost_of_sell: number;
   recurrent_fee: number;
   percent_cost: number;
@@ -54,7 +53,6 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
               <TableRow>
                 <TableHead>Service Name</TableHead>
                 <TableHead>% Weight</TableHead>
-                <TableHead>% Commission</TableHead>
                 <TableHead>% Cost of Sale</TableHead>
                 <TableHead>Recurrent fee</TableHead>
                 <TableHead>% Cost</TableHead>
@@ -64,18 +62,17 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-muted-foreground">Loading services...</TableCell>
+                  <TableCell colSpan={6} className="text-muted-foreground">Loading services...</TableCell>
                 </TableRow>
               ) : services.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-muted-foreground">No services saved for this scenario.</TableCell>
+                  <TableCell colSpan={6} className="text-muted-foreground">No services saved for this scenario.</TableCell>
                 </TableRow>
               ) : (
                 services.map(s => (
                   <TableRow key={s.id}>
                     <TableCell>{s.name}</TableCell>
                     <TableCell>{Number(s.weight || 0).toFixed(2)}%</TableCell>
-                    <TableCell>{Number(s.commission_rate || 0).toFixed(2)}%</TableCell>
                     <TableCell>{Number(s.cost_of_sell || 0).toFixed(2)}%</TableCell>
                     <TableCell>${Number(s.recurrent_fee || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</TableCell>
                     <TableCell>{Number(s.percent_cost || 0).toFixed(2)}%</TableCell>
