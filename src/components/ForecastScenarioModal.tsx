@@ -34,30 +34,15 @@ const formatPercent = (decimal: number) => `${(decimal * 100).toFixed(2)}%`;
 export default function ForecastScenarioModal({ open, onOpenChange, scenario }: ForecastScenarioModalProps) {
   const [period, setPeriod] = React.useState<"month" | "year">("month");
 
-  if (!scenario) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[720px] bg-background">
-          <DialogHeader>
-            <DialogTitle>Forecast Scenario</DialogTitle>
-            <DialogDescription>Select a scenario to view details.</DialogDescription>
-          </DialogHeader>
-          <div className="text-sm text-muted-foreground">No scenario selected.</div>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
-  // Inputs
+  // MOVED: derive inputs and memoized calculations ABOVE the early return
   const OTA_RATE = 0.15;
-  const adr = Number(scenario.average_daily_rate) || 0;
-  const directRevenuePct = Number(scenario.direct_bookings_target) || 0;
-  const rooms = Number(scenario.rooms) || 0;
-  const occPct = Number(scenario.occupancy_rate) || 0;
-  const costOfSell = Number(scenario.cost_of_sell) || 0; // decimal
-  const convRate = Number(scenario.conversion_rate) || 0; // decimal
+  const adr = Number(scenario?.average_daily_rate ?? 0);
+  const directRevenuePct = Number(scenario?.direct_bookings_target ?? 0);
+  const rooms = Number(scenario?.rooms ?? 0);
+  const occPct = Number(scenario?.occupancy_rate ?? 0);
+  const costOfSell = Number(scenario?.cost_of_sell ?? 0); // decimal (0-1)
+  const convRate = Number(scenario?.conversion_rate ?? 0); // decimal (0-1)
 
-  // Base monthly metrics
   const monthly = React.useMemo(() => {
     const rev = adr * rooms * 30 * (occPct / 100);
     const paidRevenue = rev * (directRevenuePct / 100);
@@ -85,10 +70,24 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
     yourCost: monthly.yourCost * 12,
     savings: monthly.savings * 12,
     bookings: monthly.bookings * 12,
-    maxCpc: monthly.maxCpc, // same recommendation
+    maxCpc: monthly.maxCpc,
   }), [monthly]);
 
   const selected = period === "month" ? monthly : yearly;
+
+  if (!scenario) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[720px] bg-background">
+          <DialogHeader>
+            <DialogTitle>Forecast Scenario</DialogTitle>
+            <DialogDescription>Select a scenario to view details.</DialogDescription>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">No scenario selected.</div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   // Channel assumptions (simple and editable later if needed)
   const CHANNELS = [
