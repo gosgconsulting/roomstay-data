@@ -435,6 +435,7 @@ export const FiltersBar = ({
         // If saved date range is in the future (more than 1 day ahead), reset to all_time
         if (savedDateStart && savedDateStart > new Date(now.getTime() + 24 * 60 * 60 * 1000)) {
           console.log('[FiltersBar] Saved date range is in the future, resetting to all_time');
+          console.log('[FiltersBar] Future date detected:', savedDateStart.toISOString(), 'vs now:', now.toISOString());
           applyDatePreset("all_time");
           
           // Update the saved view to prevent this issue in the future
@@ -446,9 +447,15 @@ export const FiltersBar = ({
               date_range_preset: "all_time"
             })
             .eq("id", data.id);
+        } else if (savedDateStart && savedDateEnd) {
+          // Use saved date range if it's valid (not in future)
+          console.log('[FiltersBar] Using saved date range:', savedDateStart.toISOString(), 'to', savedDateEnd.toISOString());
+          setDateRange({ from: savedDateStart, to: savedDateEnd });
+          setDatePreset("custom");
         } else {
           // Use saved date range preset, defaulting to all_time if not set
           const preset = (data as any).date_range_preset || "all_time";
+          console.log('[FiltersBar] Using saved preset:', preset);
           applyDatePreset(preset);
         }
       } else {

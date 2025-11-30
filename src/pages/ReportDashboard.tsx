@@ -107,6 +107,25 @@ export default function ReportDashboard() {
     };
   });
 
+  // Reset future date ranges
+  useEffect(() => {
+    if (filters.dateRange?.from) {
+      const now = new Date();
+      const isDateInFuture = filters.dateRange.from > new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      
+      if (isDateInFuture) {
+        console.log('[ReportDashboard] Detected future date range, resetting to all_time');
+        console.log('[ReportDashboard] Future date:', filters.dateRange.from.toISOString(), 'vs now:', now.toISOString());
+        
+        setFilters(prev => ({
+          ...prev,
+          dateRange: undefined,
+          datePreset: "all_time"
+        }));
+      }
+    }
+  }, [filters.dateRange]);
+
   // Track filter changes
   useEffect(() => {
     console.log('[testing] ReportDashboard - Filter state updated:', {

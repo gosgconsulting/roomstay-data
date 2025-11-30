@@ -190,6 +190,55 @@ export function KPIMetricsCards({
       });
 
       console.log('[KPI-FIXED] Current metrics calculated:', Object.keys(currentMetrics));
+      console.log('[KPI-FIXED] Current metrics values:', currentMetrics);
+
+      // If no standard metrics found, try to find any numeric dimensions as fallback
+      if (Object.keys(currentMetrics).length === 0) {
+        console.log('[KPI-FIXED] No standard metrics found, trying fallback approach...');
+        
+        // Collect all unique dimension IDs and their sample values
+        const allDimensions: Record<string, any[]> = {};
+        rawRows.slice(0, 10).forEach((row: any) => {
+          const dv = row.dimension_values || {};
+          Object.entries(dv).forEach(([dimId, value]) => {
+            if (!allDimensions[dimId]) allDimensions[dimId] = [];
+            allDimensions[dimId].push(value);
+          });
+        });
+        
+        console.log('[KPI-FIXED] All dimensions found:', Object.keys(allDimensions));
+        
+        // Try to identify numeric dimensions
+        Object.entries(allDimensions).forEach(([dimId, values]) => {
+          const numericValues = values.filter(v => {
+            const num = parseFloat(String(v));
+            return !isNaN(num) && num > 0;
+          });
+          
+          if (numericValues.length > 0) {
+            console.log('[KPI-FIXED] Found numeric dimension:', dimId, 'sample values:', numericValues.slice(0, 3));
+            
+            // Sum this dimension across all rows
+            let total = 0;
+            rawRows.forEach((row: any) => {
+              const dv = row.dimension_values || {};
+              const value = dv[dimId];
+              if (value !== undefined && value !== null && value !== '') {
+                const numValue = parseFloat(String(value));
+                if (!isNaN(numValue)) {
+                  total += numValue;
+                }
+              }
+            });
+            
+            if (total > 0) {
+              // Use the dimension ID as the metric name for now
+              currentMetrics[dimId] = total;
+              console.log('[KPI-FIXED] Added fallback metric:', dimId, '=', total);
+            }
+          }
+        });
+      }
 
       // Calculate derived metrics
       if (currentMetrics['Clicks'] && currentMetrics['Impressions']) {
