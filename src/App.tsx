@@ -13,6 +13,7 @@ import SharedReport from "./pages/SharedReport";
 import NotFound from "./pages/NotFound";
 import AllReports from "./pages/AllReports";
 import BudgetPage from "./pages/BudgetPage";
+import ForecastScenarioPage from "./pages/ForecastScenarioPage";
 import { ReportsSidebarDemo } from "./components/ReportsSidebarDemo";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
           <Route path="/tools/report" element={<ReportTool />} />
           <Route path="/tools/report/:accountId" element={<ReportDashboard />} />
           <Route path="/tools/forecasting" element={<ForecastingTool />} />
+          <Route path="/tools/forecasting/scenario/:scenarioId" element={<ForecastScenarioPage />} />
           <Route path="/tools/forecasting/:accountId" element={<ForecastingDashboard />} />
           <Route path="/tools/budget" element={<BudgetPage />} />
           <Route path="/tools/budget/:accountId" element={<BudgetPage />} />

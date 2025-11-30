@@ -907,13 +907,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
         </CardContent>
       </Card>
 
-      {/* View scenario modal */}
-      <ForecastScenarioModal
-        open={viewOpen}
-        onOpenChange={(open) => { setViewOpen(open); if (!open) setSelectedScenario(null); }}
-        scenario={selectedScenario}
-      />
-
       <ForecastServicesModal
         open={servicesModalOpen}
         onOpenChange={(open) => { setServicesModalOpen(open); if (!open) setServicesModalForecastId(null); }}
