@@ -314,40 +314,77 @@ export const fetchCSVUrlData = async (
   return csvData.values;
 };
 
-// Delete existing dimension data
+// Delete existing dimension data (optimized for large datasets)
 export const deleteExistingData = async (dataSourceId: string): Promise<number> => {
   console.log(`[SYNC] Deleting existing dimension_data for data source: ${dataSourceId}`);
   
-  let totalDeleted = 0;
-  let continueDeleting = true;
+  // First, check total count to determine strategy
+  const { count: totalCount, error: countError } = await supabase
+    .from('dimension_data')
+    .select('*', { count: 'exact', head: true })
+    .eq('data_source_id', dataSourceId);
   
-  while (continueDeleting) {
-    const { error: deleteError, count } = await supabase
+  if (countError) throw countError;
+  
+  const rowCount = totalCount || 0;
+  console.log(`[SYNC] Found ${rowCount} existing rows to delete`);
+  
+  if (rowCount === 0) {
+    return 0;
+  }
+  
+  let totalDeleted = 0;
+  let batchNumber = 0;
+  const batchSize = 10000; // Larger batch size for more efficient deletion
+  const totalBatches = Math.ceil(rowCount / batchSize);
+  
+  // Delete in batches without counting (faster)
+  while (true) {
+    batchNumber++;
+    
+    // Use a subquery to select IDs to delete in batches
+    const { data: idsToDelete, error: selectError } = await supabase
       .from('dimension_data')
-      .delete({ count: 'exact' })
+      .select('id')
       .eq('data_source_id', dataSourceId)
-      .limit(5000);
+      .limit(batchSize);
+    
+    if (selectError) throw selectError;
+    
+    if (!idsToDelete || idsToDelete.length === 0) {
+      break; // No more rows to delete
+    }
+    
+    const ids = idsToDelete.map((row: any) => row.id);
+    
+    // Delete by IDs (more efficient than using data_source_id filter repeatedly)
+    const { error: deleteError } = await supabase
+      .from('dimension_data')
+      .delete()
+      .in('id', ids);
 
     if (deleteError) throw deleteError;
     
-    if (count !== null && count !== undefined) {
-      totalDeleted += count;
-      if (count < 5000) {
-        continueDeleting = false;
-      }
-    } else {
-      const { data: checkData, error: checkError } = await supabase
-        .from('dimension_data')
-        .select('id', { count: 'exact', head: true })
-        .eq('data_source_id', dataSourceId)
-        .limit(1);
-      
-      if (checkError) throw checkError;
-      continueDeleting = checkData && checkData.length > 0;
+    totalDeleted += ids.length;
+    
+    // Progress logging for large datasets
+    if (rowCount > 50000) {
+      const progress = Math.round((batchNumber / totalBatches) * 100);
+      console.log(`[SYNC] Deletion progress: ${progress}% (${totalDeleted}/${rowCount} rows, batch ${batchNumber}/${totalBatches})`);
+    }
+    
+    // Break if we deleted fewer rows than the batch size (last batch)
+    if (ids.length < batchSize) {
+      break;
+    }
+    
+    // Small delay between large batches to prevent overwhelming the database
+    if (batchNumber % 5 === 0 && rowCount > 100000) {
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
   }
   
-  console.log(`[SYNC] Deleted ${totalDeleted} existing rows`);
+  console.log(`[SYNC] Deleted ${totalDeleted} existing rows in ${batchNumber} batches`);
   return totalDeleted;
 };
 
