@@ -431,11 +431,14 @@ export const FiltersBar = ({
         const savedDateStart = data.date_range_start ? new Date(data.date_range_start) : null;
         const savedDateEnd = data.date_range_end ? new Date(data.date_range_end) : null;
         const now = new Date();
+        const currentYear = now.getFullYear();
         
-        // If saved date range is in the future (more than 1 day ahead), reset to all_time
-        if (savedDateStart && savedDateStart > new Date(now.getTime() + 24 * 60 * 60 * 1000)) {
+        // More aggressive future date detection - check if year is greater than current year
+        if (savedDateStart && (savedDateStart.getFullYear() > currentYear || savedDateStart > new Date(now.getTime() + 24 * 60 * 60 * 1000))) {
           console.log('[FiltersBar] Saved date range is in the future, resetting to all_time');
-          console.log('[FiltersBar] Future date detected:', savedDateStart.toISOString(), 'vs now:', now.toISOString());
+          console.log('[FiltersBar] Future date detected:', savedDateStart.toISOString(), 'current year:', currentYear);
+          
+          // Force all_time
           applyDatePreset("all_time");
           
           // Update the saved view to prevent this issue in the future
@@ -447,6 +450,8 @@ export const FiltersBar = ({
               date_range_preset: "all_time"
             })
             .eq("id", data.id);
+            
+          console.log('[FiltersBar] Updated saved view to all_time');
         } else if (savedDateStart && savedDateEnd) {
           // Use saved date range if it's valid (not in future)
           console.log('[FiltersBar] Using saved date range:', savedDateStart.toISOString(), 'to', savedDateEnd.toISOString());
@@ -456,20 +461,28 @@ export const FiltersBar = ({
           // Use saved date range preset, defaulting to all_time if not set
           const preset = (data as any).date_range_preset || "all_time";
           console.log('[FiltersBar] Using saved preset:', preset);
-          applyDatePreset(preset);
+          
+          // Force all_time if preset is problematic
+          if (preset === "this_month" || preset === "last_month") {
+            console.log('[FiltersBar] Forcing all_time instead of potentially problematic preset:', preset);
+            applyDatePreset("all_time");
+          } else {
+            applyDatePreset(preset);
+          }
         }
       } else {
-        // No view: default to Account if available, else Date
+        // No view: default to Account if available, else Date, and always use all_time for date
         if (defaultAccountDimId) {
           setActiveDimensions([defaultAccountDimId]);
         } else if (dateDimensionId) {
           setActiveDimensions([dateDimensionId]);
         }
+        console.log('[FiltersBar] No saved view, defaulting to all_time');
         applyDatePreset("all_time");
       }
     } catch (error) {
       console.error("Error loading filter settings:", error);
-      // Fallback default
+      // Fallback default - always use all_time
       const defaultAccountDimId = await getAccountDimensionId();
       const dateDimensionId = await getDateDimensionId();
       if (defaultAccountDimId) {
@@ -477,6 +490,7 @@ export const FiltersBar = ({
       } else if (dateDimensionId) {
         setActiveDimensions([dateDimensionId]);
       }
+      console.log('[FiltersBar] Error fallback - using all_time');
       applyDatePreset("all_time");
     }
   };

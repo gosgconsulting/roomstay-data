@@ -91,15 +91,13 @@ export default function ReportDashboard() {
     accountId: accountId || undefined,
   });
   
-  // Filter state - default to this month with timezone-free date range
+  // Filter state - default to all_time to avoid date range issues
   const [filters, setFilters] = useState<FilterState>(() => {
-    console.log('[testing] ReportDashboard - Initializing with timezone-free date range:', {
-      preset: "all_time"
-    });
+    console.log('[testing] ReportDashboard - Initializing with all_time preset to avoid date issues');
     
     return {
       dimensionFilters: {},
-      dateRange: undefined,
+      dateRange: undefined, // No date range = all time
       datePreset: "all_time",
       compareEnabled: false,
       compareType: "previous_period",
@@ -107,7 +105,25 @@ export default function ReportDashboard() {
     };
   });
 
-  // Reset future date ranges
+  // Force reset any future date ranges immediately on mount
+  useEffect(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    
+    // If we detect any date range in the future (like 2025), reset to all_time
+    if (filters.dateRange?.from && filters.dateRange.from.getFullYear() > currentYear) {
+      console.log('[ReportDashboard] Detected future date range on mount, forcing reset to all_time');
+      console.log('[ReportDashboard] Future date:', filters.dateRange.from.toISOString(), 'current year:', currentYear);
+      
+      setFilters(prev => ({
+        ...prev,
+        dateRange: undefined,
+        datePreset: "all_time"
+      }));
+    }
+  }, []); // Run only on mount
+
+  // Reset future date ranges when they appear
   useEffect(() => {
     if (filters.dateRange?.from) {
       const now = new Date();
