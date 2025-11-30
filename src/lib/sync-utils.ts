@@ -324,12 +324,16 @@ export const deleteExistingData = async (dataSourceId: string): Promise<number> 
     .select('*', { count: 'exact', head: true })
     .eq('data_source_id', dataSourceId);
   
-  if (countError) throw countError;
+  if (countError) {
+    console.error(`[SYNC] Error getting count for deletion (non-fatal):`, countError);
+    // Don't throw - proceed with deletion anyway
+  }
   
   const rowCount = totalCount || 0;
   console.log(`[SYNC] Found ${rowCount} existing rows to delete`);
   
   if (rowCount === 0) {
+    console.log(`[SYNC] No existing data to delete`);
     return 0;
   }
   
@@ -1208,11 +1212,19 @@ export const syncDataSource = async (
         throw new Error('CSV URL is required for CSV data source');
       }
       
-      console.log(`[SYNC] Fetching data from CSV URL...`);
-      const csvData = await fetchCSVUrlData(dataSource.csv_url);
-      
-      if (csvData.length === 0) {
-        throw new Error('No data found in CSV file');
+      console.log(`[SYNC] Fetching data from CSV URL: ${dataSource.csv_url}`);
+      let csvData: any[][];
+      try {
+        csvData = await fetchCSVUrlData(dataSource.csv_url);
+        
+        if (csvData.length === 0) {
+          throw new Error('No data found in CSV file');
+        }
+        
+        console.log(`[SYNC] Successfully fetched ${csvData.length} total rows from CSV`);
+      } catch (csvError) {
+        console.error(`[SYNC] Error fetching CSV data:`, csvError);
+        throw new Error(`Failed to fetch CSV data: ${csvError instanceof Error ? csvError.message : 'Unknown error'}`);
       }
       
       // Extract headers from the specified header row
