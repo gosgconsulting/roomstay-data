@@ -2,11 +2,9 @@ import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Eye, MousePointer, ShoppingCart, DollarSign, Percent, Target } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { retryWithBackoff } from "@/lib/debug";
-import { loadReportData, calculateKPIMetrics, getCurrentMonthDateRange, Dimension } from "@/lib/data-loading-fix";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/lib/auth";
-import { useQueryClient } from "@tanstack/react-query";
 
 interface KPIMetric {
   label: string;
@@ -40,7 +38,6 @@ export function KPIMetricsCards({
   visibilityRefreshTrigger,
   headerAction
 }: KPIMetricsCardsProps) {
-  const queryClient = useQueryClient();
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
@@ -52,7 +49,7 @@ export function KPIMetricsCards({
   const stableFilters = useMemo(() => {
     console.log('[KPI-FIXED] Creating stable filters reference:', filters);
     return {
-      dimensionFilters: filters.dimensionFilters,
+      dimensionFilters: filters.dimensionFilters || {},
       dateRange: filters.dateRange,
       compareEnabled: filters.compareEnabled,
       compareType: filters.compareType,
@@ -80,6 +77,7 @@ export function KPIMetricsCards({
     } else {
       console.log('[KPI-FIXED] ✗ Missing reportId or accountId, skipping loadMetrics');
       setIsLoading(false);
+      setMetrics([]);
     }
   }, [reportId, accountId, stableFilters]);
 
@@ -95,9 +93,6 @@ export function KPIMetricsCards({
     console.log('[KPI-FIXED] loadMetrics - Starting data fetch for reportId:', reportId);
     setIsLoading(true);
     try {
-      // Get the current user (optional for public/shared views)
-      console.log('[KPI-FIXED] loadMetrics - User:', user?.id);
-      
       if (!reportId || !accountId) {
         console.error('[KPI-FIXED] Missing required data:', { reportId, accountId });
         setMetrics([]);
@@ -110,24 +105,17 @@ export function KPIMetricsCards({
 
       if (user?.id) {
         try {
-          const viewSettings = await retryWithBackoff(
-            async () => {
-              const { data, error } = await supabase
-                .from("report_views")
-                .select("visible_kpis, kpi_order")
-                .eq("report_id", reportId)
-                .eq("user_id", user.id)
-                .eq("is_default", true)
-                .maybeSingle();
+          const { data: viewSettings, error } = await supabase
+            .from("report_views")
+            .select("visible_kpis, kpi_order")
+            .eq("report_id", reportId)
+            .eq("user_id", user.id)
+            .eq("is_default", true)
+            .maybeSingle();
 
-              if (error) throw error;
-              return data;
-            },
-            3,
-            500
-          );
-
-          if (viewSettings) {
+          if (error) {
+            console.warn('[KPI-FIXED] Error loading view settings:', error);
+          } else if (viewSettings) {
             visibleKPIs = viewSettings.visible_kpis as string[] | null;
             kpiOrder = viewSettings.kpi_order as string[] | null;
             console.log('[KPI-FIXED] Loaded KPI settings:', { visibleKPIs, kpiOrder });
@@ -137,84 +125,153 @@ export function KPIMetricsCards({
         }
       }
 
-      // Get current month date range for filtering if no date range provided
-      const currentMonthRange = getCurrentMonthDateRange();
-      
-      // Apply filters from the component props
-      const filters = {
-        dateRange: stableFilters.dateRange || currentMonthRange,
-        dimensionFilters: stableFilters.dimensionFilters
-      };
+      // Use the same edge function as PerformanceTable for consistency
+      const dateFromFormatted = stableFilters.dateRange?.from ? format(stableFilters.dateRange.from, 'yyyy-MM-dd') : undefined;
+      const dateToFormatted = stableFilters.dateRange?.to ? format(stableFilters.dateRange.to, 'yyyy-MM-dd') : undefined;
 
-      console.log('[KPI-FIXED] Loading data with filters:', filters);
-      console.log('[KPI-FIXED] Date range being used:', {
-        from: filters.dateRange?.from,
-        to: filters.dateRange?.to,
-        isCurrentMonth: !stableFilters.dateRange
+      console.log('[KPI-FIXED] Calling edge function with params:', {
+        reportId,
+        accountId,
+        userId: user?.id,
+        dateFrom: dateFromFormatted,
+        dateTo: dateToFormatted,
+        dimensionFilters: stableFilters.dimensionFilters
       });
 
-      // Load data using the standardized approach with React Query caching
-      const result = await loadReportData(reportId, accountId, user?.id, filters, queryClient);
+      const { data: edgeData, error: edgeError } = await supabase.functions.invoke('get-performance-data', {
+        body: {
+          reportId,
+          accountId,
+          userId: user?.id,
+          dateFrom: dateFromFormatted,
+          dateTo: dateToFormatted,
+          dimensionFilters: stableFilters.dimensionFilters || {},
+          limit: 50000,
+          offset: 0,
+        }
+      });
 
-      if (!result.success) {
-        console.error('[KPI-FIXED] Failed to load report data:', result.error);
+      if (edgeError) {
+        console.error('[KPI-FIXED] Edge function error:', edgeError);
+        throw new Error(`Edge function error: ${edgeError.message || 'Unknown error'}`);
+      }
+
+      if (!edgeData || !edgeData.data) {
+        console.log('[KPI-FIXED] No data returned from edge function');
         setMetrics([]);
         return;
       }
 
-      const { data: filteredData, dimensions } = result;
+      const rawRows = edgeData.data;
+      console.log('[KPI-FIXED] Raw rows from edge function:', rawRows.length);
+
+      if (rawRows.length === 0) {
+        console.log('[KPI-FIXED] No rows found');
+        setMetrics([]);
+        return;
+      }
+
+      // Calculate current period metrics from dimension_values
+      const currentMetrics: Record<string, number> = {};
+      rawRows.forEach((row: any) => {
+        const dv = row.dimension_values || {};
+        
+        // Sum up all numeric values by dimension ID, mapping to common metric names
+        Object.entries(dv).forEach(([dimId, value]) => {
+          if (value !== undefined && value !== null && value !== '') {
+            const numValue = parseFloat(String(value));
+            if (!isNaN(numValue)) {
+              // Map dimension IDs to standard metric names
+              let metricName = getMetricNameFromDimensionId(dimId);
+              currentMetrics[metricName] = (currentMetrics[metricName] || 0) + numValue;
+            }
+          }
+        });
+      });
+
+      console.log('[KPI-FIXED] Current metrics calculated:', Object.keys(currentMetrics));
+
+      // Calculate derived metrics
+      if (currentMetrics['Clicks'] && currentMetrics['Impressions']) {
+        currentMetrics['CTR'] = (currentMetrics['Clicks'] / currentMetrics['Impressions']) * 100;
+      }
+      if (currentMetrics['Conversions'] && currentMetrics['Clicks']) {
+        currentMetrics['Conversion Rate'] = (currentMetrics['Conversions'] / currentMetrics['Clicks']) * 100;
+      }
+      if (currentMetrics['Cost'] && currentMetrics['Clicks']) {
+        currentMetrics['CPC'] = currentMetrics['Cost'] / currentMetrics['Clicks'];
+      }
+      if (currentMetrics['Revenue'] && currentMetrics['Cost']) {
+        currentMetrics['ROAS'] = currentMetrics['Revenue'] / currentMetrics['Cost'];
+      }
+      if (currentMetrics['Cost'] && currentMetrics['Revenue']) {
+        currentMetrics['Cost of sale'] = (currentMetrics['Cost'] / currentMetrics['Revenue']) * 100;
+      }
 
       // Load comparison period data if comparison is enabled
       let comparisonMetrics: Record<string, number> = {};
-      if (stableFilters.compareEnabled) {
-        console.log('[KPI-FIXED] Comparison enabled, loading comparison period data');
-        
-        const currentPeriod = filters.dateRange;
+      if (stableFilters.compareEnabled && stableFilters.dateRange?.from && stableFilters.dateRange?.to) {
+        console.log('[KPI-FIXED] Loading comparison data...');
+        const currentPeriod = stableFilters.dateRange;
         const daysDiff = Math.ceil((currentPeriod.to.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
-        
         const previousPeriodEnd = new Date(currentPeriod.from);
         previousPeriodEnd.setDate(previousPeriodEnd.getDate() - 1);
         const previousPeriodStart = new Date(previousPeriodEnd);
         previousPeriodStart.setDate(previousPeriodStart.getDate() - daysDiff + 1);
 
-        const comparisonFilters = {
-          dateRange: { from: previousPeriodStart, to: previousPeriodEnd },
-          dimensionFilters: stableFilters.dimensionFilters
-        };
+        const prevFromFormatted = format(previousPeriodStart, 'yyyy-MM-dd');
+        const prevToFormatted = format(previousPeriodEnd, 'yyyy-MM-dd');
 
-        const comparisonResult = await loadReportData(reportId, accountId, user?.id, comparisonFilters, queryClient);
-        if (comparisonResult.success) {
-          comparisonMetrics = await calculateKPIMetrics(comparisonResult.data, dimensions, reportId, accountId);
-          console.log('[KPI-FIXED] Comparison metrics calculated:', comparisonMetrics);
+        // Fetch comparison data using edge function
+        const { data: prevEdgeData } = await supabase.functions.invoke('get-performance-data', {
+          body: {
+            reportId,
+            accountId,
+            userId: user?.id,
+            dateFrom: prevFromFormatted,
+            dateTo: prevToFormatted,
+            dimensionFilters: stableFilters.dimensionFilters || {},
+            limit: 50000,
+            offset: 0,
+          }
+        });
+
+        if (prevEdgeData && prevEdgeData.data) {
+          const prevRawRows = prevEdgeData.data;
+          
+          // Calculate comparison metrics
+          prevRawRows.forEach((row: any) => {
+            const dv = row.dimension_values || {};
+            
+            Object.entries(dv).forEach(([dimId, value]) => {
+              if (value !== undefined && value !== null && value !== '') {
+                const numValue = parseFloat(String(value));
+                if (!isNaN(numValue)) {
+                  let metricName = getMetricNameFromDimensionId(dimId);
+                  comparisonMetrics[metricName] = (comparisonMetrics[metricName] || 0) + numValue;
+                }
+              }
+            });
+          });
+
+          // Calculate derived comparison metrics
+          if (comparisonMetrics['Clicks'] && comparisonMetrics['Impressions']) {
+            comparisonMetrics['CTR'] = (comparisonMetrics['Clicks'] / comparisonMetrics['Impressions']) * 100;
+          }
+          if (comparisonMetrics['Conversions'] && comparisonMetrics['Clicks']) {
+            comparisonMetrics['Conversion Rate'] = (comparisonMetrics['Conversions'] / comparisonMetrics['Clicks']) * 100;
+          }
+          if (comparisonMetrics['Cost'] && comparisonMetrics['Clicks']) {
+            comparisonMetrics['CPC'] = comparisonMetrics['Cost'] / comparisonMetrics['Clicks'];
+          }
+          if (comparisonMetrics['Revenue'] && comparisonMetrics['Cost']) {
+            comparisonMetrics['ROAS'] = comparisonMetrics['Revenue'] / comparisonMetrics['Cost'];
+          }
+          if (comparisonMetrics['Cost'] && comparisonMetrics['Revenue']) {
+            comparisonMetrics['Cost of sale'] = (comparisonMetrics['Cost'] / comparisonMetrics['Revenue']) * 100;
+          }
         }
-      } else {
-        console.log('[KPI-FIXED] Comparison disabled');
       }
-
-      console.log('[KPI-FIXED] ========== DATA LOADING SUMMARY ==========');
-      console.log('[KPI-FIXED] Total dimension_data rows loaded:', result.totalRows);
-      console.log('[KPI-FIXED] Filtered rows:', result.filteredRows);
-      console.log('[KPI-FIXED] Total dimensions loaded:', dimensions?.length);
-      console.log('[KPI-FIXED] Dimension names:', dimensions?.map(d => d.name).join(', '));
-      console.log('[KPI-FIXED] Sample data row:', filteredData[0]?.dimension_values);
-      console.log('[KPI-FIXED] Validation:', result.debugInfo?.validation);
-      console.log('[KPI-FIXED] ========================================');
-
-      if (!dimensions || dimensions.length === 0) {
-        console.error('[KPI-FIXED] ✗ NO DIMENSIONS LOADED - Cannot calculate metrics!');
-        setMetrics([]);
-        return;
-      }
-
-      if (filteredData.length === 0) {
-        console.error('[KPI-FIXED] ✗ NO DATA LOADED - Cannot calculate metrics!');
-        setMetrics([]);
-        return;
-      }
-
-      // Calculate KPI metrics using the utility function
-      const calculatedMetrics = await calculateKPIMetrics(filteredData, dimensions, reportId, accountId);
-      console.log('[KPI-FIXED] Calculated metrics:', calculatedMetrics);
 
       // Create display metrics based on visibility settings
       const defaultKPIs = [
@@ -230,7 +287,7 @@ export function KPIMetricsCards({
       orderedKPIs.forEach(kpiName => {
         if (!kpisToShow.includes(kpiName)) return;
 
-        const value = calculatedMetrics[kpiName];
+        const value = currentMetrics[kpiName];
         if (value === undefined || value === null) return;
 
         let formattedValue: string | number = value;
@@ -341,6 +398,27 @@ export function KPIMetricsCards({
     }
   };
 
+  // Helper function to map dimension IDs to standard metric names
+  const getMetricNameFromDimensionId = (dimId: string): string => {
+    // Common dimension ID mappings
+    const commonMappings: Record<string, string> = {
+      'impressions': 'Impressions',
+      'clicks': 'Clicks',
+      'conversions': 'Conversions',
+      'bookings': 'Bookings',
+      'cost': 'Cost',
+      'revenue': 'Revenue',
+      'cpc': 'CPC',
+      'ctr': 'CTR',
+      'conversion_rate': 'Conversion Rate',
+      'roas': 'ROAS',
+      'cost_of_sale': 'Cost of sale'
+    };
+    
+    const lowerDimId = dimId.toLowerCase();
+    return commonMappings[lowerDimId] || dimId;
+  };
+
   // Formatting functions
   const formatNumber = (value: number): string => {
     if (value >= 1000000) {
@@ -393,7 +471,6 @@ export function KPIMetricsCards({
     );
   }
 
-  // Don't hide if no metrics - show empty state only if explicitly no dimensions
   if (metrics.length === 0) {
     console.log('[KPI-FIXED] KPIMetricsCards - Rendering empty state (no metrics)');
     return (

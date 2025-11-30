@@ -427,9 +427,30 @@ export const FiltersBar = ({
           setMasterDimensionId(fv.__master_dimension_id);
         }
 
-        // FIX: Use date_range_preset from DB
-        const preset = (data as any).date_range_preset || "all_time";
-        applyDatePreset(preset);
+        // Check if saved date range is in the future and reset to all_time if so
+        const savedDateStart = data.date_range_start ? new Date(data.date_range_start) : null;
+        const savedDateEnd = data.date_range_end ? new Date(data.date_range_end) : null;
+        const now = new Date();
+        
+        // If saved date range is in the future (more than 1 day ahead), reset to all_time
+        if (savedDateStart && savedDateStart > new Date(now.getTime() + 24 * 60 * 60 * 1000)) {
+          console.log('[FiltersBar] Saved date range is in the future, resetting to all_time');
+          applyDatePreset("all_time");
+          
+          // Update the saved view to prevent this issue in the future
+          await supabase
+            .from("report_views")
+            .update({
+              date_range_start: null,
+              date_range_end: null,
+              date_range_preset: "all_time"
+            })
+            .eq("id", data.id);
+        } else {
+          // Use saved date range preset, defaulting to all_time if not set
+          const preset = (data as any).date_range_preset || "all_time";
+          applyDatePreset(preset);
+        }
       } else {
         // No view: default to Account if available, else Date
         if (defaultAccountDimId) {
