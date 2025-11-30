@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -34,6 +35,7 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
     field: null,
     value: ""
   });
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
   // NEW: add service handler
   const handleAddService = async () => {
@@ -77,6 +79,32 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
     setServices(prev => [data as ServiceRow, ...prev]);
     setEditing({ id: data.id, field: "name", value: data.name || "" });
     toast.success("Service added");
+  };
+
+  // NEW: delete service handler
+  const handleDeleteService = async (id: string) => {
+    if (!id) return;
+    if (!window.confirm("Delete this service?")) return;
+
+    setDeletingId(id);
+    const { error } = await (supabase as any)
+      .from("forecast_services")
+      .delete()
+      .eq("id", id);
+
+    setDeletingId(null);
+
+    if (error) {
+      console.error("Delete service error:", error);
+      toast.error("Failed to delete service");
+      return;
+    }
+
+    setServices(prev => prev.filter(s => s.id !== id));
+    if (editing.id === id) {
+      setEditing({ id: null, field: null, value: "" });
+    }
+    toast.success("Service deleted");
   };
 
   const startEdit = (id: string, field: EditableField, current: number | string) => {
@@ -184,16 +212,17 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                 <TableHead>Recurrent fee</TableHead>
                 <TableHead>% Cost</TableHead>
                 <TableHead>% Revenue</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground">Loading services...</TableCell>
+                  <TableCell colSpan={7} className="text-muted-foreground">Loading services...</TableCell>
                 </TableRow>
               ) : services.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground">No services saved for this scenario.</TableCell>
+                  <TableCell colSpan={7} className="text-muted-foreground">No services saved for this scenario.</TableCell>
                 </TableRow>
               ) : (
                 services.map(s => (
@@ -347,6 +376,20 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                       ) : (
                         `${Number(s.percent_revenue || 0).toFixed(2)}%`
                       )}
+                    </TableCell>
+
+                    {/* Actions */}
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDeleteService(s.id)}
+                        disabled={deletingId === s.id}
+                        aria-label="Delete service"
+                        title="Delete service"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))
