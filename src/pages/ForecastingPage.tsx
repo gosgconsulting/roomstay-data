@@ -26,6 +26,15 @@ interface ForecastScenario {
   created_at: string;
 }
 
+// ADD: service row type for create form
+interface ServiceRow {
+  id: string;
+  name: string;
+  weight: string; // store as string for controlled inputs; parse to number on submit
+  commission_rate: string; // percent input
+  cost_of_sell: string; // percent input
+}
+
 interface ForecastingPageProps {
   reportId: string;
   accountId?: string;
@@ -57,15 +66,36 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
   // Form state
   const [formData, setFormData] = useState({
     name: '', // Hotel Name
-    email: '', // Optional
     average_daily_rate: '',
     direct_bookings_target: '', // % Direct Revenue
     rooms: '',
     occupancy_rate: '',
-    commission_rate: '15', // % Commission Rate (placeholder, defaults to 15%)
-    cost_of_sell: '', // percentage input
     conversion_rate: ''
   });
+
+  // ADD: services rows for commission and cost-of-sale inputs
+  const [serviceRows, setServiceRows] = useState<ServiceRow[]>([]);
+
+  const addServiceRow = () => {
+    setServiceRows(prev => [
+      ...prev,
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: '',
+        weight: '',
+        commission_rate: '',
+        cost_of_sell: ''
+      }
+    ]);
+  };
+
+  const updateServiceRow = (id: string, field: keyof ServiceRow, value: string) => {
+    setServiceRows(prev => prev.map(r => (r.id === id ? { ...r, [field]: value } : r)));
+  };
+
+  const removeServiceRow = (id: string) => {
+    setServiceRows(prev => prev.filter(r => r.id !== id));
+  };
 
   useEffect(() => {
     if (reportId) {
@@ -129,14 +159,12 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
       return;
     }
 
-    // Email is now optional, so no validation needed
-
+    // Required numeric fields (removed cost_of_sell and email)
     const requiredFields = [
       'average_daily_rate',
       'direct_bookings_target',
       'rooms',
       'occupancy_rate',
-      'cost_of_sell',
       'conversion_rate'
     ];
 
@@ -150,6 +178,15 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
         return;
       }
     }
+
+    // Compute weighted average cost of sale from services (percent -> decimal)
+    const weights = serviceRows.map(r => parseFloat(r.weight) || 0);
+    const costs = serviceRows.map(r => parseFloat(r.cost_of_sell) || 0); // percent values
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    const weightedCostPercent = totalWeight > 0
+      ? weights.reduce((sum, w, i) => sum + w * costs[i], 0) / totalWeight
+      : 0;
+    const aggregatedCostOfSellDecimal = (weightedCostPercent || 0) / 100;
 
     try {
       setIsSubmitting(true);
@@ -165,12 +202,12 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
           report_id: reportId,
           user_id: user.id,
           name: formData.name.trim(), // Hotel Name
-          email: formData.email.trim() || null, // Optional field
+          email: null, // removed from form; store null
           average_daily_rate: parseFloat(formData.average_daily_rate),
           direct_bookings_target: parseFloat(formData.direct_bookings_target),
           rooms: parseInt(formData.rooms),
           occupancy_rate: parseFloat(formData.occupancy_rate),
-          cost_of_sell: parseFloat(formData.cost_of_sell) / 100, // percentage to decimal
+          cost_of_sell: aggregatedCostOfSellDecimal, // derived from Services table
           conversion_rate: parseFloat(formData.conversion_rate) / 100, // Convert percentage to decimal
         })
         .select()
@@ -183,18 +220,16 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
 
       console.log('[testing] Created scenario:', data);
       
-      // Reset form
+      // Reset form (removed commission_rate, cost_of_sell, email) and services
       setFormData({
         name: '',
-        email: '',
         average_daily_rate: '',
         direct_bookings_target: '',
         rooms: '',
         occupancy_rate: '',
-        commission_rate: '15',
-        cost_of_sell: '',
         conversion_rate: ''
       });
+      setServiceRows([]);
 
       // Reload scenarios
       await loadScenarios();
@@ -463,45 +498,101 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                   required
                 />
               </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="commission-rate">% Commission Rate</Label>
-                <Input
-                  id="commission-rate"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  placeholder="15.00"
-                  value={formData.commission_rate}
-                  onChange={(e) => handleInputChange('commission_rate', e.target.value)}
-                />
+
+              {/* REMOVED: % Commission Rate, % Cost of Sale, Email Address inputs from create form */}
+            </div>
+
+            {/* NEW: Services section */}
+            <div className="space-y-3">
+              <Separator />
+              <div className="flex items-center justify-between">
+                <Label className="text-base">Services</Label>
+                <Button type="button" variant="secondary" size="sm" onClick={addServiceRow} className="flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Service
+                </Button>
               </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="cost-of-sale">% Cost of Sale</Label>
-                <Input
-                  id="cost-of-sale"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  placeholder="12.5"
-                  value={formData.cost_of_sell}
-                  onChange={(e) => handleInputChange('cost_of_sell', e.target.value)}
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address (Optional)</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="name@example.com"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                />
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Service Name</TableHead>
+                      <TableHead>Weight</TableHead>
+                      <TableHead>% Commission</TableHead>
+                      <TableHead>% Cost of Sale</TableHead>
+                      <TableHead className="w-[80px]">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {serviceRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-muted-foreground">
+                          No services added yet. Click "Add Service" to start.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      serviceRows.map(row => (
+                        <TableRow key={row.id}>
+                          <TableCell>
+                            <Input
+                              className="h-8"
+                              placeholder="e.g., Metasearch, PPC"
+                              value={row.name}
+                              onChange={(e) => updateServiceRow(row.id, 'name', e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              className="h-8"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="e.g., 1"
+                              value={row.weight}
+                              onChange={(e) => updateServiceRow(row.id, 'weight', e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              className="h-8"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="100"
+                              placeholder="e.g., 15"
+                              value={row.commission_rate}
+                              onChange={(e) => updateServiceRow(row.id, 'commission_rate', e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              className="h-8"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="100"
+                              placeholder="e.g., 12.5"
+                              value={row.cost_of_sell}
+                              onChange={(e) => updateServiceRow(row.id, 'cost_of_sell', e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                              onClick={() => removeServiceRow(row.id)}
+                              title="Remove service"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </div>
             </div>
             
