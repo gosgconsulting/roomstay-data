@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import ForecastServicesModal from "@/components/ForecastServicesModal";
 import { useUser } from "@/lib/auth";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 
 interface ForecastScenario {
   id: string;
@@ -36,6 +37,7 @@ interface ServiceRow {
   recurrent_fee: string; // currency input
   percent_cost: string; // percent input
   percent_revenue: string; // percent input
+  budget_payer?: 'client' | 'agency';
 }
 
 interface ForecastingPageProps {
@@ -93,7 +95,8 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
         cost_of_sell: '',
         recurrent_fee: '',
         percent_cost: '',
-        percent_revenue: ''
+        percent_revenue: '',
+        budget_payer: 'client'
       }
     ]);
   };
@@ -244,6 +247,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
           recurrent_fee: parseFloat((r as any).recurrent_fee) || 0,
           percent_cost: parseFloat((r as any).percent_cost) || 0,
           percent_revenue: parseFloat((r as any).percent_revenue) || 0,
+          budget_payer: (r.budget_payer ?? 'client')
         }));
         const { error: svcError } = await (supabase as any)
           .from('forecast_services')
@@ -517,6 +521,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                       <TableHead>Recurrent fee</TableHead>
                       <TableHead>% Cost</TableHead>
                       <TableHead>% Revenue</TableHead>
+                      <TableHead>Budget</TableHead>
                       <TableHead className="w-[80px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -596,6 +601,20 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                               value={row.percent_revenue}
                               onChange={(e) => updateServiceRow(row.id, 'percent_revenue', e.target.value)}
                             />
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              value={row.budget_payer ?? 'client'}
+                              onValueChange={(v) => updateServiceRow(row.id, 'budget_payer', v as 'client' | 'agency')}
+                            >
+                              <SelectTrigger className="h-8 w-36">
+                                <SelectValue placeholder="Client" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="client">Client</SelectItem>
+                                <SelectItem value="agency">Agency</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </TableCell>
                           <TableCell>
                             <Button
