@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { supabase } from "@/integrations/supabase/client";
 
 type ForecastScenario = {
   id: string;
@@ -33,47 +34,99 @@ const formatPercent = (decimal: number) => `${(decimal * 100).toFixed(2)}%`;
 
 export default function ForecastScenarioModal({ open, onOpenChange, scenario }: ForecastScenarioModalProps) {
   const [period, setPeriod] = React.useState<"month" | "year">("month");
+  // Load services for the scenario
+  type ServiceRow = { id: string; name: string; weight: number; commission_rate: number; cost_of_sell: number; recurrent_fee: number; percent_cost: number; percent_revenue: number; };
+  const [services, setServices] = React.useState<ServiceRow[]>([]);
 
-  // MOVED: derive inputs and memoized calculations ABOVE the early return
-  const OTA_RATE = 0.15;
+  React.useEffect(() => {
+    const loadServices = async () => {
+      if (!scenario?.id) {
+        setServices([]);
+        return;
+      }
+      const { data } = await (supabase as any)
+        .from("forecast_services")
+        .select("*")
+        .eq("forecast_id", scenario.id)
+        .order("created_at", { ascending: false }) as { data: ServiceRow[] | null };
+      setServices(data || []);
+    };
+    loadServices();
+  }, [scenario?.id, open]);
+
+  // Inputs (safe defaults)
   const adr = Number(scenario?.average_daily_rate ?? 0);
   const directRevenuePct = Number(scenario?.direct_bookings_target ?? 0);
   const rooms = Number(scenario?.rooms ?? 0);
   const occPct = Number(scenario?.occupancy_rate ?? 0);
-  const costOfSell = Number(scenario?.cost_of_sell ?? 0); // decimal (0-1)
-  const convRate = Number(scenario?.conversion_rate ?? 0); // decimal (0-1)
+  const convRate = Number(scenario?.conversion_rate ?? 0); // decimal
 
+  // Base monthly metrics
   const monthly = React.useMemo(() => {
-    const rev = adr * rooms * 30 * (occPct / 100);
-    const paidRevenue = rev * (directRevenuePct / 100);
-    const otaCost = paidRevenue * OTA_RATE;
-    const yourCost = paidRevenue * costOfSell;
-    const savings = otaCost - yourCost;
-    const bookings = convRate > 0 ? rev * convRate : 0;
-    const maxCpc = convRate > 0 ? (adr * costOfSell) / convRate : 0;
-
-    return {
-      revenue: rev,
-      paidRevenue,
-      otaCost,
-      yourCost,
-      savings,
-      bookings,
-      maxCpc,
-    };
-  }, [adr, rooms, occPct, directRevenuePct, costOfSell, convRate]);
+    const revenue = adr * rooms * 30 * (occPct / 100);
+    const paidRevenue = revenue * (directRevenuePct / 100);
+    const bookings = convRate > 0 ? revenue * convRate : 0;
+    return { revenue, paidRevenue, bookings };
+  }, [adr, rooms, occPct, directRevenuePct, convRate]);
 
   const yearly = React.useMemo(() => ({
     revenue: monthly.revenue * 12,
     paidRevenue: monthly.paidRevenue * 12,
-    otaCost: monthly.otaCost * 12,
-    yourCost: monthly.yourCost * 12,
-    savings: monthly.savings * 12,
-    bookings: monthly.bookings * 12,
-    maxCpc: monthly.maxCpc,
+    bookings: monthly.bookings * 12
   }), [monthly]);
 
-  const selected = period === "month" ? monthly : yearly;
+  const base = period === "month" ? monthly : yearly;
+
+  // Compute per-service metrics from weights → shares
+  const serviceShares = React.useMemo(() => {
+    const total = services.reduce((sum, s) => sum + (Number(s.weight) || 0), 0);
+    return services.map(s => ({
+      ...s,
+      share: total > 0 ? (Number(s.weight) || 0) / total : 0
+    }));
+  }, [services]);
+
+  const perService = React.useMemo(() => {
+    return serviceShares.map(s => {
+      const paidRevenueShare = base.paidRevenue * s.share;
+      const commissions = paidRevenueShare * ((Number(s.commission_rate) || 0) / 100);
+      const variableCost = paidRevenueShare * ((Number(s.cost_of_sell) || 0) / 100);
+      const recurrent = period === "year" ? (Number(s.recurrent_fee) || 0) * 12 : (Number(s.recurrent_fee) || 0);
+      const yourCost = variableCost + recurrent;
+      const savings = commissions - yourCost;
+      const bookings = base.bookings * s.share;
+      return {
+        key: s.id,
+        name: s.name,
+        paidRevenue: paidRevenueShare,
+        commissions,
+        yourCost,
+        savings,
+        bookings
+      };
+    });
+  }, [serviceShares, base, period]);
+
+  const aggregated = React.useMemo(() => {
+    if (perService.length > 0) {
+      const commissions = perService.reduce((sum, ch) => sum + ch.commissions, 0);
+      const yourCost = perService.reduce((sum, ch) => sum + ch.yourCost, 0);
+      const savings = commissions - yourCost;
+      // Weighted avg cost-of-sale for Max CPC
+      const totalShare = serviceShares.reduce((sum, s) => sum + s.share, 0);
+      const avgCostRate = totalShare > 0 ? serviceShares.reduce((sum, s) => sum + s.share * ((Number(s.cost_of_sell) || 0) / 100), 0) / totalShare : Number(scenario?.cost_of_sell || 0);
+      const maxCpc = convRate > 0 ? (adr * avgCostRate) / convRate : 0;
+      return { commissions, yourCost, savings, maxCpc };
+    } else {
+      // Fallback: use scenario cost_of_sell and a default commission (15%)
+      const fallbackCommissionRate = 0.15;
+      const commissions = base.paidRevenue * fallbackCommissionRate;
+      const yourCost = base.paidRevenue * (Number(scenario?.cost_of_sell || 0));
+      const savings = commissions - yourCost;
+      const maxCpc = convRate > 0 ? (adr * Number(scenario?.cost_of_sell || 0)) / convRate : 0;
+      return { commissions, yourCost, savings, maxCpc };
+    }
+  }, [perService, base, convRate, adr, scenario?.cost_of_sell, serviceShares]);
 
   if (!scenario) {
     return (
@@ -89,49 +142,23 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
     );
   }
 
-  // Channel assumptions (simple and editable later if needed)
-  const CHANNELS = [
-    { key: "metasearch", name: "Metasearch", share: 0.5, costRate: costOfSell },
-    { key: "fbl", name: "Free Booking Links", share: 0.3, costRate: 0 },
-    { key: "other", name: "Other Paid", share: 0.2, costRate: costOfSell },
-  ];
-
-  const channelMetrics = CHANNELS.map((ch) => {
-    const paidRevenue = selected.paidRevenue * ch.share;
-    const commissions = paidRevenue * OTA_RATE;
-    const cost = paidRevenue * ch.costRate;
-    const savings = commissions - cost;
-    const bookings = selected.bookings * ch.share;
-    return {
-      key: ch.key,
-      name: ch.name,
-      paidRevenue,
-      commissions,
-      cost,
-      savings,
-      bookings,
-    };
-  });
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[1100px] bg-background">
         <DialogHeader>
           <DialogTitle>Forecast: {scenario.name}</DialogTitle>
           <DialogDescription>
-            Compare monthly and yearly KPIs, and see channel-level breakdown. OTA commission assumed at 15%.
+            KPIs and per-service breakdown are computed from the configured Services.
           </DialogDescription>
         </DialogHeader>
 
         {/* Scenario badges */}
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">Rooms: {rooms}</Badge>
-          <Badge variant="outline">ADR: {formatCurrency2(adr)}</Badge>
-          <Badge variant="outline">Occupancy: {occPct.toFixed(2)}%</Badge>
-          <Badge variant="outline">Direct Revenue %: {directRevenuePct.toFixed(2)}%</Badge>
-          <Badge variant="outline">Cost of sale: {formatPercent(costOfSell)}</Badge>
-          <Badge variant="outline">OTA rate: 15%</Badge>
-          {scenario.email && <Badge variant="outline">Email: {scenario.email}</Badge>}
+          <Badge variant="outline">Rooms: {Number(scenario.rooms || 0)}</Badge>
+          <Badge variant="outline">ADR: {formatCurrency2(Number(scenario.average_daily_rate || 0))}</Badge>
+          <Badge variant="outline">Occupancy: {Number(scenario.occupancy_rate || 0).toFixed(2)}%</Badge>
+          <Badge variant="outline">Direct Revenue %: {Number(scenario.direct_bookings_target || 0).toFixed(2)}%</Badge>
+          <Badge variant="outline">Conv. Rate: {formatPercent(Number(scenario.conversion_rate || 0))}</Badge>
         </div>
 
         {/* Period toggle */}
@@ -142,7 +169,7 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
           </ToggleGroup>
         </div>
 
-        {/* Layout: KPI sidebar + channels */}
+        {/* Layout: KPI sidebar + per-service cards */}
         <div className="mt-4 grid grid-cols-1 lg:grid-cols-4 gap-4">
           {/* KPI Sidebar */}
           <Card className="lg:col-span-1">
@@ -152,66 +179,77 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
             <CardContent className="space-y-2 text-sm">
               <div className="flex items-center justify-between">
                 <span>Revenue</span>
-                <span className="font-medium">{formatCurrency0(selected.revenue)}</span>
+                <span className="font-medium">{formatCurrency0(base.revenue)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span>Paid Revenue</span>
-                <span className="font-medium">{formatCurrency0(selected.paidRevenue)}</span>
+                <span className="font-medium">{formatCurrency0(base.paidRevenue)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>OTA Commissions</span>
-                <span className="font-medium">{formatCurrency2(selected.otaCost)}</span>
+                <span>Commissions</span>
+                <span className="font-medium">{formatCurrency2(aggregated.commissions)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span>Your Cost</span>
-                <span className="font-medium">{formatCurrency2(selected.yourCost)}</span>
+                <span className="font-medium">{formatCurrency2(aggregated.yourCost)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Savings vs OTA</span>
-                <span className={`font-semibold ${selected.savings >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatCurrency2(selected.savings)}</span>
+                <span>Savings vs Commission</span>
+                <span className={`font-semibold ${aggregated.savings >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatCurrency2(aggregated.savings)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span>Estimated Bookings</span>
-                <span className="font-medium">{Math.floor(selected.bookings).toLocaleString("en-US")}</span>
+                <span className="font-medium">{Math.floor(base.bookings).toLocaleString("en-US")}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span>Max CPC Recommendation</span>
-                <span className="font-medium">{formatCurrency2(selected.maxCpc)}</span>
+                <span className="font-medium">{formatCurrency2(aggregated.maxCpc)}</span>
               </div>
             </CardContent>
           </Card>
 
-          {/* Channels */}
+          {/* Per-service cards */}
           <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {channelMetrics.map((ch) => (
-              <Card key={ch.key}>
+            {perService.length === 0 ? (
+              <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">{ch.name}</CardTitle>
+                  <CardTitle className="text-base">No Services</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span>Paid Revenue</span>
-                    <span className="font-medium">{formatCurrency0(ch.paidRevenue)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Commissions</span>
-                    <span className="font-medium">{formatCurrency2(ch.commissions)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Your Cost</span>
-                    <span className="font-medium">{formatCurrency2(ch.cost)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Savings vs OTA</span>
-                    <span className={`font-semibold ${ch.savings >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatCurrency2(ch.savings)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Estimated Bookings</span>
-                    <span className="font-medium">{Math.floor(ch.bookings).toLocaleString("en-US")}</span>
-                  </div>
+                <CardContent className="text-sm text-muted-foreground">
+                  Add services to this scenario to see detailed breakdown.
                 </CardContent>
               </Card>
-            ))}
+            ) : (
+              perService.map((ch) => (
+                <Card key={ch.key}>
+                  <CardHeader>
+                    <CardTitle className="text-base">{ch.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span>Paid Revenue</span>
+                      <span className="font-medium">{formatCurrency0(ch.paidRevenue)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Commissions</span>
+                      <span className="font-medium">{formatCurrency2(ch.commissions)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Your Cost</span>
+                      <span className="font-medium">{formatCurrency2(ch.yourCost)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Savings</span>
+                      <span className={`font-semibold ${ch.savings >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatCurrency2(ch.savings)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Estimated Bookings</span>
+                      <span className="font-medium">{Math.floor(ch.bookings).toLocaleString("en-US")}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </div>
       </DialogContent>

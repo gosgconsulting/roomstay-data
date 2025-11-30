@@ -5,12 +5,13 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, TrendingUp, Eye, Pencil, Check, X } from "lucide-react";
+import { Eye, Pencil, Check, X, Trash2, TrendingUp, Plus, Settings } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import ForecastScenarioModal from "@/components/ForecastScenarioModal";
+import ForecastServicesModal from "@/components/ForecastServicesModal";
 import { useUser } from "@/lib/auth";
 
 interface ForecastScenario {
@@ -56,14 +57,12 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
   const [editingField, setEditingField] = useState<keyof typeof rowForm | null>(null);
   const [rowForm, setRowForm] = useState({
     name: '',
-    email: '',
     average_daily_rate: '',
-    direct_bookings_target: '', // % Direct Revenue
+    direct_bookings_target: '',
     rooms: '',
     occupancy_rate: '',
-    commission_rate: '15', // % Commission Rate (placeholder, defaults to 15%)
-    cost_of_sell: '', // percentage
-    conversion_rate: '' // percentage
+    cost_of_sell: '',
+    conversion_rate: ''
   });
   const [isRowSaving, setIsRowSaving] = useState(false);
   
@@ -79,6 +78,10 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
 
   // ADD: services rows for commission and cost-of-sale inputs
   const [serviceRows, setServiceRows] = useState<ServiceRow[]>([]);
+
+  // ADD: services modal state (fixes TS2304 errors)
+  const [servicesModalOpen, setServicesModalOpen] = useState(false);
+  const [servicesModalForecastId, setServicesModalForecastId] = useState<string | null>(null);
 
   const addServiceRow = () => {
     setServiceRows(prev => [
@@ -187,9 +190,9 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
       }
     }
 
-    // Compute weighted average cost of sale from services (percent -> decimal)
+    // Compute weighted average cost of sale
     const weights = serviceRows.map(r => parseFloat(r.weight) || 0);
-    const costs = serviceRows.map(r => parseFloat(r.cost_of_sell) || 0); // percent values
+    const costs = serviceRows.map(r => parseFloat(r.cost_of_sell) || 0);
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     const weightedCostPercent = totalWeight > 0
       ? weights.reduce((sum, w, i) => sum + w * costs[i], 0) / totalWeight
@@ -198,37 +201,47 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
 
     try {
       setIsSubmitting(true);
-      console.log('[testing] Submitting forecast scenario:', formData);
-
-      if (!user) {
-        throw new Error('No user found');
-      }
+      if (!user) throw new Error('No user found');
 
       const { data, error } = await (supabase as any)
         .from('forecasts')
         .insert({
           report_id: reportId,
           user_id: user.id,
-          name: formData.name.trim(), // Hotel Name
-          email: null, // removed from form; store null
+          name: formData.name.trim(),
+          email: null,
           average_daily_rate: parseFloat(formData.average_daily_rate),
           direct_bookings_target: parseFloat(formData.direct_bookings_target),
           rooms: parseInt(formData.rooms),
           occupancy_rate: parseFloat(formData.occupancy_rate),
-          cost_of_sell: aggregatedCostOfSellDecimal, // derived from Services table
-          conversion_rate: parseFloat(formData.conversion_rate) / 100, // Convert percentage to decimal
+          cost_of_sell: aggregatedCostOfSellDecimal,
+          conversion_rate: parseFloat(formData.conversion_rate) / 100,
         })
         .select()
         .single() as { data: ForecastScenario | null; error: any };
 
-      if (error) {
-        console.error('Error creating scenario:', error);
-        throw error;
+      if (error || !data) throw error || new Error('Insert failed');
+
+      // Persist services for this forecast
+      if (serviceRows.length > 0) {
+        const rowsToInsert = serviceRows.map(r => ({
+          forecast_id: data.id,
+          user_id: user.id,
+          name: r.name.trim(),
+          weight: parseFloat(r.weight) || 0,
+          commission_rate: parseFloat(r.commission_rate) || 0,
+          cost_of_sell: parseFloat(r.cost_of_sell) || 0,
+          recurrent_fee: parseFloat((r as any).recurrent_fee) || 0,
+          percent_cost: parseFloat((r as any).percent_cost) || 0,
+          percent_revenue: parseFloat((r as any).percent_revenue) || 0,
+        }));
+        const { error: svcError } = await (supabase as any)
+          .from('forecast_services')
+          .insert(rowsToInsert);
+        if (svcError) throw svcError;
       }
 
-      console.log('[testing] Created scenario:', data);
-      
-      // Reset form (removed commission_rate, cost_of_sell, email) and services
+      // Reset form and services
       setFormData({
         name: '',
         average_daily_rate: '',
@@ -239,21 +252,11 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
       });
       setServiceRows([]);
 
-      // Reload scenarios
       await loadScenarios();
-
-      toast({
-        title: "Success",
-        description: "Forecast scenario created successfully",
-      });
-
+      toast({ title: "Success", description: "Forecast scenario created successfully" });
     } catch (error) {
       console.error('Error in handleSubmit:', error);
-      toast({
-        title: "Error",
-        description: "Failed to create forecast scenario",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to create forecast scenario", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -296,12 +299,10 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
     setEditingField(field ?? null);
     setRowForm({
       name: scenario.name || '',
-      email: scenario.email || '',
       average_daily_rate: String(scenario.average_daily_rate ?? ''),
       direct_bookings_target: String(scenario.direct_bookings_target ?? ''),
       rooms: String(scenario.rooms ?? ''),
       occupancy_rate: String(scenario.occupancy_rate ?? ''),
-      commission_rate: '15', // Default placeholder
       cost_of_sell: scenario.cost_of_sell != null ? String((scenario.cost_of_sell * 100).toFixed(2)) : '',
       conversion_rate: scenario.conversion_rate != null ? String((scenario.conversion_rate * 100).toFixed(2)) : '',
     });
@@ -328,59 +329,35 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
 
   const saveRowEdit = async () => {
     if (!editingRowId) return;
-
-    // Validate required fields
     if (!rowForm.name.trim()) {
       toast({ title: "Validation Error", description: "Please enter a hotel name", variant: "destructive" });
       return;
     }
-    // Email is now optional, so no validation needed
-    
-    const requiredFields = [
-      'average_daily_rate',
-      'direct_bookings_target',
-      'rooms',
-      'occupancy_rate',
-      'cost_of_sell',
-      'conversion_rate'
-    ];
+    const requiredFields = ['average_daily_rate','direct_bookings_target','rooms','occupancy_rate','cost_of_sell','conversion_rate'];
     for (const field of requiredFields) {
       if (!rowForm[field as keyof typeof rowForm].trim()) {
-        toast({
-          title: "Validation Error",
-          description: `Please enter ${field.replace(/_/g, ' ')}`,
-          variant: "destructive",
-        });
+        toast({ title: "Validation Error", description: `Please enter ${field.replace(/_/g, ' ')}`, variant: "destructive" });
         return;
       }
     }
-
     try {
       setIsRowSaving(true);
       const { data, error } = await (supabase as any)
         .from('forecasts')
         .update({
           name: rowForm.name.trim(),
-          email: rowForm.email.trim() || null, // Optional field
           average_daily_rate: parseFloat(rowForm.average_daily_rate),
           direct_bookings_target: parseFloat(rowForm.direct_bookings_target),
           rooms: parseInt(rowForm.rooms),
           occupancy_rate: parseFloat(rowForm.occupancy_rate),
-          cost_of_sell: parseFloat(rowForm.cost_of_sell) / 100, // percentage to decimal
-          conversion_rate: parseFloat(rowForm.conversion_rate) / 100, // percentage to decimal
+          cost_of_sell: parseFloat(rowForm.cost_of_sell) / 100,
+          conversion_rate: parseFloat(rowForm.conversion_rate) / 100,
         })
         .eq('id', editingRowId)
         .select()
         .single() as { data: ForecastScenario | null; error: any };
-
-      if (error) {
-        console.error('Error updating scenario:', error);
-        throw error;
-      }
-
-      // Update local state
+      if (error) throw error;
       setScenarios(prev => prev.map(s => s.id === editingRowId ? (data as ForecastScenario) : s));
-
       toast({ title: "Saved", description: "Forecast scenario updated successfully" });
       setEditingRowId(null);
     } catch (err) {
@@ -701,9 +678,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                     <TableHead>Average Daily Rate</TableHead>
                     <TableHead>% Direct Revenue</TableHead>
                     <TableHead>% Conversion Rate</TableHead>
-                    <TableHead>% Commission Rate</TableHead>
                     <TableHead>% Cost of Sale</TableHead>
-                    <TableHead>Email</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead className="w-[160px]">Actions</TableHead>
                   </TableRow>
@@ -843,28 +818,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                             step="0.01"
                             min="0"
                             max="100"
-                            value={rowForm.commission_rate}
-                            onChange={(e) => handleRowChange('commission_rate', e.target.value)}
-                            autoFocus={editingField === 'commission_rate'}
-                            onKeyDown={handleCellKeyDown}
-                          />
-                        ) : (
-                          <span
-                            className="cursor-text"
-                            onClick={() => startEditing(scenario, 'commission_rate')}
-                          >
-                            15.00%
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {editingRowId === scenario.id ? (
-                          <Input
-                            className="h-8"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            max="100"
                             value={rowForm.cost_of_sell}
                             onChange={(e) => handleRowChange('cost_of_sell', e.target.value)}
                             autoFocus={editingField === 'cost_of_sell'}
@@ -876,25 +829,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                             onClick={() => startEditing(scenario, 'cost_of_sell')}
                           >
                             {formatPercentage(scenario.cost_of_sell)}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {editingRowId === scenario.id ? (
-                          <Input
-                            className="h-8"
-                            type="email"
-                            value={rowForm.email}
-                            onChange={(e) => handleRowChange('email', e.target.value)}
-                            autoFocus={editingField === 'email'}
-                            onKeyDown={handleCellKeyDown}
-                          />
-                        ) : (
-                          <span
-                            className="cursor-text"
-                            onClick={() => startEditing(scenario, 'email')}
-                          >
-                            {scenario.email || '-'}
                           </span>
                         )}
                       </TableCell>
@@ -945,6 +879,15 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                             <Button
                               variant="ghost"
                               size="sm"
+                              onClick={() => { setServicesModalForecastId(scenario.id); setServicesModalOpen(true); }}
+                              className="h-8 w-8 p-0"
+                              title="View services"
+                            >
+                              <Settings className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => { setSelectedScenario(scenario); setViewOpen(true); }}
                               className="h-8 w-8 p-0"
                               title="View scenario"
@@ -968,6 +911,12 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
         open={viewOpen}
         onOpenChange={(open) => { setViewOpen(open); if (!open) setSelectedScenario(null); }}
         scenario={selectedScenario}
+      />
+
+      <ForecastServicesModal
+        open={servicesModalOpen}
+        onOpenChange={(open) => { setServicesModalOpen(open); if (!open) setServicesModalForecastId(null); }}
+        forecastId={servicesModalForecastId}
       />
     </div>
   );
