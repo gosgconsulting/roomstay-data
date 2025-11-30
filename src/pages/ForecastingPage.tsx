@@ -10,7 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import ForecastScenarioModal from "@/components/ForecastScenarioModal";
+import { useNavigate } from "react-router-dom";
 import ForecastServicesModal from "@/components/ForecastServicesModal";
 import { useUser } from "@/lib/auth";
 
@@ -46,11 +46,10 @@ interface ForecastingPageProps {
 export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) => {
   const { data: userData } = useUser();
   const user = userData?.user || null;
+  const navigate = useNavigate();
   const [scenarios, setScenarios] = useState<ForecastScenario[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [viewOpen, setViewOpen] = useState(false);
-  const [selectedScenario, setSelectedScenario] = useState<ForecastScenario | null>(null);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<keyof typeof rowForm | null>(null);
   const [rowForm, setRowForm] = useState({
@@ -889,7 +888,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => { setSelectedScenario(scenario); setViewOpen(true); }}
+                              onClick={() => navigate(`/tools/forecasting/scenario/${scenario.id}`)}
                               className="h-8 w-8 p-0"
                               title="View scenario"
                             >
