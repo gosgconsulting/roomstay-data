@@ -6,6 +6,7 @@ import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "./usePerformanceTableDimensions";
 import { fetchPerformanceData } from "./usePerformanceData";
 import { useQueryClient } from "@tanstack/react-query";
+import { autoFixDimensionSync } from "@/lib/dimension-sync-auto-fix";
 
 export interface TableRow {
   id: string;
@@ -116,11 +117,15 @@ export function usePerformanceTableDataFixed({
 
       console.log('[PERF-DATA-FIXED] Edge function returned', rawRows.length, 'rows');
 
+      // NEW: Fix dimension ID mismatches before transforming rows
+      const fixedRows = await autoFixDimensionSync(rawRows, dimensions);
+      console.log('[PERF-DATA-FIXED] Applied auto-fix to', fixedRows.length, 'rows');
+
       // Transform edge function rows: dimension_values keyed by IDs -> row.data keyed by dimension names
       const firstDimId = groupByDimensions[0];
       const firstDimension = dimensions.find(d => d.id === firstDimId);
 
-      const transformedRows: TableRow[] = rawRows.map((row: any, idx: number) => {
+      const transformedRows: TableRow[] = fixedRows.map((row: any, idx: number) => {
         const dv: Record<string, any> = row.dimension_values || {};
         
         // Apply vlookup mappings (client-side) if present

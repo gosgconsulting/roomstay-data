@@ -248,6 +248,21 @@ export function usePerformanceTableDimensions({
         }
       }
 
+      // NEW: Ensure essential KPI metrics are present even if the filter excluded them
+      const essentialKPIs = [
+        'Impressions', 'Clicks', 'Conversions', 'Bookings', 'Conversion Rate',
+        'CPC', 'Cost', 'Revenue', 'ROAS', 'Cost of sale'
+      ];
+      const existingNames = new Set(finalDimensions.map(d => d.name.toLowerCase()));
+      const byNameMap = new Map(allDimensionsWithBudget.map(d => [d.name.toLowerCase(), d]));
+      essentialKPIs.forEach(kpiName => {
+        const key = kpiName.toLowerCase();
+        if (!existingNames.has(key) && byNameMap.has(key)) {
+          finalDimensions.push(byNameMap.get(key)!);
+          existingNames.add(key);
+        }
+      });
+
       // Ensure we have at least some basic dimensions
       if (finalDimensions.length === 0) {
         console.warn('[DIMENSIONS] No dimensions with data found! Using fallback.');
