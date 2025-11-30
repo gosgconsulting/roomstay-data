@@ -26,15 +26,25 @@ type ServiceRow = {
   recurrent_fee: number;
   percent_cost: number;
   percent_revenue: number;
-  one_off_fee: number; // NEW
-  budget_payer?: 'client' | 'agency';
+  one_off_fee: number;
+  budget_payer?: "client" | "agency";
 };
 
 const formatCurrency0 = (value: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
 
 const formatCurrency2 = (value: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 
 const formatPercent = (decimal: number) => `${(decimal * 100).toFixed(2)}%`;
 
@@ -75,6 +85,90 @@ export default function ForecastScenarioPage() {
     };
   }, [scenarioId]);
 
+  // Inputs (safe defaults when loading or missing scenario)
+  const adr = Number(scenario?.average_daily_rate ?? 0);
+  const directRevenuePct = Number(scenario?.direct_bookings_target ?? 0);
+  const rooms = Number(scenario?.rooms ?? 0);
+  const occPct = Number(scenario?.occupancy_rate ?? 0);
+  const convRate = Number(scenario?.conversion_rate ?? 0);
+
+  // Base monthly metrics
+  const monthly = React.useMemo(() => {
+    const revenue = adr * rooms * 30 * (occPct / 100);
+    const paidRevenue = revenue * (directRevenuePct / 100);
+    const bookings = convRate > 0 ? revenue * convRate : 0;
+    return { revenue, paidRevenue, bookings };
+  }, [adr, rooms, occPct, directRevenuePct, convRate]);
+
+  const yearly = React.useMemo(
+    () => ({
+      revenue: monthly.revenue * 12,
+      paidRevenue: monthly.paidRevenue * 12,
+      bookings: monthly.bookings * 12,
+    }),
+    [monthly]
+  );
+
+  const base = React.useMemo(
+    () => (period === "month" ? monthly : yearly),
+    [period, monthly, yearly]
+  );
+
+  // Compute per-service metrics
+  const serviceShares = React.useMemo(() => {
+    const total = services.reduce((sum, s) => sum + (Number(s.weight) || 0), 0);
+    return services.map((s) => ({
+      ...s,
+      share: total > 0 ? (Number(s.weight) || 0) / total : 0,
+    }));
+  }, [services]);
+
+  const perService = React.useMemo(() => {
+    return serviceShares.map((s) => {
+      const revenue = base.paidRevenue * s.share;
+      const cost = revenue * ((Number(s.cost_of_sell) || 0) / 100);
+      const recurrentFee =
+        period === "year"
+          ? (Number(s.recurrent_fee) || 0) * 12
+          : Number(s.recurrent_fee) || 0;
+      const oneOffFee = Number(s.one_off_fee || 0);
+
+      const costFee = cost * ((Number(s.percent_cost) || 0) / 100);
+      const revenueFee = revenue * ((Number(s.percent_revenue) || 0) / 100);
+
+      const totalCostValue = cost + recurrentFee + oneOffFee + costFee + revenueFee;
+      const totalCostPct = revenue > 0 ? totalCostValue / revenue : 0;
+
+      return {
+        key: s.id,
+        name: s.name,
+        revenue,
+        cost,
+        recurrentFee,
+        oneOffFee,
+        costFee,
+        revenueFee,
+        totalCostValue,
+        totalCostPct,
+        percentCost: Number(s.percent_cost || 0),
+        percentRevenue: Number(s.percent_revenue || 0),
+        budgetPayer: (s.budget_payer ?? "client") as "client" | "agency",
+      };
+    });
+  }, [serviceShares, base, period]);
+
+  // Profit KPI: sum of fees (cost %, revenue %, recurrent, one-off) minus cost, for Agency-paid budgets
+  const totalProfit = React.useMemo(() => {
+    return perService.reduce((sum, svc) => {
+      if (svc.budgetPayer === "agency") {
+        const profit =
+          svc.costFee + svc.revenueFee + svc.recurrentFee + svc.oneOffFee - svc.cost;
+        return sum + profit;
+      }
+      return sum;
+    }, 0);
+  }, [perService]);
+
   if (loading) {
     return (
       <div className="container mx-auto p-4 md:p-6">
@@ -82,7 +176,6 @@ export default function ForecastScenarioPage() {
           <CardHeader>
             <CardTitle>Loading forecast...</CardTitle>
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">Please wait while we load the scenario.</CardContent>
         </Card>
       </div>
     );
@@ -95,111 +188,58 @@ export default function ForecastScenarioPage() {
           <CardHeader>
             <CardTitle>Forecast Scenario</CardTitle>
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">Scenario not found.</CardContent>
+          <CardContent className="text-sm text-muted-foreground">
+            Scenario not found.
+          </CardContent>
         </Card>
       </div>
     );
   }
 
-  // Inputs
-  const adr = Number(scenario.average_daily_rate ?? 0);
-  const directRevenuePct = Number(scenario.direct_bookings_target ?? 0);
-  const rooms = Number(scenario.rooms ?? 0);
-  const occPct = Number(scenario.occupancy_rate ?? 0);
-  const convRate = Number(scenario.conversion_rate ?? 0); // decimal
-
-  // Base monthly metrics
-  const monthly = React.useMemo(() => {
-    const revenue = adr * rooms * 30 * (occPct / 100);
-    const paidRevenue = revenue * (directRevenuePct / 100);
-    const bookings = convRate > 0 ? revenue * convRate : 0;
-    return { revenue, paidRevenue, bookings };
-  }, [adr, rooms, occPct, directRevenuePct, convRate]);
-
-  const yearly = React.useMemo(() => ({
-    revenue: monthly.revenue * 12,
-    paidRevenue: monthly.paidRevenue * 12,
-    bookings: monthly.bookings * 12
-  }), [monthly]);
-
-  const base = period === "month" ? monthly : yearly;
-
-  // Compute per-service metrics
-  const serviceShares = React.useMemo(() => {
-    const total = services.reduce((sum, s) => sum + (Number(s.weight) || 0), 0);
-    return services.map(s => ({
-      ...s,
-      share: total > 0 ? (Number(s.weight) || 0) / total : 0
-    }));
-  }, [services]);
-
-  const perService = React.useMemo(() => {
-    return serviceShares.map(s => {
-      const revenue = base.paidRevenue * s.share;
-      const cost = revenue * ((Number(s.cost_of_sell) || 0) / 100);
-      const recurrentFee = period === "year" ? (Number(s.recurrent_fee) || 0) * 12 : (Number(s.recurrent_fee) || 0);
-      const oneOffFee = Number(s.one_off_fee || 0); // one-time
-
-      const costFee = cost * ((Number(s.percent_cost) || 0) / 100);
-      const revenueFee = revenue * ((Number(s.percent_revenue) || 0) / 100);
-
-      const totalCostValue = cost + recurrentFee + oneOffFee + costFee + revenueFee; // include one-off
-      const totalCostPct = revenue > 0 ? totalCostValue / revenue : 0;
-
-      return {
-        key: s.id,
-        name: s.name,
-        revenue,
-        cost,
-        recurrentFee,
-        oneOffFee, // NEW
-        costFee,
-        revenueFee,
-        totalCostValue,
-        totalCostPct,
-        percentCost: Number(s.percent_cost || 0),
-        percentRevenue: Number(s.percent_revenue || 0),
-        budgetPayer: (s.budget_payer ?? 'client') as 'client' | 'agency',
-      };
-    });
-  }, [serviceShares, base, period]);
-
-  // Profit includes all fees
-  const totalProfit = React.useMemo(() => {
-    return perService.reduce((sum, svc) => {
-      if (svc.budgetPayer === 'agency') {
-        const profit = (svc.costFee + svc.revenueFee + svc.recurrentFee + svc.oneOffFee) - svc.cost;
-        return sum + profit;
-      }
-      return sum;
-    }, 0);
-  }, [perService]);
-
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-4">
       <div>
         <h1 className="text-xl font-semibold">Forecast: {scenario.name}</h1>
-        <p className="text-sm text-muted-foreground">Per-service metrics are computed from the configured Services.</p>
+        <p className="text-sm text-muted-foreground">
+          Per-service metrics are computed from the configured Services.
+        </p>
       </div>
 
       {/* Scenario badges */}
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="outline">Rooms: {Number(scenario.rooms || 0)}</Badge>
-        <Badge variant="outline">ADR: {formatCurrency2(Number(scenario.average_daily_rate || 0))}</Badge>
-        <Badge variant="outline">Occupancy: {Number(scenario.occupancy_rate || 0).toFixed(2)}%</Badge>
-        <Badge variant="outline">Direct Revenue %: {Number(scenario.direct_bookings_target || 0).toFixed(2)}%</Badge>
-        <Badge variant="outline">Conv. Rate: {formatPercent(Number(scenario.conversion_rate || 0))}</Badge>
+        <Badge variant="outline">
+          ADR: {formatCurrency2(Number(scenario.average_daily_rate || 0))}
+        </Badge>
+        <Badge variant="outline">
+          Occupancy: {Number(scenario.occupancy_rate || 0).toFixed(2)}%
+        </Badge>
+        <Badge variant="outline">
+          Direct Revenue %: {Number(scenario.direct_bookings_target || 0).toFixed(2)}%
+        </Badge>
+        <Badge variant="outline">
+          Conv. Rate: {formatPercent(Number(scenario.conversion_rate || 0))}
+        </Badge>
       </div>
 
       {/* Period toggle */}
       <div>
-        <ToggleGroup type="single" value={period} onValueChange={(v) => v && setPeriod(v as "month" | "year")} className="justify-start">
-          <ToggleGroupItem value="month" aria-label="Month">Month</ToggleGroupItem>
-          <ToggleGroupItem value="year" aria-label="Year">Year</ToggleGroupItem>
+        <ToggleGroup
+          type="single"
+          value={period}
+          onValueChange={(v) => v && setPeriod(v as "month" | "year")}
+          className="justify-start"
+        >
+          <ToggleGroupItem value="month" aria-label="Month">
+            Month
+          </ToggleGroupItem>
+          <ToggleGroupItem value="year" aria-label="Year">
+            Year
+          </ToggleGroupItem>
         </ToggleGroup>
       </div>
 
-      {/* Summary card with Total Revenue and scenario info */}
+      {/* Summary card */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Total Revenue</CardTitle>
@@ -216,19 +256,27 @@ export default function ForecastScenarioPage() {
           </div>
           <div className="flex items-center justify-between">
             <span>ADR</span>
-            <span className="font-medium">{formatCurrency2(Number(scenario.average_daily_rate || 0))}</span>
+            <span className="font-medium">
+              {formatCurrency2(Number(scenario.average_daily_rate || 0))}
+            </span>
           </div>
           <div className="flex items-center justify-between">
             <span>Occupancy Rate</span>
-            <span className="font-medium">{Number(scenario.occupancy_rate || 0).toFixed(2)}%</span>
+            <span className="font-medium">
+              {Number(scenario.occupancy_rate || 0).toFixed(2)}%
+            </span>
           </div>
           <div className="flex items-center justify-between">
             <span>Direct Revenue %</span>
-            <span className="font-medium">{Number(scenario.direct_bookings_target || 0).toFixed(2)}%</span>
+            <span className="font-medium">
+              {Number(scenario.direct_bookings_target || 0).toFixed(2)}%
+            </span>
           </div>
           <div className="flex items-center justify-between">
             <span>Conv Rate</span>
-            <span className="font-medium">{formatPercent(Number(scenario.conversion_rate || 0))}</span>
+            <span className="font-medium">
+              {formatPercent(Number(scenario.conversion_rate || 0))}
+            </span>
           </div>
           <div className="flex items-center justify-between pt-2">
             <span className="font-semibold">Total Revenue</span>
@@ -286,7 +334,8 @@ export default function ForecastScenarioPage() {
                 <div className="flex items-center justify-between">
                   <span>Total Cost</span>
                   <span className="font-semibold">
-                    {formatCurrency2(svc.totalCostValue)} ({(svc.totalCostPct * 100).toFixed(2)}%)
+                    {formatCurrency2(svc.totalCostValue)} (
+                    {(svc.totalCostPct * 100).toFixed(2)}%)
                   </span>
                 </div>
               </CardContent>
