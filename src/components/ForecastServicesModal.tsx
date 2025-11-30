@@ -2,6 +2,8 @@ import * as React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -32,6 +34,50 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
     field: null,
     value: ""
   });
+
+  // NEW: add service handler
+  const handleAddService = async () => {
+    if (!forecastId) {
+      toast.error("Please select a forecast scenario first");
+      return;
+    }
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      console.error("Auth error:", authError);
+      toast.error("Unable to verify user");
+      return;
+    }
+    const user = authData?.user;
+    if (!user) {
+      toast.error("You must be signed in to add a service");
+      return;
+    }
+
+    const { data, error } = await (supabase as any)
+      .from("forecast_services")
+      .insert({
+        forecast_id: forecastId,
+        user_id: user.id,
+        name: "New service",
+        weight: 0,
+        cost_of_sell: 0,
+        recurrent_fee: 0,
+        percent_cost: 0,
+        percent_revenue: 0
+      })
+      .select()
+      .single() as { data: ServiceRow | null; error: any };
+
+    if (error || !data) {
+      console.error("Add service error:", error);
+      toast.error("Failed to add service");
+      return;
+    }
+
+    setServices(prev => [data as ServiceRow, ...prev]);
+    setEditing({ id: data.id, field: "name", value: data.name || "" });
+    toast.success("Service added");
+  };
 
   const startEdit = (id: string, field: EditableField, current: number | string) => {
     setEditing({ id, field, value: String(current ?? "") });
@@ -118,7 +164,16 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
         <DialogHeader>
           <DialogTitle>Services</DialogTitle>
         </DialogHeader>
-        <div className="text-xs text-muted-foreground mb-2">Tip: Click a cell to edit. Press Enter to save, Esc to cancel.</div>
+
+        {/* Tip + Add Service button */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-xs text-muted-foreground">Tip: Click a cell to edit. Press Enter to save, Esc to cancel.</div>
+          <Button size="sm" onClick={handleAddService}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Service
+          </Button>
+        </div>
+
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
