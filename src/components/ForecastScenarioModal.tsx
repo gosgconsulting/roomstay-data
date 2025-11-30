@@ -96,10 +96,13 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
 
   const perService = React.useMemo(() => {
     return serviceShares.map(s => {
-      const revenue = base.paidRevenue * s.share; // per-service revenue (previously 'paidRevenue')
-      const cost = revenue * ((Number(s.cost_of_sell) || 0) / 100); // ad spend
+      const revenue = base.paidRevenue * s.share;
+      const cost = revenue * ((Number(s.cost_of_sell) || 0) / 100);
       const recurrentFee = period === "year" ? (Number(s.recurrent_fee) || 0) * 12 : (Number(s.recurrent_fee) || 0);
-      const costFee = revenue * ((Number(s.percent_cost) || 0) / 100);
+
+      // FIX: Cost Fee is based on Cost, not Revenue
+      const costFee = cost * ((Number(s.percent_cost) || 0) / 100);
+      // Revenue Fee remains based on Revenue
       const revenueFee = revenue * ((Number(s.percent_revenue) || 0) / 100);
 
       const totalCostValue = cost + recurrentFee + costFee + revenueFee;
@@ -114,7 +117,9 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
         costFee,
         revenueFee,
         totalCostValue,
-        totalCostPct
+        totalCostPct,
+        percentCost: Number(s.percent_cost || 0),
+        percentRevenue: Number(s.percent_revenue || 0),
       };
     });
   }, [serviceShares, base, period]);
@@ -191,11 +196,11 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
                     <span className="font-medium">{formatCurrency2(svc.recurrentFee)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span>Cost Fee</span>
+                    <span>Cost Fee ({svc.percentCost.toFixed(2)}%)</span>
                     <span className="font-medium">{formatCurrency2(svc.costFee)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span>Revenue Fee</span>
+                    <span>Revenue Fee ({svc.percentRevenue.toFixed(2)}%)</span>
                     <span className="font-medium">{formatCurrency2(svc.revenueFee)}</span>
                   </div>
                   <div className="flex items-center justify-between">
