@@ -29,10 +29,14 @@ interface ForecastScenario {
 // ADD: service row type for create form
 interface ServiceRow {
   id: string;
-  name: string;
+  name: string; // store as string for controlled inputs; parse to number on submit
   weight: string; // store as string for controlled inputs; parse to number on submit
   commission_rate: string; // percent input
   cost_of_sell: string; // percent input
+  // ADD: new service fields
+  recurrent_fee: string; // currency input
+  percent_cost: string; // percent input
+  percent_revenue: string; // percent input
 }
 
 interface ForecastingPageProps {
@@ -84,7 +88,11 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
         name: '',
         weight: '',
         commission_rate: '',
-        cost_of_sell: ''
+        cost_of_sell: '',
+        // ADD: defaults for new fields
+        recurrent_fee: '',
+        percent_cost: '',
+        percent_revenue: ''
       }
     ]);
   };
@@ -520,13 +528,18 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                       <TableHead>Weight</TableHead>
                       <TableHead>% Commission</TableHead>
                       <TableHead>% Cost of Sale</TableHead>
+                      {/* ADD: new headers */}
+                      <TableHead>Recurrent fee</TableHead>
+                      <TableHead>% Cost</TableHead>
+                      <TableHead>% Revenue</TableHead>
                       <TableHead className="w-[80px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {serviceRows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-muted-foreground">
+                        {/* UPDATE: adjust colSpan for new columns */}
+                        <TableCell colSpan={8} className="text-muted-foreground">
                           No services added yet. Click "Add Service" to start.
                         </TableCell>
                       </TableRow>
@@ -574,6 +587,42 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                               placeholder="e.g., 12.5"
                               value={row.cost_of_sell}
                               onChange={(e) => updateServiceRow(row.id, 'cost_of_sell', e.target.value)}
+                            />
+                          </TableCell>
+                          {/* ADD: new inputs per row */}
+                          <TableCell>
+                            <Input
+                              className="h-8"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="e.g., 500"
+                              value={row.recurrent_fee}
+                              onChange={(e) => updateServiceRow(row.id, 'recurrent_fee', e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              className="h-8"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="100"
+                              placeholder="e.g., 10"
+                              value={row.percent_cost}
+                              onChange={(e) => updateServiceRow(row.id, 'percent_cost', e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              className="h-8"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="100"
+                              placeholder="e.g., 8"
+                              value={row.percent_revenue}
+                              onChange={(e) => updateServiceRow(row.id, 'percent_revenue', e.target.value)}
                             />
                           </TableCell>
                           <TableCell>
