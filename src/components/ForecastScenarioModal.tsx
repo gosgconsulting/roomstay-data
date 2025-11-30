@@ -96,45 +96,28 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
 
   const perService = React.useMemo(() => {
     return serviceShares.map(s => {
-      const paidRevenueShare = base.paidRevenue * s.share;
-      const commissions = paidRevenueShare * ((Number(s.percent_revenue) || 0) / 100);
-      const variableCost = paidRevenueShare * ((Number(s.cost_of_sell) || 0) / 100);
-      const recurrent = period === "year" ? (Number(s.recurrent_fee) || 0) * 12 : (Number(s.recurrent_fee) || 0);
-      const yourCost = variableCost + recurrent;
-      const savings = commissions - yourCost;
-      const bookings = base.bookings * s.share;
+      const revenue = base.paidRevenue * s.share; // per-service revenue (previously 'paidRevenue')
+      const cost = revenue * ((Number(s.cost_of_sell) || 0) / 100); // ad spend
+      const recurrentFee = period === "year" ? (Number(s.recurrent_fee) || 0) * 12 : (Number(s.recurrent_fee) || 0);
+      const costFee = revenue * ((Number(s.percent_cost) || 0) / 100);
+      const revenueFee = revenue * ((Number(s.percent_revenue) || 0) / 100);
+
+      const totalCostValue = cost + recurrentFee + costFee + revenueFee;
+      const totalCostPct = revenue > 0 ? totalCostValue / revenue : 0;
+
       return {
         key: s.id,
         name: s.name,
-        paidRevenue: paidRevenueShare,
-        commissions,
-        yourCost,
-        savings,
-        bookings
+        revenue,
+        cost,
+        recurrentFee,
+        costFee,
+        revenueFee,
+        totalCostValue,
+        totalCostPct
       };
     });
   }, [serviceShares, base, period]);
-
-  const aggregated = React.useMemo(() => {
-    if (perService.length > 0) {
-      const commissions = perService.reduce((sum, ch) => sum + ch.commissions, 0);
-      const yourCost = perService.reduce((sum, ch) => sum + ch.yourCost, 0);
-      const savings = commissions - yourCost;
-      // Weighted avg cost-of-sale for Max CPC
-      const totalShare = serviceShares.reduce((sum, s) => sum + s.share, 0);
-      const avgCostRate = totalShare > 0 ? serviceShares.reduce((sum, s) => sum + s.share * ((Number(s.cost_of_sell) || 0) / 100), 0) / totalShare : Number(scenario?.cost_of_sell || 0);
-      const maxCpc = convRate > 0 ? (adr * avgCostRate) / convRate : 0;
-      return { commissions, yourCost, savings, maxCpc };
-    } else {
-      // Fallback: use scenario cost_of_sell and a default commission (15%)
-      const fallbackCommissionRate = 0.15;
-      const commissions = base.paidRevenue * fallbackCommissionRate;
-      const yourCost = base.paidRevenue * (Number(scenario?.cost_of_sell || 0));
-      const savings = commissions - yourCost;
-      const maxCpc = convRate > 0 ? (adr * Number(scenario?.cost_of_sell || 0)) / convRate : 0;
-      return { commissions, yourCost, savings, maxCpc };
-    }
-  }, [perService, base, convRate, adr, scenario?.cost_of_sell, serviceShares]);
 
   if (!scenario) {
     return (
@@ -156,7 +139,7 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
         <DialogHeader>
           <DialogTitle>Forecast: {scenario.name}</DialogTitle>
           <DialogDescription>
-            KPIs and per-service breakdown are computed from the configured Services.
+            Per-service metrics are computed from the configured Services.
           </DialogDescription>
         </DialogHeader>
 
@@ -177,88 +160,54 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
           </ToggleGroup>
         </div>
 
-        {/* Layout: KPI sidebar + per-service cards */}
-        <div className="mt-4 grid grid-cols-1 lg:grid-cols-4 gap-4">
-          {/* KPI Sidebar */}
-          <Card className="lg:col-span-1">
-            <CardHeader>
-              <CardTitle className="text-base">KPIs</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span>Revenue</span>
-                <span className="font-medium">{formatCurrency0(base.revenue)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Paid Revenue</span>
-                <span className="font-medium">{formatCurrency0(base.paidRevenue)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Commissions</span>
-                <span className="font-medium">{formatCurrency2(aggregated.commissions)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Your Cost</span>
-                <span className="font-medium">{formatCurrency2(aggregated.yourCost)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Savings vs Commission</span>
-                <span className={`font-semibold ${aggregated.savings >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatCurrency2(aggregated.savings)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Estimated Bookings</span>
-                <span className="font-medium">{Math.floor(base.bookings).toLocaleString("en-US")}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Max CPC Recommendation</span>
-                <span className="font-medium">{formatCurrency2(aggregated.maxCpc)}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Per-service cards */}
-          <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {perService.length === 0 ? (
-              <Card>
+        {/* UPDATED Layout: only per-service cards (removed total KPIs sidebar) */}
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {perService.length === 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">No Services</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                Add services to this scenario to see detailed breakdown.
+              </CardContent>
+            </Card>
+          ) : (
+            perService.map((svc) => (
+              <Card key={svc.key}>
                 <CardHeader>
-                  <CardTitle className="text-base">No Services</CardTitle>
+                  <CardTitle className="text-base">{svc.name}</CardTitle>
                 </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  Add services to this scenario to see detailed breakdown.
+                <CardContent className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>Revenue</span>
+                    <span className="font-medium">{formatCurrency0(svc.revenue)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Cost</span>
+                    <span className="font-medium">{formatCurrency2(svc.cost)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Recurrent Fee</span>
+                    <span className="font-medium">{formatCurrency2(svc.recurrentFee)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Cost Fee</span>
+                    <span className="font-medium">{formatCurrency2(svc.costFee)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Revenue Fee</span>
+                    <span className="font-medium">{formatCurrency2(svc.revenueFee)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Total Cost</span>
+                    <span className="font-semibold">
+                      {formatCurrency2(svc.totalCostValue)} ({(svc.totalCostPct * 100).toFixed(2)}%)
+                    </span>
+                  </div>
                 </CardContent>
               </Card>
-            ) : (
-              perService.map((ch) => (
-                <Card key={ch.key}>
-                  <CardHeader>
-                    <CardTitle className="text-base">{ch.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span>Paid Revenue</span>
-                      <span className="font-medium">{formatCurrency0(ch.paidRevenue)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Commissions</span>
-                      <span className="font-medium">{formatCurrency2(ch.commissions)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Your Cost</span>
-                      <span className="font-medium">{formatCurrency2(ch.yourCost)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Savings</span>
-                      <span className={`font-semibold ${ch.savings >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatCurrency2(ch.savings)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Estimated Bookings</span>
-                      <span className="font-medium">{Math.floor(ch.bookings).toLocaleString("en-US")}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
+            ))
+          )}
         </div>
       </DialogContent>
     </Dialog>
