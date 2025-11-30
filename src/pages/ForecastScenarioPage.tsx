@@ -132,11 +132,15 @@ export default function ForecastScenarioPage() {
           ? (Number(s.recurrent_fee) || 0) * 12
           : Number(s.recurrent_fee) || 0;
       const oneOffFee = Number(s.one_off_fee || 0);
-
       const costFee = cost * ((Number(s.percent_cost) || 0) / 100);
       const revenueFee = revenue * ((Number(s.percent_revenue) || 0) / 100);
 
-      const totalCostValue = cost + recurrentFee + oneOffFee + costFee + revenueFee;
+      // Include budget (cost) in Total Cost only if client pays
+      const costIncludedInTotal =
+        (s.budget_payer ?? "client") === "client" ? cost : 0;
+
+      const totalCostValue =
+        costIncludedInTotal + recurrentFee + oneOffFee + costFee + revenueFee;
       const totalCostPct = revenue > 0 ? totalCostValue / revenue : 0;
 
       return {
@@ -165,7 +169,15 @@ export default function ForecastScenarioPage() {
     const totalOneOffFee = perService.reduce((sum, s) => sum + s.oneOffFee, 0);
     const totalCostFee = perService.reduce((sum, s) => sum + s.costFee, 0);
     const totalRevenueFee = perService.reduce((sum, s) => sum + s.revenueFee, 0);
-    const totalCostValue = totalCost + totalRecurrentFee + totalOneOffFee + totalCostFee + totalRevenueFee;
+
+    // Only include budget (cost) when Client pays
+    const clientPaidBudget = perService.reduce(
+      (sum, s) => sum + (s.budgetPayer === "client" ? s.cost : 0),
+      0
+    );
+
+    const totalCostValue =
+      clientPaidBudget + totalRecurrentFee + totalOneOffFee + totalCostFee + totalRevenueFee;
     const totalCostPct = totalRevenue > 0 ? totalCostValue / totalRevenue : 0;
     return {
       totalRevenue,
@@ -304,10 +316,6 @@ export default function ForecastScenarioPage() {
             <span className="font-semibold">Total Revenue</span>
             <span className="font-semibold">{formatCurrency0(base.revenue)}</span>
           </div>
-          <div className="flex items-center justify-between">
-            <span>Profit</span>
-            <span className="font-semibold">{formatCurrency0(totalProfit)}</span>
-          </div>
         </CardContent>
       </Card>
 
@@ -341,6 +349,10 @@ export default function ForecastScenarioPage() {
           <div className="flex items-center justify-between">
             <span>Revenue Fee</span>
             <span className="font-medium">{formatCurrency2(servicesTotals.totalRevenueFee)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="font-semibold">Profit</span>
+            <span className="font-semibold">{formatCurrency0(totalProfit)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="font-semibold">Total Cost</span>
