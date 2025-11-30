@@ -83,6 +83,9 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
   const [servicesModalOpen, setServicesModalOpen] = useState(false);
   const [servicesModalForecastId, setServicesModalForecastId] = useState<string | null>(null);
 
+  // FIX: total % Weight for services (used in UI)
+  const totalWeightPercent = serviceRows.reduce((sum, r) => sum + (parseFloat(r.weight) || 0), 0);
+
   const addServiceRow = () => {
     setServiceRows(prev => [
       ...prev,
@@ -184,6 +187,19 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
         toast({
           title: "Validation Error",
           description: `Please enter ${field.replace(/_/g, ' ')}`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Enforce total % Weight equals 100 when services exist
+    if (serviceRows.length > 0) {
+      const total = serviceRows.reduce((sum, r) => sum + (parseFloat(r.weight) || 0), 0);
+      if (Number(total.toFixed(2)) !== 100) {
+        toast({
+          title: "Validation Error",
+          description: "Total % Weight must equal 100%",
           variant: "destructive",
         });
         return;
@@ -502,10 +518,9 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                   <TableHeader>
                     <TableRow>
                       <TableHead>Service Name</TableHead>
-                      <TableHead>Weight</TableHead>
+                      <TableHead>% Weight</TableHead>
                       <TableHead>% Commission</TableHead>
                       <TableHead>% Cost of Sale</TableHead>
-                      {/* ADD: new headers */}
                       <TableHead>Recurrent fee</TableHead>
                       <TableHead>% Cost</TableHead>
                       <TableHead>% Revenue</TableHead>
@@ -515,7 +530,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                   <TableBody>
                     {serviceRows.length === 0 ? (
                       <TableRow>
-                        {/* UPDATE: adjust colSpan for new columns */}
                         <TableCell colSpan={8} className="text-muted-foreground">
                           No services added yet. Click "Add Service" to start.
                         </TableCell>
@@ -537,6 +551,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                               type="number"
                               step="0.01"
                               min="0"
+                              max="100"
                               placeholder="e.g., 1"
                               value={row.weight}
                               onChange={(e) => updateServiceRow(row.id, 'weight', e.target.value)}
@@ -566,7 +581,6 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                               onChange={(e) => updateServiceRow(row.id, 'cost_of_sell', e.target.value)}
                             />
                           </TableCell>
-                          {/* ADD: new inputs per row */}
                           <TableCell>
                             <Input
                               className="h-8"
@@ -619,6 +633,11 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                     )}
                   </TableBody>
                 </Table>
+              </div>
+              <div className="flex justify-end mt-2 text-sm">
+                <span className={cn(totalWeightPercent === 100 ? "text-muted-foreground" : "text-destructive font-medium")}>
+                  Total % Weight: {totalWeightPercent.toFixed(2)}%
+                </span>
               </div>
             </div>
             

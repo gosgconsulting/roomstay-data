@@ -53,7 +53,7 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
             <TableHeader>
               <TableRow>
                 <TableHead>Service Name</TableHead>
-                <TableHead>Weight</TableHead>
+                <TableHead>% Weight</TableHead>
                 <TableHead>% Commission</TableHead>
                 <TableHead>% Cost of Sale</TableHead>
                 <TableHead>Recurrent fee</TableHead>
@@ -74,7 +74,7 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                 services.map(s => (
                   <TableRow key={s.id}>
                     <TableCell>{s.name}</TableCell>
-                    <TableCell>{Number(s.weight || 0).toFixed(2)}</TableCell>
+                    <TableCell>{Number(s.weight || 0).toFixed(2)}%</TableCell>
                     <TableCell>{Number(s.commission_rate || 0).toFixed(2)}%</TableCell>
                     <TableCell>{Number(s.cost_of_sell || 0).toFixed(2)}%</TableCell>
                     <TableCell>${Number(s.recurrent_fee || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</TableCell>
