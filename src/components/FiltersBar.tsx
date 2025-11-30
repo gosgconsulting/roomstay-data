@@ -10,8 +10,7 @@ import { cn } from "@/lib/utils";
 import { startOfMonth, endOfMonth, startOfWeek, subDays, subMonths, startOfYear, endOfYear, differenceInDays, subYears } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
-import { retryWithBackoff, filterDimensionsByVisibility, filterDimensionsByFilterSettings } from "@/lib/debug";
-import { filterDimensionsByDataAvailability } from "@/lib/dimensionUtils";
+import { retryWithBackoff, filterDimensionsByFilterSettings } from "@/lib/debug";
 import { useToast } from "@/components/ui/use-toast";
 import { useVlookupMappings, getMappedValue } from "@/hooks/useVlookupMappings";
 import PerformanceSettingsModal from "@/components/PerformanceSettingsModal";
@@ -55,7 +54,7 @@ interface Dimension {
   id: string;
   name: string;
   type: string;
-  scope?: 'global' | 'account' | 'custom';
+  scope?: 'global' | 'account' | 'custom' | 'fallback';
   conditions?: import("@/types/dimensions").DimensionCondition[];
 }
 
@@ -73,7 +72,7 @@ export const FiltersBar = ({
   isEditMode = false,
 }: FiltersBarProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
-  const [allDimensions, setAllDimensions] = useState<Dimension[]>([]); // NEW: All available dimensions for settings modal
+  const [allDimensions, setAllDimensions] = useState<Dimension[]>([]); // All available dimensions for settings modal
   const [activeDimensions, setActiveDimensions] = useState<string[]>([]);
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
@@ -629,111 +628,85 @@ export const FiltersBar = ({
     try {
       if (!user) throw new Error("User not authenticated");
 
-      let accountData: Dimension[] = [];
-      if (accountId) {
-        const { data, error } = await supabase
-          .from("dimensions").select("*")
-          .eq("scope", "account")
-          .eq("account_id", accountId)
-          .order("created_at", { ascending: false });
-        if (error) throw error;
-        accountData = ((data || []).map(d => ({
-          ...d,
-          conditions: (Array.isArray(d.conditions) ? d.conditions : []) as unknown as import("@/types/dimensions").DimensionCondition[]
-        })) as unknown) as Dimension[];
-      }
+      console.log('[FiltersBar] Loading dimensions for filtering - being more permissive...');
 
-      let customData: Dimension[] = [];
-      if (reportId) {
-        const { data, error } = await supabase
-          .from("dimensions").select("*")
-          .eq("user_id", user.id)
-          .eq("scope", "custom")
-          .or(`report_id.is.null,report_id.eq.${reportId}`)
-          .order("created_at", { ascending: false });
-        if (error) throw error;
-        customData = ((data || []).map(d => ({
-          ...d,
-          conditions: (Array.isArray(d.conditions) ? d.conditions : []) as unknown as import("@/types/dimensions").DimensionCondition[]
-        })) as unknown) as Dimension[];
-      } else {
-        const { data, error } = await supabase
-          .from("dimensions").select("*")
-          .eq("user_id", user.id)
-          .eq("scope", "custom")
-          .is("report_id", null)
-          .order("created_at", { ascending: false });
-        if (error) throw error;
-        customData = ((data || []).map(d => ({
-          ...d,
-          conditions: (Array.isArray(d.conditions) ? d.conditions : []) as unknown as import("@/types/dimensions").DimensionCondition[]
-        })) as unknown) as Dimension[];
-      }
+      // Use centralized dimension loader to get ALL dimensions (no data filtering for filters)
+      const allAvailableDimensions = await loadDimensionsForUser(
+        user.id, 
+        reportId,
+        {
+          filterByDataAvailability: false,  // DON'T filter by data availability for filters
+          alwaysIncludeDate: true,
+          alwaysIncludeCalculated: true,
+          fallbackOnError: true
+        }
+      );
 
-      const { data: globalData, error: globalError } = await supabase
-        .from("dimensions").select("*")
-        .eq("scope", "global")
-        .order("created_at", { ascending: false });
-      if (globalError) throw globalError;
-
-      // Include all dimensions (vlookup dimensions are now included in custom data)
-      const all = [
-        ...(accountData || []),
-        ...(customData || []),
-        ...(globalData || [])
-      ].map(d => ({
-        ...d,
-        conditions: (Array.isArray(d.conditions) ? d.conditions : []) as unknown as import("@/types/dimensions").DimensionCondition[]
-      })) as Dimension[];
-      // FIX: Deduplicate by id (not by name) so newly added dimensions aren't dropped
-      const seenIds = new Set<string>();
-      const unique = all.filter(d => {
-        if (seenIds.has(d.id)) return false;
-        seenIds.add(d.id);
-        return true;
-      });
-
-      console.log('[FiltersBar] loadDimensions - All unique dimensions:', unique.map(d => `${d.name} (${d.type})`));
-      const filterable = unique.filter(d => d.type === "text" || d.type === "vlookup");
-      console.log('[FiltersBar] loadDimensions - After type filter (text only):', filterable.map(d => d.name));
+      console.log('[FiltersBar] loadDimensions - All dimensions loaded:', allAvailableDimensions.map(d => `${d.name} (${d.type})`));
       
-      // Filter by data availability first (only for reportId-specific loading)
-      let dataFilteredDimensions = filterable;
-      if (reportId) {
+      // Filter to only text and vlookup dimensions (suitable for filtering)
+      const filterable = allAvailableDimensions.filter(d => d.type === "text" || d.type === "vlookup");
+      console.log('[FiltersBar] loadDimensions - After type filter (text/vlookup only):', filterable.map(d => d.name));
+      
+      // Apply filter settings filtering, but with fallback to ensure some dimensions are always available
+      let final = filterable;
+      if (user && reportId) {
         try {
-          console.log('[FiltersBar] Filtering dimensions by data availability...');
-          dataFilteredDimensions = await filterDimensionsByDataAvailability(
-            filterable, 
-            reportId,
-            {
-              alwaysIncludeDate: false,      // Don't force include date for filters (text/vlookup only)
-              alwaysIncludeCalculated: true, // Include calculated dimensions in filters
-              fallbackOnError: true          // Return all dimensions if error occurs
-            }
-          );
-          console.log('[FiltersBar] Data availability filtering:', {
-            original: filterable.length,
-            filtered: dataFilteredDimensions.length,
-            excluded: filterable.length - dataFilteredDimensions.length
-          });
+          const settingsFiltered = await filterDimensionsByFilterSettings(filterable, reportId, user.id, supabase);
+          
+          // If filter settings result in empty array, use some default dimensions
+          if (settingsFiltered.length === 0) {
+            console.log('[FiltersBar] Filter settings returned empty, using fallback dimensions');
+            // Use first 5 filterable dimensions as fallback
+            final = filterable.slice(0, 5);
+          } else {
+            final = settingsFiltered;
+          }
         } catch (filterError) {
-          console.error('[FiltersBar] Error filtering by data availability:', filterError);
-          // Use all filterable dimensions as fallback
-          dataFilteredDimensions = filterable;
+          console.error('[FiltersBar] Error applying filter settings, using all filterable dimensions:', filterError);
+          final = filterable;
         }
       }
       
-      const final = (user && reportId)
-        ? await filterDimensionsByFilterSettings(dataFilteredDimensions, reportId, user.id, supabase)
-        : dataFilteredDimensions;
+      // Ensure we always have at least some dimensions for filtering
+      if (final.length === 0) {
+        console.log('[FiltersBar] No dimensions available after all filtering, using fallback');
+        // Create fallback dimensions to prevent complete failure
+        const fallbackDimensions = [
+          {
+            id: 'fallback-account',
+            name: 'Account',
+            type: 'text',
+            scope: 'fallback' as const
+          },
+          {
+            id: 'fallback-campaign',
+            name: 'Campaign',
+            type: 'text',
+            scope: 'fallback' as const
+          }
+        ];
+        final = fallbackDimensions;
+      }
       
-      console.log('[FiltersBar] loadDimensions - Final dimensions after all filters:', final.map(d => d.name));
+      console.log('[FiltersBar] loadDimensions - Final dimensions for filtering:', final.map(d => d.name));
       setDimensions(final);
       
-      // Store all dimensions for settings modal (including vlookup dimensions)
-      setAllDimensions(unique);
+      // Store all dimensions for settings modal
+      setAllDimensions(allAvailableDimensions);
     } catch (e) {
       console.error("Error loading dimensions:", e);
+      // Set fallback dimensions to prevent complete failure
+      const fallbackDimensions = [
+        {
+          id: 'fallback-account',
+          name: 'Account',
+          type: 'text',
+          scope: 'fallback' as const
+        }
+      ];
+      setDimensions(fallbackDimensions);
+      setAllDimensions(fallbackDimensions);
     } finally {
       setIsLoading(false);
     }
