@@ -165,6 +165,46 @@ export default function ForecastScenarioModal({ open, onOpenChange, scenario }: 
           </ToggleGroup>
         </div>
 
+        {/* NEW: Summary card with Total Revenue and scenario info */}
+        <div className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Total Revenue</CardTitle>
+              <div className="text-xs text-muted-foreground">Based on forecast</div>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span>Hotel Name</span>
+                <span className="font-medium">{scenario.name}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Rooms</span>
+                <span className="font-medium">{Number(scenario.rooms || 0)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>ADR</span>
+                <span className="font-medium">{formatCurrency2(Number(scenario.average_daily_rate || 0))}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Occupancy Rate</span>
+                <span className="font-medium">{Number(scenario.occupancy_rate || 0).toFixed(2)}%</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Direct Revenue %</span>
+                <span className="font-medium">{Number(scenario.direct_bookings_target || 0).toFixed(2)}%</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Conv Rate</span>
+                <span className="font-medium">{formatPercent(Number(scenario.conversion_rate || 0))}</span>
+              </div>
+              <div className="flex items-center justify-between pt-2">
+                <span className="font-semibold">Total Revenue</span>
+                <span className="font-semibold">{formatCurrency0(base.revenue)}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* UPDATED Layout: only per-service cards (removed total KPIs sidebar) */}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {perService.length === 0 ? (
