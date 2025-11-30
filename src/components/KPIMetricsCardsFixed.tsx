@@ -99,6 +99,61 @@ export function KPIMetricsCards({
         return;
       }
 
+      // Load dimension metadata to map IDs to names
+      console.log('[KPI-FIXED] Loading dimension metadata...');
+      let dimensionMap: Record<string, { name: string; type: string }> = {};
+      
+      try {
+        // Load dimensions (account > custom > global > report-specific)
+        const dimensionQueries = [];
+        
+        if (accountId) {
+          dimensionQueries.push(
+            supabase.from('dimensions')
+              .select('id, name, type, scope, account_id, report_id')
+              .eq('scope', 'account')
+              .eq('account_id', accountId)
+          );
+        }
+        
+        if (user?.id) {
+          dimensionQueries.push(
+            supabase.from('dimensions')
+              .select('id, name, type, scope, account_id, report_id')
+              .eq('scope', 'custom')
+              .eq('user_id', user.id)
+          );
+        }
+        
+        dimensionQueries.push(
+          supabase.from('dimensions')
+            .select('id, name, type, scope, account_id, report_id')
+            .eq('scope', 'global')
+        );
+        
+        dimensionQueries.push(
+          supabase.from('dimensions')
+            .select('id, name, type, scope, account_id, report_id')
+            .eq('report_id', reportId)
+        );
+        
+        const dimensionResults = await Promise.all(dimensionQueries);
+        
+        // Combine all dimensions into a map
+        dimensionResults.forEach(({ data: dimensions }) => {
+          if (dimensions) {
+            dimensions.forEach((dim: any) => {
+              dimensionMap[dim.id] = { name: dim.name, type: dim.type };
+            });
+          }
+        });
+        
+        console.log('[KPI-FIXED] Loaded dimension map:', Object.keys(dimensionMap).length, 'dimensions');
+        console.log('[KPI-FIXED] Dimension names:', Object.values(dimensionMap).map(d => d.name));
+      } catch (error) {
+        console.error('[KPI-FIXED] Error loading dimensions:', error);
+      }
+
       // Load KPI visibility and order settings from report_views
       let visibleKPIs: string[] | null = null;
       let kpiOrder: string[] | null = null;
@@ -176,13 +231,14 @@ export function KPIMetricsCards({
       rawRows.forEach((row: any) => {
         const dv = row.dimension_values || {};
         
-        // Sum up all numeric values by dimension ID, mapping to common metric names
+        // Sum up all numeric values by dimension ID, mapping to actual dimension names
         Object.entries(dv).forEach(([dimId, value]) => {
           if (value !== undefined && value !== null && value !== '') {
             const numValue = parseFloat(String(value));
             if (!isNaN(numValue)) {
-              // Map dimension IDs to standard metric names
-              let metricName = getMetricNameFromDimensionId(dimId);
+              // Use the actual dimension name from the dimension map
+              const dimension = dimensionMap[dimId];
+              const metricName = dimension ? dimension.name : dimId;
               currentMetrics[metricName] = (currentMetrics[metricName] || 0) + numValue;
             }
           }
@@ -232,9 +288,11 @@ export function KPIMetricsCards({
             });
             
             if (total > 0) {
-              // Use the dimension ID as the metric name for now
-              currentMetrics[dimId] = total;
-              console.log('[KPI-FIXED] Added fallback metric:', dimId, '=', total);
+              // Use the actual dimension name if available, otherwise use dimension ID
+              const dimension = dimensionMap[dimId];
+              const metricName = dimension ? dimension.name : dimId;
+              currentMetrics[metricName] = total;
+              console.log('[KPI-FIXED] Added fallback metric:', metricName, '=', total);
             }
           }
         });
@@ -296,7 +354,9 @@ export function KPIMetricsCards({
               if (value !== undefined && value !== null && value !== '') {
                 const numValue = parseFloat(String(value));
                 if (!isNaN(numValue)) {
-                  let metricName = getMetricNameFromDimensionId(dimId);
+                  // Use the actual dimension name from the dimension map
+                  const dimension = dimensionMap[dimId];
+                  const metricName = dimension ? dimension.name : dimId;
                   comparisonMetrics[metricName] = (comparisonMetrics[metricName] || 0) + numValue;
                 }
               }
