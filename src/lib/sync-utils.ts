@@ -1140,6 +1140,16 @@ export const syncDataSource = async (
     onProgress
   } = options;
 
+  console.log(`[SYNC] ============= STARTING SYNC =============`);
+  console.log(`[SYNC] Data Source: ${dataSource.name}`);
+  console.log(`[SYNC] Source Type: ${dataSource.source_type || 'google_sheets'}`);
+  console.log(`[SYNC] Spreadsheet ID: ${dataSource.spreadsheet_id}`);
+  console.log(`[SYNC] Tab Name: ${dataSource.tab_name}`);
+  console.log(`[SYNC] Header Row: ${dataSource.header_row}`);
+  console.log(`[SYNC] Column Mappings: ${dataSource.column_mappings?.length || 0}`);
+  console.log(`[SYNC] Options:`, options);
+  console.log(`[SYNC] =========================================`);
+
   try {
     // Validate session and get current user
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -1187,17 +1197,21 @@ export const syncDataSource = async (
       }
     }
 
-    console.log(`[SYNC] Starting sync for data source: ${dataSource.name} (account: ${accountId || 'none'})`);
+    console.log(`[SYNC] Report ID: ${reportId}`);
+    console.log(`[SYNC] Account ID: ${accountId || 'none'}`);
+    console.log(`[SYNC] User ID: ${user.id}`);
     
     // Step 1: Fix problematic column mappings
     await fixColumnMappings(dataSource.id);
     
     // Step 2: Delete existing data if requested
     if (shouldDeleteData) {
-      await deleteExistingData(dataSource.id);
+      const deletedCount = await deleteExistingData(dataSource.id);
+      console.log(`[SYNC] Deleted ${deletedCount} existing rows`);
       
       if (recreateDimensions) {
         await deleteCustomDimensions(dataSource.id);
+        console.log(`[SYNC] Deleted custom dimensions`);
       }
     }
 
@@ -1205,6 +1219,9 @@ export const syncDataSource = async (
     const sourceType = dataSource.source_type || 'google_sheets'; // Default to google_sheets for backward compatibility
     let headers: string[] = [];
     let allData: any[] = [];
+    
+    console.log(`[SYNC] ============= FETCHING DATA =============`);
+    console.log(`[SYNC] Source Type: ${sourceType}`);
     
     if (sourceType === 'csv_url') {
       // CSV URL source
@@ -1244,31 +1261,64 @@ export const syncDataSource = async (
     } else {
       // Google Sheets source
       if (!dataSource.spreadsheet_id || !dataSource.tab_name) {
+        console.error(`[SYNC] ❌ MISSING GOOGLE SHEETS PARAMETERS:`);
+        console.error(`[SYNC] Spreadsheet ID: ${dataSource.spreadsheet_id}`);
+        console.error(`[SYNC] Tab Name: ${dataSource.tab_name}`);
         throw new Error('Spreadsheet ID and tab name are required for Google Sheets data source');
       }
       
+      console.log(`[SYNC] ============= GOOGLE SHEETS FETCH =============`);
+      console.log(`[SYNC] Spreadsheet ID: ${dataSource.spreadsheet_id}`);
+      console.log(`[SYNC] Tab Name: ${dataSource.tab_name}`);
+      console.log(`[SYNC] Header Row: ${dataSource.header_row}`);
+      console.log(`[SYNC] ===============================================`);
+      
       // Fetch headers
       const headerRange = `A${dataSource.header_row}:Z${dataSource.header_row}`;
-      const headerData = await fetchGoogleSheetsData(
-        dataSource.spreadsheet_id,
-        dataSource.tab_name,
-        headerRange
-      );
+      console.log(`[SYNC] ============= FETCHING HEADERS =============`);
+      console.log(`[SYNC] Header Range: ${headerRange}`);
       
-      headers = headerData[0].map((h: any) => 
-        h === null || h === undefined ? '' : String(h).trim()
-      );
+      try {
+        const headerData = await fetchGoogleSheetsData(
+          dataSource.spreadsheet_id,
+          dataSource.tab_name,
+          headerRange
+        );
+        
+        headers = headerData[0].map((h: any) => 
+          h === null || h === undefined ? '' : String(h).trim()
+        );
+        
+        console.log(`[SYNC] ✅ Headers fetched successfully:`, headers);
+        console.log(`[SYNC] Header count: ${headers.length}`);
+      } catch (headerError) {
+        console.error(`[SYNC] ❌ ERROR FETCHING HEADERS:`, headerError);
+        throw new Error(`Failed to fetch headers: ${headerError instanceof Error ? headerError.message : 'Unknown error'}`);
+      }
 
       // Step 4: Fetch all data in chunks for large datasets
-      console.log(`[SYNC] Fetching data from Google Sheets...`);
+      console.log(`[SYNC] ============= FETCHING DATA ROWS =============`);
+      
+      // Calculate expected data start row
+      const dataStartRow = dataSource.header_row + 1;
+      console.log(`[SYNC] Data should start at row: ${dataStartRow}`);
       
       // First, try to get an estimate of total rows by fetching a small sample
-      const sampleRange = `A${dataSource.header_row + 1}:A${dataSource.header_row + 100}`;
-      const sampleData = await fetchGoogleSheetsData(
-        dataSource.spreadsheet_id,
-        dataSource.tab_name,
-        sampleRange
-      );
+      const sampleRange = `A${dataStartRow}:A${dataStartRow + 99}`;
+      console.log(`[SYNC] Fetching sample data from range: ${sampleRange}`);
+      
+      try {
+        const sampleData = await fetchGoogleSheetsData(
+          dataSource.spreadsheet_id,
+          dataSource.tab_name,
+          sampleRange
+        );
+        console.log(`[SYNC] ✅ Sample data fetched: ${sampleData.length} rows`);
+        console.log(`[SYNC] Sample data preview:`, sampleData.slice(0, 3));
+      } catch (sampleError) {
+        console.warn(`[SYNC] ⚠️ Could not fetch sample data:`, sampleError);
+        console.warn(`[SYNC] This might indicate the sheet has no data after the header row`);
+      }
       
       // Determine if we need chunked fetching based on sample size and available data
       const SHEET_CHUNK_SIZE = 25000; // Fetch 25K rows at a time to prevent timeouts
@@ -1276,7 +1326,9 @@ export const syncDataSource = async (
       // Try to fetch all data first, with fallback to chunked approach
       try {
         console.log(`[SYNC] Attempting to fetch all data at once...`);
-        const dataRange = `A${dataSource.header_row + 1}:Z`;
+        const dataRange = `A${dataStartRow}:Z`;
+        console.log(`[SYNC] Data range: ${dataRange}`);
+        
         const initialData = await fetchGoogleSheetsData(
           dataSource.spreadsheet_id,
           dataSource.tab_name,
@@ -1285,13 +1337,18 @@ export const syncDataSource = async (
         
         if (initialData && initialData.length > 0) {
           allData = initialData;
-          console.log(`[SYNC] Successfully fetched ${allData.length} rows in single request`);
+          console.log(`[SYNC] ✅ Successfully fetched ${allData.length} rows in single request`);
+          console.log(`[SYNC] First data row:`, allData[0]);
+          console.log(`[SYNC] Last data row:`, allData[allData.length - 1]);
+        } else {
+          console.warn(`[SYNC] ⚠️ Single fetch returned no data`);
+          console.warn(`[SYNC] This means the sheet has no data after row ${dataStartRow}`);
         }
       } catch (fetchError) {
-        console.warn(`[SYNC] Single fetch failed, switching to chunked approach:`, fetchError);
+        console.warn(`[SYNC] ⚠️ Single fetch failed, switching to chunked approach:`, fetchError);
         
         // Fallback to chunked fetching for very large datasets
-        let startRow = dataSource.header_row + 1;
+        let startRow = dataStartRow;
         let hasMoreData = true;
         let chunkCount = 0;
         
@@ -1339,6 +1396,37 @@ export const syncDataSource = async (
       }
     }
 
+    console.log(`[SYNC] ============= DATA FETCH COMPLETE =============`);
+    console.log(`[SYNC] Headers: ${headers.length} (${headers.join(', ')})`);
+    console.log(`[SYNC] Data Rows: ${allData.length}`);
+    if (allData.length > 0) {
+      console.log(`[SYNC] Sample Data Row:`, allData[0]);
+    }
+    console.log(`[SYNC] =============================================`);
+
+    if (allData.length === 0) {
+      console.error(`[SYNC] ❌ NO DATA ROWS FOUND - This is the problem!`);
+      console.error(`[SYNC] Headers were found: ${headers.length > 0 ? 'YES' : 'NO'}`);
+      console.error(`[SYNC] Check your Google Sheets:`, {
+        spreadsheet_id: dataSource.spreadsheet_id,
+        tab_name: dataSource.tab_name,
+        header_row: dataSource.header_row,
+        expected_data_start_row: (dataSource.header_row || 1) + 1
+      });
+      console.error(`[SYNC] Possible causes:`);
+      console.error(`[SYNC] 1. Sheet has no data after the header row`);
+      console.error(`[SYNC] 2. Wrong tab name (case sensitive)`);
+      console.error(`[SYNC] 3. Wrong header row number`);
+      console.error(`[SYNC] 4. Google Sheets API permission issues`);
+      
+      return {
+        success: true, // Don't fail the sync, just report 0 rows
+        rowsProcessed: 0,
+        dimensionsCreated: 0,
+      };
+    }
+
+    // Continue with the rest of the sync process...
     // Step 5: Auto-enable mappings that have valid dimension assignments
     const mappings = dataSource.column_mappings || [];
     const mappingsWithValidAssignments = mappings.filter(m => {
