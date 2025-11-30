@@ -372,6 +372,65 @@ export type Database = {
           },
         ]
       }
+      forecast_services: {
+        Row: {
+          budget_payer: string
+          commission_rate: number
+          cost_of_sell: number
+          created_at: string | null
+          forecast_id: string
+          id: string
+          name: string
+          one_off_fee: number
+          percent_cost: number
+          percent_revenue: number
+          recurrent_fee: number
+          updated_at: string | null
+          user_id: string
+          weight: number
+        }
+        Insert: {
+          budget_payer?: string
+          commission_rate?: number
+          cost_of_sell?: number
+          created_at?: string | null
+          forecast_id: string
+          id?: string
+          name: string
+          one_off_fee?: number
+          percent_cost?: number
+          percent_revenue?: number
+          recurrent_fee?: number
+          updated_at?: string | null
+          user_id: string
+          weight?: number
+        }
+        Update: {
+          budget_payer?: string
+          commission_rate?: number
+          cost_of_sell?: number
+          created_at?: string | null
+          forecast_id?: string
+          id?: string
+          name?: string
+          one_off_fee?: number
+          percent_cost?: number
+          percent_revenue?: number
+          recurrent_fee?: number
+          updated_at?: string | null
+          user_id?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forecast_services_forecast_id_fkey"
+            columns: ["forecast_id"]
+            isOneToOne: false
+            referencedRelation: "forecasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       forecasts: {
         Row: {
           average_daily_rate: number | null
