@@ -23,15 +23,18 @@ type ServiceRow = {
   recurrent_fee: number;
   percent_cost: number;
   percent_revenue: number;
+  one_off_fee: number;
   budget_payer?: 'client' | 'agency';
 };
+
+// Editable fields
+type EditableField = keyof Pick<ServiceRow, 'name' | 'weight' | 'cost_of_sell' | 'recurrent_fee' | 'percent_cost' | 'percent_revenue' | 'one_off_fee' | 'budget_payer'>;
 
 export default function ForecastServicesModal({ open, onOpenChange, forecastId }: ForecastServicesModalProps) {
   const [services, setServices] = React.useState<ServiceRow[]>([]);
   const [loading, setLoading] = React.useState(false);
 
   // NEW: editing state for inline cells
-  type EditableField = keyof Pick<ServiceRow, 'name' | 'weight' | 'cost_of_sell' | 'recurrent_fee' | 'percent_cost' | 'percent_revenue' | 'budget_payer'>;
   const [editing, setEditing] = React.useState<{ id: string | null; field: EditableField | null; value: string }>({
     id: null,
     field: null,
@@ -68,6 +71,7 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
         recurrent_fee: 0,
         percent_cost: 0,
         percent_revenue: 0,
+        one_off_fee: 0,
         budget_payer: 'client'
       })
       .select()
@@ -124,7 +128,6 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
     const field = editing.field;
     let valueToSave: number | string = editing.value;
 
-    // Validation + normalization
     const percentFields: EditableField[] = ["weight", "cost_of_sell", "percent_cost", "percent_revenue"];
     if (field === "name") {
       valueToSave = String(valueToSave).trim();
@@ -132,10 +135,10 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
         toast.error("Service name cannot be empty");
         return;
       }
-    } else if (field === "recurrent_fee") {
+    } else if (field === "recurrent_fee" || field === "one_off_fee") {
       const num = parseFloat(String(valueToSave));
       if (Number.isNaN(num) || num < 0) {
-        toast.error("Recurrent fee must be a non-negative number");
+        toast.error(`${field === 'one_off_fee' ? 'One-off fee' : 'Recurrent fee'} must be a non-negative number`);
         return;
       }
       valueToSave = num;
@@ -155,7 +158,6 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
       valueToSave = val;
     }
 
-    // Persist to Supabase
     const { error } = await (supabase as any)
       .from("forecast_services")
       .update({ [field]: valueToSave })
@@ -167,7 +169,6 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
       return;
     }
 
-    // Optimistic UI update
     setServices(prev => prev.map(s => s.id === id ? { ...s, [field]: valueToSave as any } : s));
     toast.success("Saved");
     cancelEdit();
@@ -217,6 +218,7 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                 <TableHead>Service Name</TableHead>
                 <TableHead>% Weight</TableHead>
                 <TableHead>% Cost of Sale</TableHead>
+                <TableHead>One-off</TableHead>
                 <TableHead>Recurrent fee</TableHead>
                 <TableHead>% Cost</TableHead>
                 <TableHead>% Revenue</TableHead>
@@ -227,11 +229,11 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-muted-foreground">Loading services...</TableCell>
+                  <TableCell colSpan={9} className="text-muted-foreground">Loading services...</TableCell>
                 </TableRow>
               ) : services.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-muted-foreground">No services saved for this scenario.</TableCell>
+                  <TableCell colSpan={9} className="text-muted-foreground">No services saved for this scenario.</TableCell>
                 </TableRow>
               ) : (
                 services.map(s => (
@@ -307,6 +309,31 @@ export default function ForecastServicesModal({ open, onOpenChange, forecastId }
                         </div>
                       ) : (
                         `${Number(s.cost_of_sell || 0).toFixed(2)}%`
+                      )}
+                    </TableCell>
+
+                    {/* One-off */}
+                    <TableCell onClick={() => startEdit(s.id, "one_off_fee", s.one_off_fee)} className="cursor-pointer">
+                      {editing.id === s.id && editing.field === "one_off_fee" ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            autoFocus
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            className="w-32"
+                            value={editing.value}
+                            onChange={(e) => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitEdit();
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                          <Button size="sm" variant="secondary" onClick={commitEdit}>Save</Button>
+                          <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
+                        </div>
+                      ) : (
+                        `$${Number(s.one_off_fee || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}`
                       )}
                     </TableCell>
 

@@ -26,6 +26,7 @@ type ServiceRow = {
   recurrent_fee: number;
   percent_cost: number;
   percent_revenue: number;
+  one_off_fee: number; // NEW
   budget_payer?: 'client' | 'agency';
 };
 
@@ -137,11 +138,12 @@ export default function ForecastScenarioPage() {
       const revenue = base.paidRevenue * s.share;
       const cost = revenue * ((Number(s.cost_of_sell) || 0) / 100);
       const recurrentFee = period === "year" ? (Number(s.recurrent_fee) || 0) * 12 : (Number(s.recurrent_fee) || 0);
+      const oneOffFee = Number(s.one_off_fee || 0); // one-time
 
       const costFee = cost * ((Number(s.percent_cost) || 0) / 100);
       const revenueFee = revenue * ((Number(s.percent_revenue) || 0) / 100);
 
-      const totalCostValue = cost + recurrentFee + costFee + revenueFee;
+      const totalCostValue = cost + recurrentFee + oneOffFee + costFee + revenueFee; // include one-off
       const totalCostPct = revenue > 0 ? totalCostValue / revenue : 0;
 
       return {
@@ -150,6 +152,7 @@ export default function ForecastScenarioPage() {
         revenue,
         cost,
         recurrentFee,
+        oneOffFee, // NEW
         costFee,
         revenueFee,
         totalCostValue,
@@ -161,11 +164,11 @@ export default function ForecastScenarioPage() {
     });
   }, [serviceShares, base, period]);
 
-  // NEW: total profit across services where budget is Agency
+  // Profit includes all fees
   const totalProfit = React.useMemo(() => {
     return perService.reduce((sum, svc) => {
       if (svc.budgetPayer === 'agency') {
-        const profit = (svc.costFee + svc.revenueFee + svc.recurrentFee) - svc.cost;
+        const profit = (svc.costFee + svc.revenueFee + svc.recurrentFee + svc.oneOffFee) - svc.cost;
         return sum + profit;
       }
       return sum;
@@ -267,6 +270,10 @@ export default function ForecastScenarioPage() {
                 <div className="flex items-center justify-between">
                   <span>Recurrent Fee</span>
                   <span className="font-medium">{formatCurrency2(svc.recurrentFee)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>One-off Fee</span>
+                  <span className="font-medium">{formatCurrency2(svc.oneOffFee)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Cost Fee ({svc.percentCost.toFixed(2)}%)</span>

@@ -37,6 +37,7 @@ interface ServiceRow {
   recurrent_fee: string; // currency input
   percent_cost: string; // percent input
   percent_revenue: string; // percent input
+  one_off_fee: string; // NEW
   budget_payer?: 'client' | 'agency';
 }
 
@@ -96,6 +97,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
         recurrent_fee: '',
         percent_cost: '',
         percent_revenue: '',
+        one_off_fee: '', // NEW
         budget_payer: 'client'
       }
     ]);
@@ -247,6 +249,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
           recurrent_fee: parseFloat((r as any).recurrent_fee) || 0,
           percent_cost: parseFloat((r as any).percent_cost) || 0,
           percent_revenue: parseFloat((r as any).percent_revenue) || 0,
+          one_off_fee: parseFloat((r as any).one_off_fee) || 0, // NEW
           budget_payer: (r.budget_payer ?? 'client')
         }));
         const { error: svcError } = await (supabase as any)
@@ -518,6 +521,7 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                       <TableHead>Service Name</TableHead>
                       <TableHead>% Weight</TableHead>
                       <TableHead>% Cost of Sale</TableHead>
+                      <TableHead>One-off</TableHead>
                       <TableHead>Recurrent fee</TableHead>
                       <TableHead>% Cost</TableHead>
                       <TableHead>% Revenue</TableHead>
@@ -565,6 +569,17 @@ export const ForecastingPage = ({ reportId, accountId }: ForecastingPageProps) =
                               placeholder="e.g., 12.5"
                               value={row.cost_of_sell}
                               onChange={(e) => updateServiceRow(row.id, 'cost_of_sell', e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              className="h-8"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="e.g., 1500"
+                              value={row.one_off_fee}
+                              onChange={(e) => updateServiceRow(row.id, 'one_off_fee', e.target.value)}
                             />
                           </TableCell>
                           <TableCell>
