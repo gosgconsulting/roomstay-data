@@ -9,6 +9,7 @@ interface KPIChartsGridProps {
   filters: {
     dimensionFilters: Record<string, string[]>;
     dateRange?: { from: Date; to?: Date };
+    datePreset?: string;
     compareEnabled?: boolean;
     compareType?: string;
     compareDateRange?: { from: Date; to?: Date };

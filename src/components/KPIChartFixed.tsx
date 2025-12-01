@@ -4,10 +4,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff } from "@/lib/debug";
-import { loadReportData, getCurrentMonthDateRange, Dimension } from "@/lib/data-loading-fix";
+import { getCurrentMonthDateRange, Dimension } from "@/lib/data-loading-fix";
 import { format, parseISO } from "date-fns";
 import { useUser } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSourceData } from "@/hooks/dataSources";
+import type { DataSource } from "@/lib/data-sources/types";
+import { loadAccountDimensions } from "@/lib/data-loading-fix";
 
 interface KPIChartProps {
   reportId: string | null;
@@ -15,6 +18,7 @@ interface KPIChartProps {
   filters: {
     dimensionFilters: Record<string, string[]>;
     dateRange?: { from: Date; to?: Date };
+    datePreset?: string;
     compareEnabled?: boolean;
     compareType?: string;
     compareDateRange?: { from: Date; to?: Date };
@@ -43,14 +47,75 @@ export function KPIChart({
   const [selectedMetric, setSelectedMetric] = useState<string>(initialMetric || "Revenue");
   const [isLoading, setIsLoading] = useState(true);
   const [availableMetrics, setAvailableMetrics] = useState<string[]>([]);
+  const [dataSource, setDataSource] = useState<DataSource | null>(null);
+  const [dimensions, setDimensions] = useState<Dimension[]>([]);
 
   console.log('[CHART-FIXED] Component render - reportId:', reportId, 'accountId:', accountId);
+
+  // Fetch data source for the report
+  useEffect(() => {
+    const fetchDataSource = async () => {
+      if (!reportId) {
+        setDataSource(null);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('data_sources')
+          .select('*')
+          .eq('report_id', reportId)
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          console.error('[CHART-FIXED] Error fetching data source:', error);
+          return;
+        }
+
+        if (data) {
+          setDataSource({
+            ...data,
+            column_mappings: (data.column_mappings as any) || null,
+          } as DataSource);
+        }
+      } catch (error) {
+        console.error('[CHART-FIXED] Error fetching data source:', error);
+      }
+    };
+
+    fetchDataSource();
+  }, [reportId]);
+
+  // Load dimensions
+  useEffect(() => {
+    const loadDims = async () => {
+      if (!accountId || !user?.id || !reportId) return;
+      
+      try {
+        const dims = await loadAccountDimensions(accountId, user.id, reportId);
+        setDimensions(dims);
+      } catch (error) {
+        console.error('[CHART-FIXED] Error loading dimensions:', error);
+      }
+    };
+
+    loadDims();
+  }, [accountId, user?.id, reportId]);
+
+  // Use source data hook
+  const { data: sourceData, isLoading: isLoadingSource } = useSourceData(
+    dataSource,
+    accountId,
+    { enabled: !!dataSource && !!reportId }
+  );
 
   // Create a stable reference for filters to prevent unnecessary re-renders
   const stableFilters = useMemo(() => {
     return {
       dimensionFilters: filters.dimensionFilters,
       dateRange: filters.dateRange,
+      datePreset: filters.datePreset || 'all_time',
       compareEnabled: filters.compareEnabled,
       compareType: filters.compareType,
       compareDateRange: filters.compareDateRange,
@@ -59,6 +124,7 @@ export function KPIChart({
     JSON.stringify(filters.dimensionFilters),
     filters.dateRange?.from?.toISOString(),
     filters.dateRange?.to?.toISOString(),
+    filters.datePreset,
     filters.compareEnabled,
     filters.compareType,
     filters.compareDateRange?.from?.toISOString(),
@@ -66,13 +132,13 @@ export function KPIChart({
   ]);
 
   useEffect(() => {
-    if (reportId && accountId) {
+    if (reportId && accountId && sourceData && dimensions.length > 0) {
       loadChartData();
     } else {
       setIsLoading(false);
       onLoadingComplete?.();
     }
-  }, [reportId, accountId, stableFilters, selectedMetric]);
+  }, [reportId, accountId, stableFilters, selectedMetric, sourceData, dimensions.length]);
 
   // Keep selectedMetric in sync if parent changes initialMetric
   useEffect(() => {
@@ -176,41 +242,93 @@ export function KPIChart({
     setIsLoading(true);
     
     try {
-      if (!reportId || !accountId) {
-        console.error('[CHART-FIXED] Missing required data:', { reportId, accountId });
+      if (!reportId || !accountId || !sourceData || !dimensions || dimensions.length === 0) {
+        console.error('[CHART-FIXED] Missing required data:', { 
+          reportId, 
+          accountId, 
+          hasSourceData: !!sourceData,
+          dimensionsCount: dimensions.length 
+        });
         setChartData([]);
         return;
       }
 
-      // Get current month date range for filtering if no date range provided
-      const currentMonthRange = getCurrentMonthDateRange();
-      
-      // Apply filters from the component props
-      const dataFilters = {
-        dateRange: stableFilters.dateRange || currentMonthRange,
-        dimensionFilters: stableFilters.dimensionFilters
-      };
+      // Only apply date filtering if datePreset is not "all_time" and dateRange is provided
+      // If "all_time" is selected, don't filter by date at all
+      const shouldFilterByDate = stableFilters.datePreset !== 'all_time' && stableFilters.dateRange;
+      const dateRange = shouldFilterByDate ? stableFilters.dateRange : undefined;
 
-      console.log('[CHART-FIXED] Loading data with filters:', dataFilters);
-
-      // Load data using the standardized approach with React Query caching
-      const result = await loadReportData(reportId, accountId, user?.id, dataFilters, queryClient);
-
-      if (!result.success) {
-        console.error('[CHART-FIXED] Failed to load report data:', result.error);
-        setChartData([]);
-        return;
-      }
-
-      const { data: filteredData, dimensions } = result;
-
-      console.log('[CHART-FIXED] Loaded data:', {
-        totalRows: result.totalRows,
-        filteredRows: result.filteredRows,
-        dimensions: dimensions.length
+      console.log('[CHART-FIXED] Loading data with filters:', { 
+        dateRange, 
+        datePreset: stableFilters.datePreset,
+        shouldFilterByDate,
+        dimensionFilters: stableFilters.dimensionFilters 
       });
 
-      if (!dimensions || dimensions.length === 0 || filteredData.length === 0) {
+      // Start with source data
+      let filteredData = sourceData.transformedRows.map((row: any, idx: number) => ({
+        id: `row-${row.row_number ?? idx + 1}`,
+        dimension_values: row.dimension_values || {},
+        row_number: row.row_number ?? idx + 1,
+        data_source_id: null,
+      }));
+
+      console.log('[CHART-FIXED] Loaded raw data rows from source:', filteredData.length);
+      console.log('[CHART-FIXED] Source data sample:', sourceData.transformedRows.slice(0, 2));
+      console.log('[CHART-FIXED] Dimensions loaded:', dimensions.map(d => ({ id: d.id, name: d.name, type: d.type })));
+
+      // Apply date filter only if datePreset is not "all_time"
+      if (shouldFilterByDate && dateRange && (dateRange.from || dateRange.to)) {
+        const fromDate = dateRange.from ? new Date(dateRange.from) : null;
+        const toDate = dateRange.to ? new Date(dateRange.to) : null;
+        const adjustedToDate = toDate
+          ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1)
+          : null;
+
+        // Find date dimension
+        const dateDimension = dimensions.find(d => d.type === 'date');
+        
+        if (dateDimension) {
+          filteredData = filteredData.filter((row: any) => {
+            const dv = row.dimension_values || {};
+            const dateValue = dv[dateDimension.id];
+            if (!dateValue) return true; // Keep rows without date
+
+            const rowDate = new Date(String(dateValue));
+            if (fromDate && rowDate < fromDate) return false;
+            if (adjustedToDate && rowDate >= adjustedToDate) return false;
+            return true;
+          });
+        }
+      }
+
+      // Apply dimension filters
+      if (stableFilters.dimensionFilters && Object.keys(stableFilters.dimensionFilters).length > 0) {
+        const normalizedFilters: Record<string, string[]> = {};
+        for (const [k, v] of Object.entries(stableFilters.dimensionFilters)) {
+          if (Array.isArray(v)) normalizedFilters[k] = v.map((x) => String(x));
+          else if (v !== undefined && v !== null) normalizedFilters[k] = [String(v)];
+        }
+
+        filteredData = filteredData.filter((row: any) => {
+          const dv = row.dimension_values || {};
+          for (const [dimId, values] of Object.entries(normalizedFilters)) {
+            if (!values || values.length === 0) continue;
+            const rowVal = dv[dimId];
+            if (rowVal === undefined || rowVal === null) return false;
+
+            const rowStr = String(rowVal).trim().toLowerCase();
+            const filterValuesLower = (values as string[]).map(v => String(v).trim().toLowerCase());
+
+            if (!filterValuesLower.some((v) => v === rowStr)) return false;
+          }
+          return true;
+        });
+      }
+
+      console.log('[CHART-FIXED] Filtered data rows:', filteredData.length);
+
+      if (filteredData.length === 0) {
         setChartData([]);
         return;
       }
@@ -232,10 +350,20 @@ export function KPIChart({
       const dateDimension = dimensions.find(d => d.type === 'date');
       const metricDimension = dimensions.find(d => d.name === selectedMetric);
 
+      console.log('[CHART-FIXED] Dimension lookup:', {
+        dateDimension: dateDimension ? { id: dateDimension.id, name: dateDimension.name } : null,
+        metricDimension: metricDimension ? { id: metricDimension.id, name: metricDimension.name } : null,
+        selectedMetric,
+        allDimensionNames: dimensions.map(d => d.name),
+        allMetricNames: dimensions.filter(d => d.type === 'number' || d.type === 'currency' || d.type === 'percentage').map(d => d.name)
+      });
+
       if (!dateDimension || !metricDimension) {
         console.warn('[CHART-FIXED] Missing required dimensions:', { 
           dateDimension: !!dateDimension, 
-          metricDimension: !!metricDimension 
+          metricDimension: !!metricDimension,
+          availableDimensions: dimensions.map(d => ({ name: d.name, type: d.type })),
+          selectedMetric
         });
         setChartData([]);
         return;
@@ -243,26 +371,48 @@ export function KPIChart({
 
       // Group current period data by date (supports derived metrics via formulas)
       const currentDateGroups = new Map<string, number>();
+      let rowsWithData = 0;
+      let rowsWithoutDate = 0;
+      let rowsWithoutMetric = 0;
+      
       filteredData.forEach(row => {
         const dv = row.dimension_values;
         const dateStr = dv[dateDimension.id];
         const metricValue = getMetricValueForRow(dv, metricDimension, dimensions);
 
-        if (dateStr && metricValue !== null && metricValue !== undefined) {
-          const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(String(metricValue)) || 0;
-          const currentTotal = currentDateGroups.get(dateStr) || 0;
-          currentDateGroups.set(dateStr, currentTotal + numericValue);
+        if (!dateStr) {
+          rowsWithoutDate++;
+          return;
         }
+        
+        if (metricValue === null || metricValue === undefined) {
+          rowsWithoutMetric++;
+          return;
+        }
+
+        rowsWithData++;
+        const numericValue = typeof metricValue === 'number' ? metricValue : parseFloat(String(metricValue)) || 0;
+        const currentTotal = currentDateGroups.get(dateStr) || 0;
+        currentDateGroups.set(dateStr, currentTotal + numericValue);
       });
 
-      // Only load previous period data if comparison is enabled
+      console.log('[CHART-FIXED] Data grouping stats:', {
+        totalRows: filteredData.length,
+        rowsWithData,
+        rowsWithoutDate,
+        rowsWithoutMetric,
+        uniqueDates: currentDateGroups.size,
+        sampleDates: Array.from(currentDateGroups.keys()).slice(0, 5)
+      });
+
+      // Only load previous period data if comparison is enabled and we have a date range
       const previousDateGroups = new Map<string, number>();
       
-      if (stableFilters.compareEnabled) {
+      if (stableFilters.compareEnabled && shouldFilterByDate && dateRange?.from && dateRange?.to) {
         console.log('[CHART-FIXED] Comparison enabled, loading previous period data');
         
         // Calculate date ranges for current and previous periods
-        const currentPeriod = dataFilters.dateRange!;
+        const currentPeriod = dateRange;
         const daysDiff = Math.ceil((currentPeriod.to!.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
         
         const previousPeriodEnd = new Date(currentPeriod.from);
@@ -276,14 +426,57 @@ export function KPIChart({
           daysDiff
         });
 
-        // Load previous period data
-        const previousPeriodFilters = {
-          dateRange: { from: previousPeriodStart, to: previousPeriodEnd },
-          dimensionFilters: dataFilters.dimensionFilters
-        };
+        // For previous period, we need to filter the same source data with different date range
+        // Since we already have sourceData, we can filter it directly
+        let previousData = sourceData.transformedRows.map((row: any, idx: number) => ({
+          id: `row-${row.row_number ?? idx + 1}`,
+          dimension_values: row.dimension_values || {},
+          row_number: row.row_number ?? idx + 1,
+          data_source_id: null,
+        }));
 
-        const previousResult = await loadReportData(reportId, accountId, user?.id, previousPeriodFilters, queryClient);
-        const previousData = previousResult.success ? previousResult.data : [];
+        // Apply date filter for previous period
+        const prevFromDate = new Date(previousPeriodStart);
+        const prevToDate = new Date(previousPeriodEnd);
+        const prevAdjustedToDate = new Date(prevToDate.getFullYear(), prevToDate.getMonth(), prevToDate.getDate() + 1);
+
+        const dateDimension = dimensions.find(d => d.type === 'date');
+        if (dateDimension) {
+          previousData = previousData.filter((row: any) => {
+            const dv = row.dimension_values || {};
+            const dateValue = dv[dateDimension.id];
+            if (!dateValue) return true;
+
+            const rowDate = new Date(String(dateValue));
+            if (rowDate < prevFromDate) return false;
+            if (rowDate >= prevAdjustedToDate) return false;
+            return true;
+          });
+        }
+
+        // Apply same dimension filters
+        if (stableFilters.dimensionFilters && Object.keys(stableFilters.dimensionFilters).length > 0) {
+          const normalizedFilters: Record<string, string[]> = {};
+          for (const [k, v] of Object.entries(stableFilters.dimensionFilters)) {
+            if (Array.isArray(v)) normalizedFilters[k] = v.map((x) => String(x));
+            else if (v !== undefined && v !== null) normalizedFilters[k] = [String(v)];
+          }
+
+          previousData = previousData.filter((row: any) => {
+            const dv = row.dimension_values || {};
+            for (const [dimId, values] of Object.entries(normalizedFilters)) {
+              if (!values || values.length === 0) continue;
+              const rowVal = dv[dimId];
+              if (rowVal === undefined || rowVal === null) return false;
+
+              const rowStr = String(rowVal).trim().toLowerCase();
+              const filterValuesLower = (values as string[]).map(v => String(v).trim().toLowerCase());
+
+              if (!filterValuesLower.some((v) => v === rowStr)) return false;
+            }
+            return true;
+          });
+        }
 
         // Group previous period data by date (offset by the period difference)
         previousData.forEach(row => {
@@ -309,6 +502,13 @@ export function KPIChart({
 
       // Create chart data
       const allDates = new Set([...currentDateGroups.keys(), ...previousDateGroups.keys()]);
+      
+      if (allDates.size === 0) {
+        console.warn('[CHART-FIXED] No dates found in grouped data. This means no rows had both date and metric values.');
+        setChartData([]);
+        return;
+      }
+      
       const chartDataArray = Array.from(allDates)
         .map(dateStr => {
           const dataPoint: any = {
@@ -317,7 +517,7 @@ export function KPIChart({
             [selectedMetric]: currentDateGroups.get(dateStr) || 0,
           };
           
-          if (stableFilters.compareEnabled) {
+          if (stableFilters.compareEnabled && previousDateGroups.size > 0) {
             dataPoint[`${selectedMetric}_previous`] = previousDateGroups.get(dateStr) || 0;
           }
           

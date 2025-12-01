@@ -27,8 +27,9 @@ export interface SourceDataResult {
 
 /**
  * Fetch source data from Google Sheets or CSV
+ * Exported for use in non-hook contexts (e.g., data-loading-fix.ts)
  */
-async function fetchSourceData(
+export async function fetchSourceData(
   dataSource: DataSource,
   userId: string,
   accountId?: string | null

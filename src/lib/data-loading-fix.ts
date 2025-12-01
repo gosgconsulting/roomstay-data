@@ -12,8 +12,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 import type { Dimension as LoaderDimension } from "@/lib/dimensionLoader";
 import type { FormulaConditionPair } from "@/types/dimensions";
-import { fetchPerformanceData } from "@/hooks/performanceTable/usePerformanceData";
 import type { QueryClient } from "@tanstack/react-query";
+import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
+import type { DataSource } from "@/lib/data-sources/types";
 
 export interface Dimension {
   id: string;
@@ -118,7 +119,7 @@ export async function loadAccountDimensions(accountId: string, userId?: string, 
 }
 
 /**
- * Load and filter dimension data using the edge function
+ * Load and filter dimension data using source data (Google Sheets/CSV)
  * 
  * @param reportId - Report ID
  * @param accountId - Account ID
@@ -136,7 +137,7 @@ export async function loadReportData(
   },
   queryClient?: QueryClient
 ): Promise<DataLoadingResult> {
-  console.log('[DATA-FIX] Loading report data via edge function:', { reportId, accountId, filters });
+  console.log('[DATA-FIX] Loading report data from source:', { reportId, accountId, filters });
   
   try {
     // 1. Load dimensions first (include reportId to resolve account-scoped dims)
@@ -168,78 +169,116 @@ export async function loadReportData(
       console.log('[DATA-FIX] Added virtual Budget dimension (budgets exist)');
     }
 
-    // 3. Call edge function to get performance data
-    const dateFrom = filters?.dateRange?.from?.toISOString().split('T')[0];
-    const dateTo = filters?.dateRange?.to?.toISOString().split('T')[0];
+    // 3. Fetch data source for the report
+    const { data: dataSourceData, error: dsError } = await supabase
+      .from('data_sources')
+      .select('*')
+      .eq('report_id', reportId)
+      .limit(1)
+      .maybeSingle();
+
+    if (dsError || !dataSourceData) {
+      throw new Error(`No data source found for report ${reportId}`);
+    }
+
+    const dataSource: DataSource = {
+      ...dataSourceData,
+      column_mappings: (dataSourceData.column_mappings as any) || null,
+    } as DataSource;
+
+    // 4. Fetch source data using the exported fetch function
+    // We need to get the user for the fetchSourceData function
+    if (!userId) {
+      const { getUser } = await import("@/lib/auth");
+      const { user } = await getUser();
+      if (!user) {
+        throw new Error('User must be authenticated');
+      }
+      userId = user.id;
+    }
     
-    // Convert dimension filters to the format expected by edge function
-    const dimensionFilters: Record<string, string | string[]> = {};
-    if (filters?.dimensionFilters) {
-      for (const [key, values] of Object.entries(filters.dimensionFilters)) {
-        dimensionFilters[key] = values.length === 1 ? values[0] : values;
+    // Fetch source data
+    const sourceDataResult = await fetchSourceData(dataSource, userId, accountId);
+    
+    if (!sourceDataResult || !sourceDataResult.transformedRows) {
+      throw new Error('Failed to fetch source data');
+    }
+
+    let allData = sourceDataResult.transformedRows.map((row: any, idx: number) => ({
+      id: `row-${row.row_number ?? idx + 1}`,
+      dimension_values: row.dimension_values || {},
+      row_number: row.row_number ?? idx + 1,
+      data_source_id: null,
+    }));
+
+    console.log('[DATA-FIX] Loaded raw data rows from source:', allData.length);
+
+    // 5. Apply date and dimension filters
+    const dateFromFilter = filters?.dateRange?.from;
+    const dateToFilter = filters?.dateRange?.to;
+    
+    if (dateFromFilter || dateToFilter) {
+      const fromDate = dateFromFilter ? new Date(dateFromFilter) : null;
+      const toDate = dateToFilter ? new Date(dateToFilter) : null;
+      const adjustedToDate = toDate
+        ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1)
+        : null;
+
+      // Find date dimension
+      const dateDimension = dimensions.find(d => d.type === 'date');
+      
+      if (dateDimension) {
+        allData = allData.filter((row: any) => {
+          const dv = row.dimension_values || {};
+          const dateValue = dv[dateDimension.id];
+          if (!dateValue) return true; // Keep rows without date
+
+          const rowDate = new Date(String(dateValue));
+          if (fromDate && rowDate < fromDate) return false;
+          if (adjustedToDate && rowDate >= adjustedToDate) return false;
+          return true;
+        });
       }
     }
 
-    console.log('[DATA-FIX] Calling edge function with params:', {
-      reportId,
-      accountId,
-      userId,
-      dateFrom,
-      dateTo,
-      dimensionFilters,
-      visibleDimensionIds: dimensions.map(d => d.id)
-    });
-
-    // Use the centralized fetch function for consistency and React Query caching
-    const edgeData = await fetchPerformanceData({
-      reportId,
-      accountId,
-      userId,
-      dateFrom,
-      dateTo,
-      dimensionFilters,
-      visibleDimensionIds: dimensions.map(d => d.id),
-      limit: 50000,
-      offset: 0,
-    }, queryClient);
-
-    console.log('[DATA-FIX] Edge function returned data:', {
-      totalCount: edgeData.totalCount,
-      dataLength: edgeData.data?.length
-    });
-
-    const allData = edgeData.data || [];
-
-    console.log('[DATA-FIX] Loaded raw data rows:', allData.length);
-
-    // 4. Normalize data structure - ensure all rows have dimension_values
-    const normalizedData = allData.map((row: any, idx: number) => {
-      // If row already has dimension_values, return as is
-      if (row.dimension_values) {
-        return row;
+    // Apply dimension filters
+    if (filters?.dimensionFilters && Object.keys(filters.dimensionFilters).length > 0) {
+      const normalizedFilters: Record<string, string[]> = {};
+      for (const [k, v] of Object.entries(filters.dimensionFilters)) {
+        if (Array.isArray(v)) normalizedFilters[k] = v.map((x) => String(x));
+        else if (v !== undefined && v !== null) normalizedFilters[k] = [String(v)];
       }
-      // If dimension_values are spread at root level, wrap them
-      return {
-        dimension_values: row,
-        row_number: row._row_number || row.row_number,
-        data_source_id: row._data_source_id || row.data_source_id,
-      };
-    });
 
-    console.log('[DATA-FIX] Normalized data rows:', normalizedData.length);
+      allData = allData.filter((row: any) => {
+        const dv = row.dimension_values || {};
+        for (const [dimId, values] of Object.entries(normalizedFilters)) {
+          if (!values || values.length === 0) continue;
+          const rowVal = dv[dimId];
+          if (rowVal === undefined || rowVal === null) return false;
 
-    // 5. Validate data structure
-    const validationResult = validateDataStructure(normalizedData, dimensions);
+          const rowStr = String(rowVal).trim().toLowerCase();
+          const filterValuesLower = (values as string[]).map(v => String(v).trim().toLowerCase());
+
+          if (!filterValuesLower.some((v) => v === rowStr)) return false;
+        }
+        return true;
+      });
+    }
+
+    console.log('[DATA-FIX] Filtered data rows:', allData.length);
+
+    // 6. Validate data structure
+    const validationResult = validateDataStructure(allData, dimensions);
     
     return {
       success: true,
-      data: normalizedData,
+      data: allData,
       dimensions,
-      totalRows: edgeData.totalCount || normalizedData.length,
-      filteredRows: normalizedData.length,
+      totalRows: allData.length,
+      filteredRows: allData.length,
       debugInfo: {
         validation: validationResult,
-        sampleRow: normalizedData[0]?.dimension_values,
+        sampleRow: allData[0]?.dimension_values,
         dimensionIds: dimensions.map(d => ({ id: d.id, name: d.name }))
       }
     };
@@ -628,14 +667,16 @@ export async function debugReportDataLoading(reportId: string, accountId: string
     if (reportError) throw reportError;
     console.log('Report:', report);
 
-    // Check dimension data count
-    const { count, error: countError } = await supabase
-      .from('dimension_data')
-      .select('*', { count: 'exact', head: true })
-      .eq('report_id', reportId);
+    // Check data source
+    const { data: dataSource, error: dsError } = await supabase
+      .from('data_sources')
+      .select('*')
+      .eq('report_id', reportId)
+      .limit(1)
+      .maybeSingle();
 
-    if (countError) throw countError;
-    console.log('Dimension data rows:', count);
+    if (dsError) throw dsError;
+    console.log('Data source:', dataSource);
 
     // Check account dimensions
     const { data: dimensions, error: dimError } = await supabase
@@ -646,27 +687,6 @@ export async function debugReportDataLoading(reportId: string, accountId: string
 
     if (dimError) throw dimError;
     console.log('Account dimensions:', dimensions?.length);
-
-    // Sample data
-    const { data: sampleData, error: sampleError } = await supabase
-      .from('dimension_data')
-      .select('dimension_values')
-      .eq('report_id', reportId)
-      .limit(1);
-
-    if (sampleError) throw sampleError;
-    
-    if (sampleData && sampleData.length > 0) {
-      const dataKeys = Object.keys(sampleData[0].dimension_values);
-      const dimensionIds = dimensions?.map(d => d.id) || [];
-      const matchingIds = dataKeys.filter(key => dimensionIds.includes(key));
-      
-      console.log('Data structure validation:');
-      console.log('- Data keys:', dataKeys.length);
-      console.log('- Dimension IDs:', dimensionIds.length);
-      console.log('- Matching IDs:', matchingIds.length);
-      console.log('- Match ratio:', matchingIds.length / dataKeys.length);
-    }
 
   } catch (error) {
     console.error('Debug error:', error);
