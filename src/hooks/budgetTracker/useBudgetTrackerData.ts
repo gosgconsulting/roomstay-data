@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { format, startOfYear, endOfYear, eachMonthOfInterval, startOfMonth, endOfMonth } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -6,8 +6,8 @@ import { useVlookupMappings } from "@/hooks/useVlookupMappings";
 import type { Dimension } from "../performanceTable/usePerformanceTableDimensions";
 import type { BudgetTrackerFilterState } from "./useBudgetTrackerFilters";
 import { useUser } from "@/lib/auth";
-import { fetchPerformanceData } from "../performanceTable/usePerformanceData";
-import { useQueryClient } from "@tanstack/react-query";
+import { useSourceData } from "@/hooks/dataSources/useSourceData";
+import type { DataSource } from "@/lib/data-sources/types";
 
 export interface BudgetTableRow {
   id: string;
@@ -48,16 +48,58 @@ export function useBudgetTrackerData({
   dimensions,
   onLoadingComplete,
 }: UseBudgetTrackerDataOptions) {
-  const queryClient = useQueryClient();
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [tableData, setTableData] = useState<BudgetTableRow[]>([]);
   const [totalData, setTotalData] = useState<Record<string, any>>({});
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [dataSource, setDataSource] = useState<DataSource | null>(null);
 
   // Load vlookup mappings for applying to data
   const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
+
+  // Fetch data source for the report
+  useEffect(() => {
+    const fetchDataSource = async () => {
+      if (!reportId) {
+        setDataSource(null);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('data_sources')
+          .select('*')
+          .eq('report_id', reportId)
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          console.error('[useBudgetTrackerData] Error fetching data source:', error);
+          return;
+        }
+
+        if (data) {
+          setDataSource({
+            ...data,
+            column_mappings: (data.column_mappings as any) || null,
+          } as DataSource);
+        }
+      } catch (error) {
+        console.error('[useBudgetTrackerData] Error fetching data source:', error);
+      }
+    };
+
+    fetchDataSource();
+  }, [reportId]);
+
+  // Use source data hook to get actual source data
+  const { data: sourceData } = useSourceData(
+    dataSource,
+    accountId,
+    { enabled: !!dataSource && !!reportId }
+  );
 
   // Generate all months for the selected year
   const yearMonths = useMemo(() => {
@@ -139,27 +181,58 @@ export function useBudgetTrackerData({
         }
       }
 
-      // Use edge function for optimized, server-side data loading with React Query caching
-      const edgeFunctionData = await fetchPerformanceData({
-        reportId: reportId || undefined,
-        reportIds: reportIds,
-        accountId: accountId!,
-        groupByDims: groupByDimensions,
-        breakdownDims: breakdownByDimensions,
-        thenByDims: thenByDimensions,
-        visibleDimensionIds: Array.from(visibleColumns),
-        dimensionFilters: {},
-        dateFrom: dateFromFormatted,
-        dateTo: dateToFormatted,
-        dateGranularity: activeDateTab === 'year' ? 'year' : 'month',
-        dateOrder: 'desc',
-        limit: 50000,
-        offset: 0
-      }, queryClient);
-      
-      const rawRows = edgeFunctionData?.data || [];
+      // Fetch data from source directly
+      if (!sourceData) {
+        console.log('[BUDGET-TRACKER] No source data available');
+        setTableData([]);
+        setTotalData({});
+        setIsLoadingData(false);
+        onLoadingComplete?.();
+        return;
+      }
 
-      console.log('[BUDGET-TRACKER] Edge function returned', rawRows.length, 'rows');
+      let allRows = sourceData.transformedRows;
+      console.log('[BUDGET-TRACKER] Starting with', allRows.length, 'rows from source');
+
+      // Apply vlookup mappings
+      if (vlookupMappings.length > 0) {
+        allRows = allRows.map((row: any) => {
+          const dv = { ...row.dimension_values };
+          for (const m of vlookupMappings) {
+            const src = dv[m.sourceDimensionId];
+            if (src !== undefined && src !== null) {
+              if (String(src).toLowerCase() === m.sourceValue.toLowerCase()) {
+                dv[m.targetDimensionId] = m.targetValue;
+              }
+            }
+          }
+          return { ...row, dimension_values: dv };
+        });
+      }
+
+      // Apply date filter
+      const fromDate = dateFromFormatted ? new Date(dateFromFormatted) : null;
+      const toDate = dateToFormatted ? new Date(dateToFormatted) : null;
+      const adjustedToDate = toDate
+        ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1)
+        : null;
+
+      let filteredRows = allRows;
+      if (fromDate || adjustedToDate) {
+        filteredRows = filteredRows.filter((row: any) => {
+          const dv = row.dimension_values || {};
+          const dateValue = dv[dateId];
+          if (!dateValue) return true; // Keep rows without date
+          const rowDate = new Date(String(dateValue));
+          if (fromDate && rowDate < fromDate) return false;
+          if (adjustedToDate && rowDate >= adjustedToDate) return false;
+          return true;
+        });
+      }
+
+      console.log('[BUDGET-TRACKER] After date filtering:', filteredRows.length, 'rows');
+
+      const rawRows = filteredRows;
 
       // Transform edge function rows and ensure all months are represented
       const dataByMonth = new Map<string, BudgetTableRow[]>();
@@ -174,17 +247,7 @@ export function useBudgetTrackerData({
         const transformedRows: BudgetTableRow[] = rawRows.map((row: any, idx: number) => {
           const dv: Record<string, any> = row.dimension_values || {};
           
-          // Apply vlookup mappings if present
-          if (vlookupMappings.length > 0) {
-            for (const m of vlookupMappings) {
-              const src = dv[m.sourceDimensionId];
-              if (src !== undefined && src !== null) {
-                if (String(src).toLowerCase() === m.sourceValue.toLowerCase()) {
-                  dv[m.targetDimensionId] = m.targetValue;
-                }
-              }
-            }
-          }
+          // Vlookup mappings already applied above, no need to apply again
 
           // Build row.data keyed by dimension names with numeric conversion
           const rowData: Record<string, any> = {};
@@ -367,19 +430,21 @@ export function useBudgetTrackerData({
           
           const ym = format(month.date, 'yyyy-MM');
 
+          // Initialize month row data
+          const monthRowData: Record<string, any> = {};
+          dimensions.forEach(dim => {
+            if (dim.type === 'date') {
+              monthRowData[dim.name] = month.key;
+            } else if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
+              monthRowData[dim.name] = 0;
+            }
+          });
+
+          const breakdownAggregate: Record<string, Record<string, number>> = {};
+          const nestedAggregate: Record<string, Record<string, Record<string, number>>> = {};
+
+          // Process data rows if they exist
           if (monthRows.length > 0) {
-            const monthRowData: Record<string, any> = {};
-            dimensions.forEach(dim => {
-              if (dim.type === 'date') {
-                monthRowData[dim.name] = month.key;
-              } else if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
-                monthRowData[dim.name] = 0;
-              }
-            });
-
-            const breakdownAggregate: Record<string, Record<string, number>> = {};
-            const nestedAggregate: Record<string, Record<string, Record<string, number>>> = {};
-
             monthRows.forEach(row => {
               Object.keys(row.data).forEach(dimName => {
                 const dim = dimensions.find(d => d.name === dimName);
@@ -406,84 +471,64 @@ export function useBudgetTrackerData({
                 }
               }
             });
+          }
 
-            // Inject budgets into breakdown aggregates and sum to month
-            if (breakdownDim) {
-              Object.keys(budgetsMap).forEach((itemName) => {
-                const val = budgetsMap[itemName]?.[ym];
-                if (val !== undefined) {
-                  breakdownAggregate[itemName] = breakdownAggregate[itemName] || {};
-                  breakdownAggregate[itemName]['Budget'] = (breakdownAggregate[itemName]['Budget'] || 0) + val;
-                  monthRowData['Budget'] = (monthRowData['Budget'] || 0) + val;
-                }
-              });
-            }
-
-            // Build children rows
-            let children: BudgetTableRow[] | undefined = undefined;
-            if (breakdownDim && Object.keys(breakdownAggregate).length > 0) {
-              children = Object.keys(breakdownAggregate)
-                .sort((a, b) => a.localeCompare(b))
-                .map(itemName => {
-                  const childId = `budget-month-${month.key}-${breakdownDim.id}-${itemName}`;
-                  const childData = breakdownAggregate[itemName];
-                  const child: BudgetTableRow = {
-                    id: childId,
-                    name: itemName,
-                    level: 1,
-                    parentId: `budget-month-${month.key}`,
-                    data: childData,
-                  };
-                  if (thenDim && nestedAggregate[itemName]) {
-                    const grandChildren: BudgetTableRow[] = Object.keys(nestedAggregate[itemName])
-                      .sort((a, b) => a.localeCompare(b))
-                      .map(thenName => ({
-                        id: `${childId}-${thenDim.id}-${thenName}`,
-                        name: thenName,
-                        level: 2,
-                        parentId: childId,
-                        data: nestedAggregate[itemName][thenName],
-                      }));
-                    if (grandChildren.length > 0) {
-                      child.children = grandChildren;
-                    }
-                  }
-                  return child;
-                });
-            }
-
-            const monthRow: BudgetTableRow = {
-              id: `budget-month-${month.key}`,
-              name: month.name,
-              level: 0,
-              data: monthRowData,
-              originalDate: month.date,
-              children,
-            };
-
-            finalTableData.push(monthRow);
-          } else {
-            const emptyRowData: Record<string, any> = {};
-            dimensions.forEach(dim => {
-              if (dim.type === 'date') {
-                emptyRowData[dim.name] = month.key;
-              } else if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
-                emptyRowData[dim.name] = 0;
-              } else {
-                emptyRowData[dim.name] = '';
+          // Always inject budgets into breakdown aggregates (even if no data rows)
+          // This ensures months with $0 cost but with budgets still show breakdown
+          if (breakdownDim) {
+            Object.keys(budgetsMap).forEach((itemName) => {
+              const val = budgetsMap[itemName]?.[ym];
+              if (val !== undefined) {
+                breakdownAggregate[itemName] = breakdownAggregate[itemName] || {};
+                breakdownAggregate[itemName]['Budget'] = (breakdownAggregate[itemName]['Budget'] || 0) + val;
+                monthRowData['Budget'] = (monthRowData['Budget'] || 0) + val;
               }
             });
-            // Ensure Budget visible even without data
-            emptyRowData['Budget'] = 0;
-
-            finalTableData.push({
-              id: `budget-month-empty-${month.key}`,
-              name: month.name,
-              level: 0,
-              data: emptyRowData,
-              originalDate: month.date,
-            });
           }
+
+          // Build children rows - show breakdown if there are any aggregates (from data or budgets)
+          let children: BudgetTableRow[] | undefined = undefined;
+          if (breakdownDim && Object.keys(breakdownAggregate).length > 0) {
+            children = Object.keys(breakdownAggregate)
+              .sort((a, b) => a.localeCompare(b))
+              .map(itemName => {
+                const childId = `budget-month-${month.key}-${breakdownDim.id}-${itemName}`;
+                const childData = breakdownAggregate[itemName];
+                const child: BudgetTableRow = {
+                  id: childId,
+                  name: itemName,
+                  level: 1,
+                  parentId: `budget-month-${month.key}`,
+                  data: childData,
+                };
+                if (thenDim && nestedAggregate[itemName]) {
+                  const grandChildren: BudgetTableRow[] = Object.keys(nestedAggregate[itemName])
+                    .sort((a, b) => a.localeCompare(b))
+                    .map(thenName => ({
+                      id: `${childId}-${thenDim.id}-${thenName}`,
+                      name: thenName,
+                      level: 2,
+                      parentId: childId,
+                      data: nestedAggregate[itemName][thenName],
+                    }));
+                  if (grandChildren.length > 0) {
+                    child.children = grandChildren;
+                  }
+                }
+                return child;
+              });
+          }
+
+          const monthRow: BudgetTableRow = {
+            id: `budget-month-${month.key}`,
+            name: month.name,
+            level: 0,
+            data: monthRowData,
+            originalDate: month.date,
+            children,
+          };
+
+          finalTableData.push(monthRow);
         });
       }
 
@@ -539,7 +584,7 @@ export function useBudgetTrackerData({
     onLoadingComplete,
     vlookupMappings.length,
     yearMonths.length,
-    queryClient
+    sourceData?.transformedRows?.length
   ]);
 
   return {
