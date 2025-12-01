@@ -105,8 +105,20 @@ export function usePerformanceTableData({
     setLoadError(null);
     setIsLoadingData(true);
 
-    const dateFromFormatted = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined;
-    const dateToFormatted = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined;
+    // Only apply date filtering if datePreset is not "all_time" and dateRange is provided
+    const shouldFilterByDate = filters.datePreset !== 'all_time' && filters.dateRange;
+    const dateFromFormatted = shouldFilterByDate && filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined;
+    const dateToFormatted = shouldFilterByDate && filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined;
+
+    console.log('[PERF-TABLE] Loading data:', {
+      reportId,
+      datePreset: filters.datePreset,
+      shouldFilterByDate,
+      dateFromFormatted,
+      dateToFormatted,
+      hasSourceData: !!sourceData,
+      sourceDataRows: sourceData?.transformedRows?.length || 0
+    });
 
     if ((!reportId && !reportIds) || groupByDimensions.length === 0) {
       setTableData([]);
@@ -119,6 +131,7 @@ export function usePerformanceTableData({
     }
 
     if (!sourceData) {
+      console.log('[PERF-TABLE] No source data available');
       setIsLoadingData(false);
       onLoadingComplete?.();
       return;
@@ -126,6 +139,7 @@ export function usePerformanceTableData({
 
     try {
       let allRows = sourceData.transformedRows;
+      console.log('[PERF-TABLE] Starting with', allRows.length, 'rows from source');
 
       // Apply vlookup mappings
       if (vlookupMappings.length > 0) {
@@ -157,9 +171,11 @@ export function usePerformanceTableData({
         }
       }
 
-      // Apply date filter
+      console.log('[PERF-TABLE] Date dimension:', dateDimInUse ? { id: dateDimInUse.id, name: dateDimInUse.name } : 'not found');
+
+      // Apply date filter only if shouldFilterByDate is true
       let filteredRows = allRows;
-      if (dateDimInUse && (dateFromFormatted || dateToFormatted)) {
+      if (shouldFilterByDate && dateDimInUse && (dateFromFormatted || dateToFormatted)) {
         const fromDate = dateFromFormatted ? new Date(dateFromFormatted) : null;
         const toDate = dateToFormatted ? new Date(dateToFormatted) : null;
         const adjustedToDate = toDate

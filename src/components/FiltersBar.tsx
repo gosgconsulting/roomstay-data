@@ -16,6 +16,7 @@ import { useVlookupMappings, getMappedValue } from "@/hooks/useVlookupMappings";
 import PerformanceSettingsModal from "@/components/PerformanceSettingsModal";
 import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 import { useUser } from "@/lib/auth";
+import { fetchUniqueDimensionValues } from "@/lib/vlookup/fetchUniqueValues";
 
 import { 
   DimensionFilter, 
@@ -181,22 +182,34 @@ export const FiltersBar = ({
           return;
         }
 
-        const { data, error } = await supabase
-          .from("dimension_data")
-          .select("dimension_values")
-          .in("report_id", reportIds)
-          .limit(10000);
+        // Fetch unique values from source data for all reports
+        const allValues = new Set<string>();
+        
+        for (const reportId of reportIds) {
+          try {
+            // Find dimension name for better matching
+            const dimension = dimensions.find(d => d.id === masterDimensionId);
+            const dimensionName = dimension?.name;
 
-        if (error) throw error;
+            const values = await fetchUniqueDimensionValues({
+              reportId,
+              dimensionId: masterDimensionId,
+              dimensionName,
+              limit: 10000,
+            });
 
-        const valuesSet = new Set<string>();
-        data?.forEach(row => {
-          const dv = row.dimension_values as Record<string, string>;
-          const value = dv[masterDimensionId];
-          if (value && value !== "") valuesSet.add(String(value));
-        });
+            values.forEach(value => {
+              if (value && value !== "") {
+                allValues.add(String(value));
+              }
+            });
+          } catch (err) {
+            console.error(`Error loading master dimension values for report ${reportId}:`, err);
+            // Continue with other reports
+          }
+        }
 
-        setMasterDimensionOptions(Array.from(valuesSet).sort());
+        setMasterDimensionOptions(Array.from(allValues).sort());
       } catch (e) {
         console.error("Error loading master dimension values:", e);
         setMasterDimensionOptions([]);
@@ -205,7 +218,7 @@ export const FiltersBar = ({
       }
     };
     loadOptions();
-  }, [masterDimensionId, accountId]);
+  }, [masterDimensionId, accountId, dimensions]);
 
   // Refresh dimensions on sync
   useEffect(() => {
@@ -776,7 +789,7 @@ export const FiltersBar = ({
             return;
           }
 
-          // Otherwise, load unique values via edge function (only if reportId is available)
+          // Otherwise, load unique values from source data (only if reportId is available)
           if (!reportId) {
             console.log('[FiltersBar] Skipping dimension values load for dimension without reportId:', dimId);
             valuesArray[dimId] = [];
@@ -784,21 +797,21 @@ export const FiltersBar = ({
           }
 
           try {
-            const { data, error } = await supabase.functions.invoke('get-unique-dimension-values', {
-              body: {
-                reportId,
-                dimensionId: dimId,
-                limit: 10000,
-              },
+            // Find dimension name for better matching
+            const dimension = dimensions.find(d => d.id === dimId);
+            const dimensionName = dimension?.name;
+
+            console.log('[FiltersBar] Fetching unique values from source for dimension:', dimId, dimensionName);
+
+            // Fetch unique values directly from source data
+            const values = await fetchUniqueDimensionValues({
+              reportId,
+              dimensionId: dimId,
+              dimensionName,
+              limit: 10000,
             });
 
-            if (error) {
-              console.error(`Error loading values for dimension ${dimId}:`, error);
-              valuesArray[dimId] = [];
-              return;
-            }
-
-            const values = (data?.values || []) as string[];
+            console.log(`[FiltersBar] Loaded ${values.length} unique values for dimension ${dimId}`);
             
             // Apply vlookup mapping for non-target dimensions if relevant (kept for compatibility)
             const valuesSet = new Set<string>();
