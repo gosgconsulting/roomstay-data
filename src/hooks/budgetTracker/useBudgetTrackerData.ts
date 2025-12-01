@@ -312,22 +312,32 @@ export function useBudgetTrackerData({
             yearRowData[dim.name] = `${filters.selectedYear}`;
           }
         });
+        // Always initialize Budget column (may not be in dimensions array)
+        yearRowData['Budget'] = 0;
 
         // Aggregate all months into year totals and collect breakdowns (and then-by)
         const breakdownAggregate: Record<string, Record<string, number>> = {};
         const nestedAggregate: Record<string, Record<string, Record<string, number>>> = {};
         
         dataByMonth.forEach((monthRows, monthKey) => {
+          // monthKey is yyyy-MM-dd; convert to YYYY-MM
+          const ym = monthKey.slice(0, 7);
+          
           // Add budgets into aggregates per item for this month
           if (breakdownDim2) {
             Object.keys(budgetsMap).forEach((itemName) => {
-              const v = budgetsMap[itemName]?.[monthKey.replace(/-\d{2}$/, '')] // no day part; handled below
-              // monthKey is yyyy-MM-dd; convert to YYYY-MM
-              const ym = monthKey.slice(0, 7);
               const val = budgetsMap[itemName]?.[ym];
               if (val !== undefined) {
                 breakdownAggregate[itemName] = breakdownAggregate[itemName] || {};
                 breakdownAggregate[itemName]['Budget'] = (breakdownAggregate[itemName]['Budget'] || 0) + val;
+                yearRowData['Budget'] = (yearRowData['Budget'] || 0) + val;
+              }
+            });
+          } else {
+            // If no breakdown dimension, still add total budget for the month
+            Object.keys(budgetsMap).forEach((itemName) => {
+              const val = budgetsMap[itemName]?.[ym];
+              if (val !== undefined) {
                 yearRowData['Budget'] = (yearRowData['Budget'] || 0) + val;
               }
             });
@@ -439,6 +449,8 @@ export function useBudgetTrackerData({
               monthRowData[dim.name] = 0;
             }
           });
+          // Always initialize Budget column (may not be in dimensions array)
+          monthRowData['Budget'] = 0;
 
           const breakdownAggregate: Record<string, Record<string, number>> = {};
           const nestedAggregate: Record<string, Record<string, Record<string, number>>> = {};
@@ -481,6 +493,15 @@ export function useBudgetTrackerData({
               if (val !== undefined) {
                 breakdownAggregate[itemName] = breakdownAggregate[itemName] || {};
                 breakdownAggregate[itemName]['Budget'] = (breakdownAggregate[itemName]['Budget'] || 0) + val;
+                monthRowData['Budget'] = (monthRowData['Budget'] || 0) + val;
+              }
+            });
+          } else {
+            // If no breakdown dimension, still add total budget for the month
+            // Sum all budgets for this month regardless of breakdown item
+            Object.keys(budgetsMap).forEach((itemName) => {
+              const val = budgetsMap[itemName]?.[ym];
+              if (val !== undefined) {
                 monthRowData['Budget'] = (monthRowData['Budget'] || 0) + val;
               }
             });

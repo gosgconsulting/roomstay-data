@@ -284,7 +284,7 @@ export function TableBody({
                   const showEllipsis = prevPage && page - prevPage > 1;
                   
                   return (
-                    <Fragment key={page} data-dyad-id={undefined}>
+                    <Fragment key={page}>
                       {showEllipsis && (
                         <PaginationItem key={`ellipsis-${page}`}>
                           <PaginationEllipsis />
