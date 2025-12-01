@@ -27,6 +27,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { checkDimensionsHaveData } from "@/lib/dimensionUtils";
 import { useUser } from "@/lib/auth";
+import { useSourceData } from "@/hooks/dataSources";
+import type { DataSource } from "@/lib/data-sources/types";
 
 interface Budget {
   id: string;
@@ -98,6 +100,49 @@ export const BudgetModal = ({
   const [selectedItem, setSelectedItem] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState<string>("");
   const [budgetData, setBudgetData] = useState<Record<string, Record<string, number>>>({});
+  const [dataSource, setDataSource] = useState<DataSource | null>(null);
+
+  // Fetch data source for the report
+  useEffect(() => {
+    const fetchDataSource = async () => {
+      if (!reportId) {
+        setDataSource(null);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('data_sources')
+          .select('*')
+          .eq('report_id', reportId)
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          console.error('[BudgetModal] Error fetching data source:', error);
+          return;
+        }
+
+        if (data) {
+          setDataSource({
+            ...data,
+            column_mappings: (data.column_mappings as any) || null,
+          } as DataSource);
+        }
+      } catch (error) {
+        console.error('[BudgetModal] Error fetching data source:', error);
+      }
+    };
+
+    fetchDataSource();
+  }, [reportId]);
+
+  // Use source data hook
+  const { data: sourceData } = useSourceData(
+    dataSource,
+    accountId,
+    { enabled: !!dataSource && !!reportId }
+  );
 
   const currentYear = new Date().getFullYear();
   const availableYears = [
@@ -466,79 +511,39 @@ export const BudgetModal = ({
         console.warn("[testing] Dimension not found in dimensions array:", dimensionName);
       }
 
-      if (reportIdToUse) {
-        const { data, error } = await supabase
-          .from("dimension_data")
-          .select("dimension_values")
-          .eq("report_id", reportIdToUse);
+      // Use source data instead of dimension_data table
+      if (sourceData && sourceData.transformedRows) {
+        console.log("[testing] Using source data rows:", sourceData.transformedRows.length);
 
-        if (error) throw error;
-
-        console.log("[testing] dimension_data rows:", data?.length || 0);
-
-        data?.forEach((row) => {
-          const values = row.dimension_values as Record<string, unknown>;
-          let value = selectedDim?.id ? values[selectedDim.id] : undefined;
-          if (value === undefined || value === null) {
-            value = values[dimensionName];
-          }
-          if (value !== null && value !== undefined && value !== "") {
-            items.add(String(value));
-          }
-        });
-
-        if (items.size === 0) {
-          const { data: monthlyData } = await (supabase as any)
-            .from("monthly_dimension_data")
-            .select("dimension_values")
-            .eq("report_id", reportIdToUse)
-            .limit(100);
-
-          console.log("[testing] monthly_dimension_data rows:", monthlyData?.length || 0);
-
-          monthlyData?.forEach((row) => {
-            const values = row.dimension_values as Record<string, unknown>;
-            let value = selectedDim?.id ? values[selectedDim.id] : undefined;
-            if (value === undefined || value === null) {
-              value = values[dimensionName];
-            }
+        // Extract unique values for the selected dimension
+        if (selectedDim?.id) {
+          sourceData.transformedRows.forEach((row: any) => {
+            const values = row.dimension_values || {};
+            const value = values[selectedDim.id];
             if (value !== null && value !== undefined && value !== "") {
               items.add(String(value));
             }
+          });
+        } else {
+          // Fallback: if dimension ID not found, try to find by dimension name
+          // This happens when dimension mapping might not be perfect
+          sourceData.transformedRows.forEach((row: any) => {
+            const values = row.dimension_values || {};
+            // Try all dimension values to find one that matches the dimension name
+            // This is a best-effort fallback
+            Object.values(values).forEach(v => {
+              if (v !== null && v !== undefined && v !== "") {
+                items.add(String(v));
+              }
+            });
           });
         }
       }
 
-      if (accountId && items.size === 0) {
-        const { data: reports } = await supabase
-          .from("reports")
-          .select("id")
-          .eq("account_id", accountId);
-
-        console.log("[testing] account reports:", reports?.length || 0);
-
-        if (reports && reports.length > 0) {
-          const reportIds = reports.map(r => r.id);
-          
-          const { data: dimensionData } = await supabase
-            .from("dimension_data")
-            .select("dimension_values")
-            .in("report_id", reportIds)
-            .limit(500);
-
-          console.log("[testing] account-level dimension_data rows:", dimensionData?.length || 0);
-
-          dimensionData?.forEach((row) => {
-            const values = row.dimension_values as Record<string, unknown>;
-            let value = selectedDim?.id ? values[selectedDim.id] : undefined;
-            if (value === undefined || value === null) {
-              value = values[dimensionName];
-            }
-            if (value !== null && value !== undefined && value !== "") {
-              items.add(String(value));
-            }
-          });
-        }
+      // Note: Account-level fallback removed - we now only use source data
+      // If items are still empty, it means the dimension doesn't have data in the current report's source
+      if (items.size === 0) {
+        console.log("[testing] No items found for dimension:", dimensionName);
       }
 
       console.log("[testing] total items found:", items.size);

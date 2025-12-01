@@ -1,3 +1,17 @@
+/**
+ * @deprecated This file is deprecated. Use direct source fetching instead.
+ * 
+ * The sync functions (syncDataSource, deleteExistingData, insertDataInBatches) 
+ * are no longer needed as we now fetch data directly from Google Sheets/CSV.
+ * 
+ * For fetching source data, use:
+ * - @/lib/data-sources/fetchGoogleSheets
+ * - @/lib/data-sources/fetchCSV
+ * - @/hooks/dataSources/useSourceData
+ * 
+ * This file is kept for backward compatibility but will be removed in a future version.
+ */
+
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
@@ -314,7 +328,9 @@ export const fetchCSVUrlData = async (
   return csvData.values;
 };
 
-// Delete existing dimension data (optimized for large datasets)
+/**
+ * @deprecated No longer needed - data is fetched directly from source
+ */
 export const deleteExistingData = async (dataSourceId: string): Promise<number> => {
   console.log(`[SYNC] Deleting existing dimension_data for data source: ${dataSourceId}`);
   
@@ -861,7 +877,9 @@ export const transformDataRows = async (
   return rowsToInsert;
 };
 
-// Insert data in batches
+/**
+ * @deprecated No longer needed - data is transformed in-memory, not stored in DB
+ */
 export const insertDataInBatches = async (
   rowsToInsert: any[],
   onProgress?: (message: string) => void
@@ -1128,7 +1146,12 @@ export const fixColumnMappings = async (dataSourceId: string): Promise<void> => 
   }
 };
 
-// Main sync function
+/**
+ * @deprecated Use direct source fetching instead. See @/hooks/dataSources/useSourceData
+ * 
+ * This function syncs data to the dimension_data table, which is no longer used.
+ * Data is now fetched directly from source on-demand.
+ */
 export const syncDataSource = async (
   dataSource: DataSource,
   options: SyncOptions = {}

@@ -1,0 +1,61 @@
+/**
+ * Types for data source operations
+ */
+
+export interface DataSource {
+  id: string;
+  name: string;
+  google_sheets_url?: string | null;
+  spreadsheet_id?: string | null;
+  tab_name?: string | null;
+  csv_url?: string | null;
+  source_type?: 'google_sheets' | 'csv_url';
+  header_row: number;
+  column_mappings: ColumnMapping[] | null;
+  report_id?: string;
+}
+
+export interface ColumnMapping {
+  column: string;
+  dimensionId?: string | null;
+  dimensionName?: string | null;
+  visible: boolean;
+  newDimensionName?: string;
+  newDimensionType?: string;
+  dateFormat?: string;
+  dimensionType?: string;
+}
+
+export interface Dimension {
+  id: string;
+  name: string;
+  type: string;
+  formula?: string | null;
+}
+
+export interface TransformedRow {
+  id: string;
+  name: string;
+  level: number;
+  parentId?: string;
+  data: Record<string, any>;
+  children?: TransformedRow[];
+  compareData?: Record<string, any>;
+  changeData?: Record<string, number>;
+  originalDate?: string | Date;
+  row_number: number;
+  dimension_values: Record<string, any>;
+}
+
+export interface SourceDataResult {
+  headers: string[];
+  rows: any[][];
+  dataSourceId: string;
+  reportId: string;
+}
+
+export interface DimensionMappingResult {
+  dimensionIdMap: Record<string, string>;
+  columnIndexMap: Record<string, number>;
+  createdCount: number;
+}

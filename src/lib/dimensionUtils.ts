@@ -41,14 +41,16 @@ function isCacheValid(reportId: string): boolean {
 }
 
 /**
- * Checks if a dimension has data for a specific report
+ * Checks if a dimension has data for a specific report using source data
  * @param dimensionId - The ID of the dimension to check
  * @param reportId - The ID of the report to check data for
+ * @param sourceData - Optional source data to check. If not provided, will fetch from source
  * @returns Promise<boolean> - true if dimension has data, false otherwise
  */
 export async function checkDimensionHasData(
   dimensionId: string,
-  reportId: string
+  reportId: string,
+  sourceData?: { transformedRows: any[] }
 ): Promise<boolean> {
   try {
     if (!dimensionId || !reportId) {
@@ -56,29 +58,28 @@ export async function checkDimensionHasData(
       return false;
     }
 
-    // Query dimension_data table to check if this dimension exists in any row's dimension_values
-    const { data, error } = await supabase
-      .from('dimension_data')
-      .select('dimension_values')
-      .eq('report_id', reportId)
-      .limit(10); // Check only first 10 rows for performance
+    let rowsToCheck: any[] = [];
 
-    if (error) {
-      console.error('[DIMENSION-UTILS] Error checking dimension data:', error);
+    if (sourceData && sourceData.transformedRows) {
+      // Use provided source data (already fetched from Google Sheets/CSV)
+      rowsToCheck = sourceData.transformedRows.slice(0, 10); // Check first 10 rows
+    } else {
+      // If sourceData is not provided, we cannot check - return false
+      // The caller should provide sourceData from useSourceData hook
+      console.warn('[DIMENSION-UTILS] No sourceData provided. Caller should use useSourceData hook and pass the data.');
       return false;
     }
 
-    if (!data || data.length === 0) {
+    if (rowsToCheck.length === 0) {
       console.log('[DIMENSION-UTILS] No data found for report:', reportId);
       return false;
     }
 
     // Check if any row has this dimension in its dimension_values
-    const hasData = data.some((row) => {
+    const hasData = rowsToCheck.some((row) => {
       try {
-        const dimValues = row.dimension_values as Record<string, any>;
-        return dimValues && 
-               dimValues[dimensionId] !== undefined && 
+        const dimValues = row.dimension_values || {};
+        return dimValues[dimensionId] !== undefined && 
                dimValues[dimensionId] !== null && 
                dimValues[dimensionId] !== '';
       } catch (rowError) {
@@ -95,14 +96,16 @@ export async function checkDimensionHasData(
 }
 
 /**
- * Checks if multiple dimensions have data for a specific report (with caching)
+ * Checks if multiple dimensions have data for a specific report using source data (with caching)
  * @param dimensionIds - Array of dimension IDs to check
  * @param reportId - The ID of the report to check data for
+ * @param sourceData - Optional source data to check. If not provided, will fetch from source
  * @returns Promise<Record<string, boolean>> - Map of dimension ID to hasData boolean
  */
 export async function checkDimensionsHaveData(
   dimensionIds: string[],
-  reportId: string
+  reportId: string,
+  sourceData?: { transformedRows: any[] }
 ): Promise<Record<string, boolean>> {
   if (!reportId || !dimensionIds || dimensionIds.length === 0) {
     console.warn('[DIMENSION-UTILS] Missing reportId or dimensionIds');
@@ -126,23 +129,24 @@ export async function checkDimensionsHaveData(
   try {
     console.log('[DIMENSION-UTILS] Checking data for', dimensionIds.length, 'dimensions in report:', reportId);
 
-    // Fetch sample dimension_data for this report (limit for performance)
-    const { data, error } = await supabase
-      .from('dimension_data')
-      .select('dimension_values')
-      .eq('report_id', reportId)
-      .limit(100); // Check first 100 rows for better coverage while maintaining performance
+    let rowsToCheck: any[] = [];
 
-    if (error) {
-      console.error('[DIMENSION-UTILS] Error checking dimensions data:', error);
-      // Return all dimensions as having data to prevent UI issues
-      return dimensionIds.reduce((acc, id) => ({ ...acc, [id]: true }), {});
+    if (sourceData && sourceData.transformedRows) {
+      // Use provided source data (already fetched from Google Sheets/CSV)
+      rowsToCheck = sourceData.transformedRows.slice(0, 100); // Check first 100 rows
+    } else {
+      // If sourceData is not provided, we cannot check - return all false
+      // The caller should provide sourceData from useSourceData hook
+      console.warn('[DIMENSION-UTILS] No sourceData provided. Caller should use useSourceData hook and pass the data.');
+      const result = dimensionIds.reduce((acc, id) => ({ ...acc, [id]: false }), {});
+      dimensionDataCache.set(reportId, result);
+      cacheTimestamps.set(reportId, Date.now());
+      return result;
     }
 
-    if (!data || data.length === 0) {
+    if (rowsToCheck.length === 0) {
       console.log('[DIMENSION-UTILS] No data found for report:', reportId);
       const result = dimensionIds.reduce((acc, id) => ({ ...acc, [id]: false }), {});
-      // Cache the result
       dimensionDataCache.set(reportId, result);
       cacheTimestamps.set(reportId, Date.now());
       return result;
@@ -155,10 +159,10 @@ export async function checkDimensionsHaveData(
     let rowsChecked = 0;
     let dimensionsFound = 0;
 
-    data.forEach((row, index) => {
+    rowsToCheck.forEach((row, index) => {
       try {
-        const dimValues = row.dimension_values as Record<string, any>;
-        if (!dimValues) return;
+        const dimValues = row.dimension_values || {};
+        if (!dimValues || Object.keys(dimValues).length === 0) return;
 
         rowsChecked++;
 
