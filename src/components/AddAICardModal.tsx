@@ -26,6 +26,7 @@ import { getUser } from "@/lib/auth";
 import { Search, ChevronRight, ChevronLeft, Sparkles, Loader2, Calendar } from "lucide-react";
 import { 
   getDateRange, 
+  getComparisonDateRange,
   aggregateMetrics, 
   getDateGroupKey,
   parseDate,
@@ -514,12 +515,28 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       ytd: [],
       breakdown_data: {},
       date_breakdown_data: {},
+      comparison_previous_period: { last_month: [], mtd: [], ytd: [] },
+      comparison_previous_year: { last_month: [], mtd: [], ytd: [] },
     };
 
     const dateRanges: Record<DateTab, { start: Date; end: Date }> = {
       last_month: getDateRange("last_month"),
       mtd: getDateRange("mtd"),
       ytd: getDateRange("ytd"),
+    };
+    
+    // Comparison date ranges
+    const comparisonRanges: Record<string, Record<DateTab, { start: Date; end: Date } | null>> = {
+      previous_period: {
+        last_month: getComparisonDateRange("last_month", "previous_period"),
+        mtd: getComparisonDateRange("mtd", "previous_period"),
+        ytd: getComparisonDateRange("ytd", "previous_period"),
+      },
+      previous_year: {
+        last_month: getComparisonDateRange("last_month", "previous_year"),
+        mtd: getComparisonDateRange("mtd", "previous_year"),
+        ytd: getComparisonDateRange("ytd", "previous_year"),
+      },
     };
 
     const { user } = await getUser();
@@ -551,9 +568,9 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         const fetchedReport = reportData;
         
         // Continue with fetched report
-        await processReport(fetchedReport, user.id, dateRanges, pivotData);
+        await processReport(fetchedReport, user.id, dateRanges, comparisonRanges, pivotData);
       } else {
-        await processReport(report, user.id, dateRanges, pivotData);
+        await processReport(report, user.id, dateRanges, comparisonRanges, pivotData);
       }
     }
 
@@ -565,6 +582,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     report: { id: string; name: string },
     userId: string,
     dateRanges: Record<DateTab, { start: Date; end: Date }>,
+    comparisonRanges: Record<string, Record<DateTab, { start: Date; end: Date } | null>>,
     pivotData: CachedPivotData
   ) => {
     // Get source data - either from cache or fetch fresh
@@ -653,6 +671,40 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         reportName: report.name,
         metrics,
       });
+      
+      // Compute comparison data - Previous Period
+      const prevPeriodRange = comparisonRanges.previous_period[tab];
+      if (prevPeriodRange) {
+        const prevPeriodMetrics = aggregateMetrics(
+          sourceData.transformedRows,
+          selectedMetrics,
+          prevPeriodRange,
+          dimensionFilter,
+          metricNameToIdMap
+        );
+        pivotData.comparison_previous_period![tab].push({
+          reportId: report.id,
+          reportName: report.name,
+          metrics: prevPeriodMetrics,
+        });
+      }
+      
+      // Compute comparison data - Previous Year
+      const prevYearRange = comparisonRanges.previous_year[tab];
+      if (prevYearRange) {
+        const prevYearMetrics = aggregateMetrics(
+          sourceData.transformedRows,
+          selectedMetrics,
+          prevYearRange,
+          dimensionFilter,
+          metricNameToIdMap
+        );
+        pivotData.comparison_previous_year![tab].push({
+          reportId: report.id,
+          reportName: report.name,
+          metrics: prevYearMetrics,
+        });
+      }
     });
 
     // Compute breakdown data if configured

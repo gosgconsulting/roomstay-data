@@ -36,6 +36,7 @@ import {
   AISummaryPivotTable, 
   type CachedPivotData,
   getDateRange,
+  getComparisonDateRange,
   aggregateMetrics,
   getDateGroupKey,
   parseDate,
@@ -189,11 +190,33 @@ const AISummaryPage = () => {
       // Initialize breakdown data structures
       const breakdownData: Record<string, Record<DateTab, Array<{ groupValue: string; metrics: Record<string, number> }>>> = {};
       const dateBreakdownData: Record<string, Record<DateTab, Array<{ dateGroup: string; metrics: Record<string, number> }>>> = {};
+      
+      // Initialize comparison data
+      const comparisonPreviousPeriod: Record<DateTab, Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>> = {
+        last_month: [], mtd: [], ytd: []
+      };
+      const comparisonPreviousYear: Record<DateTab, Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>> = {
+        last_month: [], mtd: [], ytd: []
+      };
 
       const dateRanges: Record<DateTab, { start: Date; end: Date }> = {
         last_month: getDateRange("last_month"),
         mtd: getDateRange("mtd"),
         ytd: getDateRange("ytd"),
+      };
+      
+      // Comparison date ranges
+      const comparisonRanges = {
+        previous_period: {
+          last_month: getComparisonDateRange("last_month", "previous_period"),
+          mtd: getComparisonDateRange("mtd", "previous_period"),
+          ytd: getComparisonDateRange("ytd", "previous_period"),
+        },
+        previous_year: {
+          last_month: getComparisonDateRange("last_month", "previous_year"),
+          mtd: getComparisonDateRange("mtd", "previous_year"),
+          ytd: getComparisonDateRange("ytd", "previous_year"),
+        },
       };
 
       // Extract filter configs from report_configs
@@ -266,6 +289,40 @@ const AISummaryPage = () => {
             reportName: reportData.name,
             metrics,
           });
+          
+          // Compute comparison data - Previous Period
+          const prevPeriodRange = comparisonRanges.previous_period[tab];
+          if (prevPeriodRange) {
+            const prevPeriodMetrics = aggregateMetrics(
+              sourceData.transformedRows,
+              card.selected_metrics,
+              prevPeriodRange,
+              dimensionFilter,
+              metricNameToIdMap
+            );
+            comparisonPreviousPeriod[tab].push({
+              reportId: reportData.id,
+              reportName: reportData.name,
+              metrics: prevPeriodMetrics,
+            });
+          }
+          
+          // Compute comparison data - Previous Year
+          const prevYearRange = comparisonRanges.previous_year[tab];
+          if (prevYearRange) {
+            const prevYearMetrics = aggregateMetrics(
+              sourceData.transformedRows,
+              card.selected_metrics,
+              prevYearRange,
+              dimensionFilter,
+              metricNameToIdMap
+            );
+            comparisonPreviousYear[tab].push({
+              reportId: reportData.id,
+              reportName: reportData.name,
+              metrics: prevYearMetrics,
+            });
+          }
         });
 
         // Build breakdown data if configured
@@ -428,10 +485,19 @@ const AISummaryPage = () => {
 
       toast.dismiss("refresh-pivot");
 
+      // Build complete pivot data with all breakdowns and comparisons
+      const completePivotData = { 
+        ...pivotData, 
+        breakdown_data: breakdownData, 
+        date_breakdown_data: dateBreakdownData,
+        comparison_previous_period: comparisonPreviousPeriod,
+        comparison_previous_year: comparisonPreviousYear,
+      };
+
       // Save to database including breakdown data and date breakdown data
       const { error } = await (supabase.from("ai_summary_cards") as any)
         .update({
-          cached_pivot_data: { ...pivotData, breakdown_data: breakdownData, date_breakdown_data: dateBreakdownData },
+          cached_pivot_data: completePivotData,
           pivot_data_refreshed_at: new Date().toISOString(),
         })
         .eq("id", card.id);
@@ -444,7 +510,7 @@ const AISummaryPage = () => {
       // Update local state
       setCards(prev => prev.map(c => 
         c.id === card.id 
-          ? { ...c, cached_pivot_data: { ...pivotData, breakdown_data: breakdownData, date_breakdown_data: dateBreakdownData }, pivot_data_refreshed_at: new Date().toISOString() }
+          ? { ...c, cached_pivot_data: completePivotData, pivot_data_refreshed_at: new Date().toISOString() }
           : c
       ));
 
