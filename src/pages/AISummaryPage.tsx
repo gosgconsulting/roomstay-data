@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, RefreshCw, Settings, MoreHorizontal, Database } from "lucide-react";
+import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, RefreshCw, Settings, MoreHorizontal, Database, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { AddAICardModal } from "@/components/AddAICardModal";
 import { supabase } from "@/integrations/supabase/client";
@@ -89,6 +91,8 @@ const AISummaryPage = () => {
   const [generatingCardId, setGeneratingCardId] = useState<string | null>(null);
   const [viewingSummary, setViewingSummary] = useState<AISummaryCard | null>(null);
   const [refreshingPivotCardId, setRefreshingPivotCardId] = useState<string | null>(null);
+  const [renamingCardId, setRenamingCardId] = useState<string | null>(null);
+  const [newCardName, setNewCardName] = useState("");
 
   const fetchCards = async () => {
     try {
@@ -685,6 +689,38 @@ const AISummaryPage = () => {
     setIsAddCardModalOpen(true);
   };
 
+  const handleStartRename = (card: AISummaryCard) => {
+    setRenamingCardId(card.id);
+    setNewCardName(card.name);
+  };
+
+  const handleRenameCard = async (cardId: string) => {
+    if (!newCardName.trim()) {
+      setRenamingCardId(null);
+      return;
+    }
+
+    try {
+      const { error } = await (supabase.from("ai_summary_cards") as any)
+        .update({ name: newCardName.trim() })
+        .eq("id", cardId);
+
+      if (error) {
+        toast.error("Failed to rename card");
+        return;
+      }
+
+      setCards(prev => prev.map(c => 
+        c.id === cardId ? { ...c, name: newCardName.trim() } : c
+      ));
+      toast.success("Card renamed");
+    } catch (err) {
+      toast.error("Failed to rename card");
+    } finally {
+      setRenamingCardId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="border-b">
@@ -723,7 +759,7 @@ const AISummaryPage = () => {
         ) : (
           <div className="grid grid-cols-1 gap-6">
             {cards.map(card => (
-              <Card key={card.id} className="overflow-hidden">
+              <Card key={card.id} className="overflow-hidden group">
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b">
                   <div className="flex items-center gap-3">
@@ -738,7 +774,39 @@ const AISummaryPage = () => {
                       </div>
                     </div>
                     <Sparkles className="h-4 w-4 text-primary" />
-                    <span className="font-medium">{card.name}</span>
+                    {renamingCardId === card.id ? (
+                      <Input
+                        autoFocus
+                        value={newCardName}
+                        onChange={(e) => setNewCardName(e.target.value)}
+                        onBlur={() => handleRenameCard(card.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleRenameCard(card.id);
+                          if (e.key === "Escape") setRenamingCardId(null);
+                        }}
+                        className="h-7 w-48 text-sm font-medium"
+                      />
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{card.name}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => handleStartRename(card)}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                          onClick={() => setDeleteCardId(card.id)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     {card.pivot_data_refreshed_at && (
@@ -784,7 +852,11 @@ const AISummaryPage = () => {
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
+                      <DropdownMenuContent align="end" className="bg-popover">
+                        <DropdownMenuItem onClick={() => handleStartRename(card)}>
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Rename
+                        </DropdownMenuItem>
                         <DropdownMenuItem 
                           onClick={() => handleRefreshPivotData(card)}
                           disabled={refreshingPivotCardId === card.id}
@@ -796,8 +868,9 @@ const AISummaryPage = () => {
                           )}
                           Refresh Data
                         </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem 
-                          className="text-destructive"
+                          className="text-destructive focus:text-destructive"
                           onClick={() => setDeleteCardId(card.id)}
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
