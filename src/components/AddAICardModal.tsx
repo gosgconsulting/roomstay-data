@@ -18,12 +18,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchSourceData, type SourceDataResult } from "@/hooks/dataSources/useSourceData";
 import { extractUniqueDimensionValues } from "@/lib/filters/extractDimensionValues";
 import { getUser } from "@/lib/auth";
-import { Search, ChevronRight, ChevronLeft, Sparkles, Loader2 } from "lucide-react";
+import { Search, ChevronRight, ChevronLeft, Sparkles, Loader2, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 
 interface Report {
   id: string;
@@ -61,7 +63,137 @@ interface AddAICardModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type Step = "select-reports" | "filter-dimensions" | "ai-prompt";
+type Step = "select-reports" | "filter-dimensions" | "select-metrics" | "select-period" | "ai-prompt";
+
+// Standard KPI metrics available
+const AVAILABLE_METRICS = [
+  "Impressions",
+  "Impression share",
+  "Clicks",
+  "CTR",
+  "Conversions",
+  "Conversion rate",
+  "CPC",
+  "Cost",
+  "Revenue",
+  "ROAS",
+  "Cost of sale",
+];
+
+const DEFAULT_AI_PROMPT = `You are an analytics expert.
+I will provide raw performance data broken down by channel (e.g., SEM, Social Ads, Metasearch).
+Using the dataset and the selected metrics I provide, generate a clear and executive-level performance summary following the structure below.
+
+1. Global Results per Channel
+
+For each channel:
+
+Present the selected metrics clearly and consistently.
+
+Provide:
+
+Short narrative summary
+
+Bullet insights on performance drivers, efficiency, volume changes, notable strengths or weaknesses.
+
+2. MTD vs Previous Period
+
+Compare Month-To-Date vs Previous Period (same number of days) using the same selected metrics:
+
+Highlight key increases or decreases
+
+Add a 1–2 sentence executive interpretation per channel
+
+Mention seasonal or competitive factors if they explain the change
+
+3. MTD vs Last Month
+
+Compare MTD to the full previous calendar month, using the same selected metrics:
+
+Summarize shifts, trends, and efficiency changes
+
+Provide a short strategic interpretation (why the changes matter)
+
+4. YTD vs Previous Year (if available)
+
+If YTD data exists:
+
+Compare the selected metrics against previous year
+
+Identify the major drivers of improvement or decline
+If not available:
+
+State YTD comparison is not applicable.
+
+5. Cross-Channel Executive Summary
+
+Provide a high-level overview answering:
+
+Which channel is most efficient overall?
+
+Which channel delivers the strongest scale?
+
+Are costs rising or stabilizing?
+
+What major shifts define this period?
+
+What is the single biggest opportunity to improve?
+
+This section must read as a polished C-suite executive summary.
+
+6. Recommendations
+
+Provide short, strategic, actionable recommendations:
+
+Budget allocation
+
+Optimizations
+
+Creative and audience refresh
+
+Structural changes
+
+Any funnel or CRO improvements
+
+Focus on impact, not technical details.
+
+7. Automatically Add These Insights When Relevant
+Seasonality
+
+Call out if performance changes align with known seasonal periods, holidays, or industry cycles.
+
+Competitive/Auction Dynamics
+
+Identify trends such as increased competition, volatility, or efficiency shifts.
+
+Tracking/Data Considerations
+
+Mention anomalies, missing signals, attribution mismatches, or measurement gaps if visible.
+
+Final Output Format
+
+Executive Summary
+
+Global Results per Channel
+
+MTD vs Previous Period
+
+MTD vs Last Month
+
+YTD vs Previous Year
+
+Key Insights
+
+Recommendations
+
+Tone: Concise, professional, and performance-driven.`;
+
+// Calculate default "Since" date - January 1st of previous year
+const getDefaultSinceDate = (): string => {
+  const now = new Date();
+  const previousYear = now.getFullYear() - 1;
+  return `${previousYear}-01-01`;
+};
 
 export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
   const { accountId } = useParams();
@@ -75,7 +207,15 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
   const [dimensions, setDimensions] = useState<Record<string, Dimension[]>>({});
   const [reportConfigs, setReportConfigs] = useState<Record<string, ReportDimensionConfig>>({});
   const [searchQuery, setSearchQuery] = useState("");
-  const [aiPrompt, setAiPrompt] = useState("");
+  const [selectedMetrics, setSelectedMetrics] = useState<string[]>([
+    "Impressions",
+    "Clicks",
+    "Cost",
+    "Revenue",
+    "ROAS",
+  ]);
+  const [sinceDate, setSinceDate] = useState<string>(getDefaultSinceDate());
+  const [aiPrompt, setAiPrompt] = useState(DEFAULT_AI_PROMPT);
 
   // Fetch reports for the account
   useEffect(() => {
@@ -228,6 +368,14 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
     });
   };
 
+  const handleMetricToggle = (metric: string) => {
+    setSelectedMetrics(prev =>
+      prev.includes(metric)
+        ? prev.filter(m => m !== metric)
+        : [...prev, metric]
+    );
+  };
+
   const selectedReports = useMemo(
     () => reports.filter(r => selectedReportIds.includes(r.id)),
     [reports, selectedReportIds]
@@ -238,6 +386,10 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
       setStep("filter-dimensions");
       setActiveReportTab(selectedReportIds[0]);
     } else if (step === "filter-dimensions") {
+      setStep("select-metrics");
+    } else if (step === "select-metrics") {
+      setStep("select-period");
+    } else if (step === "select-period") {
       setStep("ai-prompt");
     }
   };
@@ -245,14 +397,18 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
   const handleBack = () => {
     if (step === "filter-dimensions") {
       setStep("select-reports");
-    } else if (step === "ai-prompt") {
+    } else if (step === "select-metrics") {
       setStep("filter-dimensions");
+    } else if (step === "select-period") {
+      setStep("select-metrics");
+    } else if (step === "ai-prompt") {
+      setStep("select-period");
     }
   };
 
   const handleSave = () => {
     // TODO: Save card configuration and generate AI summary
-    console.log("Saving card config:", { reportConfigs, aiPrompt });
+    console.log("Saving card config:", { reportConfigs, selectedMetrics, sinceDate, aiPrompt });
     onOpenChange(false);
     resetState();
   };
@@ -266,7 +422,9 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
     setDimensions({});
     setReportConfigs({});
     setSearchQuery("");
-    setAiPrompt("");
+    setSelectedMetrics(["Impressions", "Clicks", "Cost", "Revenue", "ROAS"]);
+    setSinceDate(getDefaultSinceDate());
+    setAiPrompt(DEFAULT_AI_PROMPT);
     setLoadingReports(new Set());
   };
 
@@ -277,7 +435,30 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
 
   const activeDimensions = activeReportTab ? dimensions[activeReportTab] || [] : [];
   const isActiveReportLoading = activeReportTab ? loadingReports.has(activeReportTab) : false;
-  const activeSourceData = activeReportTab ? sourceDataCache[activeReportTab] : null;
+
+  // Format the "since" date for display
+  const formattedSinceDate = useMemo(() => {
+    try {
+      return format(new Date(sinceDate), "MMMM d, yyyy");
+    } catch {
+      return sinceDate;
+    }
+  }, [sinceDate]);
+
+  const getStepTitle = () => {
+    switch (step) {
+      case "select-reports":
+        return "Select Reports";
+      case "filter-dimensions":
+        return "Filter Dimensions";
+      case "select-metrics":
+        return "Select Metrics";
+      case "select-period":
+        return "Select Period";
+      case "ai-prompt":
+        return "AI Summary Prompt";
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -285,9 +466,7 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            {step === "select-reports" && "Select Reports"}
-            {step === "filter-dimensions" && "Filter Dimensions"}
-            {step === "ai-prompt" && "AI Summary Prompt"}
+            {getStepTitle()}
           </DialogTitle>
         </DialogHeader>
 
@@ -467,24 +646,108 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
             </div>
           )}
 
-          {/* Step 3: AI Prompt */}
+          {/* Step 3: Select Metrics */}
+          {step === "select-metrics" && (
+            <ScrollArea className="h-[400px] pr-4">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground mb-4">
+                  Select the metrics to include in your AI summary.
+                </p>
+                {AVAILABLE_METRICS.map(metric => (
+                  <div
+                    key={metric}
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                      selectedMetrics.includes(metric)
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-muted/50"
+                    )}
+                    onClick={() => handleMetricToggle(metric)}
+                  >
+                    <Checkbox
+                      checked={selectedMetrics.includes(metric)}
+                      onCheckedChange={() => handleMetricToggle(metric)}
+                    />
+                    <span className="font-medium">{metric}</span>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+
+          {/* Step 4: Select Period */}
+          {step === "select-period" && (
+            <div className="space-y-6">
+              <div className="bg-muted/50 rounded-lg p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Calendar className="h-5 w-5 text-primary" />
+                  <h4 className="font-medium">Data Period</h4>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">
+                      Since
+                    </Label>
+                    <Input
+                      type="date"
+                      value={sinceDate}
+                      onChange={e => setSinceDate(e.target.value)}
+                      className="w-full max-w-xs"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Data will be analyzed from this date up to today.
+                    </p>
+                  </div>
+
+                  <div className="pt-4 border-t">
+                    <p className="text-sm">
+                      <span className="font-medium">Selected Period:</span>{" "}
+                      {formattedSinceDate} → Today
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-muted/30 rounded-lg p-4">
+                <h4 className="font-medium mb-2 text-sm">Configuration Summary</h4>
+                <div className="space-y-1 text-sm text-muted-foreground">
+                  <p><span className="font-medium text-foreground">Reports:</span> {selectedReports.map(r => r.name).join(", ")}</p>
+                  <p><span className="font-medium text-foreground">Metrics:</span> {selectedMetrics.join(", ")}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: AI Prompt */}
           {step === "ai-prompt" && (
             <div className="space-y-4">
               <div>
                 <Label className="text-sm font-medium mb-2 block">
-                  AI Prompt (optional)
+                  AI Prompt
                 </Label>
-                <textarea
-                  className="w-full h-32 px-3 py-2 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-primary bg-background"
-                  placeholder="Enter additional instructions for the AI summary (e.g., 'Focus on performance trends and key insights...')"
+                <Textarea
+                  className="w-full h-64 resize-none"
+                  placeholder="Enter instructions for the AI summary..."
                   value={aiPrompt}
                   onChange={e => setAiPrompt(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  This prompt will guide the AI in generating your executive summary.
+                </p>
               </div>
 
               <div className="bg-muted/50 rounded-lg p-4">
                 <h4 className="font-medium mb-2">Summary Configuration</h4>
                 <div className="space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    <span className="font-medium text-foreground">Period:</span>{" "}
+                    {formattedSinceDate} → Today
+                  </p>
+                  <p>
+                    <span className="font-medium text-foreground">Metrics:</span>{" "}
+                    {selectedMetrics.join(", ")}
+                  </p>
                   {selectedReports.map(report => {
                     const config = reportConfigs[report.id];
                     const dim = dimensions[report.id]?.find(
@@ -531,7 +794,8 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
             <Button
               onClick={handleNext}
               disabled={
-                step === "select-reports" && selectedReportIds.length === 0
+                (step === "select-reports" && selectedReportIds.length === 0) ||
+                (step === "select-metrics" && selectedMetrics.length === 0)
               }
             >
               Next
