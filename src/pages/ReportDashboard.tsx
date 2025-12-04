@@ -15,7 +15,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { Settings, ArrowLeft, Database, Grid3x3, GitCompare, Wallet, Eye, Pencil, RefreshCw, Trash2, Star, Calendar, Share2, MoreHorizontal, Download, Maximize2, X, Filter, Plus } from "lucide-react";
+import { ArrowLeft, Database, Grid3x3, GitCompare, RefreshCw, Trash2, Star, Share2, Settings } from "lucide-react";
 import { ShareModal } from "@/components/ShareModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
@@ -498,41 +498,15 @@ export default function ReportDashboard() {
                   variant="ghost"
                   size="sm"
                   className="gap-2 text-muted-foreground hover:text-foreground"
-                  onClick={() => toast({ title: "Coming soon", description: "Schedule report feature coming soon" })}
-                >
-                  <Calendar className="h-4 w-4" />
-                  Schedule report
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-2 text-muted-foreground hover:text-foreground"
                   onClick={() => setShowShareModal(true)}
                 >
                   <Share2 className="h-4 w-4" />
                   Share
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                  <Download className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                  <Maximize2 className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground"
-                  onClick={() => navigate(`/?account=${accountId}`)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
               </div>
             </div>
 
-            {/* Row 2: Edit mode toggle and quick actions */}
+            {/* Row 2: Edit mode toggle and refresh */}
             <div className="container mx-auto px-6 py-2 flex items-center justify-between border-t">
               {/* Left: Edit mode toggle */}
               <div className="flex items-center gap-2">
@@ -544,7 +518,7 @@ export default function ReportDashboard() {
                 />
               </div>
 
-              {/* Right: Refresh status and actions */}
+              {/* Right: Refresh */}
               <div className="flex items-center gap-3">
                 <Button
                   variant="ghost"
@@ -553,18 +527,7 @@ export default function ReportDashboard() {
                   onClick={() => refreshData()}
                 >
                   <RefreshCw className="h-4 w-4" />
-                  Refreshed just now
-                </Button>
-                <span className="px-3 py-1 text-xs font-medium rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                  Auto refresh: On
-                </span>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Filter className="h-4 w-4" />
-                  Filters
-                </Button>
-                <Button size="sm" className="gap-2 bg-emerald-500 hover:bg-emerald-600 text-white">
-                  <Plus className="h-4 w-4" />
-                  Add card
+                  Refresh
                 </Button>
               </div>
             </div>
