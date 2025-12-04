@@ -65,11 +65,17 @@ interface ReportDimensionConfig {
   selectedValues: string[];
 }
 
+interface ReportBreakdownConfig {
+  reportId: string;
+  breakdownDimensionId: string | null;
+}
+
 interface EditingCard {
   id: string;
   name: string;
   report_ids: string[];
   report_configs: Record<string, any>;
+  breakdown_configs?: Record<string, ReportBreakdownConfig>;
   selected_metrics: string[];
   since_date: string;
   ai_prompt: string;
@@ -82,7 +88,7 @@ interface AddAICardModalProps {
   editingCard?: EditingCard | null;
 }
 
-type Step = "select-reports" | "filter-dimensions" | "select-metrics" | "select-period" | "ai-prompt";
+type Step = "select-reports" | "filter-dimensions" | "breakdown-dimensions" | "select-metrics" | "select-period" | "ai-prompt";
 
 // Standard KPI metrics available
 const AVAILABLE_METRICS = [
@@ -226,6 +232,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
   const [loadingReports, setLoadingReports] = useState<Set<string>>(new Set());
   const [dimensions, setDimensions] = useState<Record<string, Dimension[]>>({});
   const [reportConfigs, setReportConfigs] = useState<Record<string, ReportDimensionConfig>>({});
+  const [breakdownConfigs, setBreakdownConfigs] = useState<Record<string, ReportBreakdownConfig>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([
     "Impressions",
@@ -241,7 +248,11 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
   useEffect(() => {
     if (editingCard && open) {
       setSelectedReportIds(editingCard.report_ids || []);
-      setReportConfigs(editingCard.report_configs || {});
+      // Extract breakdown_configs from report_configs if stored together
+      const storedConfigs = editingCard.report_configs || {};
+      const { breakdown_configs: storedBreakdown, ...filterConfigs } = storedConfigs as any;
+      setReportConfigs(filterConfigs || {});
+      setBreakdownConfigs(storedBreakdown || editingCard.breakdown_configs || {});
       setSelectedMetrics(editingCard.selected_metrics || ["Impressions", "Clicks", "Cost", "Revenue", "ROAS"]);
       setSinceDate(editingCard.since_date || getDefaultSinceDate());
       setAiPrompt(editingCard.ai_prompt || DEFAULT_AI_PROMPT);
@@ -415,11 +426,24 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     [reports, selectedReportIds]
   );
 
+  const handleBreakdownChange = (reportId: string, dimensionId: string | null) => {
+    setBreakdownConfigs(prev => ({
+      ...prev,
+      [reportId]: {
+        reportId,
+        breakdownDimensionId: dimensionId,
+      },
+    }));
+  };
+
   const handleNext = () => {
     if (step === "select-reports" && selectedReportIds.length > 0) {
       setStep("filter-dimensions");
       setActiveReportTab(selectedReportIds[0]);
     } else if (step === "filter-dimensions") {
+      setStep("breakdown-dimensions");
+      setActiveReportTab(selectedReportIds[0]);
+    } else if (step === "breakdown-dimensions") {
       setStep("select-metrics");
     } else if (step === "select-metrics") {
       setStep("select-period");
@@ -431,8 +455,11 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
   const handleBack = () => {
     if (step === "filter-dimensions") {
       setStep("select-reports");
-    } else if (step === "select-metrics") {
+    } else if (step === "breakdown-dimensions") {
       setStep("filter-dimensions");
+      setActiveReportTab(selectedReportIds[0]);
+    } else if (step === "select-metrics") {
+      setStep("breakdown-dimensions");
     } else if (step === "select-period") {
       setStep("select-metrics");
     } else if (step === "ai-prompt") {
@@ -502,7 +529,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
           .update({
             name: cardName,
             report_ids: selectedReportIds,
-            report_configs: reportConfigs,
+            report_configs: { ...reportConfigs, breakdown_configs: breakdownConfigs },
             selected_metrics: selectedMetrics,
             since_date: sinceDate,
             ai_prompt: aiPrompt,
@@ -525,7 +552,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
           account_id: accountId || null,
           name: cardName,
           report_ids: selectedReportIds,
-          report_configs: reportConfigs,
+          report_configs: { ...reportConfigs, breakdown_configs: breakdownConfigs },
           selected_metrics: selectedMetrics,
           since_date: sinceDate,
           ai_prompt: aiPrompt,
@@ -561,6 +588,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     setSourceDataCache({});
     setDimensions({});
     setReportConfigs({});
+    setBreakdownConfigs({});
     setSearchQuery("");
     setSelectedMetrics(["Impressions", "Clicks", "Cost", "Revenue", "ROAS"]);
     setSinceDate(getDefaultSinceDate());
@@ -592,6 +620,8 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         return `${prefix}Select Reports`;
       case "filter-dimensions":
         return `${prefix}Filter Dimensions`;
+      case "breakdown-dimensions":
+        return `${prefix}Breakdown By`;
       case "select-metrics":
         return `${prefix}Select Metrics`;
       case "select-period":
@@ -787,7 +817,104 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
             </div>
           )}
 
-          {/* Step 3: Select Metrics */}
+          {/* Step 3: Breakdown Dimensions */}
+          {step === "breakdown-dimensions" && (
+            <div className="flex h-[400px] gap-4">
+              {/* Left: Report tabs */}
+              <div className="w-48 border-r pr-4">
+                <ScrollArea className="h-full">
+                  <div className="space-y-1">
+                    {selectedReports.map(report => {
+                      const hasBreakdown = !!breakdownConfigs[report.id]?.breakdownDimensionId;
+                      return (
+                        <button
+                          key={report.id}
+                          className={cn(
+                            "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
+                            activeReportTab === report.id
+                              ? "bg-primary text-primary-foreground"
+                              : "hover:bg-muted"
+                          )}
+                          onClick={() => {
+                            setActiveReportTab(report.id);
+                          }}
+                        >
+                          <span className="truncate">{report.name}</span>
+                          {hasBreakdown && (
+                            <span className="text-xs opacity-50">✓</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              {/* Right: Breakdown dimension selector */}
+              <div className="flex-1 flex flex-col gap-4">
+                {activeReportTab && (
+                  <>
+                    {isActiveReportLoading ? (
+                      <div className="flex-1 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                          <Loader2 className="h-8 w-8 animate-spin" />
+                          <span>Loading dimensions...</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="bg-muted/30 rounded-lg p-4 mb-2">
+                          <p className="text-sm text-muted-foreground">
+                            Select a dimension to break down this report's data. This will create a detailed table grouped by the selected dimension.
+                          </p>
+                        </div>
+                        
+                        <div>
+                          <Label className="text-sm font-medium mb-2 block">
+                            Breakdown By
+                          </Label>
+                          <Select
+                            value={breakdownConfigs[activeReportTab]?.breakdownDimensionId || "none"}
+                            onValueChange={value =>
+                              handleBreakdownChange(activeReportTab, value === "none" ? null : value)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Choose a dimension..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">
+                                <span className="text-muted-foreground">No breakdown</span>
+                              </SelectItem>
+                              {activeDimensions.map(dim => (
+                                <SelectItem key={dim.id} value={dim.id}>
+                                  {dim.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {breakdownConfigs[activeReportTab]?.breakdownDimensionId && (
+                          <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
+                            <p className="text-sm">
+                              <span className="font-medium">Selected:</span>{" "}
+                              {activeDimensions.find(d => d.id === breakdownConfigs[activeReportTab]?.breakdownDimensionId)?.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              A detailed breakdown table will be created for this report.
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Select Metrics */}
           {step === "select-metrics" && (
             <ScrollArea className="h-[400px] pr-4">
               <div className="space-y-2">
@@ -891,21 +1018,32 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
                   </p>
                   {selectedReports.map(report => {
                     const config = reportConfigs[report.id];
-                    const dim = dimensions[report.id]?.find(
+                    const breakdownConfig = breakdownConfigs[report.id];
+                    const filterDim = dimensions[report.id]?.find(
                       d => d.id === config?.dimensionId
                     );
+                    const breakdownDim = dimensions[report.id]?.find(
+                      d => d.id === breakdownConfig?.breakdownDimensionId
+                    );
                     return (
-                      <div key={report.id}>
-                        <span className="font-medium text-foreground">
-                          {report.name}:
-                        </span>{" "}
-                        {dim ? (
-                          <>
-                            {dim.name} ({config?.selectedValues.length || 0}{" "}
-                            selected)
-                          </>
-                        ) : (
-                          <span className="italic">No filter selected</span>
+                      <div key={report.id} className="space-y-1">
+                        <div>
+                          <span className="font-medium text-foreground">
+                            {report.name}:
+                          </span>{" "}
+                          {filterDim ? (
+                            <>
+                              Filter: {filterDim.name} ({config?.selectedValues.length || 0}{" "}
+                              selected)
+                            </>
+                          ) : (
+                            <span className="italic">No filter</span>
+                          )}
+                        </div>
+                        {breakdownDim && (
+                          <div className="ml-4 text-xs">
+                            → Breakdown by: {breakdownDim.name}
+                          </div>
                         )}
                       </div>
                     );
