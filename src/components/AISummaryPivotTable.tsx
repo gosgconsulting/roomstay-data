@@ -19,6 +19,7 @@ import { Loader2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { getUser } from "@/lib/auth";
+import FormattedAISummary from "@/components/FormattedAISummary";
 import {
   startOfMonth,
   endOfMonth,
@@ -63,6 +64,12 @@ export interface TableInsights {
   breakdowns: Record<string, Record<DateTab, string>>; // reportId -> tab -> insight
 }
 
+export interface ExecutiveSummaries {
+  last_month?: string;
+  mtd?: string;
+  ytd?: string;
+}
+
 export interface CachedPivotData {
   last_month: ReportMetrics[];
   mtd: ReportMetrics[];
@@ -72,6 +79,7 @@ export interface CachedPivotData {
   date_breakdown_data?: Record<string, Record<DateTab, DateBreakdownRow[]>>; // Legacy per-report
   combined_date_breakdown?: Record<DateTab, DateBreakdownRow[]>; // Combined across all reports
   table_insights?: TableInsights;
+  executive_summaries?: ExecutiveSummaries; // Separate summary for each tab
   // Comparison data
   comparison_previous_period?: {
     last_month: ReportMetrics[];
@@ -716,6 +724,19 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
           return (
             <TabsContent key={tab} value={tab} className="mt-0 space-y-6">
+              {/* Executive Summary for this tab */}
+              {data.executive_summaries?.[tab] && (
+                <div className="border rounded-lg overflow-hidden bg-gradient-to-br from-primary/5 to-primary/10">
+                  <div className="px-4 py-2 border-b bg-primary/10 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <h3 className="font-semibold text-sm">Executive Summary</h3>
+                  </div>
+                  <div className="p-4">
+                    <FormattedAISummary summary={data.executive_summaries[tab]} />
+                  </div>
+                </div>
+              )}
+              
               {/* Main Summary Table */}
               <div className="border rounded-lg overflow-hidden">
                 <Table>
