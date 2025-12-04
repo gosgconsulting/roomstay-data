@@ -5,12 +5,31 @@ interface FormattedAISummaryProps {
 }
 
 const FormattedAISummary: React.FC<FormattedAISummaryProps> = ({ summary }) => {
+  // Clean up malformed markdown before processing
+  const cleanMarkdown = (text: string): string => {
+    let cleaned = text;
+    
+    // Fix malformed bold: *text** -> **text** and **text* -> **text**
+    cleaned = cleaned.replace(/(?<!\*)\*([^*\n]+)\*\*/g, '**$1**');
+    cleaned = cleaned.replace(/\*\*([^*\n]+)\*(?!\*)/g, '**$1**');
+    
+    // Fix cases like - *1. Text** (bullet with broken bold)
+    cleaned = cleaned.replace(/-\s*\*(\d+\.)/g, '- **$1');
+    
+    // Remove any remaining single asterisks that look like broken bold markers
+    // Pattern: single * followed by text and then **
+    cleaned = cleaned.replace(/(?<!\*)\*(?!\*)(\d+\.\s*[A-Za-z][^*\n]*)\*\*/g, '**$1**');
+    
+    return cleaned;
+  };
+
   const parseAndFormat = (text: string) => {
-    const lines = text.split("\n");
+    const cleanedText = cleanMarkdown(text);
+    const lines = cleanedText.split("\n");
     const elements: React.ReactNode[] = [];
     let keyIndex = 0;
 
-    const formatInlineText = (text: string): React.ReactNode => {
+    const formatInlineText = (lineText: string): React.ReactNode => {
       // Process the text to handle bold and numbers with colors
       const processNumberColors = (segment: string, segmentIdx: number): React.ReactNode => {
         // Match numbers with signs: +24.7%, -12.2%, $258K, 32x, etc.
@@ -57,16 +76,18 @@ const FormattedAISummary: React.FC<FormattedAISummaryProps> = ({ summary }) => {
         return segment;
       };
 
-      // First handle **bold** markdown - only render as bold, no special colors
+      // Handle **bold** markdown - render as bold
       const boldPattern = /\*\*([^*]+)\*\*/g;
-      const boldParts = text.split(boldPattern);
+      const boldParts = lineText.split(boldPattern);
       
       return boldParts.map((part, idx) => {
         // Odd indices are the bold content
         if (idx % 2 === 1) {
           return <strong key={idx} className="font-semibold">{processNumberColors(part, idx)}</strong>;
         }
-        return <React.Fragment key={idx}>{processNumberColors(part, idx)}</React.Fragment>;
+        // Clean any remaining stray asterisks from non-bold parts
+        const cleanedPart = part.replace(/\*+/g, '');
+        return <React.Fragment key={idx}>{processNumberColors(cleanedPart, idx)}</React.Fragment>;
       });
     };
 
