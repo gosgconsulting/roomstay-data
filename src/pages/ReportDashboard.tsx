@@ -15,7 +15,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Database, Grid3x3, GitCompare, Trash2, Star, Share2, Settings } from "lucide-react";
+import { ArrowLeft, Database, Grid3x3, GitCompare, Star, Share2, Settings } from "lucide-react";
 import { ShareModal } from "@/components/ShareModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
@@ -534,15 +534,6 @@ export default function ReportDashboard() {
                     >
                       <GitCompare className="h-4 w-4" />
                       Vlookup
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2 text-destructive hover:text-destructive"
-                      onClick={handleClearAndResync}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Clear & Resync
                     </Button>
                     <div className="h-4 w-px bg-border" />
                   </>
