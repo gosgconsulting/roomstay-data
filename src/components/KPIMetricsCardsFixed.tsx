@@ -50,10 +50,17 @@ export function KPIMetricsCards({
   const [kpiOrder, setKpiOrder] = useState<string[] | null>(null);
 
   // Load dimensions using the same hook as PerformanceTable
-  const { dimensions } = usePerformanceTableDimensions({
+  const { dimensions, isLoadingDimensions, loadDimensions } = usePerformanceTableDimensions({
     reportId,
     accountId: accountId || undefined,
   });
+
+  // Trigger dimension loading when reportId changes
+  useEffect(() => {
+    if (reportId) {
+      loadDimensions();
+    }
+  }, [reportId, loadDimensions]);
 
   // Fetch data source for the report
   useEffect(() => {
@@ -140,9 +147,17 @@ export function KPIMetricsCards({
 
   // Process source data into metrics (same approach as performance table)
   useEffect(() => {
-    if (!sourceData || isLoadingSource) return;
+    // Wait for both source data and dimensions to be loaded
+    if (!sourceData || isLoadingSource || isLoadingDimensions) return;
+    
+    // Must have dimensions loaded to map IDs to names
+    if (!dimensions || dimensions.length === 0) {
+      console.log('[KPI-CARDS] Waiting for dimensions to load...');
+      return;
+    }
 
     console.log('[KPI-CARDS] Processing source data:', sourceData.transformedRows?.length, 'rows');
+    console.log('[KPI-CARDS] Dimensions available:', dimensions.length, dimensions.map(d => ({ id: d.id, name: d.name })));
 
     try {
       let allRows = sourceData.transformedRows || [];
@@ -330,7 +345,7 @@ export function KPIMetricsCards({
       setMetrics([]);
       onLoadingComplete?.();
     }
-  }, [sourceData, isLoadingSource, stableFilters, dimensions, visibleKPIs, kpiOrder, onLoadingComplete]);
+  }, [sourceData, isLoadingSource, isLoadingDimensions, stableFilters, dimensions, visibleKPIs, kpiOrder, onLoadingComplete]);
 
   const formatDisplay = (kpiName: string, value: number): string => {
     const name = kpiName.toLowerCase();
@@ -352,7 +367,7 @@ export function KPIMetricsCards({
     return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  if (isLoadingSource) {
+  if (isLoadingSource || isLoadingDimensions) {
     return (
       <div>
         <div className="flex items-center justify-end mb-4">
