@@ -160,6 +160,7 @@ export const getDateRange = (tab: DateTab): { start: Date; end: Date } => {
 };
 
 // Get comparison date range based on comparison type
+// Uses YTD-style comparison: same day of month/year for accurate comparison
 export const getComparisonDateRange = (
   tab: DateTab, 
   comparisonType: ComparisonType
@@ -170,16 +171,41 @@ export const getComparisonDateRange = (
   const now = new Date();
   
   if (comparisonType === "previous_period") {
-    // Previous period = same duration, immediately before
-    const durationMs = currentRange.end.getTime() - currentRange.start.getTime();
-    return {
-      start: new Date(currentRange.start.getTime() - durationMs - 86400000), // -1 day buffer
-      end: new Date(currentRange.start.getTime() - 86400000),
-    };
+    // Previous period = same day range in the previous month/period
+    switch (tab) {
+      case "last_month": {
+        // Compare to 2 months ago (full month)
+        const twoMonthsAgo = subMonths(now, 2);
+        return {
+          start: startOfMonth(twoMonthsAgo),
+          end: endOfMonth(twoMonthsAgo),
+        };
+      }
+      case "mtd": {
+        // Compare to same day of previous month (e.g., Dec 1-5 vs Nov 1-5)
+        const prevMonth = subMonths(now, 1);
+        const dayOfMonth = now.getDate();
+        const prevMonthStart = startOfMonth(prevMonth);
+        // Ensure we don't exceed the previous month's days
+        const prevMonthEnd = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), 
+          Math.min(dayOfMonth, endOfMonth(prevMonth).getDate()));
+        return {
+          start: prevMonthStart,
+          end: prevMonthEnd,
+        };
+      }
+      case "ytd": {
+        // Compare to same period last year (Jan 1 to same day/month)
+        return {
+          start: subYears(currentRange.start, 1),
+          end: subYears(currentRange.end, 1),
+        };
+      }
+    }
   }
   
   if (comparisonType === "previous_year") {
-    // Same period but last year
+    // Same period but last year (YTD-style: same day of month/year)
     return {
       start: subYears(currentRange.start, 1),
       end: subYears(currentRange.end, 1),
