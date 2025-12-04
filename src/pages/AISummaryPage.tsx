@@ -277,9 +277,18 @@ const AISummaryPage = () => {
           const breakdownDimName = breakdownDimData?.name;
           const breakdownDimId = breakdownConfig.breakdownDimensionId;
           
-          // Get unique values for this breakdown dimension
+          // First filter rows by dimension filter, then get unique breakdown values
+          const filteredByDimension = sourceData.transformedRows.filter((row: any) => {
+            if (!dimensionFilter || dimensionFilter.values.length === 0) return true;
+            const rowData = row.dimension_values || row;
+            const dimVal = rowData[dimensionFilter.dimensionId] || 
+                           (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
+            return dimVal !== undefined && dimensionFilter.values.includes(String(dimVal));
+          });
+          
+          // Get unique values for this breakdown dimension from filtered rows only
           const uniqueValues = new Set<string>();
-          sourceData.transformedRows.forEach((row: any) => {
+          filteredByDimension.forEach((row: any) => {
             const rowData = row.dimension_values || row;
             const val = rowData[breakdownDimId] || (breakdownDimName ? rowData[breakdownDimName] : undefined);
             if (val !== undefined && val !== null && val !== '') {
