@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, Settings, MoreHorizontal, Database, Pencil } from "lucide-react";
+import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, Settings, MoreHorizontal, Database, Pencil, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { AddAICardModal } from "@/components/AddAICardModal";
+import { CreateShareLinkModal } from "@/components/CreateShareLinkModal";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
@@ -98,6 +99,7 @@ const AISummaryPage = () => {
   const [newCardName, setNewCardName] = useState("");
   const [generateModalCard, setGenerateModalCard] = useState<AISummaryCard | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(summaryId || null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   const fetchCards = async () => {
     try {
@@ -797,10 +799,16 @@ const AISummaryPage = () => {
                 <h1 className="text-xl font-semibold">AI Summary</h1>
               </div>
             </div>
-            <Button onClick={() => setIsAddCardModalOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add card
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setIsShareModalOpen(true)}>
+                <Share2 className="h-4 w-4 mr-2" />
+                Share
+              </Button>
+              <Button onClick={() => setIsAddCardModalOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add card
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -1002,6 +1010,16 @@ const AISummaryPage = () => {
           }
         }}
         editingCard={editingCard}
+      />
+
+      <CreateShareLinkModal
+        open={isShareModalOpen}
+        onOpenChange={setIsShareModalOpen}
+        onSuccess={() => {
+          setIsShareModalOpen(false);
+          toast.success("Share link created successfully");
+        }}
+        accountId={accountId}
       />
 
       <AlertDialog open={!!deleteCardId} onOpenChange={() => setDeleteCardId(null)}>
