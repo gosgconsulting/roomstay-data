@@ -399,6 +399,11 @@ const AISummaryPage = () => {
           // Store the dimension name for this breakdown
           breakdownDimensionNames[breakdownKey] = breakdownDimName;
           
+          // DEBUG: Log column mappings and dimension info
+          console.log(`[Breakdown Debug] Dimension ID: ${breakdownDimId}, Name: ${breakdownDimName}`);
+          console.log(`[Breakdown Debug] dimIdToColumnHeader:`, dimIdToColumnHeader);
+          console.log(`[Breakdown Debug] Column header for this dim:`, dimIdToColumnHeader[breakdownDimId]);
+          
           // First filter rows by dimension filter, then get unique breakdown values
           const filteredByDimension = sourceData.transformedRows.filter((row: any) => {
             if (!dimensionFilter || dimensionFilter.values.length === 0) return true;
@@ -407,6 +412,16 @@ const AISummaryPage = () => {
                            (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
             return dimVal !== undefined && dimensionFilter.values.includes(String(dimVal));
           });
+          
+          // DEBUG: Log sample row data
+          if (filteredByDimension.length > 0) {
+            const sampleRow = filteredByDimension[0];
+            const sampleRowData = sampleRow.dimension_values || sampleRow;
+            console.log(`[Breakdown Debug] Sample row keys:`, Object.keys(sampleRowData));
+            console.log(`[Breakdown Debug] Sample row data (first 5 keys):`, 
+              Object.fromEntries(Object.entries(sampleRowData).slice(0, 10))
+            );
+          }
           
           // Get unique values for this breakdown dimension from filtered rows only
           const uniqueValues = new Set<string>();
@@ -421,6 +436,9 @@ const AISummaryPage = () => {
               hasUncategorized = true;
             }
           });
+          
+          console.log(`[Breakdown Debug] Unique values found:`, Array.from(uniqueValues));
+          console.log(`[Breakdown Debug] Has uncategorized:`, hasUncategorized);
 
           breakdownData[breakdownKey] = { last_month: [], mtd: [], ytd: [] };
           
