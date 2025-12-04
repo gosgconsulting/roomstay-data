@@ -37,6 +37,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   AISummaryPivotTable, 
   type CachedPivotData,
+  type DateBreakdownRow,
   getDateRange,
   getComparisonDateRange,
   aggregateMetrics,
@@ -193,7 +194,7 @@ const AISummaryPage = () => {
       
       // Initialize breakdown data structures
       const breakdownData: Record<string, Record<DateTab, Array<{ groupValue: string; metrics: Record<string, number> }>>> = {};
-      const combinedDateBreakdown: Record<DateTab, Array<{ dateGroup: string; metrics: Record<string, number> }>> = {
+      const combinedDateBreakdown: Record<DateTab, DateBreakdownRow[]> = {
         last_month: [], mtd: [], ytd: []
       };
       // To accumulate all rows for combined date breakdown
@@ -516,8 +517,8 @@ const AISummaryPage = () => {
       (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
         const dateRange = dateRanges[tab];
         
-        // Group all rows by date group (week or year)
-        const dateGroups: Record<string, any[]> = {};
+        // Group all rows by date group (week or month)
+        const dateGroups: Record<string, { rows: any[], minDate: Date | null, maxDate: Date | null }> = {};
         
         allRowsForDateBreakdown.forEach((row: any) => {
           const rowData = row.dimension_values || row;
@@ -542,15 +543,23 @@ const AISummaryPage = () => {
           
           const groupKey = getDateGroupKey(rowDate, tab);
           if (!dateGroups[groupKey]) {
-            dateGroups[groupKey] = [];
+            dateGroups[groupKey] = { rows: [], minDate: null, maxDate: null };
           }
-          dateGroups[groupKey].push(row);
+          dateGroups[groupKey].rows.push(row);
+          
+          // Track min/max dates for this group
+          if (!dateGroups[groupKey].minDate || rowDate < dateGroups[groupKey].minDate) {
+            dateGroups[groupKey].minDate = rowDate;
+          }
+          if (!dateGroups[groupKey].maxDate || rowDate > dateGroups[groupKey].maxDate) {
+            dateGroups[groupKey].maxDate = rowDate;
+          }
         });
         
         // Aggregate metrics for each date group
-        Object.entries(dateGroups).forEach(([dateGroup, groupRows]) => {
+        Object.entries(dateGroups).forEach(([dateGroup, groupData]) => {
           const metrics = aggregateMetrics(
-            groupRows,
+            groupData.rows,
             card.selected_metrics,
             dateRange,
             undefined,
@@ -559,6 +568,8 @@ const AISummaryPage = () => {
           
           combinedDateBreakdown[tab].push({
             dateGroup,
+            dateRangeStart: groupData.minDate?.toISOString(),
+            dateRangeEnd: groupData.maxDate?.toISOString(),
             metrics,
           });
         });
