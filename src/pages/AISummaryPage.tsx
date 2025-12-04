@@ -288,46 +288,33 @@ const AISummaryPage = () => {
           
           // Get unique values for this breakdown dimension from filtered rows only
           const uniqueValues = new Set<string>();
+          let hasUncategorized = false;
+          
           filteredByDimension.forEach((row: any) => {
             const rowData = row.dimension_values || row;
             const val = rowData[breakdownDimId] || (breakdownDimName ? rowData[breakdownDimName] : undefined);
             if (val !== undefined && val !== null && val !== '') {
               uniqueValues.add(String(val));
+            } else {
+              hasUncategorized = true;
             }
           });
 
           breakdownData[reportId] = { last_month: [], mtd: [], ytd: [] };
           
           (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+            // Process each named group
             uniqueValues.forEach((groupValue) => {
-              // Create filter for this specific group value
-              const groupFilter = {
-                dimensionId: breakdownDimId,
-                dimensionName: breakdownDimName,
-                values: [groupValue],
-              };
-              
-              // Apply both the dimension filter and the group filter
-              const filteredRows = sourceData.transformedRows.filter((row: any) => {
+              // Filter rows for this specific group value
+              const groupRows = filteredByDimension.filter((row: any) => {
                 const rowData = row.dimension_values || row;
-                
-                // Check dimension filter first
-                if (dimensionFilter && dimensionFilter.values.length > 0) {
-                  const dimVal = rowData[dimensionFilter.dimensionId] || 
-                                 (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
-                  if (dimVal === undefined || !dimensionFilter.values.includes(String(dimVal))) {
-                    return false;
-                  }
-                }
-                
-                // Check group filter
-                const groupVal = rowData[groupFilter.dimensionId] || 
-                                 (groupFilter.dimensionName ? rowData[groupFilter.dimensionName] : undefined);
-                return groupVal !== undefined && groupFilter.values.includes(String(groupVal));
+                const groupVal = rowData[breakdownDimId] || 
+                                 (breakdownDimName ? rowData[breakdownDimName] : undefined);
+                return groupVal !== undefined && String(groupVal) === groupValue;
               });
               
               const metrics = aggregateMetrics(
-                filteredRows,
+                groupRows,
                 card.selected_metrics,
                 dateRanges[tab],
                 undefined, // Already filtered
@@ -339,6 +326,28 @@ const AISummaryPage = () => {
                 metrics,
               });
             });
+            
+            // Add Uncategorized group for rows without breakdown value
+            if (hasUncategorized) {
+              const uncategorizedRows = filteredByDimension.filter((row: any) => {
+                const rowData = row.dimension_values || row;
+                const val = rowData[breakdownDimId] || (breakdownDimName ? rowData[breakdownDimName] : undefined);
+                return val === undefined || val === null || val === '';
+              });
+              
+              const metrics = aggregateMetrics(
+                uncategorizedRows,
+                card.selected_metrics,
+                dateRanges[tab],
+                undefined,
+                metricNameToIdMap
+              );
+
+              breakdownData[reportId][tab].push({
+                groupValue: 'Uncategorized',
+                metrics,
+              });
+            }
           });
         }
       }
