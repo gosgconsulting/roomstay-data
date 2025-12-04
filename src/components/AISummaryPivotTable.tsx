@@ -51,7 +51,9 @@ export type DateTab = "last_month" | "mtd" | "ytd";
 export type ComparisonType = "none" | "previous_period" | "previous_year";
 
 export interface DateBreakdownRow {
-  dateGroup: string; // e.g., "Week 45, 2024" or "2024"
+  dateGroup: string; // e.g., "Week 45, 2024" or "January 2024"
+  dateRangeStart?: string; // Actual start date from data (ISO string)
+  dateRangeEnd?: string; // Actual end date from data (ISO string)
   metrics: Record<string, number>;
 }
 
@@ -778,7 +780,17 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                           </TableHeader>
                           <TableBody>
                             {dateRows.map((row, idx) => {
-                              const weekDateRange = isWeekView ? getWeekDateRangeFromKey(row.dateGroup) : null;
+                              // Use actual date range from data if available, otherwise fall back to calculated
+                              let displayDateRange: string | null = null;
+                              if (isWeekView) {
+                                if (row.dateRangeStart && row.dateRangeEnd) {
+                                  const startDate = new Date(row.dateRangeStart);
+                                  const endDate = new Date(row.dateRangeEnd);
+                                  displayDateRange = `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d')}`;
+                                } else {
+                                  displayDateRange = getWeekDateRangeFromKey(row.dateGroup);
+                                }
+                              }
                               return (
                                 <TableRow
                                   key={row.dateGroup}
@@ -787,8 +799,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                                   <TableCell className="font-medium text-sm">
                                     <div className="flex flex-col">
                                       <span>{row.dateGroup}</span>
-                                      {weekDateRange && (
-                                        <span className="text-xs text-muted-foreground">{weekDateRange}</span>
+                                      {displayDateRange && (
+                                        <span className="text-xs text-muted-foreground">{displayDateRange}</span>
                                       )}
                                     </div>
                                   </TableCell>
