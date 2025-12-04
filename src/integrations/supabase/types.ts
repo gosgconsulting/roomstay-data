@@ -681,6 +681,7 @@ export type Database = {
           id: string
           is_default: boolean | null
           kpi_order: string[] | null
+          loading_preference: string | null
           name: string
           report_id: string
           then_by_dimensions: string[] | null
@@ -705,6 +706,7 @@ export type Database = {
           id?: string
           is_default?: boolean | null
           kpi_order?: string[] | null
+          loading_preference?: string | null
           name?: string
           report_id: string
           then_by_dimensions?: string[] | null
@@ -729,6 +731,7 @@ export type Database = {
           id?: string
           is_default?: boolean | null
           kpi_order?: string[] | null
+          loading_preference?: string | null
           name?: string
           report_id?: string
           then_by_dimensions?: string[] | null

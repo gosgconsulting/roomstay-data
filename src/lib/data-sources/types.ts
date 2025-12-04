@@ -13,6 +13,12 @@ export interface DataSource {
   header_row: number;
   column_mappings: ColumnMapping[] | null;
   report_id?: string;
+  updated_at?: string;
+  created_at?: string;
+  last_synced_at?: string | null;
+  sync_frequency?: string | null;
+  sync_time?: string | null;
+  sync_timezone?: string | null;
 }
 
 export interface ColumnMapping {

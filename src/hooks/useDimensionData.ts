@@ -86,26 +86,27 @@ export function useDimensionData(reportId?: string, accountId?: string) {
         return;
       }
 
-      // Use centralized dimension loader with data availability filtering
+      // Load ALL dimensions without filtering by data availability
+      // Per user memory: all text, vlookup, and date dimensions should be displayed
+      // regardless of whether they currently contain data
       const loadedDimensions = await loadDimensionsForUser(
         user.id, 
         reportId,
         {
-          filterByDataAvailability: true,  // Filter to only dimensions with data
-          alwaysIncludeDate: true,         // Always include date dimensions
-          alwaysIncludeCalculated: true,   // Always include calculated/formula dimensions
-          fallbackOnError: true            // Return all dimensions if filtering fails
+          filterByDataAvailability: false,  // Don't filter - show ALL dimensions
+          alwaysIncludeDate: true,          // Always include date dimensions
+          alwaysIncludeCalculated: true,    // Always include calculated/formula dimensions
+          fallbackOnError: true             // Return all dimensions if filtering fails
         }
       );
       
-      // Dimensions are now pre-filtered by data availability
-      const filteredDimensions = loadedDimensions;
+      console.log('[useDimensionData] Loaded dimensions:', loadedDimensions.length, loadedDimensions.map(d => d.name));
 
-      setDimensions(filteredDimensions);
+      setDimensions(loadedDimensions);
 
-      // Check data availability if reportId is provided
-      if (reportId && filteredDimensions.length > 0) {
-        const dimensionIds = filteredDimensions.map(d => d.id);
+      // Check data availability if reportId is provided (for UI hints, not filtering)
+      if (reportId && loadedDimensions.length > 0) {
+        const dimensionIds = loadedDimensions.map(d => d.id);
         await checkDataAvailability(dimensionIds, reportId);
       }
     } catch (error) {
