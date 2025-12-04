@@ -528,22 +528,25 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
   ) => {
     // Get source data - either from cache or fetch fresh
     let sourceData = sourceDataCache[report.id];
+    let dsData: any = dataSources[report.id];
     
     if (!sourceData?.transformedRows) {
       console.log(`[computePivotData] Fetching data source for report ${report.id}`);
       
       // Fetch data source and source data
-      const { data: dsData, error: dsError } = await supabase
+      const { data: fetchedDsData, error: dsError } = await supabase
         .from("data_sources")
         .select("*")
         .eq("report_id", report.id)
         .limit(1)
         .single();
 
-      if (dsError || !dsData) {
+      if (dsError || !fetchedDsData) {
         console.error(`[computePivotData] No data source for report ${report.id}:`, dsError);
         return;
       }
+      
+      dsData = fetchedDsData;
 
       console.log(`[computePivotData] Fetching source data for ${report.name}`);
       try {
@@ -559,6 +562,16 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       console.warn(`[computePivotData] No transformed rows for report ${report.id}`);
       return;
     }
+
+    // Build metric name to dimension ID mapping from column_mappings
+    const columnMappings = Array.isArray(dsData?.column_mappings) ? dsData.column_mappings : [];
+    const metricNameToIdMap: Record<string, string> = {};
+    columnMappings.forEach((m: any) => {
+      if (m.dimensionName && m.dimensionId && m.dimensionId !== 'none') {
+        metricNameToIdMap[m.dimensionName] = m.dimensionId;
+      }
+    });
+    console.log(`[computePivotData] Built metric mapping for ${report.name}:`, Object.keys(metricNameToIdMap).length, 'mappings');
 
     // Get dimension filter config for this report
     const filterConfig = reportConfigs[report.id];
@@ -591,7 +604,8 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         sourceData.transformedRows,
         selectedMetrics,
         dateRanges[tab],
-        dimensionFilter
+        dimensionFilter,
+        metricNameToIdMap
       );
 
       pivotData[tab].push({

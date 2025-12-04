@@ -28,12 +28,18 @@ interface ReportMetrics {
   metrics: Record<string, number>;
 }
 
+interface BreakdownRow {
+  groupValue: string;
+  metrics: Record<string, number>;
+}
+
 export type DateTab = "last_month" | "mtd" | "ytd";
 
 export interface CachedPivotData {
   last_month: ReportMetrics[];
   mtd: ReportMetrics[];
   ytd: ReportMetrics[];
+  breakdown_data?: Record<string, Record<DateTab, BreakdownRow[]>>;
 }
 
 interface AISummaryPivotTableProps {
@@ -41,6 +47,7 @@ interface AISummaryPivotTableProps {
   selectedMetrics: string[];
   accountId?: string;
   cachedPivotData?: CachedPivotData | null;
+  reportConfigs?: Record<string, any>;
 }
 
 interface DataSource {
@@ -124,14 +131,40 @@ export const aggregateMetrics = (
   rows: any[],
   metrics: string[],
   dateRange: { start: Date; end: Date },
-  dimensionFilter?: { dimensionId: string; dimensionName?: string; values: string[] }
+  dimensionFilter?: { dimensionId: string; dimensionName?: string; values: string[] },
+  metricNameToIdMap?: Record<string, string>
 ): Record<string, number> => {
   const result: Record<string, number> = {};
   metrics.forEach((m) => (result[m] = 0));
+  
+  // Try to find Date dimension ID from metricNameToIdMap
+  const dateDimId = metricNameToIdMap?.['Date'] || metricNameToIdMap?.['date'] || metricNameToIdMap?.['Day'];
 
   const filteredRows = rows.filter((row) => {
-    // Date filter
-    const dateValue = row.Date || row.date || row.Day || row.day;
+    // Handle both flat row format and transformed row format (with dimension_values)
+    const rowData = row.dimension_values || row;
+    
+    // Date filter - try multiple approaches to find the date value
+    let dateValue: any = null;
+    
+    // First, try by name
+    dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
+    
+    // Then try by dimension ID if we have it
+    if (!dateValue && dateDimId) {
+      dateValue = rowData[dateDimId];
+    }
+    
+    // Finally, search all values for a date pattern
+    if (!dateValue) {
+      for (const [key, val] of Object.entries(rowData)) {
+        if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+          dateValue = val;
+          break;
+        }
+      }
+    }
+    
     const rowDate = parseDate(dateValue);
     if (!rowDate) return false;
     if (!isWithinInterval(rowDate, { start: dateRange.start, end: dateRange.end })) {
@@ -140,9 +173,9 @@ export const aggregateMetrics = (
     
     // Dimension filter
     if (dimensionFilter && dimensionFilter.values.length > 0) {
-      // Try to find the dimension value by ID or name
-      const dimValue = row[dimensionFilter.dimensionId] || 
-                       (dimensionFilter.dimensionName ? row[dimensionFilter.dimensionName] : undefined);
+      // Try to find the dimension value by ID first, then by name
+      const dimValue = rowData[dimensionFilter.dimensionId] || 
+                       (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
       if (dimValue === undefined || !dimensionFilter.values.includes(String(dimValue))) {
         return false;
       }
@@ -152,8 +185,17 @@ export const aggregateMetrics = (
   });
 
   filteredRows.forEach((row) => {
+    const rowData = row.dimension_values || row;
+    
     metrics.forEach((metric) => {
-      const value = row[metric];
+      // Try to get value by metric name directly
+      let value = rowData[metric];
+      
+      // If not found and we have a mapping, try by dimension ID
+      if ((value === undefined || value === null) && metricNameToIdMap && metricNameToIdMap[metric]) {
+        value = rowData[metricNameToIdMap[metric]];
+      }
+      
       if (value !== undefined && value !== null) {
         const numValue = parseFloat(String(value).replace(/[^0-9.-]/g, ""));
         if (!isNaN(numValue)) {
@@ -171,10 +213,11 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   selectedMetrics,
   accountId,
   cachedPivotData,
+  reportConfigs,
 }) => {
   const [activeTab, setActiveTab] = useState<DateTab>("mtd");
   const [isLoading, setIsLoading] = useState(!cachedPivotData);
-  const [data, setData] = useState<Record<DateTab, ReportMetrics[]>>(
+  const [data, setData] = useState<CachedPivotData>(
     cachedPivotData || { last_month: [], mtd: [], ytd: [] }
   );
 
@@ -292,9 +335,31 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   }
 
   const safeMetrics = selectedMetrics || [];
+  
+  // Get breakdown data and report names
+  const breakdownData = data.breakdown_data || {};
+  const mainTabData = data[activeTab] || [];
+  
+  // Helper to get report name from reportId
+  const getReportName = (reportId: string): string => {
+    const report = mainTabData.find(r => r.reportId === reportId);
+    return report?.reportName || reportId;
+  };
+  
+  // Calculate breakdown totals
+  const calculateBreakdownTotals = (rows: BreakdownRow[]): Record<string, number> => {
+    const totals: Record<string, number> = {};
+    safeMetrics.forEach(m => totals[m] = 0);
+    rows.forEach(row => {
+      safeMetrics.forEach(metric => {
+        totals[metric] += row.metrics[metric] || 0;
+      });
+    });
+    return totals;
+  };
 
   return (
-    <div className="w-full">
+    <div className="w-full space-y-6">
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as DateTab)}>
         <TabsList className="mb-4">
           <TabsTrigger value="last_month">Last Month</TabsTrigger>
@@ -307,7 +372,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           const totals = calculateTotals(tabData);
 
           return (
-            <TabsContent key={tab} value={tab} className="mt-0">
+            <TabsContent key={tab} value={tab} className="mt-0 space-y-6">
+              {/* Main Summary Table */}
               <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
@@ -348,6 +414,65 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   </TableBody>
                 </Table>
               </div>
+              
+              {/* Breakdown Tables */}
+              {Object.keys(breakdownData).length > 0 && (
+                <div className="space-y-4">
+                  {Object.entries(breakdownData).map(([reportId, reportBreakdown]) => {
+                    const breakdownRows = reportBreakdown[tab] || [];
+                    if (breakdownRows.length === 0) return null;
+                    
+                    const breakdownTotals = calculateBreakdownTotals(breakdownRows);
+                    const reportName = getReportName(reportId);
+                    
+                    return (
+                      <div key={reportId} className="border rounded-lg overflow-hidden">
+                        <div className="bg-primary/5 px-4 py-2 border-b">
+                          <h4 className="font-semibold text-sm">{reportName} - Breakdown</h4>
+                        </div>
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/30">
+                              <TableHead className="font-medium w-[200px]">Group</TableHead>
+                              {safeMetrics.map((metric) => (
+                                <TableHead key={metric} className="font-medium text-right text-xs">
+                                  {metric}
+                                </TableHead>
+                              ))}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {breakdownRows.map((row, idx) => (
+                              <TableRow
+                                key={row.groupValue}
+                                className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                              >
+                                <TableCell className="font-medium text-sm">
+                                  {row.groupValue}
+                                </TableCell>
+                                {safeMetrics.map((metric) => (
+                                  <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                    {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
+                            {/* Breakdown Total Row */}
+                            <TableRow className="bg-muted/50 font-medium border-t">
+                              <TableCell className="text-sm">Total</TableCell>
+                              {safeMetrics.map((metric) => (
+                                <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                  {formatMetricValue(metric, breakdownTotals[metric] || 0)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </TabsContent>
           );
         })}

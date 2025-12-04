@@ -183,6 +183,9 @@ const AISummaryPage = () => {
         mtd: [],
         ytd: [],
       };
+      
+      // Initialize breakdown data structure
+      const breakdownData: Record<string, Record<DateTab, Array<{ groupValue: string; metrics: Record<string, number> }>>> = {};
 
       const dateRanges: Record<DateTab, { start: Date; end: Date }> = {
         last_month: getDateRange("last_month"),
@@ -213,6 +216,15 @@ const AISummaryPage = () => {
 
         if (!dsData) continue;
 
+        // Build metric name to dimension ID mapping from column_mappings
+        const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
+        const metricNameToIdMap: Record<string, string> = {};
+        columnMappings.forEach((m: any) => {
+          if (m.dimensionName && m.dimensionId && m.dimensionId !== 'none') {
+            metricNameToIdMap[m.dimensionName] = m.dimensionId;
+          }
+        });
+
         // Fetch source data
         const sourceData = await fetchSourceData(dsData as DataSource, user.id, accountId);
         
@@ -242,7 +254,8 @@ const AISummaryPage = () => {
             sourceData.transformedRows,
             card.selected_metrics,
             dateRanges[tab],
-            dimensionFilter
+            dimensionFilter,
+            metricNameToIdMap
           );
 
           pivotData[tab].push({
@@ -251,14 +264,82 @@ const AISummaryPage = () => {
             metrics,
           });
         });
+
+        // Build breakdown data if configured
+        const breakdownConfig = breakdown_configs?.[reportId];
+        if (breakdownConfig?.breakdownDimensionId) {
+          const { data: breakdownDimData } = await supabase
+            .from("dimensions")
+            .select("name")
+            .eq("id", breakdownConfig.breakdownDimensionId)
+            .single();
+          
+          const breakdownDimName = breakdownDimData?.name;
+          const breakdownDimId = breakdownConfig.breakdownDimensionId;
+          
+          // Get unique values for this breakdown dimension
+          const uniqueValues = new Set<string>();
+          sourceData.transformedRows.forEach((row: any) => {
+            const rowData = row.dimension_values || row;
+            const val = rowData[breakdownDimId] || (breakdownDimName ? rowData[breakdownDimName] : undefined);
+            if (val !== undefined && val !== null && val !== '') {
+              uniqueValues.add(String(val));
+            }
+          });
+
+          breakdownData[reportId] = { last_month: [], mtd: [], ytd: [] };
+          
+          (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+            uniqueValues.forEach((groupValue) => {
+              // Create filter for this specific group value
+              const groupFilter = {
+                dimensionId: breakdownDimId,
+                dimensionName: breakdownDimName,
+                values: [groupValue],
+              };
+              
+              // Apply both the dimension filter and the group filter
+              const filteredRows = sourceData.transformedRows.filter((row: any) => {
+                const rowData = row.dimension_values || row;
+                
+                // Check dimension filter first
+                if (dimensionFilter && dimensionFilter.values.length > 0) {
+                  const dimVal = rowData[dimensionFilter.dimensionId] || 
+                                 (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
+                  if (dimVal === undefined || !dimensionFilter.values.includes(String(dimVal))) {
+                    return false;
+                  }
+                }
+                
+                // Check group filter
+                const groupVal = rowData[groupFilter.dimensionId] || 
+                                 (groupFilter.dimensionName ? rowData[groupFilter.dimensionName] : undefined);
+                return groupVal !== undefined && groupFilter.values.includes(String(groupVal));
+              });
+              
+              const metrics = aggregateMetrics(
+                filteredRows,
+                card.selected_metrics,
+                dateRanges[tab],
+                undefined, // Already filtered
+                metricNameToIdMap
+              );
+
+              breakdownData[reportId][tab].push({
+                groupValue,
+                metrics,
+              });
+            });
+          });
+        }
       }
 
       toast.dismiss("refresh-pivot");
 
-      // Save to database
+      // Save to database including breakdown data
       const { error } = await (supabase.from("ai_summary_cards") as any)
         .update({
-          cached_pivot_data: pivotData,
+          cached_pivot_data: { ...pivotData, breakdown_data: breakdownData },
           pivot_data_refreshed_at: new Date().toISOString(),
         })
         .eq("id", card.id);
@@ -271,7 +352,7 @@ const AISummaryPage = () => {
       // Update local state
       setCards(prev => prev.map(c => 
         c.id === card.id 
-          ? { ...c, cached_pivot_data: pivotData, pivot_data_refreshed_at: new Date().toISOString() }
+          ? { ...c, cached_pivot_data: { ...pivotData, breakdown_data: breakdownData }, pivot_data_refreshed_at: new Date().toISOString() }
           : c
       ));
 
@@ -536,6 +617,7 @@ const AISummaryPage = () => {
                     selectedMetrics={card.selected_metrics}
                     accountId={accountId}
                     cachedPivotData={card.cached_pivot_data}
+                    reportConfigs={card.report_configs}
                   />
                 </CardContent>
                 
