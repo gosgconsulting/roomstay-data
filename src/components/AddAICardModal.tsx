@@ -87,7 +87,7 @@ interface EditingCard {
 interface AddAICardModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCardCreated?: () => void;
+  onCardCreated?: (newCardId?: string) => void;
   editingCard?: EditingCard | null;
 }
 
@@ -1006,18 +1006,21 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         toast.success("AI Summary card updated!");
       } else {
         // Create new card
-        const { error } = await (supabase.from("ai_summary_cards") as any).insert({
-          user_id: user.id,
-          account_id: accountId || null,
-          name: cardName,
-          report_ids: selectedReportIds,
-          report_configs: { ...reportConfigs, breakdown_configs: breakdownConfigs },
-          selected_metrics: selectedMetrics,
-          since_date: sinceDate,
-          ai_prompt: aiPrompt,
-          cached_pivot_data: cachedPivotData,
-          pivot_data_refreshed_at: new Date().toISOString(),
-        });
+        const { data: newCard, error } = await (supabase.from("ai_summary_cards") as any)
+          .insert({
+            user_id: user.id,
+            account_id: accountId || null,
+            name: cardName,
+            report_ids: selectedReportIds,
+            report_configs: { ...reportConfigs, breakdown_configs: breakdownConfigs },
+            selected_metrics: selectedMetrics,
+            since_date: sinceDate,
+            ai_prompt: aiPrompt,
+            cached_pivot_data: cachedPivotData,
+            pivot_data_refreshed_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
 
         if (error) {
           console.error("Error saving AI card:", error);
@@ -1026,6 +1029,12 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         }
 
         toast.success("AI Summary card created!");
+        
+        // Pass the new card ID to the callback
+        onCardCreated?.(newCard?.id);
+        onOpenChange(false);
+        resetState();
+        return;
       }
 
       onCardCreated?.();

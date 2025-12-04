@@ -36,6 +36,7 @@ const App = () => (
           <Route path="/tools/forecasting" element={<ForecastingTool />} />
           <Route path="/tools/forecasting/scenario/:scenarioId" element={<ForecastScenarioPage />} />
           <Route path="/tools/forecasting/:accountId" element={<ForecastingDashboard />} />
+          <Route path="/tools/ai-summary/:accountId" element={<AISummaryPage />} />
           <Route path="/tools/ai-summary/:accountId/:summaryId" element={<AISummaryPage />} />
           <Route path="/demo/sidebar" element={<ReportsSidebarDemo />} />
           <Route path="/shared/:slug" element={<SharedReport />} />
