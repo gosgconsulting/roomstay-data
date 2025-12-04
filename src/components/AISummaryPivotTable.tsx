@@ -251,10 +251,11 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
   const calculateTotals = (reportMetrics: ReportMetrics[]): Record<string, number> => {
     const totals: Record<string, number> = {};
-    selectedMetrics.forEach((m) => (totals[m] = 0));
+    const metrics = selectedMetrics || [];
+    metrics.forEach((m) => (totals[m] = 0));
 
     reportMetrics.forEach((rm) => {
-      selectedMetrics.forEach((metric) => {
+      metrics.forEach((metric) => {
         totals[metric] += rm.metrics[metric] || 0;
       });
     });
@@ -270,9 +271,11 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     );
   }
 
-  if (reportIds.length === 0 || selectedMetrics.length === 0) {
+  if (reportIds.length === 0 || !selectedMetrics || selectedMetrics.length === 0) {
     return null;
   }
+
+  const safeMetrics = selectedMetrics || [];
 
   return (
     <div className="w-full">
@@ -284,7 +287,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         </TabsList>
 
         {(["last_month", "mtd", "ytd"] as DateTab[]).map((tab) => {
-          const tabData = data[tab];
+          const tabData = data[tab] || [];
           const totals = calculateTotals(tabData);
 
           return (
@@ -294,7 +297,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   <TableHeader>
                     <TableRow className="bg-muted/50">
                       <TableHead className="font-semibold w-[200px]">Report</TableHead>
-                      {selectedMetrics.map((metric) => (
+                      {safeMetrics.map((metric) => (
                         <TableHead key={metric} className="font-semibold text-right">
                           {metric}
                         </TableHead>
@@ -310,7 +313,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                         <TableCell className="font-medium">
                           {reportData.reportName}
                         </TableCell>
-                        {selectedMetrics.map((metric) => (
+                        {safeMetrics.map((metric) => (
                           <TableCell key={metric} className="text-right tabular-nums">
                             {formatMetricValue(metric, reportData.metrics[metric] || 0)}
                           </TableCell>
@@ -320,7 +323,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                     {/* Total Row */}
                     <TableRow className="bg-muted font-semibold border-t-2">
                       <TableCell>Total</TableCell>
-                      {selectedMetrics.map((metric) => (
+                      {safeMetrics.map((metric) => (
                         <TableCell key={metric} className="text-right tabular-nums">
                           {formatMetricValue(metric, totals[metric] || 0)}
                         </TableCell>
