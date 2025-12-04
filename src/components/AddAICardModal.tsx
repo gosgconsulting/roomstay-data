@@ -27,6 +27,8 @@ import { Search, ChevronRight, ChevronLeft, Sparkles, Loader2, Calendar } from "
 import { 
   getDateRange, 
   aggregateMetrics, 
+  getDateGroupKey,
+  parseDate,
   type CachedPivotData, 
   type DateTab 
 } from "@/components/AISummaryPivotTable";
@@ -511,6 +513,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       mtd: [],
       ytd: [],
       breakdown_data: {},
+      date_breakdown_data: {},
     };
 
     const dateRanges: Record<DateTab, { start: Date; end: Date }> = {
@@ -742,6 +745,90 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         }
       });
     }
+    
+    // Always compute date breakdown data (grouped by week for last_month/mtd, by year for ytd)
+    // Initialize date breakdown data for this report
+    if (!pivotData.date_breakdown_data) {
+      pivotData.date_breakdown_data = {};
+    }
+    pivotData.date_breakdown_data[report.id] = { last_month: [], mtd: [], ytd: [] };
+    
+    // Build metric name to dimension ID mapping if not already done
+    const mappings = Array.isArray(dsData?.column_mappings) ? dsData.column_mappings : [];
+    const metricMap: Record<string, string> = {};
+    mappings.forEach((m: any) => {
+      if (m.dimensionName && m.dimensionId && m.dimensionId !== 'none') {
+        metricMap[m.dimensionName] = m.dimensionId;
+      }
+    });
+    
+    // Find date dimension ID
+    const dateDimId = metricMap['Date'] || metricMap['date'] || metricMap['Day'];
+    
+    // Get rows filtered by dimension filter
+    const baseRows = sourceData.transformedRows.filter((row: any) => {
+      if (!dimensionFilter || dimensionFilter.values.length === 0) return true;
+      const rowData = row.dimension_values || row;
+      const dimVal = rowData[dimensionFilter.dimensionId] || 
+                     (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
+      return dimVal !== undefined && dimensionFilter.values.includes(String(dimVal));
+    });
+    
+    (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+      const dateRange = dateRanges[tab];
+      
+      // Group rows by date group (week or year)
+      const dateGroups: Record<string, any[]> = {};
+      
+      baseRows.forEach((row: any) => {
+        const rowData = row.dimension_values || row;
+        let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
+        if (!dateValue && dateDimId) {
+          dateValue = rowData[dateDimId];
+        }
+        if (!dateValue) {
+          for (const [key, val] of Object.entries(rowData)) {
+            if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+              dateValue = val;
+              break;
+            }
+          }
+        }
+        
+        const rowDate = parseDate(dateValue);
+        if (!rowDate) return;
+        
+        // Check if within date range
+        if (rowDate < dateRange.start || rowDate > dateRange.end) return;
+        
+        const groupKey = getDateGroupKey(rowDate, tab);
+        if (!dateGroups[groupKey]) {
+          dateGroups[groupKey] = [];
+        }
+        dateGroups[groupKey].push(row);
+      });
+      
+      // Aggregate metrics for each date group
+      Object.entries(dateGroups).forEach(([dateGroup, groupRows]) => {
+        const metrics = aggregateMetrics(
+          groupRows,
+          selectedMetrics,
+          dateRange,
+          undefined,
+          metricNameToIdMap
+        );
+        
+        pivotData.date_breakdown_data![report.id][tab].push({
+          dateGroup,
+          metrics,
+        });
+      });
+      
+      // Sort by date group
+      pivotData.date_breakdown_data![report.id][tab].sort((a, b) => 
+        a.dateGroup.localeCompare(b.dateGroup)
+      );
+    });
   };
 
   const handleSave = async () => {
