@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { startOfMonth, endOfMonth, startOfWeek, subDays, subMonths, startOfYear, endOfYear, differenceInDays, subYears } from "date-fns";
@@ -78,17 +79,11 @@ export const FiltersBar = ({
   const [activeDimensions, setActiveDimensions] = useState<string[]>([]);
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
-    // Default to this month
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    return { from: startOfMonth, to: endOfMonth };
-  });
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [datePreset, setDatePreset] = useState<string>("this_month");
   const [showDimensionSelector, setShowDimensionSelector] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingFilters, setIsLoadingFilters] = useState(false);
+  const [isLoadingFilters, setIsLoadingFilters] = useState(true); // Start true to prevent flash
   const [compareEnabled, setCompareEnabled] = useState(false);
   const [compareType, setCompareType] = useState<string>("previous_period");
   const [compareDateRange, setCompareDateRange] = useState<DateRange | undefined>();
@@ -157,12 +152,11 @@ export const FiltersBar = ({
   useEffect(() => {
     if (reportId || accountId) {
       setIsInitialLoad(true);
+      setIsLoadingFilters(true);
       setActiveDimensions([]);
       setSelectedFilters({});
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-      setDateRange({ from: startOfMonth, to: endOfMonth });
+      // Don't pre-compute dates - let loadFilterSettings handle it
+      setDateRange(undefined);
       setDatePreset("this_month");
       setCompareEnabled(false);
       setCompareType("previous_period");
@@ -173,6 +167,8 @@ export const FiltersBar = ({
         if (reportId) {
           loadFilterSettings().finally(() => setIsInitialLoad(false));
         } else {
+          // No saved view - apply "this_month" preset
+          applyDatePreset("this_month");
           setIsInitialLoad(false);
         }
       });
@@ -461,11 +457,11 @@ export const FiltersBar = ({
             .update({
               date_range_start: null,
               date_range_end: null,
-              date_range_preset: "all_time"
+              date_range_preset: "this_month"
             })
             .eq("id", data.id);
             
-          console.log('[FiltersBar] Updated saved view to all_time');
+          console.log('[FiltersBar] Updated saved view to this_month');
         } else if (savedDateStart && savedDateEnd) {
           // Use saved date range if it's valid (not in future)
           console.log('[FiltersBar] Using saved date range:', savedDateStart.toISOString(), 'to', savedDateEnd.toISOString());
@@ -473,7 +469,7 @@ export const FiltersBar = ({
           setDatePreset("custom");
         } else {
           // Use saved date range preset, defaulting to all_time if not set
-          const preset = (data as any).date_range_preset || "all_time";
+          const preset = (data as any).date_range_preset || "this_month";
           console.log('[FiltersBar] Using saved preset:', preset);
           
           // Force all_time if preset is problematic
@@ -1017,26 +1013,33 @@ export const FiltersBar = ({
               })
             )}
 
-            <DateRangeFilter
-              dateRange={dateRange}
-              datePreset={datePreset}
-              compareEnabled={compareEnabled}
-              compareType={compareType}
-              onDatePresetChange={(preset) => {
-                if (preset === "all_time") {
-                  setDateRange(undefined);
-                  setDatePreset("all_time");
-                } else {
-                  applyDatePreset(preset);
-                }
-              }}
-              onDateRangeChange={(range) => {
-                setDateRange(range);
-                setDatePreset("custom");
-              }}
-              onCompareEnabledChange={setCompareEnabled}
-              onCompareTypeChange={setCompareType}
-            />
+            {isLoadingFilters ? (
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Date Range</span>
+                <Skeleton className="h-10 w-[200px]" />
+              </div>
+            ) : (
+              <DateRangeFilter
+                dateRange={dateRange}
+                datePreset={datePreset}
+                compareEnabled={compareEnabled}
+                compareType={compareType}
+                onDatePresetChange={(preset) => {
+                  if (preset === "all_time") {
+                    setDateRange(undefined);
+                    setDatePreset("all_time");
+                  } else {
+                    applyDatePreset(preset);
+                  }
+                }}
+                onDateRangeChange={(range) => {
+                  setDateRange(range);
+                  setDatePreset("custom");
+                }}
+                onCompareEnabledChange={setCompareEnabled}
+                onCompareTypeChange={setCompareType}
+              />
+            )}
 
             {/* Inline icon-only Reset Filters, bottom-aligned */}
             {hasActiveFilters() && (
