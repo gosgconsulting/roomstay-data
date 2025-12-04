@@ -948,8 +948,12 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               {/* Breakdown Tables */}
               {Object.keys(breakdownData).length > 0 && (
                 <div className="space-y-4">
-                  {Object.entries(breakdownData).map(([reportId, reportBreakdown]) => {
-                    const breakdownRows = reportBreakdown[tab] || [];
+                {Object.entries(breakdownData).map(([reportId, reportBreakdown]) => {
+                    const rawBreakdownRows = reportBreakdown[tab] || [];
+                    // Filter out rows where all metrics are 0
+                    const breakdownRows = rawBreakdownRows.filter(row => {
+                      return safeMetrics.some(metric => (row.metrics[metric] || 0) !== 0);
+                    });
                     if (breakdownRows.length === 0) return null;
                     
                     const breakdownTotals = calculateBreakdownTotals(breakdownRows);
