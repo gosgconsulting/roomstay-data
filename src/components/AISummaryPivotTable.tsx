@@ -476,7 +476,29 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     return null;
   }
 
-  const safeMetrics = selectedMetrics || [];
+  // Preferred metric display order
+  const METRIC_ORDER = [
+    "Impressions",
+    "Clicks", 
+    "CTR",
+    "Conversion rate",
+    "Bookings",
+    "CPC",
+    "Cost",
+    "Revenue",
+    "ROAS",
+    "Cost of sale",
+  ];
+  
+  // Sort metrics by preferred order
+  const safeMetrics = (selectedMetrics || []).slice().sort((a, b) => {
+    const aIndex = METRIC_ORDER.indexOf(a);
+    const bIndex = METRIC_ORDER.indexOf(b);
+    // If not in order list, put at end
+    const aOrder = aIndex === -1 ? 999 : aIndex;
+    const bOrder = bIndex === -1 ? 999 : bIndex;
+    return aOrder - bOrder;
+  });
   
   // Get breakdown data and report names
   const breakdownData = data.breakdown_data || {};
