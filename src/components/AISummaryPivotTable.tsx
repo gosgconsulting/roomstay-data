@@ -62,6 +62,7 @@ export interface CachedPivotData {
   mtd: ReportMetrics[];
   ytd: ReportMetrics[];
   breakdown_data?: Record<string, Record<DateTab, BreakdownRow[]>>;
+  breakdown_dimension_names?: Record<string, string>; // Map of reportId -> dimension name
   date_breakdown_data?: Record<string, Record<DateTab, DateBreakdownRow[]>>; // Legacy per-report
   combined_date_breakdown?: Record<DateTab, DateBreakdownRow[]>; // Combined across all reports
   // Comparison data
@@ -877,9 +878,11 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                     const breakdownTotals = calculateBreakdownTotals(breakdownRows);
                     const reportName = getReportName(reportId);
                     
-                    // Get dimension name from reportConfigs
+                    // Get dimension name from breakdown_dimension_names (stored in cached data)
+                    // Fallback to reportConfigs for backward compatibility, then to 'Group'
+                    const breakdownDimensionNames = data.breakdown_dimension_names || {};
                     const reportConfig = reportConfigs?.[reportId];
-                    const dimensionName = reportConfig?.dimensionName || 'Group';
+                    const dimensionName = breakdownDimensionNames[reportId] || reportConfig?.dimensionName || 'Group';
                     
                     // Get comparison breakdown data
                     const comparisonBreakdownData = comparisonType === "previous_period"
