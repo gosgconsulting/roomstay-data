@@ -234,7 +234,24 @@ serve(async (req) => {
     const pivotDataTyped = pivotData as CachedPivotData;
 
     // System prompt for executive summaries - focused on single period analysis
-    const getSystemPrompt = (periodLabel: string) => `You are an expert digital marketing analyst writing executive summaries for hotel and hospitality clients. Write in flowing paragraphs with specific numbers inline.
+    const getSystemPrompt = (periodLabel: string, periodKey: string) => {
+      const isMTD = periodKey === 'mtd';
+      
+      const mtdForecasting = isMTD ? `
+## MTD FORECASTING REQUIREMENTS
+Since this is Month-to-Date data, you MUST include:
+1. **Days Progress**: State how many days of data we have vs total days in the month (e.g., "With 15 days of data out of 30...")
+2. **Projected Performance**: Forecast the end-of-month figures:
+   - Projected Revenue by month end
+   - Projected Cost/Budget consumption
+   - Projected ROAS and Bookings
+   - Are we on track vs previous month's final numbers?
+3. **Pacing Analysis**: Is performance trending above or below the monthly run rate?
+
+Example: "With 18 days of data (60% of the month), current revenue stands at $180K. **Projected month-end revenue is $300K**, which would represent a +15% improvement over last month's $261K."
+` : '';
+
+      return `You are an expert digital marketing analyst writing executive summaries for hotel and hospitality clients. Write in flowing paragraphs with specific numbers inline.
 
 ## CRITICAL FORMATTING RULES
 
@@ -263,16 +280,17 @@ For channel sections, use numbered format:
 Use + prefix for positive changes and - prefix for negative changes. The UI will color them:
 - "+24.7%" will show green
 - "-12.3%" will show red
-
+${mtdForecasting}
 ## EXAMPLE OF GOOD ANALYSIS:
 "In November 2024, SEM was **the standout channel** with revenue of $258K (+24.7%) driven by improved conversion at 3.66% (+16.5%) and ROAS at 32x (+29.8%). Despite lower clicks at 11K (-1.1%), efficiency gains offset volume decline."
 
 ## Output Structure (FOCUSED ON ${periodLabel.toUpperCase()} ONLY)
-1. **Executive Summary** - 2-3 sentences with the headline story and key numbers
+1. **Executive Summary** - 2-3 sentences with the headline story and key numbers${isMTD ? ' including projected month-end figures' : ''}
 2. **Channel Analysis** - Use "**1. Metasearch**", "**2. SEM**", "**3. Social**". Each channel gets a paragraph with numbers inline.
-3. **Key Takeaway** - One actionable insight
+3. **Key Takeaway** - One actionable insight${isMTD ? ' about pacing or forecast' : ''}
 
 ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
+    };
 
     // Helper to build data context for a specific period
     const buildPeriodContext = (
@@ -351,7 +369,7 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
           body: JSON.stringify({
             model: 'openai/gpt-4-turbo',
             messages: [
-              { role: 'system', content: getSystemPrompt(tab.label) },
+              { role: 'system', content: getSystemPrompt(tab.label, tab.key) },
               { role: 'user', content: `Please analyze the following ${tab.label} performance data and generate an executive summary.\n\n${dataContext}` }
             ],
             max_tokens: 2500,
