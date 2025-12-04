@@ -157,7 +157,7 @@ const FormattedAISummary: React.FC<FormattedAISummaryProps> = ({ summary }) => {
         const bulletText = trimmedLine.replace(/^[-•*]\s*/, "");
         elements.push(
           <div key={`bullet-${keyIndex++}`} className="flex items-start gap-2 mb-2 ml-4">
-            <span className="text-foreground mt-0.5 flex-shrink-0">-</span>
+            <span className="text-primary mt-1.5 flex-shrink-0">•</span>
             <span className="text-foreground/90">{formatInlineText(bulletText)}</span>
           </div>
         );
