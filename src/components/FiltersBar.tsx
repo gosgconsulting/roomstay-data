@@ -994,18 +994,25 @@ export const FiltersBar = ({
               />
             )}
 
-            {/* Show loading placeholders for dimension filters */}
-            {(isLoading || isInitialLoad) && activeDimensions.length === 0 ? (
+            {/* Show loading placeholders while filters are being initialized */}
+            {(isLoading || isInitialLoad) ? (
               <>
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground">Loading...</span>
+                  <span className="text-xs text-muted-foreground">Account</span>
                   <div className="h-10 w-[180px] bg-muted animate-pulse rounded-md border" />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground">Loading...</span>
+                  <span className="text-xs text-muted-foreground">Filter</span>
                   <div className="h-10 w-[180px] bg-muted animate-pulse rounded-md border" />
                 </div>
               </>
+            ) : activeDimensions.length === 0 ? (
+              // No active dimensions configured - show message in edit mode, nothing in view mode
+              isEditMode ? (
+                <div className="flex items-center text-sm text-muted-foreground">
+                  No filters configured. Click settings to add filters.
+                </div>
+              ) : null
             ) : (
               activeDimensions.map((dimId) => {
                 const dimension = dimensions.find(d => d.id === dimId);
