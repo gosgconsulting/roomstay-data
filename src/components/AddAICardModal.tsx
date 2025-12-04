@@ -480,29 +480,126 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       ytd: getDateRange("ytd"),
     };
 
-    for (const reportId of selectedReportIds) {
-      const report = reports.find(r => r.id === reportId);
-      if (!report) continue;
-
-      const sourceData = sourceDataCache[reportId];
-      if (!sourceData?.transformedRows) continue;
-
-      (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
-        const metrics = aggregateMetrics(
-          sourceData.transformedRows,
-          selectedMetrics,
-          dateRanges[tab]
-        );
-
-        pivotData[tab].push({
-          reportId: report.id,
-          reportName: report.name,
-          metrics,
-        });
-      });
+    const { user } = await getUser();
+    if (!user) {
+      console.error("[computePivotData] No user found");
+      return pivotData;
     }
 
+    console.log("[computePivotData] Starting for reports:", selectedReportIds);
+    console.log("[computePivotData] Reports state:", reports);
+    console.log("[computePivotData] Report configs:", reportConfigs);
+
+    for (const reportId of selectedReportIds) {
+      const report = reports.find(r => r.id === reportId);
+      if (!report) {
+        console.warn(`[computePivotData] Report ${reportId} not found in state`);
+        // Try to fetch report name from database
+        const { data: reportData } = await supabase
+          .from("reports")
+          .select("id, name")
+          .eq("id", reportId)
+          .single();
+        
+        if (!reportData) {
+          console.error(`[computePivotData] Could not fetch report ${reportId}`);
+          continue;
+        }
+        
+        // Use fetched report data
+        const fetchedReport = reportData;
+        
+        // Continue with fetched report
+        await processReport(fetchedReport, user.id, dateRanges, pivotData);
+      } else {
+        await processReport(report, user.id, dateRanges, pivotData);
+      }
+    }
+
+    console.log("[computePivotData] Final pivot data:", pivotData);
     return pivotData;
+  };
+
+  const processReport = async (
+    report: { id: string; name: string },
+    userId: string,
+    dateRanges: Record<DateTab, { start: Date; end: Date }>,
+    pivotData: CachedPivotData
+  ) => {
+    // Get source data - either from cache or fetch fresh
+    let sourceData = sourceDataCache[report.id];
+    
+    if (!sourceData?.transformedRows) {
+      console.log(`[computePivotData] Fetching data source for report ${report.id}`);
+      
+      // Fetch data source and source data
+      const { data: dsData, error: dsError } = await supabase
+        .from("data_sources")
+        .select("*")
+        .eq("report_id", report.id)
+        .limit(1)
+        .single();
+
+      if (dsError || !dsData) {
+        console.error(`[computePivotData] No data source for report ${report.id}:`, dsError);
+        return;
+      }
+
+      console.log(`[computePivotData] Fetching source data for ${report.name}`);
+      try {
+        sourceData = await fetchSourceData(dsData as any, userId, accountId);
+        console.log(`[computePivotData] Got ${sourceData?.transformedRows?.length || 0} rows for ${report.name}`);
+      } catch (err) {
+        console.error(`[computePivotData] Error fetching source data for report ${report.id}:`, err);
+        return;
+      }
+    }
+
+    if (!sourceData?.transformedRows || sourceData.transformedRows.length === 0) {
+      console.warn(`[computePivotData] No transformed rows for report ${report.id}`);
+      return;
+    }
+
+    // Get dimension filter config for this report
+    const filterConfig = reportConfigs[report.id];
+    let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
+    
+    if (filterConfig?.dimensionId && filterConfig.selectedValues.length > 0) {
+      // Get dimension name - from cache or fetch from DB
+      let dimName = dimensions[report.id]?.find(d => d.id === filterConfig.dimensionId)?.name;
+      
+      if (!dimName) {
+        // Fetch dimension name from database
+        const { data: dimData } = await supabase
+          .from("dimensions")
+          .select("name")
+          .eq("id", filterConfig.dimensionId)
+          .single();
+        dimName = dimData?.name;
+      }
+      
+      dimensionFilter = {
+        dimensionId: filterConfig.dimensionId,
+        dimensionName: dimName,
+        values: filterConfig.selectedValues,
+      };
+      console.log(`[computePivotData] Applying filter for ${report.name}:`, dimensionFilter);
+    }
+
+    (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+      const metrics = aggregateMetrics(
+        sourceData.transformedRows,
+        selectedMetrics,
+        dateRanges[tab],
+        dimensionFilter
+      );
+
+      pivotData[tab].push({
+        reportId: report.id,
+        reportName: report.name,
+        metrics,
+      });
+    });
   };
 
   const handleSave = async () => {
@@ -514,9 +611,13 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         return;
       }
 
-      // Compute pivot data from cached source data
-      toast.info("Computing pivot data...");
+      // Compute pivot data - fetch from sources and apply filters
+      toast.info("Fetching data from sources and computing pivot table...", {
+        duration: 10000,
+        id: "computing-pivot",
+      });
       const cachedPivotData = await computePivotData();
+      toast.dismiss("computing-pivot");
 
       // Generate a name based on selected reports
       const cardName = selectedReports.length > 0 
