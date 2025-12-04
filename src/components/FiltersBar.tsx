@@ -994,26 +994,40 @@ export const FiltersBar = ({
               />
             )}
 
-            {activeDimensions.map((dimId) => {
-              const dimension = dimensions.find(d => d.id === dimId);
-              if (!dimension) return null;
-              return (
-                <DimensionFilter
-                  key={dimId}
-                  dimension={{ id: dimId, name: dimension.name }}
-                  isLoading={isLoadingFilters}
-                  values={dimensionValues[dimId] || []}
-                  searchTerm={searchTerms[dimId] || ""}
-                  selectedValues={selectedFilters[dimId] || []}
-                  open={!!openPopovers[dimId]}
-                  onOpenChange={(o) => setOpenPopovers({ ...openPopovers, [dimId]: o })}
-                  onSearchTermChange={(term) => setSearchTerms({ ...searchTerms, [dimId]: term })}
-                  onSelectAll={() => handleSelectAll(dimId)}
-                  onDeselectAll={() => handleDeselectAll(dimId)}
-                  onToggleValue={(value) => handleFilterChange(dimId, value)}
-                />
-              );
-            })}
+            {/* Show loading placeholders for dimension filters */}
+            {(isLoading || isInitialLoad) && activeDimensions.length === 0 ? (
+              <>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">Loading...</span>
+                  <div className="h-10 w-[180px] bg-muted animate-pulse rounded-md border" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">Loading...</span>
+                  <div className="h-10 w-[180px] bg-muted animate-pulse rounded-md border" />
+                </div>
+              </>
+            ) : (
+              activeDimensions.map((dimId) => {
+                const dimension = dimensions.find(d => d.id === dimId);
+                if (!dimension) return null;
+                return (
+                  <DimensionFilter
+                    key={dimId}
+                    dimension={{ id: dimId, name: dimension.name }}
+                    isLoading={isLoadingFilters}
+                    values={dimensionValues[dimId] || []}
+                    searchTerm={searchTerms[dimId] || ""}
+                    selectedValues={selectedFilters[dimId] || []}
+                    open={!!openPopovers[dimId]}
+                    onOpenChange={(o) => setOpenPopovers({ ...openPopovers, [dimId]: o })}
+                    onSearchTermChange={(term) => setSearchTerms({ ...searchTerms, [dimId]: term })}
+                    onSelectAll={() => handleSelectAll(dimId)}
+                    onDeselectAll={() => handleDeselectAll(dimId)}
+                    onToggleValue={(value) => handleFilterChange(dimId, value)}
+                  />
+                );
+              })
+            )}
 
             <DateRangeFilter
               dateRange={dateRange}
