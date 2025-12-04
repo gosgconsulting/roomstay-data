@@ -923,12 +923,12 @@ const AISummaryPage = () => {
                   />
                 </CardContent>
                 
-                {/* AI Summary Content */}
+                {/* Generate/Regenerate Button Bar */}
                 <CardContent className="p-0 border-t">
-                  <div className="bg-gradient-to-r from-primary/5 to-primary/10 px-4 py-3 border-b flex items-center justify-between">
+                  <div className="bg-gradient-to-r from-primary/5 to-primary/10 px-4 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-primary" />
-                      <h3 className="font-semibold text-sm">Executive Summary</h3>
+                      <h3 className="font-semibold text-sm">AI Executive Summary</h3>
                     </div>
                     <Button 
                       variant="outline"
@@ -942,7 +942,7 @@ const AISummaryPage = () => {
                           <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
                           Generating...
                         </>
-                      ) : card.generated_summary ? (
+                      ) : card.cached_pivot_data?.executive_summaries ? (
                         <>
                           <Sparkles className="h-3 w-3 mr-1.5" />
                           Regenerate
@@ -955,32 +955,12 @@ const AISummaryPage = () => {
                       )}
                     </Button>
                   </div>
-                  <div className="min-h-[200px] flex items-center justify-center">
-                    {generatingCardId === card.id ? (
-                      <div className="flex flex-col items-center gap-4 text-muted-foreground py-8">
-                        <Loader2 className="h-12 w-12 animate-spin" />
-                        <p>Generating AI summary...</p>
-                      </div>
-                    ) : card.generated_summary ? (
-                      <div className="p-6 w-full">
-                        <FormattedAISummary summary={card.generated_summary} />
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-4 text-muted-foreground py-8">
-                        <div className="relative">
-                          <div className="absolute -top-2 -right-2">
-                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21 8 14l-6-4.6h7.6L12 2z" />
-                            </svg>
-                          </div>
-                          <div className="w-16 h-16 rounded-full border-2 border-muted flex items-center justify-center">
-                            <Sparkles className="h-8 w-8" />
-                          </div>
-                        </div>
-                        <p className="text-sm">Click "Generate" to create an AI executive summary</p>
-                      </div>
-                    )}
-                  </div>
+                  {generatingCardId === card.id && (
+                    <div className="flex items-center justify-center py-4 border-t bg-muted/30">
+                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                      <p className="text-sm text-muted-foreground">Generating AI summary...</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
