@@ -84,12 +84,23 @@ const formatNumber = (value: number): string => {
 
 const formatMetricValue = (metric: string, value: number): string => {
   const lowerMetric = metric.toLowerCase();
-  if (lowerMetric.includes("rate") || lowerMetric.includes("ctr") || lowerMetric.includes("roas") || lowerMetric.includes("cos") || lowerMetric === "cost of sale") {
+  
+  // Percentage metrics (rates, CTR, Cost of sale)
+  if (lowerMetric.includes("rate") || lowerMetric === "ctr" || lowerMetric === "cost of sale" || lowerMetric === "cos") {
     return value.toFixed(2) + "%";
   }
-  if (lowerMetric.includes("cost") || lowerMetric.includes("revenue") || lowerMetric.includes("cpc") || lowerMetric.includes("spend")) {
+  
+  // ROAS is a multiplier, not percentage
+  if (lowerMetric === "roas") {
+    return value.toFixed(2) + "x";
+  }
+  
+  // Currency metrics (Cost, Revenue, CPC, Spend) - but NOT "cost of sale"
+  if ((lowerMetric === "cost" || lowerMetric === "revenue" || lowerMetric === "cpc" || lowerMetric === "spend")) {
     return "$" + formatNumber(value);
   }
+  
+  // Default: raw number
   return formatNumber(value);
 };
 
@@ -130,8 +141,8 @@ export const parseDate = (value: any): Date | null => {
 // Formula metrics that should be calculated, not summed
 export const FORMULA_METRICS = ['CTR', 'ROAS', 'Conversion rate', 'CPC', 'Cost of sale', 'COS'];
 
-// Base metrics needed for formula calculations
-export const BASE_METRICS = ['Impressions', 'Clicks', 'Cost', 'Revenue', 'Conversions'];
+// Base metrics needed for formula calculations (including alternatives like Bookings)
+export const BASE_METRICS = ['Impressions', 'Clicks', 'Cost', 'Revenue', 'Conversions', 'Bookings'];
 
 export const calculateFormulaMetrics = (baseValues: Record<string, number>): Record<string, number> => {
   const result: Record<string, number> = {};
@@ -139,10 +150,11 @@ export const calculateFormulaMetrics = (baseValues: Record<string, number>): Rec
   const clicks = baseValues['Clicks'] || 0;
   const cost = baseValues['Cost'] || 0;
   const revenue = baseValues['Revenue'] || 0;
-  const conversions = baseValues['Conversions'] || 0;
+  // Use Conversions, or fall back to Bookings if Conversions is 0
+  const conversions = baseValues['Conversions'] || baseValues['Bookings'] || 0;
 
   result['CTR'] = impressions > 0 ? (clicks / impressions) * 100 : 0;
-  result['ROAS'] = cost > 0 ? (revenue / cost) * 100 : 0;
+  result['ROAS'] = cost > 0 ? revenue / cost : 0; // ROAS is a multiplier, not percentage
   result['Conversion rate'] = clicks > 0 ? (conversions / clicks) * 100 : 0;
   result['CPC'] = clicks > 0 ? cost / clicks : 0;
   result['Cost of sale'] = revenue > 0 ? (cost / revenue) * 100 : 0;
