@@ -724,19 +724,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
           return (
             <TabsContent key={tab} value={tab} className="mt-0 space-y-6">
-              {/* Executive Summary for this tab */}
-              {data.executive_summaries?.[tab] && (
-                <div className="border rounded-lg overflow-hidden bg-gradient-to-br from-primary/5 to-primary/10">
-                  <div className="px-4 py-2 border-b bg-primary/10 flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    <h3 className="font-semibold text-sm">Executive Summary</h3>
-                  </div>
-                  <div className="p-4">
-                    <FormattedAISummary summary={data.executive_summaries[tab]} />
-                  </div>
-                </div>
-              )}
-              
               {/* Main Summary Table */}
               <div className="border rounded-lg overflow-hidden">
                 <Table>
@@ -1005,6 +992,19 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                       </div>
                     );
                   })}
+                </div>
+              )}
+              
+              {/* Executive Summary at the bottom */}
+              {data.executive_summaries?.[tab] && (
+                <div className="border rounded-lg overflow-hidden bg-background">
+                  <div className="px-4 py-3 border-b bg-muted/30 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <h3 className="font-semibold">Executive Summary</h3>
+                  </div>
+                  <div className="p-6 bg-background">
+                    <FormattedAISummary summary={data.executive_summaries[tab]} />
+                  </div>
                 </div>
               )}
             </TabsContent>
