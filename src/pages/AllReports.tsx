@@ -388,10 +388,9 @@ export default function AllReports() {
                 <div className="space-y-2">
                   <h3 className="text-base font-semibold text-foreground">Performance Chart</h3>
                   <KPIChart
-                    reportId="consolidated"
-                    filters={getCombinedFilters('consolidated')}
+                    reportId={selectedReportIds[0] || reports[0]?.id || null}
                     accountId={accountId}
-                    dimensions={[]}
+                    filters={getCombinedFilters('consolidated')}
                     key={`charts-${loadingGeneration}`}
                     onLoadingComplete={() => markComponentLoaded('chart')}
                   />

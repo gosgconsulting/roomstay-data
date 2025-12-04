@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
-import { KPIMetricsCards } from "@/components/KPIMetricsCardsFixed";
+import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import KPIChartsGrid from "@/components/KPIChartsGrid";
 import { PerformanceTable } from "@/components/PerformanceTable";
 

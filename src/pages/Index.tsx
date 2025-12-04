@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
-import { KPIMetricsCards } from "@/components/KPIMetricsCardsFixed";
-import { KPIChart } from "@/components/KPIChartFixed";
+import { KPIMetricsCards } from "@/components/KPIMetricsCards";
+import { KPIChart } from "@/components/KPIChart";
 import { PerformanceTable } from "@/components/PerformanceTable";
 
 import { KPISettingsModal } from "@/components/KPISettingsModal";
