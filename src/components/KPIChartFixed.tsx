@@ -562,24 +562,19 @@ export function KPIChart({
     return (
       <Card className="shadow-sm">
         <CardHeader className="flex flex-col items-end">
-          <div className="flex items-center gap-2">
-            <Select value={selectedMetric} onValueChange={handleMetricChange}>
-              <SelectTrigger className="w-40 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availableMetrics.map((metric) => (
-                  <SelectItem key={metric} value={metric}>
-                    {metric}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <div className="h-8 w-40 bg-muted rounded animate-pulse" />
         </CardHeader>
         <CardContent>
-          <div className="h-56 flex items-center justify-center">
-            <div className="animate-pulse text-muted-foreground">Loading chart data...</div>
+          <div className="h-56 flex items-end justify-between gap-2 px-4 pb-6">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <div 
+                  className="w-full bg-muted rounded-t animate-pulse" 
+                  style={{ height: `${Math.random() * 60 + 20}%` }}
+                />
+                <div className="h-2 w-6 bg-muted rounded animate-pulse" />
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -606,8 +601,13 @@ export function KPIChart({
           </div>
         </CardHeader>
         <CardContent>
-          <div className="h-56 flex items-center justify-center text-muted-foreground">
-            No chart data for selected date range
+          <div className="h-56 flex items-end justify-between gap-2 px-4 pb-6">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <div className="w-full bg-muted/40 rounded-t" style={{ height: '20%' }} />
+                <div className="h-2 w-6 bg-muted/40 rounded" />
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

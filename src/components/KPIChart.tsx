@@ -278,12 +278,22 @@ export function KPIChart({ reportId, filters, accountId, visibilityRefreshTrigge
   if (isLoading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Performance Chart</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div className="h-5 w-32 bg-muted rounded animate-pulse" />
+          <div className="h-9 w-48 bg-muted rounded animate-pulse" />
         </CardHeader>
         <CardContent>
-          <div className="h-80 flex items-center justify-center">
-            <div className="animate-pulse text-gray-500">Loading chart data...</div>
+          <div className="h-80 flex items-end justify-between gap-4 px-8 pb-8">
+            {/* Chart skeleton bars */}
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                <div 
+                  className="w-full bg-muted rounded-t animate-pulse" 
+                  style={{ height: `${Math.random() * 60 + 20}%` }}
+                />
+                <div className="h-3 w-8 bg-muted rounded animate-pulse" />
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -311,8 +321,17 @@ export function KPIChart({ reportId, filters, accountId, visibilityRefreshTrigge
           )}
         </CardHeader>
         <CardContent>
-          <div className="h-80 flex items-center justify-center text-gray-500">
-            No chart data for selected date range
+          <div className="h-80 flex items-end justify-between gap-4 px-8 pb-8">
+            {/* Empty state skeleton bars */}
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                <div 
+                  className="w-full bg-muted/50 rounded-t" 
+                  style={{ height: '20%' }}
+                />
+                <div className="h-3 w-8 bg-muted/50 rounded" />
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
