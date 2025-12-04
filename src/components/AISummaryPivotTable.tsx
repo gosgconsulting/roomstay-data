@@ -90,9 +90,9 @@ const formatMetricValue = (metric: string, value: number): string => {
     return value.toFixed(2) + "%";
   }
   
-  // ROAS is a multiplier, not percentage
+  // ROAS is a multiplier - show as whole number with x
   if (lowerMetric === "roas") {
-    return value.toFixed(2) + "x";
+    return Math.round(value) + "x";
   }
   
   // Currency metrics (Cost, Revenue, CPC, Spend) - but NOT "cost of sale"
