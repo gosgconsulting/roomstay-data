@@ -681,16 +681,17 @@ const AISummaryPage = () => {
         return;
       }
 
-      // Merge table insights into cached_pivot_data
+      // Merge table insights and executive summaries into cached_pivot_data
       const updatedPivotData = {
         ...card.cached_pivot_data,
-        table_insights: result.tableInsights || {}
+        table_insights: result.tableInsights || {},
+        executive_summaries: result.executiveSummaries || {}
       };
 
       // Update the card with the generated summary and table insights
       const { error: updateError } = await (supabase.from("ai_summary_cards") as any)
         .update({
-          generated_summary: result.summary,
+          generated_summary: result.summary, // Backwards compatibility (last_month)
           cached_pivot_data: updatedPivotData,
           last_generated_at: new Date().toISOString()
         })
