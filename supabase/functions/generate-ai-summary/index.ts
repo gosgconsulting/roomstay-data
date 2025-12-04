@@ -299,42 +299,38 @@ serve(async (req) => {
       dataContext += "\n";
     }
 
-    // Enhanced system prompt for executive summaries - focused on End of Month reporting
-    const systemPrompt = `You are an expert digital marketing analyst providing end-of-month executive summaries for hotel and hospitality clients. Your analysis should be strategic, actionable, and focused on business impact.
+    // Enhanced system prompt for executive summaries - focused on narrative paragraphs
+    const systemPrompt = `You are an expert digital marketing analyst writing executive summaries for hotel and hospitality clients. Write in flowing paragraphs, NOT bullet lists of individual KPIs.
 
-## Your Role
-- Provide clear, concise executive summaries based on completed month performance data
-- Focus on insights that matter to senior stakeholders and decision-makers
-- Highlight both wins and areas requiring attention
-- Consider seasonality and industry trends in hospitality
-- This report is for client delivery, so be professional and clear
+## CRITICAL WRITING RULES
+1. **NO LISTING ALL KPIS** - Tables already show the numbers. Your job is to explain the story BEHIND the numbers.
+2. **WRITE IN PARAGRAPHS** - Use narrative prose, not bullet points with metric values.
+3. **GROUP KPIS BY CATEGORY** when explaining performance:
+   - **Volume metrics**: Impressions, Clicks, Bookings (traffic & demand indicators)
+   - **Efficiency metrics**: CTR, Conversion Rate, ROAS (performance quality)
+   - **Financial metrics**: Revenue, Cost, CPC, Cost of Sale (money impact)
+4. **EXPLAIN CAUSALITY** - e.g., "Revenue grew +24% driven by higher traffic (+15% clicks) combined with improved conversion rate (+16%)."
+5. **ONLY MENTION RELEVANT KPIS** - Don't list every metric. Focus on what tells the story.
+6. **USE BOLD for key numbers and important insights** - Make critical data stand out.
 
-## Analysis Guidelines
-1. **Start with the headline**: What's the most important insight from last month?
-2. **Compare periods intelligently**: 
-   - Last Month vs Previous Month for recent trends
-   - Last Month vs Same Month Last Year for YoY comparison
-   - YTM (Year to Month) vs Same Period Last Year for cumulative performance
-3. **Identify patterns**: Look for consistent trends across channels
-4. **Prioritize by impact**: Focus on metrics that affect revenue and ROI most
-5. **Be specific**: Use actual numbers and percentages from the data
+## EXAMPLE OF GOOD ANALYSIS (DO THIS):
+"SEM delivered exceptional revenue growth of **+24.7%** this month, driven by a combination of improved efficiency and volume. **Conversion rates jumped +16.5%**, indicating better traffic quality, while **ROAS reached 32x** - a **+29.8% improvement**. This efficiency gain allowed the channel to generate more revenue despite a slight **-1.1% decrease in clicks**, proving that quality outweighed quantity."
 
-## Key Metrics Interpretation
-- **ROAS**: Target typically 10x+ for profitable campaigns
-- **Cost of Sale (COS)**: Lower is better, typically target <15%
-- **CTR**: Varies by channel (Metasearch ~5%, SEM ~3%, Social ~1%)
-- **Conversion Rate**: Industry benchmark ~3-5%
-- **CPC**: Monitor for cost efficiency
+## EXAMPLE OF BAD ANALYSIS (DON'T DO THIS):
+"SEM Performance:
+- Impressions: 521,421 (-19.4%)
+- Clicks: 11,068 (-1.1%)
+- Cost: $8,067.73 (-3.9%)
+- Revenue: $258,335.21 (+24.7%)"
 
-## Output Format
-Structure your response as follows:
-1. **Executive Summary** (2-3 sentences capturing the key story of the month)
-2. **Last Month Highlights by Channel** (bullet points per channel with key metrics)
-3. **Year-to-Date Progress** (how cumulative performance compares to last year)
-4. **Key Trends & Insights** (what's improving, what needs attention)
-5. **Recommendations for Next Month** (specific, actionable next steps)
+## Output Structure
+Write 3-4 paragraphs covering:
+1. **Overall Performance Summary** - The headline story across all channels (2-3 sentences)
+2. **Channel Analysis** - For each channel, explain WHY performance changed using grouped metrics. Connect the dots between traffic, efficiency, and revenue.
+3. **Year-to-Date Context** - How does monthly performance fit into the bigger picture?
+4. **Key Takeaway** - One actionable insight or recommendation
 
-${aiPrompt ? `\n## Additional Instructions from User\n${aiPrompt}` : ''}`;
+${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
 
     console.log('Calling OpenRouter API with GPT-4 Turbo...');
 
