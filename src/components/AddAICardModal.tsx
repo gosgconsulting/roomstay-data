@@ -19,7 +19,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
-import { Search, ChevronRight, ChevronLeft, Sparkles } from "lucide-react";
+import { useSourceData, type SourceDataResult } from "@/hooks/dataSources/useSourceData";
+import { extractUniqueDimensionValues } from "@/lib/filters/extractDimensionValues";
+import { Search, ChevronRight, ChevronLeft, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Report {
@@ -27,13 +29,24 @@ interface Report {
   name: string;
 }
 
+interface DataSource {
+  id: string;
+  report_id: string;
+  name: string;
+  source_type: "google_sheets" | "csv_url";
+  spreadsheet_id: string | null;
+  google_sheets_url: string | null;
+  csv_url: string | null;
+  tab_name: string | null;
+  header_row: number;
+  column_mappings: any[] | null;
+  updated_at: string;
+}
+
 interface Dimension {
   id: string;
   name: string;
-}
-
-interface DimensionValue {
-  value: string;
+  type: string;
 }
 
 interface ReportDimensionConfig {
@@ -47,7 +60,7 @@ interface AddAICardModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type Step = "select-reports" | "configure-dimensions" | "ai-prompt";
+type Step = "select-reports" | "filter-dimensions" | "ai-prompt";
 
 export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
   const { accountId } = useParams();
@@ -55,11 +68,10 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
   const [reports, setReports] = useState<Report[]>([]);
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
   const [activeReportTab, setActiveReportTab] = useState<string | null>(null);
+  const [dataSources, setDataSources] = useState<Record<string, DataSource>>({});
   const [dimensions, setDimensions] = useState<Record<string, Dimension[]>>({});
-  const [dimensionValues, setDimensionValues] = useState<Record<string, DimensionValue[]>>({});
   const [reportConfigs, setReportConfigs] = useState<Record<string, ReportDimensionConfig>>({});
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
 
   // Fetch reports for the account
@@ -83,48 +95,79 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
     }
   }, [accountId, open]);
 
-  // Fetch dimensions for active report
+  // Fetch data source and dimensions for active report
   useEffect(() => {
-    const fetchDimensions = async () => {
-      if (!activeReportTab || dimensions[activeReportTab]) return;
+    const fetchDataSourceAndDimensions = async () => {
+      if (!activeReportTab || dataSources[activeReportTab]) return;
 
-      const { data, error } = await supabase
-        .from("dimensions")
-        .select("id, name")
-        .or(`report_id.eq.${activeReportTab},account_id.eq.${accountId}`)
-        .in("type", ["text", "vlookup"])
-        .order("name");
+      // Fetch data source for the report
+      const { data: dsData, error: dsError } = await supabase
+        .from("data_sources")
+        .select("*")
+        .eq("report_id", activeReportTab)
+        .limit(1)
+        .single();
 
-      if (!error && data) {
-        setDimensions(prev => ({ ...prev, [activeReportTab]: data }));
+      if (dsError || !dsData) {
+        console.error("Error fetching data source:", dsError);
+        return;
+      }
+
+      setDataSources(prev => ({ ...prev, [activeReportTab]: dsData as DataSource }));
+
+      // Extract dimension IDs from column mappings
+      const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
+      const dimensionIds = columnMappings
+        .filter((m: any) => m.dimensionId)
+        .map((m: any) => m.dimensionId);
+
+      if (dimensionIds.length > 0) {
+        // Fetch dimension details
+        const { data: dimData, error: dimError } = await supabase
+          .from("dimensions")
+          .select("id, name, type")
+          .in("id", dimensionIds)
+          .in("type", ["text", "vlookup"])
+          .order("name");
+
+        if (!dimError && dimData) {
+          setDimensions(prev => ({ ...prev, [activeReportTab]: dimData as Dimension[] }));
+        }
+      } else {
+        setDimensions(prev => ({ ...prev, [activeReportTab]: [] }));
       }
     };
 
-    fetchDimensions();
-  }, [activeReportTab, accountId]);
+    fetchDataSourceAndDimensions();
+  }, [activeReportTab]);
 
-  // Fetch dimension values when dimension is selected
-  const fetchDimensionValues = async (reportId: string, dimensionId: string) => {
-    const key = `${reportId}-${dimensionId}`;
-    if (dimensionValues[key]) return;
+  // Get active data source for useSourceData hook
+  const activeDataSource = activeReportTab ? dataSources[activeReportTab] : null;
+  
+  // Fetch source data using the same hook as reports
+  const { data: sourceData, isLoading: isLoadingSourceData } = useSourceData(
+    activeDataSource as any,
+    accountId,
+    { enabled: !!activeDataSource }
+  );
 
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("get-unique-dimension-values", {
-        body: { reportId, dimensionId },
-      });
+  // Extract dimension values from source data
+  const currentDimensionValues = useMemo(() => {
+    if (!activeReportTab || !sourceData?.transformedRows) return [];
+    const config = reportConfigs[activeReportTab];
+    if (!config?.dimensionId) return [];
 
-      if (!error && data?.values) {
-        setDimensionValues(prev => ({
-          ...prev,
-          [key]: data.values.map((v: string) => ({ value: v })),
-        }));
-      }
-    } catch (err) {
-      console.error("Error fetching dimension values:", err);
-    }
-    setIsLoading(false);
-  };
+    return extractUniqueDimensionValues(sourceData.transformedRows, {
+      dimensionId: config.dimensionId,
+    });
+  }, [activeReportTab, sourceData, reportConfigs]);
+
+  const filteredValues = useMemo(() => {
+    if (!searchQuery) return currentDimensionValues;
+    return currentDimensionValues.filter(v =>
+      v.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [currentDimensionValues, searchQuery]);
 
   const handleReportToggle = (reportId: string) => {
     setSelectedReportIds(prev =>
@@ -143,7 +186,6 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
         selectedValues: prev[reportId]?.selectedValues || [],
       },
     }));
-    fetchDimensionValues(reportId, dimensionId);
   };
 
   const handleValueToggle = (reportId: string, value: string) => {
@@ -159,21 +201,6 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
     });
   };
 
-  const currentDimensionValues = useMemo(() => {
-    if (!activeReportTab) return [];
-    const config = reportConfigs[activeReportTab];
-    if (!config?.dimensionId) return [];
-    const key = `${activeReportTab}-${config.dimensionId}`;
-    return dimensionValues[key] || [];
-  }, [activeReportTab, reportConfigs, dimensionValues]);
-
-  const filteredValues = useMemo(() => {
-    if (!searchQuery) return currentDimensionValues;
-    return currentDimensionValues.filter(v =>
-      v.value.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [currentDimensionValues, searchQuery]);
-
   const selectedReports = useMemo(
     () => reports.filter(r => selectedReportIds.includes(r.id)),
     [reports, selectedReportIds]
@@ -181,18 +208,18 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
 
   const handleNext = () => {
     if (step === "select-reports" && selectedReportIds.length > 0) {
-      setStep("configure-dimensions");
+      setStep("filter-dimensions");
       setActiveReportTab(selectedReportIds[0]);
-    } else if (step === "configure-dimensions") {
+    } else if (step === "filter-dimensions") {
       setStep("ai-prompt");
     }
   };
 
   const handleBack = () => {
-    if (step === "configure-dimensions") {
+    if (step === "filter-dimensions") {
       setStep("select-reports");
     } else if (step === "ai-prompt") {
-      setStep("configure-dimensions");
+      setStep("filter-dimensions");
     }
   };
 
@@ -217,6 +244,8 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
     resetState();
   };
 
+  const activeDimensions = activeReportTab ? dimensions[activeReportTab] || [] : [];
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
@@ -224,7 +253,7 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
             {step === "select-reports" && "Select Reports"}
-            {step === "configure-dimensions" && "Configure Dimensions"}
+            {step === "filter-dimensions" && "Filter Dimensions"}
             {step === "ai-prompt" && "AI Summary Prompt"}
           </DialogTitle>
         </DialogHeader>
@@ -261,8 +290,8 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
             </ScrollArea>
           )}
 
-          {/* Step 2: Configure Dimensions */}
-          {step === "configure-dimensions" && (
+          {/* Step 2: Filter Dimensions */}
+          {step === "filter-dimensions" && (
             <div className="flex h-[400px] gap-4">
               {/* Left: Report tabs */}
               <div className="w-48 border-r pr-4">
@@ -312,11 +341,16 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
                           <SelectValue placeholder="Choose a dimension..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {dimensions[activeReportTab]?.map(dim => (
+                          {activeDimensions.map(dim => (
                             <SelectItem key={dim.id} value={dim.id}>
                               {dim.name}
                             </SelectItem>
                           ))}
+                          {activeDimensions.length === 0 && (
+                            <div className="px-2 py-4 text-sm text-muted-foreground text-center">
+                              {isLoadingSourceData ? "Loading..." : "No dimensions available"}
+                            </div>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -335,35 +369,36 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
 
                         <ScrollArea className="flex-1 border rounded-md">
                           <div className="p-2 space-y-1">
-                            {isLoading ? (
-                              <p className="text-center text-muted-foreground py-4">
-                                Loading...
-                              </p>
+                            {isLoadingSourceData ? (
+                              <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>Loading values from source...</span>
+                              </div>
                             ) : filteredValues.length > 0 ? (
-                              filteredValues.map(item => (
+                              filteredValues.map(value => (
                                 <div
-                                  key={item.value}
+                                  key={value}
                                   className={cn(
                                     "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
                                     reportConfigs[activeReportTab]?.selectedValues.includes(
-                                      item.value
+                                      value
                                     )
                                       ? "bg-primary/10"
                                       : "hover:bg-muted/50"
                                   )}
                                   onClick={() =>
-                                    handleValueToggle(activeReportTab, item.value)
+                                    handleValueToggle(activeReportTab, value)
                                   }
                                 >
                                   <Checkbox
                                     checked={reportConfigs[
                                       activeReportTab
-                                    ]?.selectedValues.includes(item.value)}
+                                    ]?.selectedValues.includes(value)}
                                     onCheckedChange={() =>
-                                      handleValueToggle(activeReportTab, item.value)
+                                      handleValueToggle(activeReportTab, value)
                                     }
                                   />
-                                  <span className="text-sm">{item.value}</span>
+                                  <span className="text-sm">{value}</span>
                                 </div>
                               ))
                             ) : (
@@ -415,7 +450,7 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
                             selected)
                           </>
                         ) : (
-                          <span className="italic">No dimension selected</span>
+                          <span className="italic">No filter selected</span>
                         )}
                       </div>
                     );
