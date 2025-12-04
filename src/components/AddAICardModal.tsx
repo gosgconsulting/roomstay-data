@@ -25,6 +25,7 @@ import { extractUniqueDimensionValues } from "@/lib/filters/extractDimensionValu
 import { getUser } from "@/lib/auth";
 import { Search, ChevronRight, ChevronLeft, Sparkles, Loader2, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { format } from "date-fns";
 
 interface Report {
@@ -61,6 +62,7 @@ interface ReportDimensionConfig {
 interface AddAICardModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCardCreated?: () => void;
 }
 
 type Step = "select-reports" | "filter-dimensions" | "select-metrics" | "select-period" | "ai-prompt";
@@ -195,9 +197,10 @@ const getDefaultSinceDate = (): string => {
   return `${previousYear}-01-01`;
 };
 
-export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
+export const AddAICardModal = ({ open, onOpenChange, onCardCreated }: AddAICardModalProps) => {
   const { accountId } = useParams();
   const [step, setStep] = useState<Step>("select-reports");
+  const [isSaving, setIsSaving] = useState(false);
   const [reports, setReports] = useState<Report[]>([]);
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
   const [activeReportTab, setActiveReportTab] = useState<string | null>(null);
@@ -406,11 +409,47 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
     }
   };
 
-  const handleSave = () => {
-    // TODO: Save card configuration and generate AI summary
-    console.log("Saving card config:", { reportConfigs, selectedMetrics, sinceDate, aiPrompt });
-    onOpenChange(false);
-    resetState();
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const { user } = await getUser();
+      if (!user) {
+        toast.error("You must be logged in to create a card");
+        return;
+      }
+
+      // Generate a name based on selected reports
+      const cardName = selectedReports.length > 0 
+        ? `${selectedReports.map(r => r.name).join(", ")} Summary`
+        : "AI Summary";
+
+      const { error } = await (supabase.from("ai_summary_cards") as any).insert({
+        user_id: user.id,
+        account_id: accountId || null,
+        name: cardName,
+        report_ids: selectedReportIds,
+        report_configs: reportConfigs,
+        selected_metrics: selectedMetrics,
+        since_date: sinceDate,
+        ai_prompt: aiPrompt,
+      });
+
+      if (error) {
+        console.error("Error saving AI card:", error);
+        toast.error("Failed to save card");
+        return;
+      }
+
+      toast.success("AI Summary card created!");
+      onCardCreated?.();
+      onOpenChange(false);
+      resetState();
+    } catch (err) {
+      console.error("Error saving AI card:", err);
+      toast.error("Failed to save card");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const resetState = () => {
@@ -786,9 +825,13 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
           </Button>
 
           {step === "ai-prompt" ? (
-            <Button onClick={handleSave}>
-              <Sparkles className="h-4 w-4 mr-1" />
-              Generate Summary
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 mr-1" />
+              )}
+              {isSaving ? "Saving..." : "Create Card"}
             </Button>
           ) : (
             <Button

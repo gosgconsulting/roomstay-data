@@ -41,6 +41,62 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_summary_cards: {
+        Row: {
+          account_id: string | null
+          ai_prompt: string
+          created_at: string
+          generated_summary: string | null
+          id: string
+          last_generated_at: string | null
+          name: string
+          report_configs: Json
+          report_ids: string[]
+          selected_metrics: string[]
+          since_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          ai_prompt: string
+          created_at?: string
+          generated_summary?: string | null
+          id?: string
+          last_generated_at?: string | null
+          name?: string
+          report_configs?: Json
+          report_ids?: string[]
+          selected_metrics?: string[]
+          since_date: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          ai_prompt?: string
+          created_at?: string
+          generated_summary?: string | null
+          id?: string
+          last_generated_at?: string | null
+          name?: string
+          report_configs?: Json
+          report_ids?: string[]
+          selected_metrics?: string[]
+          since_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_summary_cards_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       budgets: {
         Row: {
           account_id: string | null
