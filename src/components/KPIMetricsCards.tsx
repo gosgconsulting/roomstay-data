@@ -426,21 +426,19 @@ export const KPIMetricsCards = ({
       <div>
         {headerAction && (
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold">Key Metrics</h2>
+            <div className="h-6 w-24 bg-muted rounded animate-pulse" />
             {headerAction}
           </div>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           {Array.from({ length: 10 }).map((_, i) => (
-            <Card key={i} className="animate-pulse">
+            <Card key={i}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  <div className="h-4 bg-gray-200 rounded w-20"></div>
-                </CardTitle>
-                <div className="h-4 w-4 bg-gray-200 rounded"></div>
+                <div className="h-4 bg-muted rounded w-20 animate-pulse" />
+                <div className="h-4 w-4 bg-muted rounded animate-pulse" />
               </CardHeader>
               <CardContent>
-                <div className="h-8 bg-gray-200 rounded w-16 mb-1"></div>
+                <div className="h-8 bg-muted rounded w-24 mb-1 animate-pulse" />
               </CardContent>
             </Card>
           ))}
@@ -458,8 +456,18 @@ export const KPIMetricsCards = ({
             {headerAction}
           </div>
         )}
-        <div className="text-center py-8 text-gray-500">
-          No data available for the selected filters
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div className="h-4 bg-muted/50 rounded w-20" />
+                <div className="h-4 w-4 bg-muted/50 rounded" />
+              </CardHeader>
+              <CardContent>
+                <div className="h-8 bg-muted/50 rounded w-16 mb-1" />
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     );
