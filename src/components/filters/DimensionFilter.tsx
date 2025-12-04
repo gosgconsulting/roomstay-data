@@ -4,6 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Settings, Search, Check } from "lucide-react";
 
 interface DimensionMeta {
@@ -43,6 +44,15 @@ export const DimensionFilter: React.FC<DimensionFilterProps> = ({
     : values;
   const selectedCount = selectedValues.length;
 
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="text-xs text-muted-foreground">{dimension.name}</span>
+        <Skeleton className="h-10 w-[200px]" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-1">
       <label className="text-xs text-muted-foreground">{dimension.name}</label>
@@ -53,12 +63,9 @@ export const DimensionFilter: React.FC<DimensionFilterProps> = ({
         <PopoverTrigger asChild>
           <Button
             variant="outline"
-            disabled={isLoading}
             className="w-[200px] justify-between bg-background"
           >
-            {isLoading ? (
-              <span className="text-muted-foreground">Loading...</span>
-            ) : selectedCount === 0 ? (
+            {selectedCount === 0 ? (
               <span>All {dimension.name}</span>
             ) : (
               <span>
