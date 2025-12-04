@@ -278,6 +278,32 @@ const AISummaryPage = () => {
             metricNameToIdMap[m.dimensionName] = m.dimensionId;
           }
         });
+        
+        // Build dimension ID to column header mapping for lookups
+        const dimIdToColumnHeader: Record<string, string> = {};
+        columnMappings.forEach((m: any) => {
+          if (m.dimensionId && m.dimensionId !== 'none' && m.columnHeader) {
+            dimIdToColumnHeader[m.dimensionId] = m.columnHeader;
+          }
+        });
+        
+        // Helper to get breakdown value from row data
+        const getBreakdownValue = (rowData: any, dimId: string, dimName: string): string | undefined => {
+          // Try dimension ID first
+          if (rowData[dimId] !== undefined && rowData[dimId] !== null && rowData[dimId] !== '') {
+            return String(rowData[dimId]);
+          }
+          // Try dimension name
+          if (dimName && rowData[dimName] !== undefined && rowData[dimName] !== null && rowData[dimName] !== '') {
+            return String(rowData[dimName]);
+          }
+          // Try column header from mappings
+          const columnHeader = dimIdToColumnHeader[dimId];
+          if (columnHeader && rowData[columnHeader] !== undefined && rowData[columnHeader] !== null && rowData[columnHeader] !== '') {
+            return String(rowData[columnHeader]);
+          }
+          return undefined;
+        };
 
         // Fetch source data
         const sourceData = await fetchSourceData(dsData as DataSource, user.id, accountId);
@@ -388,9 +414,9 @@ const AISummaryPage = () => {
           
           filteredByDimension.forEach((row: any) => {
             const rowData = row.dimension_values || row;
-            const val = rowData[breakdownDimId] || (breakdownDimName ? rowData[breakdownDimName] : undefined);
-            if (val !== undefined && val !== null && val !== '') {
-              uniqueValues.add(String(val));
+            const val = getBreakdownValue(rowData, breakdownDimId, breakdownDimName);
+            if (val !== undefined) {
+              uniqueValues.add(val);
             } else {
               hasUncategorized = true;
             }
@@ -410,9 +436,8 @@ const AISummaryPage = () => {
               // Filter rows for this specific group value
               const groupRows = filteredByDimension.filter((row: any) => {
                 const rowData = row.dimension_values || row;
-                const groupVal = rowData[breakdownDimId] || 
-                                 (breakdownDimName ? rowData[breakdownDimName] : undefined);
-                return groupVal !== undefined && String(groupVal) === groupValue;
+                const groupVal = getBreakdownValue(rowData, breakdownDimId, breakdownDimName);
+                return groupVal === groupValue;
               });
               
               // Main metrics
@@ -466,8 +491,8 @@ const AISummaryPage = () => {
             if (hasUncategorized) {
               const uncategorizedRows = filteredByDimension.filter((row: any) => {
                 const rowData = row.dimension_values || row;
-                const val = rowData[breakdownDimId] || (breakdownDimName ? rowData[breakdownDimName] : undefined);
-                return val === undefined || val === null || val === '';
+                const val = getBreakdownValue(rowData, breakdownDimId, breakdownDimName);
+                return val === undefined;
               });
               
               const metrics = aggregateMetrics(
