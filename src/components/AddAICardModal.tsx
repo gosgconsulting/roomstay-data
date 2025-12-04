@@ -59,10 +59,21 @@ interface ReportDimensionConfig {
   selectedValues: string[];
 }
 
+interface EditingCard {
+  id: string;
+  name: string;
+  report_ids: string[];
+  report_configs: Record<string, any>;
+  selected_metrics: string[];
+  since_date: string;
+  ai_prompt: string;
+}
+
 interface AddAICardModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCardCreated?: () => void;
+  editingCard?: EditingCard | null;
 }
 
 type Step = "select-reports" | "filter-dimensions" | "select-metrics" | "select-period" | "ai-prompt";
@@ -197,7 +208,7 @@ const getDefaultSinceDate = (): string => {
   return `${previousYear}-01-01`;
 };
 
-export const AddAICardModal = ({ open, onOpenChange, onCardCreated }: AddAICardModalProps) => {
+export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard }: AddAICardModalProps) => {
   const { accountId } = useParams();
   const [step, setStep] = useState<Step>("select-reports");
   const [isSaving, setIsSaving] = useState(false);
@@ -219,6 +230,20 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated }: AddAICardM
   ]);
   const [sinceDate, setSinceDate] = useState<string>(getDefaultSinceDate());
   const [aiPrompt, setAiPrompt] = useState(DEFAULT_AI_PROMPT);
+
+  // Initialize from editingCard when editing
+  useEffect(() => {
+    if (editingCard && open) {
+      setSelectedReportIds(editingCard.report_ids || []);
+      setReportConfigs(editingCard.report_configs || {});
+      setSelectedMetrics(editingCard.selected_metrics || ["Impressions", "Clicks", "Cost", "Revenue", "ROAS"]);
+      setSinceDate(editingCard.since_date || getDefaultSinceDate());
+      setAiPrompt(editingCard.ai_prompt || DEFAULT_AI_PROMPT);
+      if (editingCard.report_ids?.length > 0) {
+        setActiveReportTab(editingCard.report_ids[0]);
+      }
+    }
+  }, [editingCard, open]);
 
   // Fetch reports for the account
   useEffect(() => {
@@ -414,7 +439,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated }: AddAICardM
     try {
       const { user } = await getUser();
       if (!user) {
-        toast.error("You must be logged in to create a card");
+        toast.error("You must be logged in to save a card");
         return;
       }
 
@@ -423,24 +448,48 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated }: AddAICardM
         ? `${selectedReports.map(r => r.name).join(", ")} Summary`
         : "AI Summary";
 
-      const { error } = await (supabase.from("ai_summary_cards") as any).insert({
-        user_id: user.id,
-        account_id: accountId || null,
-        name: cardName,
-        report_ids: selectedReportIds,
-        report_configs: reportConfigs,
-        selected_metrics: selectedMetrics,
-        since_date: sinceDate,
-        ai_prompt: aiPrompt,
-      });
+      if (editingCard) {
+        // Update existing card
+        const { error } = await (supabase.from("ai_summary_cards") as any)
+          .update({
+            name: cardName,
+            report_ids: selectedReportIds,
+            report_configs: reportConfigs,
+            selected_metrics: selectedMetrics,
+            since_date: sinceDate,
+            ai_prompt: aiPrompt,
+          })
+          .eq("id", editingCard.id);
 
-      if (error) {
-        console.error("Error saving AI card:", error);
-        toast.error("Failed to save card");
-        return;
+        if (error) {
+          console.error("Error updating AI card:", error);
+          toast.error("Failed to update card");
+          return;
+        }
+
+        toast.success("AI Summary card updated!");
+      } else {
+        // Create new card
+        const { error } = await (supabase.from("ai_summary_cards") as any).insert({
+          user_id: user.id,
+          account_id: accountId || null,
+          name: cardName,
+          report_ids: selectedReportIds,
+          report_configs: reportConfigs,
+          selected_metrics: selectedMetrics,
+          since_date: sinceDate,
+          ai_prompt: aiPrompt,
+        });
+
+        if (error) {
+          console.error("Error saving AI card:", error);
+          toast.error("Failed to save card");
+          return;
+        }
+
+        toast.success("AI Summary card created!");
       }
 
-      toast.success("AI Summary card created!");
       onCardCreated?.();
       onOpenChange(false);
       resetState();
@@ -485,17 +534,18 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated }: AddAICardM
   }, [sinceDate]);
 
   const getStepTitle = () => {
+    const prefix = editingCard ? "Edit: " : "";
     switch (step) {
       case "select-reports":
-        return "Select Reports";
+        return `${prefix}Select Reports`;
       case "filter-dimensions":
-        return "Filter Dimensions";
+        return `${prefix}Filter Dimensions`;
       case "select-metrics":
-        return "Select Metrics";
+        return `${prefix}Select Metrics`;
       case "select-period":
-        return "Select Period";
+        return `${prefix}Select Period`;
       case "ai-prompt":
-        return "AI Summary Prompt";
+        return `${prefix}AI Summary Prompt`;
     }
   };
 
@@ -831,7 +881,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated }: AddAICardM
               ) : (
                 <Sparkles className="h-4 w-4 mr-1" />
               )}
-              {isSaving ? "Saving..." : "Create Card"}
+              {isSaving ? "Saving..." : editingCard ? "Update Card" : "Create Card"}
             </Button>
           ) : (
             <Button
