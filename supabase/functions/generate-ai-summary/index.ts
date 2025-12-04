@@ -189,25 +189,8 @@ serve(async (req) => {
     // Build comprehensive data context from pivot tables
     let dataContext = `# Performance Analysis Data\n\n`;
     
-    // MTD Section with vs Previous Period comparison
-    dataContext += `## Month-to-Date (MTD) Performance\n\n`;
-    dataContext += formatReportTable(
-      pivotData.mtd, 
-      pivotData.comparison_previous_period?.mtd,
-      selectedMetrics,
-      "MTD vs Previous Month (same days)"
-    );
-    
-    // MTD vs Previous Year
-    dataContext += formatReportTable(
-      pivotData.mtd, 
-      pivotData.comparison_previous_year?.mtd,
-      selectedMetrics,
-      "MTD vs Same Period Last Year"
-    );
-    
-    // Last Month Section
-    dataContext += `## Last Month Performance\n\n`;
+    // Last Month Section - Primary Focus
+    dataContext += `## Last Month Performance (End of Month Results)\n\n`;
     dataContext += formatReportTable(
       pivotData.last_month, 
       pivotData.comparison_previous_period?.last_month,
@@ -221,54 +204,69 @@ serve(async (req) => {
       "Last Month vs Same Month Last Year"
     );
     
-    // YTD Section
-    dataContext += `## Year-to-Date (YTD) Performance\n\n`;
+    // YTM Section (Year to End of Month)
+    dataContext += `## Year-to-Month (YTM) Performance\n\n`;
     dataContext += formatReportTable(
       pivotData.ytd, 
       pivotData.comparison_previous_year?.ytd,
       selectedMetrics,
-      "YTD vs Same Period Last Year"
+      "YTM vs Same Period Last Year"
     );
     
-    // Breakdown data for each report
+    // Breakdown data for each report (using last_month data)
     if (pivotData.breakdown_data && Object.keys(pivotData.breakdown_data).length > 0) {
-      dataContext += `## Channel Breakdown Analysis\n\n`;
+      dataContext += `## Channel Breakdown Analysis (Last Month)\n\n`;
       
       for (const [reportId, breakdown] of Object.entries(pivotData.breakdown_data)) {
         const reportConfig = reportConfigs?.[reportId];
         const dimensionName = reportConfig?.dimensionName || 'Segment';
-        const reportName = pivotData.mtd?.find(r => r.reportId === reportId)?.reportName || 'Channel';
+        const reportName = pivotData.last_month?.find(r => r.reportId === reportId)?.reportName || 'Channel';
         
+        // Use last_month breakdown instead of mtd
+        const lastMonthBreakdown = {
+          last_month: breakdown.last_month,
+          mtd: breakdown.last_month, // Map to last_month for the formatter
+          ytd: breakdown.ytd
+        };
         const compBreakdown = pivotData.comparison_previous_period?.breakdown_data?.[reportId];
-        dataContext += formatBreakdownTable(breakdown, compBreakdown, selectedMetrics, reportName, dimensionName);
+        const lastMonthCompBreakdown = compBreakdown ? {
+          last_month: compBreakdown.last_month,
+          mtd: compBreakdown.last_month,
+          ytd: compBreakdown.ytd
+        } : undefined;
+        dataContext += formatBreakdownTable(lastMonthBreakdown, lastMonthCompBreakdown, selectedMetrics, reportName, dimensionName);
       }
     }
     
-    // Weekly/Yearly trend data
-    if (pivotData.combined_date_breakdown?.mtd && pivotData.combined_date_breakdown.mtd.length > 0) {
-      dataContext += `## Weekly Trend (MTD - Combined All Channels)\n\n`;
-      dataContext += "| Week | " + selectedMetrics.join(" | ") + " |\n";
-      dataContext += "|------|" + selectedMetrics.map(() => "------").join("|") + "|\n";
+    // Monthly trend data for YTM
+    if (pivotData.combined_date_breakdown?.ytd && pivotData.combined_date_breakdown.ytd.length > 0) {
+      dataContext += `## Monthly Trend (YTM - Combined All Channels)\n\n`;
+      dataContext += "| Month | " + selectedMetrics.join(" | ") + " |\n";
+      dataContext += "|-------|" + selectedMetrics.map(() => "------").join("|") + "|\n";
       
-      pivotData.combined_date_breakdown.mtd.forEach(row => {
+      pivotData.combined_date_breakdown.ytd.forEach(row => {
         const cells = selectedMetrics.map(m => formatMetricValue(m, row.metrics[m] || 0));
         dataContext += `| ${row.dateGroup} | ${cells.join(" | ")} |\n`;
       });
       dataContext += "\n";
     }
 
-    // Enhanced system prompt for executive summaries
-    const systemPrompt = `You are an expert digital marketing analyst providing executive summaries for hotel and hospitality clients. Your analysis should be strategic, actionable, and focused on business impact.
+    // Enhanced system prompt for executive summaries - focused on End of Month reporting
+    const systemPrompt = `You are an expert digital marketing analyst providing end-of-month executive summaries for hotel and hospitality clients. Your analysis should be strategic, actionable, and focused on business impact.
 
 ## Your Role
-- Provide clear, concise executive summaries based on structured performance data
+- Provide clear, concise executive summaries based on completed month performance data
 - Focus on insights that matter to senior stakeholders and decision-makers
 - Highlight both wins and areas requiring attention
 - Consider seasonality and industry trends in hospitality
+- This report is for client delivery, so be professional and clear
 
 ## Analysis Guidelines
-1. **Start with the headline**: What's the most important insight?
-2. **Compare periods intelligently**: Use MTD vs Previous Month for recent trends, YTD vs LY for seasonal patterns
+1. **Start with the headline**: What's the most important insight from last month?
+2. **Compare periods intelligently**: 
+   - Last Month vs Previous Month for recent trends
+   - Last Month vs Same Month Last Year for YoY comparison
+   - YTM (Year to Month) vs Same Period Last Year for cumulative performance
 3. **Identify patterns**: Look for consistent trends across channels
 4. **Prioritize by impact**: Focus on metrics that affect revenue and ROI most
 5. **Be specific**: Use actual numbers and percentages from the data
@@ -282,10 +280,11 @@ serve(async (req) => {
 
 ## Output Format
 Structure your response as follows:
-1. **Executive Summary** (2-3 sentences capturing the key story)
-2. **Channel Performance Highlights** (bullet points per channel)
-3. **Key Trends & Insights** (what's improving, what needs attention)
-4. **Recommendations** (specific, actionable next steps)
+1. **Executive Summary** (2-3 sentences capturing the key story of the month)
+2. **Last Month Highlights by Channel** (bullet points per channel with key metrics)
+3. **Year-to-Date Progress** (how cumulative performance compares to last year)
+4. **Key Trends & Insights** (what's improving, what needs attention)
+5. **Recommendations for Next Month** (specific, actionable next steps)
 
 ${aiPrompt ? `\n## Additional Instructions from User\n${aiPrompt}` : ''}`;
 
