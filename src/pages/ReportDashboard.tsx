@@ -59,6 +59,9 @@ export default function ReportDashboard() {
 
   // FIX: Add missing state for sidebar reports list
   const [reportsList, setReportsList] = useState<SidebarReport[]>([]);
+  
+  // AI Summaries state for sidebar
+  const [aiSummaries, setAiSummaries] = useState<{ id: string; name: string }[]>([]);
 
   // FIX: Add missing state for local Share modal
   const [showShareModal, setShowShareModal] = useState(false);
@@ -204,8 +207,27 @@ export default function ReportDashboard() {
   useEffect(() => {
     if (session && accountId) {
       loadAccount();
+      loadAISummaries();
     }
   }, [session, accountId]);
+
+  const loadAISummaries = async () => {
+    if (!session || !accountId) return;
+    
+    try {
+      const { data, error } = await (supabase.from("ai_summary_cards") as any)
+        .select("id, name")
+        .eq("user_id", session.user.id)
+        .eq("account_id", accountId)
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        setAiSummaries(data);
+      }
+    } catch (err) {
+      console.error("Error loading AI summaries:", err);
+    }
+  };
 
   const checkAuth = async () => {
     try {
@@ -464,6 +486,7 @@ export default function ReportDashboard() {
           onAddNewReport={() => setShowCreateReportModal(true)}
           onSelectReport={(id) => setReportId(id)}
           onAddAISummary={() => setShowAISummaryModal(true)}
+          aiSummaries={aiSummaries}
         />
         <SidebarInset className="flex-1 overflow-x-hidden">
           {/* Loading toast for data loading - HIDDEN: Individual components show their own loading states */}
@@ -728,11 +751,11 @@ export default function ReportDashboard() {
       <CreateAISummaryModal
         open={showAISummaryModal}
         onOpenChange={setShowAISummaryModal}
-        onCreateSummary={(name) => {
-          // For now, just show a toast - page is blank placeholder
-          toast({ title: "AI Summary created", description: `"${name}" summary created.` });
-          const fakeId = crypto.randomUUID();
-          navigate(`/tools/ai-summary/${accountId}/${fakeId}`);
+        accountId={accountId}
+        userId={session?.user?.id}
+        onSummaryCreated={(summary) => {
+          setAiSummaries((prev) => [summary, ...prev]);
+          navigate(`/tools/ai-summary/${accountId}/${summary.id}`);
         }}
       />
     </SidebarProvider>
