@@ -53,6 +53,7 @@ interface RequestBody {
   reportConfigs?: Record<string, any>;
   aiPrompt: string;
   isTableComment?: boolean;
+  comparisonType?: 'previous_period' | 'previous_year' | 'both';
 }
 
 const formatMetricValue = (metric: string, value: number): string => {
@@ -175,9 +176,9 @@ serve(async (req) => {
     }
 
     const body: RequestBody = await req.json();
-    const { cardId, pivotData, selectedMetrics, reportConfigs, aiPrompt, isTableComment } = body;
+    const { cardId, pivotData, selectedMetrics, reportConfigs, aiPrompt, isTableComment, comparisonType = 'previous_year' } = body;
 
-    console.log('Generating AI summary, isTableComment:', isTableComment);
+    console.log('Generating AI summary, isTableComment:', isTableComment, 'comparisonType:', comparisonType);
     console.log('Selected metrics:', selectedMetrics);
 
     if (!pivotData) {
@@ -242,10 +243,50 @@ serve(async (req) => {
     const lastMonthYear = lastMonth.getFullYear();
     const previousYearLastMonth = lastMonthYear - 1;
 
+    // Get comparison context based on user selection
+    const getComparisonContext = (periodKey: string) => {
+      const isLastMonth = periodKey === 'last_month';
+      const isMTD = periodKey === 'mtd';
+      
+      if (comparisonType === 'previous_period') {
+        if (isLastMonth) {
+          const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+          const twoMonthsAgoName = twoMonthsAgo.toLocaleString('en-US', { month: 'long' });
+          return `Compare ${lastMonthName} ${lastMonthYear} vs ${twoMonthsAgoName} ${twoMonthsAgo.getFullYear()} (previous month)`;
+        } else if (isMTD) {
+          return `Compare ${currentMonth} ${currentYear} MTD vs same days in ${lastMonthName} ${lastMonthYear}`;
+        }
+        return `Compare ${currentYear} YTD vs same period in ${currentYear - 1}`;
+      } else if (comparisonType === 'previous_year') {
+        if (isLastMonth) {
+          return `Compare ${lastMonthName} ${lastMonthYear} vs ${lastMonthName} ${previousYearLastMonth} (same month last year)`;
+        } else if (isMTD) {
+          return `Compare ${currentMonth} ${currentYear} MTD vs ${currentMonth} ${currentYear - 1} MTD`;
+        }
+        return `Compare ${currentYear} YTD vs ${currentYear - 1} YTD`;
+      }
+      // 'both' - include both comparisons
+      if (isLastMonth) {
+        const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+        const twoMonthsAgoName = twoMonthsAgo.toLocaleString('en-US', { month: 'long' });
+        return `Compare ${lastMonthName} ${lastMonthYear} vs BOTH:
+- Previous Month: ${twoMonthsAgoName} ${twoMonthsAgo.getFullYear()}
+- Same Month Last Year: ${lastMonthName} ${previousYearLastMonth}`;
+      } else if (isMTD) {
+        return `Compare ${currentMonth} ${currentYear} MTD vs BOTH:
+- Previous Month: same days in ${lastMonthName} ${lastMonthYear}
+- Same Month Last Year: ${currentMonth} ${currentYear - 1} MTD`;
+      }
+      return `Compare ${currentYear} YTD vs BOTH:
+- Previous Year Same Period: ${currentYear - 1} YTD
+- Full Previous Year: ${currentYear - 1}`;
+    };
+
     // System prompt for executive summaries - focused on single period analysis
     const getSystemPrompt = (periodLabel: string, periodKey: string) => {
       const isMTD = periodKey === 'mtd';
       const isLastMonth = periodKey === 'last_month';
+      const comparisonContext = getComparisonContext(periodKey);
       
       const mtdForecasting = isMTD ? `
 ## MTD FORECASTING REQUIREMENTS
@@ -261,16 +302,24 @@ Since this is Month-to-Date data for ${currentMonth} ${currentYear}, you MUST in
 Example: "With 18 days of data (60% of the month), current revenue stands at $180K. **Projected month-end revenue is $300K**, which would represent a +15% improvement over last month's $261K."
 ` : '';
 
-      const lastMonthContext = isLastMonth ? `
+      const dateContext = isLastMonth ? `
 ## IMPORTANT DATE CONTEXT FOR LAST MONTH
 - You are analyzing: ${lastMonthName} ${lastMonthYear} (the current data period)
-- Comparing to: ${lastMonthName} ${previousYearLastMonth} (same month, previous year)
-- ALWAYS refer to the current period as "${lastMonthName} ${lastMonthYear}", NOT "${lastMonthName} ${previousYearLastMonth}"
-- When showing comparisons, format as: "In ${lastMonthName} ${lastMonthYear}, revenue was $X (+Y% vs ${lastMonthName} ${previousYearLastMonth})"
-` : '';
+- COMPARISON: ${comparisonContext}
+- ALWAYS refer to the current period as "${lastMonthName} ${lastMonthYear}"
+- Use the comparison data provided to show meaningful changes
+` : isMTD ? `
+## IMPORTANT DATE CONTEXT FOR MTD
+- You are analyzing: ${currentMonth} ${currentYear} to date
+- COMPARISON: ${comparisonContext}
+` : `
+## IMPORTANT DATE CONTEXT FOR YTD  
+- You are analyzing: January - ${currentMonth} ${currentYear}
+- COMPARISON: ${comparisonContext}
+`;
 
       return `You are an expert digital marketing analyst writing executive summaries for hotel and hospitality clients. Write in flowing paragraphs with specific numbers inline.
-${lastMonthContext}
+${dateContext}
 ## CRITICAL FORMATTING RULES
 
 ### 1. ALWAYS INCLUDE NUMBERS WITH SIGNS
@@ -284,10 +333,10 @@ Only use **bold** for truly important summary phrases or key takeaways, NOT for 
 - ❌ WRONG: "SEM showed **strong** **growth** with **improved** **performance**"
 Do NOT bold words like: growth, improvement, increase, decrease, strong, significant, etc.
 
-### 3. USE SPECIFIC TIME PERIODS
-Always use the correct month and year. For ${periodLabel}:
-${isLastMonth ? `- Current period: ${lastMonthName} ${lastMonthYear}
-- Comparison period: ${lastMonthName} ${previousYearLastMonth}` : isMTD ? `- Current period: ${currentMonth} ${currentYear} to date` : `- Current period: January - ${currentMonth} ${currentYear}`}
+### 3. COMPARISON FOCUS
+${comparisonType === 'both' ? 'Include insights from BOTH comparisons when data is available. Show changes vs previous period AND vs same period last year.' : 
+  comparisonType === 'previous_period' ? 'Focus on sequential/month-over-month changes (e.g., November vs October, this week vs last week).' :
+  'Focus on year-over-year changes (e.g., November 2025 vs November 2024).'}
 
 ### 4. CHANNEL SECTION FORMATTING
 For channel sections, use numbered format:
@@ -299,9 +348,6 @@ Use + prefix for positive changes and - prefix for negative changes. The UI will
 - "+24.7%" will show green
 - "-12.3%" will show red
 ${mtdForecasting}
-## EXAMPLE OF GOOD ANALYSIS:
-"In ${isLastMonth ? `${lastMonthName} ${lastMonthYear}` : isMTD ? `${currentMonth} ${currentYear}` : currentYear.toString()}, SEM was **the standout channel** with revenue of $258K (+24.7%) driven by improved conversion at 3.66% (+16.5%) and ROAS at 32x (+29.8%). Despite lower clicks at 11K (-1.1%), efficiency gains offset volume decline."
-
 ## Output Structure (FOCUSED ON ${periodLabel.toUpperCase()} ONLY)
 1. **Executive Summary** - 2-3 sentences with the headline story and key numbers${isMTD ? ' including projected month-end figures' : ''}
 2. **Channel Analysis** - Use "**1. Metasearch**", "**2. SEM**", "**3. Social**". Each channel gets a paragraph with numbers inline.

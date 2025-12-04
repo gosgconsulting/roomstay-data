@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FormattedAISummary from "@/components/FormattedAISummary";
+import GenerateAISummaryModal, { type ComparisonOption } from "@/components/GenerateAISummaryModal";
 import { 
   AISummaryPivotTable, 
   type CachedPivotData,
@@ -95,6 +96,7 @@ const AISummaryPage = () => {
   const [refreshingPivotCardId, setRefreshingPivotCardId] = useState<string | null>(null);
   const [renamingCardId, setRenamingCardId] = useState<string | null>(null);
   const [newCardName, setNewCardName] = useState("");
+  const [generateModalCard, setGenerateModalCard] = useState<AISummaryCard | null>(null);
 
   const fetchCards = async () => {
     try {
@@ -628,19 +630,26 @@ const AISummaryPage = () => {
     }
   };
 
-  const handleGenerateSummary = async (card: AISummaryCard) => {
+  const handleOpenGenerateModal = (card: AISummaryCard) => {
+    // Check if pivot data exists first
+    if (!card.cached_pivot_data || Object.keys(card.cached_pivot_data).length === 0) {
+      toast.error("Please refresh the pivot data first before generating a summary");
+      return;
+    }
+    setGenerateModalCard(card);
+  };
+
+  const handleGenerateSummary = async (comparisonType: ComparisonOption) => {
+    const card = generateModalCard;
+    if (!card) return;
+    
+    setGenerateModalCard(null); // Close modal
     setGeneratingCardId(card.id);
     
     try {
       const { user } = await getUser();
       if (!user) {
         toast.error("You must be logged in");
-        return;
-      }
-
-      // Check if pivot data exists
-      if (!card.cached_pivot_data || Object.keys(card.cached_pivot_data).length === 0) {
-        toast.error("Please refresh the pivot data first before generating a summary");
         return;
       }
 
@@ -662,7 +671,8 @@ const AISummaryPage = () => {
           pivotData: card.cached_pivot_data,
           selectedMetrics: card.selected_metrics,
           reportConfigs: card.report_configs,
-          aiPrompt: card.ai_prompt
+          aiPrompt: card.ai_prompt,
+          comparisonType: comparisonType
         })
       });
 
@@ -933,7 +943,7 @@ const AISummaryPage = () => {
                     <Button 
                       variant="outline"
                       size="sm"
-                      onClick={() => handleGenerateSummary(card)}
+                      onClick={() => handleOpenGenerateModal(card)}
                       disabled={generatingCardId === card.id}
                       className="h-7 text-xs"
                     >
@@ -1015,6 +1025,15 @@ const AISummaryPage = () => {
           </ScrollArea>
         </DialogContent>
       </Dialog>
+
+      {/* Generate AI Summary Modal */}
+      <GenerateAISummaryModal
+        open={!!generateModalCard}
+        onOpenChange={(open) => !open && setGenerateModalCard(null)}
+        onGenerate={handleGenerateSummary}
+        isGenerating={!!generatingCardId}
+        cardName={generateModalCard?.name}
+      />
     </div>
   );
 };
