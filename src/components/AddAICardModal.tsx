@@ -660,7 +660,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         .from("dimensions")
         .select("name")
         .eq("id", breakdownConfig.breakdownDimensionId)
-        .single();
+        .maybeSingle();
       
       const breakdownDimName = breakdownDimData?.name;
       const breakdownDimId = breakdownConfig.breakdownDimensionId;
@@ -676,11 +676,15 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       
       // Get unique values for breakdown dimension from filtered rows
       const uniqueValues = new Set<string>();
+      let hasUncategorized = false;
+      
       filteredByDimension.forEach((row: any) => {
         const rowData = row.dimension_values || row;
         const val = rowData[breakdownDimId] || (breakdownDimName ? rowData[breakdownDimName] : undefined);
         if (val !== undefined && val !== null && val !== '') {
           uniqueValues.add(String(val));
+        } else {
+          hasUncategorized = true;
         }
       });
 
@@ -691,6 +695,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       pivotData.breakdown_data[report.id] = { last_month: [], mtd: [], ytd: [] };
       
       (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+        // Process each named group
         uniqueValues.forEach((groupValue) => {
           // Filter rows for this specific group value
           const groupRows = filteredByDimension.filter((row: any) => {
@@ -713,6 +718,28 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
             metrics,
           });
         });
+        
+        // Add Uncategorized group for rows without breakdown value
+        if (hasUncategorized) {
+          const uncategorizedRows = filteredByDimension.filter((row: any) => {
+            const rowData = row.dimension_values || row;
+            const val = rowData[breakdownDimId] || (breakdownDimName ? rowData[breakdownDimName] : undefined);
+            return val === undefined || val === null || val === '';
+          });
+          
+          const metrics = aggregateMetrics(
+            uncategorizedRows,
+            selectedMetrics,
+            dateRanges[tab],
+            undefined,
+            metricNameToIdMap
+          );
+
+          pivotData.breakdown_data![report.id][tab].push({
+            groupValue: 'Uncategorized',
+            metrics,
+          });
+        }
       });
     }
   };
