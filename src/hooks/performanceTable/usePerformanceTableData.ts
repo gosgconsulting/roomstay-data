@@ -84,7 +84,10 @@ export function usePerformanceTableData({
         }
 
         if (data) {
-          setDataSource(data as DataSource);
+          setDataSource({
+            ...data,
+            column_mappings: (data.column_mappings as any) || null,
+          } as DataSource);
         }
       } catch (error) {
         console.error('[PERF-TABLE] Error fetching data source:', error);
