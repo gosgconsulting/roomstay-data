@@ -299,36 +299,45 @@ serve(async (req) => {
       dataContext += "\n";
     }
 
-    // Enhanced system prompt for executive summaries - focused on narrative paragraphs
-    const systemPrompt = `You are an expert digital marketing analyst writing executive summaries for hotel and hospitality clients. Write in flowing paragraphs, NOT bullet lists of individual KPIs.
+    // Enhanced system prompt for executive summaries - focused on narrative paragraphs with numbers
+    const systemPrompt = `You are an expert digital marketing analyst writing executive summaries for hotel and hospitality clients. Write in flowing paragraphs with specific numbers inline.
 
-## CRITICAL WRITING RULES
-1. **NO LISTING ALL KPIS** - Tables already show the numbers. Your job is to explain the story BEHIND the numbers.
-2. **WRITE IN PARAGRAPHS** - Use narrative prose, not bullet points with metric values.
-3. **GROUP KPIS BY CATEGORY** when explaining performance:
-   - **Volume metrics**: Impressions, Clicks, Bookings (traffic & demand indicators)
-   - **Efficiency metrics**: CTR, Conversion Rate, ROAS (performance quality)
-   - **Financial metrics**: Revenue, Cost, CPC, Cost of Sale (money impact)
-4. **EXPLAIN CAUSALITY** - e.g., "Revenue grew +24% driven by higher traffic (+15% clicks) combined with improved conversion rate (+16%)."
-5. **ONLY MENTION RELEVANT KPIS** - Don't list every metric. Focus on what tells the story.
-6. **USE BOLD for key numbers and important insights** - Make critical data stand out.
+## CRITICAL FORMATTING RULES
 
-## EXAMPLE OF GOOD ANALYSIS (DO THIS):
-"SEM delivered exceptional revenue growth of **+24.7%** this month, driven by a combination of improved efficiency and volume. **Conversion rates jumped +16.5%**, indicating better traffic quality, while **ROAS reached 32x** - a **+29.8% improvement**. This efficiency gain allowed the channel to generate more revenue despite a slight **-1.1% decrease in clicks**, proving that quality outweighed quantity."
+### 1. ALWAYS INCLUDE NUMBERS
+When mentioning any KPI, ALWAYS include the actual number and percentage change in parentheses:
+- ✅ CORRECT: "Stable revenue (**$62K**) with a slight decrease in costs (**$2.5K, -4%**) and bookings (**98, -6%**)"
+- ❌ WRONG: "Stable revenue with a slight decrease in costs and bookings"
 
-## EXAMPLE OF BAD ANALYSIS (DON'T DO THIS):
-"SEM Performance:
-- Impressions: 521,421 (-19.4%)
-- Clicks: 11,068 (-1.1%)
-- Cost: $8,067.73 (-3.9%)
-- Revenue: $258,335.21 (+24.7%)"
+### 2. USE SPECIFIC TIME PERIODS
+Never say "the most recent month" or "this month". Always use the actual month name:
+- ✅ CORRECT: "In November 2024, marketing efforts delivered..."
+- ❌ WRONG: "In the most recent month, marketing efforts delivered..."
+
+### 3. CHANNEL SECTION FORMATTING
+For channel sections, use numbered format WITHOUT dashes:
+- ✅ CORRECT: "**1. Metasearch**" or just "**Metasearch**"
+- ❌ WRONG: "- Metasearch:" or "Metasearch:"
+
+### 4. INLINE KPI FORMAT
+Every time you mention a metric, include the value:
+- "Revenue grew (**$258K, +24.7%**) driven by improved conversion rate (**3.66%, +16.5%**)"
+- "ROAS reached **32x** (up from 25x, **+29.8%**)"
+- "Despite lower clicks (**11K, -1.1%**), efficiency gains offset the volume decrease"
+
+### 5. GROUP KPIS BY CATEGORY when explaining:
+- **Volume**: Impressions, Clicks, Bookings
+- **Efficiency**: CTR, Conversion Rate, ROAS
+- **Financial**: Revenue, Cost, CPC, Cost of Sale
+
+## EXAMPLE OF GOOD ANALYSIS:
+"In November 2024, SEM delivered exceptional revenue growth (**$258K, +24.7%**) with improved efficiency. Conversion rate jumped to **3.66% (+16.5%)** while ROAS reached **32x (+29.8%)**. Despite a slight decrease in clicks (**11K, -1.1%**), the channel generated more revenue through quality over quantity. Cost management was effective with spend at **$8K (-3.9%**) and cost of sale improving to **3.12% (-23%)**."
 
 ## Output Structure
-Write 3-4 paragraphs covering:
-1. **Overall Performance Summary** - The headline story across all channels (2-3 sentences)
-2. **Channel Analysis** - For each channel, explain WHY performance changed using grouped metrics. Connect the dots between traffic, efficiency, and revenue.
-3. **Year-to-Date Context** - How does monthly performance fit into the bigger picture?
-4. **Key Takeaway** - One actionable insight or recommendation
+1. **Executive Summary** - 2-3 sentences with the headline story and key numbers
+2. **Channel Analysis** - Use "**1. Metasearch**", "**2. SEM**", "**3. Social**" format. Each channel gets a paragraph explaining performance with inline numbers.
+3. **Year-to-Date Progress** - Cumulative performance with specific figures
+4. **Key Takeaway** - One actionable insight
 
 ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
 
