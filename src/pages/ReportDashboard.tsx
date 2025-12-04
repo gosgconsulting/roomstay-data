@@ -5,7 +5,7 @@ import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCardsFixed";
 import KPIChartsGrid from "@/components/KPIChartsGrid";
 import { PerformanceTable } from "@/components/PerformanceTable";
-import { BudgetTrackerTable } from "@/components/BudgetTrackerTable";
+
 import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
 import { supabase } from "@/integrations/supabase/client";
@@ -216,7 +216,6 @@ export default function ReportDashboard() {
       markComponentLoading('metrics');
       markComponentLoading('chart');
       markComponentLoading('table');
-      markComponentLoading('budget-table');
       
       setFilters({
         dimensionFilters: {},
@@ -373,7 +372,7 @@ export default function ReportDashboard() {
     markComponentLoading('metrics');
     markComponentLoading('chart');
     markComponentLoading('table');
-    markComponentLoading('budget-table');
+    
     setDataRefreshKey(prev => prev + 1);
   };
 
@@ -705,15 +704,6 @@ export default function ReportDashboard() {
                   onLoadingComplete={() => markComponentLoaded('table')}
                 />
 
-                <BudgetTrackerTable
-                  reportId={reportId}
-                  isSharedView={isSharedView}
-                  accountId={accountId}
-                  visibilityRefreshTrigger={visibilityRefreshTrigger}
-                  isEditMode={isEditMode}
-                  key={`budget-table-${dataRefreshKey}-${loadingGeneration}`}
-                  onLoadingComplete={() => markComponentLoaded('budget-table')}
-                />
               </main>
               
               <KPISettingsModal

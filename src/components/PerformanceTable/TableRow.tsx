@@ -9,8 +9,6 @@ import type { TableRow as TableRowType } from "@/hooks/performanceTable/usePerfo
 import type { FilterState } from "@/components/FiltersBar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-// NEW: import BudgetModal for popup editing
-import { BudgetModal } from "@/components/BudgetModal";
 import { useUser } from "@/lib/auth";
 
 interface TableRowProps {
@@ -67,10 +65,6 @@ export function TableRow({
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const budgetInputRef = useRef<HTMLInputElement | null>(null);
   // NEW: modal state + presets
-  const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
-  const [presetDimensionName, setPresetDimensionName] = useState<string>('');
-  const [presetItemName, setPresetItemName] = useState<string>('');
-  const [presetYearMonth, setPresetYearMonth] = useState<string>('');
 
   const handleRowClick = () => {
     if (hasChildren) {
@@ -183,19 +177,6 @@ export function TableRow({
   const shouldShowSetBudget = hasLoadedFromDb && localBudget === null;
 
   // NEW: handle opening modal with presets and refresh after save
-  const openBudgetModal = async () => {
-    if (!isMonthView || !isBreakdownChild) return;
-
-    const breakdownDimId = breakdownByDimensions[0];
-    const breakdownDim = breakdownDimId ? dimensions.find(d => d.id === breakdownDimId) : undefined;
-    const monthYM = extractMonthKey();
-    if (!breakdownDim || !monthYM) return;
-
-    setPresetDimensionName(breakdownDim.name);
-    setPresetItemName(String((row as any).name).trim());
-    setPresetYearMonth(monthYM);
-    setIsBudgetModalOpen(true);
-  };
 
   const refreshBudgetFromDb = async () => {
     const monthYM = extractMonthKey();
@@ -304,20 +285,8 @@ export function TableRow({
                   }}
                 />
               ) : (isMonthView && isBreakdownChild) ? (
-                // NEW: clickable display; show "Set Budget" when no budget exists, opens modal
-                <span
-                  className={cn(
-                    "select-none",
-                    isEditMode && isMonthView && isBreakdownChild && "cursor-pointer",
-                    shouldShowSetBudget && "text-muted-foreground underline"
-                  )}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openBudgetModal();
-                  }}
-                  title={isEditMode && isMonthView && isBreakdownChild ? "Click to set budget" : undefined}
-                >
-                  {shouldShowSetBudget ? "Set Budget" : formatValue(displayBudget, budgetDimForFormatValue)}
+                <span className="select-none">
+                  {formatValue(displayBudget, budgetDimForFormatValue)}
                 </span>
               ) : null}
             </div>
@@ -384,30 +353,6 @@ export function TableRow({
             </Fragment>
           );
         })}
-      {/* NEW: BudgetModal wired with presets */}
-      {isBudgetModalOpen && (
-        <BudgetModal
-          open={isBudgetModalOpen}
-          onOpenChange={(o) => {
-            setIsBudgetModalOpen(o);
-            if (!o) {
-              refreshBudgetFromDb();
-            }
-          }}
-          reportId={reportId ?? null}
-          accountId={accountId ?? null}
-          // presets from clicked cell
-          presetDimensionName={presetDimensionName}
-          presetItemName={presetItemName}
-          presetYearMonth={presetYearMonth}
-          // Pass existing budget value to avoid fetching from DB
-          initialBudgetValue={localBudget}
-          onSuccess={() => {
-            setIsBudgetModalOpen(false);
-            refreshBudgetFromDb();
-          }}
-        />
-      )}
     </>
   );
 }

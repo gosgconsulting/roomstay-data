@@ -5,7 +5,7 @@ import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCardsFixed";
 import { KPIChart } from "@/components/KPIChartFixed";
 import { PerformanceTable } from "@/components/PerformanceTable";
-import { BudgetTrackerTable } from "@/components/BudgetTrackerTable";
+
 import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
 import { ReportModal } from "@/components/ReportModal";
@@ -155,7 +155,6 @@ export default function Index() {
       markComponentLoading('metrics');
       markComponentLoading('chart');
       markComponentLoading('table');
-      markComponentLoading('budget-table');
       setDataRefreshKey(prev => prev + 1);
 
       // Load dimensions when reportId changes
@@ -336,7 +335,7 @@ export default function Index() {
     markComponentLoading('metrics');
     markComponentLoading('chart');
     markComponentLoading('table');
-    markComponentLoading('budget-table');
+    
     
     // Increment both refresh keys to ensure all components reload
     setDataRefreshKey(prev => prev + 1);
@@ -460,14 +459,6 @@ export default function Index() {
                   visibilityRefreshTrigger={visibilityRefreshTrigger}
                 />
 
-                <BudgetTrackerTable
-                  reportId={reportId}
-                  isSharedView={false}
-                  accountId={accountId || undefined}
-                  key={`budget-table-${dataRefreshKey}-${loadingGeneration}`}
-                  onLoadingComplete={() => markComponentLoaded('budget-table')}
-                  visibilityRefreshTrigger={visibilityRefreshTrigger}
-                />
               </main>
               
               <KPISettingsModal
