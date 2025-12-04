@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Save, X } from "lucide-react";
 
 interface PerformanceSettingsModalProps {
   open: boolean;
@@ -19,6 +20,7 @@ interface PerformanceSettingsModalProps {
   selectedDimensionIds?: string[]; // NEW: initial selection to sync with filters/options
   reportId?: string;
   accountId?: string;
+  isEditMode?: boolean;
 }
 
 export function PerformanceSettingsModal({
@@ -32,8 +34,13 @@ export function PerformanceSettingsModal({
   selectedDimensionIds = [],
   reportId,
   accountId,
+  isEditMode = true,
 }: PerformanceSettingsModalProps) {
   const [localDimensions, setLocalDimensions] = useState<Dimension[]>(dimensions || []);
+  const [selectedDims, setSelectedDims] = useState<string[]>([]);
+  const [initialSelectedDims, setInitialSelectedDims] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+
   const textDateDims = useMemo(
     () => localDimensions.filter(d => d.type === "text" || d.type === "vlookup" || d.type === "date"),
     [localDimensions]
@@ -61,8 +68,6 @@ export function PerformanceSettingsModal({
     return unique;
   };
 
-  const [selectedDims, setSelectedDims] = useState<string[]>(buildInitial());
-
   useEffect(() => {
     if (open) {
       setLocalDimensions(dimensions || []);
@@ -71,12 +76,15 @@ export function PerformanceSettingsModal({
 
   useEffect(() => {
     if (open) {
-      setSelectedDims(buildInitial());
+      const initial = buildInitial();
+      setSelectedDims(initial);
+      setInitialSelectedDims(initial);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, selectedDimensionIds.join(','), groupBy[0], breakdownBy[0], thenBy[0]]);
 
   const toggleSelection = (id: string) => {
+    if (!isEditMode) return;
     if (dateDimId && id === dateDimId) return; // Date cannot be toggled off
     setSelectedDims(prev => {
       const exists = prev.includes(id);
@@ -87,9 +95,22 @@ export function PerformanceSettingsModal({
     });
   };
 
-  const handleSave = () => {
+  const hasUnsavedChanges = () => {
+    if (selectedDims.length !== initialSelectedDims.length) return true;
+    return selectedDims.some((id, index) => id !== initialSelectedDims[index]);
+  };
+
+  const handleApply = () => {
+    setIsSaving(true);
     const final = dateDimId ? Array.from(new Set([dateDimId, ...selectedDims])) : selectedDims;
     onSave(final);
+    setInitialSelectedDims([...selectedDims]); // Update initial to match current
+    setIsSaving(false);
+    onOpenChange(false);
+  };
+
+  const handleCancel = () => {
+    setSelectedDims([...initialSelectedDims]); // Revert to initial
     onOpenChange(false);
   };
 
@@ -100,6 +121,11 @@ export function PerformanceSettingsModal({
           <DialogTitle>Filters Settings</DialogTitle>
           <DialogDescription>
             Date is required and always available. Select which dimensions appear in the Group by / Breakdown by / Then by dropdowns and the filter options.
+            {!isEditMode && (
+              <span className="block mt-2 text-amber-600 font-medium">
+                Switch to Edit Mode to modify settings.
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -111,17 +137,16 @@ export function PerformanceSettingsModal({
                 {textDateDims.map((dim) => {
                   const isDate = dateDimId && dim.id === dateDimId;
                   const checked = selectedDims.includes(dim.id);
-                  const scope = String(dim.scope ?? "");
                   return (
                     <div
                       key={dim.id}
-                      className="flex items-center justify-between rounded-md border px-3 py-2 bg-background"
+                      className={`flex items-center justify-between rounded-md border px-3 py-2 bg-background ${!isEditMode ? 'opacity-60' : ''}`}
                     >
                       <div className="flex items-center gap-3">
                         <Checkbox
                           checked={checked}
                           onCheckedChange={() => toggleSelection(dim.id)}
-                          disabled={!!isDate}
+                          disabled={!!isDate || !isEditMode}
                         />
                         <div className="flex items-center gap-2">
                           <span className="text-sm">{dim.name}</span>
@@ -156,10 +181,42 @@ export function PerformanceSettingsModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSave}>Save</Button>
-        </div>
+        {/* Apply/Cancel buttons - only show if in Edit Mode and has changes */}
+        {isEditMode && hasUnsavedChanges() && (
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button 
+              variant="outline" 
+              onClick={handleCancel}
+              disabled={isSaving}
+              className="gap-2"
+            >
+              <X className="h-4 w-4" />
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleApply}
+              disabled={isSaving}
+              className="gap-2"
+            >
+              <Save className="h-4 w-4" />
+              {isSaving ? "Applying..." : "Apply Settings"}
+            </Button>
+          </div>
+        )}
+
+        {/* Show close button when no changes or not in edit mode */}
+        {(!isEditMode || !hasUnsavedChanges()) && (
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+          </div>
+        )}
+
+        {/* Show read-only message in View Mode */}
+        {!isEditMode && (
+          <p className="text-sm text-muted-foreground text-center mt-2">
+            Settings are read-only in View Mode. Switch to Edit Mode to make changes.
+          </p>
+        )}
       </DialogContent>
     </Dialog>
   );
