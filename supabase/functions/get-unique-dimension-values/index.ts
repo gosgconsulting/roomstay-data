@@ -25,6 +25,8 @@ Deno.serve(async (req) => {
     const body: RequestBody = await req.json();
     const { reportId, reportIds, dimensionId, dimensionName: nameInput, limit = 5000 } = body || {};
 
+    console.log('[get-unique-dimension-values] Request:', { reportId, dimensionId, dimensionName: nameInput, limit });
+
     if (!dimensionId) {
       return new Response(JSON.stringify({ error: 'dimensionId is required', values: [] }), {
         status: 200,
@@ -67,41 +69,78 @@ Deno.serve(async (req) => {
       const { data: sameNameDims } = await supabase
         .from('dimensions')
         .select('id, name')
-        .ilike('name', dimName); // case-insensitive match
+        .ilike('name', dimName);
 
       (sameNameDims || []).forEach((d: any) => {
         if (d?.id) candidateIds.add(String(d.id));
       });
     }
 
-    // Fetch dimension_data rows for the report(s) - increased limit for large datasets
-    let query = supabase.from('dimension_data').select('dimension_values, report_id').limit(200000);
-    if (reportId) {
-      query = query.eq('report_id', reportId);
-    } else if (reportIds && reportIds.length > 0) {
-      query = query.in('report_id', reportIds);
-    }
+    console.log('[get-unique-dimension-values] Candidate dimension IDs:', Array.from(candidateIds));
 
-    const { data, error } = await query;
-    if (error) {
-      return new Response(JSON.stringify({ error: error.message, values: [] }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Collect unique values from any candidate dimension id key present in dimension_values
+    // Build report filter
+    const targetReportIds = reportId ? [reportId] : (reportIds || []);
+    
+    // Use a more memory-efficient approach: fetch in smaller batches and extract values
     const set = new Set<string>();
     const ids = Array.from(candidateIds);
+    const batchSize = 10000; // Process in smaller batches
+    let offset = 0;
+    let hasMore = true;
 
-    for (const row of data || []) {
-      const dv = (row as any).dimension_values || {};
-      for (const id of ids) {
-        const val = dv?.[id];
-        if (val !== undefined && val !== null) {
-          const str = String(val).trim();
-          if (str !== '') set.add(str);
+    while (hasMore && set.size < limit) {
+      // Fetch a batch of dimension_data rows
+      let query = supabase
+        .from('dimension_data')
+        .select('dimension_values')
+        .in('report_id', targetReportIds)
+        .range(offset, offset + batchSize - 1);
+
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('[get-unique-dimension-values] Query error:', error);
+        return new Response(JSON.stringify({ error: error.message, values: [] }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (!data || data.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      console.log(`[get-unique-dimension-values] Batch ${offset}-${offset + data.length}: processing ${data.length} rows`);
+
+      // Extract unique values from this batch
+      for (const row of data) {
+        const dv = (row as any).dimension_values || {};
+        for (const id of ids) {
+          const val = dv?.[id];
+          if (val !== undefined && val !== null) {
+            const str = String(val).trim();
+            if (str !== '') {
+              set.add(str);
+              // Early exit if we have enough values
+              if (set.size >= limit) break;
+            }
+          }
         }
+        if (set.size >= limit) break;
+      }
+
+      // Check if we got a full batch (more data might exist)
+      if (data.length < batchSize) {
+        hasMore = false;
+      } else {
+        offset += batchSize;
+      }
+
+      // Safety limit to prevent infinite loops
+      if (offset > 500000) {
+        console.warn('[get-unique-dimension-values] Reached safety limit of 500k rows');
+        hasMore = false;
       }
     }
 
@@ -112,12 +151,15 @@ Deno.serve(async (req) => {
       values = values.slice(0, limit);
     }
 
+    console.log(`[get-unique-dimension-values] Returning ${values.length} unique values`);
+
     return new Response(JSON.stringify({ values }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    console.error('[get-unique-dimension-values] Error:', message);
     return new Response(JSON.stringify({ error: message, values: [] }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
