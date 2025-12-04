@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.fetch-csv-url]
 verify_jwt = false
+
+[functions.generate-ai-summary]
+verify_jwt = false
