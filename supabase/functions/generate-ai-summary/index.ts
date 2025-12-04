@@ -47,11 +47,12 @@ interface CachedPivotData {
 }
 
 interface RequestBody {
-  cardId: string;
-  pivotData: CachedPivotData;
+  cardId?: string;
+  pivotData: CachedPivotData | { tableContext: any[] };
   selectedMetrics: string[];
   reportConfigs?: Record<string, any>;
   aiPrompt: string;
+  isTableComment?: boolean;
 }
 
 const formatMetricValue = (metric: string, value: number): string => {
@@ -174,9 +175,9 @@ serve(async (req) => {
     }
 
     const body: RequestBody = await req.json();
-    const { cardId, pivotData, selectedMetrics, reportConfigs, aiPrompt } = body;
+    const { cardId, pivotData, selectedMetrics, reportConfigs, aiPrompt, isTableComment } = body;
 
-    console.log('Generating AI summary for card:', cardId);
+    console.log('Generating AI summary, isTableComment:', isTableComment);
     console.log('Selected metrics:', selectedMetrics);
 
     if (!pivotData) {
@@ -186,20 +187,66 @@ serve(async (req) => {
       );
     }
 
+    // Handle table comment generation (shorter, focused insights)
+    if (isTableComment) {
+      console.log('Generating table comment...');
+      
+      const tableCommentPrompt = `You are a concise marketing analyst. Analyze the provided data and give exactly 2-3 bullet points with brief, actionable insights. Keep each point to one sentence. Focus on patterns, top/bottom performers, and opportunities.`;
+      
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openRouterApiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://lovable.dev',
+          'X-Title': 'AI Table Comments'
+        },
+        body: JSON.stringify({
+          model: 'openai/gpt-4-turbo',
+          messages: [
+            { role: 'system', content: tableCommentPrompt },
+            { role: 'user', content: aiPrompt }
+          ],
+          max_tokens: 500,
+          temperature: 0.5
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('OpenRouter API error:', response.status, errorText);
+        return new Response(
+          JSON.stringify({ error: `API error: ${response.status}` }),
+          { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const data = await response.json();
+      const comment = data.choices?.[0]?.message?.content || '';
+      
+      return new Response(
+        JSON.stringify({ summary: comment }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Cast pivotData to CachedPivotData for the main summary generation
+    const pivotDataTyped = pivotData as CachedPivotData;
+
     // Build comprehensive data context from pivot tables
     let dataContext = `# Performance Analysis Data\n\n`;
     
     // Last Month Section - Primary Focus
     dataContext += `## Last Month Performance (End of Month Results)\n\n`;
     dataContext += formatReportTable(
-      pivotData.last_month, 
-      pivotData.comparison_previous_period?.last_month,
+      pivotDataTyped.last_month, 
+      pivotDataTyped.comparison_previous_period?.last_month,
       selectedMetrics,
       "Last Month vs Previous Month"
     );
     dataContext += formatReportTable(
-      pivotData.last_month, 
-      pivotData.comparison_previous_year?.last_month,
+      pivotDataTyped.last_month, 
+      pivotDataTyped.comparison_previous_year?.last_month,
       selectedMetrics,
       "Last Month vs Same Month Last Year"
     );
@@ -207,28 +254,29 @@ serve(async (req) => {
     // YTM Section (Year to End of Month)
     dataContext += `## Year-to-Month (YTM) Performance\n\n`;
     dataContext += formatReportTable(
-      pivotData.ytd, 
-      pivotData.comparison_previous_year?.ytd,
+      pivotDataTyped.ytd, 
+      pivotDataTyped.comparison_previous_year?.ytd,
       selectedMetrics,
       "YTM vs Same Period Last Year"
     );
     
     // Breakdown data for each report (using last_month data)
-    if (pivotData.breakdown_data && Object.keys(pivotData.breakdown_data).length > 0) {
+    if (pivotDataTyped.breakdown_data && Object.keys(pivotDataTyped.breakdown_data).length > 0) {
       dataContext += `## Channel Breakdown Analysis (Last Month)\n\n`;
       
-      for (const [reportId, breakdown] of Object.entries(pivotData.breakdown_data)) {
+      for (const [reportId, breakdown] of Object.entries(pivotDataTyped.breakdown_data)) {
         const reportConfig = reportConfigs?.[reportId];
         const dimensionName = reportConfig?.dimensionName || 'Segment';
-        const reportName = pivotData.last_month?.find(r => r.reportId === reportId)?.reportName || 'Channel';
+        const reportName = pivotDataTyped.last_month?.find((r: ReportMetrics) => r.reportId === reportId)?.reportName || 'Channel';
         
         // Use last_month breakdown instead of mtd
+        const typedBreakdown = breakdown as Record<DateTab, BreakdownRow[]>;
         const lastMonthBreakdown = {
-          last_month: breakdown.last_month,
-          mtd: breakdown.last_month, // Map to last_month for the formatter
-          ytd: breakdown.ytd
+          last_month: typedBreakdown.last_month,
+          mtd: typedBreakdown.last_month, // Map to last_month for the formatter
+          ytd: typedBreakdown.ytd
         };
-        const compBreakdown = pivotData.comparison_previous_period?.breakdown_data?.[reportId];
+        const compBreakdown = pivotDataTyped.comparison_previous_period?.breakdown_data?.[reportId];
         const lastMonthCompBreakdown = compBreakdown ? {
           last_month: compBreakdown.last_month,
           mtd: compBreakdown.last_month,
@@ -239,12 +287,12 @@ serve(async (req) => {
     }
     
     // Monthly trend data for YTM
-    if (pivotData.combined_date_breakdown?.ytd && pivotData.combined_date_breakdown.ytd.length > 0) {
+    if (pivotDataTyped.combined_date_breakdown?.ytd && pivotDataTyped.combined_date_breakdown.ytd.length > 0) {
       dataContext += `## Monthly Trend (YTM - Combined All Channels)\n\n`;
       dataContext += "| Month | " + selectedMetrics.join(" | ") + " |\n";
       dataContext += "|-------|" + selectedMetrics.map(() => "------").join("|") + "|\n";
       
-      pivotData.combined_date_breakdown.ytd.forEach(row => {
+      pivotDataTyped.combined_date_breakdown.ytd.forEach((row: DateBreakdownRow) => {
         const cells = selectedMetrics.map(m => formatMetricValue(m, row.metrics[m] || 0));
         dataContext += `| ${row.dateGroup} | ${cells.join(" | ")} |\n`;
       });
