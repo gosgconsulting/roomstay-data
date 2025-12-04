@@ -127,6 +127,30 @@ export const parseDate = (value: any): Date | null => {
   return null;
 };
 
+// Formula metrics that should be calculated, not summed
+export const FORMULA_METRICS = ['CTR', 'ROAS', 'Conversion rate', 'CPC', 'Cost of sale', 'COS'];
+
+// Base metrics needed for formula calculations
+export const BASE_METRICS = ['Impressions', 'Clicks', 'Cost', 'Revenue', 'Conversions'];
+
+export const calculateFormulaMetrics = (baseValues: Record<string, number>): Record<string, number> => {
+  const result: Record<string, number> = {};
+  const impressions = baseValues['Impressions'] || 0;
+  const clicks = baseValues['Clicks'] || 0;
+  const cost = baseValues['Cost'] || 0;
+  const revenue = baseValues['Revenue'] || 0;
+  const conversions = baseValues['Conversions'] || 0;
+
+  result['CTR'] = impressions > 0 ? (clicks / impressions) * 100 : 0;
+  result['ROAS'] = cost > 0 ? (revenue / cost) * 100 : 0;
+  result['Conversion rate'] = clicks > 0 ? (conversions / clicks) * 100 : 0;
+  result['CPC'] = clicks > 0 ? cost / clicks : 0;
+  result['Cost of sale'] = revenue > 0 ? (cost / revenue) * 100 : 0;
+  result['COS'] = result['Cost of sale'];
+
+  return result;
+};
+
 export const aggregateMetrics = (
   rows: any[],
   metrics: string[],
@@ -135,7 +159,10 @@ export const aggregateMetrics = (
   metricNameToIdMap?: Record<string, string>
 ): Record<string, number> => {
   const result: Record<string, number> = {};
-  metrics.forEach((m) => (result[m] = 0));
+  
+  // Initialize all requested metrics and base metrics needed for formulas
+  const allMetricsToTrack = new Set([...metrics, ...BASE_METRICS]);
+  allMetricsToTrack.forEach((m) => (result[m] = 0));
   
   // Try to find Date dimension ID from metricNameToIdMap
   const dateDimId = metricNameToIdMap?.['Date'] || metricNameToIdMap?.['date'] || metricNameToIdMap?.['Day'];
@@ -184,10 +211,14 @@ export const aggregateMetrics = (
     return true;
   });
 
+  // Sum up base metrics (non-formula metrics)
   filteredRows.forEach((row) => {
     const rowData = row.dimension_values || row;
     
-    metrics.forEach((metric) => {
+    allMetricsToTrack.forEach((metric) => {
+      // Skip formula metrics - they'll be calculated after summing
+      if (FORMULA_METRICS.includes(metric)) return;
+      
       // Try to get value by metric name directly
       let value = rowData[metric];
       
@@ -203,6 +234,14 @@ export const aggregateMetrics = (
         }
       }
     });
+  });
+
+  // Calculate formula metrics from aggregated base values
+  const formulaValues = calculateFormulaMetrics(result);
+  FORMULA_METRICS.forEach(metric => {
+    if (metrics.includes(metric)) {
+      result[metric] = formulaValues[metric] || 0;
+    }
   });
 
   return result;
@@ -311,12 +350,33 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   const calculateTotals = (reportMetrics: ReportMetrics[]): Record<string, number> => {
     const totals: Record<string, number> = {};
     const metrics = selectedMetrics || [];
-    metrics.forEach((m) => (totals[m] = 0));
+    
+    // First sum all base metrics
+    const baseMetricsToSum = [...BASE_METRICS];
+    baseMetricsToSum.forEach(m => totals[m] = 0);
+    metrics.forEach(m => {
+      if (!FORMULA_METRICS.includes(m)) {
+        totals[m] = 0;
+      }
+    });
 
     reportMetrics.forEach((rm) => {
-      metrics.forEach((metric) => {
+      baseMetricsToSum.forEach((metric) => {
         totals[metric] += rm.metrics[metric] || 0;
       });
+      metrics.forEach((metric) => {
+        if (!FORMULA_METRICS.includes(metric)) {
+          totals[metric] += rm.metrics[metric] || 0;
+        }
+      });
+    });
+
+    // Calculate formula metrics from totals
+    const formulaValues = calculateFormulaMetrics(totals);
+    metrics.forEach(metric => {
+      if (FORMULA_METRICS.includes(metric)) {
+        totals[metric] = formulaValues[metric] || 0;
+      }
     });
 
     return totals;
@@ -346,15 +406,37 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     return report?.reportName || reportId;
   };
   
-  // Calculate breakdown totals
+  // Calculate breakdown totals with formula metrics
   const calculateBreakdownTotals = (rows: BreakdownRow[]): Record<string, number> => {
     const totals: Record<string, number> = {};
-    safeMetrics.forEach(m => totals[m] = 0);
+    
+    // Sum base metrics first
+    BASE_METRICS.forEach(m => totals[m] = 0);
+    safeMetrics.forEach(m => {
+      if (!FORMULA_METRICS.includes(m)) {
+        totals[m] = 0;
+      }
+    });
+    
     rows.forEach(row => {
-      safeMetrics.forEach(metric => {
+      BASE_METRICS.forEach(metric => {
         totals[metric] += row.metrics[metric] || 0;
       });
+      safeMetrics.forEach(metric => {
+        if (!FORMULA_METRICS.includes(metric)) {
+          totals[metric] += row.metrics[metric] || 0;
+        }
+      });
     });
+    
+    // Calculate formula metrics
+    const formulaValues = calculateFormulaMetrics(totals);
+    safeMetrics.forEach(metric => {
+      if (FORMULA_METRICS.includes(metric)) {
+        totals[metric] = formulaValues[metric] || 0;
+      }
+    });
+    
     return totals;
   };
 
