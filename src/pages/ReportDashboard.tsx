@@ -97,59 +97,13 @@ export default function ReportDashboard() {
     
     return {
       dimensionFilters: {},
-      dateRange: (() => {
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-        return { from: startOfMonth, to: endOfMonth };
-      })(),
+      dateRange: undefined, // Let FiltersBar handle initial date range
       datePreset: "this_month",
       compareEnabled: false,
       compareType: "previous_period",
       compareDateRange: undefined,
     };
   });
-
-  // Force reset any future date ranges immediately on mount
-  useEffect(() => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    
-    // If we detect any date range in the future (like 2025), reset to this_month
-    if (filters.dateRange?.from && filters.dateRange.from.getFullYear() > currentYear) {
-      console.log('[ReportDashboard] Detected future date range on mount, forcing reset to this_month');
-      console.log('[ReportDashboard] Future date:', filters.dateRange.from.toISOString(), 'current year:', currentYear);
-      
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-      setFilters(prev => ({
-        ...prev,
-        dateRange: { from: startOfMonth, to: endOfMonth },
-        datePreset: "this_month"
-      }));
-    }
-  }, []); // Run only on mount
-
-  // Reset future date ranges when they appear
-  useEffect(() => {
-    if (filters.dateRange?.from) {
-      const now = new Date();
-      const isDateInFuture = filters.dateRange.from > new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      
-      if (isDateInFuture) {
-        console.log('[ReportDashboard] Detected future date range, resetting to this_month');
-        console.log('[ReportDashboard] Future date:', filters.dateRange.from.toISOString(), 'vs now:', now.toISOString());
-        
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-        setFilters(prev => ({
-          ...prev,
-          dateRange: { from: startOfMonth, to: endOfMonth },
-          datePreset: "this_month"
-        }));
-      }
-    }
-  }, [filters.dateRange]);
 
   // Track filter changes
   useEffect(() => {
@@ -226,12 +180,9 @@ export default function ReportDashboard() {
       markComponentLoading('chart');
       markComponentLoading('table');
       
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
       setFilters({
         dimensionFilters: {},
-        dateRange: { from: startOfMonth, to: endOfMonth },
+        dateRange: undefined, // Let FiltersBar handle initial date range
         datePreset: "this_month",
         compareEnabled: false,
         compareType: "previous_period",
