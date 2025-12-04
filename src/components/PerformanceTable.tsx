@@ -643,6 +643,7 @@ export const PerformanceTable = ({
         breakdownBy={breakdownByDimensions}
         thenBy={thenByDimensions}
         selectedDimensionIds={selectorDimensions}
+        isEditMode={isEditMode}
         onSave={handleSettingsSave}
       />
     </>

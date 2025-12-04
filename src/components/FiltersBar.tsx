@@ -1153,6 +1153,7 @@ export const FiltersBar = ({
         breakdownBy={[]}
         thenBy={[]}
         selectedDimensionIds={activeDimensions}
+        isEditMode={isEditMode}
         onSave={(selectedIds) => {
           // Apply to filter options (chips) and persist via existing handler
           handleDimensionsChange(selectedIds);
