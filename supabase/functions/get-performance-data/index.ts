@@ -280,19 +280,68 @@ Deno.serve(async (req) => {
       console.log(`[GET-PERFORMANCE-DATA] Applying dimension filters:`, JSON.stringify(normalizedFilters));
     }
 
+    // Build a map of dimension ID -> dimension name for flexible filtering
+    const dimIdToName: Record<string, string> = {};
+    const dimNameToIds: Record<string, string[]> = {};
+    allDimensions.forEach((dim: any) => {
+      dimIdToName[dim.id] = dim.name;
+      if (!dimNameToIds[dim.name]) dimNameToIds[dim.name] = [];
+      if (!dimNameToIds[dim.name].includes(dim.id)) {
+        dimNameToIds[dim.name].push(dim.id);
+      }
+    });
+
+    // Expand filters to include all dimension IDs with the same name
+    // This ensures filtering works even if the same dimension has multiple IDs
+    const expandedFilters: Record<string, string[]> = {};
+    for (const [dimId, values] of Object.entries(normalizedFilters)) {
+      const dimName = dimIdToName[dimId];
+      if (dimName) {
+        // Get all dimension IDs with this name
+        const allIdsForName = dimNameToIds[dimName] || [dimId];
+        allIdsForName.forEach(id => {
+          expandedFilters[id] = values;
+        });
+        console.log(`[GET-PERFORMANCE-DATA] Filter dimension "${dimName}" expanded to IDs:`, allIdsForName);
+      } else {
+        // Fallback: just use the provided ID
+        expandedFilters[dimId] = values;
+      }
+    }
+
     if (Object.keys(normalizedFilters).length > 0) {
+      console.log(`[GET-PERFORMANCE-DATA] Original filters:`, JSON.stringify(normalizedFilters));
+      console.log(`[GET-PERFORMANCE-DATA] Expanded filters:`, JSON.stringify(expandedFilters));
+      
       filteredData = filteredData.filter((row: any) => {
         const dv = row.dimension_values || {};
-        for (const [dimId, values] of Object.entries(normalizedFilters)) {
+        
+        // Group filters by dimension name and check if ANY matching dimension ID passes
+        for (const [filterDimId, values] of Object.entries(normalizedFilters)) {
           if (!values || values.length === 0) continue;
-          const rowVal = dv[dimId];
-          if (rowVal === undefined || rowVal === null) return false;
-          const rowStr = String(rowVal);
-          // Must match one of the values exactly (case-sensitive)
-          if (!values.some((v) => rowStr === v)) return false;
+          
+          const dimName = dimIdToName[filterDimId];
+          const allIdsForName = dimName ? (dimNameToIds[dimName] || [filterDimId]) : [filterDimId];
+          
+          // Check if ANY of the dimension IDs with this name has a matching value
+          let foundMatch = false;
+          for (const id of allIdsForName) {
+            const rowVal = dv[id];
+            if (rowVal !== undefined && rowVal !== null) {
+              const rowStr = String(rowVal);
+              if (values.some((v) => rowStr === v)) {
+                foundMatch = true;
+                break;
+              }
+            }
+          }
+          
+          if (!foundMatch) return false;
         }
         return true;
       });
+      
+      console.log(`[GET-PERFORMANCE-DATA] Rows after dimension filtering: ${filteredData.length}`);
     }
 
     // Build response: keep dimension_values keyed by IDs to match frontend expectations
