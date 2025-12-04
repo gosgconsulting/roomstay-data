@@ -32,6 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { AISummaryPivotTable } from "@/components/AISummaryPivotTable";
 
 interface AISummaryCard {
   id: string;
@@ -390,10 +391,19 @@ const AISummaryPage = () => {
                   </div>
                 </div>
                 
-                {/* Content */}
-                <CardContent className="p-0 min-h-[300px] flex items-center justify-center">
+                {/* Pivot Table */}
+                <CardContent className="p-4">
+                  <AISummaryPivotTable
+                    reportIds={card.report_ids}
+                    selectedMetrics={card.selected_metrics}
+                    accountId={accountId}
+                  />
+                </CardContent>
+                
+                {/* AI Summary Content */}
+                <CardContent className="p-0 min-h-[200px] flex items-center justify-center border-t">
                   {generatingCardId === card.id ? (
-                    <div className="flex flex-col items-center gap-4 text-muted-foreground">
+                    <div className="flex flex-col items-center gap-4 text-muted-foreground py-8">
                       <Loader2 className="h-12 w-12 animate-spin" />
                       <p>Generating AI summary...</p>
                     </div>
@@ -404,7 +414,7 @@ const AISummaryPage = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-4 text-muted-foreground">
+                    <div className="flex flex-col items-center gap-4 text-muted-foreground py-8">
                       <div className="relative">
                         <div className="absolute -top-2 -right-2">
                           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
