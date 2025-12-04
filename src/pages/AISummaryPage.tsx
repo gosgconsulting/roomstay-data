@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Plus, Trash2, Calendar, BarChart3, FileText, Loader2 } from "lucide-react";
+import { ArrowLeft, Sparkles, Plus, Trash2, Calendar, BarChart3, FileText, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AddAICardModal } from "@/components/AddAICardModal";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
+import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -19,6 +20,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface AISummaryCard {
   id: string;
@@ -38,6 +46,19 @@ interface Report {
   name: string;
 }
 
+interface DataSource {
+  id: string;
+  report_id: string;
+  name: string;
+  source_type: "google_sheets" | "csv_url";
+  spreadsheet_id: string | null;
+  google_sheets_url: string | null;
+  csv_url: string | null;
+  tab_name: string | null;
+  header_row: number;
+  column_mappings: any[] | null;
+}
+
 const AISummaryPage = () => {
   const { accountId } = useParams();
   const navigate = useNavigate();
@@ -47,14 +68,15 @@ const AISummaryPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [generatingCardId, setGeneratingCardId] = useState<string | null>(null);
+  const [viewingSummary, setViewingSummary] = useState<AISummaryCard | null>(null);
 
   const fetchCards = async () => {
     try {
       const { user } = await getUser();
       if (!user) return;
 
-      const query = supabase
-        .from("ai_summary_cards")
+      const query = (supabase.from("ai_summary_cards") as any)
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
@@ -70,7 +92,7 @@ const AISummaryPage = () => {
         return;
       }
 
-      setCards((data || []) as unknown as AISummaryCard[]);
+      setCards((data || []) as AISummaryCard[]);
     } catch (err) {
       console.error("Error fetching AI cards:", err);
     } finally {
@@ -109,8 +131,7 @@ const AISummaryPage = () => {
     
     setIsDeleting(true);
     try {
-      const { error } = await supabase
-        .from("ai_summary_cards")
+      const { error } = await (supabase.from("ai_summary_cards") as any)
         .delete()
         .eq("id", deleteCardId);
 
@@ -126,6 +147,123 @@ const AISummaryPage = () => {
     } finally {
       setIsDeleting(false);
       setDeleteCardId(null);
+    }
+  };
+
+  const handleGenerateSummary = async (card: AISummaryCard) => {
+    setGeneratingCardId(card.id);
+    
+    try {
+      const { user } = await getUser();
+      if (!user) {
+        toast.error("You must be logged in");
+        return;
+      }
+
+      toast.info("Fetching data from sources...");
+
+      // Fetch data for each report
+      const reportData: Array<{ reportName: string; rows: Array<Record<string, any>> }> = [];
+
+      for (const reportId of card.report_ids) {
+        const report = reports.find(r => r.id === reportId);
+        if (!report) continue;
+
+        // Fetch data source
+        const { data: dsData, error: dsError } = await supabase
+          .from("data_sources")
+          .select("*")
+          .eq("report_id", reportId)
+          .limit(1)
+          .maybeSingle();
+
+        if (dsError || !dsData) {
+          console.error(`Error fetching data source for report ${reportId}:`, dsError);
+          continue;
+        }
+
+        // Fetch source data
+        const sourceData = await fetchSourceData(dsData as DataSource, user.id, accountId);
+        
+        if (sourceData?.transformedRows) {
+          // Filter by date if sinceDate is set
+          const sinceDate = new Date(card.since_date);
+          const filteredRows = sourceData.transformedRows.filter((row: any) => {
+            // Find the date column
+            const dateValue = row.Date || row.date || row.Day || row.day;
+            if (!dateValue) return true;
+            const rowDate = new Date(dateValue);
+            return rowDate >= sinceDate;
+          });
+
+          reportData.push({
+            reportName: report.name,
+            rows: filteredRows
+          });
+        }
+      }
+
+      if (reportData.length === 0) {
+        toast.error("No data available for analysis");
+        return;
+      }
+
+      toast.info("Generating AI summary with GPT-4 Turbo...");
+
+      // Call the edge function
+      const { data: result, error: fnError } = await supabase.functions.invoke('generate-ai-summary', {
+        body: {
+          cardId: card.id,
+          reportData,
+          selectedMetrics: card.selected_metrics,
+          sinceDate: card.since_date,
+          aiPrompt: card.ai_prompt
+        }
+      });
+
+      if (fnError) {
+        console.error("Error calling AI function:", fnError);
+        toast.error("Failed to generate summary");
+        return;
+      }
+
+      if (result?.error) {
+        console.error("AI function error:", result.error);
+        toast.error(result.error);
+        return;
+      }
+
+      // Update the card with the generated summary
+      const { error: updateError } = await (supabase.from("ai_summary_cards") as any)
+        .update({
+          generated_summary: result.summary,
+          last_generated_at: new Date().toISOString()
+        })
+        .eq("id", card.id);
+
+      if (updateError) {
+        console.error("Error updating card:", updateError);
+        toast.error("Failed to save summary");
+        return;
+      }
+
+      // Update local state
+      setCards(prev => prev.map(c => 
+        c.id === card.id 
+          ? { ...c, generated_summary: result.summary, last_generated_at: new Date().toISOString() }
+          : c
+      ));
+
+      toast.success("AI Summary generated!");
+      
+      // Show the generated summary
+      setViewingSummary({ ...card, generated_summary: result.summary });
+
+    } catch (err) {
+      console.error("Error generating summary:", err);
+      toast.error("Failed to generate summary");
+    } finally {
+      setGeneratingCardId(null);
     }
   };
 
@@ -173,7 +311,7 @@ const AISummaryPage = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {cards.map(card => (
-              <Card key={card.id} className="relative group">
+              <Card key={card.id} className="relative group flex flex-col">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
@@ -193,7 +331,7 @@ const AISummaryPage = () => {
                     Created {format(new Date(card.created_at), "MMM d, yyyy")}
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-3 flex-1 flex flex-col">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <FileText className="h-4 w-4" />
                     <span className="truncate">
@@ -220,17 +358,57 @@ const AISummaryPage = () => {
                       </Badge>
                     )}
                   </div>
+                  
+                  <div className="flex-1" />
+                  
                   {card.generated_summary ? (
-                    <div className="pt-3 border-t">
+                    <div className="pt-3 border-t space-y-2">
                       <p className="text-sm text-muted-foreground line-clamp-3">
                         {card.generated_summary}
                       </p>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={() => setViewingSummary(card)}
+                        >
+                          View Full
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleGenerateSummary(card)}
+                          disabled={generatingCardId === card.id}
+                        >
+                          {generatingCardId === card.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   ) : (
                     <div className="pt-3 border-t">
-                      <Badge variant="outline" className="text-xs">
-                        Not generated yet
-                      </Badge>
+                      <Button 
+                        className="w-full" 
+                        size="sm"
+                        onClick={() => handleGenerateSummary(card)}
+                        disabled={generatingCardId === card.id}
+                      >
+                        {generatingCardId === card.id ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            Generate Summary
+                          </>
+                        )}
+                      </Button>
                     </div>
                   )}
                 </CardContent>
@@ -266,6 +444,23 @@ const AISummaryPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* View Summary Dialog */}
+      <Dialog open={!!viewingSummary} onOpenChange={() => setViewingSummary(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              {viewingSummary?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="flex-1 pr-4">
+            <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap">
+              {viewingSummary?.generated_summary}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
