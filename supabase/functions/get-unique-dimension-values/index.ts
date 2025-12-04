@@ -1,10 +1,10 @@
-// @ts-nocheck
+// @ts-ignore - Deno resolves remote module imports at runtime
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.77.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE, PATCH',
-  'Access-Control-Allow-Headers': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Max-Age': '86400',
 };
 
@@ -16,14 +16,15 @@ type RequestBody = {
   limit?: number;
 };
 
+// @ts-ignore - Deno global is provided by the Edge Functions runtime
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { status: 200, headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const body: RequestBody = await req.json();
-    const { reportId, reportIds, dimensionId, dimensionName: nameInput, limit = 5000 } = body || {};
+    const { reportId, reportIds, dimensionId, dimensionName: nameInput, limit = 1000 } = body || {};
 
     console.log('[get-unique-dimension-values] Request:', { reportId, dimensionId, dimensionName: nameInput, limit });
 
@@ -41,7 +42,9 @@ Deno.serve(async (req) => {
       });
     }
 
+    // @ts-ignore - Deno env is available in the Edge Functions runtime
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    // @ts-ignore - Deno env is available in the Edge Functions runtime
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -80,40 +83,34 @@ Deno.serve(async (req) => {
 
     // Build report filter
     const targetReportIds = reportId ? [reportId] : (reportIds || []);
-    
-    // Use a more memory-efficient approach: fetch in smaller batches and extract values
-    const set = new Set<string>();
     const ids = Array.from(candidateIds);
-    const batchSize = 10000; // Process in smaller batches
-    let offset = 0;
-    let hasMore = true;
+    
+    // Use a more efficient approach: fetch a sample of rows with LIMIT
+    // and extract unique values from those rows
+    const set = new Set<string>();
+    const maxRows = 50000; // Limit total rows to process
 
-    while (hasMore && set.size < limit) {
-      // Fetch a batch of dimension_data rows
-      let query = supabase
-        .from('dimension_data')
-        .select('dimension_values')
-        .in('report_id', targetReportIds)
-        .range(offset, offset + batchSize - 1);
+    // Fetch dimension_data with a reasonable limit
+    let query = supabase
+      .from('dimension_data')
+      .select('dimension_values')
+      .in('report_id', targetReportIds)
+      .limit(maxRows);
 
-      const { data, error } = await query;
-      
-      if (error) {
-        console.error('[get-unique-dimension-values] Query error:', error);
-        return new Response(JSON.stringify({ error: error.message, values: [] }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error('[get-unique-dimension-values] Query error:', error);
+      return new Response(JSON.stringify({ error: error.message, values: [] }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-      if (!data || data.length === 0) {
-        hasMore = false;
-        break;
-      }
+    console.log(`[get-unique-dimension-values] Fetched ${data?.length || 0} rows to extract unique values`);
 
-      console.log(`[get-unique-dimension-values] Batch ${offset}-${offset + data.length}: processing ${data.length} rows`);
-
-      // Extract unique values from this batch
+    // Extract unique values from the fetched rows
+    if (data) {
       for (const row of data) {
         const dv = (row as any).dimension_values || {};
         for (const id of ids) {
@@ -128,19 +125,6 @@ Deno.serve(async (req) => {
           }
         }
         if (set.size >= limit) break;
-      }
-
-      // Check if we got a full batch (more data might exist)
-      if (data.length < batchSize) {
-        hasMore = false;
-      } else {
-        offset += batchSize;
-      }
-
-      // Safety limit to prevent infinite loops
-      if (offset > 500000) {
-        console.warn('[get-unique-dimension-values] Reached safety limit of 500k rows');
-        hasMore = false;
       }
     }
 
