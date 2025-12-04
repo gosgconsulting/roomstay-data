@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff } from "@/lib/debug";
@@ -561,20 +562,39 @@ export function KPIChart({
   if (isLoading) {
     return (
       <Card className="shadow-sm">
-        <CardHeader className="flex flex-col items-end">
-          <div className="h-8 w-40 bg-muted rounded animate-pulse" />
+        <CardHeader className="flex flex-col items-end pb-2">
+          <Skeleton className="h-8 w-40" />
         </CardHeader>
         <CardContent>
-          <div className="h-56 flex items-end justify-between gap-2 px-4 pb-6">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div 
-                  className="w-full bg-muted rounded-t animate-pulse" 
-                  style={{ height: `${Math.random() * 60 + 20}%` }}
-                />
-                <div className="h-2 w-6 bg-muted rounded animate-pulse" />
+          <div className="h-56 md:h-64 flex flex-col gap-4">
+            {/* Y-axis labels skeleton */}
+            <div className="flex gap-2 h-full">
+              <div className="flex flex-col justify-between py-2">
+                <Skeleton className="h-3 w-8" />
+                <Skeleton className="h-3 w-10" />
+                <Skeleton className="h-3 w-8" />
+                <Skeleton className="h-3 w-12" />
+                <Skeleton className="h-3 w-8" />
               </div>
-            ))}
+              {/* Chart area skeleton */}
+              <div className="flex-1 flex flex-col justify-end">
+                <div className="flex items-end justify-between gap-1 h-[180px] border-l border-b border-muted px-2">
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <Skeleton
+                      key={i}
+                      className="flex-1 max-w-8 rounded-t"
+                      style={{ height: `${30 + Math.sin(i * 0.8) * 40 + 20}%` }}
+                    />
+                  ))}
+                </div>
+                {/* X-axis labels skeleton */}
+                <div className="flex justify-between px-2 pt-2">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton key={i} className="h-3 w-8" />
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -584,7 +604,7 @@ export function KPIChart({
   if (chartData.length === 0) {
     return (
       <Card className="shadow-sm">
-        <CardHeader className="flex flex-col items-end">
+        <CardHeader className="flex flex-col items-end pb-2">
           <div className="flex items-center gap-2">
             <Select value={selectedMetric} onValueChange={handleMetricChange}>
               <SelectTrigger className="w-40 h-8 text-xs">
@@ -601,13 +621,32 @@ export function KPIChart({
           </div>
         </CardHeader>
         <CardContent>
-          <div className="h-56 flex items-end justify-between gap-2 px-4 pb-6">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div className="w-full bg-muted/40 rounded-t" style={{ height: '20%' }} />
-                <div className="h-2 w-6 bg-muted/40 rounded" />
+          <div className="h-56 md:h-64 flex flex-col gap-4">
+            <div className="flex gap-2 h-full">
+              <div className="flex flex-col justify-between py-2">
+                <Skeleton className="h-3 w-8 opacity-40" />
+                <Skeleton className="h-3 w-10 opacity-40" />
+                <Skeleton className="h-3 w-8 opacity-40" />
+                <Skeleton className="h-3 w-12 opacity-40" />
+                <Skeleton className="h-3 w-8 opacity-40" />
               </div>
-            ))}
+              <div className="flex-1 flex flex-col justify-end">
+                <div className="flex items-end justify-between gap-1 h-[180px] border-l border-b border-muted/50 px-2">
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <Skeleton
+                      key={i}
+                      className="flex-1 max-w-8 rounded-t opacity-30"
+                      style={{ height: '20%' }}
+                    />
+                  ))}
+                </div>
+                <div className="flex justify-between px-2 pt-2">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton key={i} className="h-3 w-8 opacity-40" />
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -616,7 +655,7 @@ export function KPIChart({
 
   return (
     <Card className="shadow-sm">
-      <CardHeader className="flex flex-col items-end">
+      <CardHeader className="flex flex-col items-end pb-2">
         <div className="flex items-center gap-2">
           <Select value={selectedMetric} onValueChange={handleMetricChange}>
             <SelectTrigger className="w-40 h-8 text-xs">
