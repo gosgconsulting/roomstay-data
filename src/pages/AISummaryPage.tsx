@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Plus, Trash2, Calendar, BarChart3, FileText, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, RefreshCw, Settings, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { AddAICardModal } from "@/components/AddAICardModal";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
@@ -64,6 +69,7 @@ const AISummaryPage = () => {
   const navigate = useNavigate();
   const [isAddCardModalOpen, setIsAddCardModalOpen] = useState(false);
   const [cards, setCards] = useState<AISummaryCard[]>([]);
+  const [editingCard, setEditingCard] = useState<AISummaryCard | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
@@ -267,10 +273,9 @@ const AISummaryPage = () => {
     }
   };
 
-  const getReportNames = (reportIds: string[]) => {
-    return reportIds
-      .map(id => reports.find(r => r.id === id)?.name || "Unknown")
-      .join(", ");
+  const handleOpenSettings = (card: AISummaryCard) => {
+    setEditingCard(card);
+    setIsAddCardModalOpen(true);
   };
 
   return (
@@ -309,106 +314,123 @@ const AISummaryPage = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             {cards.map(card => (
-              <Card key={card.id} className="relative group flex flex-col">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-primary" />
-                      <CardTitle className="text-lg">{card.name}</CardTitle>
+              <Card key={card.id} className="overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <div className="grid grid-cols-2 gap-0.5">
+                        <div className="w-1 h-1 rounded-full bg-current" />
+                        <div className="w-1 h-1 rounded-full bg-current" />
+                        <div className="w-1 h-1 rounded-full bg-current" />
+                        <div className="w-1 h-1 rounded-full bg-current" />
+                        <div className="w-1 h-1 rounded-full bg-current" />
+                        <div className="w-1 h-1 rounded-full bg-current" />
+                      </div>
                     </div>
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <span className="font-medium">{card.name}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {card.last_generated_at && (
+                      <span className="text-sm text-muted-foreground mr-2">
+                        Refreshed {format(new Date(card.last_generated_at), "MMM d 'at' h:mm a")}
+                      </span>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => setDeleteCardId(card.id)}
+                      className="h-8 w-8"
+                      onClick={() => setViewingSummary(card)}
+                      disabled={!card.generated_summary}
                     >
-                      <Trash2 className="h-4 w-4 text-destructive" />
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                      </svg>
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handleOpenSettings(card)}
+                    >
+                      <Settings className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handleGenerateSummary(card)}
+                      disabled={generatingCardId === card.id}
+                    >
+                      {generatingCardId === card.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem 
+                          className="text-destructive"
+                          onClick={() => setDeleteCardId(card.id)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                  <CardDescription className="text-xs">
-                    Created {format(new Date(card.created_at), "MMM d, yyyy")}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 flex-1 flex flex-col">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <FileText className="h-4 w-4" />
-                    <span className="truncate">
-                      {getReportNames(card.report_ids) || "No reports"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Calendar className="h-4 w-4" />
-                    <span>Since {format(new Date(card.since_date), "MMM d, yyyy")}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <BarChart3 className="h-4 w-4" />
-                    <span>{card.selected_metrics.length} metrics</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1 pt-2">
-                    {card.selected_metrics.slice(0, 4).map(metric => (
-                      <Badge key={metric} variant="secondary" className="text-xs">
-                        {metric}
-                      </Badge>
-                    ))}
-                    {card.selected_metrics.length > 4 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{card.selected_metrics.length - 4}
-                      </Badge>
-                    )}
-                  </div>
-                  
-                  <div className="flex-1" />
-                  
-                  {card.generated_summary ? (
-                    <div className="pt-3 border-t space-y-2">
-                      <p className="text-sm text-muted-foreground line-clamp-3">
+                </div>
+                
+                {/* Content */}
+                <CardContent className="p-0 min-h-[300px] flex items-center justify-center">
+                  {generatingCardId === card.id ? (
+                    <div className="flex flex-col items-center gap-4 text-muted-foreground">
+                      <Loader2 className="h-12 w-12 animate-spin" />
+                      <p>Generating AI summary...</p>
+                    </div>
+                  ) : card.generated_summary ? (
+                    <div className="p-6 w-full">
+                      <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap">
                         {card.generated_summary}
-                      </p>
-                      <div className="flex gap-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="flex-1"
-                          onClick={() => setViewingSummary(card)}
-                        >
-                          View Full
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleGenerateSummary(card)}
-                          disabled={generatingCardId === card.id}
-                        >
-                          {generatingCardId === card.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-4 w-4" />
-                          )}
-                        </Button>
                       </div>
                     </div>
                   ) : (
-                    <div className="pt-3 border-t">
-                      <Button 
-                        className="w-full" 
-                        size="sm"
-                        onClick={() => handleGenerateSummary(card)}
-                        disabled={generatingCardId === card.id}
-                      >
-                        {generatingCardId === card.id ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Generating...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            Generate Summary
-                          </>
-                        )}
-                      </Button>
+                    <div className="flex flex-col items-center gap-4 text-muted-foreground">
+                      <div className="relative">
+                        <div className="absolute -top-2 -right-2">
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21 8 14l-6-4.6h7.6L12 2z" />
+                          </svg>
+                        </div>
+                        <div className="absolute top-0 right-6">
+                          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M4 6h16M4 12h16M4 18h10" />
+                          </svg>
+                        </div>
+                        <div className="w-16 h-16 rounded-full border-2 border-muted flex items-center justify-center">
+                          <Sparkles className="h-8 w-8" />
+                        </div>
+                        <div className="absolute -bottom-1 -left-2">
+                          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                          </svg>
+                        </div>
+                        <div className="absolute -bottom-2 right-0">
+                          <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21 8 14l-6-4.6h7.6L12 2z" />
+                          </svg>
+                        </div>
+                      </div>
+                      <p className="text-center">Click refresh to generate AI summary</p>
                     </div>
                   )}
                 </CardContent>
@@ -420,8 +442,12 @@ const AISummaryPage = () => {
 
       <AddAICardModal
         open={isAddCardModalOpen}
-        onOpenChange={setIsAddCardModalOpen}
+        onOpenChange={(open) => {
+          setIsAddCardModalOpen(open);
+          if (!open) setEditingCard(null);
+        }}
         onCardCreated={fetchCards}
+        editingCard={editingCard}
       />
 
       <AlertDialog open={!!deleteCardId} onOpenChange={() => setDeleteCardId(null)}>
