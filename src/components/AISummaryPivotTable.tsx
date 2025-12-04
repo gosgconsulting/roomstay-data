@@ -20,6 +20,9 @@ import {
   isWithinInterval,
   parseISO,
   isValid,
+  getWeek,
+  getYear,
+  format,
 } from "date-fns";
 
 interface ReportMetrics {
@@ -35,11 +38,17 @@ interface BreakdownRow {
 
 export type DateTab = "last_month" | "mtd" | "ytd";
 
+export interface DateBreakdownRow {
+  dateGroup: string; // e.g., "Week 45, 2024" or "2024"
+  metrics: Record<string, number>;
+}
+
 export interface CachedPivotData {
   last_month: ReportMetrics[];
   mtd: ReportMetrics[];
   ytd: ReportMetrics[];
   breakdown_data?: Record<string, Record<DateTab, BreakdownRow[]>>;
+  date_breakdown_data?: Record<string, Record<DateTab, DateBreakdownRow[]>>;
 }
 
 interface AISummaryPivotTableProps {
@@ -161,6 +170,17 @@ export const calculateFormulaMetrics = (baseValues: Record<string, number>): Rec
   result['COS'] = result['Cost of sale'];
 
   return result;
+};
+
+// Helper to format date group key based on tab (week for last_month/mtd, year for ytd)
+export const getDateGroupKey = (date: Date, tab: DateTab): string => {
+  if (tab === 'ytd') {
+    return String(getYear(date));
+  }
+  // For last_month and mtd, group by week
+  const weekNum = getWeek(date);
+  const year = getYear(date);
+  return `Week ${weekNum}, ${year}`;
 };
 
 export const aggregateMetrics = (
@@ -409,6 +429,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   
   // Get breakdown data and report names
   const breakdownData = data.breakdown_data || {};
+  const dateBreakdownData = data.date_breakdown_data || {};
   const mainTabData = data[activeTab] || [];
   
   // Helper to get report name from reportId
@@ -418,7 +439,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   };
   
   // Calculate breakdown totals with formula metrics
-  const calculateBreakdownTotals = (rows: BreakdownRow[]): Record<string, number> => {
+  const calculateBreakdownTotals = (rows: (BreakdownRow | DateBreakdownRow)[]): Record<string, number> => {
     const totals: Record<string, number> = {};
     
     // Combine all metrics we need to track (base + selected non-formula)
@@ -507,6 +528,66 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   </TableBody>
                 </Table>
               </div>
+              
+              {/* Date Breakdown Tables - Group by Week for last_month/mtd, by Year for ytd */}
+              {Object.keys(dateBreakdownData).length > 0 && (
+                <div className="space-y-4">
+                  {Object.entries(dateBreakdownData).map(([reportId, reportDateBreakdown]) => {
+                    const dateRows = reportDateBreakdown[tab] || [];
+                    if (dateRows.length === 0) return null;
+                    
+                    const dateBreakdownTotals = calculateBreakdownTotals(dateRows);
+                    const reportName = getReportName(reportId);
+                    const groupLabel = tab === 'ytd' ? 'Year' : 'Week';
+                    
+                    return (
+                      <div key={`date-${reportId}`} className="border rounded-lg overflow-hidden">
+                        <div className="bg-blue-50 dark:bg-blue-900/20 px-4 py-2 border-b">
+                          <h4 className="font-semibold text-sm">{reportName} - By {groupLabel}</h4>
+                        </div>
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/30">
+                              <TableHead className="font-medium w-[200px]">{groupLabel}</TableHead>
+                              {safeMetrics.map((metric) => (
+                                <TableHead key={metric} className="font-medium text-right text-xs">
+                                  {metric}
+                                </TableHead>
+                              ))}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {dateRows.map((row, idx) => (
+                              <TableRow
+                                key={row.dateGroup}
+                                className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                              >
+                                <TableCell className="font-medium text-sm">
+                                  {row.dateGroup}
+                                </TableCell>
+                                {safeMetrics.map((metric) => (
+                                  <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                    {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
+                            {/* Date Breakdown Total Row */}
+                            <TableRow className="bg-muted/50 font-medium border-t">
+                              <TableCell className="text-sm">Total</TableCell>
+                              {safeMetrics.map((metric) => (
+                                <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                  {formatMetricValue(metric, dateBreakdownTotals[metric] || 0)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               
               {/* Breakdown Tables */}
               {Object.keys(breakdownData).length > 0 && (

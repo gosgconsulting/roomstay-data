@@ -37,6 +37,8 @@ import {
   type CachedPivotData,
   getDateRange,
   aggregateMetrics,
+  getDateGroupKey,
+  parseDate,
   type DateTab
 } from "@/components/AISummaryPivotTable";
 
@@ -184,8 +186,9 @@ const AISummaryPage = () => {
         ytd: [],
       };
       
-      // Initialize breakdown data structure
+      // Initialize breakdown data structures
       const breakdownData: Record<string, Record<DateTab, Array<{ groupValue: string; metrics: Record<string, number> }>>> = {};
+      const dateBreakdownData: Record<string, Record<DateTab, Array<{ dateGroup: string; metrics: Record<string, number> }>>> = {};
 
       const dateRanges: Record<DateTab, { start: Date; end: Date }> = {
         last_month: getDateRange("last_month"),
@@ -350,14 +353,85 @@ const AISummaryPage = () => {
             }
           });
         }
+        
+        // Always compute date breakdown data (grouped by week for last_month/mtd, by year for ytd)
+        dateBreakdownData[reportId] = { last_month: [], mtd: [], ytd: [] };
+        
+        // Find date dimension ID
+        const dateDimId = metricNameToIdMap['Date'] || metricNameToIdMap['date'] || metricNameToIdMap['Day'];
+        
+        // Get rows filtered by dimension filter
+        const baseRows = sourceData.transformedRows.filter((row: any) => {
+          if (!dimensionFilter || dimensionFilter.values.length === 0) return true;
+          const rowData = row.dimension_values || row;
+          const dimVal = rowData[dimensionFilter.dimensionId] || 
+                         (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
+          return dimVal !== undefined && dimensionFilter.values.includes(String(dimVal));
+        });
+        
+        (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+          const dateRange = dateRanges[tab];
+          
+          // Group rows by date group (week or year)
+          const dateGroups: Record<string, any[]> = {};
+          
+          baseRows.forEach((row: any) => {
+            const rowData = row.dimension_values || row;
+            let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
+            if (!dateValue && dateDimId) {
+              dateValue = rowData[dateDimId];
+            }
+            if (!dateValue) {
+              for (const [key, val] of Object.entries(rowData)) {
+                if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+                  dateValue = val;
+                  break;
+                }
+              }
+            }
+            
+            const rowDate = parseDate(dateValue);
+            if (!rowDate) return;
+            
+            // Check if within date range
+            if (rowDate < dateRange.start || rowDate > dateRange.end) return;
+            
+            const groupKey = getDateGroupKey(rowDate, tab);
+            if (!dateGroups[groupKey]) {
+              dateGroups[groupKey] = [];
+            }
+            dateGroups[groupKey].push(row);
+          });
+          
+          // Aggregate metrics for each date group
+          Object.entries(dateGroups).forEach(([dateGroup, groupRows]) => {
+            const metrics = aggregateMetrics(
+              groupRows,
+              card.selected_metrics,
+              dateRange,
+              undefined,
+              metricNameToIdMap
+            );
+            
+            dateBreakdownData[reportId][tab].push({
+              dateGroup,
+              metrics,
+            });
+          });
+          
+          // Sort by date group
+          dateBreakdownData[reportId][tab].sort((a, b) => 
+            a.dateGroup.localeCompare(b.dateGroup)
+          );
+        });
       }
 
       toast.dismiss("refresh-pivot");
 
-      // Save to database including breakdown data
+      // Save to database including breakdown data and date breakdown data
       const { error } = await (supabase.from("ai_summary_cards") as any)
         .update({
-          cached_pivot_data: { ...pivotData, breakdown_data: breakdownData },
+          cached_pivot_data: { ...pivotData, breakdown_data: breakdownData, date_breakdown_data: dateBreakdownData },
           pivot_data_refreshed_at: new Date().toISOString(),
         })
         .eq("id", card.id);
@@ -370,7 +444,7 @@ const AISummaryPage = () => {
       // Update local state
       setCards(prev => prev.map(c => 
         c.id === card.id 
-          ? { ...c, cached_pivot_data: { ...pivotData, breakdown_data: breakdownData }, pivot_data_refreshed_at: new Date().toISOString() }
+          ? { ...c, cached_pivot_data: { ...pivotData, breakdown_data: breakdownData, date_breakdown_data: dateBreakdownData }, pivot_data_refreshed_at: new Date().toISOString() }
           : c
       ));
 
