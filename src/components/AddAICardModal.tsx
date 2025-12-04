@@ -514,10 +514,14 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       mtd: [],
       ytd: [],
       breakdown_data: {},
-      date_breakdown_data: {},
-      comparison_previous_period: { last_month: [], mtd: [], ytd: [] },
-      comparison_previous_year: { last_month: [], mtd: [], ytd: [] },
+      combined_date_breakdown: { last_month: [], mtd: [], ytd: [] },
+      comparison_previous_period: { last_month: [], mtd: [], ytd: [], breakdown_data: {} },
+      comparison_previous_year: { last_month: [], mtd: [], ytd: [], breakdown_data: {} },
     };
+    
+    // Collect all rows for combined date breakdown
+    const allRowsForDateBreakdown: any[] = [];
+    const allMetricMaps: Record<string, string>[] = [];
 
     const dateRanges: Record<DateTab, { start: Date; end: Date }> = {
       last_month: getDateRange("last_month"),
@@ -568,11 +572,74 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         const fetchedReport = reportData;
         
         // Continue with fetched report
-        await processReport(fetchedReport, user.id, dateRanges, comparisonRanges, pivotData);
+        const reportRows = await processReport(fetchedReport, user.id, dateRanges, comparisonRanges, pivotData);
+        if (reportRows) {
+          allRowsForDateBreakdown.push(...reportRows.rows);
+          allMetricMaps.push(reportRows.metricMap);
+        }
       } else {
-        await processReport(report, user.id, dateRanges, comparisonRanges, pivotData);
+        const reportRows = await processReport(report, user.id, dateRanges, comparisonRanges, pivotData);
+        if (reportRows) {
+          allRowsForDateBreakdown.push(...reportRows.rows);
+          allMetricMaps.push(reportRows.metricMap);
+        }
       }
     }
+    
+    // Compute combined date breakdown after processing all reports
+    const mergedMetricMap: Record<string, string> = {};
+    allMetricMaps.forEach(map => Object.assign(mergedMetricMap, map));
+    const dateDimId = mergedMetricMap['Date'] || mergedMetricMap['date'] || mergedMetricMap['Day'];
+    
+    (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+      const dateRange = dateRanges[tab];
+      const dateGroups: Record<string, any[]> = {};
+      
+      allRowsForDateBreakdown.forEach((row: any) => {
+        const rowData = row.dimension_values || row;
+        let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
+        if (!dateValue && dateDimId) {
+          dateValue = rowData[dateDimId];
+        }
+        if (!dateValue) {
+          for (const [key, val] of Object.entries(rowData)) {
+            if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+              dateValue = val;
+              break;
+            }
+          }
+        }
+        
+        const rowDate = parseDate(dateValue);
+        if (!rowDate) return;
+        if (rowDate < dateRange.start || rowDate > dateRange.end) return;
+        
+        const groupKey = getDateGroupKey(rowDate, tab);
+        if (!dateGroups[groupKey]) {
+          dateGroups[groupKey] = [];
+        }
+        dateGroups[groupKey].push(row);
+      });
+      
+      Object.entries(dateGroups).forEach(([dateGroup, groupRows]) => {
+        const metrics = aggregateMetrics(
+          groupRows,
+          selectedMetrics,
+          dateRange,
+          undefined,
+          mergedMetricMap
+        );
+        
+        pivotData.combined_date_breakdown![tab].push({
+          dateGroup,
+          metrics,
+        });
+      });
+      
+      pivotData.combined_date_breakdown![tab].sort((a, b) => 
+        a.dateGroup.localeCompare(b.dateGroup)
+      );
+    });
 
     console.log("[computePivotData] Final pivot data:", pivotData);
     return pivotData;
@@ -584,7 +651,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     dateRanges: Record<DateTab, { start: Date; end: Date }>,
     comparisonRanges: Record<string, Record<DateTab, { start: Date; end: Date } | null>>,
     pivotData: CachedPivotData
-  ) => {
+  ): Promise<{ rows: any[]; metricMap: Record<string, string> } | null> => {
     // Get source data - either from cache or fetch fresh
     let sourceData = sourceDataCache[report.id];
     let dsData: any = dataSources[report.id];
@@ -798,14 +865,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       });
     }
     
-    // Always compute date breakdown data (grouped by week for last_month/mtd, by year for ytd)
-    // Initialize date breakdown data for this report
-    if (!pivotData.date_breakdown_data) {
-      pivotData.date_breakdown_data = {};
-    }
-    pivotData.date_breakdown_data[report.id] = { last_month: [], mtd: [], ytd: [] };
-    
-    // Build metric name to dimension ID mapping if not already done
+    // Build metric name to dimension ID mapping for date breakdown
     const mappings = Array.isArray(dsData?.column_mappings) ? dsData.column_mappings : [];
     const metricMap: Record<string, string> = {};
     mappings.forEach((m: any) => {
@@ -814,10 +874,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       }
     });
     
-    // Find date dimension ID
-    const dateDimId = metricMap['Date'] || metricMap['date'] || metricMap['Day'];
-    
-    // Get rows filtered by dimension filter
+    // Get rows filtered by dimension filter for combined date breakdown
     const baseRows = sourceData.transformedRows.filter((row: any) => {
       if (!dimensionFilter || dimensionFilter.values.length === 0) return true;
       const rowData = row.dimension_values || row;
@@ -826,61 +883,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       return dimVal !== undefined && dimensionFilter.values.includes(String(dimVal));
     });
     
-    (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
-      const dateRange = dateRanges[tab];
-      
-      // Group rows by date group (week or year)
-      const dateGroups: Record<string, any[]> = {};
-      
-      baseRows.forEach((row: any) => {
-        const rowData = row.dimension_values || row;
-        let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
-        if (!dateValue && dateDimId) {
-          dateValue = rowData[dateDimId];
-        }
-        if (!dateValue) {
-          for (const [key, val] of Object.entries(rowData)) {
-            if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-              dateValue = val;
-              break;
-            }
-          }
-        }
-        
-        const rowDate = parseDate(dateValue);
-        if (!rowDate) return;
-        
-        // Check if within date range
-        if (rowDate < dateRange.start || rowDate > dateRange.end) return;
-        
-        const groupKey = getDateGroupKey(rowDate, tab);
-        if (!dateGroups[groupKey]) {
-          dateGroups[groupKey] = [];
-        }
-        dateGroups[groupKey].push(row);
-      });
-      
-      // Aggregate metrics for each date group
-      Object.entries(dateGroups).forEach(([dateGroup, groupRows]) => {
-        const metrics = aggregateMetrics(
-          groupRows,
-          selectedMetrics,
-          dateRange,
-          undefined,
-          metricNameToIdMap
-        );
-        
-        pivotData.date_breakdown_data![report.id][tab].push({
-          dateGroup,
-          metrics,
-        });
-      });
-      
-      // Sort by date group
-      pivotData.date_breakdown_data![report.id][tab].sort((a, b) => 
-        a.dateGroup.localeCompare(b.dateGroup)
-      );
-    });
+    return { rows: baseRows, metricMap };
   };
 
   const handleSave = async () => {

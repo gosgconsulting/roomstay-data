@@ -189,14 +189,23 @@ const AISummaryPage = () => {
       
       // Initialize breakdown data structures
       const breakdownData: Record<string, Record<DateTab, Array<{ groupValue: string; metrics: Record<string, number> }>>> = {};
-      const dateBreakdownData: Record<string, Record<DateTab, Array<{ dateGroup: string; metrics: Record<string, number> }>>> = {};
-      
-      // Initialize comparison data
-      const comparisonPreviousPeriod: Record<DateTab, Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>> = {
+      const combinedDateBreakdown: Record<DateTab, Array<{ dateGroup: string; metrics: Record<string, number> }>> = {
         last_month: [], mtd: [], ytd: []
       };
-      const comparisonPreviousYear: Record<DateTab, Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>> = {
-        last_month: [], mtd: [], ytd: []
+      // To accumulate all rows for combined date breakdown
+      const allRowsForDateBreakdown: any[] = [];
+      const allMetricNameToIdMaps: Record<string, string>[] = [];
+      
+      // Initialize comparison data
+      const comparisonPreviousPeriod: {
+        [key in DateTab]: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
+      } & { breakdown_data?: Record<string, Record<DateTab, Array<{ groupValue: string; metrics: Record<string, number> }>>> } = {
+        last_month: [], mtd: [], ytd: [], breakdown_data: {}
+      };
+      const comparisonPreviousYear: {
+        [key in DateTab]: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
+      } & { breakdown_data?: Record<string, Record<DateTab, Array<{ groupValue: string; metrics: Record<string, number> }>>> } = {
+        last_month: [], mtd: [], ytd: [], breakdown_data: {}
       };
 
       const dateRanges: Record<DateTab, { start: Date; end: Date }> = {
@@ -411,12 +420,7 @@ const AISummaryPage = () => {
           });
         }
         
-        // Always compute date breakdown data (grouped by week for last_month/mtd, by year for ytd)
-        dateBreakdownData[reportId] = { last_month: [], mtd: [], ytd: [] };
-        
-        // Find date dimension ID
-        const dateDimId = metricNameToIdMap['Date'] || metricNameToIdMap['date'] || metricNameToIdMap['Day'];
-        
+        // Collect rows for combined date breakdown (across all reports)
         // Get rows filtered by dimension filter
         const baseRows = sourceData.transformedRows.filter((row: any) => {
           if (!dimensionFilter || dimensionFilter.values.length === 0) return true;
@@ -426,62 +430,70 @@ const AISummaryPage = () => {
           return dimVal !== undefined && dimensionFilter.values.includes(String(dimVal));
         });
         
-        (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
-          const dateRange = dateRanges[tab];
-          
-          // Group rows by date group (week or year)
-          const dateGroups: Record<string, any[]> = {};
-          
-          baseRows.forEach((row: any) => {
-            const rowData = row.dimension_values || row;
-            let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
-            if (!dateValue && dateDimId) {
-              dateValue = rowData[dateDimId];
-            }
-            if (!dateValue) {
-              for (const [key, val] of Object.entries(rowData)) {
-                if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-                  dateValue = val;
-                  break;
-                }
+        allRowsForDateBreakdown.push(...baseRows);
+        allMetricNameToIdMaps.push(metricNameToIdMap);
+      }
+      
+      // Build combined date breakdown after processing all reports
+      const mergedMetricMap: Record<string, string> = {};
+      allMetricNameToIdMaps.forEach(map => Object.assign(mergedMetricMap, map));
+      const dateDimId = mergedMetricMap['Date'] || mergedMetricMap['date'] || mergedMetricMap['Day'];
+      
+      (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+        const dateRange = dateRanges[tab];
+        
+        // Group all rows by date group (week or year)
+        const dateGroups: Record<string, any[]> = {};
+        
+        allRowsForDateBreakdown.forEach((row: any) => {
+          const rowData = row.dimension_values || row;
+          let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
+          if (!dateValue && dateDimId) {
+            dateValue = rowData[dateDimId];
+          }
+          if (!dateValue) {
+            for (const [key, val] of Object.entries(rowData)) {
+              if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+                dateValue = val;
+                break;
               }
             }
-            
-            const rowDate = parseDate(dateValue);
-            if (!rowDate) return;
-            
-            // Check if within date range
-            if (rowDate < dateRange.start || rowDate > dateRange.end) return;
-            
-            const groupKey = getDateGroupKey(rowDate, tab);
-            if (!dateGroups[groupKey]) {
-              dateGroups[groupKey] = [];
-            }
-            dateGroups[groupKey].push(row);
-          });
+          }
           
-          // Aggregate metrics for each date group
-          Object.entries(dateGroups).forEach(([dateGroup, groupRows]) => {
-            const metrics = aggregateMetrics(
-              groupRows,
-              card.selected_metrics,
-              dateRange,
-              undefined,
-              metricNameToIdMap
-            );
-            
-            dateBreakdownData[reportId][tab].push({
-              dateGroup,
-              metrics,
-            });
-          });
+          const rowDate = parseDate(dateValue);
+          if (!rowDate) return;
           
-          // Sort by date group
-          dateBreakdownData[reportId][tab].sort((a, b) => 
-            a.dateGroup.localeCompare(b.dateGroup)
-          );
+          // Check if within date range
+          if (rowDate < dateRange.start || rowDate > dateRange.end) return;
+          
+          const groupKey = getDateGroupKey(rowDate, tab);
+          if (!dateGroups[groupKey]) {
+            dateGroups[groupKey] = [];
+          }
+          dateGroups[groupKey].push(row);
         });
-      }
+        
+        // Aggregate metrics for each date group
+        Object.entries(dateGroups).forEach(([dateGroup, groupRows]) => {
+          const metrics = aggregateMetrics(
+            groupRows,
+            card.selected_metrics,
+            dateRange,
+            undefined,
+            mergedMetricMap
+          );
+          
+          combinedDateBreakdown[tab].push({
+            dateGroup,
+            metrics,
+          });
+        });
+        
+        // Sort by date group
+        combinedDateBreakdown[tab].sort((a, b) => 
+          a.dateGroup.localeCompare(b.dateGroup)
+        );
+      });
 
       toast.dismiss("refresh-pivot");
 
@@ -489,7 +501,7 @@ const AISummaryPage = () => {
       const completePivotData = { 
         ...pivotData, 
         breakdown_data: breakdownData, 
-        date_breakdown_data: dateBreakdownData,
+        combined_date_breakdown: combinedDateBreakdown,
         comparison_previous_period: comparisonPreviousPeriod,
         comparison_previous_year: comparisonPreviousYear,
       };

@@ -57,17 +57,20 @@ export interface CachedPivotData {
   mtd: ReportMetrics[];
   ytd: ReportMetrics[];
   breakdown_data?: Record<string, Record<DateTab, BreakdownRow[]>>;
-  date_breakdown_data?: Record<string, Record<DateTab, DateBreakdownRow[]>>;
+  date_breakdown_data?: Record<string, Record<DateTab, DateBreakdownRow[]>>; // Legacy per-report
+  combined_date_breakdown?: Record<DateTab, DateBreakdownRow[]>; // Combined across all reports
   // Comparison data
   comparison_previous_period?: {
     last_month: ReportMetrics[];
     mtd: ReportMetrics[];
     ytd: ReportMetrics[];
+    breakdown_data?: Record<string, Record<DateTab, BreakdownRow[]>>;
   };
   comparison_previous_year?: {
     last_month: ReportMetrics[];
     mtd: ReportMetrics[];
     ytd: ReportMetrics[];
+    breakdown_data?: Record<string, Record<DateTab, BreakdownRow[]>>;
   };
 }
 
@@ -502,7 +505,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   
   // Get breakdown data and report names
   const breakdownData = data.breakdown_data || {};
-  const dateBreakdownData = data.date_breakdown_data || {};
+  const combinedDateBreakdown = data.combined_date_breakdown || {};
   const mainTabData = data[activeTab] || [];
   
   // Helper to get report name from reportId
@@ -680,21 +683,18 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                 </Table>
               </div>
               
-              {/* Date Breakdown Tables - Group by Week for last_month/mtd, by Year for ytd */}
-              {Object.keys(dateBreakdownData).length > 0 && (
+              {/* Combined Date Breakdown Table - Group by Week for last_month/mtd, by Year for ytd */}
+              {combinedDateBreakdown[tab] && combinedDateBreakdown[tab].length > 0 && (
                 <div className="space-y-4">
-                  {Object.entries(dateBreakdownData).map(([reportId, reportDateBreakdown]) => {
-                    const dateRows = reportDateBreakdown[tab] || [];
-                    if (dateRows.length === 0) return null;
-                    
+                  {(() => {
+                    const dateRows = combinedDateBreakdown[tab] || [];
                     const dateBreakdownTotals = calculateBreakdownTotals(dateRows);
-                    const reportName = getReportName(reportId);
                     const groupLabel = tab === 'ytd' ? 'Year' : 'Week';
                     
                     return (
-                      <div key={`date-${reportId}`} className="border rounded-lg overflow-hidden">
+                      <div className="border rounded-lg overflow-hidden">
                         <div className="bg-blue-50 dark:bg-blue-900/20 px-4 py-2 border-b">
-                          <h4 className="font-semibold text-sm">{reportName} - By {groupLabel}</h4>
+                          <h4 className="font-semibold text-sm">Results By {groupLabel}</h4>
                         </div>
                         <Table>
                           <TableHeader>
@@ -736,7 +736,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                         </Table>
                       </div>
                     );
-                  })}
+                  })()}
                 </div>
               )}
               
@@ -749,6 +749,23 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                     
                     const breakdownTotals = calculateBreakdownTotals(breakdownRows);
                     const reportName = getReportName(reportId);
+                    
+                    // Get comparison breakdown data
+                    const comparisonBreakdownData = comparisonType === "previous_period"
+                      ? data.comparison_previous_period?.breakdown_data?.[reportId]?.[tab]
+                      : comparisonType === "previous_year"
+                      ? data.comparison_previous_year?.breakdown_data?.[reportId]?.[tab]
+                      : null;
+                    
+                    // Build a map of groupValue to comparison metrics
+                    const comparisonBreakdownMap = new Map<string, Record<string, number>>();
+                    comparisonBreakdownData?.forEach(row => {
+                      comparisonBreakdownMap.set(row.groupValue, row.metrics);
+                    });
+                    
+                    const comparisonBreakdownTotals = comparisonBreakdownData 
+                      ? calculateBreakdownTotals(comparisonBreakdownData) 
+                      : null;
                     
                     return (
                       <div key={reportId} className="border rounded-lg overflow-hidden">
@@ -767,27 +784,30 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {breakdownRows.map((row, idx) => (
-                              <TableRow
-                                key={row.groupValue}
-                                className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                              >
-                                <TableCell className="font-medium text-sm">
-                                  {row.groupValue}
-                                </TableCell>
-                                {safeMetrics.map((metric) => (
-                                  <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                    {formatMetricValue(metric, row.metrics[metric] || 0)}
+                            {breakdownRows.map((row, idx) => {
+                              const rowComparisonMetrics = comparisonBreakdownMap.get(row.groupValue) || null;
+                              return (
+                                <TableRow
+                                  key={row.groupValue}
+                                  className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                                >
+                                  <TableCell className="font-medium text-sm">
+                                    {row.groupValue}
                                   </TableCell>
-                                ))}
-                              </TableRow>
-                            ))}
+                                  {safeMetrics.map((metric) => (
+                                    <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                      {renderMetricCell(row.metrics[metric] || 0, metric, rowComparisonMetrics)}
+                                    </TableCell>
+                                  ))}
+                                </TableRow>
+                              );
+                            })}
                             {/* Breakdown Total Row */}
                             <TableRow className="bg-muted/50 font-medium border-t">
                               <TableCell className="text-sm">Total</TableCell>
                               {safeMetrics.map((metric) => (
                                 <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                  {formatMetricValue(metric, breakdownTotals[metric] || 0)}
+                                  {renderMetricCell(breakdownTotals[metric] || 0, metric, comparisonBreakdownTotals, true)}
                                 </TableCell>
                               ))}
                             </TableRow>
