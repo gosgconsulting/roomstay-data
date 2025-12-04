@@ -20,3 +20,18 @@ verify_jwt = true
 
 [functions.update-user-password]
 verify_jwt = false
+
+[functions.clear-and-resync]
+verify_jwt = false
+
+[functions.resync-data-source]
+verify_jwt = false
+
+[functions.get-unique-dimension-values]
+verify_jwt = false
+
+[functions.get-consolidated-performance-data]
+verify_jwt = false
+
+[functions.fetch-csv-url]
+verify_jwt = false

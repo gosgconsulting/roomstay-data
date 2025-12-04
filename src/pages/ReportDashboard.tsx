@@ -14,7 +14,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { Settings, ArrowLeft, Database, Grid3x3, GitCompare, Wallet, Eye, Pencil } from "lucide-react";
+import { Settings, ArrowLeft, Database, Grid3x3, GitCompare, Wallet, Eye, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { ShareModal } from "@/components/ShareModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
@@ -376,6 +376,67 @@ export default function ReportDashboard() {
     markComponentLoading('budget-table');
     setDataRefreshKey(prev => prev + 1);
   };
+
+  const handleClearAndResync = async () => {
+    if (!accountId) return;
+    
+    if (!window.confirm('This will clear all stored data and resync from source. Continue?')) {
+      return;
+    }
+    
+    try {
+      toast({
+        title: "Clearing data...",
+        description: "Please wait while we clear stored data.",
+      });
+      
+      const { data, error } = await supabase.functions.invoke('clear-and-resync', {
+        body: { accountId, reportId }
+      });
+      
+      if (error) throw error;
+      
+      console.log('[CLEAR-RESYNC] Clear result:', data);
+      
+      toast({
+        title: "Data cleared",
+        description: `Cleared data for ${data.clearedReports || 0} reports. Resyncing...`,
+      });
+      
+      // Invalidate all caches
+      queryClient.invalidateQueries();
+      
+      // Trigger resync for each data source
+      const { data: dataSources } = await supabase
+        .from('data_sources')
+        .select('id, name')
+        .eq('report_id', reportId);
+      
+      if (dataSources && dataSources.length > 0) {
+        for (const ds of dataSources) {
+          console.log(`[CLEAR-RESYNC] Resyncing data source: ${ds.name}`);
+          await supabase.functions.invoke('resync-data-source', {
+            body: { dataSourceId: ds.id }
+          });
+        }
+        
+        toast({
+          title: "Resync complete",
+          description: "Data has been cleared and resynced from source.",
+        });
+      }
+      
+      // Refresh the page data
+      refreshData();
+    } catch (error) {
+      console.error('[CLEAR-RESYNC] Error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to clear and resync data.",
+        variant: "destructive",
+      });
+    }
+  };
   
   const handleEditReport = (id: string) => {
     // Navigate to the report tool for editing the selected report
@@ -511,6 +572,17 @@ export default function ReportDashboard() {
                       >
                         <Wallet className="h-4 w-4" />
                         Budget
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2 text-destructive hover:text-destructive"
+                        onClick={handleClearAndResync}
+                        title="Clear stored data and resync from source"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Clear & Resync
                       </Button>
                     </div>
                   )}
