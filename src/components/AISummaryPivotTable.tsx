@@ -123,16 +123,32 @@ export const parseDate = (value: any): Date | null => {
 export const aggregateMetrics = (
   rows: any[],
   metrics: string[],
-  dateRange: { start: Date; end: Date }
+  dateRange: { start: Date; end: Date },
+  dimensionFilter?: { dimensionId: string; dimensionName?: string; values: string[] }
 ): Record<string, number> => {
   const result: Record<string, number> = {};
   metrics.forEach((m) => (result[m] = 0));
 
   const filteredRows = rows.filter((row) => {
+    // Date filter
     const dateValue = row.Date || row.date || row.Day || row.day;
     const rowDate = parseDate(dateValue);
     if (!rowDate) return false;
-    return isWithinInterval(rowDate, { start: dateRange.start, end: dateRange.end });
+    if (!isWithinInterval(rowDate, { start: dateRange.start, end: dateRange.end })) {
+      return false;
+    }
+    
+    // Dimension filter
+    if (dimensionFilter && dimensionFilter.values.length > 0) {
+      // Try to find the dimension value by ID or name
+      const dimValue = row[dimensionFilter.dimensionId] || 
+                       (dimensionFilter.dimensionName ? row[dimensionFilter.dimensionName] : undefined);
+      if (dimValue === undefined || !dimensionFilter.values.includes(String(dimValue))) {
+        return false;
+      }
+    }
+    
+    return true;
   });
 
   filteredRows.forEach((row) => {

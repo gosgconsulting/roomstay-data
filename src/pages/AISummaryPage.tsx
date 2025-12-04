@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, RefreshCw, Settings, MoreHorizontal } from "lucide-react";
+import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, RefreshCw, Settings, MoreHorizontal, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -32,7 +32,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AISummaryPivotTable, type CachedPivotData } from "@/components/AISummaryPivotTable";
+import { 
+  AISummaryPivotTable, 
+  type CachedPivotData,
+  getDateRange,
+  aggregateMetrics,
+  type DateTab
+} from "@/components/AISummaryPivotTable";
 
 interface AISummaryCard {
   id: string;
@@ -79,6 +85,7 @@ const AISummaryPage = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [generatingCardId, setGeneratingCardId] = useState<string | null>(null);
   const [viewingSummary, setViewingSummary] = useState<AISummaryCard | null>(null);
+  const [refreshingPivotCardId, setRefreshingPivotCardId] = useState<string | null>(null);
 
   const fetchCards = async () => {
     try {
@@ -156,6 +163,124 @@ const AISummaryPage = () => {
     } finally {
       setIsDeleting(false);
       setDeleteCardId(null);
+    }
+  };
+
+  const handleRefreshPivotData = async (card: AISummaryCard) => {
+    setRefreshingPivotCardId(card.id);
+    
+    try {
+      const { user } = await getUser();
+      if (!user) {
+        toast.error("You must be logged in");
+        return;
+      }
+
+      toast.info("Refreshing pivot data from sources...", { id: "refresh-pivot" });
+
+      const pivotData: CachedPivotData = {
+        last_month: [],
+        mtd: [],
+        ytd: [],
+      };
+
+      const dateRanges: Record<DateTab, { start: Date; end: Date }> = {
+        last_month: getDateRange("last_month"),
+        mtd: getDateRange("mtd"),
+        ytd: getDateRange("ytd"),
+      };
+
+      // Extract filter configs from report_configs
+      const { breakdown_configs, ...filterConfigs } = card.report_configs as any;
+
+      for (const reportId of card.report_ids) {
+        // Fetch report info
+        const { data: reportData } = await supabase
+          .from("reports")
+          .select("id, name")
+          .eq("id", reportId)
+          .single();
+
+        if (!reportData) continue;
+
+        // Fetch data source
+        const { data: dsData } = await supabase
+          .from("data_sources")
+          .select("*")
+          .eq("report_id", reportId)
+          .limit(1)
+          .single();
+
+        if (!dsData) continue;
+
+        // Fetch source data
+        const sourceData = await fetchSourceData(dsData as DataSource, user.id, accountId);
+        
+        if (!sourceData?.transformedRows) continue;
+
+        // Get dimension filter for this report
+        const filterConfig = filterConfigs[reportId];
+        let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
+
+        if (filterConfig?.dimensionId && filterConfig.selectedValues?.length > 0) {
+          const { data: dimData } = await supabase
+            .from("dimensions")
+            .select("name")
+            .eq("id", filterConfig.dimensionId)
+            .single();
+
+          dimensionFilter = {
+            dimensionId: filterConfig.dimensionId,
+            dimensionName: dimData?.name,
+            values: filterConfig.selectedValues,
+          };
+        }
+
+        // Aggregate metrics for each date range
+        (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+          const metrics = aggregateMetrics(
+            sourceData.transformedRows,
+            card.selected_metrics,
+            dateRanges[tab],
+            dimensionFilter
+          );
+
+          pivotData[tab].push({
+            reportId: reportData.id,
+            reportName: reportData.name,
+            metrics,
+          });
+        });
+      }
+
+      toast.dismiss("refresh-pivot");
+
+      // Save to database
+      const { error } = await (supabase.from("ai_summary_cards") as any)
+        .update({
+          cached_pivot_data: pivotData,
+          pivot_data_refreshed_at: new Date().toISOString(),
+        })
+        .eq("id", card.id);
+
+      if (error) {
+        toast.error("Failed to save pivot data");
+        return;
+      }
+
+      // Update local state
+      setCards(prev => prev.map(c => 
+        c.id === card.id 
+          ? { ...c, cached_pivot_data: pivotData, pivot_data_refreshed_at: new Date().toISOString() }
+          : c
+      ));
+
+      toast.success("Pivot data refreshed!");
+    } catch (err) {
+      console.error("Error refreshing pivot data:", err);
+      toast.error("Failed to refresh pivot data");
+    } finally {
+      setRefreshingPivotCardId(null);
     }
   };
 
@@ -337,9 +462,9 @@ const AISummaryPage = () => {
                     <span className="font-medium">{card.name}</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    {card.last_generated_at && (
-                      <span className="text-sm text-muted-foreground mr-2">
-                        Refreshed {format(new Date(card.last_generated_at), "MMM d 'at' h:mm a")}
+                    {card.pivot_data_refreshed_at && (
+                      <span className="text-xs text-muted-foreground mr-2">
+                        Data: {format(new Date(card.pivot_data_refreshed_at), "MMM d 'at' h:mm a")}
                       </span>
                     )}
                     <Button
@@ -381,6 +506,17 @@ const AISummaryPage = () => {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem 
+                          onClick={() => handleRefreshPivotData(card)}
+                          disabled={refreshingPivotCardId === card.id}
+                        >
+                          {refreshingPivotCardId === card.id ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Database className="h-4 w-4 mr-2" />
+                          )}
+                          Refresh Data
+                        </DropdownMenuItem>
                         <DropdownMenuItem 
                           className="text-destructive"
                           onClick={() => setDeleteCardId(card.id)}
