@@ -82,7 +82,7 @@ interface DataSource {
 }
 
 const AISummaryPage = () => {
-  const { accountId } = useParams();
+  const { accountId, summaryId } = useParams();
   const navigate = useNavigate();
   const [isAddCardModalOpen, setIsAddCardModalOpen] = useState(false);
   const [cards, setCards] = useState<AISummaryCard[]>([]);
@@ -97,6 +97,7 @@ const AISummaryPage = () => {
   const [renamingCardId, setRenamingCardId] = useState<string | null>(null);
   const [newCardName, setNewCardName] = useState("");
   const [generateModalCard, setGenerateModalCard] = useState<AISummaryCard | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(summaryId || null);
 
   const fetchCards = async () => {
     try {
@@ -144,6 +145,13 @@ const AISummaryPage = () => {
     fetchCards();
     fetchReports();
   }, [accountId]);
+
+  // Update selectedCardId when summaryId from URL changes
+  useEffect(() => {
+    if (summaryId) {
+      setSelectedCardId(summaryId);
+    }
+  }, [summaryId]);
 
   const handleBack = () => {
     if (accountId) {
@@ -812,7 +820,9 @@ const AISummaryPage = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6">
-            {cards.map(card => (
+            {cards
+              .filter(card => !selectedCardId || card.id === selectedCardId)
+              .map(card => (
               <Card key={card.id} className="overflow-hidden group">
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b">
@@ -984,7 +994,13 @@ const AISummaryPage = () => {
           setIsAddCardModalOpen(open);
           if (!open) setEditingCard(null);
         }}
-        onCardCreated={fetchCards}
+        onCardCreated={(newCardId) => {
+          fetchCards();
+          // Navigate to the new card if an ID was returned
+          if (newCardId && accountId) {
+            navigate(`/tools/ai-summary/${accountId}/${newCardId}`);
+          }
+        }}
         editingCard={editingCard}
       />
 
