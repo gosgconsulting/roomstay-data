@@ -18,6 +18,7 @@ import {
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
+import AITableComments from "@/components/AITableComments";
 import { getUser } from "@/lib/auth";
 import {
   startOfMonth,
@@ -752,6 +753,12 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                     </TableRow>
                   </TableBody>
                 </Table>
+                <AITableComments
+                  tableType="report"
+                  tableName="Summary"
+                  tableData={tabData}
+                  metrics={safeMetrics}
+                />
               </div>
               
               {/* Combined Date Breakdown Table - Group by Week for last_month/mtd, by Month for ytd */}
@@ -862,6 +869,12 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                             </TableRow>
                           </TableBody>
                         </Table>
+                        <AITableComments
+                          tableType="date"
+                          tableName={`Results By ${groupLabel}`}
+                          tableData={dateRows}
+                          metrics={safeMetrics}
+                        />
                       </div>
                     );
                   })()}
@@ -947,6 +960,12 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                             </TableRow>
                           </TableBody>
                         </Table>
+                        <AITableComments
+                          tableType="breakdown"
+                          tableName={`${reportName} - ${dimensionName}`}
+                          tableData={breakdownRows}
+                          metrics={safeMetrics}
+                        />
                       </div>
                     );
                   })}
