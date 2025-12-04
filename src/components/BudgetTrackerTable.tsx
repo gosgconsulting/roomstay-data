@@ -166,17 +166,17 @@ export const BudgetTrackerTable = ({
         </Tabs>
       </CardHeader>
       <CardContent className="pt-6">
-        {groupByDimensions.length === 0 ? (
+        {isLoadingDimensions ? (
+          <TableSkeleton />
+        ) : groupByDimensions.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            {isLoadingDimensions ? (
-              "Loading dimensions..."
-            ) : hasDataSources ? (
+            {hasDataSources ? (
               "No date dimension found. Budget tracker requires a date dimension."
             ) : (
               "No data sources found. Please add a data source to this report."
             )}
           </div>
-        ) : isLoadingData || isLoadingDimensions ? (
+        ) : isLoadingData ? (
           <TableSkeleton />
         ) : loadError ? (
           <div className="text-center py-8 text-destructive">
