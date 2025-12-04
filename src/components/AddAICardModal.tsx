@@ -270,7 +270,24 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       const storedConfigs = editingCard.report_configs || {};
       const { breakdown_configs: storedBreakdown, ...filterConfigs } = storedConfigs as any;
       setReportConfigs(filterConfigs || {});
-      setBreakdownConfigs(storedBreakdown || editingCard.breakdown_configs || {});
+      
+      // Convert legacy breakdownDimensionId to breakdownDimensionIds array
+      const rawBreakdownConfigs = storedBreakdown || editingCard.breakdown_configs || {};
+      const convertedBreakdownConfigs: Record<string, { reportId: string; breakdownDimensionIds: string[] }> = {};
+      Object.entries(rawBreakdownConfigs).forEach(([reportId, config]: [string, any]) => {
+        if (config?.breakdownDimensionIds) {
+          // New format - use as-is
+          convertedBreakdownConfigs[reportId] = config;
+        } else if (config?.breakdownDimensionId) {
+          // Legacy format - convert to array
+          convertedBreakdownConfigs[reportId] = {
+            reportId,
+            breakdownDimensionIds: [config.breakdownDimensionId],
+          };
+        }
+      });
+      setBreakdownConfigs(convertedBreakdownConfigs);
+      
       setSelectedMetrics(editingCard.selected_metrics || ["Impressions", "Clicks", "Cost", "Revenue", "ROAS"]);
       setSinceDate(editingCard.since_date || getDefaultSinceDate());
       setAiPrompt(editingCard.ai_prompt || DEFAULT_AI_PROMPT);

@@ -353,22 +353,25 @@ const AISummaryPage = () => {
           }
         });
 
-        // Build breakdown data if configured
+        // Build breakdown data if configured - support multiple breakdown dimensions
         const breakdownConfig = breakdown_configs?.[reportId];
-        if (breakdownConfig?.breakdownDimensionId) {
+        const breakdownDimensionIds = breakdownConfig?.breakdownDimensionIds || 
+          (breakdownConfig?.breakdownDimensionId ? [breakdownConfig.breakdownDimensionId] : []); // Support legacy format
+        
+        for (const breakdownDimId of breakdownDimensionIds) {
           const { data: breakdownDimData } = await supabase
             .from("dimensions")
             .select("name")
-            .eq("id", breakdownConfig.breakdownDimensionId)
+            .eq("id", breakdownDimId)
             .single();
           
-          const breakdownDimName = breakdownDimData?.name;
-          const breakdownDimId = breakdownConfig.breakdownDimensionId;
+          const breakdownDimName = breakdownDimData?.name || 'Group';
           
-          // Store the dimension name for this report
-          if (breakdownDimName) {
-            breakdownDimensionNames[reportId] = breakdownDimName;
-          }
+          // Use composite key: reportId_dimensionId
+          const breakdownKey = `${reportId}_${breakdownDimId}`;
+          
+          // Store the dimension name for this breakdown
+          breakdownDimensionNames[breakdownKey] = breakdownDimName;
           
           // First filter rows by dimension filter, then get unique breakdown values
           const filteredByDimension = sourceData.transformedRows.filter((row: any) => {
@@ -393,13 +396,13 @@ const AISummaryPage = () => {
             }
           });
 
-          breakdownData[reportId] = { last_month: [], mtd: [], ytd: [] };
+          breakdownData[breakdownKey] = { last_month: [], mtd: [], ytd: [] };
           
-          // Initialize comparison breakdown data for this report
+          // Initialize comparison breakdown data for this breakdown
           if (!comparisonPreviousPeriod.breakdown_data) comparisonPreviousPeriod.breakdown_data = {};
           if (!comparisonPreviousYear.breakdown_data) comparisonPreviousYear.breakdown_data = {};
-          comparisonPreviousPeriod.breakdown_data[reportId] = { last_month: [], mtd: [], ytd: [] };
-          comparisonPreviousYear.breakdown_data[reportId] = { last_month: [], mtd: [], ytd: [] };
+          comparisonPreviousPeriod.breakdown_data[breakdownKey] = { last_month: [], mtd: [], ytd: [] };
+          comparisonPreviousYear.breakdown_data[breakdownKey] = { last_month: [], mtd: [], ytd: [] };
           
           (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
             // Process each named group
@@ -421,7 +424,7 @@ const AISummaryPage = () => {
                 metricNameToIdMap
               );
 
-              breakdownData[reportId][tab].push({
+              breakdownData[breakdownKey][tab].push({
                 groupValue,
                 metrics,
               });
@@ -436,7 +439,7 @@ const AISummaryPage = () => {
                   undefined,
                   metricNameToIdMap
                 );
-                comparisonPreviousPeriod.breakdown_data![reportId][tab].push({
+                comparisonPreviousPeriod.breakdown_data![breakdownKey][tab].push({
                   groupValue,
                   metrics: prevPeriodMetrics,
                 });
@@ -452,7 +455,7 @@ const AISummaryPage = () => {
                   undefined,
                   metricNameToIdMap
                 );
-                comparisonPreviousYear.breakdown_data![reportId][tab].push({
+                comparisonPreviousYear.breakdown_data![breakdownKey][tab].push({
                   groupValue,
                   metrics: prevYearMetrics,
                 });
@@ -475,7 +478,7 @@ const AISummaryPage = () => {
                 metricNameToIdMap
               );
 
-              breakdownData[reportId][tab].push({
+              breakdownData[breakdownKey][tab].push({
                 groupValue: 'Uncategorized',
                 metrics,
               });
@@ -490,7 +493,7 @@ const AISummaryPage = () => {
                   undefined,
                   metricNameToIdMap
                 );
-                comparisonPreviousPeriod.breakdown_data![reportId][tab].push({
+                comparisonPreviousPeriod.breakdown_data![breakdownKey][tab].push({
                   groupValue: 'Uncategorized',
                   metrics: prevPeriodMetrics,
                 });
@@ -505,14 +508,14 @@ const AISummaryPage = () => {
                   undefined,
                   metricNameToIdMap
                 );
-                comparisonPreviousYear.breakdown_data![reportId][tab].push({
+                comparisonPreviousYear.breakdown_data![breakdownKey][tab].push({
                   groupValue: 'Uncategorized',
                   metrics: prevYearMetrics,
                 });
               }
             }
           });
-        }
+        } // End of loop for each breakdown dimension
         
         // Collect rows for combined date breakdown (across all reports)
         // Get rows filtered by dimension filter
