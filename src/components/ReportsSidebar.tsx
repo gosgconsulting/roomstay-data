@@ -35,6 +35,8 @@ interface ReportsSidebarProps {
   onAddNewReport?: () => void;
   onSelectReport?: (reportId: string) => void;
   onAddAISummary?: () => void;
+  onEditAISummary?: (summaryId: string) => void;
+  onDeleteAISummary?: (summaryId: string) => void;
   aiSummaries?: AISummary[];
   className?: string;
 }
@@ -51,11 +53,14 @@ export function ReportsSidebar({
   onAddNewReport,
   onSelectReport,
   onAddAISummary,
+  onEditAISummary,
+  onDeleteAISummary,
   aiSummaries = [],
   className,
 }: ReportsSidebarProps) {
   const navigate = useNavigate();
   const [hoveredReportId, setHoveredReportId] = useState<string | null>(null);
+  const [hoveredSummaryId, setHoveredSummaryId] = useState<string | null>(null);
 
   const handleReportClick = (reportId: string) => {
     // Prefer local switch if provided
@@ -188,14 +193,53 @@ export function ReportsSidebar({
               {/* AI Summaries List */}
               {aiSummaries.map((summary) => (
                 <SidebarMenuItem key={summary.id}>
-                  <SidebarMenuButton
-                    onClick={() => handleAISummaryClick(summary.id)}
-                    tooltip={summary.name}
-                    className="w-full justify-start text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground px-3 py-2 h-auto font-normal"
+                  <div
+                    className="relative group"
+                    onMouseEnter={() => setHoveredSummaryId(summary.id)}
+                    onMouseLeave={() => setHoveredSummaryId(null)}
                   >
-                    <Sparkles className="h-4 w-4" />
-                    <span className="truncate">{summary.name}</span>
-                  </SidebarMenuButton>
+                    <SidebarMenuButton
+                      onClick={() => handleAISummaryClick(summary.id)}
+                      tooltip={summary.name}
+                      className="w-full justify-start text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground px-3 py-2 h-auto font-normal pr-16"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      <span className="truncate">{summary.name}</span>
+                    </SidebarMenuButton>
+                    
+                    {hoveredSummaryId === summary.id && (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        {onEditAISummary && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 hover:bg-sidebar-accent rounded-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditAISummary(summary.id);
+                            }}
+                            title="Edit AI summary"
+                          >
+                            <Edit className="h-3 w-3 text-sidebar-foreground" />
+                          </Button>
+                        )}
+                        {onDeleteAISummary && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 hover:bg-destructive hover:text-destructive-foreground rounded-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteAISummary(summary.id);
+                            }}
+                            title="Delete AI summary"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </SidebarMenuItem>
               ))}
 

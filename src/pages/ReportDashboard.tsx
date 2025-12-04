@@ -229,6 +229,37 @@ export default function ReportDashboard() {
     }
   };
 
+  const handleEditAISummary = (summaryId: string) => {
+    // Navigate to the AI summary page where editing is handled
+    navigate(`/tools/ai-summary/${accountId}/${summaryId}`);
+  };
+
+  const handleDeleteAISummary = async (summaryId: string) => {
+    if (!confirm("Are you sure you want to delete this AI Summary?")) return;
+    
+    try {
+      const { error } = await supabase
+        .from("ai_summary_cards")
+        .delete()
+        .eq("id", summaryId);
+      
+      if (error) throw error;
+      
+      setAiSummaries(prev => prev.filter(s => s.id !== summaryId));
+      toast({
+        title: "AI Summary deleted",
+        description: "The AI summary has been deleted successfully.",
+      });
+    } catch (err) {
+      console.error("Error deleting AI summary:", err);
+      toast({
+        title: "Error",
+        description: "Failed to delete the AI summary.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const checkAuth = async () => {
     try {
       const { data: { session }, error } = await supabase.auth.getSession();
@@ -486,6 +517,8 @@ export default function ReportDashboard() {
           onAddNewReport={() => setShowCreateReportModal(true)}
           onSelectReport={(id) => setReportId(id)}
           onAddAISummary={() => setShowAISummaryModal(true)}
+          onEditAISummary={handleEditAISummary}
+          onDeleteAISummary={handleDeleteAISummary}
           aiSummaries={aiSummaries}
         />
         <SidebarInset className="flex-1 overflow-x-hidden">
