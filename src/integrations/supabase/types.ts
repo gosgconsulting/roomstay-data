@@ -45,11 +45,13 @@ export type Database = {
         Row: {
           account_id: string | null
           ai_prompt: string
+          cached_pivot_data: Json | null
           created_at: string
           generated_summary: string | null
           id: string
           last_generated_at: string | null
           name: string
+          pivot_data_refreshed_at: string | null
           report_configs: Json
           report_ids: string[]
           selected_metrics: string[]
@@ -60,11 +62,13 @@ export type Database = {
         Insert: {
           account_id?: string | null
           ai_prompt: string
+          cached_pivot_data?: Json | null
           created_at?: string
           generated_summary?: string | null
           id?: string
           last_generated_at?: string | null
           name?: string
+          pivot_data_refreshed_at?: string | null
           report_configs?: Json
           report_ids?: string[]
           selected_metrics?: string[]
@@ -75,11 +79,13 @@ export type Database = {
         Update: {
           account_id?: string | null
           ai_prompt?: string
+          cached_pivot_data?: Json | null
           created_at?: string
           generated_summary?: string | null
           id?: string
           last_generated_at?: string | null
           name?: string
+          pivot_data_refreshed_at?: string | null
           report_configs?: Json
           report_ids?: string[]
           selected_metrics?: string[]
