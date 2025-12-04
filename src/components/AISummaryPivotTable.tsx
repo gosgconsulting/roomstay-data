@@ -8,6 +8,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
@@ -17,6 +24,7 @@ import {
   endOfMonth,
   subMonths,
   startOfYear,
+  subYears,
   isWithinInterval,
   parseISO,
   isValid,
@@ -37,6 +45,7 @@ interface BreakdownRow {
 }
 
 export type DateTab = "last_month" | "mtd" | "ytd";
+export type ComparisonType = "none" | "previous_period" | "previous_year";
 
 export interface DateBreakdownRow {
   dateGroup: string; // e.g., "Week 45, 2024" or "2024"
@@ -49,6 +58,17 @@ export interface CachedPivotData {
   ytd: ReportMetrics[];
   breakdown_data?: Record<string, Record<DateTab, BreakdownRow[]>>;
   date_breakdown_data?: Record<string, Record<DateTab, DateBreakdownRow[]>>;
+  // Comparison data
+  comparison_previous_period?: {
+    last_month: ReportMetrics[];
+    mtd: ReportMetrics[];
+    ytd: ReportMetrics[];
+  };
+  comparison_previous_year?: {
+    last_month: ReportMetrics[];
+    mtd: ReportMetrics[];
+    ytd: ReportMetrics[];
+  };
 }
 
 interface AISummaryPivotTableProps {
@@ -134,6 +154,36 @@ export const getDateRange = (tab: DateTab): { start: Date; end: Date } => {
         end: now,
       };
   }
+};
+
+// Get comparison date range based on comparison type
+export const getComparisonDateRange = (
+  tab: DateTab, 
+  comparisonType: ComparisonType
+): { start: Date; end: Date } | null => {
+  if (comparisonType === "none") return null;
+  
+  const currentRange = getDateRange(tab);
+  const now = new Date();
+  
+  if (comparisonType === "previous_period") {
+    // Previous period = same duration, immediately before
+    const durationMs = currentRange.end.getTime() - currentRange.start.getTime();
+    return {
+      start: new Date(currentRange.start.getTime() - durationMs - 86400000), // -1 day buffer
+      end: new Date(currentRange.start.getTime() - 86400000),
+    };
+  }
+  
+  if (comparisonType === "previous_year") {
+    // Same period but last year
+    return {
+      start: subYears(currentRange.start, 1),
+      end: subYears(currentRange.end, 1),
+    };
+  }
+  
+  return null;
 };
 
 export const parseDate = (value: any): Date | null => {
@@ -287,6 +337,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   reportConfigs,
 }) => {
   const [activeTab, setActiveTab] = useState<DateTab>("mtd");
+  const [comparisonType, setComparisonType] = useState<ComparisonType>("none");
   const [isLoading, setIsLoading] = useState(!cachedPivotData);
   const [data, setData] = useState<CachedPivotData>(
     cachedPivotData || { last_month: [], mtd: [], ytd: [] }
@@ -471,19 +522,94 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     
     return totals;
   };
+  
+  // Calculate percentage change between current and comparison values
+  const calculatePercentChange = (current: number, comparison: number): number | null => {
+    if (comparison === 0) return current > 0 ? 100 : null;
+    return ((current - comparison) / Math.abs(comparison)) * 100;
+  };
+  
+  // Get comparison data for a report
+  const getComparisonMetrics = (reportId: string, tab: DateTab): Record<string, number> | null => {
+    if (comparisonType === "none") return null;
+    
+    const comparisonData = comparisonType === "previous_period" 
+      ? data.comparison_previous_period 
+      : data.comparison_previous_year;
+    
+    if (!comparisonData) return null;
+    
+    const reportData = comparisonData[tab]?.find(r => r.reportId === reportId);
+    return reportData?.metrics || null;
+  };
+  
+  // Render metric cell with optional comparison
+  const renderMetricCell = (
+    currentValue: number, 
+    metric: string, 
+    comparisonMetrics: Record<string, number> | null,
+    isTotal: boolean = false
+  ) => {
+    const formattedValue = formatMetricValue(metric, currentValue);
+    
+    if (comparisonType === "none" || !comparisonMetrics) {
+      return <span>{formattedValue}</span>;
+    }
+    
+    const comparisonValue = comparisonMetrics[metric] || 0;
+    const percentChange = calculatePercentChange(currentValue, comparisonValue);
+    
+    // Determine if increase is good or bad based on metric
+    const lowerMetric = metric.toLowerCase();
+    const isInverseMetric = lowerMetric === 'cost' || lowerMetric === 'cpc' || lowerMetric === 'cost of sale' || lowerMetric === 'cos';
+    const isPositive = percentChange !== null && (isInverseMetric ? percentChange < 0 : percentChange > 0);
+    const isNegative = percentChange !== null && (isInverseMetric ? percentChange > 0 : percentChange < 0);
+    
+    return (
+      <div className="flex flex-col items-end">
+        <span>{formattedValue}</span>
+        {percentChange !== null && (
+          <span className={`text-xs ${isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : 'text-muted-foreground'}`}>
+            {percentChange > 0 ? '+' : ''}{percentChange.toFixed(1)}%
+          </span>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="w-full space-y-6">
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as DateTab)}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="last_month">Last Month</TabsTrigger>
-          <TabsTrigger value="mtd">MTD</TabsTrigger>
-          <TabsTrigger value="ytd">YTD</TabsTrigger>
-        </TabsList>
+        <div className="flex items-center justify-between mb-4">
+          <TabsList>
+            <TabsTrigger value="last_month">Last Month</TabsTrigger>
+            <TabsTrigger value="mtd">MTD</TabsTrigger>
+            <TabsTrigger value="ytd">YTD</TabsTrigger>
+          </TabsList>
+          
+          <Select value={comparisonType} onValueChange={(v) => setComparisonType(v as ComparisonType)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Comparison" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No Comparison</SelectItem>
+              <SelectItem value="previous_period">vs Previous Period</SelectItem>
+              <SelectItem value="previous_year">vs Previous Year</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         {(["last_month", "mtd", "ytd"] as DateTab[]).map((tab) => {
           const tabData = data[tab] || [];
           const totals = calculateTotals(tabData);
+          
+          // Get comparison totals
+          const comparisonData = comparisonType === "previous_period" 
+            ? data.comparison_previous_period?.[tab]
+            : comparisonType === "previous_year"
+            ? data.comparison_previous_year?.[tab]
+            : null;
+          const comparisonTotals = comparisonData ? calculateTotals(comparisonData) : null;
 
           return (
             <TabsContent key={tab} value={tab} className="mt-0 space-y-6">
@@ -501,27 +627,30 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {tabData.map((reportData, idx) => (
-                      <TableRow
-                        key={reportData.reportId}
-                        className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}
-                      >
-                        <TableCell className="font-medium">
-                          {reportData.reportName}
-                        </TableCell>
-                        {safeMetrics.map((metric) => (
-                          <TableCell key={metric} className="text-right tabular-nums">
-                            {formatMetricValue(metric, reportData.metrics[metric] || 0)}
+                    {tabData.map((reportData, idx) => {
+                      const comparisonMetrics = getComparisonMetrics(reportData.reportId, tab);
+                      return (
+                        <TableRow
+                          key={reportData.reportId}
+                          className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}
+                        >
+                          <TableCell className="font-medium">
+                            {reportData.reportName}
                           </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
+                          {safeMetrics.map((metric) => (
+                            <TableCell key={metric} className="text-right tabular-nums">
+                              {renderMetricCell(reportData.metrics[metric] || 0, metric, comparisonMetrics)}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      );
+                    })}
                     {/* Total Row */}
                     <TableRow className="bg-muted font-semibold border-t-2">
                       <TableCell>Total</TableCell>
                       {safeMetrics.map((metric) => (
                         <TableCell key={metric} className="text-right tabular-nums">
-                          {formatMetricValue(metric, totals[metric] || 0)}
+                          {renderMetricCell(totals[metric] || 0, metric, comparisonTotals, true)}
                         </TableCell>
                       ))}
                     </TableRow>
