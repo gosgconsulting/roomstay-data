@@ -510,6 +510,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       last_month: [],
       mtd: [],
       ytd: [],
+      breakdown_data: {},
     };
 
     const dateRanges: Record<DateTab, { start: Date; end: Date }> = {
@@ -525,8 +526,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     }
 
     console.log("[computePivotData] Starting for reports:", selectedReportIds);
-    console.log("[computePivotData] Reports state:", reports);
-    console.log("[computePivotData] Report configs:", reportConfigs);
+    console.log("[computePivotData] Breakdown configs:", breakdownConfigs);
 
     for (const reportId of selectedReportIds) {
       const report = reports.find(r => r.id === reportId);
@@ -609,7 +609,6 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         metricNameToIdMap[m.dimensionName] = m.dimensionId;
       }
     });
-    console.log(`[computePivotData] Built metric mapping for ${report.name}:`, Object.keys(metricNameToIdMap).length, 'mappings');
 
     // Get dimension filter config for this report
     const filterConfig = reportConfigs[report.id];
@@ -634,9 +633,9 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         dimensionName: dimName,
         values: filterConfig.selectedValues,
       };
-      console.log(`[computePivotData] Applying filter for ${report.name}:`, dimensionFilter);
     }
 
+    // Aggregate main metrics
     (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
       const metrics = aggregateMetrics(
         sourceData.transformedRows,
@@ -652,6 +651,70 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         metrics,
       });
     });
+
+    // Compute breakdown data if configured
+    const breakdownConfig = breakdownConfigs[report.id];
+    if (breakdownConfig?.breakdownDimensionId) {
+      // Fetch breakdown dimension name
+      const { data: breakdownDimData } = await supabase
+        .from("dimensions")
+        .select("name")
+        .eq("id", breakdownConfig.breakdownDimensionId)
+        .single();
+      
+      const breakdownDimName = breakdownDimData?.name;
+      const breakdownDimId = breakdownConfig.breakdownDimensionId;
+      
+      // First filter rows by dimension filter
+      const filteredByDimension = sourceData.transformedRows.filter((row: any) => {
+        if (!dimensionFilter || dimensionFilter.values.length === 0) return true;
+        const rowData = row.dimension_values || row;
+        const dimVal = rowData[dimensionFilter.dimensionId] || 
+                       (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
+        return dimVal !== undefined && dimensionFilter.values.includes(String(dimVal));
+      });
+      
+      // Get unique values for breakdown dimension from filtered rows
+      const uniqueValues = new Set<string>();
+      filteredByDimension.forEach((row: any) => {
+        const rowData = row.dimension_values || row;
+        const val = rowData[breakdownDimId] || (breakdownDimName ? rowData[breakdownDimName] : undefined);
+        if (val !== undefined && val !== null && val !== '') {
+          uniqueValues.add(String(val));
+        }
+      });
+
+      // Initialize breakdown data for this report
+      if (!pivotData.breakdown_data) {
+        pivotData.breakdown_data = {};
+      }
+      pivotData.breakdown_data[report.id] = { last_month: [], mtd: [], ytd: [] };
+      
+      (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+        uniqueValues.forEach((groupValue) => {
+          // Filter rows for this specific group value
+          const groupRows = filteredByDimension.filter((row: any) => {
+            const rowData = row.dimension_values || row;
+            const groupVal = rowData[breakdownDimId] || 
+                             (breakdownDimName ? rowData[breakdownDimName] : undefined);
+            return groupVal !== undefined && String(groupVal) === groupValue;
+          });
+          
+          const metrics = aggregateMetrics(
+            groupRows,
+            selectedMetrics,
+            dateRanges[tab],
+            undefined, // Already filtered
+            metricNameToIdMap
+          );
+
+          pivotData.breakdown_data![report.id][tab].push({
+            groupValue,
+            metrics,
+          });
+        });
+      });
+    }
   };
 
   const handleSave = async () => {
