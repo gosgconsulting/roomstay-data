@@ -121,6 +121,50 @@ interface Report {
   name: string;
 }
 
+// Helper to format AI Insights text into styled bullet points
+const FormatAIInsights: React.FC<{ text: string }> = ({ text }) => {
+  // Parse the numbered format: "1. **Label**: text 2. **Label**: text"
+  const lines = text.split(/(?=\d+\.\s+\*\*)/);
+  
+  const items = lines.map(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return null;
+    
+    // Match pattern: "1. **Label**: content" or "**Label**: content"
+    const match = trimmed.match(/^(?:\d+\.\s*)?\*\*([^*]+)\*\*:?\s*(.+)$/);
+    if (match) {
+      const [, label, content] = match;
+      return { label: label.trim(), content: content.trim() };
+    }
+    
+    // Fallback: just return the text cleaned up
+    const cleanedText = trimmed
+      .replace(/^\d+\.\s*/, '')
+      .replace(/\*\*/g, '')
+      .replace(/^[-•]\s*/, '');
+    return cleanedText ? { label: null, content: cleanedText } : null;
+  }).filter(Boolean);
+
+  if (items.length === 0) {
+    // Fallback: just render the text cleaned of markdown
+    return <p className="text-sm text-muted-foreground">{text.replace(/\*\*/g, '')}</p>;
+  }
+
+  return (
+    <ul className="space-y-1.5">
+      {items.map((item, idx) => (
+        <li key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
+          <span className="text-primary mt-1.5 flex-shrink-0">•</span>
+          <span>
+            {item?.label && <strong className="font-semibold text-foreground">{item.label}:</strong>}{' '}
+            {item?.content}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+};
+
 const formatNumber = (value: number): string => {
   if (value === 0) return "0";
   if (Math.abs(value) >= 1000000) {
@@ -773,7 +817,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                       <Sparkles className="h-3 w-3" />
                       AI Insights
                     </div>
-                    <p className="text-sm text-muted-foreground">{data.table_insights.summary[tab]}</p>
+                    <FormatAIInsights text={data.table_insights.summary[tab]} />
                   </div>
                 )}
               </div>
@@ -892,7 +936,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                               <Sparkles className="h-3 w-3" />
                               AI Insights
                             </div>
-                            <p className="text-sm text-muted-foreground">{data.table_insights.date_breakdown[tab]}</p>
+                            <FormatAIInsights text={data.table_insights.date_breakdown[tab]} />
                           </div>
                         )}
                       </div>
@@ -986,7 +1030,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                               <Sparkles className="h-3 w-3" />
                               AI Insights
                             </div>
-                            <p className="text-sm text-muted-foreground">{data.table_insights.breakdowns[reportId][tab]}</p>
+                            <FormatAIInsights text={data.table_insights.breakdowns[reportId][tab]} />
                           </div>
                         )}
                       </div>
