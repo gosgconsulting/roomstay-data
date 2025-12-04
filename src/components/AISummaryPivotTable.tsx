@@ -757,10 +757,48 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               {combinedDateBreakdown[tab] && combinedDateBreakdown[tab].length > 0 && (
                 <div className="space-y-4">
                   {(() => {
-                    const dateRows = combinedDateBreakdown[tab] || [];
-                    const dateBreakdownTotals = calculateBreakdownTotals(dateRows);
+                    const rawDateRows = combinedDateBreakdown[tab] || [];
                     const groupLabel = tab === 'ytd' ? 'Month' : 'Week';
                     const isWeekView = tab !== 'ytd';
+                    
+                    // Sort dateRows in descending order (most recent first)
+                    const dateRows = [...rawDateRows].sort((a, b) => {
+                      if (isWeekView) {
+                        // Parse "Week 45, 2024" format
+                        const matchA = a.dateGroup.match(/Week\s+(\d+),?\s+(\d+)/i);
+                        const matchB = b.dateGroup.match(/Week\s+(\d+),?\s+(\d+)/i);
+                        if (matchA && matchB) {
+                          const yearA = parseInt(matchA[2]);
+                          const yearB = parseInt(matchB[2]);
+                          if (yearA !== yearB) return yearB - yearA; // Descending by year
+                          return parseInt(matchB[1]) - parseInt(matchA[1]); // Descending by week
+                        }
+                      } else {
+                        // Parse "January 2024" format for months
+                        const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
+                                           'july', 'august', 'september', 'october', 'november', 'december'];
+                        const parseMonth = (dateGroup: string): { month: number; year: number } | null => {
+                          const match = dateGroup.match(/(\w+)\s+(\d+)/);
+                          if (match) {
+                            const monthIndex = monthNames.indexOf(match[1].toLowerCase());
+                            if (monthIndex !== -1) {
+                              return { month: monthIndex, year: parseInt(match[2]) };
+                            }
+                          }
+                          return null;
+                        };
+                        const parsedA = parseMonth(a.dateGroup);
+                        const parsedB = parseMonth(b.dateGroup);
+                        if (parsedA && parsedB) {
+                          if (parsedA.year !== parsedB.year) return parsedB.year - parsedA.year; // Descending by year
+                          return parsedB.month - parsedA.month; // Descending by month
+                        }
+                      }
+                      // Fallback to string comparison
+                      return b.dateGroup.localeCompare(a.dateGroup);
+                    });
+                    
+                    const dateBreakdownTotals = calculateBreakdownTotals(dateRows);
                     
                     return (
                       <div className="border rounded-lg overflow-hidden">
