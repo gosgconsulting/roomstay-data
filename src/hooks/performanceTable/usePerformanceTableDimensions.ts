@@ -221,32 +221,12 @@ export function usePerformanceTableDimensions({
         ? [...allDimensions, budgetDimension]
         : allDimensions;
 
-      // Filter dimensions by data availability for this report
+      // Per user memory: all text, vlookup, and date dimensions should be displayed
+      // regardless of whether they currently contain data.
+      // Do NOT filter by data availability - show ALL dimensions
       let finalDimensions = allDimensionsWithBudget;
       
-      if (reportId && allDimensionsWithBudget.length > 0) {
-        try {
-          console.log('[DIMENSIONS] Filtering dimensions by data availability...');
-          finalDimensions = await filterDimensionsByDataAvailability(
-            allDimensionsWithBudget, 
-            reportId,
-            {
-              alwaysIncludeDate: true,      // Always include date dimensions (required for grouping)
-              alwaysIncludeCalculated: true, // Always include calculated/formula dimensions
-              fallbackOnError: true         // Return all dimensions if error occurs
-            }
-          );
-          console.log('[DIMENSIONS] Filtered dimensions:', {
-            original: allDimensionsWithBudget.length,
-            filtered: finalDimensions.length,
-            excluded: allDimensionsWithBudget.length - finalDimensions.length
-          });
-        } catch (filterError) {
-          console.error('[DIMENSIONS] Error filtering dimensions by data availability:', filterError);
-          // Use all dimensions as fallback
-          finalDimensions = allDimensionsWithBudget;
-        }
-      }
+      console.log('[DIMENSIONS] Skipping data availability filter - showing all dimensions:', finalDimensions.length);
 
       // NEW: Ensure essential KPI metrics are present even if the filter excluded them
       const essentialKPIs = [
