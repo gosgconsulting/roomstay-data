@@ -70,7 +70,7 @@ interface ReportDimensionConfig {
 
 interface ReportBreakdownConfig {
   reportId: string;
-  breakdownDimensionId: string | null;
+  breakdownDimensionIds: string[]; // Changed to array for multi-select
 }
 
 interface EditingCard {
@@ -467,14 +467,20 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     [reports, selectedReportIds]
   );
 
-  const handleBreakdownChange = (reportId: string, dimensionId: string | null) => {
-    setBreakdownConfigs(prev => ({
-      ...prev,
-      [reportId]: {
-        reportId,
-        breakdownDimensionId: dimensionId,
-      },
-    }));
+  const handleBreakdownToggle = (reportId: string, dimensionId: string) => {
+    setBreakdownConfigs(prev => {
+      const currentIds = prev[reportId]?.breakdownDimensionIds || [];
+      const newIds = currentIds.includes(dimensionId)
+        ? currentIds.filter(id => id !== dimensionId)
+        : [...currentIds, dimensionId];
+      return {
+        ...prev,
+        [reportId]: {
+          reportId,
+          breakdownDimensionIds: newIds,
+        },
+      };
+    });
   };
 
   const handleNext = () => {
@@ -774,18 +780,22 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       }
     });
 
-    // Compute breakdown data if configured
+    // Compute breakdown data if configured - support multiple breakdown dimensions
     const breakdownConfig = breakdownConfigs[report.id];
-    if (breakdownConfig?.breakdownDimensionId) {
+    const breakdownDimensionIds = breakdownConfig?.breakdownDimensionIds || [];
+    
+    for (const breakdownDimId of breakdownDimensionIds) {
       // Fetch breakdown dimension name
       const { data: breakdownDimData } = await supabase
         .from("dimensions")
         .select("name")
-        .eq("id", breakdownConfig.breakdownDimensionId)
+        .eq("id", breakdownDimId)
         .maybeSingle();
       
-      const breakdownDimName = breakdownDimData?.name;
-      const breakdownDimId = breakdownConfig.breakdownDimensionId;
+      const breakdownDimName = breakdownDimData?.name || 'Group';
+      
+      // Use a composite key: reportId_dimensionId
+      const breakdownKey = `${report.id}_${breakdownDimId}`;
       
       // First filter rows by dimension filter
       const filteredByDimension = sourceData.transformedRows.filter((row: any) => {
@@ -810,21 +820,25 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         }
       });
 
-      // Initialize breakdown data for this report
+      // Initialize breakdown data for this breakdown (using composite key)
       if (!pivotData.breakdown_data) {
         pivotData.breakdown_data = {};
       }
-      pivotData.breakdown_data[report.id] = { last_month: [], mtd: [], ytd: [] };
+      if (!pivotData.breakdown_dimension_names) {
+        pivotData.breakdown_dimension_names = {};
+      }
+      pivotData.breakdown_data[breakdownKey] = { last_month: [], mtd: [], ytd: [] };
+      pivotData.breakdown_dimension_names[breakdownKey] = breakdownDimName;
       
-      // Initialize comparison breakdown data for this report
+      // Initialize comparison breakdown data for this breakdown
       if (!pivotData.comparison_previous_period!.breakdown_data) {
         pivotData.comparison_previous_period!.breakdown_data = {};
       }
       if (!pivotData.comparison_previous_year!.breakdown_data) {
         pivotData.comparison_previous_year!.breakdown_data = {};
       }
-      pivotData.comparison_previous_period!.breakdown_data[report.id] = { last_month: [], mtd: [], ytd: [] };
-      pivotData.comparison_previous_year!.breakdown_data[report.id] = { last_month: [], mtd: [], ytd: [] };
+      pivotData.comparison_previous_period!.breakdown_data[breakdownKey] = { last_month: [], mtd: [], ytd: [] };
+      pivotData.comparison_previous_year!.breakdown_data[breakdownKey] = { last_month: [], mtd: [], ytd: [] };
       
       (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
         // Process each named group
@@ -846,7 +860,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
             metricNameToIdMap
           );
 
-          pivotData.breakdown_data![report.id][tab].push({
+          pivotData.breakdown_data![breakdownKey][tab].push({
             groupValue,
             metrics,
           });
@@ -861,7 +875,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
               undefined,
               metricNameToIdMap
             );
-            pivotData.comparison_previous_period!.breakdown_data![report.id][tab].push({
+            pivotData.comparison_previous_period!.breakdown_data![breakdownKey][tab].push({
               groupValue,
               metrics: prevPeriodMetrics,
             });
@@ -877,7 +891,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
               undefined,
               metricNameToIdMap
             );
-            pivotData.comparison_previous_year!.breakdown_data![report.id][tab].push({
+            pivotData.comparison_previous_year!.breakdown_data![breakdownKey][tab].push({
               groupValue,
               metrics: prevYearMetrics,
             });
@@ -900,7 +914,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
             metricNameToIdMap
           );
 
-          pivotData.breakdown_data![report.id][tab].push({
+          pivotData.breakdown_data![breakdownKey][tab].push({
             groupValue: 'Uncategorized',
             metrics,
           });
@@ -915,7 +929,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
               undefined,
               metricNameToIdMap
             );
-            pivotData.comparison_previous_period!.breakdown_data![report.id][tab].push({
+            pivotData.comparison_previous_period!.breakdown_data![breakdownKey][tab].push({
               groupValue: 'Uncategorized',
               metrics: prevPeriodMetrics,
             });
@@ -930,14 +944,14 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
               undefined,
               metricNameToIdMap
             );
-            pivotData.comparison_previous_year!.breakdown_data![report.id][tab].push({
+            pivotData.comparison_previous_year!.breakdown_data![breakdownKey][tab].push({
               groupValue: 'Uncategorized',
               metrics: prevYearMetrics,
             });
           }
         }
       });
-    }
+    } // End of for loop for each breakdown dimension
     
     // Build metric name to dimension ID mapping for date breakdown
     const mappings = Array.isArray(dsData?.column_mappings) ? dsData.column_mappings : [];
@@ -1293,7 +1307,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
                 <ScrollArea className="h-full">
                   <div className="space-y-1">
                     {selectedReports.map(report => {
-                      const hasBreakdown = !!breakdownConfigs[report.id]?.breakdownDimensionId;
+                      const breakdownCount = breakdownConfigs[report.id]?.breakdownDimensionIds?.length || 0;
                       return (
                         <button
                           key={report.id}
@@ -1308,8 +1322,8 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
                           }}
                         >
                           <span className="truncate">{report.name}</span>
-                          {hasBreakdown && (
-                            <span className="text-xs opacity-50">✓</span>
+                          {breakdownCount > 0 && (
+                            <span className="text-xs opacity-70">{breakdownCount}</span>
                           )}
                         </button>
                       );
@@ -1333,44 +1347,62 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
                       <>
                         <div className="bg-muted/30 rounded-lg p-4 mb-2">
                           <p className="text-sm text-muted-foreground">
-                            Select a dimension to break down this report's data. This will create a detailed table grouped by the selected dimension.
+                            Select dimensions to break down this report's data. Each selected dimension will create a separate breakdown table.
                           </p>
                         </div>
                         
                         <div>
                           <Label className="text-sm font-medium mb-2 block">
-                            Breakdown By
+                            Breakdown Dimensions
                           </Label>
-                          <Select
-                            value={breakdownConfigs[activeReportTab]?.breakdownDimensionId || "none"}
-                            onValueChange={value =>
-                              handleBreakdownChange(activeReportTab, value === "none" ? null : value)
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Choose a dimension..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">
-                                <span className="text-muted-foreground">No breakdown</span>
-                              </SelectItem>
-                              {activeDimensions.map(dim => (
-                                <SelectItem key={dim.id} value={dim.id}>
-                                  {dim.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <ScrollArea className="h-[250px] border rounded-md">
+                            <div className="p-2 space-y-1">
+                              {activeDimensions.length > 0 ? (
+                                activeDimensions.map(dim => {
+                                  const isSelected = breakdownConfigs[activeReportTab]?.breakdownDimensionIds?.includes(dim.id) || false;
+                                  return (
+                                    <div
+                                      key={dim.id}
+                                      className={cn(
+                                        "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
+                                        isSelected
+                                          ? "bg-primary/10"
+                                          : "hover:bg-muted/50"
+                                      )}
+                                      onClick={() => handleBreakdownToggle(activeReportTab, dim.id)}
+                                    >
+                                      <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={() => handleBreakdownToggle(activeReportTab, dim.id)}
+                                      />
+                                      <span className="text-sm">{dim.name}</span>
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                <p className="text-center text-muted-foreground py-4">
+                                  No dimensions available
+                                </p>
+                              )}
+                            </div>
+                          </ScrollArea>
                         </div>
 
-                        {breakdownConfigs[activeReportTab]?.breakdownDimensionId && (
-                          <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
-                            <p className="text-sm">
-                              <span className="font-medium">Selected:</span>{" "}
-                              {activeDimensions.find(d => d.id === breakdownConfigs[activeReportTab]?.breakdownDimensionId)?.name}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              A detailed breakdown table will be created for this report.
+                        {(breakdownConfigs[activeReportTab]?.breakdownDimensionIds?.length || 0) > 0 && (
+                          <div className="mt-2 p-4 bg-primary/5 rounded-lg border border-primary/20">
+                            <p className="text-sm font-medium mb-2">Selected ({breakdownConfigs[activeReportTab]?.breakdownDimensionIds?.length || 0}):</p>
+                            <div className="flex flex-wrap gap-2">
+                              {breakdownConfigs[activeReportTab]?.breakdownDimensionIds?.map(dimId => {
+                                const dim = activeDimensions.find(d => d.id === dimId);
+                                return dim ? (
+                                  <span key={dimId} className="px-2 py-1 bg-primary/10 rounded text-xs">
+                                    {dim.name}
+                                  </span>
+                                ) : null;
+                              })}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-2">
+                              A separate breakdown table will be created for each dimension.
                             </p>
                           </div>
                         )}
@@ -1498,9 +1530,9 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
                     const filterDim = dimensions[report.id]?.find(
                       d => d.id === config?.dimensionId
                     );
-                    const breakdownDim = dimensions[report.id]?.find(
-                      d => d.id === breakdownConfig?.breakdownDimensionId
-                    );
+                    const breakdownDims = (breakdownConfig?.breakdownDimensionIds || [])
+                      .map(dimId => dimensions[report.id]?.find(d => d.id === dimId)?.name)
+                      .filter(Boolean);
                     return (
                       <div key={report.id} className="space-y-1">
                         <div>
@@ -1516,9 +1548,9 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
                             <span className="italic">No filter</span>
                           )}
                         </div>
-                        {breakdownDim && (
+                        {breakdownDims.length > 0 && (
                           <div className="ml-4 text-xs">
-                            → Breakdown by: {breakdownDim.name}
+                            → Breakdowns: {breakdownDims.join(", ")}
                           </div>
                         )}
                       </div>
