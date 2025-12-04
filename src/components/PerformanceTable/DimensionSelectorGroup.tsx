@@ -41,9 +41,14 @@ export function DimensionSelectorGroup({
   // Always include the current selection in options so it displays properly
   const currentValue = dimensions[0] || "";
   const baseOptions = availableDimensions || dimensions;
+  
+  // Ensure current value is always in the options list
   const options = currentValue && !baseOptions.includes(currentValue) 
     ? [currentValue, ...baseOptions]
     : baseOptions;
+  
+  // Find the currently selected dimension for display
+  const selectedDimension = currentValue ? allDimensions.find(d => d.id === currentValue) : null;
   
   if (options.length > 0) {
     return (
@@ -57,7 +62,24 @@ export function DimensionSelectorGroup({
             className="w-40 bg-background"
             onContextMenu={!isSharedView && isEditMode && onContextMenu ? onContextMenu : undefined}
           >
-            <SelectValue />
+            <SelectValue placeholder="Select...">
+              {selectedDimension && (
+                <div className="flex items-center gap-2">
+                  {reportId && (
+                    dimensionHasData[currentValue] !== undefined ? (
+                      dimensionHasData[currentValue] ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                      )
+                    ) : (
+                      <div className="h-3.5 w-3.5" />
+                    )
+                  )}
+                  <span>{selectedDimension.name}</span>
+                </div>
+              )}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent className="bg-background z-50">
             {options.map((dimId) => {
