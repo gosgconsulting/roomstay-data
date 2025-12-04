@@ -638,20 +638,38 @@ const AISummaryPage = () => {
 
       toast.info("Generating AI summary with GPT-4 Turbo...");
 
-      // Call the edge function with cached pivot data
-      const { data: result, error: fnError } = await supabase.functions.invoke('generate-ai-summary', {
-        body: {
+      // Get the session token
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // Call the edge function with a direct fetch for better error handling
+      const response = await fetch('https://zcxxwpwheevwavdcgfht.supabase.co/functions/v1/generate-ai-summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || ''}`,
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpjeHh3cHdoZWV2d2F2ZGNnZmh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE4Mzg1MjAsImV4cCI6MjA3NzQxNDUyMH0.zKmexYsPTkNWa65kjH5H6_aMosY9rHHj0lqg8j4T3Lc'
+        },
+        body: JSON.stringify({
           cardId: card.id,
           pivotData: card.cached_pivot_data,
           selectedMetrics: card.selected_metrics,
           reportConfigs: card.report_configs,
           aiPrompt: card.ai_prompt
-        }
+        })
       });
 
-      if (fnError) {
-        console.error("Error calling AI function:", fnError);
-        toast.error("Failed to generate summary");
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Error calling AI function:", response.status, errorText);
+        toast.error(`Failed to generate summary: ${response.status}`);
+        return;
+      }
+
+      const result = await response.json();
+
+      if (result?.error) {
+        console.error("AI function error:", result.error);
+        toast.error(result.error);
         return;
       }
 
