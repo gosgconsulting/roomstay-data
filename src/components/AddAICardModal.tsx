@@ -302,10 +302,10 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
 
           setDataSources(prev => ({ ...prev, [reportId]: dsData as DataSource }));
 
-          // Extract dimension IDs from column mappings
+          // Extract dimension IDs from column mappings (filter out "none" and invalid values)
           const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
           const dimensionIds = columnMappings
-            .filter((m: any) => m.dimensionId)
+            .filter((m: any) => m.dimensionId && m.dimensionId !== "none" && m.dimensionId.length > 10)
             .map((m: any) => m.dimensionId);
 
           if (dimensionIds.length > 0) {
