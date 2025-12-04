@@ -53,8 +53,13 @@ export default function Index() {
   // Filter state - default to last 7 days for better performance with large datasets
   const [filters, setFilters] = useState<FilterState>({
     dimensionFilters: {},
-    dateRange: undefined,
-    datePreset: "all_time",
+    dateRange: (() => {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      return { from: startOfMonth, to: endOfMonth };
+    })(),
+    datePreset: "this_month",
     compareEnabled: false,
     compareType: "previous_period",
     compareDateRange: undefined,
