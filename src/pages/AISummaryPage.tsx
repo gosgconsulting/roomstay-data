@@ -615,63 +615,21 @@ const AISummaryPage = () => {
         return;
       }
 
-      toast.info("Fetching data from sources...");
-
-      // Fetch data for each report
-      const reportData: Array<{ reportName: string; rows: Array<Record<string, any>> }> = [];
-
-      for (const reportId of card.report_ids) {
-        const report = reports.find(r => r.id === reportId);
-        if (!report) continue;
-
-        // Fetch data source
-        const { data: dsData, error: dsError } = await supabase
-          .from("data_sources")
-          .select("*")
-          .eq("report_id", reportId)
-          .limit(1)
-          .maybeSingle();
-
-        if (dsError || !dsData) {
-          console.error(`Error fetching data source for report ${reportId}:`, dsError);
-          continue;
-        }
-
-        // Fetch source data
-        const sourceData = await fetchSourceData(dsData as DataSource, user.id, accountId);
-        
-        if (sourceData?.transformedRows) {
-          // Filter by date if sinceDate is set
-          const sinceDate = new Date(card.since_date);
-          const filteredRows = sourceData.transformedRows.filter((row: any) => {
-            // Find the date column
-            const dateValue = row.Date || row.date || row.Day || row.day;
-            if (!dateValue) return true;
-            const rowDate = new Date(dateValue);
-            return rowDate >= sinceDate;
-          });
-
-          reportData.push({
-            reportName: report.name,
-            rows: filteredRows
-          });
-        }
-      }
-
-      if (reportData.length === 0) {
-        toast.error("No data available for analysis");
+      // Check if pivot data exists
+      if (!card.cached_pivot_data || Object.keys(card.cached_pivot_data).length === 0) {
+        toast.error("Please refresh the pivot data first before generating a summary");
         return;
       }
 
       toast.info("Generating AI summary with GPT-4 Turbo...");
 
-      // Call the edge function
+      // Call the edge function with cached pivot data
       const { data: result, error: fnError } = await supabase.functions.invoke('generate-ai-summary', {
         body: {
           cardId: card.id,
-          reportData,
+          pivotData: card.cached_pivot_data,
           selectedMetrics: card.selected_metrics,
-          sinceDate: card.since_date,
+          reportConfigs: card.report_configs,
           aiPrompt: card.ai_prompt
         }
       });
