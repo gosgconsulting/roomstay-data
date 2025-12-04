@@ -248,18 +248,23 @@ serve(async (req) => {
       const isLastMonth = periodKey === 'last_month';
       const isMTD = periodKey === 'mtd';
       
+      // Calculate previous month for "previous_period" comparison
+      const prevMonth = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      const prevMonthName = prevMonth.toLocaleString('en-US', { month: 'long' });
+      const prevMonthYear = prevMonth.getFullYear();
+      
       if (comparisonType === 'previous_period') {
         if (isLastMonth) {
-          const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-          const twoMonthsAgoName = twoMonthsAgo.toLocaleString('en-US', { month: 'long' });
-          return `Compare ${lastMonthName} ${lastMonthYear} vs ${twoMonthsAgoName} ${twoMonthsAgo.getFullYear()} (previous month)`;
+          return `Compare ${lastMonthName} ${lastMonthYear} vs ${prevMonthName} ${prevMonthYear} (the month before). 
+IMPORTANT: When showing changes, say "vs ${prevMonthName}" NOT "vs ${lastMonthName} ${previousYearLastMonth}". This is a month-over-month comparison.`;
         } else if (isMTD) {
           return `Compare ${currentMonth} ${currentYear} MTD vs same days in ${lastMonthName} ${lastMonthYear}`;
         }
         return `Compare ${currentYear} YTD vs same period in ${currentYear - 1}`;
       } else if (comparisonType === 'previous_year') {
         if (isLastMonth) {
-          return `Compare ${lastMonthName} ${lastMonthYear} vs ${lastMonthName} ${previousYearLastMonth} (same month last year)`;
+          return `Compare ${lastMonthName} ${lastMonthYear} vs ${lastMonthName} ${previousYearLastMonth} (same month last year).
+IMPORTANT: When showing changes, say "vs ${lastMonthName} ${previousYearLastMonth}". This is a year-over-year comparison.`;
         } else if (isMTD) {
           return `Compare ${currentMonth} ${currentYear} MTD vs ${currentMonth} ${currentYear - 1} MTD`;
         }
@@ -267,10 +272,8 @@ serve(async (req) => {
       }
       // 'both' - include both comparisons
       if (isLastMonth) {
-        const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-        const twoMonthsAgoName = twoMonthsAgo.toLocaleString('en-US', { month: 'long' });
         return `Compare ${lastMonthName} ${lastMonthYear} vs BOTH:
-- Previous Month: ${twoMonthsAgoName} ${twoMonthsAgo.getFullYear()}
+- Previous Month: ${prevMonthName} ${prevMonthYear}
 - Same Month Last Year: ${lastMonthName} ${previousYearLastMonth}`;
       } else if (isMTD) {
         return `Compare ${currentMonth} ${currentYear} MTD vs BOTH:
@@ -335,8 +338,8 @@ Do NOT bold words like: growth, improvement, increase, decrease, strong, signifi
 
 ### 3. COMPARISON FOCUS
 ${comparisonType === 'both' ? 'Include insights from BOTH comparisons when data is available. Show changes vs previous period AND vs same period last year.' : 
-  comparisonType === 'previous_period' ? 'Focus on sequential/month-over-month changes (e.g., November vs October, this week vs last week).' :
-  'Focus on year-over-year changes (e.g., November 2025 vs November 2024).'}
+  comparisonType === 'previous_period' ? `Focus ONLY on sequential month-over-month changes. When you say "vs [period]" always use the PREVIOUS MONTH (e.g., ${lastMonthName} ${lastMonthYear} vs ${new Date(now.getFullYear(), now.getMonth() - 2, 1).toLocaleString('en-US', { month: 'long' })} ${new Date(now.getFullYear(), now.getMonth() - 2, 1).getFullYear()}). DO NOT mention the same month from last year.` :
+  `Focus ONLY on year-over-year changes. When you say "vs [period]" always use the SAME MONTH LAST YEAR (e.g., ${lastMonthName} ${lastMonthYear} vs ${lastMonthName} ${previousYearLastMonth}).`}
 
 ### 4. CHANNEL SECTION FORMATTING
 For channel sections, use numbered format:
@@ -409,12 +412,17 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
       const periodData = pivotDataTyped[tab.key] || [];
       if (periodData.length === 0) continue;
 
+      // Only pass the comparison data that matches the user's selection
+      const compPrevPeriod = comparisonType === 'previous_year' ? undefined : pivotDataTyped.comparison_previous_period?.[tab.key];
+      const compPrevYear = comparisonType === 'previous_period' ? undefined : pivotDataTyped.comparison_previous_year?.[tab.key];
+      const compBreakdown = comparisonType === 'previous_year' ? undefined : pivotDataTyped.comparison_previous_period?.breakdown_data;
+
       const dataContext = buildPeriodContext(
         periodData,
-        pivotDataTyped.comparison_previous_period?.[tab.key],
-        pivotDataTyped.comparison_previous_year?.[tab.key],
+        compPrevPeriod,
+        compPrevYear,
         pivotDataTyped.breakdown_data,
-        pivotDataTyped.comparison_previous_period?.breakdown_data,
+        compBreakdown,
         tab.key,
         tab.label
       );
