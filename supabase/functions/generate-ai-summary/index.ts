@@ -233,13 +233,23 @@ serve(async (req) => {
     // Cast pivotData to CachedPivotData for the main summary generation
     const pivotDataTyped = pivotData as CachedPivotData;
 
+    // Get current date context for accurate period references
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.toLocaleString('en-US', { month: 'long' });
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthName = lastMonth.toLocaleString('en-US', { month: 'long' });
+    const lastMonthYear = lastMonth.getFullYear();
+    const previousYearLastMonth = lastMonthYear - 1;
+
     // System prompt for executive summaries - focused on single period analysis
     const getSystemPrompt = (periodLabel: string, periodKey: string) => {
       const isMTD = periodKey === 'mtd';
+      const isLastMonth = periodKey === 'last_month';
       
       const mtdForecasting = isMTD ? `
 ## MTD FORECASTING REQUIREMENTS
-Since this is Month-to-Date data, you MUST include:
+Since this is Month-to-Date data for ${currentMonth} ${currentYear}, you MUST include:
 1. **Days Progress**: State how many days of data we have vs total days in the month (e.g., "With 15 days of data out of 30...")
 2. **Projected Performance**: Forecast the end-of-month figures:
    - Projected Revenue by month end
@@ -251,8 +261,16 @@ Since this is Month-to-Date data, you MUST include:
 Example: "With 18 days of data (60% of the month), current revenue stands at $180K. **Projected month-end revenue is $300K**, which would represent a +15% improvement over last month's $261K."
 ` : '';
 
-      return `You are an expert digital marketing analyst writing executive summaries for hotel and hospitality clients. Write in flowing paragraphs with specific numbers inline.
+      const lastMonthContext = isLastMonth ? `
+## IMPORTANT DATE CONTEXT FOR LAST MONTH
+- You are analyzing: ${lastMonthName} ${lastMonthYear} (the current data period)
+- Comparing to: ${lastMonthName} ${previousYearLastMonth} (same month, previous year)
+- ALWAYS refer to the current period as "${lastMonthName} ${lastMonthYear}", NOT "${lastMonthName} ${previousYearLastMonth}"
+- When showing comparisons, format as: "In ${lastMonthName} ${lastMonthYear}, revenue was $X (+Y% vs ${lastMonthName} ${previousYearLastMonth})"
+` : '';
 
+      return `You are an expert digital marketing analyst writing executive summaries for hotel and hospitality clients. Write in flowing paragraphs with specific numbers inline.
+${lastMonthContext}
 ## CRITICAL FORMATTING RULES
 
 ### 1. ALWAYS INCLUDE NUMBERS WITH SIGNS
@@ -267,9 +285,9 @@ Only use **bold** for truly important summary phrases or key takeaways, NOT for 
 Do NOT bold words like: growth, improvement, increase, decrease, strong, significant, etc.
 
 ### 3. USE SPECIFIC TIME PERIODS
-Never say "the most recent month". Always use the actual month name:
-- ✅ CORRECT: "In November 2024..." or "For ${periodLabel}..."
-- ❌ WRONG: "In the most recent month..."
+Always use the correct month and year. For ${periodLabel}:
+${isLastMonth ? `- Current period: ${lastMonthName} ${lastMonthYear}
+- Comparison period: ${lastMonthName} ${previousYearLastMonth}` : isMTD ? `- Current period: ${currentMonth} ${currentYear} to date` : `- Current period: January - ${currentMonth} ${currentYear}`}
 
 ### 4. CHANNEL SECTION FORMATTING
 For channel sections, use numbered format:
@@ -282,7 +300,7 @@ Use + prefix for positive changes and - prefix for negative changes. The UI will
 - "-12.3%" will show red
 ${mtdForecasting}
 ## EXAMPLE OF GOOD ANALYSIS:
-"In November 2024, SEM was **the standout channel** with revenue of $258K (+24.7%) driven by improved conversion at 3.66% (+16.5%) and ROAS at 32x (+29.8%). Despite lower clicks at 11K (-1.1%), efficiency gains offset volume decline."
+"In ${isLastMonth ? `${lastMonthName} ${lastMonthYear}` : isMTD ? `${currentMonth} ${currentYear}` : currentYear.toString()}, SEM was **the standout channel** with revenue of $258K (+24.7%) driven by improved conversion at 3.66% (+16.5%) and ROAS at 32x (+29.8%). Despite lower clicks at 11K (-1.1%), efficiency gains offset volume decline."
 
 ## Output Structure (FOCUSED ON ${periodLabel.toUpperCase()} ONLY)
 1. **Executive Summary** - 2-3 sentences with the headline story and key numbers${isMTD ? ' including projected month-end figures' : ''}
