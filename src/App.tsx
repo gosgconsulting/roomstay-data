@@ -12,6 +12,7 @@ import Auth from "./pages/Auth";
 import SharedReport from "./pages/SharedReport";
 import NotFound from "./pages/NotFound";
 import AllReports from "./pages/AllReports";
+import AISummaryPage from "./pages/AISummaryPage";
 
 import ForecastScenarioPage from "./pages/ForecastScenarioPage";
 import { ReportsSidebarDemo } from "./components/ReportsSidebarDemo";
@@ -35,6 +36,7 @@ const App = () => (
           <Route path="/tools/forecasting" element={<ForecastingTool />} />
           <Route path="/tools/forecasting/scenario/:scenarioId" element={<ForecastScenarioPage />} />
           <Route path="/tools/forecasting/:accountId" element={<ForecastingDashboard />} />
+          <Route path="/tools/ai-summary/:accountId/:summaryId" element={<AISummaryPage />} />
           <Route path="/demo/sidebar" element={<ReportsSidebarDemo />} />
           <Route path="/shared/:slug" element={<SharedReport />} />
           <Route path="/:slug" element={<SharedReport />} />

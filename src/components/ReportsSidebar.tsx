@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Edit, Trash2, Plus, Grid3x3, BarChart3 } from "lucide-react";
+import { Edit, Trash2, Plus, BarChart3, Sparkles } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -22,6 +22,11 @@ interface Report {
   updated_at: string;
 }
 
+interface AISummary {
+  id: string;
+  name: string;
+}
+
 interface ReportsSidebarProps {
   reports: Report[];
   accountId?: string;
@@ -29,6 +34,8 @@ interface ReportsSidebarProps {
   onDeleteReport?: (reportId: string) => void;
   onAddNewReport?: () => void;
   onSelectReport?: (reportId: string) => void;
+  onAddAISummary?: () => void;
+  aiSummaries?: AISummary[];
   className?: string;
 }
 
@@ -43,6 +50,8 @@ export function ReportsSidebar({
   onDeleteReport,
   onAddNewReport,
   onSelectReport,
+  onAddAISummary,
+  aiSummaries = [],
   className,
 }: ReportsSidebarProps) {
   const navigate = useNavigate();
@@ -66,14 +75,6 @@ export function ReportsSidebar({
     }
   };
 
-  const handleAllReportsClick = () => {
-    if (accountId) {
-      navigate(`/all-reports/${accountId}`);
-    } else {
-      navigate('/all-reports');
-    }
-  };
-
   const handleAddNewClick = () => {
     if (onAddNewReport) {
       onAddNewReport();
@@ -87,27 +88,28 @@ export function ReportsSidebar({
     }
   };
 
+  const handleAISummaryClick = (summaryId: string) => {
+    if (accountId) {
+      navigate(`/tools/ai-summary/${accountId}/${summaryId}`);
+    }
+  };
+
+  const handleAddAISummaryClick = () => {
+    if (onAddAISummary) {
+      onAddAISummary();
+    }
+  };
+
   return (
     <Sidebar collapsible="icon" className={cn("w-64 border-r bg-sidebar", className)}>
       <SidebarContent className="p-6">
+        {/* Reports Section */}
         <SidebarGroup>
           <SidebarGroupLabel className="text-base font-medium text-sidebar-foreground mb-6 px-0">
             Reports
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-2">
-              {/* All Reports */}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={handleAllReportsClick}
-                  tooltip="All reports"
-                  className="w-full justify-start text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground px-3 py-2 h-auto font-normal"
-                >
-                  <Grid3x3 className="h-4 w-4" />
-                  <span>All reports</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
               {/* Individual Reports */}
               {reports.map((report) => (
                 <SidebarMenuItem key={report.id}>
@@ -166,6 +168,42 @@ export function ReportsSidebar({
                 <SidebarMenuButton
                   onClick={handleAddNewClick}
                   tooltip="Add new report"
+                  className="w-full justify-start text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground px-3 py-2 h-auto font-normal"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  <span>Add New</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* AI Summary Section */}
+        <SidebarGroup className="mt-8">
+          <SidebarGroupLabel className="text-base font-medium text-sidebar-foreground mb-6 px-0">
+            AI Summary
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu className="space-y-2">
+              {/* AI Summaries List */}
+              {aiSummaries.map((summary) => (
+                <SidebarMenuItem key={summary.id}>
+                  <SidebarMenuButton
+                    onClick={() => handleAISummaryClick(summary.id)}
+                    tooltip={summary.name}
+                    className="w-full justify-start text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground px-3 py-2 h-auto font-normal"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    <span className="truncate">{summary.name}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+
+              {/* Add New AI Summary */}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={handleAddAISummaryClick}
+                  tooltip="Add new AI summary"
                   className="w-full justify-start text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground px-3 py-2 h-auto font-normal"
                 >
                   <Plus className="h-4 w-4 mr-2" />

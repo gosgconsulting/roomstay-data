@@ -24,6 +24,7 @@ import { DataSourcesListModal } from "@/components/DataSourcesListModal";
 import { DimensionsListModal } from "@/components/DimensionsListModal";
 import VlookupModal from "@/components/VlookupModal";
 import { ReportModal } from "@/components/ReportModal";
+import { CreateAISummaryModal } from "@/components/CreateAISummaryModal";
 
 interface Account {
   id: string;
@@ -53,6 +54,7 @@ export default function ReportDashboard() {
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   const [isEditMode, setIsEditMode] = useState(false); // View mode by default
   const [showCreateReportModal, setShowCreateReportModal] = useState(false); // NEW
+  const [showAISummaryModal, setShowAISummaryModal] = useState(false);
 
   // FIX: Add missing state for sidebar reports list
   const [reportsList, setReportsList] = useState<SidebarReport[]>([]);
@@ -458,8 +460,9 @@ export default function ReportDashboard() {
           accountId={accountId}
           onEditReport={(id) => handleEditReport(id)}
           onDeleteReport={(id) => handleDeleteReport({ id, name: "", account_id: accountId || null, created_at: "", updated_at: "" } as any)}
-          onAddNewReport={() => setShowCreateReportModal(true)} // NEW: open modal
-          onSelectReport={(id) => setReportId(id)} // NEW: local switch
+          onAddNewReport={() => setShowCreateReportModal(true)}
+          onSelectReport={(id) => setReportId(id)}
+          onAddAISummary={() => setShowAISummaryModal(true)}
         />
         <SidebarInset className="flex-1 overflow-x-hidden">
           {/* Loading toast for data loading - HIDDEN: Individual components show their own loading states */}
@@ -762,6 +765,18 @@ export default function ReportDashboard() {
           setReportsList((prev) => [data, ...prev]);
           setReportId(data.id);
           toast({ title: "Report created", description: "Your report was created successfully." });
+        }}
+      />
+
+      {/* Create AI Summary modal */}
+      <CreateAISummaryModal
+        open={showAISummaryModal}
+        onOpenChange={setShowAISummaryModal}
+        onCreateSummary={(name) => {
+          // For now, just show a toast - page is blank placeholder
+          toast({ title: "AI Summary created", description: `"${name}" summary created.` });
+          const fakeId = crypto.randomUUID();
+          navigate(`/tools/ai-summary/${accountId}/${fakeId}`);
         }}
       />
     </SidebarProvider>
