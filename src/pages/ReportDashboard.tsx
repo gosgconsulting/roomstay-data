@@ -97,8 +97,13 @@ export default function ReportDashboard() {
     
     return {
       dimensionFilters: {},
-      dateRange: undefined, // No date range = all time
-      datePreset: "all_time",
+      dateRange: (() => {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        return { from: startOfMonth, to: endOfMonth };
+      })(),
+      datePreset: "this_month",
       compareEnabled: false,
       compareType: "previous_period",
       compareDateRange: undefined,
@@ -110,15 +115,17 @@ export default function ReportDashboard() {
     const now = new Date();
     const currentYear = now.getFullYear();
     
-    // If we detect any date range in the future (like 2025), reset to all_time
+    // If we detect any date range in the future (like 2025), reset to this_month
     if (filters.dateRange?.from && filters.dateRange.from.getFullYear() > currentYear) {
-      console.log('[ReportDashboard] Detected future date range on mount, forcing reset to all_time');
+      console.log('[ReportDashboard] Detected future date range on mount, forcing reset to this_month');
       console.log('[ReportDashboard] Future date:', filters.dateRange.from.toISOString(), 'current year:', currentYear);
       
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
       setFilters(prev => ({
         ...prev,
-        dateRange: undefined,
-        datePreset: "all_time"
+        dateRange: { from: startOfMonth, to: endOfMonth },
+        datePreset: "this_month"
       }));
     }
   }, []); // Run only on mount
@@ -130,13 +137,15 @@ export default function ReportDashboard() {
       const isDateInFuture = filters.dateRange.from > new Date(now.getTime() + 24 * 60 * 60 * 1000);
       
       if (isDateInFuture) {
-        console.log('[ReportDashboard] Detected future date range, resetting to all_time');
+        console.log('[ReportDashboard] Detected future date range, resetting to this_month');
         console.log('[ReportDashboard] Future date:', filters.dateRange.from.toISOString(), 'vs now:', now.toISOString());
         
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
         setFilters(prev => ({
           ...prev,
-          dateRange: undefined,
-          datePreset: "all_time"
+          dateRange: { from: startOfMonth, to: endOfMonth },
+          datePreset: "this_month"
         }));
       }
     }
@@ -217,10 +226,13 @@ export default function ReportDashboard() {
       markComponentLoading('chart');
       markComponentLoading('table');
       
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
       setFilters({
         dimensionFilters: {},
-        dateRange: undefined,
-        datePreset: "all_time",
+        dateRange: { from: startOfMonth, to: endOfMonth },
+        datePreset: "this_month",
         compareEnabled: false,
         compareType: "previous_period",
         compareDateRange: undefined,

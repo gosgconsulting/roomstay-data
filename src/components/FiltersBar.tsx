@@ -78,8 +78,14 @@ export const FiltersBar = ({
   const [activeDimensions, setActiveDimensions] = useState<string[]>([]);
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [datePreset, setDatePreset] = useState<string>("all_time");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    // Default to this month
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    return { from: startOfMonth, to: endOfMonth };
+  });
+  const [datePreset, setDatePreset] = useState<string>("this_month");
   const [showDimensionSelector, setShowDimensionSelector] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingFilters, setIsLoadingFilters] = useState(false);
@@ -153,8 +159,11 @@ export const FiltersBar = ({
       setIsInitialLoad(true);
       setActiveDimensions([]);
       setSelectedFilters({});
-      setDateRange(undefined);
-      setDatePreset("all_time");
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      setDateRange({ from: startOfMonth, to: endOfMonth });
+      setDatePreset("this_month");
       setCompareEnabled(false);
       setCompareType("previous_period");
       setCompareDateRange(undefined);
@@ -443,8 +452,8 @@ export const FiltersBar = ({
           console.log('[FiltersBar] Saved date range is in the future, resetting to all_time');
           console.log('[FiltersBar] Future date detected:', savedDateStart.toISOString(), 'current year:', currentYear);
           
-          // Force all_time
-          applyDatePreset("all_time");
+          // Force this_month as default
+          applyDatePreset("this_month");
           
           // Update the saved view to prevent this issue in the future
           await supabase
@@ -469,8 +478,8 @@ export const FiltersBar = ({
           
           // Force all_time if preset is problematic
           if (preset === "this_month" || preset === "last_month") {
-            console.log('[FiltersBar] Forcing all_time instead of potentially problematic preset:', preset);
-            applyDatePreset("all_time");
+            console.log('[FiltersBar] Forcing this_month instead of potentially problematic preset:', preset);
+            applyDatePreset("this_month");
           } else {
             applyDatePreset(preset);
           }
@@ -482,8 +491,8 @@ export const FiltersBar = ({
         } else if (dateDimensionId) {
           setActiveDimensions([dateDimensionId]);
         }
-        console.log('[FiltersBar] No saved view, defaulting to all_time');
-        applyDatePreset("all_time");
+        console.log('[FiltersBar] No saved view, defaulting to this_month');
+        applyDatePreset("this_month");
       }
     } catch (error) {
       console.error("Error loading filter settings:", error);
@@ -495,8 +504,8 @@ export const FiltersBar = ({
       } else if (dateDimensionId) {
         setActiveDimensions([dateDimensionId]);
       }
-      console.log('[FiltersBar] Error fallback - using all_time');
-      applyDatePreset("all_time");
+      console.log('[FiltersBar] Error fallback - using this_month');
+      applyDatePreset("this_month");
     }
   };
 
@@ -659,7 +668,7 @@ export const FiltersBar = ({
 
   const handleResetFilters = () => {
     setSelectedFilters({});
-    applyDatePreset("all_time");
+    applyDatePreset("this_month");
     setCompareEnabled(false);
     setCompareType("previous_period");
     setCompareDateRange(undefined);
