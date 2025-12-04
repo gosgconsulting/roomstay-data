@@ -363,23 +363,22 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     const totals: Record<string, number> = {};
     const metrics = selectedMetrics || [];
     
-    // First sum all base metrics
-    const baseMetricsToSum = [...BASE_METRICS];
-    baseMetricsToSum.forEach(m => totals[m] = 0);
+    // Combine all metrics we need to track (base + selected non-formula)
+    const allMetricsToSum = new Set<string>();
+    BASE_METRICS.forEach(m => allMetricsToSum.add(m));
     metrics.forEach(m => {
       if (!FORMULA_METRICS.includes(m)) {
-        totals[m] = 0;
+        allMetricsToSum.add(m);
       }
     });
+    
+    // Initialize all metrics to 0
+    allMetricsToSum.forEach(m => totals[m] = 0);
 
+    // Sum metrics from each report (only once per metric)
     reportMetrics.forEach((rm) => {
-      baseMetricsToSum.forEach((metric) => {
+      allMetricsToSum.forEach((metric) => {
         totals[metric] += rm.metrics[metric] || 0;
-      });
-      metrics.forEach((metric) => {
-        if (!FORMULA_METRICS.includes(metric)) {
-          totals[metric] += rm.metrics[metric] || 0;
-        }
       });
     });
 
@@ -422,22 +421,22 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   const calculateBreakdownTotals = (rows: BreakdownRow[]): Record<string, number> => {
     const totals: Record<string, number> = {};
     
-    // Sum base metrics first
-    BASE_METRICS.forEach(m => totals[m] = 0);
+    // Combine all metrics we need to track (base + selected non-formula)
+    const allMetricsToSum = new Set<string>();
+    BASE_METRICS.forEach(m => allMetricsToSum.add(m));
     safeMetrics.forEach(m => {
       if (!FORMULA_METRICS.includes(m)) {
-        totals[m] = 0;
+        allMetricsToSum.add(m);
       }
     });
     
+    // Initialize all metrics to 0
+    allMetricsToSum.forEach(m => totals[m] = 0);
+    
+    // Sum metrics from each row (only once per metric)
     rows.forEach(row => {
-      BASE_METRICS.forEach(metric => {
+      allMetricsToSum.forEach(metric => {
         totals[metric] += row.metrics[metric] || 0;
-      });
-      safeMetrics.forEach(metric => {
-        if (!FORMULA_METRICS.includes(metric)) {
-          totals[metric] += row.metrics[metric] || 0;
-        }
       });
     });
     
