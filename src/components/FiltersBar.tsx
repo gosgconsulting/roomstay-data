@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Settings, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,7 +16,8 @@ import { useVlookupMappings, getMappedValue } from "@/hooks/useVlookupMappings";
 import PerformanceSettingsModal from "@/components/PerformanceSettingsModal";
 import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 import { useUser } from "@/lib/auth";
-import { fetchUniqueDimensionValues } from "@/lib/vlookup/fetchUniqueValues";
+import { useFiltersSourceData } from "@/hooks/useFiltersSourceData";
+import { extractMultipleDimensionValues } from "@/lib/filters/extractDimensionValues";
 
 import { 
   DimensionFilter, 
@@ -108,6 +109,13 @@ export const FiltersBar = ({
   const { data: userData } = useUser();
   const user = userData?.user || null;
 
+  // Fetch source data for extracting filter values directly from Google Sheets/CSV
+  const { 
+    transformedRows: sourceRows, 
+    dimensionIdMap,
+    isLoading: sourceDataLoading 
+  } = useFiltersSourceData(reportId, accountId);
+
   // Initialize selected reports to all by default
   useEffect(() => {
     if (showReportFilter && availableReports.length > 0 && selectedReportIds.length === 0) {
@@ -162,63 +170,29 @@ export const FiltersBar = ({
     }
   }, [reportId, accountId]);
 
-  // Master dimension options loader
+  // Master dimension options loader - extract from source data
   useEffect(() => {
-    const loadOptions = async () => {
-      if (!masterDimensionId || !accountId) {
-        setMasterDimensionOptions([]);
-        return;
-      }
+    if (!masterDimensionId || !accountId) {
+      setMasterDimensionOptions([]);
+      return;
+    }
+    
+    // If we have source rows, extract values directly
+    if (sourceRows && sourceRows.length > 0) {
       setMasterDimensionValuesLoading(true);
       try {
-        const { data: reportsData } = await supabase
-          .from("reports")
-          .select("id")
-          .eq("account_id", accountId);
-
-        const reportIds = (reportsData || []).map(r => r.id);
-        if (reportIds.length === 0) {
-          setMasterDimensionOptions([]);
-          return;
-        }
-
-        // Fetch unique values from source data for all reports
-        const allValues = new Set<string>();
-        
-        for (const reportId of reportIds) {
-          try {
-            // Find dimension name for better matching
-            const dimension = dimensions.find(d => d.id === masterDimensionId);
-            const dimensionName = dimension?.name;
-
-            const values = await fetchUniqueDimensionValues({
-              reportId,
-              dimensionId: masterDimensionId,
-              dimensionName,
-              limit: 10000,
-            });
-
-            values.forEach(value => {
-              if (value && value !== "") {
-                allValues.add(String(value));
-              }
-            });
-          } catch (err) {
-            console.error(`Error loading master dimension values for report ${reportId}:`, err);
-            // Continue with other reports
-          }
-        }
-
-        setMasterDimensionOptions(Array.from(allValues).sort());
+        const extracted = extractMultipleDimensionValues(sourceRows, [masterDimensionId], 10000);
+        const values = extracted[masterDimensionId] || [];
+        console.log(`[FiltersBar] Master dimension values extracted from source:`, values.length);
+        setMasterDimensionOptions(values);
       } catch (e) {
-        console.error("Error loading master dimension values:", e);
+        console.error("Error extracting master dimension values:", e);
         setMasterDimensionOptions([]);
       } finally {
         setMasterDimensionValuesLoading(false);
       }
-    };
-    loadOptions();
-  }, [masterDimensionId, accountId, dimensions]);
+    }
+  }, [masterDimensionId, accountId, sourceRows]);
 
   // Refresh dimensions on sync
   useEffect(() => {
@@ -228,12 +202,12 @@ export const FiltersBar = ({
     }
   }, [refreshTrigger, reportId, accountId]);
 
-  // Load values for active dimensions
+  // Load values for active dimensions when source data is available
   useEffect(() => {
-    if (activeDimensions.length > 0 && reportId) {
+    if (activeDimensions.length > 0 && reportId && sourceRows && sourceRows.length > 0) {
       loadDimensionValues();
     }
-  }, [activeDimensions, reportId]);
+  }, [activeDimensions, reportId, sourceRows, sourceDataLoading]);
 
   // Ensure Date dimension is available in the settings modal
   useEffect(() => {
@@ -785,69 +759,67 @@ export const FiltersBar = ({
     }
   };
 
-  const loadDimensionValues = async () => {
+  const loadDimensionValues = () => {
     if ((!reportId && !accountId) || activeDimensions.length === 0) return;
+    
+    // Wait for source data to be loaded
+    if (sourceDataLoading || !sourceRows) {
+      console.log('[FiltersBar] Waiting for source data to load...');
+      return;
+    }
+
     setIsLoadingFilters(true);
     try {
       const valuesArray: Record<string, string[]> = {};
       
-      await Promise.all(
-        activeDimensions.map(async (dimId) => {
-          // If this dimension is a vlookup target, list cluster names directly
-          const mappingsForDim = (vlookupMappings || []).filter(m => m.targetDimensionId === dimId);
-          if (mappingsForDim.length > 0) {
-            console.log('[FiltersBar] Loading vlookup values for dimension:', dimId, 'mappings:', mappingsForDim.length);
-            const namesSet = new Set<string>();
-            mappingsForDim.forEach(m => {
-              const name = String(m.targetValue || '').trim();
-              if (name) namesSet.add(name);
-            });
-            valuesArray[dimId] = Array.from(namesSet).sort();
-            console.log('[FiltersBar] Vlookup values loaded:', valuesArray[dimId]);
-            return;
-          }
+      // First, handle vlookup dimensions separately
+      const vlookupDimIds: string[] = [];
+      const regularDimIds: string[] = [];
+      
+      activeDimensions.forEach(dimId => {
+        const mappingsForDim = (vlookupMappings || []).filter(m => m.targetDimensionId === dimId);
+        if (mappingsForDim.length > 0) {
+          vlookupDimIds.push(dimId);
+          // For vlookup targets, list cluster names directly
+          const namesSet = new Set<string>();
+          mappingsForDim.forEach(m => {
+            const name = String(m.targetValue || '').trim();
+            if (name) namesSet.add(name);
+          });
+          valuesArray[dimId] = Array.from(namesSet).sort();
+          console.log('[FiltersBar] Vlookup values loaded:', dimId, valuesArray[dimId].length);
+        } else {
+          regularDimIds.push(dimId);
+        }
+      });
 
-          // Otherwise, load unique values from source data (only if reportId is available)
-          if (!reportId) {
-            console.log('[FiltersBar] Skipping dimension values load for dimension without reportId:', dimId);
-            valuesArray[dimId] = [];
-            return;
-          }
-
-          try {
-            // Find dimension name for better matching
-            const dimension = dimensions.find(d => d.id === dimId);
-            const dimensionName = dimension?.name;
-
-            console.log('[FiltersBar] Fetching unique values from source for dimension:', dimId, dimensionName);
-
-            // Fetch unique values directly from source data
-            const values = await fetchUniqueDimensionValues({
-              reportId,
-              dimensionId: dimId,
-              dimensionName,
-              limit: 10000,
-            });
-
-            console.log(`[FiltersBar] Loaded ${values.length} unique values for dimension ${dimId}`);
-            
-            // Apply vlookup mapping for non-target dimensions if relevant (kept for compatibility)
-            const valuesSet = new Set<string>();
-            values.forEach(value => {
-              valuesSet.add(value);
-              const mappedValue = getMappedValue(value, vlookupMappings, dimId);
-              if (mappedValue !== value) {
-                valuesSet.add(mappedValue);
-              }
-            });
-            
-            valuesArray[dimId] = Array.from(valuesSet).sort();
-          } catch (err) {
-            console.error(`Exception loading values for dimension ${dimId}:`, err);
-            valuesArray[dimId] = [];
-          }
-        })
-      );
+      // Extract values for regular dimensions from source data
+      if (regularDimIds.length > 0 && sourceRows.length > 0) {
+        console.log('[FiltersBar] Extracting dimension values from source data for:', regularDimIds);
+        const extracted = extractMultipleDimensionValues(sourceRows, regularDimIds, 10000);
+        
+        regularDimIds.forEach(dimId => {
+          const values = extracted[dimId] || [];
+          console.log(`[FiltersBar] Extracted ${values.length} unique values for dimension ${dimId}`);
+          
+          // Apply vlookup mapping for source dimensions if relevant
+          const valuesSet = new Set<string>();
+          values.forEach(value => {
+            valuesSet.add(value);
+            const mappedValue = getMappedValue(value, vlookupMappings, dimId);
+            if (mappedValue !== value) {
+              valuesSet.add(mappedValue);
+            }
+          });
+          
+          valuesArray[dimId] = Array.from(valuesSet).sort();
+        });
+      } else if (regularDimIds.length > 0) {
+        // No source data yet, set empty arrays
+        regularDimIds.forEach(dimId => {
+          valuesArray[dimId] = [];
+        });
+      }
 
       setDimensionValues(valuesArray);
     } catch (e) {
