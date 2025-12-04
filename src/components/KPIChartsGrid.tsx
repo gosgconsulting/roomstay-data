@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { KPIChart } from "@/components/KPIChartFixed";
+import { KPIChart } from "@/components/KPIChart";
 
 interface KPIChartsGridProps {
   reportId: string | null;

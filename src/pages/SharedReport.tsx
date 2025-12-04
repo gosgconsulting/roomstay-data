@@ -9,8 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Lock, Eye, EyeOff } from "lucide-react";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
-import { KPIMetricsCards } from "@/components/KPIMetricsCardsFixed";
-import { KPIChart } from "@/components/KPIChartFixed";
+import { KPIMetricsCards } from "@/components/KPIMetricsCards";
+import { KPIChart } from "@/components/KPIChart";
 import { PerformanceTable } from "@/components/PerformanceTable";
 import { LoadingToast } from "@/components/LoadingToast";
 

@@ -4,10 +4,9 @@ import { TrendingUp, TrendingDown, Eye, MousePointer, ShoppingCart, DollarSign, 
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import type { FilterState } from "@/components/FiltersBar";
-import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import { useUser } from "@/lib/auth";
 import { useSourceData } from "@/hooks/dataSources";
+import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import type { DataSource } from "@/lib/data-sources/types";
 
 interface KPIMetric {
@@ -21,29 +20,47 @@ interface KPIMetric {
 
 interface KPIMetricsCardsProps {
   reportId: string | null;
-  filters: FilterState;
+  accountId: string | null;
+  filters: {
+    dimensionFilters: Record<string, string[]>;
+    dateRange?: { from: Date; to?: Date };
+    datePreset?: string;
+    compareEnabled?: boolean;
+    compareType?: string;
+    compareDateRange?: { from: Date; to?: Date };
+  };
   onLoadingComplete?: () => void;
-  accountId?: string | null;
   visibilityRefreshTrigger?: number;
-  dimensions?: Dimension[];
   headerAction?: React.ReactNode;
 }
 
-export const KPIMetricsCards = ({ 
+export function KPIMetricsCards({ 
   reportId, 
+  accountId, 
   filters, 
   onLoadingComplete,
-  accountId,
   visibilityRefreshTrigger,
-  dimensions = [],
   headerAction
-}: KPIMetricsCardsProps) => {
+}: KPIMetricsCardsProps) {
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [visibleKPIs, setVisibleKPIs] = useState<string[] | null>(null);
   const [kpiOrder, setKpiOrder] = useState<string[] | null>(null);
+
+  // Load dimensions using the same hook as PerformanceTable
+  const { dimensions, isLoadingDimensions, loadDimensions } = usePerformanceTableDimensions({
+    reportId,
+    accountId: accountId || undefined,
+  });
+
+  // Trigger dimension loading when reportId or accountId changes
+  useEffect(() => {
+    if (reportId || accountId) {
+      loadDimensions();
+    }
+  }, [reportId, accountId, loadDimensions]);
 
   // Fetch data source for the report
   useEffect(() => {
@@ -62,7 +79,7 @@ export const KPIMetricsCards = ({
           .maybeSingle();
 
         if (error) {
-          console.error('[KPI-METRICS] Error fetching data source:', error);
+          console.error('[KPI-CARDS] Error fetching data source:', error);
           return;
         }
 
@@ -73,14 +90,14 @@ export const KPIMetricsCards = ({
           } as DataSource);
         }
       } catch (error) {
-        console.error('[KPI-METRICS] Error fetching data source:', error);
+        console.error('[KPI-CARDS] Error fetching data source:', error);
       }
     };
 
     fetchDataSource();
   }, [reportId]);
 
-  // Load KPI settings
+  // Load KPI visibility settings
   useEffect(() => {
     const loadKPISettings = async () => {
       if (!user?.id || !reportId) return;
@@ -102,7 +119,7 @@ export const KPIMetricsCards = ({
     loadKPISettings();
   }, [user?.id, reportId, visibilityRefreshTrigger]);
 
-  // Use source data hook - fetch directly from Google Sheets/CSV
+  // Use source data hook - fetch directly from Google Sheets/CSV (same as performance table)
   const { data: sourceData, isLoading: isLoadingSource, error: sourceError } = useSourceData(
     dataSource,
     accountId,
@@ -113,7 +130,7 @@ export const KPIMetricsCards = ({
   const stableFilters = useMemo(() => ({
     dimensionFilters: filters.dimensionFilters || {},
     dateRange: filters.dateRange,
-    datePreset: filters.datePreset,
+    datePreset: filters.datePreset || 'all_time',
     compareEnabled: filters.compareEnabled,
     compareType: filters.compareType,
     compareDateRange: filters.compareDateRange,
@@ -128,14 +145,29 @@ export const KPIMetricsCards = ({
     filters.compareDateRange?.to?.toISOString(),
   ]);
 
-  // Process source data into metrics
+  // Process source data into metrics (same approach as performance table)
   useEffect(() => {
-    if (!sourceData || isLoadingSource) return;
+    // Wait for both source data and dimensions to be loaded
+    if (!sourceData || isLoadingSource || isLoadingDimensions) return;
+    
+    // Must have dimensions loaded to map IDs to names
+    if (!dimensions || dimensions.length === 0) {
+      console.log('[KPI-CARDS] Waiting for dimensions to load...');
+      return;
+    }
 
-    console.log('[KPI-METRICS] Processing source data:', sourceData.transformedRows?.length, 'rows');
+    console.log('[KPI-CARDS] Processing source data:', sourceData.transformedRows?.length, 'rows');
+    console.log('[KPI-CARDS] Dimensions available:', dimensions.length, dimensions.map(d => ({ id: d.id, name: d.name })));
 
     try {
       let allRows = sourceData.transformedRows || [];
+
+      if (allRows.length === 0) {
+        console.log('[KPI-CARDS] No rows in source data');
+        setMetrics([]);
+        onLoadingComplete?.();
+        return;
+      }
 
       // Detect date dimension
       const dateDims = dimensions.filter(d => d.type === 'date');
@@ -151,7 +183,7 @@ export const KPIMetricsCards = ({
         }
       }
 
-      // Apply date filter
+      // Apply date filter only if not "all_time"
       const shouldFilterByDate = stableFilters.datePreset !== 'all_time' && stableFilters.dateRange;
       const dateFromFormatted = shouldFilterByDate && stableFilters.dateRange?.from 
         ? format(stableFilters.dateRange.from, 'yyyy-MM-dd') : undefined;
@@ -199,7 +231,7 @@ export const KPIMetricsCards = ({
         });
       }
 
-      console.log('[KPI-METRICS] After filtering:', filteredRows.length, 'rows');
+      console.log('[KPI-CARDS] After filtering:', filteredRows.length, 'rows');
 
       // Calculate current period metrics
       const currentMetrics: Record<string, number> = {};
@@ -241,6 +273,8 @@ export const KPIMetricsCards = ({
       if (currentMetrics['Cost'] && currentMetrics['Revenue']) {
         currentMetrics['Cost of sale'] = (currentMetrics['Cost'] / currentMetrics['Revenue']) * 100;
       }
+
+      console.log('[KPI-CARDS] Calculated metrics:', Object.keys(currentMetrics));
 
       // Build display metrics
       const defaultKPIs = [
@@ -302,16 +336,16 @@ export const KPIMetricsCards = ({
         });
       });
 
-      console.log('[KPI-METRICS] Display metrics created:', displayMetrics.length);
+      console.log('[KPI-CARDS] Display metrics created:', displayMetrics.length);
       setMetrics(displayMetrics);
       onLoadingComplete?.();
 
     } catch (error) {
-      console.error('[KPI-METRICS] Error processing data:', error);
+      console.error('[KPI-CARDS] Error processing data:', error);
       setMetrics([]);
       onLoadingComplete?.();
     }
-  }, [sourceData, isLoadingSource, stableFilters, dimensions, visibleKPIs, kpiOrder, onLoadingComplete]);
+  }, [sourceData, isLoadingSource, isLoadingDimensions, stableFilters, dimensions, visibleKPIs, kpiOrder, onLoadingComplete]);
 
   const formatDisplay = (kpiName: string, value: number): string => {
     const name = kpiName.toLowerCase();
@@ -333,24 +367,22 @@ export const KPIMetricsCards = ({
     return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  if (isLoadingSource) {
+  if (isLoadingSource || isLoadingDimensions) {
     return (
       <div>
-        {headerAction && (
-          <div className="flex justify-between items-center mb-4">
-            <div className="h-6 w-24 bg-muted rounded animate-pulse" />
-            {headerAction}
-          </div>
-        )}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <Card key={i}>
+        <div className="flex items-center justify-end mb-4">
+          {headerAction}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 mb-2">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Card key={i} className="animate-pulse shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <div className="h-4 bg-muted rounded w-20 animate-pulse" />
-                <div className="h-4 w-4 bg-muted rounded animate-pulse" />
+                <CardTitle className="text-xs font-medium uppercase text-muted-foreground">
+                  <div className="h-3 bg-muted rounded w-20"></div>
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-8 bg-muted rounded w-24 mb-1 animate-pulse" />
+                <div className="h-10 bg-muted rounded w-24 mb-1"></div>
               </CardContent>
             </Card>
           ))}
@@ -362,21 +394,17 @@ export const KPIMetricsCards = ({
   if (metrics.length === 0) {
     return (
       <div>
-        {headerAction && (
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold">Key Metrics</h2>
-            {headerAction}
-          </div>
-        )}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <Card key={i}>
+        <div className="flex items-center justify-end mb-4">
+          {headerAction}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 mb-2">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Card key={i} className="shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <div className="h-4 bg-muted/50 rounded w-20" />
-                <div className="h-4 w-4 bg-muted/50 rounded" />
+                <div className="h-3 bg-muted/50 rounded w-20" />
               </CardHeader>
               <CardContent>
-                <div className="h-8 bg-muted/50 rounded w-24 mb-1" />
+                <div className="h-10 bg-muted/50 rounded w-24 mb-1" />
               </CardContent>
             </Card>
           ))}
@@ -387,41 +415,31 @@ export const KPIMetricsCards = ({
 
   return (
     <div>
-      {headerAction && (
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Key Metrics</h2>
-          {headerAction}
-        </div>
-      )}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <div className="flex items-center justify-end mb-4">
+        {headerAction}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 mb-2">
         {metrics.map((metric, index) => {
-          const Icon = metric.icon;
+          const IconComponent = metric.icon;
           return (
-            <Card key={index}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {metric.label}
-                </CardTitle>
-                <Icon className={cn("h-4 w-4", metric.color)} />
+            <Card key={index} className="shadow-sm border-border bg-card">
+              <CardHeader className="space-y-0 pb-2">
+                <CardTitle className="text-xs font-medium uppercase text-muted-foreground tracking-wide">{metric.label}</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{metric.value}</div>
-                {metric.change !== undefined && (
-                  <div className="flex items-center text-xs mt-1">
+              <CardContent className="pt-0">
+                <div className="text-2xl font-bold text-foreground mb-1">{metric.value}</div>
+                {metric.change !== undefined && metric.compareValue !== undefined && (
+                  <p className={cn(
+                    "text-xs flex items-center gap-1 font-medium",
+                    metric.change >= 0 ? 'text-success' : 'text-destructive'
+                  )}>
                     {metric.change >= 0 ? (
-                      <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
+                      <TrendingUp className="h-3 w-3" />
                     ) : (
-                      <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
+                      <TrendingDown className="h-3 w-3" />
                     )}
-                    <span className={metric.change >= 0 ? "text-green-500" : "text-red-500"}>
-                      {metric.change >= 0 ? '+' : ''}{metric.change.toFixed(1)}%
-                    </span>
-                    {metric.compareValue && (
-                      <span className="text-muted-foreground ml-1">
-                        vs {metric.compareValue}
-                      </span>
-                    )}
-                  </div>
+                    {metric.change >= 0 ? '+' : ''}{metric.change.toFixed(1)}%
+                  </p>
                 )}
               </CardContent>
             </Card>
@@ -430,4 +448,4 @@ export const KPIMetricsCards = ({
       </div>
     </div>
   );
-};
+}
