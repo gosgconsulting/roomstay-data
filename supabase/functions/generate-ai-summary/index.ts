@@ -238,40 +238,39 @@ serve(async (req) => {
 
 ## CRITICAL FORMATTING RULES
 
-### 1. ALWAYS INCLUDE NUMBERS
-When mentioning any KPI, ALWAYS include the actual number and percentage change in parentheses:
-- ✅ CORRECT: "Stable revenue (**$62K**) with a slight decrease in costs (**$2.5K, -4%**) and bookings (**98, -6%**)"
-- ❌ WRONG: "Stable revenue with a slight decrease in costs and bookings"
+### 1. ALWAYS INCLUDE NUMBERS WITH SIGNS
+When mentioning any KPI, include the actual number with +/- signs for changes:
+- ✅ CORRECT: "Revenue reached $258K (+24.7%) with ROAS at 32x (+29.8%)"
+- ❌ WRONG: "Revenue grew significantly with improved ROAS"
 
-### 2. USE SPECIFIC TIME PERIODS
-Never say "the most recent month" or "this month". Always use the actual month name or period:
+### 2. BOLD USAGE - BE SELECTIVE
+Only use **bold** for truly important summary phrases or key takeaways, NOT for every keyword:
+- ✅ CORRECT: "SEM was **the top performer this period** with revenue of $258K (+24.7%)"
+- ❌ WRONG: "SEM showed **strong** **growth** with **improved** **performance**"
+Do NOT bold words like: growth, improvement, increase, decrease, strong, significant, etc.
+
+### 3. USE SPECIFIC TIME PERIODS
+Never say "the most recent month". Always use the actual month name:
 - ✅ CORRECT: "In November 2024..." or "For ${periodLabel}..."
 - ❌ WRONG: "In the most recent month..."
 
-### 3. CHANNEL SECTION FORMATTING
-For channel sections, use numbered format WITHOUT dashes:
+### 4. CHANNEL SECTION FORMATTING
+For channel sections, use numbered format:
 - ✅ CORRECT: "**1. Metasearch**" or just "**Metasearch**"
-- ❌ WRONG: "- Metasearch:" or "Metasearch:"
+- ❌ WRONG: "- Metasearch:" 
 
-### 4. INLINE KPI FORMAT
-Every time you mention a metric, include the value:
-- "Revenue grew (**$258K, +24.7%**) driven by improved conversion rate (**3.66%, +16.5%**)"
-- "ROAS reached **32x** (up from 25x, **+29.8%**)"
-
-### 5. GROUP KPIS BY CATEGORY when explaining:
-- **Volume**: Impressions, Clicks, Bookings
-- **Efficiency**: CTR, Conversion Rate, ROAS
-- **Financial**: Revenue, Cost, CPC, Cost of Sale
+### 5. NUMBER COLOR HINTS
+Use + prefix for positive changes and - prefix for negative changes. The UI will color them:
+- "+24.7%" will show green
+- "-12.3%" will show red
 
 ## EXAMPLE OF GOOD ANALYSIS:
-"In November 2024, SEM delivered exceptional revenue growth (**$258K, +24.7%**) with improved efficiency. Conversion rate jumped to **3.66% (+16.5%)** while ROAS reached **32x (+29.8%)**. Despite a slight decrease in clicks (**11K, -1.1%**), the channel generated more revenue through quality over quantity."
+"In November 2024, SEM was **the standout channel** with revenue of $258K (+24.7%) driven by improved conversion at 3.66% (+16.5%) and ROAS at 32x (+29.8%). Despite lower clicks at 11K (-1.1%), efficiency gains offset volume decline."
 
 ## Output Structure (FOCUSED ON ${periodLabel.toUpperCase()} ONLY)
-1. **Executive Summary** - 2-3 sentences with the headline story and key numbers for this period
-2. **Channel Analysis** - Use "**1. Metasearch**", "**2. SEM**", "**3. Social**" format. Each channel gets a paragraph explaining performance with inline numbers.
+1. **Executive Summary** - 2-3 sentences with the headline story and key numbers
+2. **Channel Analysis** - Use "**1. Metasearch**", "**2. SEM**", "**3. Social**". Each channel gets a paragraph with numbers inline.
 3. **Key Takeaway** - One actionable insight
-
-DO NOT include MTD, YTD, or other period comparisons. Focus ONLY on ${periodLabel} data.
 
 ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
 
@@ -407,10 +406,15 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
             body: JSON.stringify({
               model: 'openai/gpt-4-turbo',
               messages: [
-                { role: 'system', content: 'You are a concise marketing analyst. Provide ONE brief sentence (max 20 words) highlighting the key insight from this data. Focus on the most important trend or standout performance.' },
+                { role: 'system', content: `You are a concise marketing analyst. Provide exactly 3 brief insights (one sentence each, max 15 words each), formatted as:
+1. **Performance**: [Revenue/Cost/ROAS/Bookings insight with numbers]
+2. **Visibility**: [Impressions/Clicks/CTR/Brand awareness insight with numbers]  
+3. **Highlight**: [Best or worst performer with specific numbers]
+
+Use +/- signs for changes. Keep it factual with actual numbers from the data.` },
                 { role: 'user', content: `${tabLabels[tab.key]} performance summary:\n${summaryContext}` }
               ],
-              max_tokens: 100,
+              max_tokens: 200,
               temperature: 0.5
             }),
           });
@@ -443,10 +447,15 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
             body: JSON.stringify({
               model: 'openai/gpt-4-turbo',
               messages: [
-                { role: 'system', content: 'You are a concise marketing analyst. Provide ONE brief sentence (max 20 words) about the time-based trend in this data. Focus on trajectory or notable periods.' },
+                { role: 'system', content: `You are a concise marketing analyst. Provide exactly 3 brief insights (one sentence each, max 15 words each), formatted as:
+1. **Performance**: [Revenue/Cost trend over time with specific numbers]
+2. **Visibility**: [Traffic/impressions trend with specific numbers]
+3. **Highlight**: [Best or worst performing period with numbers]
+
+Use +/- signs for changes. Be factual with actual numbers.` },
                 { role: 'user', content: `${tabLabels[tab.key]} ${tab.key === 'ytd' ? 'monthly' : 'weekly'} breakdown:\n${dateContext}` }
               ],
-              max_tokens: 100,
+              max_tokens: 200,
               temperature: 0.5
             }),
           });
@@ -484,10 +493,15 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
                 body: JSON.stringify({
                   model: 'openai/gpt-4-turbo',
                   messages: [
-                    { role: 'system', content: 'You are a concise marketing analyst. Provide ONE brief sentence (max 20 words) about performance distribution. Mention top performer or notable pattern.' },
+                    { role: 'system', content: `You are a concise marketing analyst. Provide exactly 3 brief insights (one sentence each, max 15 words each), formatted as:
+1. **Performance**: [Revenue/ROAS/Bookings insight for this breakdown with numbers]
+2. **Visibility**: [Traffic/clicks distribution insight with numbers]
+3. **Highlight**: [Best or worst performer in this breakdown with numbers]
+
+Use +/- signs for changes. Be factual with actual numbers.` },
                     { role: 'user', content: `${reportName} ${tabLabels[tab.key]} breakdown:\n${breakdownContext}` }
                   ],
-                  max_tokens: 100,
+                  max_tokens: 200,
                   temperature: 0.5
                 }),
               });
