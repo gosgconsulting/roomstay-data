@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import { useUser } from "@/lib/auth";
+import { useSourceData } from "@/hooks/dataSources";
+import type { DataSource } from "@/lib/data-sources/types";
 
 interface KPIMetric {
   label: string;
@@ -39,167 +41,182 @@ export const KPIMetricsCards = ({
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [dataSource, setDataSource] = useState<DataSource | null>(null);
+  const [visibleKPIs, setVisibleKPIs] = useState<string[] | null>(null);
+  const [kpiOrder, setKpiOrder] = useState<string[] | null>(null);
 
-  // Create a stable reference for filters to prevent unnecessary re-renders
-  const stableFilters = useMemo(() => {
-    return {
-      dimensionFilters: filters.dimensionFilters || {},
-      dateRange: filters.dateRange,
-      compareEnabled: filters.compareEnabled,
-      compareType: filters.compareType,
-      compareDateRange: filters.compareDateRange,
+  // Fetch data source for the report
+  useEffect(() => {
+    const fetchDataSource = async () => {
+      if (!reportId) {
+        setDataSource(null);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('data_sources')
+          .select('*')
+          .eq('report_id', reportId)
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          console.error('[KPI-METRICS] Error fetching data source:', error);
+          return;
+        }
+
+        if (data) {
+          setDataSource({
+            ...data,
+            column_mappings: (data.column_mappings as any) || null,
+          } as DataSource);
+        }
+      } catch (error) {
+        console.error('[KPI-METRICS] Error fetching data source:', error);
+      }
     };
-  }, [
+
+    fetchDataSource();
+  }, [reportId]);
+
+  // Load KPI settings
+  useEffect(() => {
+    const loadKPISettings = async () => {
+      if (!user?.id || !reportId) return;
+
+      const { data: viewSettings } = await supabase
+        .from("report_views")
+        .select("visible_kpis, kpi_order")
+        .eq("report_id", reportId)
+        .eq("user_id", user.id)
+        .eq("is_default", true)
+        .maybeSingle();
+
+      if (viewSettings) {
+        setVisibleKPIs((viewSettings as any).visible_kpis || null);
+        setKpiOrder((viewSettings as any).kpi_order || null);
+      }
+    };
+
+    loadKPISettings();
+  }, [user?.id, reportId, visibilityRefreshTrigger]);
+
+  // Use source data hook - fetch directly from Google Sheets/CSV
+  const { data: sourceData, isLoading: isLoadingSource, error: sourceError } = useSourceData(
+    dataSource,
+    accountId,
+    { enabled: !!dataSource }
+  );
+
+  // Create stable filters reference
+  const stableFilters = useMemo(() => ({
+    dimensionFilters: filters.dimensionFilters || {},
+    dateRange: filters.dateRange,
+    datePreset: filters.datePreset,
+    compareEnabled: filters.compareEnabled,
+    compareType: filters.compareType,
+    compareDateRange: filters.compareDateRange,
+  }), [
     JSON.stringify(filters.dimensionFilters),
     filters.dateRange?.from?.toISOString(),
     filters.dateRange?.to?.toISOString(),
+    filters.datePreset,
     filters.compareEnabled,
     filters.compareType,
     filters.compareDateRange?.from?.toISOString(),
     filters.compareDateRange?.to?.toISOString(),
   ]);
 
+  // Process source data into metrics
   useEffect(() => {
-    console.log('[KPIMetricsCards] Effect triggered:', {
-      reportId,
-      accountId,
-      hasFilters: Object.keys(stableFilters.dimensionFilters).length > 0,
-      dateRange: stableFilters.dateRange
-    });
-    
-    if (reportId && accountId) {
-      console.log('[KPIMetricsCards] Loading metrics using edge function...');
-      loadMetrics();
-    } else {
-      console.log('[KPIMetricsCards] Missing reportId or accountId, skipping load');
-      setIsLoading(false);
-      setMetrics([]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportId, accountId, stableFilters]);
+    if (!sourceData || isLoadingSource) return;
 
-  // Refresh metrics when dimension visibility changes
-  useEffect(() => {
-    if (reportId && accountId && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
-      console.log('[KPIMetricsCards] Visibility refresh triggered');
-      loadMetrics();
-    }
-  }, [visibilityRefreshTrigger, reportId, accountId]);
+    console.log('[KPI-METRICS] Processing source data:', sourceData.transformedRows?.length, 'rows');
 
-  const loadMetrics = async () => {
-    setIsLoading(true);
     try {
-      console.log('[KPI-METRICS] Starting to load metrics using edge function...');
-      
-      if (!reportId || !accountId) {
-        console.log('[KPI-METRICS] Missing reportId or accountId, skipping');
-        setMetrics([]);
-        return;
-      }
+      let allRows = sourceData.transformedRows || [];
 
-      // Load KPI settings if available
-      let visibleKPIs: string[] | null = null;
-      let kpiOrder: string[] | null = null;
-
-      if (user?.id) {
-        const { data: viewSettings } = await supabase
-          .from("report_views")
-          .select("visible_kpis, kpi_order")
-          .eq("report_id", reportId)
-          .eq("user_id", user.id)
-          .eq("is_default", true)
-          .maybeSingle();
-
-        if (viewSettings) {
-          visibleKPIs = (viewSettings as any).visible_kpis || null;
-          kpiOrder = (viewSettings as any).kpi_order || null;
+      // Detect date dimension
+      const dateDims = dimensions.filter(d => d.type === 'date');
+      let dateDimInUse: { id: string; name: string } | null = null;
+      for (const d of dateDims) {
+        const found = allRows.some((r: any) => {
+          const dv = r.dimension_values || {};
+          return dv[d.id] !== undefined && dv[d.id] !== null && dv[d.id] !== '';
+        });
+        if (found) {
+          dateDimInUse = { id: d.id, name: d.name };
+          break;
         }
       }
 
-      // Use the same edge function as PerformanceTable for consistency
-      const dateFromFormatted = stableFilters.dateRange?.from ? format(stableFilters.dateRange.from, 'yyyy-MM-dd') : undefined;
-      const dateToFormatted = stableFilters.dateRange?.to ? format(stableFilters.dateRange.to, 'yyyy-MM-dd') : undefined;
+      // Apply date filter
+      const shouldFilterByDate = stableFilters.datePreset !== 'all_time' && stableFilters.dateRange;
+      const dateFromFormatted = shouldFilterByDate && stableFilters.dateRange?.from 
+        ? format(stableFilters.dateRange.from, 'yyyy-MM-dd') : undefined;
+      const dateToFormatted = shouldFilterByDate && stableFilters.dateRange?.to 
+        ? format(stableFilters.dateRange.to, 'yyyy-MM-dd') : undefined;
 
-      console.log('[KPI-METRICS] Calling edge function with params:', {
-        reportId,
-        accountId,
-        userId: user?.id,
-        dateFrom: dateFromFormatted,
-        dateTo: dateToFormatted,
-        dimensionFilters: stableFilters.dimensionFilters
-      });
+      let filteredRows = allRows;
+      if (shouldFilterByDate && dateDimInUse && (dateFromFormatted || dateToFormatted)) {
+        const fromDate = dateFromFormatted ? new Date(dateFromFormatted) : null;
+        const toDate = dateToFormatted ? new Date(dateToFormatted) : null;
+        const adjustedToDate = toDate
+          ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1)
+          : null;
 
-      const { data: edgeData, error: edgeError } = await supabase.functions.invoke('get-performance-data', {
-        body: {
-          reportId,
-          accountId,
-          userId: user?.id,
-          dateFrom: dateFromFormatted,
-          dateTo: dateToFormatted,
-          dimensionFilters: stableFilters.dimensionFilters || {},
-          limit: 50000,
-          offset: 0,
-        }
-      });
-
-      if (edgeError) {
-        console.error('[KPI-METRICS] Edge function error:', edgeError);
-        throw new Error(`Edge function error: ${edgeError.message || 'Unknown error'}`);
+        filteredRows = filteredRows.filter((row: any) => {
+          const dv = row.dimension_values || {};
+          const val = dv[dateDimInUse!.id];
+          if (!val) return true;
+          const rowDate = new Date(String(val));
+          if (fromDate && rowDate < fromDate) return false;
+          if (adjustedToDate && rowDate >= adjustedToDate) return false;
+          return true;
+        });
       }
 
-      if (!edgeData || !edgeData.data) {
-        console.log('[KPI-METRICS] No data returned from edge function');
-        setMetrics([]);
-        return;
+      // Apply dimension filters
+      const normalizedFilters: Record<string, string[]> = {};
+      for (const [k, v] of Object.entries(stableFilters.dimensionFilters || {})) {
+        if (Array.isArray(v)) normalizedFilters[k] = v.map((x) => String(x));
+        else if (v !== undefined && v !== null) normalizedFilters[k] = [String(v)];
       }
 
-      const rawRows = edgeData.data;
-      console.log('[KPI-METRICS] Raw rows from edge function:', rawRows.length);
-
-      if (rawRows.length === 0) {
-        console.log('[KPI-METRICS] No rows found');
-        setMetrics([]);
-        return;
+      if (Object.keys(normalizedFilters).length > 0) {
+        filteredRows = filteredRows.filter((row: any) => {
+          const dv = row.dimension_values || {};
+          for (const [dimId, values] of Object.entries(normalizedFilters)) {
+            if (!values || values.length === 0) continue;
+            const rowVal = dv[dimId];
+            if (rowVal === undefined || rowVal === null) return false;
+            const rowStr = String(rowVal).trim().toLowerCase();
+            const filterValuesLower = (values as string[]).map(v => String(v).trim().toLowerCase());
+            if (!filterValuesLower.some((v) => v === rowStr)) return false;
+          }
+          return true;
+        });
       }
 
-      // Calculate current period metrics from dimension_values
+      console.log('[KPI-METRICS] After filtering:', filteredRows.length, 'rows');
+
+      // Calculate current period metrics
       const currentMetrics: Record<string, number> = {};
-      rawRows.forEach((row: any) => {
+      filteredRows.forEach((row: any) => {
         const dv = row.dimension_values || {};
         
-        // Sum up all numeric values by dimension ID
         Object.entries(dv).forEach(([dimId, value]) => {
           if (value !== undefined && value !== null && value !== '') {
             const numValue = parseFloat(String(value));
             if (!isNaN(numValue)) {
-              // Map common dimension IDs to metric names
               let metricName = dimId;
               
-              // Try to find dimension name from dimensions array if available
               if (dimensions.length > 0) {
                 const dim = dimensions.find(d => d.id === dimId);
                 if (dim) {
                   metricName = dim.name;
                 }
-              } else {
-                // Fallback mapping for common dimension IDs
-                const commonMappings: Record<string, string> = {
-                  'impressions': 'Impressions',
-                  'clicks': 'Clicks',
-                  'conversions': 'Conversions',
-                  'bookings': 'Bookings',
-                  'cost': 'Cost',
-                  'revenue': 'Revenue',
-                  'cpc': 'CPC',
-                  'ctr': 'CTR',
-                  'conversion_rate': 'Conversion Rate',
-                  'roas': 'ROAS',
-                  'cost_of_sale': 'Cost of sale'
-                };
-                
-                const lowerDimId = dimId.toLowerCase();
-                metricName = commonMappings[lowerDimId] || dimId;
               }
               
               currentMetrics[metricName] = (currentMetrics[metricName] || 0) + numValue;
@@ -207,8 +224,6 @@ export const KPIMetricsCards = ({
           }
         });
       });
-
-      console.log('[KPI-METRICS] Current metrics calculated:', Object.keys(currentMetrics));
 
       // Calculate derived metrics
       if (currentMetrics['Clicks'] && currentMetrics['Impressions']) {
@@ -227,96 +242,7 @@ export const KPIMetricsCards = ({
         currentMetrics['Cost of sale'] = (currentMetrics['Cost'] / currentMetrics['Revenue']) * 100;
       }
 
-      // Load comparison period data if comparison is enabled
-      let comparisonMetrics: Record<string, number> = {};
-      if (stableFilters.compareEnabled && stableFilters.dateRange?.from && stableFilters.dateRange?.to) {
-        console.log('[KPIMetricsCards] Loading comparison data...');
-        const currentPeriod = stableFilters.dateRange;
-        const daysDiff = Math.ceil((currentPeriod.to.getTime() - currentPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
-        const previousPeriodEnd = new Date(currentPeriod.from);
-        previousPeriodEnd.setDate(previousPeriodEnd.getDate() - 1);
-        const previousPeriodStart = new Date(previousPeriodEnd);
-        previousPeriodStart.setDate(previousPeriodStart.getDate() - daysDiff + 1);
-
-        const prevFromFormatted = format(previousPeriodStart, 'yyyy-MM-dd');
-        const prevToFormatted = format(previousPeriodEnd, 'yyyy-MM-dd');
-
-        // Fetch comparison data using edge function
-        const { data: prevEdgeData } = await supabase.functions.invoke('get-performance-data', {
-          body: {
-            reportId,
-            accountId,
-            userId: user?.id,
-            dateFrom: prevFromFormatted,
-            dateTo: prevToFormatted,
-            dimensionFilters: stableFilters.dimensionFilters || {},
-            limit: 50000,
-            offset: 0,
-          }
-        });
-
-        if (prevEdgeData && prevEdgeData.data) {
-          const prevRawRows = prevEdgeData.data;
-          
-          // Calculate comparison metrics
-          prevRawRows.forEach((row: any) => {
-            const dv = row.dimension_values || {};
-            
-            Object.entries(dv).forEach(([dimId, value]) => {
-              if (value !== undefined && value !== null && value !== '') {
-                const numValue = parseFloat(String(value));
-                if (!isNaN(numValue)) {
-                  let metricName = dimId;
-                  
-                  if (dimensions.length > 0) {
-                    const dim = dimensions.find(d => d.id === dimId);
-                    if (dim) {
-                      metricName = dim.name;
-                    }
-                  } else {
-                    const commonMappings: Record<string, string> = {
-                      'impressions': 'Impressions',
-                      'clicks': 'Clicks',
-                      'conversions': 'Conversions',
-                      'bookings': 'Bookings',
-                      'cost': 'Cost',
-                      'revenue': 'Revenue',
-                      'cpc': 'CPC',
-                      'ctr': 'CTR',
-                      'conversion_rate': 'Conversion Rate',
-                      'roas': 'ROAS',
-                      'cost_of_sale': 'Cost of sale'
-                    };
-                    
-                    const lowerDimId = dimId.toLowerCase();
-                    metricName = commonMappings[lowerDimId] || dimId;
-                  }
-                  
-                  comparisonMetrics[metricName] = (comparisonMetrics[metricName] || 0) + numValue;
-                }
-              }
-            });
-          });
-
-          // Calculate derived comparison metrics
-          if (comparisonMetrics['Clicks'] && comparisonMetrics['Impressions']) {
-            comparisonMetrics['CTR'] = (comparisonMetrics['Clicks'] / comparisonMetrics['Impressions']) * 100;
-          }
-          if (comparisonMetrics['Conversions'] && comparisonMetrics['Clicks']) {
-            comparisonMetrics['Conversion Rate'] = (comparisonMetrics['Conversions'] / comparisonMetrics['Clicks']) * 100;
-          }
-          if (comparisonMetrics['Cost'] && comparisonMetrics['Clicks']) {
-            comparisonMetrics['CPC'] = comparisonMetrics['Cost'] / comparisonMetrics['Clicks'];
-          }
-          if (comparisonMetrics['Revenue'] && comparisonMetrics['Cost']) {
-            comparisonMetrics['ROAS'] = comparisonMetrics['Revenue'] / comparisonMetrics['Cost'];
-          }
-          if (comparisonMetrics['Cost'] && comparisonMetrics['Revenue']) {
-            comparisonMetrics['Cost of sale'] = (comparisonMetrics['Cost'] / comparisonMetrics['Revenue']) * 100;
-          }
-        }
-      }
-
+      // Build display metrics
       const defaultKPIs = [
         "Impressions", "Clicks", "CTR", "Conversions", "Conversion Rate", 
         "CPC", "Cost", "Revenue", "ROAS", "Cost of sale"
@@ -338,6 +264,7 @@ export const KPIMetricsCards = ({
         "Budget": DollarSign,
         "ROAS": TrendingUp,
       };
+
       const colorMap: Record<string, string> = {
         "Impressions": "text-pink-600",
         "Clicks": "text-purple-600",
@@ -367,39 +294,24 @@ export const KPIMetricsCards = ({
         const value = currentMetrics[kpiName];
         if (value === undefined || value === null) return;
 
-        let formattedCompareValue: string | number | undefined;
-        let change: number | undefined;
-
-        if (stableFilters.compareEnabled && comparisonMetrics[kpiName] !== undefined && comparisonMetrics[kpiName] !== null) {
-          const prev = comparisonMetrics[kpiName];
-          if (prev !== 0) {
-            change = ((value - prev) / prev) * 100;
-          } else if (value !== 0) {
-            change = 100;
-          }
-          formattedCompareValue = formatDisplay(kpiName, prev);
-        }
-
         displayMetrics.push({
           label: kpiName,
           value: formatDisplay(kpiName, value),
-          change,
-          compareValue: formattedCompareValue,
           icon: iconMap[kpiName] || Target,
           color: colorMap[kpiName] || colorMap["Default"]
         });
       });
 
-      console.log('[KPIMetricsCards] Display metrics created:', displayMetrics.length);
+      console.log('[KPI-METRICS] Display metrics created:', displayMetrics.length);
       setMetrics(displayMetrics);
+      onLoadingComplete?.();
+
     } catch (error) {
-      console.error('[KPIMetricsCards] Error loading metrics:', error);
+      console.error('[KPI-METRICS] Error processing data:', error);
       setMetrics([]);
-    } finally {
-      setIsLoading(false);
       onLoadingComplete?.();
     }
-  };
+  }, [sourceData, isLoadingSource, stableFilters, dimensions, visibleKPIs, kpiOrder, onLoadingComplete]);
 
   const formatDisplay = (kpiName: string, value: number): string => {
     const name = kpiName.toLowerCase();
@@ -421,7 +333,7 @@ export const KPIMetricsCards = ({
     return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  if (isLoading) {
+  if (isLoadingSource) {
     return (
       <div>
         {headerAction && (
@@ -464,7 +376,7 @@ export const KPIMetricsCards = ({
                 <div className="h-4 w-4 bg-muted/50 rounded" />
               </CardHeader>
               <CardContent>
-                <div className="h-8 bg-muted/50 rounded w-16 mb-1" />
+                <div className="h-8 bg-muted/50 rounded w-24 mb-1" />
               </CardContent>
             </Card>
           ))}
@@ -483,27 +395,33 @@ export const KPIMetricsCards = ({
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {metrics.map((metric, index) => {
-          const IconComponent = metric.icon;
+          const Icon = metric.icon;
           return (
             <Card key={index}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{metric.label}</CardTitle>
-                <IconComponent className={`h-4 w-4 ${metric.color}`} />
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {metric.label}
+                </CardTitle>
+                <Icon className={cn("h-4 w-4", metric.color)} />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{metric.value}</div>
-                {metric.change !== undefined && metric.compareValue !== undefined && (
-                  <p className={cn(
-                    "text-xs flex items-center gap-1",
-                    metric.change >= 0 ? 'text-green-600' : 'text-red-600'
-                  )}>
+                {metric.change !== undefined && (
+                  <div className="flex items-center text-xs mt-1">
                     {metric.change >= 0 ? (
-                      <TrendingUp className="h-3 w-3" />
+                      <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
                     ) : (
-                      <TrendingDown className="h-3 w-3" />
+                      <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
                     )}
-                    {metric.change >= 0 ? '+' : ''}{metric.change.toFixed(1)}% vs {metric.compareValue}
-                  </p>
+                    <span className={metric.change >= 0 ? "text-green-500" : "text-red-500"}>
+                      {metric.change >= 0 ? '+' : ''}{metric.change.toFixed(1)}%
+                    </span>
+                    {metric.compareValue && (
+                      <span className="text-muted-foreground ml-1">
+                        vs {metric.compareValue}
+                      </span>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -512,4 +430,4 @@ export const KPIMetricsCards = ({
       </div>
     </div>
   );
-}
+};
