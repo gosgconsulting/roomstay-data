@@ -151,11 +151,13 @@ serve(async (req) => {
 
     console.log(`[fetch-csv-url] Fetching CSV from: ${csvUrl}`);
 
-    // Fetch CSV content
+    // Fetch CSV content with proper headers to avoid 415 errors
     const response = await fetch(csvUrl, {
       method: 'GET',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Supabase-Edge-Function/1.0)',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/csv, text/plain, application/csv, application/octet-stream, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
       },
     });
     
