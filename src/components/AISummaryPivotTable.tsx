@@ -15,10 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
-import AITableComments from "@/components/AITableComments";
 import { getUser } from "@/lib/auth";
 import {
   startOfMonth,
@@ -58,6 +57,12 @@ export interface DateBreakdownRow {
   metrics: Record<string, number>;
 }
 
+export interface TableInsights {
+  summary: Record<DateTab, string>;
+  date_breakdown: Record<DateTab, string>;
+  breakdowns: Record<string, Record<DateTab, string>>; // reportId -> tab -> insight
+}
+
 export interface CachedPivotData {
   last_month: ReportMetrics[];
   mtd: ReportMetrics[];
@@ -66,6 +71,7 @@ export interface CachedPivotData {
   breakdown_dimension_names?: Record<string, string>; // Map of reportId -> dimension name
   date_breakdown_data?: Record<string, Record<DateTab, DateBreakdownRow[]>>; // Legacy per-report
   combined_date_breakdown?: Record<DateTab, DateBreakdownRow[]>; // Combined across all reports
+  table_insights?: TableInsights;
   // Comparison data
   comparison_previous_period?: {
     last_month: ReportMetrics[];
@@ -753,12 +759,15 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                     </TableRow>
                   </TableBody>
                 </Table>
-                <AITableComments
-                  tableType="report"
-                  tableName="Summary"
-                  tableData={tabData}
-                  metrics={safeMetrics}
-                />
+                {data.table_insights?.summary?.[tab] && (
+                  <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
+                      <Sparkles className="h-3 w-3" />
+                      AI Insights
+                    </div>
+                    <p className="text-sm text-muted-foreground">{data.table_insights.summary[tab]}</p>
+                  </div>
+                )}
               </div>
               
               {/* Combined Date Breakdown Table - Group by Week for last_month/mtd, by Month for ytd */}
@@ -869,12 +878,15 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                             </TableRow>
                           </TableBody>
                         </Table>
-                        <AITableComments
-                          tableType="date"
-                          tableName={`Results By ${groupLabel}`}
-                          tableData={dateRows}
-                          metrics={safeMetrics}
-                        />
+                        {data.table_insights?.date_breakdown?.[tab] && (
+                          <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
+                              <Sparkles className="h-3 w-3" />
+                              AI Insights
+                            </div>
+                            <p className="text-sm text-muted-foreground">{data.table_insights.date_breakdown[tab]}</p>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
@@ -960,12 +972,15 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                             </TableRow>
                           </TableBody>
                         </Table>
-                        <AITableComments
-                          tableType="breakdown"
-                          tableName={`${reportName} - ${dimensionName}`}
-                          tableData={breakdownRows}
-                          metrics={safeMetrics}
-                        />
+                        {data.table_insights?.breakdowns?.[reportId]?.[tab] && (
+                          <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
+                              <Sparkles className="h-3 w-3" />
+                              AI Insights
+                            </div>
+                            <p className="text-sm text-muted-foreground">{data.table_insights.breakdowns[reportId][tab]}</p>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

@@ -387,9 +387,145 @@ ${aiPrompt ? `\n## Additional Instructions from User\n${aiPrompt}` : ''}`;
 
     console.log('Summary generated successfully, length:', generatedSummary.length);
 
+    // Generate table insights for each tab
+    const tableInsights: {
+      summary: Record<string, string>;
+      date_breakdown: Record<string, string>;
+      breakdowns: Record<string, Record<string, string>>;
+    } = {
+      summary: {},
+      date_breakdown: {},
+      breakdowns: {}
+    };
+
+    const tabs = ['last_month', 'mtd', 'ytd'] as const;
+    const tabLabels: Record<string, string> = {
+      last_month: 'Last Month',
+      mtd: 'Month to Date',
+      ytd: 'Year to Date'
+    };
+
+    // Generate insights for summary table for each tab
+    for (const tab of tabs) {
+      const tabData = pivotDataTyped[tab] || [];
+      if (tabData.length > 0) {
+        const summaryContext = tabData.map(r => `${r.reportName}: ${selectedMetrics.map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
+        
+        try {
+          const insightResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openRouterApiKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://lovable.dev',
+              'X-Title': 'AI Table Insights'
+            },
+            body: JSON.stringify({
+              model: 'openai/gpt-4-turbo',
+              messages: [
+                { role: 'system', content: 'You are a concise marketing analyst. Provide ONE brief sentence (max 20 words) highlighting the key insight from this data. Focus on the most important trend or standout performance.' },
+                { role: 'user', content: `${tabLabels[tab]} performance summary:\n${summaryContext}` }
+              ],
+              max_tokens: 100,
+              temperature: 0.5
+            }),
+          });
+          
+          if (insightResponse.ok) {
+            const insightData = await insightResponse.json();
+            tableInsights.summary[tab] = insightData.choices?.[0]?.message?.content?.trim() || '';
+          }
+        } catch (e) {
+          console.error(`Error generating summary insight for ${tab}:`, e);
+        }
+      }
+    }
+
+    // Generate insights for date breakdown for each tab
+    for (const tab of tabs) {
+      const dateData = pivotDataTyped.combined_date_breakdown?.[tab] || [];
+      if (dateData.length > 0) {
+        const dateContext = dateData.slice(0, 5).map(r => `${r.dateGroup}: ${selectedMetrics.slice(0, 3).map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
+        
+        try {
+          const insightResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openRouterApiKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://lovable.dev',
+              'X-Title': 'AI Table Insights'
+            },
+            body: JSON.stringify({
+              model: 'openai/gpt-4-turbo',
+              messages: [
+                { role: 'system', content: 'You are a concise marketing analyst. Provide ONE brief sentence (max 20 words) about the time-based trend in this data. Focus on trajectory or notable periods.' },
+                { role: 'user', content: `${tabLabels[tab]} ${tab === 'ytd' ? 'monthly' : 'weekly'} breakdown:\n${dateContext}` }
+              ],
+              max_tokens: 100,
+              temperature: 0.5
+            }),
+          });
+          
+          if (insightResponse.ok) {
+            const insightData = await insightResponse.json();
+            tableInsights.date_breakdown[tab] = insightData.choices?.[0]?.message?.content?.trim() || '';
+          }
+        } catch (e) {
+          console.error(`Error generating date breakdown insight for ${tab}:`, e);
+        }
+      }
+    }
+
+    // Generate insights for breakdown tables
+    if (pivotDataTyped.breakdown_data) {
+      for (const [reportId, breakdown] of Object.entries(pivotDataTyped.breakdown_data)) {
+        tableInsights.breakdowns[reportId] = {};
+        const reportName = pivotDataTyped.last_month?.find((r: ReportMetrics) => r.reportId === reportId)?.reportName || 'Channel';
+        
+        for (const tab of tabs) {
+          const breakdownData = (breakdown as Record<string, BreakdownRow[]>)[tab] || [];
+          if (breakdownData.length > 0) {
+            const breakdownContext = breakdownData.slice(0, 5).map(r => `${r.groupValue}: ${selectedMetrics.slice(0, 3).map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
+            
+            try {
+              const insightResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${openRouterApiKey}`,
+                  'Content-Type': 'application/json',
+                  'HTTP-Referer': 'https://lovable.dev',
+                  'X-Title': 'AI Table Insights'
+                },
+                body: JSON.stringify({
+                  model: 'openai/gpt-4-turbo',
+                  messages: [
+                    { role: 'system', content: 'You are a concise marketing analyst. Provide ONE brief sentence (max 20 words) about performance distribution. Mention top performer or notable pattern.' },
+                    { role: 'user', content: `${reportName} ${tabLabels[tab]} breakdown:\n${breakdownContext}` }
+                  ],
+                  max_tokens: 100,
+                  temperature: 0.5
+                }),
+              });
+              
+              if (insightResponse.ok) {
+                const insightData = await insightResponse.json();
+                tableInsights.breakdowns[reportId][tab] = insightData.choices?.[0]?.message?.content?.trim() || '';
+              }
+            } catch (e) {
+              console.error(`Error generating breakdown insight for ${reportId} ${tab}:`, e);
+            }
+          }
+        }
+      }
+    }
+
+    console.log('Table insights generated');
+
     return new Response(
       JSON.stringify({ 
         summary: generatedSummary,
+        tableInsights,
         cardId
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

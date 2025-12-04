@@ -681,16 +681,17 @@ const AISummaryPage = () => {
         return;
       }
 
-      if (result?.error) {
-        console.error("AI function error:", result.error);
-        toast.error(result.error);
-        return;
-      }
+      // Merge table insights into cached_pivot_data
+      const updatedPivotData = {
+        ...card.cached_pivot_data,
+        table_insights: result.tableInsights || {}
+      };
 
-      // Update the card with the generated summary
+      // Update the card with the generated summary and table insights
       const { error: updateError } = await (supabase.from("ai_summary_cards") as any)
         .update({
           generated_summary: result.summary,
+          cached_pivot_data: updatedPivotData,
           last_generated_at: new Date().toISOString()
         })
         .eq("id", card.id);
@@ -704,7 +705,12 @@ const AISummaryPage = () => {
       // Update local state
       setCards(prev => prev.map(c => 
         c.id === card.id 
-          ? { ...c, generated_summary: result.summary, last_generated_at: new Date().toISOString() }
+          ? { 
+              ...c, 
+              generated_summary: result.summary, 
+              cached_pivot_data: updatedPivotData,
+              last_generated_at: new Date().toISOString() 
+            }
           : c
       ));
 
