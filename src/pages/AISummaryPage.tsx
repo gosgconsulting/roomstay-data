@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, RefreshCw, Settings, MoreHorizontal, Database, Pencil } from "lucide-react";
+import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, Settings, MoreHorizontal, Database, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -844,19 +844,6 @@ const AISummaryPage = () => {
                     >
                       <Settings className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => handleGenerateSummary(card)}
-                      disabled={generatingCardId === card.id}
-                    >
-                      {generatingCardId === card.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-4 w-4" />
-                      )}
-                    </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -943,7 +930,14 @@ const AISummaryPage = () => {
                           </svg>
                         </div>
                       </div>
-                      <p className="text-center">Click refresh to generate AI summary</p>
+                      <Button 
+                        onClick={() => handleGenerateSummary(card)}
+                        disabled={generatingCardId === card.id}
+                        className="mt-2"
+                      >
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Generate AI Summary
+                      </Button>
                     </div>
                   )}
                 </CardContent>
