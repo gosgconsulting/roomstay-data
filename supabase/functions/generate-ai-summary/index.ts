@@ -484,6 +484,18 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
       if (tabData.length > 0) {
         const summaryContext = tabData.map(r => `${r.reportName}: ${selectedMetrics.map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
         
+        // Build comparison context for insights
+        const compPrevPeriod = comparisonType === 'previous_year' ? undefined : pivotDataTyped.comparison_previous_period?.[tab.key];
+        const compPrevYear = comparisonType === 'previous_period' ? undefined : pivotDataTyped.comparison_previous_year?.[tab.key];
+        
+        let comparisonContext = '';
+        if (compPrevPeriod && compPrevPeriod.length > 0) {
+          comparisonContext += '\n\nComparison (Previous Period):\n' + compPrevPeriod.map(r => `${r.reportName}: ${selectedMetrics.map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
+        }
+        if (compPrevYear && compPrevYear.length > 0) {
+          comparisonContext += '\n\nComparison (Same Period Last Year):\n' + compPrevYear.map(r => `${r.reportName}: ${selectedMetrics.map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
+        }
+        
         try {
           const insightResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
@@ -496,16 +508,28 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
             body: JSON.stringify({
               model: 'openai/gpt-4-turbo',
               messages: [
-                { role: 'system', content: `You are a concise marketing analyst. Provide exactly 3 brief insights (one sentence each, max 15 words each), formatted as:
-1. **Performance**: [Revenue/Cost/ROAS/Bookings insight with numbers]
-2. **Visibility**: [Impressions/Clicks/CTR/Brand awareness insight with numbers]  
-3. **Highlight**: [Best or worst performer with specific numbers]
+                { role: 'system', content: `You are a senior digital marketing strategist providing performance analysis. The data in the table is self-explanatory, so DO NOT simply restate the numbers. Instead, provide strategic insights about:
 
-Use +/- signs for changes. Keep it factual with actual numbers from the data.` },
-                { role: 'user', content: `${tabLabels[tab.key]} performance summary:\n${summaryContext}` }
+- WHY certain channels are performing better or worse
+- WHAT actions should be taken based on the performance patterns
+- HOW the current performance compares to expectations or benchmarks
+- STRATEGIC recommendations for budget allocation or optimization
+
+Provide exactly 3 insights formatted as bullet points (use "•" character). Each insight should be 2-3 sentences (40-60 words) with specific reasoning and actionable recommendations.
+
+Format each insight as:
+• **[Category]:** [Your detailed insight with strategic reasoning and recommended actions]
+
+Categories to use: "Channel Strategy", "Budget Optimization", "Performance Gap", "Efficiency Analysis", "Growth Opportunity", "Risk Alert"
+
+${comparisonType !== 'previous_year' ? 'Include month-over-month momentum analysis when comparison data is available.' : ''}
+${comparisonType !== 'previous_period' ? 'Include year-over-year trend analysis when comparison data is available.' : ''}
+
+Use +/- signs when mentioning percentage changes. Focus on strategic implications, not just restating the data.` },
+                { role: 'user', content: `${tabLabels[tab.key]} performance by channel:\n${summaryContext}${comparisonContext}` }
               ],
-              max_tokens: 200,
-              temperature: 0.5
+              max_tokens: 600,
+              temperature: 0.6
             }),
           });
           
@@ -523,7 +547,9 @@ Use +/- signs for changes. Keep it factual with actual numbers from the data.` }
     for (const tab of tabs) {
       const dateData = pivotDataTyped.combined_date_breakdown?.[tab.key] || [];
       if (dateData.length > 0) {
-        const dateContext = dateData.slice(0, 5).map(r => `${r.dateGroup}: ${selectedMetrics.slice(0, 3).map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
+        const dateContext = dateData.slice(0, 8).map(r => `${r.dateGroup}: ${selectedMetrics.map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
+        
+        const periodType = tab.key === 'ytd' ? 'monthly' : 'weekly';
         
         try {
           const insightResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -537,16 +563,25 @@ Use +/- signs for changes. Keep it factual with actual numbers from the data.` }
             body: JSON.stringify({
               model: 'openai/gpt-4-turbo',
               messages: [
-                { role: 'system', content: `You are a concise marketing analyst. Provide exactly 3 brief insights (one sentence each, max 15 words each), formatted as:
-1. **Performance**: [Revenue/Cost trend over time with specific numbers]
-2. **Visibility**: [Traffic/impressions trend with specific numbers]
-3. **Highlight**: [Best or worst performing period with numbers]
+                { role: 'system', content: `You are a senior digital marketing strategist analyzing ${periodType} performance trends. The data in the table shows ${periodType} breakdowns - do NOT simply restate these numbers. Instead, provide strategic insights about:
 
-Use +/- signs for changes. Be factual with actual numbers.` },
-                { role: 'user', content: `${tabLabels[tab.key]} ${tab.key === 'ytd' ? 'monthly' : 'weekly'} breakdown:\n${dateContext}` }
+- TREND PATTERNS: Is performance accelerating, decelerating, or stabilizing? What does the trajectory suggest?
+- SEASONALITY: Are there patterns that align with typical hospitality/travel seasonality or market events?
+- PACING: Is current performance on track with monthly/quarterly goals?
+- INFLECTION POINTS: What caused significant changes between periods?
+
+Provide exactly 3 insights formatted as bullet points (use "•" character). Each insight should be 2-3 sentences (40-60 words) with specific reasoning about the trends.
+
+Format each insight as:
+• **[Category]:** [Your detailed insight with trend analysis and implications]
+
+Categories to use: "Trend Analysis", "Pacing Alert", "Seasonality Pattern", "Momentum Shift", "Forecast Implication", "Week-over-Week Insight"
+
+Focus on the story the data tells about performance trajectory, not just restating the ${periodType} numbers.` },
+                { role: 'user', content: `${tabLabels[tab.key]} ${periodType} breakdown:\n${dateContext}` }
               ],
-              max_tokens: 200,
-              temperature: 0.5
+              max_tokens: 600,
+              temperature: 0.6
             }),
           });
           
@@ -565,11 +600,32 @@ Use +/- signs for changes. Be factual with actual numbers.` },
       for (const [reportId, breakdown] of Object.entries(pivotDataTyped.breakdown_data)) {
         tableInsights.breakdowns[reportId] = {};
         const reportName = pivotDataTyped.last_month?.find((r: ReportMetrics) => r.reportId === reportId)?.reportName || 'Channel';
+        const reportConfig = reportConfigs?.[reportId];
+        const dimensionName = reportConfig?.dimensionName || 'Segment';
+        
+        // Get comparison breakdown data
+        const compBreakdownPrevPeriod = comparisonType === 'previous_year' ? undefined : pivotDataTyped.comparison_previous_period?.breakdown_data?.[reportId];
+        const compBreakdownPrevYear = comparisonType === 'previous_period' ? undefined : pivotDataTyped.comparison_previous_year?.breakdown_data?.[reportId];
         
         for (const tab of tabs) {
           const breakdownData = (breakdown as Record<string, BreakdownRow[]>)[tab.key] || [];
           if (breakdownData.length > 0) {
-            const breakdownContext = breakdownData.slice(0, 5).map(r => `${r.groupValue}: ${selectedMetrics.slice(0, 3).map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
+            const breakdownContext = breakdownData.slice(0, 8).map(r => `${r.groupValue}: ${selectedMetrics.map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
+            
+            // Build comparison context for breakdown insights
+            let compContext = '';
+            if (compBreakdownPrevPeriod) {
+              const compData = (compBreakdownPrevPeriod as Record<string, BreakdownRow[]>)[tab.key] || [];
+              if (compData.length > 0) {
+                compContext += '\n\nComparison (Previous Period):\n' + compData.slice(0, 8).map(r => `${r.groupValue}: ${selectedMetrics.map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
+              }
+            }
+            if (compBreakdownPrevYear) {
+              const compData = (compBreakdownPrevYear as Record<string, BreakdownRow[]>)[tab.key] || [];
+              if (compData.length > 0) {
+                compContext += '\n\nComparison (Same Period Last Year):\n' + compData.slice(0, 8).map(r => `${r.groupValue}: ${selectedMetrics.map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
+              }
+            }
             
             try {
               const insightResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -583,16 +639,29 @@ Use +/- signs for changes. Be factual with actual numbers.` },
                 body: JSON.stringify({
                   model: 'openai/gpt-4-turbo',
                   messages: [
-                    { role: 'system', content: `You are a concise marketing analyst. Provide exactly 3 brief insights (one sentence each, max 15 words each), formatted as:
-1. **Performance**: [Revenue/ROAS/Bookings insight for this breakdown with numbers]
-2. **Visibility**: [Traffic/clicks distribution insight with numbers]
-3. **Highlight**: [Best or worst performer in this breakdown with numbers]
+                    { role: 'system', content: `You are a senior digital marketing strategist analyzing ${reportName} performance by ${dimensionName}. The data shows breakdown by ${dimensionName} - do NOT simply restate these numbers. Instead, provide strategic insights about:
 
-Use +/- signs for changes. Be factual with actual numbers.` },
-                    { role: 'user', content: `${reportName} ${tabLabels[tab.key]} breakdown:\n${breakdownContext}` }
+- PORTFOLIO ANALYSIS: Which ${dimensionName.toLowerCase()}s are carrying the performance? Is there concentration risk?
+- EFFICIENCY GAPS: Where is budget being under or over-utilized relative to returns?
+- OPTIMIZATION OPPORTUNITIES: Which ${dimensionName.toLowerCase()}s should receive more/less investment?
+- COMPETITIVE POSITIONING: What do the performance differences suggest about market dynamics?
+
+${compContext ? `Use the comparison data to identify:
+- Which ${dimensionName.toLowerCase()}s are gaining or losing momentum
+- Where year-over-year or period-over-period changes indicate strategic shifts needed` : ''}
+
+Provide exactly 3 insights formatted as bullet points (use "•" character). Each insight should be 2-3 sentences (40-60 words) with specific strategic recommendations.
+
+Format each insight as:
+• **[Category]:** [Your detailed insight with strategic reasoning and actionable recommendations]
+
+Categories to use: "Portfolio Optimization", "Investment Reallocation", "Efficiency Gap", "Scale Opportunity", "Underperformer Alert", "Market Signal"
+
+Focus on actionable strategy, not restating the breakdown numbers.` },
+                    { role: 'user', content: `${reportName} ${tabLabels[tab.key]} breakdown by ${dimensionName}:\n${breakdownContext}${compContext}` }
                   ],
-                  max_tokens: 200,
-                  temperature: 0.5
+                  max_tokens: 600,
+                  temperature: 0.6
                 }),
               });
               
