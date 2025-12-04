@@ -19,8 +19,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
-import { useSourceData, type SourceDataResult } from "@/hooks/dataSources/useSourceData";
+import { fetchSourceData, type SourceDataResult } from "@/hooks/dataSources/useSourceData";
 import { extractUniqueDimensionValues } from "@/lib/filters/extractDimensionValues";
+import { getUser } from "@/lib/auth";
 import { Search, ChevronRight, ChevronLeft, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -69,6 +70,8 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
   const [activeReportTab, setActiveReportTab] = useState<string | null>(null);
   const [dataSources, setDataSources] = useState<Record<string, DataSource>>({});
+  const [sourceDataCache, setSourceDataCache] = useState<Record<string, SourceDataResult>>({});
+  const [loadingReports, setLoadingReports] = useState<Set<string>>(new Set());
   const [dimensions, setDimensions] = useState<Record<string, Dimension[]>>({});
   const [reportConfigs, setReportConfigs] = useState<Record<string, ReportDimensionConfig>>({});
   const [searchQuery, setSearchQuery] = useState("");
@@ -95,72 +98,96 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
     }
   }, [accountId, open]);
 
-  // Fetch data source and dimensions for active report
+  // Fetch all data sources and source data when entering filter-dimensions step
   useEffect(() => {
-    const fetchDataSourceAndDimensions = async () => {
-      if (!activeReportTab || dataSources[activeReportTab]) return;
+    const fetchAllDataForReports = async () => {
+      if (step !== "filter-dimensions" || selectedReportIds.length === 0) return;
 
-      // Fetch data source for the report
-      const { data: dsData, error: dsError } = await supabase
-        .from("data_sources")
-        .select("*")
-        .eq("report_id", activeReportTab)
-        .limit(1)
-        .single();
+      const { user } = await getUser();
+      if (!user) return;
 
-      if (dsError || !dsData) {
-        console.error("Error fetching data source:", dsError);
-        return;
-      }
+      for (const reportId of selectedReportIds) {
+        // Skip if already loaded
+        if (sourceDataCache[reportId]) continue;
 
-      setDataSources(prev => ({ ...prev, [activeReportTab]: dsData as DataSource }));
+        // Mark as loading
+        setLoadingReports(prev => new Set([...prev, reportId]));
 
-      // Extract dimension IDs from column mappings
-      const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
-      const dimensionIds = columnMappings
-        .filter((m: any) => m.dimensionId)
-        .map((m: any) => m.dimensionId);
+        try {
+          // Fetch data source for the report
+          const { data: dsData, error: dsError } = await supabase
+            .from("data_sources")
+            .select("*")
+            .eq("report_id", reportId)
+            .limit(1)
+            .single();
 
-      if (dimensionIds.length > 0) {
-        // Fetch dimension details
-        const { data: dimData, error: dimError } = await supabase
-          .from("dimensions")
-          .select("id, name, type")
-          .in("id", dimensionIds)
-          .in("type", ["text", "vlookup"])
-          .order("name");
+          if (dsError || !dsData) {
+            console.error(`Error fetching data source for report ${reportId}:`, dsError);
+            setLoadingReports(prev => {
+              const next = new Set(prev);
+              next.delete(reportId);
+              return next;
+            });
+            continue;
+          }
 
-        if (!dimError && dimData) {
-          setDimensions(prev => ({ ...prev, [activeReportTab]: dimData as Dimension[] }));
+          setDataSources(prev => ({ ...prev, [reportId]: dsData as DataSource }));
+
+          // Extract dimension IDs from column mappings
+          const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
+          const dimensionIds = columnMappings
+            .filter((m: any) => m.dimensionId)
+            .map((m: any) => m.dimensionId);
+
+          if (dimensionIds.length > 0) {
+            // Fetch dimension details
+            const { data: dimData } = await supabase
+              .from("dimensions")
+              .select("id, name, type")
+              .in("id", dimensionIds)
+              .in("type", ["text", "vlookup"])
+              .order("name");
+
+            if (dimData) {
+              setDimensions(prev => ({ ...prev, [reportId]: dimData as Dimension[] }));
+            }
+          } else {
+            setDimensions(prev => ({ ...prev, [reportId]: [] }));
+          }
+
+          // Fetch source data directly from Google Sheets/CSV
+          const sourceData = await fetchSourceData(dsData as any, user.id, accountId);
+          setSourceDataCache(prev => ({ ...prev, [reportId]: sourceData }));
+
+        } catch (err) {
+          console.error(`Error fetching data for report ${reportId}:`, err);
+        } finally {
+          setLoadingReports(prev => {
+            const next = new Set(prev);
+            next.delete(reportId);
+            return next;
+          });
         }
-      } else {
-        setDimensions(prev => ({ ...prev, [activeReportTab]: [] }));
       }
     };
 
-    fetchDataSourceAndDimensions();
-  }, [activeReportTab]);
-
-  // Get active data source for useSourceData hook
-  const activeDataSource = activeReportTab ? dataSources[activeReportTab] : null;
-  
-  // Fetch source data using the same hook as reports
-  const { data: sourceData, isLoading: isLoadingSourceData } = useSourceData(
-    activeDataSource as any,
-    accountId,
-    { enabled: !!activeDataSource }
-  );
+    fetchAllDataForReports();
+  }, [step, selectedReportIds, accountId]);
 
   // Extract dimension values from source data
   const currentDimensionValues = useMemo(() => {
-    if (!activeReportTab || !sourceData?.transformedRows) return [];
+    if (!activeReportTab) return [];
+    const sourceData = sourceDataCache[activeReportTab];
+    if (!sourceData?.transformedRows) return [];
+    
     const config = reportConfigs[activeReportTab];
     if (!config?.dimensionId) return [];
 
     return extractUniqueDimensionValues(sourceData.transformedRows, {
       dimensionId: config.dimensionId,
     });
-  }, [activeReportTab, sourceData, reportConfigs]);
+  }, [activeReportTab, sourceDataCache, reportConfigs]);
 
   const filteredValues = useMemo(() => {
     if (!searchQuery) return currentDimensionValues;
@@ -234,9 +261,13 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
     setStep("select-reports");
     setSelectedReportIds([]);
     setActiveReportTab(null);
+    setDataSources({});
+    setSourceDataCache({});
+    setDimensions({});
     setReportConfigs({});
     setSearchQuery("");
     setAiPrompt("");
+    setLoadingReports(new Set());
   };
 
   const handleClose = () => {
@@ -245,6 +276,8 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
   };
 
   const activeDimensions = activeReportTab ? dimensions[activeReportTab] || [] : [];
+  const isActiveReportLoading = activeReportTab ? loadingReports.has(activeReportTab) : false;
+  const activeSourceData = activeReportTab ? sourceDataCache[activeReportTab] : null;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -297,28 +330,40 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
               <div className="w-48 border-r pr-4">
                 <ScrollArea className="h-full">
                   <div className="space-y-1">
-                    {selectedReports.map(report => (
-                      <button
-                        key={report.id}
-                        className={cn(
-                          "w-full text-left px-3 py-2 rounded-md text-sm transition-colors",
-                          activeReportTab === report.id
-                            ? "bg-primary text-primary-foreground"
-                            : "hover:bg-muted"
-                        )}
-                        onClick={() => {
-                          setActiveReportTab(report.id);
-                          setSearchQuery("");
-                        }}
-                      >
-                        {report.name}
-                        {reportConfigs[report.id]?.selectedValues.length > 0 && (
-                          <span className="ml-2 text-xs opacity-70">
-                            ({reportConfigs[report.id].selectedValues.length})
+                    {selectedReports.map(report => {
+                      const isLoading = loadingReports.has(report.id);
+                      const hasData = !!sourceDataCache[report.id];
+                      return (
+                        <button
+                          key={report.id}
+                          className={cn(
+                            "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
+                            activeReportTab === report.id
+                              ? "bg-primary text-primary-foreground"
+                              : "hover:bg-muted"
+                          )}
+                          onClick={() => {
+                            setActiveReportTab(report.id);
+                            setSearchQuery("");
+                          }}
+                        >
+                          <span className="truncate">
+                            {report.name}
+                            {reportConfigs[report.id]?.selectedValues.length > 0 && (
+                              <span className="ml-1 text-xs opacity-70">
+                                ({reportConfigs[report.id].selectedValues.length})
+                              </span>
+                            )}
                           </span>
-                        )}
-                      </button>
-                    ))}
+                          {isLoading && (
+                            <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
+                          )}
+                          {!isLoading && hasData && (
+                            <span className="text-xs opacity-50">✓</span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </ScrollArea>
               </div>
@@ -327,87 +372,93 @@ export const AddAICardModal = ({ open, onOpenChange }: AddAICardModalProps) => {
               <div className="flex-1 flex flex-col gap-4">
                 {activeReportTab && (
                   <>
-                    <div>
-                      <Label className="text-sm font-medium mb-2 block">
-                        Select Dimension
-                      </Label>
-                      <Select
-                        value={reportConfigs[activeReportTab]?.dimensionId || ""}
-                        onValueChange={value =>
-                          handleDimensionChange(activeReportTab, value)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Choose a dimension..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {activeDimensions.map(dim => (
-                            <SelectItem key={dim.id} value={dim.id}>
-                              {dim.name}
-                            </SelectItem>
-                          ))}
-                          {activeDimensions.length === 0 && (
-                            <div className="px-2 py-4 text-sm text-muted-foreground text-center">
-                              {isLoadingSourceData ? "Loading..." : "No dimensions available"}
-                            </div>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {reportConfigs[activeReportTab]?.dimensionId && (
+                    {isActiveReportLoading ? (
+                      <div className="flex-1 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                          <Loader2 className="h-8 w-8 animate-spin" />
+                          <span>Loading data from source...</span>
+                        </div>
+                      </div>
+                    ) : (
                       <>
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            placeholder="Search values..."
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            className="pl-9"
-                          />
+                        <div>
+                          <Label className="text-sm font-medium mb-2 block">
+                            Select Dimension
+                          </Label>
+                          <Select
+                            value={reportConfigs[activeReportTab]?.dimensionId || ""}
+                            onValueChange={value =>
+                              handleDimensionChange(activeReportTab, value)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Choose a dimension..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {activeDimensions.map(dim => (
+                                <SelectItem key={dim.id} value={dim.id}>
+                                  {dim.name}
+                                </SelectItem>
+                              ))}
+                              {activeDimensions.length === 0 && (
+                                <div className="px-2 py-4 text-sm text-muted-foreground text-center">
+                                  No dimensions available
+                                </div>
+                              )}
+                            </SelectContent>
+                          </Select>
                         </div>
 
-                        <ScrollArea className="flex-1 border rounded-md">
-                          <div className="p-2 space-y-1">
-                            {isLoadingSourceData ? (
-                              <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                <span>Loading values from source...</span>
+                        {reportConfigs[activeReportTab]?.dimensionId && (
+                          <>
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                placeholder="Search values..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="pl-9"
+                              />
+                            </div>
+
+                            <ScrollArea className="flex-1 border rounded-md">
+                              <div className="p-2 space-y-1">
+                                {filteredValues.length > 0 ? (
+                                  filteredValues.map(value => (
+                                    <div
+                                      key={value}
+                                      className={cn(
+                                        "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
+                                        reportConfigs[activeReportTab]?.selectedValues.includes(
+                                          value
+                                        )
+                                          ? "bg-primary/10"
+                                          : "hover:bg-muted/50"
+                                      )}
+                                      onClick={() =>
+                                        handleValueToggle(activeReportTab, value)
+                                      }
+                                    >
+                                      <Checkbox
+                                        checked={reportConfigs[
+                                          activeReportTab
+                                        ]?.selectedValues.includes(value)}
+                                        onCheckedChange={() =>
+                                          handleValueToggle(activeReportTab, value)
+                                        }
+                                      />
+                                      <span className="text-sm">{value}</span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-center text-muted-foreground py-4">
+                                    No values found.
+                                  </p>
+                                )}
                               </div>
-                            ) : filteredValues.length > 0 ? (
-                              filteredValues.map(value => (
-                                <div
-                                  key={value}
-                                  className={cn(
-                                    "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                                    reportConfigs[activeReportTab]?.selectedValues.includes(
-                                      value
-                                    )
-                                      ? "bg-primary/10"
-                                      : "hover:bg-muted/50"
-                                  )}
-                                  onClick={() =>
-                                    handleValueToggle(activeReportTab, value)
-                                  }
-                                >
-                                  <Checkbox
-                                    checked={reportConfigs[
-                                      activeReportTab
-                                    ]?.selectedValues.includes(value)}
-                                    onCheckedChange={() =>
-                                      handleValueToggle(activeReportTab, value)
-                                    }
-                                  />
-                                  <span className="text-sm">{value}</span>
-                                </div>
-                              ))
-                            ) : (
-                              <p className="text-center text-muted-foreground py-4">
-                                No values found.
-                              </p>
-                            )}
-                          </div>
-                        </ScrollArea>
+                            </ScrollArea>
+                          </>
+                        )}
                       </>
                     )}
                   </>
