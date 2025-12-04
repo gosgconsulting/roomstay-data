@@ -142,11 +142,39 @@ export async function fetchUniqueDimensionValues(params: Params): Promise<string
         });
       }
 
+      // Also find dimension IDs in the transformed data that have matching names
+      // This handles the case where data is stored with different dimension IDs
+      const dimensionIdsByName = new Map<string, string>();
+      dimensions.forEach((d: any) => {
+        if (d.name) {
+          dimensionIdsByName.set(d.name.toLowerCase(), d.id);
+        }
+      });
+
+      // If we're looking for a dimension by name, add any IDs from transformed data
+      if (dimensionName) {
+        const normalizedName = dimensionName.toLowerCase();
+        // Check each dimension in our loaded list
+        dimensions.forEach((d: any) => {
+          if (d.name && d.name.toLowerCase() === normalizedName) {
+            candidateIds.add(d.id);
+          }
+        });
+      }
+
       // Extract unique values from transformed rows
       transformedRows.forEach((row: any) => {
         const dv = row.dimension_values || {};
         for (const id of Array.from(candidateIds)) {
           const val = dv[id];
+          if (val !== undefined && val !== null && val !== '') {
+            allValues.add(String(val).trim());
+          }
+        }
+        
+        // Also check by name in dimension_values (some data may be keyed by name)
+        if (dimensionName) {
+          const val = dv[dimensionName] || dv[dimensionName.toLowerCase()];
           if (val !== undefined && val !== null && val !== '') {
             allValues.add(String(val).trim());
           }

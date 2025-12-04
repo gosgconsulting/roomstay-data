@@ -405,6 +405,12 @@ export const FiltersBar = ({
       if (data) {
         // If only Date is set as the sole default filter dimension, replace it with Account (if available)
         const existingDims = Array.isArray(data.filter_dimensions) ? data.filter_dimensions : [];
+        
+        // Filter existing dimensions to only include those that are mapped in the data source
+        const { filterDimensionsByMappedData } = await import("@/lib/dimensionDataChecker");
+        const validDims = await filterDimensionsByMappedData(reportId!, existingDims);
+        console.log('[FiltersBar] Filtered dimensions by mapped data:', { original: existingDims.length, valid: validDims.length });
+        
         if (existingDims.length === 1 && dateDimensionId && existingDims[0] === dateDimensionId && defaultAccountDimId) {
           setActiveDimensions([defaultAccountDimId]);
 
@@ -416,18 +422,30 @@ export const FiltersBar = ({
               filter_values: {}, // clear since dimension changed
             })
             .eq("id", data.id);
-        } else if (existingDims.length) {
-          setActiveDimensions(existingDims);
+        } else if (validDims.length) {
+          // Use only valid dimensions that are mapped in the data source
+          setActiveDimensions(validDims);
           if (data.filter_values && Object.keys(data.filter_values).length) {
             const fv = data.filter_values as Record<string, string | string[]>;
             const normalized: Record<string, string[]> = {};
-            const activeDims = existingDims;
             Object.entries(fv).forEach(([key, value]) => {
-              if (activeDims.includes(key) && !key.startsWith("__")) {
+              // Only include filter values for valid dimensions
+              if (validDims.includes(key) && !key.startsWith("__")) {
                 normalized[key] = Array.isArray(value) ? value : [value];
               }
             });
             setSelectedFilters(normalized);
+          }
+          
+          // If saved dimensions were filtered out, update the saved view
+          if (validDims.length < existingDims.length) {
+            console.log('[FiltersBar] Updating saved view with valid dimensions only');
+            await supabase
+              .from("report_views")
+              .update({
+                filter_dimensions: validDims,
+              })
+              .eq("id", data.id);
           }
         } else if (defaultAccountDimId) {
           setActiveDimensions([defaultAccountDimId]);
