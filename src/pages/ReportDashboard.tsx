@@ -15,7 +15,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Database, Grid3x3, GitCompare, RefreshCw, Trash2, Star, Share2, Settings } from "lucide-react";
+import { ArrowLeft, Database, Grid3x3, GitCompare, Trash2, Star, Share2, Settings } from "lucide-react";
 import { ShareModal } from "@/components/ShareModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
@@ -492,8 +492,63 @@ export default function ReportDashboard() {
                 </div>
               </div>
 
-              {/* Right: Main action buttons */}
-              <div className="flex items-center gap-2">
+              {/* Right: Edit mode toggle, edit buttons, share */}
+              <div className="flex items-center gap-3">
+                {/* Edit mode toggle */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-foreground">Edit mode</span>
+                  <Switch
+                    checked={isEditMode}
+                    onCheckedChange={setIsEditMode}
+                    className="data-[state=checked]:bg-emerald-500"
+                  />
+                </div>
+
+                {/* Edit buttons - shown when edit mode is on */}
+                {isEditMode && (
+                  <>
+                    <div className="h-4 w-px bg-border" />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => setShowDataSourcesListModal(true)}
+                    >
+                      <Database className="h-4 w-4" />
+                      Data sources
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => setShowDimensionsListModal(true)}
+                    >
+                      <Grid3x3 className="h-4 w-4" />
+                      Dimensions
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => setShowVlookupModal(true)}
+                    >
+                      <GitCompare className="h-4 w-4" />
+                      Vlookup
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2 text-destructive hover:text-destructive"
+                      onClick={handleClearAndResync}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Clear & Resync
+                    </Button>
+                    <div className="h-4 w-px bg-border" />
+                  </>
+                )}
+
+                {/* Share button */}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -505,77 +560,7 @@ export default function ReportDashboard() {
                 </Button>
               </div>
             </div>
-
-            {/* Row 2: Edit mode toggle and refresh */}
-            <div className="container mx-auto px-6 py-2 flex items-center justify-between border-t">
-              {/* Left: Edit mode toggle */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-foreground">Edit mode</span>
-                <Switch
-                  checked={isEditMode}
-                  onCheckedChange={setIsEditMode}
-                  className="data-[state=checked]:bg-emerald-500"
-                />
-              </div>
-
-              {/* Right: Refresh */}
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-2 text-muted-foreground hover:text-foreground"
-                  onClick={() => refreshData()}
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Refresh
-                </Button>
-              </div>
-            </div>
           </header>
-
-          {/* Edit mode toolbar */}
-          {isEditMode && (
-            <div className="bg-muted/30 border-b">
-              <div className="container mx-auto px-6 py-2 flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => setShowDataSourcesListModal(true)}
-                >
-                  <Database className="h-4 w-4" />
-                  Data sources
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => setShowDimensionsListModal(true)}
-                >
-                  <Grid3x3 className="h-4 w-4" />
-                  Dimensions
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => setShowVlookupModal(true)}
-                >
-                  <GitCompare className="h-4 w-4" />
-                  Vlookup
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 text-destructive hover:text-destructive"
-                  onClick={handleClearAndResync}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Clear & Resync
-                </Button>
-              </div>
-            </div>
-          )}
           
           <DashboardHeader
             reportId={reportId}
