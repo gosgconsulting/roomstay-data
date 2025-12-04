@@ -10,11 +10,12 @@ import { KPISettingsModal } from "@/components/KPISettingsModal";
 import { LoadingToast } from "@/components/LoadingToast";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { Settings, ArrowLeft, Database, Grid3x3, GitCompare, Wallet, Eye, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { Settings, ArrowLeft, Database, Grid3x3, GitCompare, Wallet, Eye, Pencil, RefreshCw, Trash2, Star, Calendar, Share2, MoreHorizontal, Download, Maximize2, X, Filter, Plus } from "lucide-react";
 import { ShareModal } from "@/components/ShareModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
@@ -471,131 +472,147 @@ export default function ReportDashboard() {
             loadingComponents={loadingComponents}
           /> */}
           
-          {/* Header container: allow wrapping and add gaps */}
-          <header className="bg-card">
-            <div className="container mx-auto px-6 py-2 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-4">
+          {/* Top Bar - Row 1: Title and main actions */}
+          <header className="bg-card border-b">
+            <div className="container mx-auto px-6 py-3 flex items-center justify-between">
+              {/* Left: Back + Title + Star */}
+              <div className="flex items-center gap-3">
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => navigate(`/?account=${accountId}`)}
                   title="Back to accounts"
+                  className="h-8 w-8"
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
-                <div className="flex items-center gap-3">
-                  <h1 className="text-2xl font-bold text-foreground">{currentReportName}</h1>
-
-                  {/* Looker-style controls next to title (only in Edit mode) */}
-                  {isEditMode && (
-                    <div className="flex items-center gap-2 ml-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-2"
-                        onClick={() => setShowDataSourcesListModal(true)}
-                        title="Data sources"
-                      >
-                        <Database className="h-4 w-4" />
-                        Data sources
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-2"
-                        onClick={() => setShowDimensionsListModal(true)}
-                        title="Dimensions"
-                      >
-                        <Grid3x3 className="h-4 w-4" />
-                        Dimensions
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-2"
-                        onClick={() => setShowVlookupModal(true)}
-                        title="Vlookup"
-                      >
-                        <GitCompare className="h-4 w-4" />
-                        Vlookup
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-2"
-                        onClick={() => {
-                          if (accountId) {
-                            navigate(`/tools/budget/${accountId}`);
-                          } else {
-                            navigate('/tools/budget');
-                          }
-                        }}
-                        title="Budget"
-                      >
-                        <Wallet className="h-4 w-4" />
-                        Budget
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-2 text-destructive hover:text-destructive"
-                        onClick={handleClearAndResync}
-                        title="Clear stored data and resync from source"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Clear & Resync
-                      </Button>
-                    </div>
-                  )}
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg font-semibold text-foreground">{currentReportName}</h1>
+                  <Star className="h-4 w-4 text-yellow-400 fill-yellow-400" />
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="gap-2"
-                  onClick={() => {
-                    refreshData();
-                  }}
-                  title="Reload data"
+
+              {/* Right: Main action buttons */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 text-muted-foreground hover:text-foreground"
+                  onClick={() => toast({ title: "Coming soon", description: "Schedule report feature coming soon" })}
                 >
-                  Reload
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="gap-2"
-                  onClick={() => setShowShareModal(true)}
-                  title="Share"
-                >
-                  Share
+                  <Calendar className="h-4 w-4" />
+                  Schedule report
                 </Button>
                 <Button
-                  variant={isEditMode ? "default" : "outline"}
+                  variant="ghost"
                   size="sm"
-                  onClick={() => setIsEditMode((prev) => !prev)}
-                  className="gap-2"
-                  title="Toggle Edit/View mode"
+                  className="gap-2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowShareModal(true)}
                 >
-                  {isEditMode ? (
-                    <>
-                      <Pencil className="h-4 w-4" />
-                      Edit
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="h-4 w-4" />
-                      View
-                    </>
-                  )}
+                  <Share2 className="h-4 w-4" />
+                  Share
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                  <Download className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground"
+                  onClick={() => navigate(`/?account=${accountId}`)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Row 2: Edit mode toggle and quick actions */}
+            <div className="container mx-auto px-6 py-2 flex items-center justify-between border-t">
+              {/* Left: Edit mode toggle */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-foreground">Edit mode</span>
+                <Switch
+                  checked={isEditMode}
+                  onCheckedChange={setIsEditMode}
+                  className="data-[state=checked]:bg-emerald-500"
+                />
+              </div>
+
+              {/* Right: Refresh status and actions */}
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 text-muted-foreground hover:text-foreground"
+                  onClick={() => refreshData()}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Refreshed just now
+                </Button>
+                <span className="px-3 py-1 text-xs font-medium rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                  Auto refresh: On
+                </span>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Filter className="h-4 w-4" />
+                  Filters
+                </Button>
+                <Button size="sm" className="gap-2 bg-emerald-500 hover:bg-emerald-600 text-white">
+                  <Plus className="h-4 w-4" />
+                  Add card
                 </Button>
               </div>
             </div>
           </header>
+
+          {/* Edit mode toolbar */}
+          {isEditMode && (
+            <div className="bg-muted/30 border-b">
+              <div className="container mx-auto px-6 py-2 flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setShowDataSourcesListModal(true)}
+                >
+                  <Database className="h-4 w-4" />
+                  Data sources
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setShowDimensionsListModal(true)}
+                >
+                  <Grid3x3 className="h-4 w-4" />
+                  Dimensions
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setShowVlookupModal(true)}
+                >
+                  <GitCompare className="h-4 w-4" />
+                  Vlookup
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 text-destructive hover:text-destructive"
+                  onClick={handleClearAndResync}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Clear & Resync
+                </Button>
+              </div>
+            </div>
+          )}
           
           <DashboardHeader
             reportId={reportId}

@@ -637,21 +637,8 @@ export function DashboardHeader({
 
   return (
     <>
-      <header className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {/* Removed Looker-style action buttons from here; they'll live next to the title in ReportDashboard */}
-            </div>
-
-            <div className="flex items-center gap-3">
-              {/* REMOVED: Last update text */}
-              {/* <span className="text-sm text-muted-foreground">Last update: {lastUpdateDate}</span> */}
-            </div>
-          </div>
-        </div>
-      </header>
-
+      {/* Header UI hidden - using new topbar in ReportDashboard */}
+      
       {/* Modals */}
       <DataSourcesListModal
         open={showDataSourcesListModal}
