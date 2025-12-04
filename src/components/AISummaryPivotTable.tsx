@@ -30,7 +30,10 @@ import {
   isValid,
   getWeek,
   getYear,
+  getMonth,
   format,
+  startOfWeek,
+  endOfWeek,
 } from "date-fns";
 
 interface ReportMetrics {
@@ -251,15 +254,54 @@ export const calculateFormulaMetrics = (baseValues: Record<string, number>): Rec
   return result;
 };
 
-// Helper to format date group key based on tab (week for last_month/mtd, year for ytd)
+// Month names for display
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 
+                     'July', 'August', 'September', 'October', 'November', 'December'];
+
+// Helper to format date group key based on tab (week for last_month/mtd, month for ytd)
 export const getDateGroupKey = (date: Date, tab: DateTab): string => {
   if (tab === 'ytd') {
-    return String(getYear(date));
+    // For YTD, group by month
+    const month = getMonth(date);
+    const year = getYear(date);
+    return `${MONTH_NAMES[month]} ${year}`;
   }
   // For last_month and mtd, group by week
   const weekNum = getWeek(date);
   const year = getYear(date);
   return `Week ${weekNum}, ${year}`;
+};
+
+// Helper to get week date range string from a date
+export const getWeekDateRange = (date: Date): string => {
+  const weekStart = startOfWeek(date, { weekStartsOn: 1 }); // Monday start
+  const weekEnd = endOfWeek(date, { weekStartsOn: 1 });
+  return `${format(weekStart, 'MMM d')} - ${format(weekEnd, 'MMM d')}`;
+};
+
+// Helper to extract week date range from a week key like "Week 49, 2025"
+export const getWeekDateRangeFromKey = (weekKey: string): string | null => {
+  const match = weekKey.match(/Week (\d+), (\d+)/);
+  if (!match) return null;
+  
+  const weekNum = parseInt(match[1], 10);
+  const year = parseInt(match[2], 10);
+  
+  // Calculate the date for a given week number
+  // Start from Jan 1 and find the first Monday
+  const jan1 = new Date(year, 0, 1);
+  const dayOfWeek = jan1.getDay();
+  const daysToFirstMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : 8 - dayOfWeek);
+  const firstMonday = new Date(year, 0, 1 + daysToFirstMonday);
+  
+  // Calculate the start of the target week
+  const weekStart = new Date(firstMonday);
+  weekStart.setDate(firstMonday.getDate() + (weekNum - 1) * 7);
+  
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  
+  return `${format(weekStart, 'MMM d')} - ${format(weekEnd, 'MMM d')}`;
 };
 
 export const aggregateMetrics = (
@@ -709,13 +751,14 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                 </Table>
               </div>
               
-              {/* Combined Date Breakdown Table - Group by Week for last_month/mtd, by Year for ytd */}
+              {/* Combined Date Breakdown Table - Group by Week for last_month/mtd, by Month for ytd */}
               {combinedDateBreakdown[tab] && combinedDateBreakdown[tab].length > 0 && (
                 <div className="space-y-4">
                   {(() => {
                     const dateRows = combinedDateBreakdown[tab] || [];
                     const dateBreakdownTotals = calculateBreakdownTotals(dateRows);
-                    const groupLabel = tab === 'ytd' ? 'Year' : 'Week';
+                    const groupLabel = tab === 'ytd' ? 'Month' : 'Week';
+                    const isWeekView = tab !== 'ytd';
                     
                     return (
                       <div className="border rounded-lg overflow-hidden">
@@ -734,21 +777,29 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {dateRows.map((row, idx) => (
-                              <TableRow
-                                key={row.dateGroup}
-                                className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                              >
-                                <TableCell className="font-medium text-sm">
-                                  {row.dateGroup}
-                                </TableCell>
-                                {safeMetrics.map((metric) => (
-                                  <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                    {formatMetricValue(metric, row.metrics[metric] || 0)}
+                            {dateRows.map((row, idx) => {
+                              const weekDateRange = isWeekView ? getWeekDateRangeFromKey(row.dateGroup) : null;
+                              return (
+                                <TableRow
+                                  key={row.dateGroup}
+                                  className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                                >
+                                  <TableCell className="font-medium text-sm">
+                                    <div className="flex flex-col">
+                                      <span>{row.dateGroup}</span>
+                                      {weekDateRange && (
+                                        <span className="text-xs text-muted-foreground">{weekDateRange}</span>
+                                      )}
+                                    </div>
                                   </TableCell>
-                                ))}
-                              </TableRow>
-                            ))}
+                                  {safeMetrics.map((metric) => (
+                                    <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                      {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                    </TableCell>
+                                  ))}
+                                </TableRow>
+                              );
+                            })}
                             {/* Date Breakdown Total Row */}
                             <TableRow className="bg-muted/50 font-medium border-t">
                               <TableCell className="text-sm">Total</TableCell>
