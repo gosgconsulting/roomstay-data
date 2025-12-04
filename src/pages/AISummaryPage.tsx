@@ -194,6 +194,7 @@ const AISummaryPage = () => {
       
       // Initialize breakdown data structures
       const breakdownData: Record<string, Record<DateTab, Array<{ groupValue: string; metrics: Record<string, number> }>>> = {};
+      const breakdownDimensionNames: Record<string, string> = {}; // Map of reportId -> dimension name
       const combinedDateBreakdown: Record<DateTab, DateBreakdownRow[]> = {
         last_month: [], mtd: [], ytd: []
       };
@@ -350,6 +351,11 @@ const AISummaryPage = () => {
           
           const breakdownDimName = breakdownDimData?.name;
           const breakdownDimId = breakdownConfig.breakdownDimensionId;
+          
+          // Store the dimension name for this report
+          if (breakdownDimName) {
+            breakdownDimensionNames[reportId] = breakdownDimName;
+          }
           
           // First filter rows by dimension filter, then get unique breakdown values
           const filteredByDimension = sourceData.transformedRows.filter((row: any) => {
@@ -586,6 +592,7 @@ const AISummaryPage = () => {
       const completePivotData = { 
         ...pivotData, 
         breakdown_data: breakdownData, 
+        breakdown_dimension_names: breakdownDimensionNames,
         combined_date_breakdown: combinedDateBreakdown,
         comparison_previous_period: comparisonPreviousPeriod,
         comparison_previous_year: comparisonPreviousYear,
