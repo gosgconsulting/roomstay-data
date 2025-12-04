@@ -11,129 +11,62 @@ const FormattedAISummary: React.FC<FormattedAISummaryProps> = ({ summary }) => {
     let keyIndex = 0;
 
     const formatInlineText = (text: string): React.ReactNode => {
-      // Process the text to handle bold, percentages, and important keywords
-      const processSegment = (segment: string, segmentIdx: number): React.ReactNode => {
-        // Handle percentages with parentheses like (-12.2%) or (+7.4%)
-        const percentParenPattern = /\(([+-]?\d+\.?\d*%)\)/g;
-        const parts = segment.split(percentParenPattern);
+      // Process the text to handle bold and numbers with colors
+      const processNumberColors = (segment: string, segmentIdx: number): React.ReactNode => {
+        // Match numbers with signs: +24.7%, -12.2%, $258K, 32x, etc.
+        const numberPattern = /([+-]\d+\.?\d*%?|\(\s*[+-]?\d+\.?\d*%?\s*\)|\$[\d,]+\.?\d*[KkMm]?|\d+\.?\d*%|\d+x\b)/g;
+        const parts = segment.split(numberPattern);
         
         if (parts.length > 1) {
-          return parts.map((part, pIdx) => {
-            // Check if this part is a percentage
-            if (part.match(/^[+-]?\d+\.?\d*%$/)) {
-              const isNegative = part.startsWith("-");
-              const isPositive = part.startsWith("+");
+          return parts.map((part, idx) => {
+            // Check if this is a number that should be colored
+            if (part.match(/^[+-]\d+\.?\d*%?$/) || part.match(/^\(\s*[+-]?\d+\.?\d*%?\s*\)$/)) {
+              const isNegative = part.includes("-");
+              const isPositive = part.includes("+");
               return (
-                <span key={`${segmentIdx}-${pIdx}`} className={`font-semibold ${
+                <span key={`${segmentIdx}-${idx}`} className={`font-medium ${
                   isNegative ? "text-red-600 dark:text-red-500" : 
                   isPositive ? "text-green-600 dark:text-green-500" : 
                   "text-foreground"
                 }`}>
-                  ({part})
+                  {part}
                 </span>
               );
             }
-            // Process standalone percentages in the remaining text
-            return processStandalonePercent(part, `${segmentIdx}-${pIdx}`);
-          });
-        }
-        
-        return processStandalonePercent(segment, String(segmentIdx));
-      };
-
-      const processStandalonePercent = (text: string, key: string): React.ReactNode => {
-        // Handle standalone percentages and important numbers
-        const numberPattern = /(\d+\.?\d*%|\$[\d,]+\.?\d*|\d+x\b)/g;
-        const parts = text.split(numberPattern);
-        
-        if (parts.length > 1) {
-          return parts.map((part, idx) => {
-            if (part.match(/^\d+\.?\d*%$/) || part.match(/^\$[\d,]+\.?\d*$/) || part.match(/^\d+x$/)) {
-              // Check context for positive/negative
+            // For other numbers, check context
+            if (part.match(/^\$[\d,]+\.?\d*[KkMm]?$/) || part.match(/^\d+\.?\d*%$/) || part.match(/^\d+x$/)) {
+              // Check surrounding context for positive/negative
               const prevText = parts.slice(0, idx).join("").toLowerCase();
-              const isNegativeContext = prevText.includes("decline") || 
-                                        prevText.includes("decrease") || 
-                                        prevText.includes("drop") || 
-                                        prevText.includes("fall") ||
-                                        prevText.includes("reduction") ||
-                                        prevText.includes("down") ||
-                                        prevText.includes("lower");
-              const isPositiveContext = prevText.includes("increase") || 
-                                        prevText.includes("growth") || 
-                                        prevText.includes("rise") ||
-                                        prevText.includes("up") ||
-                                        prevText.includes("gain") ||
-                                        prevText.includes("improvement") ||
-                                        prevText.includes("higher") ||
-                                        prevText.includes("impressive");
+              const isNegativeContext = prevText.match(/(decline|decrease|drop|fall|reduction|down|lower|less|reduced|lost)$/i);
+              const isPositiveContext = prevText.match(/(increase|growth|rise|up|gain|improvement|higher|more|grew|jumped)$/i);
               
               return (
-                <strong key={`${key}-${idx}`} className={`font-semibold ${
+                <span key={`${segmentIdx}-${idx}`} className={`font-medium ${
                   isNegativeContext ? "text-red-600 dark:text-red-500" : 
                   isPositiveContext ? "text-green-600 dark:text-green-500" : 
                   "text-foreground"
                 }`}>
                   {part}
-                </strong>
+                </span>
               );
             }
-            return highlightKeywords(part, `${key}-${idx}`);
+            return part;
           });
         }
         
-        return highlightKeywords(text, key);
+        return segment;
       };
 
-      const highlightKeywords = (text: string, key: string): React.ReactNode => {
-        // Highlight important positive/negative keywords
-        const positiveWords = /(impressive|significant improvement|strong performance|excellent|growth|increased|improvement|improved|higher|gain|success|outperformed)/gi;
-        const negativeWords = /(decline|decrease|dropped|falling|reduction|challenge|concern|underperformed|lower|down|weakness)/gi;
-        
-        let result = text;
-        const elements: React.ReactNode[] = [];
-        let lastIndex = 0;
-        
-        // Combine patterns
-        const combinedPattern = /(impressive|significant improvement|strong performance|excellent|growth|increased|improvement|improved|higher|gain|success|outperformed|decline|decrease|dropped|falling|reduction|challenge|concern|underperformed|lower|weakness)/gi;
-        
-        let match;
-        while ((match = combinedPattern.exec(text)) !== null) {
-          // Add text before match
-          if (match.index > lastIndex) {
-            elements.push(text.slice(lastIndex, match.index));
-          }
-          
-          const word = match[0];
-          const isPositive = word.match(positiveWords);
-          elements.push(
-            <strong key={`${key}-kw-${match.index}`} className={`font-semibold ${
-              isPositive ? "text-green-600 dark:text-green-500" : "text-red-600 dark:text-red-500"
-            }`}>
-              {word}
-            </strong>
-          );
-          
-          lastIndex = match.index + word.length;
-        }
-        
-        // Add remaining text
-        if (lastIndex < text.length) {
-          elements.push(text.slice(lastIndex));
-        }
-        
-        return elements.length > 0 ? elements : text;
-      };
-
-      // First handle **bold** markdown
+      // First handle **bold** markdown - only render as bold, no special colors
       const boldPattern = /\*\*([^*]+)\*\*/g;
       const boldParts = text.split(boldPattern);
       
       return boldParts.map((part, idx) => {
         // Odd indices are the bold content
         if (idx % 2 === 1) {
-          return <strong key={idx} className="font-semibold">{processSegment(part, idx)}</strong>;
+          return <strong key={idx} className="font-semibold">{processNumberColors(part, idx)}</strong>;
         }
-        return <React.Fragment key={idx}>{processSegment(part, idx)}</React.Fragment>;
+        return <React.Fragment key={idx}>{processNumberColors(part, idx)}</React.Fragment>;
       });
     };
 
