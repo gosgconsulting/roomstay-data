@@ -948,7 +948,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               {/* Breakdown Tables */}
               {Object.keys(breakdownData).length > 0 && (
                 <div className="space-y-4">
-                {Object.entries(breakdownData).map(([reportId, reportBreakdown]) => {
+                {Object.entries(breakdownData).map(([breakdownKey, reportBreakdown]) => {
                     const rawBreakdownRows = reportBreakdown[tab] || [];
                     // Filter out rows where all metrics are 0
                     const breakdownRows = rawBreakdownRows.filter(row => {
@@ -957,19 +957,29 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                     if (breakdownRows.length === 0) return null;
                     
                     const breakdownTotals = calculateBreakdownTotals(breakdownRows);
+                    
+                    // Parse the breakdown key - it can be "reportId_dimensionId" (new format) or just "reportId" (legacy)
+                    const keyParts = breakdownKey.split('_');
+                    const reportId = keyParts.length >= 2 && keyParts[0].length === 36 
+                      ? keyParts[0]  // UUID format for reportId
+                      : breakdownKey; // Legacy: entire key is reportId
                     const reportName = getReportName(reportId);
                     
                     // Get dimension name from breakdown_dimension_names (stored in cached data)
-                    // Fallback to reportConfigs for backward compatibility, then to 'Group'
+                    // Use breakdownKey for new format, reportId for legacy
                     const breakdownDimensionNames = data.breakdown_dimension_names || {};
-                    const reportConfig = reportConfigs?.[reportId];
-                    const dimensionName = breakdownDimensionNames[reportId] || reportConfig?.dimensionName || 'Group';
+                    const dimensionName = breakdownDimensionNames[breakdownKey] || 
+                                         breakdownDimensionNames[reportId] || 
+                                         reportConfigs?.[reportId]?.dimensionName || 
+                                         'Group';
                     
-                    // Get comparison breakdown data
+                    // Get comparison breakdown data - try both key formats
                     const comparisonBreakdownData = comparisonType === "previous_period"
-                      ? data.comparison_previous_period?.breakdown_data?.[reportId]?.[tab]
+                      ? (data.comparison_previous_period?.breakdown_data?.[breakdownKey]?.[tab] || 
+                         data.comparison_previous_period?.breakdown_data?.[reportId]?.[tab])
                       : comparisonType === "previous_year"
-                      ? data.comparison_previous_year?.breakdown_data?.[reportId]?.[tab]
+                      ? (data.comparison_previous_year?.breakdown_data?.[breakdownKey]?.[tab] ||
+                         data.comparison_previous_year?.breakdown_data?.[reportId]?.[tab])
                       : null;
                     
                     // Build a map of groupValue to comparison metrics
@@ -983,9 +993,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                       : null;
                     
                     return (
-                      <div key={reportId} className="border rounded-lg overflow-hidden">
+                      <div key={breakdownKey} className="border rounded-lg overflow-hidden">
                         <div className="bg-primary/5 px-4 py-2 border-b">
-                          <h4 className="font-semibold text-sm">{reportName} - Breakdown</h4>
+                          <h4 className="font-semibold text-sm">{reportName} - {dimensionName}</h4>
                         </div>
                         <Table>
                           <TableHeader>
@@ -1028,13 +1038,13 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                             </TableRow>
                           </TableBody>
                         </Table>
-                        {data.table_insights?.breakdowns?.[reportId]?.[tab] && (
+                        {(data.table_insights?.breakdowns?.[breakdownKey]?.[tab] || data.table_insights?.breakdowns?.[reportId]?.[tab]) && (
                           <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
                             <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
                               <Sparkles className="h-3 w-3" />
                               AI Insights
                             </div>
-                            <FormatAIInsights text={data.table_insights.breakdowns[reportId][tab]} />
+                            <FormatAIInsights text={data.table_insights.breakdowns[breakdownKey]?.[tab] || data.table_insights.breakdowns[reportId]?.[tab]} />
                           </div>
                         )}
                       </div>

@@ -597,15 +597,27 @@ Focus on the story the data tells about performance trajectory, not just restati
 
     // Generate insights for breakdown tables
     if (pivotDataTyped.breakdown_data) {
-      for (const [reportId, breakdown] of Object.entries(pivotDataTyped.breakdown_data)) {
-        tableInsights.breakdowns[reportId] = {};
-        const reportName = pivotDataTyped.last_month?.find((r: ReportMetrics) => r.reportId === reportId)?.reportName || 'Channel';
-        const reportConfig = reportConfigs?.[reportId];
-        const dimensionName = reportConfig?.dimensionName || 'Segment';
+      const breakdownDimensionNames = (pivotDataTyped as any).breakdown_dimension_names || {};
+      
+      for (const [breakdownKey, breakdown] of Object.entries(pivotDataTyped.breakdown_data)) {
+        tableInsights.breakdowns[breakdownKey] = {};
         
-        // Get comparison breakdown data
-        const compBreakdownPrevPeriod = comparisonType === 'previous_year' ? undefined : pivotDataTyped.comparison_previous_period?.breakdown_data?.[reportId];
-        const compBreakdownPrevYear = comparisonType === 'previous_period' ? undefined : pivotDataTyped.comparison_previous_year?.breakdown_data?.[reportId];
+        // Parse the breakdown key - it can be "reportId_dimensionId" (new format) or just "reportId" (legacy)
+        const keyParts = breakdownKey.split('_');
+        const reportId = keyParts.length >= 2 && keyParts[0].length === 36 
+          ? keyParts[0]  // UUID format for reportId
+          : breakdownKey; // Legacy: entire key is reportId
+        
+        const reportName = pivotDataTyped.last_month?.find((r: ReportMetrics) => r.reportId === reportId)?.reportName || 'Channel';
+        const dimensionName = breakdownDimensionNames[breakdownKey] || breakdownDimensionNames[reportId] || reportConfigs?.[reportId]?.dimensionName || 'Segment';
+        
+        // Get comparison breakdown data - try both key formats
+        const compBreakdownPrevPeriod = comparisonType === 'previous_year' ? undefined : 
+          (pivotDataTyped.comparison_previous_period?.breakdown_data?.[breakdownKey] || 
+           pivotDataTyped.comparison_previous_period?.breakdown_data?.[reportId]);
+        const compBreakdownPrevYear = comparisonType === 'previous_period' ? undefined : 
+          (pivotDataTyped.comparison_previous_year?.breakdown_data?.[breakdownKey] ||
+           pivotDataTyped.comparison_previous_year?.breakdown_data?.[reportId]);
         
         for (const tab of tabs) {
           const breakdownData = (breakdown as Record<string, BreakdownRow[]>)[tab.key] || [];
@@ -667,10 +679,10 @@ Focus on actionable strategy, not restating the breakdown numbers.` },
               
               if (insightResponse.ok) {
                 const insightData = await insightResponse.json();
-                tableInsights.breakdowns[reportId][tab.key] = insightData.choices?.[0]?.message?.content?.trim() || '';
+                tableInsights.breakdowns[breakdownKey][tab.key] = insightData.choices?.[0]?.message?.content?.trim() || '';
               }
             } catch (e) {
-              console.error(`Error generating breakdown insight for ${reportId} ${tab.key}:`, e);
+              console.error(`Error generating breakdown insight for ${breakdownKey} ${tab.key}:`, e);
             }
           }
         }
