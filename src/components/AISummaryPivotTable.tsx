@@ -750,6 +750,10 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                     const breakdownTotals = calculateBreakdownTotals(breakdownRows);
                     const reportName = getReportName(reportId);
                     
+                    // Get dimension name from reportConfigs
+                    const reportConfig = reportConfigs?.[reportId];
+                    const dimensionName = reportConfig?.dimensionName || 'Group';
+                    
                     // Get comparison breakdown data
                     const comparisonBreakdownData = comparisonType === "previous_period"
                       ? data.comparison_previous_period?.breakdown_data?.[reportId]?.[tab]
@@ -775,7 +779,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                         <Table>
                           <TableHeader>
                             <TableRow className="bg-muted/30">
-                              <TableHead className="font-medium w-[200px]">Group</TableHead>
+                              <TableHead className="font-medium w-[200px]">{dimensionName}</TableHead>
                               {safeMetrics.map((metric) => (
                                 <TableHead key={metric} className="font-medium text-right text-xs">
                                   {metric}

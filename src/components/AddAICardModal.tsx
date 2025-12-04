@@ -816,6 +816,16 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       }
       pivotData.breakdown_data[report.id] = { last_month: [], mtd: [], ytd: [] };
       
+      // Initialize comparison breakdown data for this report
+      if (!pivotData.comparison_previous_period!.breakdown_data) {
+        pivotData.comparison_previous_period!.breakdown_data = {};
+      }
+      if (!pivotData.comparison_previous_year!.breakdown_data) {
+        pivotData.comparison_previous_year!.breakdown_data = {};
+      }
+      pivotData.comparison_previous_period!.breakdown_data[report.id] = { last_month: [], mtd: [], ytd: [] };
+      pivotData.comparison_previous_year!.breakdown_data[report.id] = { last_month: [], mtd: [], ytd: [] };
+      
       (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
         // Process each named group
         uniqueValues.forEach((groupValue) => {
@@ -827,6 +837,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
             return groupVal !== undefined && String(groupVal) === groupValue;
           });
           
+          // Main metrics
           const metrics = aggregateMetrics(
             groupRows,
             selectedMetrics,
@@ -839,6 +850,38 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
             groupValue,
             metrics,
           });
+          
+          // Comparison - Previous Period
+          const prevPeriodRange = comparisonRanges.previous_period[tab];
+          if (prevPeriodRange) {
+            const prevPeriodMetrics = aggregateMetrics(
+              groupRows,
+              selectedMetrics,
+              prevPeriodRange,
+              undefined,
+              metricNameToIdMap
+            );
+            pivotData.comparison_previous_period!.breakdown_data![report.id][tab].push({
+              groupValue,
+              metrics: prevPeriodMetrics,
+            });
+          }
+          
+          // Comparison - Previous Year
+          const prevYearRange = comparisonRanges.previous_year[tab];
+          if (prevYearRange) {
+            const prevYearMetrics = aggregateMetrics(
+              groupRows,
+              selectedMetrics,
+              prevYearRange,
+              undefined,
+              metricNameToIdMap
+            );
+            pivotData.comparison_previous_year!.breakdown_data![report.id][tab].push({
+              groupValue,
+              metrics: prevYearMetrics,
+            });
+          }
         });
         
         // Add Uncategorized group for rows without breakdown value
@@ -861,6 +904,37 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
             groupValue: 'Uncategorized',
             metrics,
           });
+          
+          // Comparison for Uncategorized
+          const prevPeriodRange = comparisonRanges.previous_period[tab];
+          if (prevPeriodRange) {
+            const prevPeriodMetrics = aggregateMetrics(
+              uncategorizedRows,
+              selectedMetrics,
+              prevPeriodRange,
+              undefined,
+              metricNameToIdMap
+            );
+            pivotData.comparison_previous_period!.breakdown_data![report.id][tab].push({
+              groupValue: 'Uncategorized',
+              metrics: prevPeriodMetrics,
+            });
+          }
+          
+          const prevYearRange = comparisonRanges.previous_year[tab];
+          if (prevYearRange) {
+            const prevYearMetrics = aggregateMetrics(
+              uncategorizedRows,
+              selectedMetrics,
+              prevYearRange,
+              undefined,
+              metricNameToIdMap
+            );
+            pivotData.comparison_previous_year!.breakdown_data![report.id][tab].push({
+              groupValue: 'Uncategorized',
+              metrics: prevYearMetrics,
+            });
+          }
         }
       });
     }
