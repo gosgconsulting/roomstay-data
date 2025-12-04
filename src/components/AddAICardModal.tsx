@@ -24,6 +24,12 @@ import { fetchSourceData, type SourceDataResult } from "@/hooks/dataSources/useS
 import { extractUniqueDimensionValues } from "@/lib/filters/extractDimensionValues";
 import { getUser } from "@/lib/auth";
 import { Search, ChevronRight, ChevronLeft, Sparkles, Loader2, Calendar } from "lucide-react";
+import { 
+  getDateRange, 
+  aggregateMetrics, 
+  type CachedPivotData, 
+  type DateTab 
+} from "@/components/AISummaryPivotTable";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -434,6 +440,44 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     }
   };
 
+  const computePivotData = async (): Promise<CachedPivotData> => {
+    const pivotData: CachedPivotData = {
+      last_month: [],
+      mtd: [],
+      ytd: [],
+    };
+
+    const dateRanges: Record<DateTab, { start: Date; end: Date }> = {
+      last_month: getDateRange("last_month"),
+      mtd: getDateRange("mtd"),
+      ytd: getDateRange("ytd"),
+    };
+
+    for (const reportId of selectedReportIds) {
+      const report = reports.find(r => r.id === reportId);
+      if (!report) continue;
+
+      const sourceData = sourceDataCache[reportId];
+      if (!sourceData?.transformedRows) continue;
+
+      (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+        const metrics = aggregateMetrics(
+          sourceData.transformedRows,
+          selectedMetrics,
+          dateRanges[tab]
+        );
+
+        pivotData[tab].push({
+          reportId: report.id,
+          reportName: report.name,
+          metrics,
+        });
+      });
+    }
+
+    return pivotData;
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -442,6 +486,10 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         toast.error("You must be logged in to save a card");
         return;
       }
+
+      // Compute pivot data from cached source data
+      toast.info("Computing pivot data...");
+      const cachedPivotData = await computePivotData();
 
       // Generate a name based on selected reports
       const cardName = selectedReports.length > 0 
@@ -458,6 +506,8 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
             selected_metrics: selectedMetrics,
             since_date: sinceDate,
             ai_prompt: aiPrompt,
+            cached_pivot_data: cachedPivotData,
+            pivot_data_refreshed_at: new Date().toISOString(),
           })
           .eq("id", editingCard.id);
 
@@ -479,6 +529,8 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
           selected_metrics: selectedMetrics,
           since_date: sinceDate,
           ai_prompt: aiPrompt,
+          cached_pivot_data: cachedPivotData,
+          pivot_data_refreshed_at: new Date().toISOString(),
         });
 
         if (error) {

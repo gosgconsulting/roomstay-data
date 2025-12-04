@@ -22,10 +22,25 @@ import {
   isValid,
 } from "date-fns";
 
+interface ReportMetrics {
+  reportId: string;
+  reportName: string;
+  metrics: Record<string, number>;
+}
+
+export type DateTab = "last_month" | "mtd" | "ytd";
+
+export interface CachedPivotData {
+  last_month: ReportMetrics[];
+  mtd: ReportMetrics[];
+  ytd: ReportMetrics[];
+}
+
 interface AISummaryPivotTableProps {
   reportIds: string[];
   selectedMetrics: string[];
   accountId?: string;
+  cachedPivotData?: CachedPivotData | null;
 }
 
 interface DataSource {
@@ -45,14 +60,6 @@ interface Report {
   id: string;
   name: string;
 }
-
-interface ReportMetrics {
-  reportId: string;
-  reportName: string;
-  metrics: Record<string, number>;
-}
-
-type DateTab = "last_month" | "mtd" | "ytd";
 
 const formatNumber = (value: number): string => {
   if (value === 0) return "0";
@@ -79,91 +86,91 @@ const formatMetricValue = (metric: string, value: number): string => {
   return formatNumber(value);
 };
 
+// Export these utilities for use in other files
+export const getDateRange = (tab: DateTab): { start: Date; end: Date } => {
+  const now = new Date();
+  switch (tab) {
+    case "last_month":
+      const lastMonth = subMonths(now, 1);
+      return {
+        start: startOfMonth(lastMonth),
+        end: endOfMonth(lastMonth),
+      };
+    case "mtd":
+      return {
+        start: startOfMonth(now),
+        end: now,
+      };
+    case "ytd":
+      return {
+        start: startOfYear(now),
+        end: now,
+      };
+  }
+};
+
+export const parseDate = (value: any): Date | null => {
+  if (!value) return null;
+  if (value instanceof Date) return isValid(value) ? value : null;
+  const isoDate = parseISO(String(value));
+  if (isValid(isoDate)) return isoDate;
+  const dateStr = String(value).trim();
+  const dateObj = new Date(dateStr);
+  if (isValid(dateObj)) return dateObj;
+  return null;
+};
+
+export const aggregateMetrics = (
+  rows: any[],
+  metrics: string[],
+  dateRange: { start: Date; end: Date }
+): Record<string, number> => {
+  const result: Record<string, number> = {};
+  metrics.forEach((m) => (result[m] = 0));
+
+  const filteredRows = rows.filter((row) => {
+    const dateValue = row.Date || row.date || row.Day || row.day;
+    const rowDate = parseDate(dateValue);
+    if (!rowDate) return false;
+    return isWithinInterval(rowDate, { start: dateRange.start, end: dateRange.end });
+  });
+
+  filteredRows.forEach((row) => {
+    metrics.forEach((metric) => {
+      const value = row[metric];
+      if (value !== undefined && value !== null) {
+        const numValue = parseFloat(String(value).replace(/[^0-9.-]/g, ""));
+        if (!isNaN(numValue)) {
+          result[metric] += numValue;
+        }
+      }
+    });
+  });
+
+  return result;
+};
+
 export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   reportIds,
   selectedMetrics,
   accountId,
+  cachedPivotData,
 }) => {
   const [activeTab, setActiveTab] = useState<DateTab>("mtd");
-  const [isLoading, setIsLoading] = useState(true);
-  const [reports, setReports] = useState<Report[]>([]);
-  const [data, setData] = useState<Record<DateTab, ReportMetrics[]>>({
-    last_month: [],
-    mtd: [],
-    ytd: [],
-  });
-
-  const getDateRange = (tab: DateTab): { start: Date; end: Date } => {
-    const now = new Date();
-    switch (tab) {
-      case "last_month":
-        const lastMonth = subMonths(now, 1);
-        return {
-          start: startOfMonth(lastMonth),
-          end: endOfMonth(lastMonth),
-        };
-      case "mtd":
-        return {
-          start: startOfMonth(now),
-          end: now,
-        };
-      case "ytd":
-        return {
-          start: startOfYear(now),
-          end: now,
-        };
-    }
-  };
-
-  const parseDate = (value: any): Date | null => {
-    if (!value) return null;
-    
-    // If already a Date object
-    if (value instanceof Date) return isValid(value) ? value : null;
-    
-    // Try parsing as ISO string
-    const isoDate = parseISO(String(value));
-    if (isValid(isoDate)) return isoDate;
-    
-    // Try parsing various formats
-    const dateStr = String(value).trim();
-    const dateObj = new Date(dateStr);
-    if (isValid(dateObj)) return dateObj;
-    
-    return null;
-  };
-
-  const aggregateMetrics = (
-    rows: any[],
-    metrics: string[],
-    dateRange: { start: Date; end: Date }
-  ): Record<string, number> => {
-    const result: Record<string, number> = {};
-    metrics.forEach((m) => (result[m] = 0));
-
-    const filteredRows = rows.filter((row) => {
-      const dateValue = row.Date || row.date || row.Day || row.day;
-      const rowDate = parseDate(dateValue);
-      if (!rowDate) return false;
-      return isWithinInterval(rowDate, { start: dateRange.start, end: dateRange.end });
-    });
-
-    filteredRows.forEach((row) => {
-      metrics.forEach((metric) => {
-        const value = row[metric];
-        if (value !== undefined && value !== null) {
-          const numValue = parseFloat(String(value).replace(/[^0-9.-]/g, ""));
-          if (!isNaN(numValue)) {
-            result[metric] += numValue;
-          }
-        }
-      });
-    });
-
-    return result;
-  };
+  const [isLoading, setIsLoading] = useState(!cachedPivotData);
+  const [data, setData] = useState<Record<DateTab, ReportMetrics[]>>(
+    cachedPivotData || { last_month: [], mtd: [], ytd: [] }
+  );
 
   useEffect(() => {
+    // If we have cached data, use it immediately
+    if (cachedPivotData) {
+      setData(cachedPivotData);
+      setIsLoading(false);
+      return;
+    }
+
+    // Otherwise, fetch fresh data
     const loadData = async () => {
       if (reportIds.length === 0) {
         setIsLoading(false);
@@ -176,14 +183,12 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         const { user } = await getUser();
         if (!user) return;
 
-        // Fetch report names
         const { data: reportsData } = await supabase
           .from("reports")
           .select("id, name")
           .in("id", reportIds);
 
         const reportsList = reportsData || [];
-        setReports(reportsList);
 
         const dateRanges: Record<DateTab, { start: Date; end: Date }> = {
           last_month: getDateRange("last_month"),
@@ -198,10 +203,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         };
 
         for (const reportId of reportIds) {
-          const report = reportsList.find((r) => r.id === reportId);
+          const report = reportsList.find((r: Report) => r.id === reportId);
           if (!report) continue;
 
-          // Fetch data source
           const { data: dsData } = await supabase
             .from("data_sources")
             .select("*")
@@ -211,7 +215,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
           if (!dsData) continue;
 
-          // Fetch source data
           const sourceData = await fetchSourceData(
             dsData as DataSource,
             user.id,
@@ -220,7 +223,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
           if (!sourceData?.transformedRows) continue;
 
-          // Aggregate for each date tab
           (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
             const metrics = aggregateMetrics(
               sourceData.transformedRows,
@@ -245,7 +247,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     };
 
     loadData();
-  }, [reportIds, selectedMetrics, accountId]);
+  }, [reportIds, selectedMetrics, accountId, cachedPivotData]);
 
   const calculateTotals = (reportMetrics: ReportMetrics[]): Record<string, number> => {
     const totals: Record<string, number> = {};

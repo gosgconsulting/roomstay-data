@@ -32,7 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AISummaryPivotTable } from "@/components/AISummaryPivotTable";
+import { AISummaryPivotTable, type CachedPivotData } from "@/components/AISummaryPivotTable";
 
 interface AISummaryCard {
   id: string;
@@ -45,6 +45,8 @@ interface AISummaryCard {
   generated_summary: string | null;
   last_generated_at: string | null;
   created_at: string;
+  cached_pivot_data?: CachedPivotData | null;
+  pivot_data_refreshed_at?: string | null;
 }
 
 interface Report {
@@ -397,6 +399,7 @@ const AISummaryPage = () => {
                     reportIds={card.report_ids}
                     selectedMetrics={card.selected_metrics}
                     accountId={accountId}
+                    cachedPivotData={card.cached_pivot_data}
                   />
                 </CardContent>
                 
