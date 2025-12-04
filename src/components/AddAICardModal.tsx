@@ -105,6 +105,9 @@ const AVAILABLE_METRICS = [
   "Cost of sale",
 ];
 
+// Metrics that are formulas (calculated, not raw data)
+const FORMULA_METRIC_NAMES = ["CTR", "ROAS", "Conversion rate", "CPC", "Cost of sale", "COS"];
+
 const DEFAULT_AI_PROMPT = `You are an analytics expert.
 I will provide raw performance data broken down by channel (e.g., SEM, Social Ads, Metasearch).
 Using the dataset and the selected metrics I provide, generate a clear and executive-level performance summary following the structure below.
@@ -234,6 +237,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
   const [reportConfigs, setReportConfigs] = useState<Record<string, ReportDimensionConfig>>({});
   const [breakdownConfigs, setBreakdownConfigs] = useState<Record<string, ReportBreakdownConfig>>({});
   const [searchQuery, setSearchQuery] = useState("");
+  const [customMetrics, setCustomMetrics] = useState<string[]>([]);
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([
     "Impressions",
     "Clicks",
@@ -243,6 +247,17 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
   ]);
   const [sinceDate, setSinceDate] = useState<string>(getDefaultSinceDate());
   const [aiPrompt, setAiPrompt] = useState(DEFAULT_AI_PROMPT);
+  
+  // Combine standard and custom metrics
+  const allAvailableMetrics = useMemo(() => {
+    const combined = [...AVAILABLE_METRICS];
+    customMetrics.forEach(cm => {
+      if (!combined.includes(cm)) {
+        combined.push(cm);
+      }
+    });
+    return combined;
+  }, [customMetrics]);
 
   // Initialize from editingCard when editing
   useEffect(() => {
@@ -281,6 +296,29 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     if (open) {
       fetchReports();
     }
+  }, [accountId, open]);
+
+  // Fetch custom metrics (number-type dimensions) for the account
+  useEffect(() => {
+    const fetchCustomMetrics = async () => {
+      if (!accountId || !open) return;
+
+      // Fetch dimensions of type "number" that could be custom metrics
+      const { data: numberDims } = await supabase
+        .from("dimensions")
+        .select("name")
+        .eq("account_id", accountId)
+        .eq("type", "number");
+
+      if (numberDims) {
+        const customNames = numberDims
+          .map(d => d.name)
+          .filter(name => !AVAILABLE_METRICS.includes(name) && !FORMULA_METRIC_NAMES.includes(name));
+        setCustomMetrics(customNames);
+      }
+    };
+
+    fetchCustomMetrics();
   }, [accountId, open]);
 
   // Fetch all data sources and source data when entering filter-dimensions step
@@ -1036,24 +1074,32 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
                 <p className="text-sm text-muted-foreground mb-4">
                   Select the metrics to include in your AI summary.
                 </p>
-                {AVAILABLE_METRICS.map(metric => (
-                  <div
-                    key={metric}
-                    className={cn(
-                      "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
-                      selectedMetrics.includes(metric)
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:bg-muted/50"
-                    )}
-                    onClick={() => handleMetricToggle(metric)}
-                  >
-                    <Checkbox
-                      checked={selectedMetrics.includes(metric)}
-                      onCheckedChange={() => handleMetricToggle(metric)}
-                    />
-                    <span className="font-medium">{metric}</span>
-                  </div>
-                ))}
+                {allAvailableMetrics.map(metric => {
+                  const isCustom = !AVAILABLE_METRICS.includes(metric);
+                  return (
+                    <div
+                      key={metric}
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                        selectedMetrics.includes(metric)
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted/50"
+                      )}
+                      onClick={() => handleMetricToggle(metric)}
+                    >
+                      <Checkbox
+                        checked={selectedMetrics.includes(metric)}
+                        onCheckedChange={() => handleMetricToggle(metric)}
+                      />
+                      <span className="font-medium">{metric}</span>
+                      {isCustom && (
+                        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+                          Custom
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </ScrollArea>
           )}
