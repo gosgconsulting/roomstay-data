@@ -371,6 +371,12 @@ const AISummaryPage = () => {
 
           breakdownData[reportId] = { last_month: [], mtd: [], ytd: [] };
           
+          // Initialize comparison breakdown data for this report
+          if (!comparisonPreviousPeriod.breakdown_data) comparisonPreviousPeriod.breakdown_data = {};
+          if (!comparisonPreviousYear.breakdown_data) comparisonPreviousYear.breakdown_data = {};
+          comparisonPreviousPeriod.breakdown_data[reportId] = { last_month: [], mtd: [], ytd: [] };
+          comparisonPreviousYear.breakdown_data[reportId] = { last_month: [], mtd: [], ytd: [] };
+          
           (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
             // Process each named group
             uniqueValues.forEach((groupValue) => {
@@ -382,6 +388,7 @@ const AISummaryPage = () => {
                 return groupVal !== undefined && String(groupVal) === groupValue;
               });
               
+              // Main metrics
               const metrics = aggregateMetrics(
                 groupRows,
                 card.selected_metrics,
@@ -394,6 +401,38 @@ const AISummaryPage = () => {
                 groupValue,
                 metrics,
               });
+              
+              // Comparison - Previous Period
+              const prevPeriodRange = comparisonRanges.previous_period[tab];
+              if (prevPeriodRange) {
+                const prevPeriodMetrics = aggregateMetrics(
+                  groupRows,
+                  card.selected_metrics,
+                  prevPeriodRange,
+                  undefined,
+                  metricNameToIdMap
+                );
+                comparisonPreviousPeriod.breakdown_data![reportId][tab].push({
+                  groupValue,
+                  metrics: prevPeriodMetrics,
+                });
+              }
+              
+              // Comparison - Previous Year
+              const prevYearRange = comparisonRanges.previous_year[tab];
+              if (prevYearRange) {
+                const prevYearMetrics = aggregateMetrics(
+                  groupRows,
+                  card.selected_metrics,
+                  prevYearRange,
+                  undefined,
+                  metricNameToIdMap
+                );
+                comparisonPreviousYear.breakdown_data![reportId][tab].push({
+                  groupValue,
+                  metrics: prevYearMetrics,
+                });
+              }
             });
             
             // Add Uncategorized group for rows without breakdown value
@@ -416,6 +455,37 @@ const AISummaryPage = () => {
                 groupValue: 'Uncategorized',
                 metrics,
               });
+              
+              // Comparison for Uncategorized
+              const prevPeriodRange = comparisonRanges.previous_period[tab];
+              if (prevPeriodRange) {
+                const prevPeriodMetrics = aggregateMetrics(
+                  uncategorizedRows,
+                  card.selected_metrics,
+                  prevPeriodRange,
+                  undefined,
+                  metricNameToIdMap
+                );
+                comparisonPreviousPeriod.breakdown_data![reportId][tab].push({
+                  groupValue: 'Uncategorized',
+                  metrics: prevPeriodMetrics,
+                });
+              }
+              
+              const prevYearRange = comparisonRanges.previous_year[tab];
+              if (prevYearRange) {
+                const prevYearMetrics = aggregateMetrics(
+                  uncategorizedRows,
+                  card.selected_metrics,
+                  prevYearRange,
+                  undefined,
+                  metricNameToIdMap
+                );
+                comparisonPreviousYear.breakdown_data![reportId][tab].push({
+                  groupValue: 'Uncategorized',
+                  metrics: prevYearMetrics,
+                });
+              }
             }
           });
         }
