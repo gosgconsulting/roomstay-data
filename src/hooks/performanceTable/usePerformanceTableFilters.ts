@@ -574,109 +574,23 @@ export function usePerformanceTableFilters({
     // Compute formula values for each row based on aggregated numeric data
     const dimensionNamesSorted = dimensions.map(d => d.name).sort((a, b) => b.length - a.length);
 
-    const computeFormulasForRow = (row: TableRow) => {
-      dimensions.forEach(dim => {
-        // Handle new multiple formula-condition pairs structure
-        if (dim.formula_condition_pairs && dim.formula_condition_pairs.length > 0) {
-          try {
-            let formulaApplied = false;
+    // Helper to compute formula for a single data object
+    const computeFormulaForData = (dataObj: Record<string, any>, dim: Dimension): number | null => {
+      // Handle new multiple formula-condition pairs structure
+      if (dim.formula_condition_pairs && dim.formula_condition_pairs.length > 0) {
+        try {
+          for (const pair of dim.formula_condition_pairs) {
+            if (!pair.formula) continue;
             
-            // Iterate through formula-condition pairs in order
-            for (const pair of dim.formula_condition_pairs) {
-              if (!pair.formula) continue;
-              
-              // Check if all conditions for this pair are met
-              let conditionsMatch = true;
-              
-              if (pair.conditions && pair.conditions.length > 0) {
-                for (const condition of pair.conditions) {
-                  // Find the dimension being filtered
-                  const filterDim = dimensions.find(d => d.id === condition.dimension_id);
-                  if (!filterDim) continue;
-                  
-                  const rowValue = String(row.data?.[filterDim.name] || '').toLowerCase();
-                  const conditionValue = condition.value.toLowerCase();
-                  
-                  // Check condition based on operator
-                  let matches = false;
-                  switch (condition.operator) {
-                    case 'equals':
-                      matches = rowValue === conditionValue;
-                      break;
-                    case 'not_equals':
-                      matches = rowValue !== conditionValue;
-                      break;
-                    case 'contains':
-                      matches = rowValue.includes(conditionValue);
-                      break;
-                    case 'not_contains':
-                      matches = !rowValue.includes(conditionValue);
-                      break;
-                  }
-                  
-                  if (!matches) {
-                    conditionsMatch = false;
-                    break;
-                  }
-                }
-              }
-              
-              // If conditions match (or no conditions), apply this formula
-              if (conditionsMatch) {
-                // Prepare expression
-                let expression = pair.formula;
-
-                // Convert percentage notation (e.g., "15%" to "0.15")
-                expression = expression.replace(/(\d+(?:\.\d+)?)%/g, (match, num) => {
-                  return String(parseFloat(num) / 100);
-                });
-
-                // Replace dimension names with values
-                for (const dimName of dimensionNamesSorted) {
-                  if (expression.includes(dimName)) {
-                    const value = row.data?.[dimName] || 0;
-                    expression = expression.replace(
-                      new RegExp(`\\b${dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'),
-                      String(value)
-                    );
-                  }
-                }
-
-                // Evaluate the expression
-                const result = eval(expression);
-                if (!isNaN(result) && isFinite(result)) {
-                  row.data[dim.name] = result;
-                  formulaApplied = true;
-                  break; // Stop at first matching formula
-                }
-              }
-            }
-            
-            // If no formula was applied, set to 0
-            if (!formulaApplied) {
-              row.data[dim.name] = 0;
-            }
-          } catch (error) {
-            console.warn(`[PERFORMANCE-TABLE] Error calculating formula for dimension ${dim.name}:`, error);
-            row.data[dim.name] = 0;
-          }
-        }
-        // Handle backward compatibility with old single formula structure
-        else if (dim.formula) {
-          try {
-            // Check if dimension has conditions that need to be met
-            if (dim.conditions && dim.conditions.length > 0) {
-              let conditionsMatch = true;
-              
-              for (const condition of dim.conditions) {
-                // Find the dimension being filtered
+            let conditionsMatch = true;
+            if (pair.conditions && pair.conditions.length > 0) {
+              for (const condition of pair.conditions) {
                 const filterDim = dimensions.find(d => d.id === condition.dimension_id);
                 if (!filterDim) continue;
                 
-                const rowValue = String(row.data?.[filterDim.name] || '').toLowerCase();
+                const rowValue = String(dataObj?.[filterDim.name] || '').toLowerCase();
                 const conditionValue = condition.value.toLowerCase();
                 
-                // Check condition based on operator
                 let matches = false;
                 switch (condition.operator) {
                   case 'equals':
@@ -698,42 +612,113 @@ export function usePerformanceTableFilters({
                   break;
                 }
               }
+            }
+            
+            if (conditionsMatch) {
+              let expression = pair.formula;
+              expression = expression.replace(/(\d+(?:\.\d+)?)%/g, (match, num) => {
+                return String(parseFloat(num) / 100);
+              });
               
-              // If conditions don't match, set value to 0 and skip formula calculation
-              if (!conditionsMatch) {
-                row.data[dim.name] = 0;
-                return;
+              for (const dimName of dimensionNamesSorted) {
+                if (expression.includes(dimName)) {
+                  const value = dataObj?.[dimName] || 0;
+                  expression = expression.replace(
+                    new RegExp(`\\b${dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'),
+                    String(value)
+                  );
+                }
+              }
+              
+              const result = eval(expression);
+              if (!isNaN(result) && isFinite(result)) {
+                return result;
+              }
+            }
+          }
+          return 0;
+        } catch (error) {
+          return 0;
+        }
+      }
+      // Handle backward compatibility with old single formula structure
+      else if (dim.formula) {
+        try {
+          if (dim.conditions && dim.conditions.length > 0) {
+            let conditionsMatch = true;
+            for (const condition of dim.conditions) {
+              const filterDim = dimensions.find(d => d.id === condition.dimension_id);
+              if (!filterDim) continue;
+              
+              const rowValue = String(dataObj?.[filterDim.name] || '').toLowerCase();
+              const conditionValue = condition.value.toLowerCase();
+              
+              let matches = false;
+              switch (condition.operator) {
+                case 'equals':
+                  matches = rowValue === conditionValue;
+                  break;
+                case 'not_equals':
+                  matches = rowValue !== conditionValue;
+                  break;
+                case 'contains':
+                  matches = rowValue.includes(conditionValue);
+                  break;
+                case 'not_contains':
+                  matches = !rowValue.includes(conditionValue);
+                  break;
+              }
+              
+              if (!matches) {
+                conditionsMatch = false;
+                break;
               }
             }
             
-            // Prepare expression
-            let expression = dim.formula;
+            if (!conditionsMatch) {
+              return 0;
+            }
+          }
+          
+          let expression = dim.formula;
+          expression = expression.replace(/(\d+(?:\.\d+)?)%/g, (match, num) => {
+            return String(parseFloat(num) / 100);
+          });
+          
+          dimensionNamesSorted.forEach(dimName => {
+            const rawValue = dataObj ? dataObj[dimName] : 0;
+            const numValue = rawValue === undefined || rawValue === null
+              ? 0
+              : parseFloat(String(rawValue));
+            const safeValue = isNaN(numValue) ? 0 : numValue;
 
-            // Convert percentage notation (e.g., "15%" to "0.15")
-            expression = expression.replace(/(\d+(?:\.\d+)?)%/g, (match, num) => {
-              return String(parseFloat(num) / 100);
-            });
+            const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`\\b${escapedName}\\b`, 'g');
+            expression = expression.replace(regex, `(${safeValue})`);
+          });
 
-            // Replace dimension names with row values (fallback to 0)
-            dimensionNamesSorted.forEach(dimName => {
-              const rawValue = row.data ? row.data[dimName] : 0;
-              const numValue = rawValue === undefined || rawValue === null
-                ? 0
-                : parseFloat(String(rawValue));
-              const safeValue = isNaN(numValue) ? 0 : numValue;
+          const result = eval(expression);
+          return typeof result === 'number' && isFinite(result) ? result : 0;
+        } catch (error) {
+          return 0;
+        }
+      }
+      return null;
+    };
 
-              const escapedName = dimName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              const regex = new RegExp(`\\b${escapedName}\\b`, 'g');
-              expression = expression.replace(regex, `(${safeValue})`);
-            });
-
-            // Evaluate formula
-            // eslint-disable-next-line no-eval
-            const result = eval(expression);
-            row.data[dim.name] = typeof result === 'number' && isFinite(result) ? result : 0;
-          } catch (error) {
-            // On any error, default to 0 for display stability
-            row.data[dim.name] = 0;
+    const computeFormulasForRow = (row: TableRow) => {
+      dimensions.forEach(dim => {
+        // Compute formula for main data
+        const result = computeFormulaForData(row.data, dim);
+        if (result !== null) {
+          row.data[dim.name] = result;
+        }
+        
+        // Also compute formula for compareData if it exists
+        if (row.compareData) {
+          const compareResult = computeFormulaForData(row.compareData, dim);
+          if (compareResult !== null) {
+            row.compareData[dim.name] = compareResult;
           }
         }
       });
