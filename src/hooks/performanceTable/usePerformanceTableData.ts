@@ -113,12 +113,20 @@ export function usePerformanceTableData({
     const dateFromFormatted = shouldFilterByDate && filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined;
     const dateToFormatted = shouldFilterByDate && filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined;
 
+    // Comparison date range
+    const compareEnabled = filters.compareEnabled && filters.compareDateRange;
+    const compareDateFromFormatted = compareEnabled && filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined;
+    const compareDateToFormatted = compareEnabled && filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined;
+
     console.log('[PERF-TABLE] Loading data:', {
       reportId,
       datePreset: filters.datePreset,
       shouldFilterByDate,
       dateFromFormatted,
       dateToFormatted,
+      compareEnabled,
+      compareDateFromFormatted,
+      compareDateToFormatted,
       hasSourceData: !!sourceData,
       sourceDataRows: sourceData?.transformedRows?.length || 0
     });
@@ -176,54 +184,94 @@ export function usePerformanceTableData({
 
       console.log('[PERF-TABLE] Date dimension:', dateDimInUse ? { id: dateDimInUse.id, name: dateDimInUse.name } : 'not found');
 
-      // Apply date filter only if shouldFilterByDate is true
-      let filteredRows = allRows;
-      if (shouldFilterByDate && dateDimInUse && (dateFromFormatted || dateToFormatted)) {
-        const fromDate = dateFromFormatted ? new Date(dateFromFormatted) : null;
-        const toDate = dateToFormatted ? new Date(dateToFormatted) : null;
-        const adjustedToDate = toDate
-          ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1)
-          : null;
+      // Helper function to filter rows by date range
+      const filterRowsByDateRange = (rows: any[], fromDate: string | undefined, toDate: string | undefined) => {
+        if (!dateDimInUse || (!fromDate && !toDate)) return rows;
+        
+        const from = fromDate ? new Date(fromDate) : null;
+        const to = toDate ? new Date(toDate) : null;
+        const adjustedTo = to ? new Date(to.getFullYear(), to.getMonth(), to.getDate() + 1) : null;
 
-        filteredRows = filteredRows.filter((row: any) => {
+        return rows.filter((row: any) => {
           const dv = row.dimension_values || {};
           const val = dv[dateDimInUse!.id];
           if (!val) return true;
           const rowDate = new Date(String(val));
-          if (fromDate && rowDate < fromDate) return false;
-          if (adjustedToDate && rowDate >= adjustedToDate) return false;
+          if (from && rowDate < from) return false;
+          if (adjustedTo && rowDate >= adjustedTo) return false;
           return true;
         });
+      };
+
+      // Apply date filter for current period
+      let filteredRows = allRows;
+      if (shouldFilterByDate) {
+        filteredRows = filterRowsByDateRange(filteredRows, dateFromFormatted, dateToFormatted);
       }
 
-      // Apply dimension filters
+      // Get comparison period rows (before dimension filters)
+      let compareRows: any[] = [];
+      if (compareEnabled && dateDimInUse) {
+        compareRows = filterRowsByDateRange(allRows, compareDateFromFormatted, compareDateToFormatted);
+      }
+
+      // Apply dimension filters to both current and compare rows
       const normalizedFilters: Record<string, string[]> = {};
       for (const [k, v] of Object.entries(filters.dimensionFilters || {})) {
         if (Array.isArray(v)) normalizedFilters[k] = v.map((x) => String(x));
         else if (v !== undefined && v !== null) normalizedFilters[k] = [String(v)];
       }
 
-      if (Object.keys(normalizedFilters).length > 0) {
-        filteredRows = filteredRows.filter((row: any) => {
+      const applyDimensionFilters = (rows: any[]) => {
+        if (Object.keys(normalizedFilters).length === 0) return rows;
+        return rows.filter((row: any) => {
           const dv = row.dimension_values || {};
           for (const [dimId, values] of Object.entries(normalizedFilters)) {
             if (!values || values.length === 0) continue;
             const rowVal = dv[dimId];
             if (rowVal === undefined || rowVal === null) return false;
-
             const rowStr = String(rowVal).trim().toLowerCase();
             const filterValuesLower = (values as string[]).map(v => String(v).trim().toLowerCase());
-
             if (!filterValuesLower.some((v) => v === rowStr)) return false;
           }
           return true;
         });
+      };
+
+      filteredRows = applyDimensionFilters(filteredRows);
+      if (compareEnabled) {
+        compareRows = applyDimensionFilters(compareRows);
+      }
+
+      // Build comparison data map by grouping key (first dimension value)
+      const firstDimId = groupByDimensions[0];
+      const firstDimension = dimensions.find(d => d.id === firstDimId);
+      
+      const compareDataMap: Record<string, Record<string, number>> = {};
+      if (compareEnabled && compareRows.length > 0) {
+        compareRows.forEach((row: any) => {
+          const dv: Record<string, any> = row.dimension_values || {};
+          const groupKey = String(dv[firstDimId] || 'Unknown');
+          
+          if (!compareDataMap[groupKey]) {
+            compareDataMap[groupKey] = {};
+          }
+          
+          dimensions.forEach(dim => {
+            if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
+              const value = dv[dim.id];
+              if (value !== undefined && value !== null) {
+                const numValue = parseFloat(String(value));
+                if (!isNaN(numValue)) {
+                  compareDataMap[groupKey][dim.name] = (compareDataMap[groupKey][dim.name] || 0) + numValue;
+                }
+              }
+            }
+          });
+        });
       }
 
       // Transform to TableRow format
-      const firstDimId = groupByDimensions[0];
-      const firstDimension = dimensions.find(d => d.id === firstDimId);
-
       const transformedRows: TableRow[] = filteredRows.map((row: any, idx: number) => {
         const dv: Record<string, any> = row.dimension_values || {};
         const rowData: Record<string, any> = {};
@@ -252,19 +300,24 @@ export function usePerformanceTableData({
         });
 
         const originalDate = firstDimension?.type === 'date' ? dv[firstDimId] : undefined;
+        const groupKey = String(dv[firstDimId] || 'Unknown');
+
+        // Attach compare data if available
+        const compareData = compareEnabled ? compareDataMap[groupKey] : undefined;
 
         return {
           id: `row-${row.row_number ?? idx + 1}`,
           name: dv[firstDimId] || 'Unknown',
           level: 0,
           data: rowData,
+          compareData,
           originalDate,
         };
       });
 
       setTableData(transformedRows);
 
-      // Calculate totals
+      // Calculate totals for current period
       const calculatedTotalData: Record<string, any> = {};
       if (transformedRows.length > 0 && dimensions.length > 0) {
         transformedRows.forEach((row: TableRow) => {
@@ -282,8 +335,48 @@ export function usePerformanceTableData({
         });
       }
       setTotalData(calculatedTotalData);
-      setTotalCompareData({});
-      setTotalChangeData({});
+
+      // Calculate totals for comparison period
+      const calculatedTotalCompareData: Record<string, any> = {};
+      if (compareEnabled && compareRows.length > 0) {
+        compareRows.forEach((row: any) => {
+          const dv = row.dimension_values || {};
+          dimensions.forEach(dim => {
+            if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
+              const value = dv[dim.id];
+              if (value !== undefined && value !== null) {
+                const numValue = parseFloat(String(value));
+                if (!isNaN(numValue)) {
+                  const dimName = dim.name;
+                  calculatedTotalCompareData[dimName] = (calculatedTotalCompareData[dimName] || 0) + numValue;
+                }
+              }
+            }
+          });
+        });
+      }
+      setTotalCompareData(calculatedTotalCompareData);
+
+      // Calculate change percentages
+      const calculatedChangeData: Record<string, number> = {};
+      if (compareEnabled) {
+        const allDimNames = new Set<string>();
+        Object.keys(calculatedTotalData).forEach(k => allDimNames.add(k));
+        Object.keys(calculatedTotalCompareData).forEach(k => allDimNames.add(k));
+
+        allDimNames.forEach((dimName: string) => {
+          const current = calculatedTotalData[dimName] || 0;
+          const previous = calculatedTotalCompareData[dimName] || 0;
+          if (previous !== 0) {
+            calculatedChangeData[dimName] = ((current - previous) / previous) * 100;
+          } else if (current !== 0) {
+            calculatedChangeData[dimName] = current > 0 ? 100 : -100;
+          } else {
+            calculatedChangeData[dimName] = 0;
+          }
+        });
+      }
+      setTotalChangeData(calculatedChangeData);
 
     } catch (error) {
       console.error('[PERF-TABLE] Error in loadPerformanceData:', error);

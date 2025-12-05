@@ -183,22 +183,17 @@ export function KPIMetricsCards({
         }
       }
 
-      // Apply date filter only if not "all_time"
-      const shouldFilterByDate = stableFilters.datePreset !== 'all_time' && stableFilters.dateRange;
-      const dateFromFormatted = shouldFilterByDate && stableFilters.dateRange?.from 
-        ? format(stableFilters.dateRange.from, 'yyyy-MM-dd') : undefined;
-      const dateToFormatted = shouldFilterByDate && stableFilters.dateRange?.to 
-        ? format(stableFilters.dateRange.to, 'yyyy-MM-dd') : undefined;
-
-      let filteredRows = allRows;
-      if (shouldFilterByDate && dateDimInUse && (dateFromFormatted || dateToFormatted)) {
-        const fromDate = dateFromFormatted ? new Date(dateFromFormatted) : null;
-        const toDate = dateToFormatted ? new Date(dateToFormatted) : null;
+      // Helper function to filter rows by date range
+      const filterRowsByDateRange = (rows: any[], dateRange: { from: Date; to?: Date } | undefined) => {
+        if (!dateDimInUse || !dateRange?.from) return rows;
+        
+        const fromDate = new Date(format(dateRange.from, 'yyyy-MM-dd'));
+        const toDate = dateRange.to ? new Date(format(dateRange.to, 'yyyy-MM-dd')) : null;
         const adjustedToDate = toDate
           ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1)
           : null;
 
-        filteredRows = filteredRows.filter((row: any) => {
+        return rows.filter((row: any) => {
           const dv = row.dimension_values || {};
           const val = dv[dateDimInUse!.id];
           if (!val) return true;
@@ -207,17 +202,19 @@ export function KPIMetricsCards({
           if (adjustedToDate && rowDate >= adjustedToDate) return false;
           return true;
         });
-      }
+      };
 
       // Apply dimension filters
-      const normalizedFilters: Record<string, string[]> = {};
-      for (const [k, v] of Object.entries(stableFilters.dimensionFilters || {})) {
-        if (Array.isArray(v)) normalizedFilters[k] = v.map((x) => String(x));
-        else if (v !== undefined && v !== null) normalizedFilters[k] = [String(v)];
-      }
+      const applyDimensionFilters = (rows: any[]) => {
+        const normalizedFilters: Record<string, string[]> = {};
+        for (const [k, v] of Object.entries(stableFilters.dimensionFilters || {})) {
+          if (Array.isArray(v)) normalizedFilters[k] = v.map((x) => String(x));
+          else if (v !== undefined && v !== null) normalizedFilters[k] = [String(v)];
+        }
 
-      if (Object.keys(normalizedFilters).length > 0) {
-        filteredRows = filteredRows.filter((row: any) => {
+        if (Object.keys(normalizedFilters).length === 0) return rows;
+
+        return rows.filter((row: any) => {
           const dv = row.dimension_values || {};
           for (const [dimId, values] of Object.entries(normalizedFilters)) {
             if (!values || values.length === 0) continue;
@@ -229,49 +226,84 @@ export function KPIMetricsCards({
           }
           return true;
         });
+      };
+
+      // Apply date filter only if not "all_time"
+      const shouldFilterByDate = stableFilters.datePreset !== 'all_time' && stableFilters.dateRange;
+      let filteredRows = allRows;
+      if (shouldFilterByDate) {
+        filteredRows = filterRowsByDateRange(filteredRows, stableFilters.dateRange);
+      }
+      filteredRows = applyDimensionFilters(filteredRows);
+
+      // Get comparison rows if enabled
+      let compareRows: any[] = [];
+      const compareEnabled = stableFilters.compareEnabled && stableFilters.compareDateRange;
+      if (compareEnabled) {
+        compareRows = filterRowsByDateRange(allRows, stableFilters.compareDateRange);
+        compareRows = applyDimensionFilters(compareRows);
       }
 
-      console.log('[KPI-CARDS] After filtering:', filteredRows.length, 'rows');
+      console.log('[KPI-CARDS] After filtering:', filteredRows.length, 'rows', compareEnabled ? `(compare: ${compareRows.length} rows)` : '');
+
+      // Helper to calculate metrics from rows
+      const calculateMetricsFromRows = (rows: any[]): Record<string, number> => {
+        const metrics: Record<string, number> = {};
+        rows.forEach((row: any) => {
+          const dv = row.dimension_values || {};
+          
+          Object.entries(dv).forEach(([dimId, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+              const numValue = parseFloat(String(value));
+              if (!isNaN(numValue)) {
+                let metricName = dimId;
+                
+                if (dimensions.length > 0) {
+                  const dim = dimensions.find(d => d.id === dimId);
+                  if (dim) {
+                    metricName = dim.name;
+                  }
+                }
+                
+                metrics[metricName] = (metrics[metricName] || 0) + numValue;
+              }
+            }
+          });
+        });
+        return metrics;
+      };
 
       // Calculate current period metrics
-      const currentMetrics: Record<string, number> = {};
-      filteredRows.forEach((row: any) => {
-        const dv = row.dimension_values || {};
-        
-        Object.entries(dv).forEach(([dimId, value]) => {
-          if (value !== undefined && value !== null && value !== '') {
-            const numValue = parseFloat(String(value));
-            if (!isNaN(numValue)) {
-              let metricName = dimId;
-              
-              if (dimensions.length > 0) {
-                const dim = dimensions.find(d => d.id === dimId);
-                if (dim) {
-                  metricName = dim.name;
-                }
-              }
-              
-              currentMetrics[metricName] = (currentMetrics[metricName] || 0) + numValue;
-            }
-          }
-        });
-      });
+      const currentMetrics = calculateMetricsFromRows(filteredRows);
 
-      // Calculate derived metrics
-      if (currentMetrics['Clicks'] && currentMetrics['Impressions']) {
-        currentMetrics['CTR'] = (currentMetrics['Clicks'] / currentMetrics['Impressions']) * 100;
-      }
-      if (currentMetrics['Conversions'] && currentMetrics['Clicks']) {
-        currentMetrics['Conversion Rate'] = (currentMetrics['Conversions'] / currentMetrics['Clicks']) * 100;
-      }
-      if (currentMetrics['Cost'] && currentMetrics['Clicks']) {
-        currentMetrics['CPC'] = currentMetrics['Cost'] / currentMetrics['Clicks'];
-      }
-      if (currentMetrics['Revenue'] && currentMetrics['Cost']) {
-        currentMetrics['ROAS'] = currentMetrics['Revenue'] / currentMetrics['Cost'];
-      }
-      if (currentMetrics['Cost'] && currentMetrics['Revenue']) {
-        currentMetrics['Cost of sale'] = (currentMetrics['Cost'] / currentMetrics['Revenue']) * 100;
+      // Calculate comparison metrics
+      const compareMetrics = compareEnabled ? calculateMetricsFromRows(compareRows) : {};
+
+      // Calculate derived metrics for both periods
+      const addDerivedMetrics = (metrics: Record<string, number>) => {
+        if (metrics['Clicks'] && metrics['Impressions']) {
+          metrics['CTR'] = (metrics['Clicks'] / metrics['Impressions']) * 100;
+        }
+        if (metrics['Conversions'] && metrics['Clicks']) {
+          metrics['Conversion Rate'] = (metrics['Conversions'] / metrics['Clicks']) * 100;
+        }
+        if (metrics['Bookings'] && metrics['Clicks'] && !metrics['Conversion Rate']) {
+          metrics['Conversion Rate'] = (metrics['Bookings'] / metrics['Clicks']) * 100;
+        }
+        if (metrics['Cost'] && metrics['Clicks']) {
+          metrics['CPC'] = metrics['Cost'] / metrics['Clicks'];
+        }
+        if (metrics['Revenue'] && metrics['Cost']) {
+          metrics['ROAS'] = metrics['Revenue'] / metrics['Cost'];
+        }
+        if (metrics['Cost'] && metrics['Revenue']) {
+          metrics['Cost of sale'] = (metrics['Cost'] / metrics['Revenue']) * 100;
+        }
+      };
+
+      addDerivedMetrics(currentMetrics);
+      if (compareEnabled) {
+        addDerivedMetrics(compareMetrics);
       }
 
       console.log('[KPI-CARDS] Calculated metrics:', Object.keys(currentMetrics));
@@ -328,9 +360,26 @@ export function KPIMetricsCards({
         const value = currentMetrics[kpiName];
         if (value === undefined || value === null) return;
 
+        // Calculate change if comparison is enabled
+        let change: number | undefined;
+        let compareValue: string | number | undefined;
+        if (compareEnabled && compareMetrics[kpiName] !== undefined) {
+          const prevValue = compareMetrics[kpiName];
+          compareValue = formatDisplay(kpiName, prevValue);
+          if (prevValue !== 0) {
+            change = ((value - prevValue) / prevValue) * 100;
+          } else if (value !== 0) {
+            change = value > 0 ? 100 : -100;
+          } else {
+            change = 0;
+          }
+        }
+
         displayMetrics.push({
           label: kpiName,
           value: formatDisplay(kpiName, value),
+          change,
+          compareValue,
           icon: iconMap[kpiName] || Target,
           color: colorMap[kpiName] || colorMap["Default"]
         });
