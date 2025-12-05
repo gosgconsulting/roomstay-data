@@ -10,7 +10,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Button } from "@/components/ui/button";
-import { ArrowUp, ArrowDown, X } from "lucide-react";
+import { ArrowUp, ArrowDown, X, Minus } from "lucide-react";
 import { formatValue } from "@/lib/performanceTable/formatters";
 import { TableRow } from "./TableRow";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
@@ -23,6 +23,9 @@ interface TableBodyProps {
   visibleColumns: Set<string>;
   getOrderedDimensions: () => Dimension[];
   totals: Record<string, number | string>;
+  compareTotals?: Record<string, number | string>;
+  changeData?: Record<string, number>;
+  compareEnabled?: boolean;
   groupByDimensions: string[];
   breakdownByDimensions: string[];
   thenByDimensions: string[];
@@ -50,6 +53,9 @@ export function TableBody({
   visibleColumns,
   getOrderedDimensions,
   totals,
+  compareTotals,
+  changeData,
+  compareEnabled = false,
   groupByDimensions,
   breakdownByDimensions,
   thenByDimensions,
@@ -237,12 +243,27 @@ export function TableBody({
                   const value = totals[dimension.name];
                   const numValue = typeof value === 'number' ? value : parseFloat(String(value));
                   const isNegative = !isNaN(numValue) && numValue < 0;
+                  const change = changeData?.[dimension.name];
+                  const hasComparison = compareEnabled && change !== undefined;
                   
                   return (
                     <td key={dimension.id} className="py-3 px-4 text-right">
-                      <span className={cn(isNegative && "text-red-600")}>
-                        {formatValue(value, { ...dimension, formula: dimension.formula || null })}
-                      </span>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className={cn(isNegative && "text-red-600")}>
+                          {formatValue(value, { ...dimension, formula: dimension.formula || null })}
+                        </span>
+                        {hasComparison && (
+                          <span className={cn(
+                            "text-xs flex items-center gap-1",
+                            change > 0 ? "text-green-600" : change < 0 ? "text-red-600" : "text-muted-foreground"
+                          )}>
+                            {change > 0 && <ArrowUp className="h-3 w-3" />}
+                            {change < 0 && <ArrowDown className="h-3 w-3" />}
+                            {change === 0 && <Minus className="h-3 w-3" />}
+                            {Math.abs(change).toFixed(1)}%
+                          </span>
+                        )}
+                      </div>
                     </td>
                   );
                 })}

@@ -18,6 +18,49 @@ interface UsePerformanceTableFiltersOptions {
 }
 
 /**
+ * Calculate changeData for a row based on its data and compareData
+ */
+function calculateRowChangeData(data: Record<string, any>, compareData: Record<string, any> | undefined): Record<string, number> {
+  if (!compareData) return {};
+  
+  const changeData: Record<string, number> = {};
+  const allKeys = new Set([...Object.keys(data), ...Object.keys(compareData)]);
+  
+  allKeys.forEach(key => {
+    const current = parseFloat(String(data[key] || 0));
+    const previous = parseFloat(String(compareData[key] || 0));
+    
+    if (isNaN(current) || isNaN(previous)) return;
+    
+    if (previous !== 0) {
+      changeData[key] = ((current - previous) / previous) * 100;
+    } else if (current !== 0) {
+      changeData[key] = current > 0 ? 100 : -100;
+    } else {
+      changeData[key] = 0;
+    }
+  });
+  
+  return changeData;
+}
+
+/**
+ * Recursively calculate changeData for all rows in the hierarchy
+ */
+function addChangeDataToHierarchy(rows: TableRow[], compareEnabled: boolean): void {
+  if (!compareEnabled) return;
+  
+  rows.forEach(row => {
+    if (row.compareData) {
+      row.changeData = calculateRowChangeData(row.data, row.compareData);
+    }
+    if (row.children && row.children.length > 0) {
+      addChangeDataToHierarchy(row.children, compareEnabled);
+    }
+  });
+}
+
+/**
  * Hook for filtering table data and calculating filtered totals with vlookup support
  */
 export function usePerformanceTableFilters({
@@ -286,6 +329,7 @@ export function usePerformanceTableFilters({
           name: displayValue,
           level: 0,
           data: { ...row.data },
+          compareData: row.compareData ? { ...row.compareData } : undefined,
           children: [],
           // Store original date value for sorting
           originalDate: isFirstDimDate ? firstLevelValue : undefined
@@ -308,6 +352,22 @@ export function usePerformanceTableFilters({
             }
           }
         });
+        // Also aggregate compareData
+        if (row.compareData) {
+          if (!groupMap[firstLevelKey].compareData) {
+            groupMap[firstLevelKey].compareData = {};
+          }
+          Object.keys(row.compareData).forEach(key => {
+            const dim = dimensions.find(d => d.name === key);
+            if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+              const existingValue = parseFloat(String(groupMap[firstLevelKey].compareData![key] || '0'));
+              const newValue = parseFloat(String(row.compareData![key] || '0'));
+              if (!isNaN(newValue)) {
+                groupMap[firstLevelKey].compareData![key] = existingValue + newValue;
+              }
+            }
+          });
+        }
       }
       
       // Second level grouping (if available)
@@ -328,6 +388,7 @@ export function usePerformanceTableFilters({
               level: 1,
               parentId: firstLevelKey,
               data: { ...row.data },
+              compareData: row.compareData ? { ...row.compareData } : undefined,
               children: [],
               // Store original date value for sorting
               originalDate: isSecondDimDate ? secondLevelValue : undefined
@@ -351,6 +412,22 @@ export function usePerformanceTableFilters({
                 }
               }
             });
+            // Also aggregate compareData
+            if (row.compareData) {
+              if (!level1Map[secondLevelKey].compareData) {
+                level1Map[secondLevelKey].compareData = {};
+              }
+              Object.keys(row.compareData).forEach(key => {
+                const dim = dimensions.find(d => d.name === key);
+                if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+                  const existingValue = parseFloat(String(level1Map[secondLevelKey].compareData![key] || '0'));
+                  const newValue = parseFloat(String(row.compareData![key] || '0'));
+                  if (!isNaN(newValue)) {
+                    level1Map[secondLevelKey].compareData![key] = existingValue + newValue;
+                  }
+                }
+              });
+            }
           }
           
           // Third level grouping (if available)
@@ -371,6 +448,7 @@ export function usePerformanceTableFilters({
                   level: 2,
                   parentId: secondLevelKey,
                   data: { ...row.data },
+                  compareData: row.compareData ? { ...row.compareData } : undefined,
                   // Store original date value for sorting
                   originalDate: isThirdDimDate ? thirdLevelValue : undefined
                 };
@@ -393,6 +471,22 @@ export function usePerformanceTableFilters({
                     }
                   }
                 });
+                // Also aggregate compareData
+                if (row.compareData) {
+                  if (!level2Map[thirdLevelKey].compareData) {
+                    level2Map[thirdLevelKey].compareData = {};
+                  }
+                  Object.keys(row.compareData).forEach(key => {
+                    const dim = dimensions.find(d => d.name === key);
+                    if (dim && (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage')) {
+                      const existingValue = parseFloat(String(level2Map[thirdLevelKey].compareData![key] || '0'));
+                      const newValue = parseFloat(String(row.compareData![key] || '0'));
+                      if (!isNaN(newValue)) {
+                        level2Map[thirdLevelKey].compareData![key] = existingValue + newValue;
+                      }
+                    }
+                  });
+                }
               }
             }
           }
@@ -653,13 +747,16 @@ export function usePerformanceTableFilters({
     // Apply formula computation to the full hierarchy
     hierarchicalData.forEach(r => computeFormulasForRow(r));
 
+    // Calculate change data for each row (must be after formula computation)
+    addChangeDataToHierarchy(hierarchicalData, filters.compareEnabled || false);
+
     console.log('[PERF-FILTERS] Created hierarchical data with', hierarchicalData.length, 'top-level groups');
     if (vlookupDimensions.length > 0) {
       console.log('[PERF-FILTERS] Pivot functionality applied for vlookup dimensions');
     }
     
     return hierarchicalData;
-  }, [filteredData, groupByDimensions, dimensions, dateOrder, vlookupMappings, activeDateTab]);
+  }, [filteredData, groupByDimensions, dimensions, dateOrder, vlookupMappings, activeDateTab, filters.compareEnabled]);
 
   // Calculate totals from filtered data
   const totals = useMemo(() => {
