@@ -155,14 +155,16 @@ const FormatAIInsights: React.FC<{ text: string }> = ({ text }) => {
     const match = trimmed.match(/^(?:\d+\.\s*)?\*\*([^*]+)\*\*:?\s*(.+)$/);
     if (match) {
       const [, label, content] = match;
-      return { label: label.trim(), content: content.trim() };
+      // Strip any leading bullet characters from the label
+      return { label: label.trim().replace(/^[•·\-]\s*/, ''), content: content.trim() };
     }
     
     // Try to match "Label: content" pattern
     const colonMatch = trimmed.match(/^([^:]+):\s*(.+)$/);
     if (colonMatch && colonMatch[1].length < 40) {
       const [, label, content] = colonMatch;
-      return { label: label.trim().replace(/\*\*/g, ''), content: content.trim().replace(/\*\*/g, '') };
+      // Strip any leading bullet characters from the label
+      return { label: label.trim().replace(/\*\*/g, '').replace(/^[•·\-]\s*/, ''), content: content.trim().replace(/\*\*/g, '') };
     }
     
     // Fallback: just return the text cleaned up
@@ -843,7 +845,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
                     <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
                       <Sparkles className="h-3 w-3" />
-                      AI Insights
+                      Insights
                     </div>
                     <FormatAIInsights text={data.table_insights.summary[tab]} />
                   </div>
@@ -962,7 +964,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                           <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
                             <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
                               <Sparkles className="h-3 w-3" />
-                              AI Insights
+                              Insights
                             </div>
                             <FormatAIInsights text={data.table_insights.date_breakdown[tab]} />
                           </div>
@@ -1070,7 +1072,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                           <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
                             <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
                               <Sparkles className="h-3 w-3" />
-                              AI Insights
+                              Insights
                             </div>
                             <FormatAIInsights text={data.table_insights.breakdowns[breakdownKey]?.[tab] || data.table_insights.breakdowns[reportId]?.[tab]} />
                           </div>
