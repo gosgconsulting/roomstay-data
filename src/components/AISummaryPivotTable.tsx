@@ -123,8 +123,29 @@ interface Report {
 
 // Helper to format AI Insights text into styled bullet points
 const FormatAIInsights: React.FC<{ text: string }> = ({ text }) => {
-  // Parse the numbered format: "1. **Label**: text 2. **Label**: text"
-  const lines = text.split(/(?=\d+\.\s+\*\*)/);
+  // Try multiple splitting strategies
+  let lines: string[] = [];
+  
+  // Strategy 1: Split on " • " (inline bullet separator)
+  if (text.includes(' • ')) {
+    lines = text.split(' • ').map(s => s.trim()).filter(Boolean);
+  }
+  // Strategy 2: Split on numbered format "1. **Label**:" or "2. **Label**:"
+  else if (/\d+\.\s+\*\*/.test(text)) {
+    lines = text.split(/(?=\d+\.\s+\*\*)/).map(s => s.trim()).filter(Boolean);
+  }
+  // Strategy 3: Split on newlines
+  else if (text.includes('\n')) {
+    lines = text.split('\n').map(s => s.trim()).filter(Boolean);
+  }
+  // Strategy 4: Split on standalone bullet points "• "
+  else if (text.includes('• ')) {
+    lines = text.split('• ').map(s => s.trim()).filter(Boolean);
+  }
+  // Fallback: single item
+  else {
+    lines = [text.trim()];
+  }
   
   const items = lines.map(line => {
     const trimmed = line.trim();
@@ -135,6 +156,13 @@ const FormatAIInsights: React.FC<{ text: string }> = ({ text }) => {
     if (match) {
       const [, label, content] = match;
       return { label: label.trim(), content: content.trim() };
+    }
+    
+    // Try to match "Label: content" pattern
+    const colonMatch = trimmed.match(/^([^:]+):\s*(.+)$/);
+    if (colonMatch && colonMatch[1].length < 40) {
+      const [, label, content] = colonMatch;
+      return { label: label.trim().replace(/\*\*/g, ''), content: content.trim().replace(/\*\*/g, '') };
     }
     
     // Fallback: just return the text cleaned up
@@ -151,11 +179,11 @@ const FormatAIInsights: React.FC<{ text: string }> = ({ text }) => {
   }
 
   return (
-    <ul className="space-y-1.5">
+    <ul className="space-y-3">
       {items.map((item, idx) => (
         <li key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
-          <span className="text-primary mt-1.5 flex-shrink-0">•</span>
-          <span>
+          <span className="text-primary mt-0.5 flex-shrink-0">•</span>
+          <span className="leading-relaxed">
             {item?.label && <strong className="font-semibold text-foreground">{item.label}:</strong>}{' '}
             {item?.content}
           </span>
