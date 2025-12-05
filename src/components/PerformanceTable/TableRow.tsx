@@ -228,10 +228,10 @@ export function TableRow({
         )}
         onClick={handleRowClick}
       >
-        <td className="py-3 px-4" style={{ paddingLeft: `${(row as any).level * 2 + 1}rem` }}>
+        <td className="py-3 px-4 min-w-[200px] w-[280px]" style={{ paddingLeft: `${(row as any).level * 2 + 1}rem` }}>
           <div className="flex items-center gap-2">
             {hasChildren ? (
-              <div className="text-muted-foreground">
+              <div className="text-muted-foreground flex-shrink-0">
                 {isExpanded ? (
                   <ChevronDown className="h-4 w-4" />
                 ) : (
@@ -239,9 +239,9 @@ export function TableRow({
                 )}
               </div>
             ) : (
-              <div className="w-4" />
+              <div className="w-4 flex-shrink-0" />
             )}
-            <span className={cn("font-medium", (row as any).level > 0 && "font-normal")}>
+            <span className={cn("font-medium line-clamp-2", (row as any).level > 0 && "font-normal")}>
               {formatRowName(
                 (row as any).name,
                 (row as any).level,

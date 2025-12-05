@@ -127,18 +127,10 @@ export function TableBody({
           <thead className="border-b bg-muted/30">
             <tr>
               <th
-                className="py-3 px-4 text-left font-medium text-sm"
+                className="py-3 px-4 text-left font-medium text-sm min-w-[200px] w-[280px]"
                 onContextMenu={(e) => onContextMenu(e, "name")}
               >
-                <span
-                  className="block whitespace-normal break-words leading-tight max-w-[180px] sm:max-w-[220px] xl:max-w-[260px]"
-                  style={{
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden'
-                  }}
-                >
+                <span className="block whitespace-normal break-words leading-tight line-clamp-2">
                   {groupByDimensions[0] 
                     ? dimensions.find(d => d.id === groupByDimensions[0])?.name || "Name"
                     : "Name"}
@@ -173,15 +165,7 @@ export function TableBody({
                       onContextMenu={(e) => onContextMenu(e, dimension.name)}
                     >
                       <div className="flex items-center justify-end gap-1">
-                        <span
-                          className="block whitespace-normal break-words leading-tight text-right max-w-[140px] sm:max-w-[180px] xl:max-w-[220px]"
-                          style={{
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden'
-                          }}
-                        >
+                        <span className="block whitespace-normal break-words leading-tight text-right line-clamp-2">
                           {dimension.name}
                         </span>
                         {isDesc && <ArrowDown className="h-4 w-4" />}
@@ -230,7 +214,7 @@ export function TableBody({
             })}
             {/* Total row */}
             <tr className="border-t-2 border-primary/20 bg-muted/50 font-semibold">
-              <td className="py-3 px-4">Total</td>
+              <td className="py-3 px-4 min-w-[200px] w-[280px]">Total</td>
               {showBudgetColumn && (
                 <td className="py-3 px-4 text-right">
                   <span>{formatValue(totals['Budget'] ?? 0, budgetFormatDim)}</span>
