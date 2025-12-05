@@ -586,17 +586,17 @@ export const PerformanceTable = ({
           />
         </CardHeader>
         <CardContent className="pt-6">
-          {groupByDimensions.length === 0 ? (
+          {isLoadingDimensions || !isViewInitialized ? (
+            <TableSkeleton />
+          ) : groupByDimensions.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {isLoadingDimensions ? (
-                "Loading dimensions..."
-              ) : hasDataSources ? (
+              {hasDataSources ? (
                 isEditMode ? "Right-click on 'Group by' to select dimensions" : "No dimensions selected"
               ) : (
                 "No data sources found. Please add a data source to this report."
               )}
             </div>
-          ) : isLoadingData || isLoadingDimensions ? (
+          ) : isLoadingData ? (
             <TableSkeleton />
           ) : (
             <TableBody
