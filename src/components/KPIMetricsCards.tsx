@@ -247,6 +247,9 @@ export function KPIMetricsCards({
       console.log('[KPI-CARDS] After filtering:', filteredRows.length, 'rows', compareEnabled ? `(compare: ${compareRows.length} rows)` : '');
 
       // Helper to calculate metrics from rows
+      // Formula metrics should be calculated, not summed from source data
+      const FORMULA_METRICS = ['CTR', 'ROAS', 'Conversion rate', 'Conversion Rate', 'CPC', 'Cost of sale', 'COS', 'CPM'];
+      
       const calculateMetricsFromRows = (rows: any[]): Record<string, number> => {
         const metrics: Record<string, number> = {};
         rows.forEach((row: any) => {
@@ -263,6 +266,11 @@ export function KPIMetricsCards({
                   if (dim) {
                     metricName = dim.name;
                   }
+                }
+                
+                // Skip formula metrics - they should be calculated, not summed
+                if (FORMULA_METRICS.includes(metricName)) {
+                  return;
                 }
                 
                 metrics[metricName] = (metrics[metricName] || 0) + numValue;
