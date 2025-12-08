@@ -18,7 +18,7 @@ import { CreateShareLinkModal } from "@/components/CreateShareLinkModal";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
-import { format, subMonths, startOfYear } from "date-fns";
+import { format, subMonths, subYears, startOfYear } from "date-fns";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -305,15 +305,58 @@ const AISummaryPage = () => {
         dateRanges[tab] = getDateRange(tab);
       });
       
-      // Comparison date ranges for all tabs
-      const comparisonRanges: Record<string, Record<string, { start: Date; end: Date } | null>> = {
-        previous_period: {},
-        previous_year: {},
+      // Helper to get date from row (handles both flat and nested dimension_values)
+      const getRowDateHelper = (row: any): Date | null => {
+        const rowData = row.dimension_values || row;
+        let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
+        if (!dateValue) {
+          for (const [key, val] of Object.entries(rowData)) {
+            if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+              dateValue = val as string;
+              break;
+            }
+          }
+        }
+        return parseDate(dateValue);
       };
-      allDateTabs.forEach(tab => {
-        comparisonRanges.previous_period[tab] = getComparisonDateRange(tab, "previous_period");
-        comparisonRanges.previous_year[tab] = getComparisonDateRange(tab, "previous_year");
-      });
+      
+      // Helper to calculate dynamic comparison range based on actual data dates
+      const getDynamicComparisonRange = (
+        rows: any[],
+        periodRange: { start: Date; end: Date },
+        comparisonType: "previous_period" | "previous_year"
+      ): { start: Date; end: Date } | null => {
+        // Find actual data dates within the period
+        const datesInPeriod = rows
+          .map((row: any) => getRowDateHelper(row))
+          .filter((d: Date | null): d is Date => d !== null && d >= periodRange.start && d <= periodRange.end)
+          .sort((a: Date, b: Date) => a.getTime() - b.getTime());
+        
+        if (datesInPeriod.length === 0) {
+          // Fallback to theoretical range
+          return getComparisonDateRange(
+            periodRange.start.toISOString().substring(0, 7) === format(new Date(), "yyyy-MM") ? "mtd" : periodRange.start.toISOString().substring(0, 7),
+            comparisonType
+          );
+        }
+        
+        const actualStart = datesInPeriod[0];
+        const actualEnd = datesInPeriod[datesInPeriod.length - 1];
+        
+        if (comparisonType === "previous_period") {
+          // Same-day matching for previous period (month before)
+          return {
+            start: subMonths(actualStart, 1),
+            end: subMonths(actualEnd, 1),
+          };
+        } else {
+          // Same-day matching for previous year
+          return {
+            start: subYears(actualStart, 1),
+            end: subYears(actualEnd, 1),
+          };
+        }
+      };
 
       // Extract filter configs from report_configs
       const { breakdown_configs, ...filterConfigs } = card.report_configs as any;
@@ -450,8 +493,12 @@ const AISummaryPage = () => {
             pivotData.monthly_data![tab].push(reportEntry);
           }
           
-          // Compute comparison data - Previous Period
-          const prevPeriodRange = comparisonRanges.previous_period[tab];
+          // Compute comparison data - Previous Period (using dynamic same-day matching)
+          const prevPeriodRange = getDynamicComparisonRange(
+            sourceData.transformedRows,
+            dateRanges[tab],
+            "previous_period"
+          );
           if (prevPeriodRange) {
             const prevPeriodMetrics = aggregateMetrics(
               sourceData.transformedRows,
@@ -474,8 +521,12 @@ const AISummaryPage = () => {
             }
           }
           
-          // Compute comparison data - Previous Year
-          const prevYearRange = comparisonRanges.previous_year[tab];
+          // Compute comparison data - Previous Year (using dynamic same-day matching)
+          const prevYearRange = getDynamicComparisonRange(
+            sourceData.transformedRows,
+            dateRanges[tab],
+            "previous_year"
+          );
           if (prevYearRange) {
             const prevYearMetrics = aggregateMetrics(
               sourceData.transformedRows,
@@ -600,13 +651,17 @@ const AISummaryPage = () => {
                 metrics,
               });
               
-              // Comparison - Previous Period
-              const prevPeriodRange = comparisonRanges.previous_period[tab];
-              if (prevPeriodRange) {
+              // Comparison - Previous Period (using dynamic same-day matching)
+              const breakdownPrevPeriodRange = getDynamicComparisonRange(
+                groupRows,
+                dateRanges[tab],
+                "previous_period"
+              );
+              if (breakdownPrevPeriodRange) {
                 const prevPeriodMetrics = aggregateMetrics(
                   groupRows,
                   card.selected_metrics,
-                  prevPeriodRange,
+                  breakdownPrevPeriodRange,
                   undefined,
                   metricNameToIdMap
                 );
@@ -616,13 +671,17 @@ const AISummaryPage = () => {
                 });
               }
               
-              // Comparison - Previous Year
-              const prevYearRange = comparisonRanges.previous_year[tab];
-              if (prevYearRange) {
+              // Comparison - Previous Year (using dynamic same-day matching)
+              const breakdownPrevYearRange = getDynamicComparisonRange(
+                groupRows,
+                dateRanges[tab],
+                "previous_year"
+              );
+              if (breakdownPrevYearRange) {
                 const prevYearMetrics = aggregateMetrics(
                   groupRows,
                   card.selected_metrics,
-                  prevYearRange,
+                  breakdownPrevYearRange,
                   undefined,
                   metricNameToIdMap
                 );
@@ -654,13 +713,17 @@ const AISummaryPage = () => {
                 metrics,
               });
               
-              // Comparison for Uncategorized
-              const prevPeriodRange = comparisonRanges.previous_period[tab];
-              if (prevPeriodRange) {
+              // Comparison for Uncategorized - Previous Period
+              const uncatPrevPeriodRange = getDynamicComparisonRange(
+                uncategorizedRows,
+                dateRanges[tab],
+                "previous_period"
+              );
+              if (uncatPrevPeriodRange) {
                 const prevPeriodMetrics = aggregateMetrics(
                   uncategorizedRows,
                   card.selected_metrics,
-                  prevPeriodRange,
+                  uncatPrevPeriodRange,
                   undefined,
                   metricNameToIdMap
                 );
@@ -670,12 +733,17 @@ const AISummaryPage = () => {
                 });
               }
               
-              const prevYearRange = comparisonRanges.previous_year[tab];
-              if (prevYearRange) {
+              // Comparison for Uncategorized - Previous Year
+              const uncatPrevYearRange = getDynamicComparisonRange(
+                uncategorizedRows,
+                dateRanges[tab],
+                "previous_year"
+              );
+              if (uncatPrevYearRange) {
                 const prevYearMetrics = aggregateMetrics(
                   uncategorizedRows,
                   card.selected_metrics,
-                  prevYearRange,
+                  uncatPrevYearRange,
                   undefined,
                   metricNameToIdMap
                 );
