@@ -841,8 +841,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   };
   
   // Calculate percentage change between current and comparison values
+  // Returns null when comparison is 0 (no comparison data available)
   const calculatePercentChange = (current: number, comparison: number): number | null => {
-    if (comparison === 0) return current > 0 ? 100 : null;
+    if (comparison === 0) return null; // No comparison data - show "-" instead of misleading percentage
     return ((current - comparison) / Math.abs(comparison)) * 100;
   };
   
@@ -971,10 +972,12 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     return (
       <div className="flex flex-col items-end">
         <span>{formattedValue}</span>
-        {percentChange !== null && (
+        {percentChange !== null ? (
           <span className={`text-xs ${isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : 'text-muted-foreground'}`}>
             {percentChange > 0 ? '+' : ''}{percentChange.toFixed(1)}%
           </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">-</span>
         )}
       </div>
     );
