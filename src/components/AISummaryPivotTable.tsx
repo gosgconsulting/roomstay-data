@@ -76,6 +76,8 @@ export interface CachedPivotData {
   last_month?: ReportMetrics[];
   mtd: ReportMetrics[];
   ytd: ReportMetrics[];
+  // Monthly data stored by key like "2025-01", "2025-02", etc.
+  monthly_data?: Record<string, ReportMetrics[]>;
   breakdown_data?: Record<string, Record<string, BreakdownRow[]>>;
   breakdown_dimension_names?: Record<string, string>;
   date_breakdown_data?: Record<string, Record<string, DateBreakdownRow[]>>;
@@ -86,12 +88,14 @@ export interface CachedPivotData {
     last_month?: ReportMetrics[];
     mtd?: ReportMetrics[];
     ytd?: ReportMetrics[];
+    monthly_data?: Record<string, ReportMetrics[]>;
     breakdown_data?: Record<string, Record<string, BreakdownRow[]>>;
   };
   comparison_previous_year?: {
     last_month?: ReportMetrics[];
     mtd?: ReportMetrics[];
     ytd?: ReportMetrics[];
+    monthly_data?: Record<string, ReportMetrics[]>;
     breakdown_data?: Record<string, Record<string, BreakdownRow[]>>;
   };
 }
@@ -684,6 +688,11 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       return data.ytd;
     }
     
+    // Check for cached monthly data (e.g., "2025-01", "2025-02", etc.)
+    if (tab.match(/^\d{4}-\d{2}$/) && data.monthly_data?.[tab]?.length > 0) {
+      return data.monthly_data[tab];
+    }
+    
     // For specific month tabs or fallback, compute dynamically from raw data
     if (!reportsLoaded || Object.keys(rawSourceData).length === 0) {
       return [];
@@ -868,22 +877,29 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   const getComparisonMetrics = (reportId: string, tab: DateTab): Record<string, number> | null => {
     if (comparisonType === "none") return null;
     
-    // First try cached comparison data for mtd/ytd only
-    if (tab === 'mtd' || tab === 'ytd') {
-      const cachedComparisonData = comparisonType === "previous_period" 
-        ? data.comparison_previous_period 
-        : data.comparison_previous_year;
+    const cachedComparisonData = comparisonType === "previous_period" 
+      ? data.comparison_previous_period 
+      : data.comparison_previous_year;
+    
+    if (cachedComparisonData) {
+      let tabData: ReportMetrics[] | undefined;
       
-      if (cachedComparisonData) {
-        const tabData = tab === 'mtd' ? cachedComparisonData.mtd : cachedComparisonData.ytd;
-        if (tabData && Array.isArray(tabData)) {
-          const reportData = tabData.find((r: ReportMetrics) => r.reportId === reportId);
-          if (reportData?.metrics) return reportData.metrics;
-        }
+      if (tab === 'mtd') {
+        tabData = cachedComparisonData.mtd;
+      } else if (tab === 'ytd') {
+        tabData = cachedComparisonData.ytd;
+      } else if (tab.match(/^\d{4}-\d{2}$/) && cachedComparisonData.monthly_data) {
+        // Check for cached monthly comparison data
+        tabData = cachedComparisonData.monthly_data[tab];
+      }
+      
+      if (tabData && Array.isArray(tabData)) {
+        const reportData = tabData.find((r: ReportMetrics) => r.reportId === reportId);
+        if (reportData?.metrics) return reportData.metrics;
       }
     }
     
-    // Compute dynamically for all tabs
+    // Compute dynamically as fallback
     const dynamicComparisonData = computeComparisonDataForTab(tab, comparisonType);
     const reportData = dynamicComparisonData.find(r => r.reportId === reportId);
     return reportData?.metrics || null;
