@@ -35,6 +35,9 @@ interface AISummary {
 // DateTab can be "mtd", "ytd", or a month key like "2025-11"
 export type DateTab = "mtd" | "ytd" | string;
 
+// Report tabs for AI Summary pivot table (Overview + individual reports)
+export type ReportTab = "overview" | string;
+
 interface ReportsSidebarProps {
   reports: Report[];
   accountId?: string;
@@ -53,6 +56,10 @@ interface ReportsSidebarProps {
   selectedDateTab?: DateTab;
   onDateTabChange?: (tab: DateTab) => void;
   showDateTabs?: boolean;
+  // Report tabs for AI Summary pivot table
+  aiSummaryReportTabs?: { id: string; name: string }[];
+  selectedReportTab?: ReportTab;
+  onReportTabChange?: (tab: ReportTab) => void;
 }
 
 /**
@@ -76,6 +83,9 @@ export function ReportsSidebar({
   selectedDateTab,
   onDateTabChange,
   showDateTabs = false,
+  aiSummaryReportTabs = [],
+  selectedReportTab = "overview",
+  onReportTabChange,
 }: ReportsSidebarProps) {
   const navigate = useNavigate();
 
@@ -221,6 +231,35 @@ export function ReportsSidebar({
             </Select>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Report Tabs - Only shown when showDateTabs is true and there are report tabs */}
+        {showDateTabs && aiSummaryReportTabs.length > 0 && (
+          <div className="mt-3 space-y-1">
+            <Button
+              variant={selectedReportTab === "overview" ? "secondary" : "ghost"}
+              className={cn(
+                "w-full justify-start text-left h-9 px-3",
+                selectedReportTab === "overview" && "bg-accent text-accent-foreground"
+              )}
+              onClick={() => onReportTabChange?.("overview")}
+            >
+              Overview
+            </Button>
+            {aiSummaryReportTabs.map((report) => (
+              <Button
+                key={report.id}
+                variant={selectedReportTab === report.id ? "secondary" : "ghost"}
+                className={cn(
+                  "w-full justify-start text-left h-9 px-3",
+                  selectedReportTab === report.id && "bg-accent text-accent-foreground"
+                )}
+                onClick={() => onReportTabChange?.(report.id)}
+              >
+                {report.name}
+              </Button>
+            ))}
+          </div>
+        )}
 
         {/* Date Dropdown - Only shown when showDateTabs is true */}
         {showDateTabs && (
