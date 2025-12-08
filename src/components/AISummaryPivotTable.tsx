@@ -106,6 +106,7 @@ interface AISummaryPivotTableProps {
   onTabChange?: (tab: DateTab) => void;
   selectedReportTab?: ReportTab;
   onReportTabChange?: (tab: ReportTab) => void;
+  dateOptions?: { value: string; label: string }[];
 }
 
 interface DataSource {
@@ -541,6 +542,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   onTabChange,
   selectedReportTab,
   onReportTabChange,
+  dateOptions = [],
 }) => {
   const [internalTab, setInternalTab] = useState<DateTab>("mtd");
   const activeTab = selectedTab || internalTab;
@@ -950,7 +952,24 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   return (
     <div className="w-full space-y-6">
 
-      <div className="flex items-center justify-end mb-4">
+      <div className="flex items-center justify-end gap-3 mb-4">
+        {/* Date Filter */}
+        {dateOptions.length > 0 && (
+          <Select value={activeTab} onValueChange={(v) => handleTabChange(v as DateTab)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Select date" />
+            </SelectTrigger>
+            <SelectContent className="bg-popover border-border z-50">
+              {dateOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        
+        {/* Comparison Filter */}
         <Select value={comparisonType} onValueChange={(v) => setComparisonType(v as ComparisonType)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Comparison" />
