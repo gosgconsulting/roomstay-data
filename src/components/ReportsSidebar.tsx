@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, BarChart3, Sparkles } from "lucide-react";
+import { Plus, BarChart3, Sparkles, Calendar } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -31,6 +31,8 @@ interface AISummary {
   name: string;
 }
 
+export type DateTab = "last_month" | "mtd" | "ytd";
+
 interface ReportsSidebarProps {
   reports: Report[];
   accountId?: string;
@@ -45,6 +47,10 @@ interface ReportsSidebarProps {
   onDeleteAISummary?: (summaryId: string) => void;
   aiSummaries?: AISummary[];
   className?: string;
+  // Date tab props for AI Summary
+  selectedDateTab?: DateTab;
+  onDateTabChange?: (tab: DateTab) => void;
+  showDateTabs?: boolean;
 }
 
 /**
@@ -65,6 +71,9 @@ export function ReportsSidebar({
   onDeleteAISummary,
   aiSummaries = [],
   className,
+  selectedDateTab = "mtd",
+  onDateTabChange,
+  showDateTabs = false,
 }: ReportsSidebarProps) {
   const navigate = useNavigate();
 
@@ -117,6 +126,12 @@ export function ReportsSidebar({
       onAddAISummary();
     }
   };
+
+  const dateTabOptions: { value: DateTab; label: string }[] = [
+    { value: "last_month", label: "Last Month" },
+    { value: "mtd", label: "MTD" },
+    { value: "ytd", label: "YTD" },
+  ];
 
   return (
     <Sidebar collapsible="icon" className={cn("w-64 border-r bg-sidebar", className)}>
@@ -182,6 +197,33 @@ export function ReportsSidebar({
             </Select>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Date Tab Section - Only shown when showDateTabs is true */}
+        {showDateTabs && (
+          <SidebarGroup className="mt-6">
+            <SidebarGroupLabel className="text-base font-medium text-sidebar-foreground mb-3 px-0 flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Date Range
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <div className="flex flex-col gap-1">
+                {dateTabOptions.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={selectedDateTab === option.value ? "secondary" : "ghost"}
+                    className={cn(
+                      "w-full justify-start",
+                      selectedDateTab === option.value && "bg-primary/10 text-primary"
+                    )}
+                    onClick={() => onDateTabChange?.(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
     </Sidebar>
   );
