@@ -792,12 +792,17 @@ const AISummaryPage = () => {
     setGenerateModalCard(card);
   };
 
-  const handleGenerateSummary = async (comparisonType: ComparisonOption) => {
+  const handleGenerateSummary = async (comparisonType: ComparisonOption, selectedPeriods: string[]) => {
     const card = generateModalCard;
     if (!card) return;
     
     setGenerateModalCard(null); // Close modal
     setGeneratingCardId(card.id);
+    
+    // Update selected date periods for display
+    if (selectedPeriods.length > 0) {
+      setSelectedDatePeriods(selectedPeriods);
+    }
     
     try {
       const { user } = await getUser();
@@ -825,7 +830,8 @@ const AISummaryPage = () => {
           selectedMetrics: card.selected_metrics,
           reportConfigs: card.report_configs,
           aiPrompt: card.ai_prompt,
-          comparisonType: comparisonType
+          comparisonType: comparisonType,
+          selectedPeriods: selectedPeriods
         })
       });
 
