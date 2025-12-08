@@ -936,6 +936,80 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     return results;
   };
   
+  // Get actual date ranges for display label
+  const getDateRangeLabel = (tab: DateTab, compType: ComparisonType): { 
+    currentLabel: string; 
+    comparisonLabel: string | null;
+  } => {
+    // Get the base date range for the tab
+    const currentRange = getDateRange(tab);
+    
+    // Find the actual data range across all reports
+    let actualStart: Date | null = null;
+    let actualEnd: Date | null = null;
+    
+    if (reportsLoaded && Object.keys(rawSourceData).length > 0) {
+      for (const reportId of reportIds) {
+        const reportData = rawSourceData[reportId];
+        if (!reportData) continue;
+        
+        const rowsInPeriod = reportData.rows.filter((row: any) => {
+          const rowDate = parseDate(row.Date || row.date);
+          if (!rowDate) return false;
+          return rowDate >= currentRange.start && rowDate <= currentRange.end;
+        });
+        
+        const dates = rowsInPeriod
+          .map((row: any) => parseDate(row.Date || row.date))
+          .filter((d: Date | null): d is Date => d !== null)
+          .sort((a: Date, b: Date) => a.getTime() - b.getTime());
+        
+        if (dates.length > 0) {
+          if (!actualStart || dates[0] < actualStart) actualStart = dates[0];
+          if (!actualEnd || dates[dates.length - 1] > actualEnd) actualEnd = dates[dates.length - 1];
+        }
+      }
+    }
+    
+    // Fallback to theoretical range if no actual data
+    const effectiveStart = actualStart || currentRange.start;
+    const effectiveEnd = actualEnd || currentRange.end;
+    
+    // Get period label from dateOptions
+    const periodLabel = dateOptions.find(o => o.value === tab)?.label || tab.toUpperCase();
+    const currentDateStr = `${format(effectiveStart, 'MMM d')} - ${format(effectiveEnd, 'MMM d, yyyy')}`;
+    const currentLabel = `${periodLabel} (${currentDateStr})`;
+    
+    if (compType === "none") {
+      return { currentLabel, comparisonLabel: null };
+    }
+    
+    // Calculate comparison date range
+    let compStart: Date;
+    let compEnd: Date;
+    
+    if (compType === "previous_year") {
+      compStart = subYears(effectiveStart, 1);
+      compEnd = subYears(effectiveEnd, 1);
+    } else {
+      // previous_period: use same day range in previous month
+      const startDayOfMonth = effectiveStart.getDate();
+      const endDayOfMonth = effectiveEnd.getDate();
+      const prevMonthStart = subMonths(effectiveStart, 1);
+      const prevMonthLastDay = endOfMonth(prevMonthStart).getDate();
+      
+      compStart = new Date(prevMonthStart.getFullYear(), prevMonthStart.getMonth(), Math.min(startDayOfMonth, prevMonthLastDay));
+      compEnd = new Date(subMonths(effectiveEnd, 1).getFullYear(), subMonths(effectiveEnd, 1).getMonth(), Math.min(endDayOfMonth, prevMonthLastDay));
+    }
+    
+    const compDateStr = `${format(compStart, 'MMM d')} - ${format(compEnd, 'MMM d, yyyy')}`;
+    const compLabel = compType === "previous_year" 
+      ? `Previous Year (${compDateStr})`
+      : `Previous Period (${compDateStr})`;
+    
+    return { currentLabel, comparisonLabel: compLabel };
+  };
+
   // Get comparison data for a report
   const getComparisonMetrics = (reportId: string, tab: DateTab): Record<string, number> | null => {
     if (comparisonType === "none") return null;
@@ -1097,8 +1171,20 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           // Get period label from dateOptions
           const periodLabel = dateOptions.find(o => o.value === period)?.label || period;
           
+          // Get date range labels for display
+          const dateRangeLabels = getDateRangeLabel(period as DateTab, comparisonType);
+          
           return (
             <div key={period} className="border rounded-lg overflow-hidden">
+              {/* Date Range Label */}
+              {comparisonType !== "none" && dateRangeLabels.comparisonLabel && (
+                <div className="px-4 py-2 bg-muted/30 border-b text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">Period:</span>{" "}
+                  {dateRangeLabels.currentLabel}{" "}
+                  <span className="text-muted-foreground">vs</span>{" "}
+                  {dateRangeLabels.comparisonLabel}
+                </div>
+              )}
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
