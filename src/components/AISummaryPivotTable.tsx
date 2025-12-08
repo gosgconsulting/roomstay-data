@@ -1358,15 +1358,17 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           
           return (
             <div key={period} className="border rounded-lg overflow-hidden">
-              {/* Date Range Label */}
-              {comparisonType !== "none" && dateRangeLabels.comparisonLabel && (
-                <div className="px-4 py-2 bg-muted/30 border-b text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">Period:</span>{" "}
-                  {dateRangeLabels.currentLabel}{" "}
-                  <span className="text-muted-foreground">vs</span>{" "}
-                  {dateRangeLabels.comparisonLabel}
-                </div>
-              )}
+              {/* Date Range Label - Always show period, conditionally show comparison */}
+              <div className="px-4 py-2 bg-muted/30 border-b text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Period:</span>{" "}
+                {dateRangeLabels.currentLabel}
+                {comparisonType !== "none" && dateRangeLabels.comparisonLabel && (
+                  <>
+                    {" "}<span className="text-muted-foreground">vs</span>{" "}
+                    {dateRangeLabels.comparisonLabel}
+                  </>
+                )}
+              </div>
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
