@@ -589,6 +589,42 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // State for YTD chart KPI selector
   const [chartKpi, setChartKpi] = useState<string>("Revenue");
 
+  // Prepare YTD monthly chart data - full year January to December
+  const ytdChartData = useMemo(() => {
+    const year = new Date().getFullYear();
+    const monthlyData: { month: string; value: number }[] = [];
+    
+    // Create data for all 12 months
+    for (let m = 0; m < 12; m++) {
+      const monthKey = `${year}-${String(m + 1).padStart(2, '0')}`;
+      const monthLabel = MONTH_NAMES[m].substring(0, 3); // Jan, Feb, etc.
+      
+      // Get data from cached monthly_data or compute from YTD data
+      let monthValue = 0;
+      
+      if (cachedPivotData?.monthly_data?.[monthKey]) {
+        // Sum the metric across all reports for this month
+        const monthReports = cachedPivotData.monthly_data[monthKey];
+        monthValue = monthReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
+      }
+      
+      monthlyData.push({
+        month: monthLabel,
+        value: monthValue,
+      });
+    }
+    
+    return monthlyData;
+  }, [cachedPivotData?.monthly_data, chartKpi]);
+
+  // Chart config
+  const chartConfig = {
+    value: {
+      label: chartKpi,
+      color: "hsl(var(--primary))",
+    },
+  };
+
   // Load raw source data once for dynamic tab calculations
   useEffect(() => {
     const loadRawData = async () => {
@@ -1174,42 +1210,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     : comparisonTabData.length > 0 
       ? calculateTotals(comparisonTabData.filter(r => r.reportId === activeReportTab))
       : null;
-
-  // Prepare YTD monthly chart data - full year January to December
-  const ytdChartData = useMemo(() => {
-    const year = new Date().getFullYear();
-    const monthlyData: { month: string; value: number }[] = [];
-    
-    // Create data for all 12 months
-    for (let m = 0; m < 12; m++) {
-      const monthKey = `${year}-${String(m + 1).padStart(2, '0')}`;
-      const monthLabel = MONTH_NAMES[m].substring(0, 3); // Jan, Feb, etc.
-      
-      // Get data from cached monthly_data or compute from YTD data
-      let monthValue = 0;
-      
-      if (data.monthly_data?.[monthKey]) {
-        // Sum the metric across all reports for this month
-        const monthReports = data.monthly_data[monthKey];
-        monthValue = monthReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
-      }
-      
-      monthlyData.push({
-        month: monthLabel,
-        value: monthValue,
-      });
-    }
-    
-    return monthlyData;
-  }, [data.monthly_data, chartKpi]);
-
-  // Chart config
-  const chartConfig = {
-    value: {
-      label: chartKpi,
-      color: "hsl(var(--primary))",
-    },
-  };
 
   return (
     <div className="w-full space-y-6">
