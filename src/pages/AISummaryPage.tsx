@@ -113,7 +113,7 @@ const AISummaryPage = () => {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedDateTab, setSelectedDateTab] = useState<DateTab>(format(new Date(), "yyyy-MM"));
   const [selectedReportTab, setSelectedReportTab] = useState<ReportTab>("overview");
-  const [selectedDatePeriods, setSelectedDatePeriods] = useState<string[]>([format(new Date(), "yyyy-MM")]);
+  const [selectedDatePeriod, setSelectedDatePeriod] = useState<string>(format(new Date(), "yyyy-MM"));
 
   // Generate date options: YTD at top, then MTD (current month), then previous months
   const dateOptions = React.useMemo(() => {
@@ -799,9 +799,9 @@ const AISummaryPage = () => {
     setGenerateModalCard(null); // Close modal
     setGeneratingCardId(card.id);
     
-    // Update selected date periods for display
+    // Update selected date period for display
     if (selectedPeriods.length > 0) {
-      setSelectedDatePeriods(selectedPeriods);
+      setSelectedDatePeriod(selectedPeriods[0]);
     }
     
     try {
@@ -1134,8 +1134,8 @@ const AISummaryPage = () => {
                     selectedReportTab={selectedReportTab}
                     onReportTabChange={setSelectedReportTab}
                     dateOptions={dateOptions}
-                    selectedDatePeriods={selectedDatePeriods}
-                    onDatePeriodsChange={setSelectedDatePeriods}
+                    selectedDatePeriod={selectedDatePeriod}
+                    onDatePeriodChange={setSelectedDatePeriod}
                   />
                 </CardContent>
                 
