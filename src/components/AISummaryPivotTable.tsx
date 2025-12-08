@@ -865,9 +865,27 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       
       let comparisonDateRange: { start: Date; end: Date } | null;
       
+      // Helper to extract date from row (handles both flat and nested dimension_values)
+      const getRowDate = (row: any): Date | null => {
+        const rowData = row.dimension_values || row;
+        let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
+        
+        // Search for date patterns if not found by name
+        if (!dateValue) {
+          for (const [key, val] of Object.entries(rowData)) {
+            if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+              dateValue = val as string;
+              break;
+            }
+          }
+        }
+        
+        return parseDate(dateValue);
+      };
+      
       // Find actual data range for this report in current period
       const rowsInPeriod = reportData.rows.filter((row: any) => {
-        const rowDate = parseDate(row.Date || row.date);
+        const rowDate = getRowDate(row);
         if (!rowDate) return false;
         return rowDate >= currentDateRange.start && rowDate <= currentDateRange.end;
       });
@@ -875,7 +893,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       if (rowsInPeriod.length > 0) {
         // Find the actual min and max dates in the data
         const dates = rowsInPeriod
-          .map((row: any) => parseDate(row.Date || row.date))
+          .map((row: any) => getRowDate(row))
           .filter((d: Date | null): d is Date => d !== null)
           .sort((a: Date, b: Date) => a.getTime() - b.getTime());
         
