@@ -380,7 +380,23 @@ const AISummaryPage = () => {
         
         // Track actual date range for this report
         const allDates = sourceData.transformedRows
-          .map((row: any) => parseDate(row.Date || row.date))
+          .map((row: any) => {
+            const rowData = row.dimension_values || row;
+            // Try multiple date field names
+            let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
+            
+            // Also search for date patterns if not found by name
+            if (!dateValue) {
+              for (const [key, val] of Object.entries(rowData)) {
+                if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+                  dateValue = val as string;
+                  break;
+                }
+              }
+            }
+            
+            return parseDate(dateValue);
+          })
           .filter((d: Date | null): d is Date => d !== null)
           .sort((a: Date, b: Date) => a.getTime() - b.getTime());
         
@@ -802,8 +818,8 @@ const AISummaryPage = () => {
       // Build summary of data ranges for each report
       const dataRangeSummaries = Object.values(actualDataRanges)
         .map(info => {
-          if (info.lastDate) {
-            return `${info.reportName}: ${format(info.lastDate, "MMM d, yyyy")}`;
+          if (info.firstDate && info.lastDate) {
+            return `${info.reportName}: ${format(info.firstDate, "MMM d")} - ${format(info.lastDate, "MMM d, yyyy")}`;
           }
           return `${info.reportName}: No data`;
         })
