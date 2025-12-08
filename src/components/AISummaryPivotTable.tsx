@@ -585,6 +585,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // Store raw source data for dynamic calculations
   const [rawSourceData, setRawSourceData] = useState<Record<string, { reportName: string; rows: any[] }>>({});
   const [reportsLoaded, setReportsLoaded] = useState(false);
+  
+  // State for YTD chart KPI selector
+  const [chartKpi, setChartKpi] = useState<string>("Revenue");
 
   // Load raw source data once for dynamic tab calculations
   useEffect(() => {
@@ -1144,8 +1147,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     );
   };
 
-  // State for YTD chart KPI selector
-  const [chartKpi, setChartKpi] = useState<string>("Revenue");
+
 
   // Get the tab data - compute dynamically for any tab
   const tabData = computeDataForTab(activeTab);
