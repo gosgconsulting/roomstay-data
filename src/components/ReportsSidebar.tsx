@@ -220,31 +220,25 @@ export function ReportsSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Date Tab Section - Only shown when showDateTabs is true */}
+        {/* Date Dropdown - Only shown when showDateTabs is true */}
         {showDateTabs && (
-          <SidebarGroup className="mt-6">
-            <SidebarGroupLabel className="text-base font-medium text-sidebar-foreground mb-3 px-0 flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Date Range
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <Select
-                value={selectedDateTab || defaultDateValue}
-                onValueChange={(value) => onDateTabChange?.(value)}
-              >
-                <SelectTrigger className="w-full bg-background border-border">
-                  <SelectValue placeholder="Select date range" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-border z-50">
-                  {dateOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <div className="mt-3">
+            <Select
+              value={selectedDateTab || defaultDateValue}
+              onValueChange={(value) => onDateTabChange?.(value)}
+            >
+              <SelectTrigger className="w-full bg-background border-border">
+                <SelectValue placeholder="Select date range" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border z-50">
+                {dateOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         )}
       </SidebarContent>
     </Sidebar>
