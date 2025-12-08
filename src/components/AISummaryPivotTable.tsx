@@ -285,8 +285,22 @@ export const getComparisonDateRange = (
   const currentRange = getDateRange(tab);
   const now = new Date();
   
+  // Handle specific month tabs (e.g., "2025-11")
+  const isSpecificMonth = tab.match(/^\d{4}-\d{2}$/);
+  
   if (comparisonType === "previous_period") {
     // Previous period = same day range in the previous month/period
+    if (isSpecificMonth) {
+      // For specific months, compare to the previous month
+      const [year, month] = tab.split('-').map(Number);
+      const monthDate = new Date(year, month - 1, 1);
+      const prevMonth = subMonths(monthDate, 1);
+      return {
+        start: startOfMonth(prevMonth),
+        end: endOfMonth(prevMonth),
+      };
+    }
+    
     switch (tab) {
       case "last_month": {
         // Compare to 2 months ago (full month)
@@ -297,7 +311,7 @@ export const getComparisonDateRange = (
         };
       }
       case "mtd": {
-        // Compare to same day of previous month (e.g., Dec 1-5 vs Nov 1-5)
+        // Compare to same day of previous month (e.g., Dec 1-8 vs Nov 1-8)
         const prevMonth = subMonths(now, 1);
         const dayOfMonth = now.getDate();
         const prevMonthStart = startOfMonth(prevMonth);
@@ -533,22 +547,24 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   const [comparisonType, setComparisonType] = useState<ComparisonType>("none");
   const [isLoading, setIsLoading] = useState(!cachedPivotData);
   const [data, setData] = useState<CachedPivotData>(
-    cachedPivotData || { last_month: [], mtd: [], ytd: [] }
+    cachedPivotData || { mtd: [], ytd: [] }
   );
+  
+  // Store raw source data for dynamic calculations
+  const [rawSourceData, setRawSourceData] = useState<Record<string, { reportName: string; rows: any[] }>>({});
+  const [reportsLoaded, setReportsLoaded] = useState(false);
 
+  // Load raw source data once for dynamic tab calculations
   useEffect(() => {
-    // If we have cached data, use it immediately
-    if (cachedPivotData) {
-      setData(cachedPivotData);
-      setIsLoading(false);
-      return;
-    }
-
-    // Otherwise, fetch fresh data
-    const loadData = async () => {
+    const loadRawData = async () => {
       if (reportIds.length === 0) {
         setIsLoading(false);
         return;
+      }
+
+      // If we have cached data for fixed tabs, use it
+      if (cachedPivotData) {
+        setData(cachedPivotData);
       }
 
       setIsLoading(true);
@@ -563,16 +579,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           .in("id", reportIds);
 
         const reportsList = reportsData || [];
-
-        const dateRanges = {
-          mtd: getDateRange("mtd"),
-          ytd: getDateRange("ytd"),
-        };
-
-        const newData: CachedPivotData = {
-          mtd: [],
-          ytd: [],
-        };
+        const rawData: Record<string, { reportName: string; rows: any[] }> = {};
 
         for (const reportId of reportIds) {
           const report = reportsList.find((r: Report) => r.id === reportId);
@@ -593,24 +600,50 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             accountId
           );
 
-          if (!sourceData?.transformedRows) continue;
-
-          (["mtd", "ytd"] as const).forEach((tab) => {
-            const metrics = aggregateMetrics(
-              sourceData.transformedRows,
-              selectedMetrics,
-              dateRanges[tab]
-            );
-
-            newData[tab].push({
-              reportId: report.id,
+          if (sourceData?.transformedRows) {
+            rawData[reportId] = {
               reportName: report.name,
-              metrics,
-            });
-          });
+              rows: sourceData.transformedRows,
+            };
+          }
         }
 
-        setData(newData);
+        setRawSourceData(rawData);
+        setReportsLoaded(true);
+
+        // If no cached data, compute for mtd and ytd
+        if (!cachedPivotData) {
+          const dateRanges = {
+            mtd: getDateRange("mtd"),
+            ytd: getDateRange("ytd"),
+          };
+
+          const newData: CachedPivotData = {
+            mtd: [],
+            ytd: [],
+          };
+
+          for (const reportId of reportIds) {
+            const reportData = rawData[reportId];
+            if (!reportData) continue;
+
+            (["mtd", "ytd"] as const).forEach((tab) => {
+              const metrics = aggregateMetrics(
+                reportData.rows,
+                selectedMetrics,
+                dateRanges[tab]
+              );
+
+              newData[tab].push({
+                reportId: reportId,
+                reportName: reportData.reportName,
+                metrics,
+              });
+            });
+          }
+
+          setData(newData);
+        }
       } catch (error) {
         console.error("Error loading pivot table data:", error);
       } finally {
@@ -618,8 +651,46 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       }
     };
 
-    loadData();
+    loadRawData();
   }, [reportIds, selectedMetrics, accountId, cachedPivotData]);
+  
+  // Compute data for specific month tabs dynamically
+  const computeDataForTab = (tab: DateTab): ReportMetrics[] => {
+    // If we have pre-computed data for this tab (mtd/ytd), use it
+    if (tab === 'mtd' && data.mtd?.length > 0) {
+      return data.mtd;
+    }
+    if (tab === 'ytd' && data.ytd?.length > 0) {
+      return data.ytd;
+    }
+    
+    // For specific month tabs or fallback, compute dynamically from raw data
+    if (!reportsLoaded || Object.keys(rawSourceData).length === 0) {
+      return [];
+    }
+    
+    const dateRange = getDateRange(tab);
+    const results: ReportMetrics[] = [];
+    
+    for (const reportId of reportIds) {
+      const reportData = rawSourceData[reportId];
+      if (!reportData) continue;
+      
+      const metrics = aggregateMetrics(
+        reportData.rows,
+        selectedMetrics,
+        dateRange
+      );
+      
+      results.push({
+        reportId: reportId,
+        reportName: reportData.reportName,
+        metrics,
+      });
+    }
+    
+    return results;
+  };
 
   const calculateTotals = (reportMetrics: ReportMetrics[]): Record<string, number> => {
     const totals: Record<string, number> = {};
@@ -742,17 +813,59 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     return ((current - comparison) / Math.abs(comparison)) * 100;
   };
   
+  // Compute comparison data dynamically for a given tab
+  const computeComparisonDataForTab = (tab: DateTab, compType: ComparisonType): ReportMetrics[] => {
+    if (compType === "none" || !reportsLoaded || Object.keys(rawSourceData).length === 0) {
+      return [];
+    }
+    
+    const comparisonDateRange = getComparisonDateRange(tab, compType);
+    if (!comparisonDateRange) return [];
+    
+    const results: ReportMetrics[] = [];
+    
+    for (const reportId of reportIds) {
+      const reportData = rawSourceData[reportId];
+      if (!reportData) continue;
+      
+      const metrics = aggregateMetrics(
+        reportData.rows,
+        selectedMetrics,
+        comparisonDateRange
+      );
+      
+      results.push({
+        reportId: reportId,
+        reportName: reportData.reportName,
+        metrics,
+      });
+    }
+    
+    return results;
+  };
+  
   // Get comparison data for a report
   const getComparisonMetrics = (reportId: string, tab: DateTab): Record<string, number> | null => {
     if (comparisonType === "none") return null;
     
-    const comparisonData = comparisonType === "previous_period" 
-      ? data.comparison_previous_period 
-      : data.comparison_previous_year;
+    // First try cached comparison data for mtd/ytd only
+    if (tab === 'mtd' || tab === 'ytd') {
+      const cachedComparisonData = comparisonType === "previous_period" 
+        ? data.comparison_previous_period 
+        : data.comparison_previous_year;
+      
+      if (cachedComparisonData) {
+        const tabData = tab === 'mtd' ? cachedComparisonData.mtd : cachedComparisonData.ytd;
+        if (tabData && Array.isArray(tabData)) {
+          const reportData = tabData.find((r: ReportMetrics) => r.reportId === reportId);
+          if (reportData?.metrics) return reportData.metrics;
+        }
+      }
+    }
     
-    if (!comparisonData) return null;
-    
-    const reportData = comparisonData[tab]?.find(r => r.reportId === reportId);
+    // Compute dynamically for all tabs
+    const dynamicComparisonData = computeComparisonDataForTab(tab, comparisonType);
+    const reportData = dynamicComparisonData.find(r => r.reportId === reportId);
     return reportData?.metrics || null;
   };
   
@@ -790,30 +903,13 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     );
   };
 
-  // For specific month tabs, we need to calculate data on the fly
-  // For mtd/ytd, use cached data
-  const isSpecificMonth = activeTab.match(/^\d{4}-\d{2}$/);
-  
-  // Get the tab data - for specific months, use last_month data as fallback or empty
-  const getTabData = (): ReportMetrics[] => {
-    if (isSpecificMonth) {
-      // For specific months, we'd need to recalculate - for now, return empty
-      // The data will be loaded when the component re-renders with new cached data
-      return data.last_month || data.mtd || [];
-    }
-    return (data[activeTab] as ReportMetrics[]) || [];
-  };
-  
-  const tabData = getTabData();
+  // Get the tab data - compute dynamically for any tab
+  const tabData = computeDataForTab(activeTab);
   const totals = calculateTotals(tabData);
   
-  // Get comparison totals
-  const comparisonData = comparisonType === "previous_period" 
-    ? data.comparison_previous_period?.[activeTab as keyof typeof data.comparison_previous_period]
-    : comparisonType === "previous_year"
-    ? data.comparison_previous_year?.[activeTab as keyof typeof data.comparison_previous_year]
-    : null;
-  const comparisonTotals = (comparisonData && Array.isArray(comparisonData)) ? calculateTotals(comparisonData) : null;
+  // Get comparison totals - compute dynamically
+  const comparisonTabData = computeComparisonDataForTab(activeTab, comparisonType);
+  const comparisonTotals = comparisonTabData.length > 0 ? calculateTotals(comparisonTabData) : null;
 
   return (
     <div className="w-full space-y-6">
