@@ -166,28 +166,28 @@ export function ReportsSidebar({
             <BarChart3 className="h-4 w-4" />
             Reports
           </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <Select 
-              value={selectedReportId || ""} 
-              onValueChange={handleReportSelect}
+          <SidebarGroupContent className="space-y-1">
+            {reports.map((report) => (
+              <Button
+                key={report.id}
+                variant={selectedReportId === report.id ? "secondary" : "ghost"}
+                className={cn(
+                  "w-full justify-start text-left h-9 px-3",
+                  selectedReportId === report.id && "bg-accent text-accent-foreground"
+                )}
+                onClick={() => handleReportSelect(report.id)}
+              >
+                {report.name}
+              </Button>
+            ))}
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-left h-9 px-3 text-primary hover:text-primary"
+              onClick={handleAddNewClick}
             >
-              <SelectTrigger className="w-full bg-background border-border">
-                <SelectValue placeholder="Select a report" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border z-50">
-                {reports.map((report) => (
-                  <SelectItem key={report.id} value={report.id}>
-                    {report.name}
-                  </SelectItem>
-                ))}
-                <SelectItem value="add-new" className="text-primary">
-                  <span className="flex items-center gap-2">
-                    <Plus className="h-4 w-4" />
-                    Add New Report
-                  </span>
-                </SelectItem>
-              </SelectContent>
-            </Select>
+              <Plus className="h-4 w-4 mr-2" />
+              Add New Report
+            </Button>
           </SidebarGroupContent>
         </SidebarGroup>
 
