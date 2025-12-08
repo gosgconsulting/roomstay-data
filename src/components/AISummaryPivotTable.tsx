@@ -84,6 +84,8 @@ export interface CachedPivotData {
   combined_date_breakdown?: Record<string, DateBreakdownRow[]>;
   table_insights?: TableInsights;
   executive_summaries?: ExecutiveSummaries;
+  // Actual data date ranges per report (stored during refresh)
+  actual_data_ranges?: Record<string, { reportName: string; firstDate: string | null; lastDate: string | null }>;
   comparison_previous_period?: {
     last_month?: ReportMetrics[];
     mtd?: ReportMetrics[];
@@ -960,29 +962,56 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     }
     
     // Find the actual data range across all reports
+    // First, check cached actual_data_ranges from pivot data refresh
     let actualStart: Date | null = null;
     let actualEnd: Date | null = null;
     
-    if (reportsLoaded && Object.keys(rawSourceData).length > 0) {
+    if (data.actual_data_ranges && Object.keys(data.actual_data_ranges).length > 0) {
+      // Use cached data ranges from pivot refresh
       for (const reportId of reportIds) {
-        const reportData = rawSourceData[reportId];
-        if (!reportData) continue;
+        const rangeInfo = data.actual_data_ranges[reportId];
+        if (!rangeInfo) continue;
         
-        // Get all dates from the data and filter to the period
-        const datesInPeriod = reportData.rows
-          .map((row: any) => parseDate(row.Date || row.date))
-          .filter((d: Date | null): d is Date => {
-            if (!d) return false;
-            return d >= periodStart && d <= periodMaxEnd;
-          })
-          .sort((a: Date, b: Date) => a.getTime() - b.getTime());
+        const lastDate = rangeInfo.lastDate ? new Date(rangeInfo.lastDate) : null;
+        const firstDate = rangeInfo.firstDate ? new Date(rangeInfo.firstDate) : null;
         
-        if (datesInPeriod.length > 0) {
-          const firstDate = datesInPeriod[0];
-          const lastDate = datesInPeriod[datesInPeriod.length - 1];
-          
-          if (!actualStart || firstDate < actualStart) actualStart = firstDate;
+        // For the current period, we want the latest date within the period
+        if (lastDate && lastDate >= periodStart && lastDate <= periodMaxEnd) {
           if (!actualEnd || lastDate > actualEnd) actualEnd = lastDate;
+        }
+        if (firstDate && firstDate >= periodStart && firstDate <= periodMaxEnd) {
+          if (!actualStart || firstDate < actualStart) actualStart = firstDate;
+        }
+        // If the last date is before the period, use the last date as the boundary
+        if (lastDate && lastDate < periodMaxEnd && (!actualEnd || lastDate > actualEnd)) {
+          actualEnd = lastDate > periodStart ? lastDate : null;
+        }
+      }
+    }
+    
+    // Fallback to raw source data if no cached ranges
+    if (!actualStart || !actualEnd) {
+      if (reportsLoaded && Object.keys(rawSourceData).length > 0) {
+        for (const reportId of reportIds) {
+          const reportData = rawSourceData[reportId];
+          if (!reportData) continue;
+          
+          // Get all dates from the data and filter to the period
+          const datesInPeriod = reportData.rows
+            .map((row: any) => parseDate(row.Date || row.date))
+            .filter((d: Date | null): d is Date => {
+              if (!d) return false;
+              return d >= periodStart && d <= periodMaxEnd;
+            })
+            .sort((a: Date, b: Date) => a.getTime() - b.getTime());
+          
+          if (datesInPeriod.length > 0) {
+            const firstDate = datesInPeriod[0];
+            const lastDate = datesInPeriod[datesInPeriod.length - 1];
+            
+            if (!actualStart || firstDate < actualStart) actualStart = firstDate;
+            if (!actualEnd || lastDate > actualEnd) actualEnd = lastDate;
+          }
         }
       }
     }
