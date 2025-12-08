@@ -1144,15 +1144,14 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
         
-        {/* Breakdowns - for selected period, filtered by report */}
-        {data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (() => {
+        {/* Breakdowns - only show on individual report tabs, not on overview */}
+        {activeReportTab !== "overview" && data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (() => {
           const period = selectedDatePeriod || activeTab;
           
           return (
             <div className="space-y-4">
               {Object.entries(data.breakdown_data!)
                 .filter(([breakdownKey]) => {
-                  if (activeReportTab === "overview") return true;
                   const [reportId] = breakdownKey.split('_');
                   return reportId === activeReportTab;
                 })
