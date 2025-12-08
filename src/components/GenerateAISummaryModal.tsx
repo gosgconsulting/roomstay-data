@@ -10,7 +10,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Sparkles, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { format, startOfYear, eachMonthOfInterval } from "date-fns";
 
@@ -32,7 +31,7 @@ const GenerateAISummaryModal: React.FC<GenerateAISummaryModalProps> = ({
   cardName,
 }) => {
   const [step, setStep] = useState<1 | 2>(1);
-  const [selectedPeriods, setSelectedPeriods] = useState<string[]>([]);
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("");
   const [comparisonType, setComparisonType] = useState<ComparisonOption>("previous_year");
 
   // Generate date period options
@@ -59,34 +58,18 @@ const GenerateAISummaryModal: React.FC<GenerateAISummaryModalProps> = ({
     return options;
   }, []);
 
-  const handlePeriodToggle = (value: string) => {
-    setSelectedPeriods(prev => 
-      prev.includes(value) 
-        ? prev.filter(p => p !== value)
-        : [...prev, value]
-    );
-  };
-
-  const handleSelectAll = () => {
-    if (selectedPeriods.length === dateOptions.length) {
-      setSelectedPeriods([]);
-    } else {
-      setSelectedPeriods(dateOptions.map(o => o.value));
-    }
-  };
-
   const handleGenerate = () => {
-    onGenerate(comparisonType, selectedPeriods);
+    onGenerate(comparisonType, [selectedPeriod]);
   };
 
   const handleClose = () => {
     setStep(1);
-    setSelectedPeriods([]);
+    setSelectedPeriod("");
     setComparisonType("previous_year");
     onOpenChange(false);
   };
 
-  const canProceedToStep2 = selectedPeriods.length > 0;
+  const canProceedToStep2 = selectedPeriod !== "";
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -115,38 +98,29 @@ const GenerateAISummaryModal: React.FC<GenerateAISummaryModalProps> = ({
         {step === 1 && (
           <div className="py-4 space-y-4">
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">Select Date Periods</Label>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={handleSelectAll}
-                  className="text-xs h-7"
-                >
-                  {selectedPeriods.length === dateOptions.length ? "Deselect All" : "Select All"}
-                </Button>
-              </div>
+              <Label className="text-sm font-medium">Select Date Period</Label>
               <p className="text-xs text-muted-foreground">
-                Choose which periods to include in the AI analysis
+                Choose which period to analyze
               </p>
               
-              <div className="max-h-[280px] overflow-y-auto space-y-2 pr-2">
+              <RadioGroup
+                value={selectedPeriod}
+                onValueChange={setSelectedPeriod}
+                className="max-h-[280px] overflow-y-auto space-y-2 pr-2"
+              >
                 {dateOptions.map((option) => (
                   <div 
                     key={option.value}
                     className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer"
-                    onClick={() => handlePeriodToggle(option.value)}
+                    onClick={() => setSelectedPeriod(option.value)}
                   >
-                    <Checkbox 
-                      checked={selectedPeriods.includes(option.value)}
-                      onCheckedChange={() => handlePeriodToggle(option.value)}
-                    />
-                    <Label className="font-medium cursor-pointer flex-1">
+                    <RadioGroupItem value={option.value} id={option.value} />
+                    <Label htmlFor={option.value} className="font-medium cursor-pointer flex-1">
                       {option.label}
                     </Label>
                   </div>
                 ))}
-              </div>
+              </RadioGroup>
             </div>
           </div>
         )}

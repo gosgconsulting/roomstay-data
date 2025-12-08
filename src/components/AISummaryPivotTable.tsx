@@ -15,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import MultiSelect from "@/components/MultiSelect";
 import { Loader2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
@@ -112,8 +111,8 @@ interface AISummaryPivotTableProps {
   selectedReportTab?: ReportTab;
   onReportTabChange?: (tab: ReportTab) => void;
   dateOptions?: { value: string; label: string }[];
-  selectedDatePeriods?: string[];
-  onDatePeriodsChange?: (periods: string[]) => void;
+  selectedDatePeriod?: string;
+  onDatePeriodChange?: (period: string) => void;
 }
 
 interface DataSource {
@@ -550,8 +549,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   selectedReportTab,
   onReportTabChange,
   dateOptions = [],
-  selectedDatePeriods = [],
-  onDatePeriodsChange,
+  selectedDatePeriod,
+  onDatePeriodChange,
 }) => {
   const [internalTab, setInternalTab] = useState<DateTab>("mtd");
   const activeTab = selectedTab || internalTab;
@@ -974,21 +973,17 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     <div className="w-full space-y-6">
 
       <div className="flex items-center justify-end gap-3 mb-4">
-        {/* Date Periods Multi-Select */}
-        {dateOptions.length > 0 && onDatePeriodsChange && (
-          <MultiSelect
-            options={dateOptions}
-            values={selectedDatePeriods}
-            onChange={onDatePeriodsChange}
-            placeholder="Select date periods..."
-            searchPlaceholder="Search periods..."
-            className="w-[220px]"
-          />
-        )}
-        
-        {/* Single Date Filter (fallback when multi-select not used) */}
-        {dateOptions.length > 0 && !onDatePeriodsChange && (
-          <Select value={activeTab} onValueChange={(v) => handleTabChange(v as DateTab)}>
+        {/* Single Date Period Select */}
+        {dateOptions.length > 0 && (
+          <Select 
+            value={selectedDatePeriod || activeTab} 
+            onValueChange={(v) => {
+              if (onDatePeriodChange) {
+                onDatePeriodChange(v);
+              }
+              handleTabChange(v as DateTab);
+            }}
+          >
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Select date" />
             </SelectTrigger>
@@ -1016,8 +1011,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       </div>
 
       <div className="space-y-6">
-        {/* Render a table for each selected date period */}
-        {(selectedDatePeriods.length > 0 ? selectedDatePeriods : [activeTab]).map((period) => {
+        {/* Render a table for the selected date period */}
+        {(() => {
+          const period = selectedDatePeriod || activeTab;
           const periodData = computeDataForTab(period as DateTab);
           const periodTotals = calculateTotals(periodData);
           const periodComparisonData = computeComparisonDataForTab(period as DateTab, comparisonType);
@@ -1042,12 +1038,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           
           return (
             <div key={period} className="border rounded-lg overflow-hidden">
-              {/* Period Header - only show when multiple periods selected */}
-              {selectedDatePeriods.length > 1 && (
-                <div className="bg-primary/10 px-4 py-2 border-b">
-                  <h4 className="font-semibold text-sm">{periodLabel}</h4>
-                </div>
-              )}
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
@@ -1104,21 +1094,19 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               )}
             </div>
           );
-        })}
+        })()}
         
-        {/* Combined Date Breakdown Table - for each selected period in overview mode */}
-        {activeReportTab === "overview" && (selectedDatePeriods.length > 0 ? selectedDatePeriods : [activeTab]).map((period) => {
+        {/* Combined Date Breakdown Table - for selected period in overview mode */}
+        {activeReportTab === "overview" && (() => {
+          const period = selectedDatePeriod || activeTab;
           const periodBreakdown = combinedDateBreakdown[period as DateTab];
           if (!periodBreakdown || periodBreakdown.length === 0) return null;
           
-          const periodLabel = dateOptions.find(o => o.value === period)?.label || period;
-          
           return (
-            <div key={`date-breakdown-${period}`} className="space-y-4">
+            <div className="space-y-4">
               <div className="border rounded-lg overflow-hidden">
                 <div className="bg-primary/5 px-4 py-2 border-b">
                   <h4 className="font-semibold text-sm">
-                    {selectedDatePeriods.length > 1 ? `${periodLabel} - ` : ''}
                     Results By {period === 'ytd' ? 'Month' : 'Week'}
                   </h4>
                 </div>
@@ -1154,95 +1142,90 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               </div>
             </div>
           );
-        })}
+        })()}
         
-        {/* Breakdowns - for each selected period, filtered by report */}
-        {data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (
-          <div className="space-y-4">
-            {(selectedDatePeriods.length > 0 ? selectedDatePeriods : [activeTab]).map((period) => (
-              <React.Fragment key={`breakdowns-${period}`}>
-                {Object.entries(data.breakdown_data!)
-                  .filter(([breakdownKey]) => {
-                    if (activeReportTab === "overview") return true;
-                    const [reportId] = breakdownKey.split('_');
-                    return reportId === activeReportTab;
-                  })
-                  .map(([breakdownKey, tabsData]) => {
-                    const breakdownRows = tabsData?.[period as DateTab] || [];
-                    if (breakdownRows.length === 0) return null;
-                    
-                    const [reportId] = breakdownKey.split('_');
-                    const periodData = computeDataForTab(period as DateTab);
-                    const reportName = periodData.find(r => r.reportId === reportId)?.reportName || 'Report';
-                    const dimensionName = data.breakdown_dimension_names?.[breakdownKey] || 'Group';
-                    const periodLabel = dateOptions.find(o => o.value === period)?.label || period;
-                    
-                    return (
-                      <div key={`${breakdownKey}-${period}`} className="border rounded-lg overflow-hidden">
-                        <div className="bg-primary/5 px-4 py-2 border-b">
-                          <h4 className="font-semibold text-sm">
-                            {selectedDatePeriods.length > 1 ? `${periodLabel} - ` : ''}
-                            {activeReportTab === "overview" ? `${reportName} - ` : ''}{dimensionName}
-                          </h4>
-                        </div>
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-muted/30">
-                              <TableHead className="font-medium w-[200px]">{dimensionName}</TableHead>
+        {/* Breakdowns - for selected period, filtered by report */}
+        {data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (() => {
+          const period = selectedDatePeriod || activeTab;
+          
+          return (
+            <div className="space-y-4">
+              {Object.entries(data.breakdown_data!)
+                .filter(([breakdownKey]) => {
+                  if (activeReportTab === "overview") return true;
+                  const [reportId] = breakdownKey.split('_');
+                  return reportId === activeReportTab;
+                })
+                .map(([breakdownKey, tabsData]) => {
+                  const breakdownRows = tabsData?.[period as DateTab] || [];
+                  if (breakdownRows.length === 0) return null;
+                  
+                  const [reportId] = breakdownKey.split('_');
+                  const periodData = computeDataForTab(period as DateTab);
+                  const reportName = periodData.find(r => r.reportId === reportId)?.reportName || 'Report';
+                  const dimensionName = data.breakdown_dimension_names?.[breakdownKey] || 'Group';
+                  
+                  return (
+                    <div key={`${breakdownKey}-${period}`} className="border rounded-lg overflow-hidden">
+                      <div className="bg-primary/5 px-4 py-2 border-b">
+                        <h4 className="font-semibold text-sm">
+                          {activeReportTab === "overview" ? `${reportName} - ` : ''}{dimensionName}
+                        </h4>
+                      </div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/30">
+                            <TableHead className="font-medium w-[200px]">{dimensionName}</TableHead>
+                            {safeMetrics.map((metric) => (
+                              <TableHead key={metric} className="font-medium text-right text-xs">
+                                {metric}
+                              </TableHead>
+                            ))}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {breakdownRows.map((row, idx) => (
+                            <TableRow
+                              key={row.groupValue}
+                              className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                            >
+                              <TableCell className="font-medium text-sm">
+                                {row.groupValue}
+                              </TableCell>
                               {safeMetrics.map((metric) => (
-                                <TableHead key={metric} className="font-medium text-right text-xs">
-                                  {metric}
-                                </TableHead>
+                                <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                </TableCell>
                               ))}
                             </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {breakdownRows.map((row, idx) => (
-                              <TableRow
-                                key={row.groupValue}
-                                className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                              >
-                                <TableCell className="font-medium text-sm">
-                                  {row.groupValue}
-                                </TableCell>
-                                {safeMetrics.map((metric) => (
-                                  <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                    {formatMetricValue(metric, row.metrics[metric] || 0)}
-                                  </TableCell>
-                                ))}
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    );
-                  })}
-              </React.Fragment>
-            ))}
-          </div>
-        )}
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  );
+                })}
+            </div>
+          );
+        })()}
         
-        {/* Executive Summary - for each selected period in overview mode */}
-        {activeReportTab === "overview" && (selectedDatePeriods.length > 0 ? selectedDatePeriods : [activeTab]).map((period) => {
+        {/* Executive Summary - for selected period in overview mode */}
+        {activeReportTab === "overview" && (() => {
+          const period = selectedDatePeriod || activeTab;
           const summaryContent = data.executive_summaries?.[period as DateTab];
           if (!summaryContent) return null;
           
-          const periodLabel = dateOptions.find(o => o.value === period)?.label || period;
-          
           return (
-            <div key={`summary-${period}`} className="border rounded-lg overflow-hidden bg-background">
+            <div className="border rounded-lg overflow-hidden bg-background">
               <div className="px-4 py-3 border-b bg-muted/30 flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" />
-                <h3 className="font-semibold">
-                  {selectedDatePeriods.length > 1 ? `${periodLabel} - ` : ''}Executive Summary
-                </h3>
+                <h3 className="font-semibold">Executive Summary</h3>
               </div>
               <div className="p-6 bg-background">
                 <FormattedAISummary summary={summaryContent} />
               </div>
             </div>
           );
-        })}
+        })()}
       </div>
     </div>
   );
