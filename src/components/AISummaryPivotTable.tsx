@@ -1484,18 +1484,22 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                     fill="hsl(var(--primary))" 
                     radius={[4, 4, 0, 0]}
                   />
-                  <Bar 
-                    dataKey="prevPeriod" 
-                    name="prevPeriod"
-                    fill="hsl(var(--muted-foreground) / 0.6)" 
-                    radius={[4, 4, 0, 0]}
-                  />
-                  <Bar 
-                    dataKey="prevYear" 
-                    name="prevYear"
-                    fill="hsl(var(--accent-foreground) / 0.4)" 
-                    radius={[4, 4, 0, 0]}
-                  />
+                  {comparisonType === "previous_period" && (
+                    <Bar 
+                      dataKey="prevPeriod" 
+                      name="prevPeriod"
+                      fill="hsl(var(--muted-foreground) / 0.6)" 
+                      radius={[4, 4, 0, 0]}
+                    />
+                  )}
+                  {comparisonType === "previous_year" && (
+                    <Bar 
+                      dataKey="prevYear" 
+                      name="prevYear"
+                      fill="hsl(var(--accent-foreground) / 0.4)" 
+                      radius={[4, 4, 0, 0]}
+                    />
+                  )}
                 </BarChart>
               </ChartContainer>
               <div className="flex justify-center gap-6 mt-2 text-xs">
@@ -1503,14 +1507,18 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   <div className="w-3 h-3 rounded-sm bg-primary" />
                   <span className="text-muted-foreground">Current</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'hsl(var(--muted-foreground) / 0.6)' }} />
-                  <span className="text-muted-foreground">vs Prev Period</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'hsl(var(--accent-foreground) / 0.4)' }} />
-                  <span className="text-muted-foreground">vs Prev Year</span>
-                </div>
+                {comparisonType === "previous_period" && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'hsl(var(--muted-foreground) / 0.6)' }} />
+                    <span className="text-muted-foreground">vs Prev Period</span>
+                  </div>
+                )}
+                {comparisonType === "previous_year" && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'hsl(var(--accent-foreground) / 0.4)' }} />
+                    <span className="text-muted-foreground">vs Prev Year</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
