@@ -856,6 +856,16 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     return totals;
   };
 
+  // Compute date range labels for header (must be before early returns)
+  const headerDateRangeLabels = useMemo(() => {
+    const period = selectedDatePeriod || activeTab;
+    // Early exit with default if we don't have data yet
+    if (!reportsLoaded && Object.keys(rawSourceData).length === 0 && !cachedPivotData) {
+      return { currentLabel: 'Loading...', comparisonLabel: null };
+    }
+    return getDateRangeLabel(period as DateTab, comparisonType);
+  }, [selectedDatePeriod, activeTab, comparisonType, reportsLoaded, rawSourceData, cachedPivotData]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -1264,12 +1274,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     : comparisonTabData.length > 0 
       ? calculateTotals(comparisonTabData.filter(r => r.reportId === activeReportTab))
       : null;
-
-  // Compute date range labels for header
-  const headerDateRangeLabels = useMemo(() => {
-    const period = selectedDatePeriod || activeTab;
-    return getDateRangeLabel(period as DateTab, comparisonType);
-  }, [selectedDatePeriod, activeTab, comparisonType, getDateRangeLabel]);
 
   return (
     <div className="w-full space-y-6">
