@@ -1334,7 +1334,31 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   return (
     <div className="w-full space-y-6">
 
-      <div className="flex items-center justify-end gap-3 mb-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        {/* Period Label */}
+        {(() => {
+          const period = selectedDatePeriod || activeTab;
+          const { currentLabel, comparisonLabel } = getDateRangeLabel(period as DateTab, comparisonType);
+          const reportTabLabel = activeReportTab === "overview" 
+            ? "Overview" 
+            : reportTabsList.find(r => r.id === activeReportTab)?.name || "Report";
+          
+          return (
+            <div className="text-sm font-medium text-foreground">
+              <span className="font-semibold">{reportTabLabel}</span>
+              <span className="text-muted-foreground"> - Period: </span>
+              <span>{currentLabel}</span>
+              {comparisonLabel && (
+                <>
+                  <span className="text-muted-foreground"> vs </span>
+                  <span>{comparisonLabel}</span>
+                </>
+              )}
+            </div>
+          );
+        })()}
+        
+        <div className="flex items-center gap-3">
         {/* Single Date Period Select */}
         {dateOptions.length > 0 && (
           <Select 
@@ -1370,6 +1394,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             <SelectItem value="previous_year">vs Previous Year</SelectItem>
           </SelectContent>
         </Select>
+        </div>
       </div>
 
       {/* KPI Cards Grid */}
