@@ -15,7 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { supabase } from "@/integrations/supabase/client";
@@ -1305,6 +1306,198 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         </Select>
       </div>
 
+      {/* KPI Cards Grid */}
+      {(() => {
+        const period = selectedDatePeriod || activeTab;
+        const periodData = computeDataForTab(period as DateTab);
+        
+        // Filter by active report tab
+        const filteredData = activeReportTab === "overview" 
+          ? periodData 
+          : periodData.filter(r => r.reportId === activeReportTab);
+        
+        // Calculate totals for KPI cards
+        const kpiTotals = calculateTotals(filteredData);
+        
+        // Get comparison data for KPI cards
+        let kpiComparisonTotals: Record<string, number> | null = null;
+        if (comparisonType !== "none") {
+          const cachedComparisonData = comparisonType === "previous_period" 
+            ? data.comparison_previous_period 
+            : data.comparison_previous_year;
+          
+          let comparisonData: ReportMetrics[] = [];
+          if (cachedComparisonData) {
+            if (period === 'mtd' && cachedComparisonData.mtd) {
+              comparisonData = cachedComparisonData.mtd;
+            } else if (period === 'ytd' && cachedComparisonData.ytd) {
+              comparisonData = cachedComparisonData.ytd;
+            } else if (period.match(/^\d{4}-\d{2}$/) && cachedComparisonData.monthly_data?.[period]) {
+              comparisonData = cachedComparisonData.monthly_data[period];
+            }
+          }
+          
+          if (comparisonData.length === 0) {
+            comparisonData = computeComparisonDataForTab(period as DateTab, comparisonType);
+          }
+          
+          const filteredComparisonData = activeReportTab === "overview"
+            ? comparisonData
+            : comparisonData.filter(r => r.reportId === activeReportTab);
+          
+          kpiComparisonTotals = filteredComparisonData.length > 0 ? calculateTotals(filteredComparisonData) : null;
+        }
+        
+        // Split metrics into two rows of 5
+        const topRowMetrics = safeMetrics.slice(0, 5);
+        const bottomRowMetrics = safeMetrics.slice(5, 10);
+        
+        const renderKPICard = (metric: string) => {
+          const value = kpiTotals[metric] || 0;
+          const formattedValue = formatMetricValue(metric, value);
+          
+          // Calculate percentage change
+          const compValue = kpiComparisonTotals?.[metric] || 0;
+          const percentChange = calculatePercentChange(value, compValue);
+          
+          // Determine if increase is good or bad
+          const lowerMetric = metric.toLowerCase();
+          const isInverseMetric = lowerMetric === 'cost' || lowerMetric === 'cpc' || lowerMetric === 'cost of sale' || lowerMetric === 'cos';
+          const isPositive = percentChange !== null && (isInverseMetric ? percentChange < 0 : percentChange > 0);
+          const isNegative = percentChange !== null && (isInverseMetric ? percentChange > 0 : percentChange < 0);
+          
+          return (
+            <Card key={metric} className="bg-background border">
+              <CardContent className="p-4">
+                <div className="text-xs font-medium text-primary uppercase tracking-wide mb-1">
+                  {metric}
+                </div>
+                <div className="flex items-end justify-between">
+                  <div className="text-2xl font-bold text-foreground">
+                    {formattedValue}
+                  </div>
+                  {comparisonType !== "none" && percentChange !== null && (
+                    <div className={`flex items-center gap-1 text-sm ${isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : 'text-muted-foreground'}`}>
+                      {isPositive ? <ArrowUp className="h-3 w-3" /> : isNegative ? <ArrowDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+                      <span>{Math.abs(percentChange).toFixed(1)}%</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        };
+        
+        return (
+          <div className="space-y-3">
+            {/* Top row of KPI cards */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              {topRowMetrics.map(renderKPICard)}
+            </div>
+            {/* Bottom row of KPI cards */}
+            {bottomRowMetrics.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                {bottomRowMetrics.map(renderKPICard)}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* YTD Monthly Bar Chart - shown after KPI cards on all tabs */}
+      <div className="border rounded-lg overflow-hidden">
+        <div className="bg-primary/5 px-4 py-2 border-b flex items-center justify-between">
+          <h4 className="font-semibold text-sm">
+            Results By Month (YTD){activeReportTab !== "overview" && (() => {
+              const period = selectedDatePeriod || activeTab;
+              const periodData = computeDataForTab(period as DateTab);
+              const reportName = periodData.find(r => r.reportId === activeReportTab)?.reportName;
+              return reportName ? ` - ${reportName}` : '';
+            })()}
+          </h4>
+          <Select value={chartKpi} onValueChange={setChartKpi}>
+            <SelectTrigger className="w-[140px] h-8 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-popover border-border z-50">
+              {safeMetrics.map((metric) => (
+                <SelectItem key={metric} value={metric}>
+                  {metric}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="p-4">
+          <ChartContainer config={chartConfig} className="h-[300px] w-full">
+            <BarChart data={ytdChartData} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
+              <XAxis 
+                dataKey="month" 
+                tickLine={false} 
+                axisLine={false}
+                tick={{ fontSize: 12 }}
+              />
+              <YAxis 
+                tickLine={false} 
+                axisLine={false}
+                tick={{ fontSize: 12 }}
+                tickFormatter={(value) => formatNumber(value)}
+              />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value, name) => {
+                      const label = name === 'current' ? 'Current' : name === 'prevPeriod' ? 'vs Prev Period' : 'vs Prev Year';
+                      return [formatMetricValue(chartKpi, Number(value)), label];
+                    }}
+                  />
+                }
+              />
+              <Bar 
+                dataKey="current" 
+                name="current"
+                fill="hsl(var(--primary))" 
+                radius={[4, 4, 0, 0]}
+              />
+              {comparisonType === "previous_period" && (
+                <Bar 
+                  dataKey="prevPeriod" 
+                  name="prevPeriod"
+                  fill="hsl(var(--muted-foreground) / 0.6)" 
+                  radius={[4, 4, 0, 0]}
+                />
+              )}
+              {comparisonType === "previous_year" && (
+                <Bar 
+                  dataKey="prevYear" 
+                  name="prevYear"
+                  fill="hsl(var(--accent-foreground) / 0.4)" 
+                  radius={[4, 4, 0, 0]}
+                />
+              )}
+            </BarChart>
+          </ChartContainer>
+          <div className="flex justify-center gap-6 mt-2 text-xs">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-sm bg-primary" />
+              <span className="text-muted-foreground">Current</span>
+            </div>
+            {comparisonType === "previous_period" && (
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'hsl(var(--muted-foreground) / 0.6)' }} />
+                <span className="text-muted-foreground">vs Prev Period</span>
+              </div>
+            )}
+            {comparisonType === "previous_year" && (
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'hsl(var(--accent-foreground) / 0.4)' }} />
+                <span className="text-muted-foreground">vs Prev Year</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="space-y-6">
         {/* Render a table for the selected date period */}
         {(() => {
@@ -1426,100 +1619,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             </div>
           );
         })()}
-
-        {/* YTD Monthly Bar Chart - shown after first table on all tabs */}
-        <div className="border rounded-lg overflow-hidden">
-          <div className="bg-primary/5 px-4 py-2 border-b flex items-center justify-between">
-            <h4 className="font-semibold text-sm">
-              Results By Month (YTD){activeReportTab !== "overview" && (() => {
-                const period = selectedDatePeriod || activeTab;
-                const periodData = computeDataForTab(period as DateTab);
-                const reportName = periodData.find(r => r.reportId === activeReportTab)?.reportName;
-                return reportName ? ` - ${reportName}` : '';
-              })()}
-            </h4>
-            <Select value={chartKpi} onValueChange={setChartKpi}>
-              <SelectTrigger className="w-[140px] h-8 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border z-50">
-                {safeMetrics.map((metric) => (
-                  <SelectItem key={metric} value={metric}>
-                    {metric}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="p-4">
-            <ChartContainer config={chartConfig} className="h-[300px] w-full">
-              <BarChart data={ytdChartData} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
-                <XAxis 
-                  dataKey="month" 
-                  tickLine={false} 
-                  axisLine={false}
-                  tick={{ fontSize: 12 }}
-                />
-                <YAxis 
-                  tickLine={false} 
-                  axisLine={false}
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => formatNumber(value)}
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value, name) => {
-                        const label = name === 'current' ? 'Current' : name === 'prevPeriod' ? 'vs Prev Period' : 'vs Prev Year';
-                        return [formatMetricValue(chartKpi, Number(value)), label];
-                      }}
-                    />
-                  }
-                />
-                <Bar 
-                  dataKey="current" 
-                  name="current"
-                  fill="hsl(var(--primary))" 
-                  radius={[4, 4, 0, 0]}
-                />
-                {comparisonType === "previous_period" && (
-                  <Bar 
-                    dataKey="prevPeriod" 
-                    name="prevPeriod"
-                    fill="hsl(var(--muted-foreground) / 0.6)" 
-                    radius={[4, 4, 0, 0]}
-                  />
-                )}
-                {comparisonType === "previous_year" && (
-                  <Bar 
-                    dataKey="prevYear" 
-                    name="prevYear"
-                    fill="hsl(var(--accent-foreground) / 0.4)" 
-                    radius={[4, 4, 0, 0]}
-                  />
-                )}
-              </BarChart>
-            </ChartContainer>
-            <div className="flex justify-center gap-6 mt-2 text-xs">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm bg-primary" />
-                <span className="text-muted-foreground">Current</span>
-              </div>
-              {comparisonType === "previous_period" && (
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'hsl(var(--muted-foreground) / 0.6)' }} />
-                  <span className="text-muted-foreground">vs Prev Period</span>
-                </div>
-              )}
-              {comparisonType === "previous_year" && (
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'hsl(var(--accent-foreground) / 0.4)' }} />
-                  <span className="text-muted-foreground">vs Prev Year</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
         
         {/* Combined Date Breakdown Table - for selected period in overview mode */}
         {activeReportTab === "overview" && (() => {
