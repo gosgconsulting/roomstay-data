@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -16,6 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2, Sparkles } from "lucide-react";
+import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { getUser } from "@/lib/auth";
@@ -1142,6 +1144,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     );
   };
 
+  // State for YTD chart KPI selector
+  const [chartKpi, setChartKpi] = useState<string>("Revenue");
+
   // Get the tab data - compute dynamically for any tab
   const tabData = computeDataForTab(activeTab);
   const totals = calculateTotals(tabData);
@@ -1167,6 +1172,42 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     : comparisonTabData.length > 0 
       ? calculateTotals(comparisonTabData.filter(r => r.reportId === activeReportTab))
       : null;
+
+  // Prepare YTD monthly chart data - full year January to December
+  const ytdChartData = useMemo(() => {
+    const year = new Date().getFullYear();
+    const monthlyData: { month: string; value: number }[] = [];
+    
+    // Create data for all 12 months
+    for (let m = 0; m < 12; m++) {
+      const monthKey = `${year}-${String(m + 1).padStart(2, '0')}`;
+      const monthLabel = MONTH_NAMES[m].substring(0, 3); // Jan, Feb, etc.
+      
+      // Get data from cached monthly_data or compute from YTD data
+      let monthValue = 0;
+      
+      if (data.monthly_data?.[monthKey]) {
+        // Sum the metric across all reports for this month
+        const monthReports = data.monthly_data[monthKey];
+        monthValue = monthReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
+      }
+      
+      monthlyData.push({
+        month: monthLabel,
+        value: monthValue,
+      });
+    }
+    
+    return monthlyData;
+  }, [data.monthly_data, chartKpi]);
+
+  // Chart config
+  const chartConfig = {
+    value: {
+      label: chartKpi,
+      color: "hsl(var(--primary))",
+    },
+  };
 
   return (
     <div className="w-full space-y-6">
@@ -1354,6 +1395,57 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             </div>
           );
         })()}
+
+        {/* YTD Monthly Bar Chart - only in overview mode */}
+        {activeReportTab === "overview" && (
+          <div className="border rounded-lg overflow-hidden">
+            <div className="bg-primary/5 px-4 py-2 border-b flex items-center justify-between">
+              <h4 className="font-semibold text-sm">Results By Month (YTD)</h4>
+              <Select value={chartKpi} onValueChange={setChartKpi}>
+                <SelectTrigger className="w-[140px] h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border z-50">
+                  {safeMetrics.map((metric) => (
+                    <SelectItem key={metric} value={metric}>
+                      {metric}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="p-4">
+              <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                <BarChart data={ytdChartData} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
+                  <XAxis 
+                    dataKey="month" 
+                    tickLine={false} 
+                    axisLine={false}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis 
+                    tickLine={false} 
+                    axisLine={false}
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value) => formatNumber(value)}
+                  />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value) => formatMetricValue(chartKpi, Number(value))}
+                      />
+                    }
+                  />
+                  <Bar 
+                    dataKey="value" 
+                    fill="hsl(var(--primary))" 
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ChartContainer>
+            </div>
+          </div>
+        )}
         
         {/* Breakdowns - only show on individual report tabs, not on overview */}
         {activeReportTab !== "overview" && data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (() => {
