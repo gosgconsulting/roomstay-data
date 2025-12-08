@@ -129,11 +129,12 @@ export function ReportsSidebar({
     }
   };
 
-  // Generate date options: YTD at top, then current month down to January
+  // Generate date options: YTD at top, then MTD (current month), then previous months
   const dateOptions = useMemo(() => {
     const options: { value: string; label: string }[] = [];
     const now = new Date();
     const yearStart = startOfYear(now);
+    const currentMonthKey = format(now, "yyyy-MM");
     
     // Add YTD at the top
     options.push({ value: "ytd", label: "YTD" });
@@ -142,7 +143,8 @@ export function ReportsSidebar({
     let current = now;
     while (current >= yearStart) {
       const monthKey = format(current, "yyyy-MM");
-      const monthLabel = format(current, "MMMM yyyy");
+      // Label current month as "MTD", others as month name
+      const monthLabel = monthKey === currentMonthKey ? "MTD" : format(current, "MMMM yyyy");
       options.push({ value: monthKey, label: monthLabel });
       current = subMonths(current, 1);
     }
