@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+
 import { supabase } from "@/integrations/supabase/client";
 import { fetchSourceData, type SourceDataResult } from "@/hooks/dataSources/useSourceData";
 import { extractUniqueDimensionValues } from "@/lib/filters/extractDimensionValues";
@@ -91,7 +91,7 @@ interface AddAICardModalProps {
   editingCard?: EditingCard | null;
 }
 
-type Step = "select-reports" | "filter-dimensions" | "breakdown-dimensions" | "select-metrics" | "select-period" | "ai-prompt";
+type Step = "select-reports" | "filter-dimensions" | "breakdown-dimensions" | "select-metrics" | "select-period";
 
 // Standard KPI metrics available
 const AVAILABLE_METRICS = [
@@ -511,8 +511,6 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       setStep("select-metrics");
     } else if (step === "select-metrics") {
       setStep("select-period");
-    } else if (step === "select-period") {
-      setStep("ai-prompt");
     }
   };
 
@@ -526,8 +524,6 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       setStep("breakdown-dimensions");
     } else if (step === "select-period") {
       setStep("select-metrics");
-    } else if (step === "ai-prompt") {
-      setStep("select-period");
     }
   };
 
@@ -1150,8 +1146,6 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         return `${prefix}Select Metrics`;
       case "select-period":
         return `${prefix}Select Period`;
-      case "ai-prompt":
-        return `${prefix}AI Summary Prompt`;
     }
   };
 
@@ -1536,72 +1530,6 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
               </div>
             </div>
           )}
-
-          {/* Step 5: AI Prompt */}
-          {step === "ai-prompt" && (
-            <div className="space-y-4">
-              <div>
-                <Label className="text-sm font-medium mb-2 block">
-                  AI Prompt
-                </Label>
-                <Textarea
-                  className="w-full h-64 resize-none"
-                  placeholder="Enter instructions for the AI summary..."
-                  value={aiPrompt}
-                  onChange={e => setAiPrompt(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  This prompt will guide the AI in generating your executive summary.
-                </p>
-              </div>
-
-              <div className="bg-muted/50 rounded-lg p-4">
-                <h4 className="font-medium mb-2">Summary Configuration</h4>
-                <div className="space-y-2 text-sm text-muted-foreground">
-                  <p>
-                    <span className="font-medium text-foreground">Period:</span>{" "}
-                    {formattedSinceDate} → Today
-                  </p>
-                  <p>
-                    <span className="font-medium text-foreground">Metrics:</span>{" "}
-                    {selectedMetrics.join(", ")}
-                  </p>
-                  {selectedReports.map(report => {
-                    const config = reportConfigs[report.id];
-                    const breakdownConfig = breakdownConfigs[report.id];
-                    const filterDim = dimensions[report.id]?.find(
-                      d => d.id === config?.dimensionId
-                    );
-                    const breakdownDims = (breakdownConfig?.breakdownDimensionIds || [])
-                      .map(dimId => dimensions[report.id]?.find(d => d.id === dimId)?.name)
-                      .filter(Boolean);
-                    return (
-                      <div key={report.id} className="space-y-1">
-                        <div>
-                          <span className="font-medium text-foreground">
-                            {report.name}:
-                          </span>{" "}
-                          {filterDim ? (
-                            <>
-                              Filter: {filterDim.name} ({config?.selectedValues.length || 0}{" "}
-                              selected)
-                            </>
-                          ) : (
-                            <span className="italic">No filter</span>
-                          )}
-                        </div>
-                        {breakdownDims.length > 0 && (
-                          <div className="ml-4 text-xs">
-                            → Breakdowns: {breakdownDims.join(", ")}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Footer */}
@@ -1614,7 +1542,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
             {step === "select-reports" ? "Cancel" : "Back"}
           </Button>
 
-          {step === "ai-prompt" ? (
+          {step === "select-period" ? (
             <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? (
                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />

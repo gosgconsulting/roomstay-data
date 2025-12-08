@@ -920,7 +920,7 @@ const AISummaryPage = () => {
     setGenerateModalCard(card);
   };
 
-  const handleGenerateSummary = async (comparisonType: ComparisonOption, selectedPeriods: string[]) => {
+  const handleGenerateSummary = async (comparisonType: ComparisonOption, selectedPeriods: string[], aiPrompt: string) => {
     const card = generateModalCard;
     if (!card) return;
     
@@ -957,7 +957,7 @@ const AISummaryPage = () => {
           pivotData: card.cached_pivot_data,
           selectedMetrics: card.selected_metrics,
           reportConfigs: card.report_configs,
-          aiPrompt: card.ai_prompt,
+          aiPrompt: aiPrompt, // Use the prompt from the modal
           comparisonType: comparisonType,
           selectedPeriods: selectedPeriods
         })
@@ -1383,6 +1383,7 @@ const AISummaryPage = () => {
         onGenerate={handleGenerateSummary}
         isGenerating={!!generatingCardId}
         cardName={generateModalCard?.name}
+        initialAiPrompt={generateModalCard?.ai_prompt}
       />
         </div>
       </div>
