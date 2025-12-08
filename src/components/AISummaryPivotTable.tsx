@@ -848,7 +848,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   };
   
   // Compute comparison data dynamically for a given tab
-  // For YoY comparison, we match the exact number of days each report has data for
+  // For both YoY and Previous Period, we match the exact number of days each report has data for
   const computeComparisonDataForTab = (tab: DateTab, compType: ComparisonType): ReportMetrics[] => {
     if (compType === "none" || !reportsLoaded || Object.keys(rawSourceData).length === 0) {
       return [];
@@ -863,28 +863,44 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       
       let comparisonDateRange: { start: Date; end: Date } | null;
       
-      if (compType === "previous_year") {
-        // For YoY: find actual data range for this report in current period, then apply same days to last year
-        const rowsInPeriod = reportData.rows.filter((row: any) => {
-          const rowDate = parseDate(row.Date || row.date);
-          if (!rowDate) return false;
-          return rowDate >= currentDateRange.start && rowDate <= currentDateRange.end;
-        });
+      // Find actual data range for this report in current period
+      const rowsInPeriod = reportData.rows.filter((row: any) => {
+        const rowDate = parseDate(row.Date || row.date);
+        if (!rowDate) return false;
+        return rowDate >= currentDateRange.start && rowDate <= currentDateRange.end;
+      });
+      
+      if (rowsInPeriod.length > 0) {
+        // Find the actual min and max dates in the data
+        const dates = rowsInPeriod
+          .map((row: any) => parseDate(row.Date || row.date))
+          .filter((d: Date | null): d is Date => d !== null)
+          .sort((a: Date, b: Date) => a.getTime() - b.getTime());
         
-        if (rowsInPeriod.length > 0) {
-          // Find the actual min and max dates in the data
-          const dates = rowsInPeriod
-            .map((row: any) => parseDate(row.Date || row.date))
-            .filter((d: Date | null): d is Date => d !== null)
-            .sort((a: Date, b: Date) => a.getTime() - b.getTime());
+        if (dates.length > 0) {
+          const actualStart = dates[0];
+          const actualEnd = dates[dates.length - 1];
           
-          if (dates.length > 0) {
-            const actualStart = dates[0];
-            const actualEnd = dates[dates.length - 1];
+          if (compType === "previous_year") {
             // Use the same day range from last year
             comparisonDateRange = {
               start: subYears(actualStart, 1),
               end: subYears(actualEnd, 1),
+            };
+          } else if (compType === "previous_period") {
+            // Use the same number of days from previous month
+            // Calculate the day-of-month range and apply to previous month
+            const startDayOfMonth = actualStart.getDate();
+            const endDayOfMonth = actualEnd.getDate();
+            const prevMonthStart = subMonths(actualStart, 1);
+            const prevMonthEnd = subMonths(actualEnd, 1);
+            
+            // Ensure we don't exceed the days in the previous month
+            const prevMonthLastDay = endOfMonth(prevMonthStart).getDate();
+            
+            comparisonDateRange = {
+              start: new Date(prevMonthStart.getFullYear(), prevMonthStart.getMonth(), Math.min(startDayOfMonth, prevMonthLastDay)),
+              end: new Date(prevMonthEnd.getFullYear(), prevMonthEnd.getMonth(), Math.min(endDayOfMonth, prevMonthLastDay)),
             };
           } else {
             comparisonDateRange = getComparisonDateRange(tab, compType);
@@ -893,7 +909,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           comparisonDateRange = getComparisonDateRange(tab, compType);
         }
       } else {
-        // For previous period, use the standard calculation
         comparisonDateRange = getComparisonDateRange(tab, compType);
       }
       
