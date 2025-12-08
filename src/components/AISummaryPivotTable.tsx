@@ -1750,11 +1750,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   
                   return (
                     <div key={`${breakdownKey}-${period}`} className="border rounded-lg overflow-hidden">
-                      <div className="bg-primary/5 px-4 py-2 border-b">
-                        <h4 className="font-semibold text-sm">
-                          {activeReportTab === "overview" ? `${reportName} - ` : ''}{dimensionName}
-                        </h4>
-                      </div>
                       <div className="overflow-hidden">
                         <Table>
                           <TableHeader className="sticky top-0 z-10 bg-muted/30">
