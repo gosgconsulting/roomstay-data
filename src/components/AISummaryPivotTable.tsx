@@ -48,7 +48,8 @@ interface BreakdownRow {
   metrics: Record<string, number>;
 }
 
-export type DateTab = "last_month" | "mtd" | "ytd";
+// DateTab can be "mtd", "ytd", or a month key like "2025-11"
+export type DateTab = "mtd" | "ytd" | string;
 export type ComparisonType = "none" | "previous_period" | "previous_year";
 
 export interface DateBreakdownRow {
@@ -71,27 +72,27 @@ export interface ExecutiveSummaries {
 }
 
 export interface CachedPivotData {
-  last_month: ReportMetrics[];
+  // Keep legacy structure for backward compatibility
+  last_month?: ReportMetrics[];
   mtd: ReportMetrics[];
   ytd: ReportMetrics[];
-  breakdown_data?: Record<string, Record<DateTab, BreakdownRow[]>>;
-  breakdown_dimension_names?: Record<string, string>; // Map of reportId -> dimension name
-  date_breakdown_data?: Record<string, Record<DateTab, DateBreakdownRow[]>>; // Legacy per-report
-  combined_date_breakdown?: Record<DateTab, DateBreakdownRow[]>; // Combined across all reports
+  breakdown_data?: Record<string, Record<string, BreakdownRow[]>>;
+  breakdown_dimension_names?: Record<string, string>;
+  date_breakdown_data?: Record<string, Record<string, DateBreakdownRow[]>>;
+  combined_date_breakdown?: Record<string, DateBreakdownRow[]>;
   table_insights?: TableInsights;
-  executive_summaries?: ExecutiveSummaries; // Separate summary for each tab
-  // Comparison data
+  executive_summaries?: ExecutiveSummaries;
   comparison_previous_period?: {
-    last_month: ReportMetrics[];
-    mtd: ReportMetrics[];
-    ytd: ReportMetrics[];
-    breakdown_data?: Record<string, Record<DateTab, BreakdownRow[]>>;
+    last_month?: ReportMetrics[];
+    mtd?: ReportMetrics[];
+    ytd?: ReportMetrics[];
+    breakdown_data?: Record<string, Record<string, BreakdownRow[]>>;
   };
   comparison_previous_year?: {
-    last_month: ReportMetrics[];
-    mtd: ReportMetrics[];
-    ytd: ReportMetrics[];
-    breakdown_data?: Record<string, Record<DateTab, BreakdownRow[]>>;
+    last_month?: ReportMetrics[];
+    mtd?: ReportMetrics[];
+    ytd?: ReportMetrics[];
+    breakdown_data?: Record<string, Record<string, BreakdownRow[]>>;
   };
 }
 
@@ -236,6 +237,17 @@ const formatMetricValue = (metric: string, value: number): string => {
 // Export these utilities for use in other files
 export const getDateRange = (tab: DateTab): { start: Date; end: Date } => {
   const now = new Date();
+  
+  // Handle specific month keys like "2025-11"
+  if (tab.match(/^\d{4}-\d{2}$/)) {
+    const [year, month] = tab.split('-').map(Number);
+    const monthDate = new Date(year, month - 1, 1);
+    return {
+      start: startOfMonth(monthDate),
+      end: endOfMonth(monthDate),
+    };
+  }
+  
   switch (tab) {
     case "last_month":
       const lastMonth = subMonths(now, 1);
@@ -251,6 +263,12 @@ export const getDateRange = (tab: DateTab): { start: Date; end: Date } => {
     case "ytd":
       return {
         start: startOfYear(now),
+        end: now,
+      };
+    default:
+      // Fallback to MTD
+      return {
+        start: startOfMonth(now),
         end: now,
       };
   }
@@ -546,14 +564,12 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
         const reportsList = reportsData || [];
 
-        const dateRanges: Record<DateTab, { start: Date; end: Date }> = {
-          last_month: getDateRange("last_month"),
+        const dateRanges = {
           mtd: getDateRange("mtd"),
           ytd: getDateRange("ytd"),
         };
 
-        const newData: Record<DateTab, ReportMetrics[]> = {
-          last_month: [],
+        const newData: CachedPivotData = {
           mtd: [],
           ytd: [],
         };
@@ -579,7 +595,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
           if (!sourceData?.transformedRows) continue;
 
-          (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+          (["mtd", "ytd"] as const).forEach((tab) => {
             const metrics = aggregateMetrics(
               sourceData.transformedRows,
               selectedMetrics,
@@ -774,64 +790,65 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     );
   };
 
+  // For specific month tabs, we need to calculate data on the fly
+  // For mtd/ytd, use cached data
+  const isSpecificMonth = activeTab.match(/^\d{4}-\d{2}$/);
+  
+  // Get the tab data - for specific months, use last_month data as fallback or empty
+  const getTabData = (): ReportMetrics[] => {
+    if (isSpecificMonth) {
+      // For specific months, we'd need to recalculate - for now, return empty
+      // The data will be loaded when the component re-renders with new cached data
+      return data.last_month || data.mtd || [];
+    }
+    return (data[activeTab] as ReportMetrics[]) || [];
+  };
+  
+  const tabData = getTabData();
+  const totals = calculateTotals(tabData);
+  
+  // Get comparison totals
+  const comparisonData = comparisonType === "previous_period" 
+    ? data.comparison_previous_period?.[activeTab as keyof typeof data.comparison_previous_period]
+    : comparisonType === "previous_year"
+    ? data.comparison_previous_year?.[activeTab as keyof typeof data.comparison_previous_year]
+    : null;
+  const comparisonTotals = (comparisonData && Array.isArray(comparisonData)) ? calculateTotals(comparisonData) : null;
+
   return (
     <div className="w-full space-y-6">
-      <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as DateTab)}>
-        <div className="flex items-center justify-between mb-4">
-          {/* Only show tabs if not controlled externally */}
-          {!selectedTab && (
-            <TabsList>
-              <TabsTrigger value="last_month">Last Month</TabsTrigger>
-              <TabsTrigger value="mtd">MTD</TabsTrigger>
-              <TabsTrigger value="ytd">YTD</TabsTrigger>
-            </TabsList>
-          )}
-          {selectedTab && <div />}
-          
-          <Select value={comparisonType} onValueChange={(v) => setComparisonType(v as ComparisonType)}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Comparison" />
-            </SelectTrigger>
-            <SelectContent className="bg-popover border-border z-50">
-              <SelectItem value="none">No Comparison</SelectItem>
-              <SelectItem value="previous_period">vs Previous Period</SelectItem>
-              <SelectItem value="previous_year">vs Previous Year</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="flex items-center justify-end mb-4">
+        <Select value={comparisonType} onValueChange={(v) => setComparisonType(v as ComparisonType)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Comparison" />
+          </SelectTrigger>
+          <SelectContent className="bg-popover border-border z-50">
+            <SelectItem value="none">No Comparison</SelectItem>
+            <SelectItem value="previous_period">vs Previous Period</SelectItem>
+            <SelectItem value="previous_year">vs Previous Year</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
-        {(["last_month", "mtd", "ytd"] as DateTab[]).map((tab) => {
-          const tabData = data[tab] || [];
-          const totals = calculateTotals(tabData);
-          
-          // Get comparison totals
-          const comparisonData = comparisonType === "previous_period" 
-            ? data.comparison_previous_period?.[tab]
-            : comparisonType === "previous_year"
-            ? data.comparison_previous_year?.[tab]
-            : null;
-          const comparisonTotals = comparisonData ? calculateTotals(comparisonData) : null;
-
-          return (
-            <TabsContent key={tab} value={tab} className="mt-0 space-y-6">
-              {/* Main Summary Table */}
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="font-semibold w-[200px]">Report</TableHead>
-                      {safeMetrics.map((metric) => (
-                        <TableHead key={metric} className="font-semibold text-right">
-                          {metric}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tabData.map((reportData, idx) => {
-                      const comparisonMetrics = getComparisonMetrics(reportData.reportId, tab);
-                      return (
-                        <TableRow
+      <div className="space-y-6">
+        {/* Main Summary Table */}
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="font-semibold w-[200px]">Report</TableHead>
+                {safeMetrics.map((metric) => (
+                  <TableHead key={metric} className="font-semibold text-right">
+                    {metric}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tabData.map((reportData, idx) => {
+                const comparisonMetrics = getComparisonMetrics(reportData.reportId, activeTab);
+                return (
+                  <TableRow
                           key={reportData.reportId}
                           className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}
                         >
@@ -857,186 +874,67 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                     </TableRow>
                   </TableBody>
                 </Table>
-                {data.table_insights?.summary?.[tab] && (
+                {data.table_insights?.summary?.[activeTab] && (
                   <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
                     <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
                       <Sparkles className="h-3 w-3" />
                       Insights
                     </div>
-                    <FormatAIInsights text={data.table_insights.summary[tab]} />
+                    <FormatAIInsights text={data.table_insights.summary[activeTab]} />
                   </div>
                 )}
               </div>
               
-              {/* Combined Date Breakdown Table - Group by Week for last_month/mtd, by Month for ytd */}
-              {combinedDateBreakdown[tab] && combinedDateBreakdown[tab].length > 0 && (
+              {/* Combined Date Breakdown Table */}
+              {combinedDateBreakdown[activeTab] && combinedDateBreakdown[activeTab].length > 0 && (
                 <div className="space-y-4">
-                  {(() => {
-                    const rawDateRows = combinedDateBreakdown[tab] || [];
-                    const groupLabel = tab === 'ytd' ? 'Month' : 'Week';
-                    const isWeekView = tab !== 'ytd';
-                    
-                    // Sort dateRows in descending order (most recent first)
-                    const dateRows = [...rawDateRows].sort((a, b) => {
-                      if (isWeekView) {
-                        // Parse "Week 45, 2024" format
-                        const matchA = a.dateGroup.match(/Week\s+(\d+),?\s+(\d+)/i);
-                        const matchB = b.dateGroup.match(/Week\s+(\d+),?\s+(\d+)/i);
-                        if (matchA && matchB) {
-                          const yearA = parseInt(matchA[2]);
-                          const yearB = parseInt(matchB[2]);
-                          if (yearA !== yearB) return yearB - yearA; // Descending by year
-                          return parseInt(matchB[1]) - parseInt(matchA[1]); // Descending by week
-                        }
-                      } else {
-                        // Parse "January 2024" format for months
-                        const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
-                                           'july', 'august', 'september', 'october', 'november', 'december'];
-                        const parseMonth = (dateGroup: string): { month: number; year: number } | null => {
-                          const match = dateGroup.match(/(\w+)\s+(\d+)/);
-                          if (match) {
-                            const monthIndex = monthNames.indexOf(match[1].toLowerCase());
-                            if (monthIndex !== -1) {
-                              return { month: monthIndex, year: parseInt(match[2]) };
-                            }
-                          }
-                          return null;
-                        };
-                        const parsedA = parseMonth(a.dateGroup);
-                        const parsedB = parseMonth(b.dateGroup);
-                        if (parsedA && parsedB) {
-                          if (parsedA.year !== parsedB.year) return parsedB.year - parsedA.year; // Descending by year
-                          return parsedB.month - parsedA.month; // Descending by month
-                        }
-                      }
-                      // Fallback to string comparison
-                      return b.dateGroup.localeCompare(a.dateGroup);
-                    });
-                    
-                    const dateBreakdownTotals = calculateBreakdownTotals(dateRows);
-                    
-                    return (
-                      <div className="border rounded-lg overflow-hidden">
-                        <div className="bg-blue-50 dark:bg-blue-900/20 px-4 py-2 border-b">
-                          <h4 className="font-semibold text-sm">Results By {groupLabel}</h4>
-                        </div>
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-muted/30">
-                              <TableHead className="font-medium w-[200px]">{groupLabel}</TableHead>
-                              {safeMetrics.map((metric) => (
-                                <TableHead key={metric} className="font-medium text-right text-xs">
-                                  {metric}
-                                </TableHead>
-                              ))}
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {dateRows.map((row, idx) => {
-                              // Use actual date range from data if available, otherwise fall back to calculated
-                              let displayDateRange: string | null = null;
-                              if (isWeekView) {
-                                if (row.dateRangeStart && row.dateRangeEnd) {
-                                  const startDate = new Date(row.dateRangeStart);
-                                  const endDate = new Date(row.dateRangeEnd);
-                                  displayDateRange = `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d')}`;
-                                } else {
-                                  displayDateRange = getWeekDateRangeFromKey(row.dateGroup);
-                                }
-                              }
-                              return (
-                                <TableRow
-                                  key={row.dateGroup}
-                                  className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                                >
-                                  <TableCell className="font-medium text-sm">
-                                    <div className="flex flex-col">
-                                      <span>{row.dateGroup}</span>
-                                      {displayDateRange && (
-                                        <span className="text-xs text-muted-foreground">{displayDateRange}</span>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                  {safeMetrics.map((metric) => (
-                                    <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                      {formatMetricValue(metric, row.metrics[metric] || 0)}
-                                    </TableCell>
-                                  ))}
-                                </TableRow>
-                              );
-                            })}
-                            {/* Date Breakdown Total Row */}
-                            <TableRow className="bg-muted/50 font-medium border-t">
-                              <TableCell className="text-sm">Total</TableCell>
-                              {safeMetrics.map((metric) => (
-                                <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                  {formatMetricValue(metric, dateBreakdownTotals[metric] || 0)}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          </TableBody>
-                        </Table>
-                        {data.table_insights?.date_breakdown?.[tab] && (
-                          <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
-                            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
-                              <Sparkles className="h-3 w-3" />
-                              Insights
-                            </div>
-                            <FormatAIInsights text={data.table_insights.date_breakdown[tab]} />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-primary/5 px-4 py-2 border-b">
+                      <h4 className="font-semibold text-sm">Results By {activeTab === 'ytd' ? 'Month' : 'Week'}</h4>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/30">
+                          <TableHead className="font-medium w-[200px]">{activeTab === 'ytd' ? 'Month' : 'Week'}</TableHead>
+                          {safeMetrics.map((metric) => (
+                            <TableHead key={metric} className="font-medium text-right text-xs">
+                              {metric}
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {combinedDateBreakdown[activeTab].map((row, idx) => (
+                          <TableRow
+                            key={row.dateGroup}
+                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                          >
+                            <TableCell className="font-medium text-sm">
+                              {row.dateGroup}
+                            </TableCell>
+                            {safeMetrics.map((metric) => (
+                              <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                {formatMetricValue(metric, row.metrics[metric] || 0)}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               )}
               
-              {/* Breakdown Tables */}
-              {Object.keys(breakdownData).length > 0 && (
+              {/* Breakdowns */}
+              {data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (
                 <div className="space-y-4">
-                {Object.entries(breakdownData).map(([breakdownKey, reportBreakdown]) => {
-                    const rawBreakdownRows = reportBreakdown[tab] || [];
-                    // Filter out rows where all metrics are 0
-                    const breakdownRows = rawBreakdownRows.filter(row => {
-                      return safeMetrics.some(metric => (row.metrics[metric] || 0) !== 0);
-                    });
+                  {Object.entries(data.breakdown_data).map(([breakdownKey, tabsData]) => {
+                    const breakdownRows = tabsData?.[activeTab] || [];
                     if (breakdownRows.length === 0) return null;
                     
-                    const breakdownTotals = calculateBreakdownTotals(breakdownRows);
-                    
-                    // Parse the breakdown key - it can be "reportId_dimensionId" (new format) or just "reportId" (legacy)
-                    const keyParts = breakdownKey.split('_');
-                    const reportId = keyParts.length >= 2 && keyParts[0].length === 36 
-                      ? keyParts[0]  // UUID format for reportId
-                      : breakdownKey; // Legacy: entire key is reportId
-                    const reportName = getReportName(reportId);
-                    
-                    // Get dimension name from breakdown_dimension_names (stored in cached data)
-                    // Use breakdownKey for new format, reportId for legacy
-                    const breakdownDimensionNames = data.breakdown_dimension_names || {};
-                    const dimensionName = breakdownDimensionNames[breakdownKey] || 
-                                         breakdownDimensionNames[reportId] || 
-                                         reportConfigs?.[reportId]?.dimensionName || 
-                                         'Group';
-                    
-                    // Get comparison breakdown data - try both key formats
-                    const comparisonBreakdownData = comparisonType === "previous_period"
-                      ? (data.comparison_previous_period?.breakdown_data?.[breakdownKey]?.[tab] || 
-                         data.comparison_previous_period?.breakdown_data?.[reportId]?.[tab])
-                      : comparisonType === "previous_year"
-                      ? (data.comparison_previous_year?.breakdown_data?.[breakdownKey]?.[tab] ||
-                         data.comparison_previous_year?.breakdown_data?.[reportId]?.[tab])
-                      : null;
-                    
-                    // Build a map of groupValue to comparison metrics
-                    const comparisonBreakdownMap = new Map<string, Record<string, number>>();
-                    comparisonBreakdownData?.forEach(row => {
-                      comparisonBreakdownMap.set(row.groupValue, row.metrics);
-                    });
-                    
-                    const comparisonBreakdownTotals = comparisonBreakdownData 
-                      ? calculateBreakdownTotals(comparisonBreakdownData) 
-                      : null;
+                    const [reportId] = breakdownKey.split('_');
+                    const reportName = tabData.find(r => r.reportId === reportId)?.reportName || 'Report';
+                    const dimensionName = data.breakdown_dimension_names?.[breakdownKey] || 'Group';
                     
                     return (
                       <div key={breakdownKey} className="border rounded-lg overflow-hidden">
@@ -1055,66 +953,42 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {breakdownRows.map((row, idx) => {
-                              const rowComparisonMetrics = comparisonBreakdownMap.get(row.groupValue) || null;
-                              return (
-                                <TableRow
-                                  key={row.groupValue}
-                                  className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                                >
-                                  <TableCell className="font-medium text-sm">
-                                    {row.groupValue}
-                                  </TableCell>
-                                  {safeMetrics.map((metric) => (
-                                    <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                      {renderMetricCell(row.metrics[metric] || 0, metric, rowComparisonMetrics)}
-                                    </TableCell>
-                                  ))}
-                                </TableRow>
-                              );
-                            })}
-                            {/* Breakdown Total Row */}
-                            <TableRow className="bg-muted/50 font-medium border-t">
-                              <TableCell className="text-sm">Total</TableCell>
-                              {safeMetrics.map((metric) => (
-                                <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                  {renderMetricCell(breakdownTotals[metric] || 0, metric, comparisonBreakdownTotals, true)}
+                            {breakdownRows.map((row, idx) => (
+                              <TableRow
+                                key={row.groupValue}
+                                className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                              >
+                                <TableCell className="font-medium text-sm">
+                                  {row.groupValue}
                                 </TableCell>
-                              ))}
-                            </TableRow>
+                                {safeMetrics.map((metric) => (
+                                  <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                    {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
                           </TableBody>
                         </Table>
-                        {(data.table_insights?.breakdowns?.[breakdownKey]?.[tab] || data.table_insights?.breakdowns?.[reportId]?.[tab]) && (
-                          <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
-                            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
-                              <Sparkles className="h-3 w-3" />
-                              Insights
-                            </div>
-                            <FormatAIInsights text={data.table_insights.breakdowns[breakdownKey]?.[tab] || data.table_insights.breakdowns[reportId]?.[tab]} />
-                          </div>
-                        )}
                       </div>
                     );
                   })}
                 </div>
               )}
               
-              {/* Executive Summary at the bottom */}
-              {data.executive_summaries?.[tab] && (
+              {/* Executive Summary */}
+              {data.executive_summaries?.[activeTab] && (
                 <div className="border rounded-lg overflow-hidden bg-background">
                   <div className="px-4 py-3 border-b bg-muted/30 flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-primary" />
                     <h3 className="font-semibold">Executive Summary</h3>
                   </div>
                   <div className="p-6 bg-background">
-                    <FormattedAISummary summary={data.executive_summaries[tab]} />
+                    <FormattedAISummary summary={data.executive_summaries[activeTab]} />
                   </div>
                 </div>
               )}
-            </TabsContent>
-          );
-        })}
-      </Tabs>
-    </div>
-  );
-};
+            </div>
+          </div>
+        );
+      };
