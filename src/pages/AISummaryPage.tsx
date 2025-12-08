@@ -941,27 +941,7 @@ const AISummaryPage = () => {
             </p>
           </div>
         ) : (
-          <>
-            {/* Date Filter */}
-            <div className="mb-6">
-              <Select
-                value={selectedDateTab}
-                onValueChange={(value) => setSelectedDateTab(value)}
-              >
-                <SelectTrigger className="w-[200px] bg-background border-border">
-                  <SelectValue placeholder="Select date range" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-border z-50">
-                  {dateOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="grid grid-cols-1 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             {cards
               .filter(card => !selectedCardId || card.id === selectedCardId)
               .map(card => (
@@ -1086,6 +1066,7 @@ const AISummaryPage = () => {
                     onTabChange={setSelectedDateTab}
                     selectedReportTab={selectedReportTab}
                     onReportTabChange={setSelectedReportTab}
+                    dateOptions={dateOptions}
                   />
                 </CardContent>
                 
@@ -1130,8 +1111,7 @@ const AISummaryPage = () => {
                 </CardContent>
               </Card>
             ))}
-            </div>
-          </>
+          </div>
         )}
       </div>
 
