@@ -103,7 +103,7 @@ const AISummaryPage = () => {
   const [generateModalCard, setGenerateModalCard] = useState<AISummaryCard | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(summaryId || null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [selectedDateTab, setSelectedDateTab] = useState<DateTab>("mtd");
+  const [selectedDateTab, setSelectedDateTab] = useState<DateTab>(format(new Date(), "yyyy-MM"));
 
   const fetchCards = async () => {
     try {
