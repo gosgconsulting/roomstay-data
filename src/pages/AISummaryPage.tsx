@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, Settings, MoreHorizontal, Database, Pencil, Share2 } from "lucide-react";
+import { SidebarProvider } from "@/components/ui/sidebar";
+import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -832,34 +834,50 @@ const AISummaryPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={handleBack}>
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-primary" />
-                <h1 className="text-xl font-semibold">AI Summary</h1>
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full bg-background">
+        <ReportsSidebar
+          reports={reports.map(r => ({ 
+            id: r.id, 
+            name: r.name, 
+            account_id: accountId || null,
+            created_at: '',
+            updated_at: ''
+          }))}
+          accountId={accountId}
+          selectedAISummaryId={summaryId}
+          aiSummaries={cards.map(c => ({ id: c.id, name: c.name }))}
+          onAddAISummary={() => setIsAddCardModalOpen(true)}
+        />
+        
+        <div className="flex-1 flex flex-col">
+          <div className="border-b">
+            <div className="px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <Button variant="ghost" size="icon" onClick={handleBack}>
+                    <ArrowLeft className="h-5 w-5" />
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    <h1 className="text-xl font-semibold">AI Summary</h1>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={() => setIsShareModalOpen(true)}>
+                    <Share2 className="h-4 w-4 mr-2" />
+                    Share
+                  </Button>
+                  <Button onClick={() => setIsAddCardModalOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add card
+                  </Button>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setIsShareModalOpen(true)}>
-                <Share2 className="h-4 w-4 mr-2" />
-                Share
-              </Button>
-              <Button onClick={() => setIsAddCardModalOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add card
-              </Button>
-            </div>
           </div>
-        </div>
-      </div>
 
-      <div className="container mx-auto px-6 py-8">
+          <div className="px-6 py-8 flex-1">
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1114,7 +1132,9 @@ const AISummaryPage = () => {
         isGenerating={!!generatingCardId}
         cardName={generateModalCard?.name}
       />
-    </div>
+        </div>
+      </div>
+    </SidebarProvider>
   );
 };
 
