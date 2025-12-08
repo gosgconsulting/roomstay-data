@@ -869,13 +869,13 @@ const AISummaryPage = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={() => setIsShareModalOpen(true)}>
-                    <Share2 className="h-4 w-4 mr-2" />
-                    Share
-                  </Button>
                   <Button onClick={() => setIsAddCardModalOpen(true)}>
                     <Plus className="h-4 w-4 mr-2" />
                     Add card
+                  </Button>
+                  <Button variant="outline" onClick={() => setIsShareModalOpen(true)}>
+                    <Share2 className="h-4 w-4 mr-2" />
+                    Share
                   </Button>
                 </div>
               </div>
