@@ -235,10 +235,25 @@ const AISummaryPage = () => {
 
       toast.info("Refreshing pivot data from sources...", { id: "refresh-pivot" });
 
+      // Generate month keys for the current year (from January to current month)
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth(); // 0-indexed
+      const monthKeys: string[] = [];
+      for (let m = 0; m <= currentMonth; m++) {
+        monthKeys.push(format(new Date(currentYear, m, 1), "yyyy-MM"));
+      }
+
       const pivotData: CachedPivotData = {
         mtd: [],
         ytd: [],
+        monthly_data: {},
       };
+      
+      // Initialize monthly_data for each month
+      monthKeys.forEach(monthKey => {
+        pivotData.monthly_data![monthKey] = [];
+      });
       
       // Initialize breakdown data structures
       const breakdownData: Record<string, Record<string, Array<{ groupValue: string; metrics: Record<string, number> }>>> = {};
@@ -246,6 +261,11 @@ const AISummaryPage = () => {
       const combinedDateBreakdown: Record<string, DateBreakdownRow[]> = {
         mtd: [], ytd: []
       };
+      // Initialize combined date breakdown for each month
+      monthKeys.forEach(monthKey => {
+        combinedDateBreakdown[monthKey] = [];
+      });
+      
       // To accumulate all rows for combined date breakdown
       const allRowsForDateBreakdown: any[] = [];
       const allMetricNameToIdMaps: Record<string, string>[] = [];
@@ -254,34 +274,42 @@ const AISummaryPage = () => {
       const comparisonPreviousPeriod: {
         mtd: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
         ytd: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
+        monthly_data?: Record<string, Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>>;
         breakdown_data?: Record<string, Record<string, Array<{ groupValue: string; metrics: Record<string, number> }>>>;
       } = {
-        mtd: [], ytd: [], breakdown_data: {}
+        mtd: [], ytd: [], monthly_data: {}, breakdown_data: {}
       };
       const comparisonPreviousYear: {
         mtd: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
         ytd: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
+        monthly_data?: Record<string, Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>>;
         breakdown_data?: Record<string, Record<string, Array<{ groupValue: string; metrics: Record<string, number> }>>>;
       } = {
-        mtd: [], ytd: [], breakdown_data: {}
-      };
-
-      const dateRanges: Record<string, { start: Date; end: Date }> = {
-        mtd: getDateRange("mtd"),
-        ytd: getDateRange("ytd"),
+        mtd: [], ytd: [], monthly_data: {}, breakdown_data: {}
       };
       
-      // Comparison date ranges
-      const comparisonRanges = {
-        previous_period: {
-          mtd: getComparisonDateRange("mtd", "previous_period"),
-          ytd: getComparisonDateRange("ytd", "previous_period"),
-        },
-        previous_year: {
-          mtd: getComparisonDateRange("mtd", "previous_year"),
-          ytd: getComparisonDateRange("ytd", "previous_year"),
-        },
+      // Initialize comparison monthly data
+      monthKeys.forEach(monthKey => {
+        comparisonPreviousPeriod.monthly_data![monthKey] = [];
+        comparisonPreviousYear.monthly_data![monthKey] = [];
+      });
+
+      // Build date ranges for all tabs (mtd, ytd, and each month)
+      const allDateTabs = ["mtd", "ytd", ...monthKeys];
+      const dateRanges: Record<string, { start: Date; end: Date }> = {};
+      allDateTabs.forEach(tab => {
+        dateRanges[tab] = getDateRange(tab);
+      });
+      
+      // Comparison date ranges for all tabs
+      const comparisonRanges: Record<string, Record<string, { start: Date; end: Date } | null>> = {
+        previous_period: {},
+        previous_year: {},
       };
+      allDateTabs.forEach(tab => {
+        comparisonRanges.previous_period[tab] = getComparisonDateRange(tab, "previous_period");
+        comparisonRanges.previous_year[tab] = getComparisonDateRange(tab, "previous_year");
+      });
 
       // Extract filter configs from report_configs
       const { breakdown_configs, ...filterConfigs } = card.report_configs as any;
@@ -364,8 +392,8 @@ const AISummaryPage = () => {
           };
         }
 
-        // Aggregate metrics for each date range
-        (["mtd", "ytd"] as const).forEach((tab) => {
+        // Aggregate metrics for each date range (mtd, ytd, and each month)
+        allDateTabs.forEach((tab) => {
           const metrics = aggregateMetrics(
             sourceData.transformedRows,
             card.selected_metrics,
@@ -374,11 +402,21 @@ const AISummaryPage = () => {
             metricNameToIdMap
           );
 
-          pivotData[tab].push({
+          const reportEntry = {
             reportId: reportData.id,
             reportName: reportData.name,
             metrics,
-          });
+          };
+
+          // Store in appropriate location
+          if (tab === "mtd") {
+            pivotData.mtd.push(reportEntry);
+          } else if (tab === "ytd") {
+            pivotData.ytd.push(reportEntry);
+          } else {
+            // Individual month
+            pivotData.monthly_data![tab].push(reportEntry);
+          }
           
           // Compute comparison data - Previous Period
           const prevPeriodRange = comparisonRanges.previous_period[tab];
@@ -390,11 +428,18 @@ const AISummaryPage = () => {
               dimensionFilter,
               metricNameToIdMap
             );
-            comparisonPreviousPeriod[tab].push({
+            const compEntry = {
               reportId: reportData.id,
               reportName: reportData.name,
               metrics: prevPeriodMetrics,
-            });
+            };
+            if (tab === "mtd") {
+              comparisonPreviousPeriod.mtd.push(compEntry);
+            } else if (tab === "ytd") {
+              comparisonPreviousPeriod.ytd.push(compEntry);
+            } else {
+              comparisonPreviousPeriod.monthly_data![tab].push(compEntry);
+            }
           }
           
           // Compute comparison data - Previous Year
@@ -407,11 +452,18 @@ const AISummaryPage = () => {
               dimensionFilter,
               metricNameToIdMap
             );
-            comparisonPreviousYear[tab].push({
+            const compEntry = {
               reportId: reportData.id,
               reportName: reportData.name,
               metrics: prevYearMetrics,
-            });
+            };
+            if (tab === "mtd") {
+              comparisonPreviousYear.mtd.push(compEntry);
+            } else if (tab === "ytd") {
+              comparisonPreviousYear.ytd.push(compEntry);
+            } else {
+              comparisonPreviousYear.monthly_data![tab].push(compEntry);
+            }
           }
         });
 
@@ -476,15 +528,23 @@ const AISummaryPage = () => {
           console.log(`[Breakdown Debug] Unique values found:`, Array.from(uniqueValues));
           console.log(`[Breakdown Debug] Has uncategorized:`, hasUncategorized);
 
-          breakdownData[breakdownKey] = { mtd: [], ytd: [] };
+          // Initialize breakdown data for all date tabs
+          breakdownData[breakdownKey] = {};
+          allDateTabs.forEach(tab => {
+            breakdownData[breakdownKey][tab] = [];
+          });
           
           // Initialize comparison breakdown data for this breakdown
           if (!comparisonPreviousPeriod.breakdown_data) comparisonPreviousPeriod.breakdown_data = {};
           if (!comparisonPreviousYear.breakdown_data) comparisonPreviousYear.breakdown_data = {};
-          comparisonPreviousPeriod.breakdown_data[breakdownKey] = { mtd: [], ytd: [] };
-          comparisonPreviousYear.breakdown_data[breakdownKey] = { mtd: [], ytd: [] };
+          comparisonPreviousPeriod.breakdown_data[breakdownKey] = {};
+          comparisonPreviousYear.breakdown_data[breakdownKey] = {};
+          allDateTabs.forEach(tab => {
+            comparisonPreviousPeriod.breakdown_data![breakdownKey][tab] = [];
+            comparisonPreviousYear.breakdown_data![breakdownKey][tab] = [];
+          });
           
-          (["mtd", "ytd"] as const).forEach((tab) => {
+          allDateTabs.forEach((tab) => {
             // Process each named group
             uniqueValues.forEach((groupValue) => {
               // Filter rows for this specific group value
@@ -615,7 +675,7 @@ const AISummaryPage = () => {
       allMetricNameToIdMaps.forEach(map => Object.assign(mergedMetricMap, map));
       const dateDimId = mergedMetricMap['Date'] || mergedMetricMap['date'] || mergedMetricMap['Day'];
       
-      (["mtd", "ytd"] as const).forEach((tab) => {
+      allDateTabs.forEach((tab) => {
         const dateRange = dateRanges[tab];
         
         // Group all rows by date group (week or month)
