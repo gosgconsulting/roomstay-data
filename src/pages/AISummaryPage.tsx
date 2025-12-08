@@ -267,6 +267,9 @@ const AISummaryPage = () => {
         combinedDateBreakdown[monthKey] = [];
       });
       
+      // Track actual data date ranges per report for display
+      const actualDataRanges: Record<string, { reportName: string; firstDate: Date | null; lastDate: Date | null }> = {};
+      
       // To accumulate all rows for combined date breakdown
       const allRowsForDateBreakdown: any[] = [];
       const allMetricNameToIdMaps: Record<string, string>[] = [];
@@ -374,6 +377,18 @@ const AISummaryPage = () => {
         const sourceData = await fetchSourceData(dsData as DataSource, user.id, accountId);
         
         if (!sourceData?.transformedRows) continue;
+        
+        // Track actual date range for this report
+        const allDates = sourceData.transformedRows
+          .map((row: any) => parseDate(row.Date || row.date))
+          .filter((d: Date | null): d is Date => d !== null)
+          .sort((a: Date, b: Date) => a.getTime() - b.getTime());
+        
+        actualDataRanges[reportId] = {
+          reportName: reportData.name,
+          firstDate: allDates.length > 0 ? allDates[0] : null,
+          lastDate: allDates.length > 0 ? allDates[allDates.length - 1] : null,
+        };
 
         // Get dimension filter for this report
         const filterConfig = filterConfigs[reportId];
@@ -744,7 +759,7 @@ const AISummaryPage = () => {
 
       toast.dismiss("refresh-pivot");
 
-      // Build complete pivot data with all breakdowns and comparisons
+      // Build complete pivot data with all breakdowns, comparisons, and actual data ranges
       const completePivotData = { 
         ...pivotData, 
         breakdown_data: breakdownData, 
@@ -752,6 +767,16 @@ const AISummaryPage = () => {
         combined_date_breakdown: combinedDateBreakdown,
         comparison_previous_period: comparisonPreviousPeriod,
         comparison_previous_year: comparisonPreviousYear,
+        actual_data_ranges: Object.fromEntries(
+          Object.entries(actualDataRanges).map(([reportId, info]) => [
+            reportId,
+            {
+              reportName: info.reportName,
+              firstDate: info.firstDate?.toISOString() || null,
+              lastDate: info.lastDate?.toISOString() || null,
+            }
+          ])
+        ),
       };
 
       // Save to database including breakdown data and date breakdown data
@@ -774,7 +799,26 @@ const AISummaryPage = () => {
           : c
       ));
 
-      toast.success("Pivot data refreshed!");
+      // Build summary of data ranges for each report
+      const dataRangeSummaries = Object.values(actualDataRanges)
+        .map(info => {
+          if (info.lastDate) {
+            return `${info.reportName}: ${format(info.lastDate, "MMM d, yyyy")}`;
+          }
+          return `${info.reportName}: No data`;
+        })
+        .join("\n");
+
+      toast.success(
+        <div className="space-y-1">
+          <div className="font-medium">Pivot data refreshed!</div>
+          <div className="text-xs text-muted-foreground whitespace-pre-line">
+            Latest data available:
+            {"\n"}{dataRangeSummaries}
+          </div>
+        </div>,
+        { duration: 6000 }
+      );
     } catch (err) {
       console.error("Error refreshing pivot data:", err);
       toast.error("Failed to refresh pivot data");
