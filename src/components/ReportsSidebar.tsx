@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, BarChart3, Sparkles, Calendar } from "lucide-react";
 import {
@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { format, subMonths, startOfYear } from "date-fns";
 
 interface Report {
   id: string;
@@ -31,7 +32,8 @@ interface AISummary {
   name: string;
 }
 
-export type DateTab = "last_month" | "mtd" | "ytd";
+// DateTab can be "mtd", "ytd", or a month key like "2025-11"
+export type DateTab = "mtd" | "ytd" | string;
 
 interface ReportsSidebarProps {
   reports: Report[];
@@ -127,11 +129,33 @@ export function ReportsSidebar({
     }
   };
 
-  const dateTabOptions: { value: DateTab; label: string }[] = [
-    { value: "last_month", label: "Last Month" },
-    { value: "mtd", label: "MTD" },
-    { value: "ytd", label: "YTD" },
-  ];
+  // Generate month options from January of current year to last month
+  const monthOptions = useMemo(() => {
+    const options: { value: string; label: string }[] = [];
+    const now = new Date();
+    const lastMonth = subMonths(now, 1);
+    const yearStart = startOfYear(now);
+    
+    // Start from last month and go back to January
+    let current = lastMonth;
+    while (current >= yearStart) {
+      const monthKey = format(current, "yyyy-MM");
+      const monthLabel = format(current, "MMMM yyyy");
+      options.push({ value: monthKey, label: monthLabel });
+      current = subMonths(current, 1);
+    }
+    
+    return options;
+  }, []);
+
+  // Get default month (last month)
+  const defaultMonth = useMemo(() => {
+    return format(subMonths(new Date(), 1), "yyyy-MM");
+  }, []);
+
+  // Check if current tab is a month selection
+  const isMonthSelected = selectedDateTab && selectedDateTab !== "mtd" && selectedDateTab !== "ytd";
+  const selectedMonthValue = isMonthSelected ? selectedDateTab : defaultMonth;
 
   return (
     <Sidebar collapsible="icon" className={cn("w-64 border-r bg-sidebar", className)}>
@@ -206,20 +230,52 @@ export function ReportsSidebar({
               Date Range
             </SidebarGroupLabel>
             <SidebarGroupContent>
-              <div className="flex flex-col gap-1">
-                {dateTabOptions.map((option) => (
+              <div className="flex flex-col gap-2">
+                {/* Month Dropdown */}
+                <Select
+                  value={selectedMonthValue}
+                  onValueChange={(value) => onDateTabChange?.(value)}
+                >
+                  <SelectTrigger className={cn(
+                    "w-full bg-background border-border",
+                    isMonthSelected && "ring-2 ring-primary/20"
+                  )}>
+                    <SelectValue placeholder="Select month" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border z-50">
+                    {monthOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* MTD and YTD Buttons */}
+                <div className="flex gap-1">
                   <Button
-                    key={option.value}
-                    variant={selectedDateTab === option.value ? "secondary" : "ghost"}
+                    variant={selectedDateTab === "mtd" ? "secondary" : "ghost"}
+                    size="sm"
                     className={cn(
-                      "w-full justify-start",
-                      selectedDateTab === option.value && "bg-primary/10 text-primary"
+                      "flex-1",
+                      selectedDateTab === "mtd" && "bg-primary/10 text-primary"
                     )}
-                    onClick={() => onDateTabChange?.(option.value)}
+                    onClick={() => onDateTabChange?.("mtd")}
                   >
-                    {option.label}
+                    MTD
                   </Button>
-                ))}
+                  <Button
+                    variant={selectedDateTab === "ytd" ? "secondary" : "ghost"}
+                    size="sm"
+                    className={cn(
+                      "flex-1",
+                      selectedDateTab === "ytd" && "bg-primary/10 text-primary"
+                    )}
+                    onClick={() => onDateTabChange?.("ytd")}
+                  >
+                    YTD
+                  </Button>
+                </div>
               </div>
             </SidebarGroupContent>
           </SidebarGroup>

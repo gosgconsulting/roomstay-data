@@ -204,16 +204,15 @@ const AISummaryPage = () => {
       toast.info("Refreshing pivot data from sources...", { id: "refresh-pivot" });
 
       const pivotData: CachedPivotData = {
-        last_month: [],
         mtd: [],
         ytd: [],
       };
       
       // Initialize breakdown data structures
-      const breakdownData: Record<string, Record<DateTab, Array<{ groupValue: string; metrics: Record<string, number> }>>> = {};
+      const breakdownData: Record<string, Record<string, Array<{ groupValue: string; metrics: Record<string, number> }>>> = {};
       const breakdownDimensionNames: Record<string, string> = {}; // Map of reportId -> dimension name
-      const combinedDateBreakdown: Record<DateTab, DateBreakdownRow[]> = {
-        last_month: [], mtd: [], ytd: []
+      const combinedDateBreakdown: Record<string, DateBreakdownRow[]> = {
+        mtd: [], ytd: []
       };
       // To accumulate all rows for combined date breakdown
       const allRowsForDateBreakdown: any[] = [];
@@ -221,18 +220,21 @@ const AISummaryPage = () => {
       
       // Initialize comparison data
       const comparisonPreviousPeriod: {
-        [key in DateTab]: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
-      } & { breakdown_data?: Record<string, Record<DateTab, Array<{ groupValue: string; metrics: Record<string, number> }>>> } = {
-        last_month: [], mtd: [], ytd: [], breakdown_data: {}
+        mtd: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
+        ytd: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
+        breakdown_data?: Record<string, Record<string, Array<{ groupValue: string; metrics: Record<string, number> }>>>;
+      } = {
+        mtd: [], ytd: [], breakdown_data: {}
       };
       const comparisonPreviousYear: {
-        [key in DateTab]: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
-      } & { breakdown_data?: Record<string, Record<DateTab, Array<{ groupValue: string; metrics: Record<string, number> }>>> } = {
-        last_month: [], mtd: [], ytd: [], breakdown_data: {}
+        mtd: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
+        ytd: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
+        breakdown_data?: Record<string, Record<string, Array<{ groupValue: string; metrics: Record<string, number> }>>>;
+      } = {
+        mtd: [], ytd: [], breakdown_data: {}
       };
 
-      const dateRanges: Record<DateTab, { start: Date; end: Date }> = {
-        last_month: getDateRange("last_month"),
+      const dateRanges: Record<string, { start: Date; end: Date }> = {
         mtd: getDateRange("mtd"),
         ytd: getDateRange("ytd"),
       };
@@ -240,12 +242,10 @@ const AISummaryPage = () => {
       // Comparison date ranges
       const comparisonRanges = {
         previous_period: {
-          last_month: getComparisonDateRange("last_month", "previous_period"),
           mtd: getComparisonDateRange("mtd", "previous_period"),
           ytd: getComparisonDateRange("ytd", "previous_period"),
         },
         previous_year: {
-          last_month: getComparisonDateRange("last_month", "previous_year"),
           mtd: getComparisonDateRange("mtd", "previous_year"),
           ytd: getComparisonDateRange("ytd", "previous_year"),
         },
@@ -333,7 +333,7 @@ const AISummaryPage = () => {
         }
 
         // Aggregate metrics for each date range
-        (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+        (["mtd", "ytd"] as const).forEach((tab) => {
           const metrics = aggregateMetrics(
             sourceData.transformedRows,
             card.selected_metrics,
@@ -444,15 +444,15 @@ const AISummaryPage = () => {
           console.log(`[Breakdown Debug] Unique values found:`, Array.from(uniqueValues));
           console.log(`[Breakdown Debug] Has uncategorized:`, hasUncategorized);
 
-          breakdownData[breakdownKey] = { last_month: [], mtd: [], ytd: [] };
+          breakdownData[breakdownKey] = { mtd: [], ytd: [] };
           
           // Initialize comparison breakdown data for this breakdown
           if (!comparisonPreviousPeriod.breakdown_data) comparisonPreviousPeriod.breakdown_data = {};
           if (!comparisonPreviousYear.breakdown_data) comparisonPreviousYear.breakdown_data = {};
-          comparisonPreviousPeriod.breakdown_data[breakdownKey] = { last_month: [], mtd: [], ytd: [] };
-          comparisonPreviousYear.breakdown_data[breakdownKey] = { last_month: [], mtd: [], ytd: [] };
+          comparisonPreviousPeriod.breakdown_data[breakdownKey] = { mtd: [], ytd: [] };
+          comparisonPreviousYear.breakdown_data[breakdownKey] = { mtd: [], ytd: [] };
           
-          (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+          (["mtd", "ytd"] as const).forEach((tab) => {
             // Process each named group
             uniqueValues.forEach((groupValue) => {
               // Filter rows for this specific group value
@@ -583,7 +583,7 @@ const AISummaryPage = () => {
       allMetricNameToIdMaps.forEach(map => Object.assign(mergedMetricMap, map));
       const dateDimId = mergedMetricMap['Date'] || mergedMetricMap['date'] || mergedMetricMap['Day'];
       
-      (["last_month", "mtd", "ytd"] as DateTab[]).forEach((tab) => {
+      (["mtd", "ytd"] as const).forEach((tab) => {
         const dateRange = dateRanges[tab];
         
         // Group all rows by date group (week or month)
