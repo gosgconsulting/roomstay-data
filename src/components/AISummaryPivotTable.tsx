@@ -1426,56 +1426,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             </div>
           );
         })()}
-        
-        {/* Combined Date Breakdown Table - for selected period in overview mode */}
-        {activeReportTab === "overview" && (() => {
-          const period = selectedDatePeriod || activeTab;
-          const periodBreakdown = combinedDateBreakdown[period as DateTab];
-          if (!periodBreakdown || periodBreakdown.length === 0) return null;
-          
-          return (
-            <div className="space-y-4">
-              <div className="border rounded-lg overflow-hidden">
-                <div className="bg-primary/5 px-4 py-2 border-b">
-                  <h4 className="font-semibold text-sm">
-                    Results By {period === 'ytd' ? 'Month' : 'Week'}
-                  </h4>
-                </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/30">
-                      <TableHead className="font-medium w-[200px]">{period === 'ytd' ? 'Month' : 'Week'}</TableHead>
-                      {safeMetrics.map((metric) => (
-                        <TableHead key={metric} className="font-medium text-right text-xs">
-                          {metric}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {periodBreakdown.map((row, idx) => (
-                      <TableRow
-                        key={row.dateGroup}
-                        className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                      >
-                        <TableCell className="font-medium text-sm">
-                          {row.dateGroup}
-                        </TableCell>
-                        {safeMetrics.map((metric) => (
-                          <TableCell key={metric} className="text-right tabular-nums text-sm">
-                            {formatMetricValue(metric, row.metrics[metric] || 0)}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          );
-        })()}
 
-        {/* YTD Monthly Bar Chart - shown on all tabs (overview and individual reports) */}
+        {/* YTD Monthly Bar Chart - shown after first table on all tabs */}
         <div className="border rounded-lg overflow-hidden">
           <div className="bg-primary/5 px-4 py-2 border-b flex items-center justify-between">
             <h4 className="font-semibold text-sm">
@@ -1568,6 +1520,54 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             </div>
           </div>
         </div>
+        
+        {/* Combined Date Breakdown Table - for selected period in overview mode */}
+        {activeReportTab === "overview" && (() => {
+          const period = selectedDatePeriod || activeTab;
+          const periodBreakdown = combinedDateBreakdown[period as DateTab];
+          if (!periodBreakdown || periodBreakdown.length === 0) return null;
+          
+          return (
+            <div className="space-y-4">
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-primary/5 px-4 py-2 border-b">
+                  <h4 className="font-semibold text-sm">
+                    Results By {period === 'ytd' ? 'Month' : 'Week'}
+                  </h4>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30">
+                      <TableHead className="font-medium w-[200px]">{period === 'ytd' ? 'Month' : 'Week'}</TableHead>
+                      {safeMetrics.map((metric) => (
+                        <TableHead key={metric} className="font-medium text-right text-xs">
+                          {metric}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {periodBreakdown.map((row, idx) => (
+                      <TableRow
+                        key={row.dateGroup}
+                        className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                      >
+                        <TableCell className="font-medium text-sm">
+                          {row.dateGroup}
+                        </TableCell>
+                        {safeMetrics.map((metric) => (
+                          <TableCell key={metric} className="text-right tabular-nums text-sm">
+                            {formatMetricValue(metric, row.metrics[metric] || 0)}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          );
+        })()}
         
         {/* Breakdowns - only show on individual report tabs, not on overview */}
         {activeReportTab !== "overview" && data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (() => {
