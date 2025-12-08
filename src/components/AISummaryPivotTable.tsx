@@ -1265,45 +1265,63 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       ? calculateTotals(comparisonTabData.filter(r => r.reportId === activeReportTab))
       : null;
 
+  // Compute date range labels for header
+  const headerDateRangeLabels = useMemo(() => {
+    const period = selectedDatePeriod || activeTab;
+    return getDateRangeLabel(period as DateTab, comparisonType);
+  }, [selectedDatePeriod, activeTab, comparisonType, getDateRangeLabel]);
+
   return (
     <div className="w-full space-y-6">
 
-      <div className="flex items-center justify-end gap-3 mb-4">
-        {/* Single Date Period Select */}
-        {dateOptions.length > 0 && (
-          <Select 
-            value={selectedDatePeriod || activeTab} 
-            onValueChange={(v) => {
-              if (onDatePeriodChange) {
-                onDatePeriodChange(v);
-              }
-              handleTabChange(v as DateTab);
-            }}
-          >
+      <div className="flex items-center justify-between gap-3 mb-4">
+        {/* Period Title */}
+        <h2 className="text-lg font-semibold text-foreground">
+          {headerDateRangeLabels.currentLabel}
+          {comparisonType !== "none" && headerDateRangeLabels.comparisonLabel && (
+            <span className="text-muted-foreground font-normal text-sm ml-2">
+              vs {headerDateRangeLabels.comparisonLabel}
+            </span>
+          )}
+        </h2>
+        
+        <div className="flex items-center gap-3">
+          {/* Single Date Period Select */}
+          {dateOptions.length > 0 && (
+            <Select 
+              value={selectedDatePeriod || activeTab} 
+              onValueChange={(v) => {
+                if (onDatePeriodChange) {
+                  onDatePeriodChange(v);
+                }
+                handleTabChange(v as DateTab);
+              }}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select date" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border z-50">
+                {dateOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          
+          {/* Comparison Filter */}
+          <Select value={comparisonType} onValueChange={(v) => setComparisonType(v as ComparisonType)}>
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select date" />
+              <SelectValue placeholder="Comparison" />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border z-50">
-              {dateOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
+              <SelectItem value="none">No Comparison</SelectItem>
+              <SelectItem value="previous_period">vs Previous Period</SelectItem>
+              <SelectItem value="previous_year">vs Previous Year</SelectItem>
             </SelectContent>
           </Select>
-        )}
-        
-        {/* Comparison Filter */}
-        <Select value={comparisonType} onValueChange={(v) => setComparisonType(v as ComparisonType)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Comparison" />
-          </SelectTrigger>
-          <SelectContent className="bg-popover border-border z-50">
-            <SelectItem value="none">No Comparison</SelectItem>
-            <SelectItem value="previous_period">vs Previous Period</SelectItem>
-            <SelectItem value="previous_year">vs Previous Year</SelectItem>
-          </SelectContent>
-        </Select>
+        </div>
       </div>
 
       {/* KPI Cards Grid */}
@@ -1543,25 +1561,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               ? calculateTotals(periodComparisonData.filter(r => r.reportId === activeReportTab))
               : null;
           
-          // Get period label from dateOptions
-          const periodLabel = dateOptions.find(o => o.value === period)?.label || period;
-          
-          // Get date range labels for display
-          const dateRangeLabels = getDateRangeLabel(period as DateTab, comparisonType);
           
           return (
             <div key={period} className="border rounded-lg overflow-hidden">
-              {/* Date Range Label - Always show period, conditionally show comparison */}
-              <div className="px-4 py-2 bg-muted/30 border-b text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">Period:</span>{" "}
-                {dateRangeLabels.currentLabel}
-                {comparisonType !== "none" && dateRangeLabels.comparisonLabel && (
-                  <>
-                    {" "}<span className="text-muted-foreground">vs</span>{" "}
-                    {dateRangeLabels.comparisonLabel}
-                  </>
-                )}
-              </div>
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
