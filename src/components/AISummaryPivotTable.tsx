@@ -1565,8 +1565,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       </div>
 
       <div className="space-y-6">
-        {/* Render a table for the selected date period */}
-        {(() => {
+        {/* Render a table for the selected date period - ONLY on Overview tab */}
+        {activeReportTab === "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
           const periodData = computeDataForTab(period as DateTab);
           const periodTotals = calculateTotals(periodData);
@@ -1595,20 +1595,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           
           const periodComparisonTotals = periodComparisonData.length > 0 ? calculateTotals(periodComparisonData) : null;
           
-          const filteredPeriodData = activeReportTab === "overview" 
-            ? periodData 
-            : periodData.filter(r => r.reportId === activeReportTab);
-          
-          const filteredPeriodTotals = activeReportTab === "overview"
-            ? periodTotals
-            : calculateTotals(filteredPeriodData);
-          
-          const filteredPeriodComparisonTotals = activeReportTab === "overview"
-            ? periodComparisonTotals
-            : periodComparisonData.length > 0 
-              ? calculateTotals(periodComparisonData.filter(r => r.reportId === activeReportTab))
-              : null;
-          
           // Get period label from dateOptions
           const periodLabel = dateOptions.find(o => o.value === period)?.label || period;
           
@@ -1633,16 +1619,16 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   <TableHeader className="sticky top-0 z-10 bg-muted/50">
                     <TableRow className="bg-muted/50">
                       <TableHead className="font-semibold w-[200px]">
-                        {activeReportTab === "overview" ? "Report" : "Channel"}
+                        Report
                       </TableHead>
                       {safeMetrics.map((metric) => renderSortableHeader('main-table', metric))}
                     </TableRow>
                   </TableHeader>
                 </Table>
-                <div className={filteredPeriodData.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                <div className={periodData.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
                   <Table>
                     <TableBody>
-                      {sortRows(filteredPeriodData, 'main-table', (row, metric) => row.metrics[metric] || 0).map((reportData, idx) => {
+                      {sortRows(periodData, 'main-table', (row, metric) => row.metrics[metric] || 0).map((reportData, idx) => {
                         const comparisonMetrics = getComparisonMetrics(reportData.reportId, period as DateTab);
                         return (
                           <TableRow
@@ -1663,15 +1649,15 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                     </TableBody>
                   </Table>
                 </div>
-                {/* Total Row - only show in overview mode when multiple reports */}
-                {activeReportTab === "overview" && filteredPeriodData.length > 1 && (
+                {/* Total Row - only show when multiple reports */}
+                {periodData.length > 1 && (
                   <Table>
                     <TableBody>
                       <TableRow className="bg-muted font-semibold border-t-2">
                         <TableCell className="w-[200px]">Total</TableCell>
                         {safeMetrics.map((metric) => (
                           <TableCell key={metric} className="text-right tabular-nums">
-                            {renderMetricCell(filteredPeriodTotals[metric] || 0, metric, filteredPeriodComparisonTotals, true)}
+                            {renderMetricCell(periodTotals[metric] || 0, metric, periodComparisonTotals, true)}
                           </TableCell>
                         ))}
                       </TableRow>
@@ -1679,7 +1665,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   </Table>
                 )}
               </div>
-              {activeReportTab === "overview" && data.table_insights?.summary?.[period as DateTab] && (
+              {data.table_insights?.summary?.[period as DateTab] && (
                 <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
                     <Sparkles className="h-3 w-3" />
