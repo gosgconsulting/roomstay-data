@@ -856,18 +856,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     return totals;
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (reportIds.length === 0 || !selectedMetrics || selectedMetrics.length === 0) {
-    return null;
-  }
-
   // Preferred metric display order
   const METRIC_ORDER = [
     "Impressions",
@@ -1045,8 +1033,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     return results;
   };
   
-  // Get actual date ranges for display label
-  const getDateRangeLabel = (tab: DateTab, compType: ComparisonType): { 
+  // Get actual date ranges for display label - memoized to prevent hook dependency issues
+  const getDateRangeLabel = React.useCallback((tab: DateTab, compType: ComparisonType): { 
     currentLabel: string; 
     comparisonLabel: string | null;
   } => {
@@ -1167,7 +1155,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       : `Previous Period (${compDateStr})`;
     
     return { currentLabel, comparisonLabel: compLabel };
-  };
+  }, [data.actual_data_ranges, reportIds, reportsLoaded, rawSourceData, dateOptions]);
 
   // Get comparison data for a report
   const getComparisonMetrics = (reportId: string, tab: DateTab): Record<string, number> | null => {
@@ -1270,6 +1258,19 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     const period = selectedDatePeriod || activeTab;
     return getDateRangeLabel(period as DateTab, comparisonType);
   }, [selectedDatePeriod, activeTab, comparisonType, getDateRangeLabel]);
+
+  // Early returns - placed after all hooks to avoid "rendered fewer hooks" error
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (reportIds.length === 0 || !selectedMetrics || selectedMetrics.length === 0) {
+    return null;
+  }
 
   return (
     <div className="w-full space-y-6">
