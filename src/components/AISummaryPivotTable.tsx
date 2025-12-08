@@ -101,6 +101,8 @@ interface AISummaryPivotTableProps {
   accountId?: string;
   cachedPivotData?: CachedPivotData | null;
   reportConfigs?: Record<string, any>;
+  selectedTab?: DateTab;
+  onTabChange?: (tab: DateTab) => void;
 }
 
 interface DataSource {
@@ -498,8 +500,18 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   accountId,
   cachedPivotData,
   reportConfigs,
+  selectedTab,
+  onTabChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<DateTab>("mtd");
+  const [internalTab, setInternalTab] = useState<DateTab>("mtd");
+  const activeTab = selectedTab || internalTab;
+  const handleTabChange = (tab: DateTab) => {
+    if (onTabChange) {
+      onTabChange(tab);
+    } else {
+      setInternalTab(tab);
+    }
+  };
   const [comparisonType, setComparisonType] = useState<ComparisonType>("none");
   const [isLoading, setIsLoading] = useState(!cachedPivotData);
   const [data, setData] = useState<CachedPivotData>(
@@ -764,19 +776,23 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
   return (
     <div className="w-full space-y-6">
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as DateTab)}>
+      <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as DateTab)}>
         <div className="flex items-center justify-between mb-4">
-          <TabsList>
-            <TabsTrigger value="last_month">Last Month</TabsTrigger>
-            <TabsTrigger value="mtd">MTD</TabsTrigger>
-            <TabsTrigger value="ytd">YTD</TabsTrigger>
-          </TabsList>
+          {/* Only show tabs if not controlled externally */}
+          {!selectedTab && (
+            <TabsList>
+              <TabsTrigger value="last_month">Last Month</TabsTrigger>
+              <TabsTrigger value="mtd">MTD</TabsTrigger>
+              <TabsTrigger value="ytd">YTD</TabsTrigger>
+            </TabsList>
+          )}
+          {selectedTab && <div />}
           
           <Select value={comparisonType} onValueChange={(v) => setComparisonType(v as ComparisonType)}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Comparison" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="bg-popover border-border z-50">
               <SelectItem value="none">No Comparison</SelectItem>
               <SelectItem value="previous_period">vs Previous Period</SelectItem>
               <SelectItem value="previous_year">vs Previous Year</SelectItem>

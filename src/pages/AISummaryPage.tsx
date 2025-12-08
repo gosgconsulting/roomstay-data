@@ -43,13 +43,14 @@ import {
   AISummaryPivotTable, 
   type CachedPivotData,
   type DateBreakdownRow,
+  type DateTab,
   getDateRange,
   getComparisonDateRange,
   aggregateMetrics,
   getDateGroupKey,
   parseDate,
-  type DateTab
 } from "@/components/AISummaryPivotTable";
+import { type DateTab as SidebarDateTab } from "@/components/ReportsSidebar";
 
 interface AISummaryCard {
   id: string;
@@ -102,6 +103,7 @@ const AISummaryPage = () => {
   const [generateModalCard, setGenerateModalCard] = useState<AISummaryCard | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(summaryId || null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [selectedDateTab, setSelectedDateTab] = useState<DateTab>("mtd");
 
   const fetchCards = async () => {
     try {
@@ -848,6 +850,9 @@ const AISummaryPage = () => {
           selectedAISummaryId={summaryId}
           aiSummaries={cards.map(c => ({ id: c.id, name: c.name }))}
           onAddAISummary={() => setIsAddCardModalOpen(true)}
+          showDateTabs={!!summaryId}
+          selectedDateTab={selectedDateTab}
+          onDateTabChange={setSelectedDateTab}
         />
         
         <div className="flex-1 flex flex-col">
@@ -1012,6 +1017,8 @@ const AISummaryPage = () => {
                     accountId={accountId}
                     cachedPivotData={card.cached_pivot_data}
                     reportConfigs={card.report_configs}
+                    selectedTab={selectedDateTab}
+                    onTabChange={setSelectedDateTab}
                   />
                 </CardContent>
                 
