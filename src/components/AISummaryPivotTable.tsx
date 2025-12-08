@@ -589,39 +589,76 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // State for YTD chart KPI selector
   const [chartKpi, setChartKpi] = useState<string>("Revenue");
 
-  // Prepare YTD monthly chart data - full year January to December
+  // Prepare YTD monthly chart data - full year January to December with comparisons
   const ytdChartData = useMemo(() => {
     const year = new Date().getFullYear();
-    const monthlyData: { month: string; value: number }[] = [];
+    const prevYear = year - 1;
+    const monthlyData: { month: string; current: number; prevPeriod: number; prevYear: number }[] = [];
     
     // Create data for all 12 months
     for (let m = 0; m < 12; m++) {
       const monthKey = `${year}-${String(m + 1).padStart(2, '0')}`;
+      const prevYearMonthKey = `${prevYear}-${String(m + 1).padStart(2, '0')}`;
+      // Previous period = previous month (m-1), or December of prev year if January
+      const prevPeriodMonth = m === 0 ? 11 : m - 1;
+      const prevPeriodYear = m === 0 ? prevYear : year;
+      const prevPeriodMonthKey = `${prevPeriodYear}-${String(prevPeriodMonth + 1).padStart(2, '0')}`;
+      
       const monthLabel = MONTH_NAMES[m].substring(0, 3); // Jan, Feb, etc.
       
-      // Get data from cached monthly_data or compute from YTD data
-      let monthValue = 0;
-      
+      // Get current period data
+      let currentValue = 0;
       if (cachedPivotData?.monthly_data?.[monthKey]) {
-        // Sum the metric across all reports for this month
         const monthReports = cachedPivotData.monthly_data[monthKey];
-        monthValue = monthReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
+        currentValue = monthReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
+      }
+      
+      // Get previous period (previous month) data from comparison cache or monthly_data
+      let prevPeriodValue = 0;
+      if (cachedPivotData?.comparison_previous_period?.monthly_data?.[monthKey]) {
+        const compReports = cachedPivotData.comparison_previous_period.monthly_data[monthKey];
+        prevPeriodValue = compReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
+      } else if (cachedPivotData?.monthly_data?.[prevPeriodMonthKey]) {
+        // Fallback: use previous month data as "previous period"
+        const prevMonthReports = cachedPivotData.monthly_data[prevPeriodMonthKey];
+        prevPeriodValue = prevMonthReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
+      }
+      
+      // Get previous year data
+      let prevYearValue = 0;
+      if (cachedPivotData?.comparison_previous_year?.monthly_data?.[monthKey]) {
+        const compReports = cachedPivotData.comparison_previous_year.monthly_data[monthKey];
+        prevYearValue = compReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
+      } else if (cachedPivotData?.monthly_data?.[prevYearMonthKey]) {
+        // Fallback: use same month from previous year
+        const prevYearReports = cachedPivotData.monthly_data[prevYearMonthKey];
+        prevYearValue = prevYearReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
       }
       
       monthlyData.push({
         month: monthLabel,
-        value: monthValue,
+        current: currentValue,
+        prevPeriod: prevPeriodValue,
+        prevYear: prevYearValue,
       });
     }
     
     return monthlyData;
-  }, [cachedPivotData?.monthly_data, chartKpi]);
+  }, [cachedPivotData?.monthly_data, cachedPivotData?.comparison_previous_period?.monthly_data, cachedPivotData?.comparison_previous_year?.monthly_data, chartKpi]);
 
-  // Chart config
+  // Chart config for grouped bars
   const chartConfig = {
-    value: {
-      label: chartKpi,
+    current: {
+      label: `${chartKpi} (Current)`,
       color: "hsl(var(--primary))",
+    },
+    prevPeriod: {
+      label: `${chartKpi} (vs Prev Period)`,
+      color: "hsl(var(--muted-foreground))",
+    },
+    prevYear: {
+      label: `${chartKpi} (vs Prev Year)`,
+      color: "hsl(var(--accent-foreground) / 0.5)",
     },
   };
 
@@ -1434,17 +1471,47 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   <ChartTooltip
                     content={
                       <ChartTooltipContent
-                        formatter={(value) => formatMetricValue(chartKpi, Number(value))}
+                        formatter={(value, name) => {
+                          const label = name === 'current' ? 'Current' : name === 'prevPeriod' ? 'vs Prev Period' : 'vs Prev Year';
+                          return [formatMetricValue(chartKpi, Number(value)), label];
+                        }}
                       />
                     }
                   />
                   <Bar 
-                    dataKey="value" 
+                    dataKey="current" 
+                    name="current"
                     fill="hsl(var(--primary))" 
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar 
+                    dataKey="prevPeriod" 
+                    name="prevPeriod"
+                    fill="hsl(var(--muted-foreground) / 0.6)" 
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar 
+                    dataKey="prevYear" 
+                    name="prevYear"
+                    fill="hsl(var(--accent-foreground) / 0.4)" 
                     radius={[4, 4, 0, 0]}
                   />
                 </BarChart>
               </ChartContainer>
+              <div className="flex justify-center gap-6 mt-2 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm bg-primary" />
+                  <span className="text-muted-foreground">Current</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'hsl(var(--muted-foreground) / 0.6)' }} />
+                  <span className="text-muted-foreground">vs Prev Period</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'hsl(var(--accent-foreground) / 0.4)' }} />
+                  <span className="text-muted-foreground">vs Prev Year</span>
+                </div>
+              </div>
             </div>
           </div>
         )}
