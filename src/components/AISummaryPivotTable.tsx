@@ -526,6 +526,9 @@ export const aggregateMetrics = (
   return result;
 };
 
+// Tab for selecting which report to view
+export type ReportTab = "overview" | string; // "overview" or reportId
+
 export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   reportIds,
   selectedMetrics,
@@ -549,6 +552,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   const [data, setData] = useState<CachedPivotData>(
     cachedPivotData || { mtd: [], ytd: [] }
   );
+  
+  // Report tab state - "overview" shows all reports, or select individual report
+  const [activeReportTab, setActiveReportTab] = useState<ReportTab>("overview");
   
   // Store raw source data for dynamic calculations
   const [rawSourceData, setRawSourceData] = useState<Record<string, { reportName: string; rows: any[] }>>({});
@@ -911,8 +917,49 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   const comparisonTabData = computeComparisonDataForTab(activeTab, comparisonType);
   const comparisonTotals = comparisonTabData.length > 0 ? calculateTotals(comparisonTabData) : null;
 
+  // Get list of reports with names for tabs
+  const reportTabsList = tabData.map(r => ({ id: r.reportId, name: r.reportName }));
+  
+  // Filter data based on active report tab
+  const filteredTabData = activeReportTab === "overview" 
+    ? tabData 
+    : tabData.filter(r => r.reportId === activeReportTab);
+  
+  const filteredTotals = activeReportTab === "overview"
+    ? totals
+    : calculateTotals(filteredTabData);
+  
+  const filteredComparisonTotals = activeReportTab === "overview"
+    ? comparisonTotals
+    : comparisonTabData.length > 0 
+      ? calculateTotals(comparisonTabData.filter(r => r.reportId === activeReportTab))
+      : null;
+
   return (
     <div className="w-full space-y-6">
+      {/* Report Tabs */}
+      {reportTabsList.length > 0 && (
+        <Tabs value={activeReportTab} onValueChange={(v) => setActiveReportTab(v as ReportTab)} className="w-full">
+          <TabsList className="w-full flex flex-wrap h-auto gap-1 bg-muted/50 p-1">
+            <TabsTrigger 
+              value="overview" 
+              className="flex-shrink-0 data-[state=active]:bg-background data-[state=active]:text-foreground"
+            >
+              Overview
+            </TabsTrigger>
+            {reportTabsList.map((report) => (
+              <TabsTrigger 
+                key={report.id} 
+                value={report.id}
+                className="flex-shrink-0 data-[state=active]:bg-background data-[state=active]:text-foreground"
+              >
+                {report.name}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      )}
+
       <div className="flex items-center justify-end mb-4">
         <Select value={comparisonType} onValueChange={(v) => setComparisonType(v as ComparisonType)}>
           <SelectTrigger className="w-[180px]">
@@ -932,7 +979,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="font-semibold w-[200px]">Report</TableHead>
+                <TableHead className="font-semibold w-[200px]">
+                  {activeReportTab === "overview" ? "Report" : "Channel"}
+                </TableHead>
                 {safeMetrics.map((metric) => (
                   <TableHead key={metric} className="font-semibold text-right">
                     {metric}
@@ -941,57 +990,116 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tabData.map((reportData, idx) => {
+              {filteredTabData.map((reportData, idx) => {
                 const comparisonMetrics = getComparisonMetrics(reportData.reportId, activeTab);
                 return (
                   <TableRow
-                          key={reportData.reportId}
-                          className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}
-                        >
-                          <TableCell className="font-medium">
-                            {reportData.reportName}
-                          </TableCell>
-                          {safeMetrics.map((metric) => (
-                            <TableCell key={metric} className="text-right tabular-nums">
-                              {renderMetricCell(reportData.metrics[metric] || 0, metric, comparisonMetrics)}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      );
-                    })}
-                    {/* Total Row */}
-                    <TableRow className="bg-muted font-semibold border-t-2">
-                      <TableCell>Total</TableCell>
+                    key={reportData.reportId}
+                    className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}
+                  >
+                    <TableCell className="font-medium">
+                      {reportData.reportName}
+                    </TableCell>
+                    {safeMetrics.map((metric) => (
+                      <TableCell key={metric} className="text-right tabular-nums">
+                        {renderMetricCell(reportData.metrics[metric] || 0, metric, comparisonMetrics)}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                );
+              })}
+              {/* Total Row - only show in overview mode when multiple reports */}
+              {activeReportTab === "overview" && filteredTabData.length > 1 && (
+                <TableRow className="bg-muted font-semibold border-t-2">
+                  <TableCell>Total</TableCell>
+                  {safeMetrics.map((metric) => (
+                    <TableCell key={metric} className="text-right tabular-nums">
+                      {renderMetricCell(filteredTotals[metric] || 0, metric, filteredComparisonTotals, true)}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          {activeReportTab === "overview" && data.table_insights?.summary?.[activeTab] && (
+            <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
+                <Sparkles className="h-3 w-3" />
+                Insights
+              </div>
+              <FormatAIInsights text={data.table_insights.summary[activeTab]} />
+            </div>
+          )}
+        </div>
+        
+        {/* Combined Date Breakdown Table - only show in overview */}
+        {activeReportTab === "overview" && combinedDateBreakdown[activeTab] && combinedDateBreakdown[activeTab].length > 0 && (
+          <div className="space-y-4">
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-primary/5 px-4 py-2 border-b">
+                <h4 className="font-semibold text-sm">Results By {activeTab === 'ytd' ? 'Month' : 'Week'}</h4>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30">
+                    <TableHead className="font-medium w-[200px]">{activeTab === 'ytd' ? 'Month' : 'Week'}</TableHead>
+                    {safeMetrics.map((metric) => (
+                      <TableHead key={metric} className="font-medium text-right text-xs">
+                        {metric}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {combinedDateBreakdown[activeTab].map((row, idx) => (
+                    <TableRow
+                      key={row.dateGroup}
+                      className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                    >
+                      <TableCell className="font-medium text-sm">
+                        {row.dateGroup}
+                      </TableCell>
                       {safeMetrics.map((metric) => (
-                        <TableCell key={metric} className="text-right tabular-nums">
-                          {renderMetricCell(totals[metric] || 0, metric, comparisonTotals, true)}
+                        <TableCell key={metric} className="text-right tabular-nums text-sm">
+                          {formatMetricValue(metric, row.metrics[metric] || 0)}
                         </TableCell>
                       ))}
                     </TableRow>
-                  </TableBody>
-                </Table>
-                {data.table_insights?.summary?.[activeTab] && (
-                  <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
-                      <Sparkles className="h-3 w-3" />
-                      Insights
-                    </div>
-                    <FormatAIInsights text={data.table_insights.summary[activeTab]} />
-                  </div>
-                )}
-              </div>
-              
-              {/* Combined Date Breakdown Table */}
-              {combinedDateBreakdown[activeTab] && combinedDateBreakdown[activeTab].length > 0 && (
-                <div className="space-y-4">
-                  <div className="border rounded-lg overflow-hidden">
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        )}
+        
+        {/* Breakdowns - filter by selected report if not overview */}
+        {data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (
+          <div className="space-y-4">
+            {Object.entries(data.breakdown_data)
+              .filter(([breakdownKey]) => {
+                if (activeReportTab === "overview") return true;
+                const [reportId] = breakdownKey.split('_');
+                return reportId === activeReportTab;
+              })
+              .map(([breakdownKey, tabsData]) => {
+                const breakdownRows = tabsData?.[activeTab] || [];
+                if (breakdownRows.length === 0) return null;
+                
+                const [reportId] = breakdownKey.split('_');
+                const reportName = tabData.find(r => r.reportId === reportId)?.reportName || 'Report';
+                const dimensionName = data.breakdown_dimension_names?.[breakdownKey] || 'Group';
+                
+                return (
+                  <div key={breakdownKey} className="border rounded-lg overflow-hidden">
                     <div className="bg-primary/5 px-4 py-2 border-b">
-                      <h4 className="font-semibold text-sm">Results By {activeTab === 'ytd' ? 'Month' : 'Week'}</h4>
+                      <h4 className="font-semibold text-sm">
+                        {activeReportTab === "overview" ? `${reportName} - ` : ''}{dimensionName}
+                      </h4>
                     </div>
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/30">
-                          <TableHead className="font-medium w-[200px]">{activeTab === 'ytd' ? 'Month' : 'Week'}</TableHead>
+                          <TableHead className="font-medium w-[200px]">{dimensionName}</TableHead>
                           {safeMetrics.map((metric) => (
                             <TableHead key={metric} className="font-medium text-right text-xs">
                               {metric}
@@ -1000,13 +1108,13 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {combinedDateBreakdown[activeTab].map((row, idx) => (
+                        {breakdownRows.map((row, idx) => (
                           <TableRow
-                            key={row.dateGroup}
+                            key={row.groupValue}
                             className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
                           >
                             <TableCell className="font-medium text-sm">
-                              {row.dateGroup}
+                              {row.groupValue}
                             </TableCell>
                             {safeMetrics.map((metric) => (
                               <TableCell key={metric} className="text-right tabular-nums text-sm">
@@ -1018,73 +1126,24 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                       </TableBody>
                     </Table>
                   </div>
-                </div>
-              )}
-              
-              {/* Breakdowns */}
-              {data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (
-                <div className="space-y-4">
-                  {Object.entries(data.breakdown_data).map(([breakdownKey, tabsData]) => {
-                    const breakdownRows = tabsData?.[activeTab] || [];
-                    if (breakdownRows.length === 0) return null;
-                    
-                    const [reportId] = breakdownKey.split('_');
-                    const reportName = tabData.find(r => r.reportId === reportId)?.reportName || 'Report';
-                    const dimensionName = data.breakdown_dimension_names?.[breakdownKey] || 'Group';
-                    
-                    return (
-                      <div key={breakdownKey} className="border rounded-lg overflow-hidden">
-                        <div className="bg-primary/5 px-4 py-2 border-b">
-                          <h4 className="font-semibold text-sm">{reportName} - {dimensionName}</h4>
-                        </div>
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-muted/30">
-                              <TableHead className="font-medium w-[200px]">{dimensionName}</TableHead>
-                              {safeMetrics.map((metric) => (
-                                <TableHead key={metric} className="font-medium text-right text-xs">
-                                  {metric}
-                                </TableHead>
-                              ))}
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {breakdownRows.map((row, idx) => (
-                              <TableRow
-                                key={row.groupValue}
-                                className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                              >
-                                <TableCell className="font-medium text-sm">
-                                  {row.groupValue}
-                                </TableCell>
-                                {safeMetrics.map((metric) => (
-                                  <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                    {formatMetricValue(metric, row.metrics[metric] || 0)}
-                                  </TableCell>
-                                ))}
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              
-              {/* Executive Summary */}
-              {data.executive_summaries?.[activeTab] && (
-                <div className="border rounded-lg overflow-hidden bg-background">
-                  <div className="px-4 py-3 border-b bg-muted/30 flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    <h3 className="font-semibold">Executive Summary</h3>
-                  </div>
-                  <div className="p-6 bg-background">
-                    <FormattedAISummary summary={data.executive_summaries[activeTab]} />
-                  </div>
-                </div>
-              )}
+                );
+              })}
+          </div>
+        )}
+        
+        {/* Executive Summary - only show in overview */}
+        {activeReportTab === "overview" && data.executive_summaries?.[activeTab] && (
+          <div className="border rounded-lg overflow-hidden bg-background">
+            <div className="px-4 py-3 border-b bg-muted/30 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <h3 className="font-semibold">Executive Summary</h3>
+            </div>
+            <div className="p-6 bg-background">
+              <FormattedAISummary summary={data.executive_summaries[activeTab]} />
             </div>
           </div>
-        );
-      };
+        )}
+      </div>
+    </div>
+  );
+};
