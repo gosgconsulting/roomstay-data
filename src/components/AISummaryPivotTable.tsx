@@ -1295,7 +1295,29 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           const period = selectedDatePeriod || activeTab;
           const periodData = computeDataForTab(period as DateTab);
           const periodTotals = calculateTotals(periodData);
-          const periodComparisonData = computeComparisonDataForTab(period as DateTab, comparisonType);
+          // Get comparison data - use cached data first, then fallback to dynamic computation
+          let periodComparisonData: ReportMetrics[] = [];
+          const cachedComparisonData = comparisonType === "previous_period" 
+            ? data.comparison_previous_period 
+            : comparisonType === "previous_year" 
+              ? data.comparison_previous_year 
+              : null;
+          
+          if (cachedComparisonData) {
+            if (period === 'mtd' && cachedComparisonData.mtd) {
+              periodComparisonData = cachedComparisonData.mtd;
+            } else if (period === 'ytd' && cachedComparisonData.ytd) {
+              periodComparisonData = cachedComparisonData.ytd;
+            } else if (period.match(/^\d{4}-\d{2}$/) && cachedComparisonData.monthly_data?.[period]) {
+              periodComparisonData = cachedComparisonData.monthly_data[period];
+            }
+          }
+          
+          // Fallback to dynamic computation if no cached data
+          if (periodComparisonData.length === 0 && comparisonType !== "none") {
+            periodComparisonData = computeComparisonDataForTab(period as DateTab, comparisonType);
+          }
+          
           const periodComparisonTotals = periodComparisonData.length > 0 ? calculateTotals(periodComparisonData) : null;
           
           const filteredPeriodData = activeReportTab === "overview" 
