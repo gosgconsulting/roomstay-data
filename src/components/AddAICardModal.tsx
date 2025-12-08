@@ -1035,10 +1035,9 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         : "AI Summary";
 
       if (editingCard) {
-        // Update existing card
+        // Update existing card - preserve the existing name
         const { error } = await (supabase.from("ai_summary_cards") as any)
           .update({
-            name: cardName,
             report_ids: selectedReportIds,
             report_configs: { ...reportConfigs, breakdown_configs: breakdownConfigs },
             selected_metrics: selectedMetrics,
