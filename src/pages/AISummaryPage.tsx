@@ -44,13 +44,14 @@ import {
   type CachedPivotData,
   type DateBreakdownRow,
   type DateTab,
+  type ReportTab,
   getDateRange,
   getComparisonDateRange,
   aggregateMetrics,
   getDateGroupKey,
   parseDate,
 } from "@/components/AISummaryPivotTable";
-import { type DateTab as SidebarDateTab } from "@/components/ReportsSidebar";
+import { type DateTab as SidebarDateTab, type ReportTab as SidebarReportTab } from "@/components/ReportsSidebar";
 
 interface AISummaryCard {
   id: string;
@@ -104,6 +105,7 @@ const AISummaryPage = () => {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(summaryId || null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedDateTab, setSelectedDateTab] = useState<DateTab>(format(new Date(), "yyyy-MM"));
+  const [selectedReportTab, setSelectedReportTab] = useState<ReportTab>("overview");
 
   const fetchCards = async () => {
     try {
@@ -838,22 +840,35 @@ const AISummaryPage = () => {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
-        <ReportsSidebar
-          reports={reports.map(r => ({ 
-            id: r.id, 
-            name: r.name, 
-            account_id: accountId || null,
-            created_at: '',
-            updated_at: ''
-          }))}
-          accountId={accountId}
-          selectedAISummaryId={summaryId}
-          aiSummaries={cards.map(c => ({ id: c.id, name: c.name }))}
-          onAddAISummary={() => setIsAddCardModalOpen(true)}
-          showDateTabs={!!summaryId}
-          selectedDateTab={selectedDateTab}
-          onDateTabChange={setSelectedDateTab}
-        />
+        {/* Compute report tabs for the selected AI Summary card */}
+        {(() => {
+          const selectedCard = summaryId ? cards.find(c => c.id === summaryId) : null;
+          const aiSummaryReportTabs = selectedCard 
+            ? reports.filter(r => selectedCard.report_ids.includes(r.id))
+            : [];
+          
+          return (
+            <ReportsSidebar
+              reports={reports.map(r => ({ 
+                id: r.id, 
+                name: r.name, 
+                account_id: accountId || null,
+                created_at: '',
+                updated_at: ''
+              }))}
+              accountId={accountId}
+              selectedAISummaryId={summaryId}
+              aiSummaries={cards.map(c => ({ id: c.id, name: c.name }))}
+              onAddAISummary={() => setIsAddCardModalOpen(true)}
+              showDateTabs={!!summaryId}
+              selectedDateTab={selectedDateTab}
+              onDateTabChange={setSelectedDateTab}
+              aiSummaryReportTabs={aiSummaryReportTabs}
+              selectedReportTab={selectedReportTab}
+              onReportTabChange={setSelectedReportTab}
+            />
+          );
+        })()}
         
         <div className="flex-1 flex flex-col">
           <div className="border-b">
@@ -1019,6 +1034,8 @@ const AISummaryPage = () => {
                     reportConfigs={card.report_configs}
                     selectedTab={selectedDateTab}
                     onTabChange={setSelectedDateTab}
+                    selectedReportTab={selectedReportTab}
+                    onReportTabChange={setSelectedReportTab}
                   />
                 </CardContent>
                 

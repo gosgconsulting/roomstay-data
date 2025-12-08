@@ -104,6 +104,8 @@ interface AISummaryPivotTableProps {
   reportConfigs?: Record<string, any>;
   selectedTab?: DateTab;
   onTabChange?: (tab: DateTab) => void;
+  selectedReportTab?: ReportTab;
+  onReportTabChange?: (tab: ReportTab) => void;
 }
 
 interface DataSource {
@@ -537,6 +539,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   reportConfigs,
   selectedTab,
   onTabChange,
+  selectedReportTab,
+  onReportTabChange,
 }) => {
   const [internalTab, setInternalTab] = useState<DateTab>("mtd");
   const activeTab = selectedTab || internalTab;
@@ -553,8 +557,16 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     cachedPivotData || { mtd: [], ytd: [] }
   );
   
-  // Report tab state - "overview" shows all reports, or select individual report
-  const [activeReportTab, setActiveReportTab] = useState<ReportTab>("overview");
+  // Report tab state - controlled from parent if props provided, otherwise internal
+  const [internalReportTab, setInternalReportTab] = useState<ReportTab>("overview");
+  const activeReportTab = selectedReportTab || internalReportTab;
+  const handleReportTabChange = (tab: ReportTab) => {
+    if (onReportTabChange) {
+      onReportTabChange(tab);
+    } else {
+      setInternalReportTab(tab);
+    }
+  };
   
   // Store raw source data for dynamic calculations
   const [rawSourceData, setRawSourceData] = useState<Record<string, { reportName: string; rows: any[] }>>({});
@@ -937,28 +949,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
   return (
     <div className="w-full space-y-6">
-      {/* Report Tabs */}
-      {reportTabsList.length > 0 && (
-        <Tabs value={activeReportTab} onValueChange={(v) => setActiveReportTab(v as ReportTab)} className="w-full">
-          <TabsList className="w-full flex flex-wrap h-auto gap-1 bg-muted/50 p-1">
-            <TabsTrigger 
-              value="overview" 
-              className="flex-shrink-0 data-[state=active]:bg-background data-[state=active]:text-foreground"
-            >
-              Overview
-            </TabsTrigger>
-            {reportTabsList.map((report) => (
-              <TabsTrigger 
-                key={report.id} 
-                value={report.id}
-                className="flex-shrink-0 data-[state=active]:bg-background data-[state=active]:text-foreground"
-              >
-                {report.name}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      )}
 
       <div className="flex items-center justify-end mb-4">
         <Select value={comparisonType} onValueChange={(v) => setComparisonType(v as ComparisonType)}>
