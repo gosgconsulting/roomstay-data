@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Sparkles, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { Loader2, Sparkles, ArrowUp, ArrowDown, Minus, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -589,6 +589,72 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   
   // State for YTD chart KPI selector
   const [chartKpi, setChartKpi] = useState<string>("Revenue");
+
+  // Sorting state for tables - keyed by table identifier
+  const [sortConfig, setSortConfig] = useState<Record<string, { column: string | null; direction: 'asc' | 'desc' }>>({});
+
+  // Toggle sort for a table
+  const toggleSort = useCallback((tableId: string, column: string) => {
+    setSortConfig(prev => {
+      const current = prev[tableId];
+      if (current?.column === column) {
+        // Toggle direction or clear
+        if (current.direction === 'desc') {
+          return { ...prev, [tableId]: { column, direction: 'asc' } };
+        } else {
+          return { ...prev, [tableId]: { column: null, direction: 'desc' } };
+        }
+      }
+      // Default to descending (high to low) first
+      return { ...prev, [tableId]: { column, direction: 'desc' } };
+    });
+  }, []);
+
+  // Sort rows by metric
+  const sortRows = useCallback(<T extends { metrics?: Record<string, number>; groupValue?: string }>(
+    rows: T[], 
+    tableId: string,
+    getMetricValue: (row: T, metric: string) => number
+  ): T[] => {
+    const config = sortConfig[tableId];
+    if (!config?.column) return rows;
+    
+    return [...rows].sort((a, b) => {
+      const aVal = getMetricValue(a, config.column!);
+      const bVal = getMetricValue(b, config.column!);
+      return config.direction === 'desc' ? bVal - aVal : aVal - bVal;
+    });
+  }, [sortConfig]);
+
+  // Render sortable header
+  const renderSortableHeader = useCallback((tableId: string, metric: string) => {
+    const config = sortConfig[tableId];
+    const isActive = config?.column === metric;
+    
+    return (
+      <TableHead 
+        key={metric} 
+        className="font-semibold text-right cursor-pointer hover:bg-muted/50 transition-colors select-none"
+        onClick={() => toggleSort(tableId, metric)}
+      >
+        <div className="flex items-center justify-end gap-1">
+          {metric}
+          {isActive ? (
+            config.direction === 'desc' ? (
+              <ChevronDown className="h-3 w-3 text-primary" />
+            ) : (
+              <ChevronUp className="h-3 w-3 text-primary" />
+            )
+          ) : (
+            <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />
+          )}
+        </div>
+      </TableHead>
+    );
+  }, [sortConfig, toggleSort]);
+
+  // Max rows before scroll
+  const MAX_VISIBLE_ROWS = 10;
 
   // Prepare YTD monthly chart data - full year January to December with comparisons
   // Filter by activeReportTab when not in overview mode
@@ -1562,51 +1628,57 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   </>
                 )}
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="font-semibold w-[200px]">
-                      {activeReportTab === "overview" ? "Report" : "Channel"}
-                    </TableHead>
-                    {safeMetrics.map((metric) => (
-                      <TableHead key={metric} className="font-semibold text-right">
-                        {metric}
+              <div className="overflow-hidden">
+                <Table>
+                  <TableHeader className="sticky top-0 z-10 bg-muted/50">
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="font-semibold w-[200px]">
+                        {activeReportTab === "overview" ? "Report" : "Channel"}
                       </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPeriodData.map((reportData, idx) => {
-                    const comparisonMetrics = getComparisonMetrics(reportData.reportId, period as DateTab);
-                    return (
-                      <TableRow
-                        key={reportData.reportId}
-                        className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}
-                      >
-                        <TableCell className="font-medium">
-                          {reportData.reportName}
-                        </TableCell>
+                      {safeMetrics.map((metric) => renderSortableHeader('main-table', metric))}
+                    </TableRow>
+                  </TableHeader>
+                </Table>
+                <div className={filteredPeriodData.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                  <Table>
+                    <TableBody>
+                      {sortRows(filteredPeriodData, 'main-table', (row, metric) => row.metrics[metric] || 0).map((reportData, idx) => {
+                        const comparisonMetrics = getComparisonMetrics(reportData.reportId, period as DateTab);
+                        return (
+                          <TableRow
+                            key={reportData.reportId}
+                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}
+                          >
+                            <TableCell className="font-medium w-[200px]">
+                              {reportData.reportName}
+                            </TableCell>
+                            {safeMetrics.map((metric) => (
+                              <TableCell key={metric} className="text-right tabular-nums">
+                                {renderMetricCell(reportData.metrics[metric] || 0, metric, comparisonMetrics)}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                {/* Total Row - only show in overview mode when multiple reports */}
+                {activeReportTab === "overview" && filteredPeriodData.length > 1 && (
+                  <Table>
+                    <TableBody>
+                      <TableRow className="bg-muted font-semibold border-t-2">
+                        <TableCell className="w-[200px]">Total</TableCell>
                         {safeMetrics.map((metric) => (
                           <TableCell key={metric} className="text-right tabular-nums">
-                            {renderMetricCell(reportData.metrics[metric] || 0, metric, comparisonMetrics)}
+                            {renderMetricCell(filteredPeriodTotals[metric] || 0, metric, filteredPeriodComparisonTotals, true)}
                           </TableCell>
                         ))}
                       </TableRow>
-                    );
-                  })}
-                  {/* Total Row - only show in overview mode when multiple reports */}
-                  {activeReportTab === "overview" && filteredPeriodData.length > 1 && (
-                    <TableRow className="bg-muted font-semibold border-t-2">
-                      <TableCell>Total</TableCell>
-                      {safeMetrics.map((metric) => (
-                        <TableCell key={metric} className="text-right tabular-nums">
-                          {renderMetricCell(filteredPeriodTotals[metric] || 0, metric, filteredPeriodComparisonTotals, true)}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
               {activeReportTab === "overview" && data.table_insights?.summary?.[period as DateTab] && (
                 <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
@@ -1634,35 +1706,37 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                     Results By {period === 'ytd' ? 'Month' : 'Week'}
                   </h4>
                 </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/30">
-                      <TableHead className="font-medium w-[200px]">{period === 'ytd' ? 'Month' : 'Week'}</TableHead>
-                      {safeMetrics.map((metric) => (
-                        <TableHead key={metric} className="font-medium text-right text-xs">
-                          {metric}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {periodBreakdown.map((row, idx) => (
-                      <TableRow
-                        key={row.dateGroup}
-                        className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                      >
-                        <TableCell className="font-medium text-sm">
-                          {row.dateGroup}
-                        </TableCell>
-                        {safeMetrics.map((metric) => (
-                          <TableCell key={metric} className="text-right tabular-nums text-sm">
-                            {formatMetricValue(metric, row.metrics[metric] || 0)}
-                          </TableCell>
-                        ))}
+                <div className="overflow-hidden">
+                  <Table>
+                    <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="font-medium w-[200px]">{period === 'ytd' ? 'Month' : 'Week'}</TableHead>
+                        {safeMetrics.map((metric) => renderSortableHeader('date-breakdown', metric))}
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                  </Table>
+                  <div className={periodBreakdown.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                    <Table>
+                      <TableBody>
+                        {sortRows(periodBreakdown, 'date-breakdown', (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                          <TableRow
+                            key={row.dateGroup}
+                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                          >
+                            <TableCell className="font-medium text-sm w-[200px]">
+                              {row.dateGroup}
+                            </TableCell>
+                            {safeMetrics.map((metric) => (
+                              <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                {formatMetricValue(metric, row.metrics[metric] || 0)}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
               </div>
             </div>
           );
@@ -1695,35 +1769,37 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                           {activeReportTab === "overview" ? `${reportName} - ` : ''}{dimensionName}
                         </h4>
                       </div>
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/30">
-                            <TableHead className="font-medium w-[200px]">{dimensionName}</TableHead>
-                            {safeMetrics.map((metric) => (
-                              <TableHead key={metric} className="font-medium text-right text-xs">
-                                {metric}
-                              </TableHead>
-                            ))}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {breakdownRows.map((row, idx) => (
-                            <TableRow
-                              key={row.groupValue}
-                              className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                            >
-                              <TableCell className="font-medium text-sm">
-                                {row.groupValue}
-                              </TableCell>
-                              {safeMetrics.map((metric) => (
-                                <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
-                                </TableCell>
-                              ))}
+                      <div className="overflow-hidden">
+                        <Table>
+                          <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                            <TableRow className="bg-muted/30">
+                              <TableHead className="font-medium w-[200px]">{dimensionName}</TableHead>
+                              {safeMetrics.map((metric) => renderSortableHeader(`breakdown-${breakdownKey}`, metric))}
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHeader>
+                        </Table>
+                        <div className={breakdownRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                          <Table>
+                            <TableBody>
+                              {sortRows(breakdownRows, `breakdown-${breakdownKey}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                                <TableRow
+                                  key={row.groupValue}
+                                  className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                                >
+                                  <TableCell className="font-medium text-sm w-[200px]">
+                                    {row.groupValue}
+                                  </TableCell>
+                                  {safeMetrics.map((metric) => (
+                                    <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                      {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                    </TableCell>
+                                  ))}
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
