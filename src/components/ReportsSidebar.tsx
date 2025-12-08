@@ -261,26 +261,6 @@ export function ReportsSidebar({
           </div>
         )}
 
-        {/* Date Dropdown - Only shown when showDateTabs is true */}
-        {showDateTabs && (
-          <div className="mt-3">
-            <Select
-              value={selectedDateTab || defaultDateValue}
-              onValueChange={(value) => onDateTabChange?.(value)}
-            >
-              <SelectTrigger className="w-full bg-background border-border">
-                <SelectValue placeholder="Select date range" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border z-50">
-                {dateOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
       </SidebarContent>
     </Sidebar>
   );

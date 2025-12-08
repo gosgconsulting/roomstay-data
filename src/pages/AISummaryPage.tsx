@@ -18,7 +18,7 @@ import { CreateShareLinkModal } from "@/components/CreateShareLinkModal";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
-import { format } from "date-fns";
+import { format, subMonths, startOfYear } from "date-fns";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -37,6 +37,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import FormattedAISummary from "@/components/FormattedAISummary";
 import GenerateAISummaryModal, { type ComparisonOption } from "@/components/GenerateAISummaryModal";
 import { 
@@ -106,6 +113,29 @@ const AISummaryPage = () => {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedDateTab, setSelectedDateTab] = useState<DateTab>(format(new Date(), "yyyy-MM"));
   const [selectedReportTab, setSelectedReportTab] = useState<ReportTab>("overview");
+
+  // Generate date options: YTD at top, then MTD (current month), then previous months
+  const dateOptions = React.useMemo(() => {
+    const options: { value: string; label: string }[] = [];
+    const now = new Date();
+    const yearStart = startOfYear(now);
+    const currentMonthKey = format(now, "yyyy-MM");
+    
+    // Add YTD at the top
+    options.push({ value: "ytd", label: "YTD" });
+    
+    // Start from current month and go back to January
+    let current = now;
+    while (current >= yearStart) {
+      const monthKey = format(current, "yyyy-MM");
+      // Label current month as "MTD", others as month name
+      const monthLabel = monthKey === currentMonthKey ? "MTD" : format(current, "MMMM yyyy");
+      options.push({ value: monthKey, label: monthLabel });
+      current = subMonths(current, 1);
+    }
+    
+    return options;
+  }, []);
 
   const fetchCards = async () => {
     try {
@@ -911,7 +941,27 @@ const AISummaryPage = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6">
+          <>
+            {/* Date Filter */}
+            <div className="mb-6">
+              <Select
+                value={selectedDateTab}
+                onValueChange={(value) => setSelectedDateTab(value)}
+              >
+                <SelectTrigger className="w-[200px] bg-background border-border">
+                  <SelectValue placeholder="Select date range" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border z-50">
+                  {dateOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-6">
             {cards
               .filter(card => !selectedCardId || card.id === selectedCardId)
               .map(card => (
@@ -1080,7 +1130,8 @@ const AISummaryPage = () => {
                 </CardContent>
               </Card>
             ))}
-          </div>
+            </div>
+          </>
         )}
       </div>
 
