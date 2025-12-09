@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { AddAICardModal } from "@/components/AddAICardModal";
-import { CreateShareLinkModal } from "@/components/CreateShareLinkModal";
+import { CreateAISummaryShareLinkModal } from "@/components/CreateAISummaryShareLinkModal";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
@@ -1328,15 +1328,19 @@ const AISummaryPage = () => {
         editingCard={editingCard}
       />
 
-      <CreateShareLinkModal
-        open={isShareModalOpen}
-        onOpenChange={setIsShareModalOpen}
-        onSuccess={() => {
-          setIsShareModalOpen(false);
-          toast.success("Share link created successfully");
-        }}
-        accountId={accountId}
-      />
+      {selectedCardId && cards.find(c => c.id === selectedCardId) && (
+        <CreateAISummaryShareLinkModal
+          open={isShareModalOpen}
+          onOpenChange={setIsShareModalOpen}
+          onSuccess={() => {
+            setIsShareModalOpen(false);
+            toast.success("Share link created successfully");
+          }}
+          summaryId={selectedCardId}
+          summaryName={cards.find(c => c.id === selectedCardId)?.name || "AI Summary"}
+          accountId={accountId}
+        />
+      )}
 
       <AlertDialog open={!!deleteCardId} onOpenChange={() => setDeleteCardId(null)}>
         <AlertDialogContent>
