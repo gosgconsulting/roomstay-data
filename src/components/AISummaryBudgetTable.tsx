@@ -538,19 +538,6 @@ export function AISummaryBudgetTable({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">{reportName}</h3>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={refreshMetrics}
-          disabled={isRefreshing}
-        >
-          {isRefreshing ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4 mr-2" />
-          )}
-          Refresh Data
-        </Button>
       </div>
 
       <div className="border rounded-lg overflow-hidden">
