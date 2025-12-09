@@ -10,6 +10,7 @@ import ForecastingTool from "./pages/ForecastingTool";
 import ForecastingDashboard from "./pages/ForecastingDashboard";
 import Auth from "./pages/Auth";
 import SharedReport from "./pages/SharedReport";
+import SharedAISummary from "./pages/SharedAISummary";
 import NotFound from "./pages/NotFound";
 import AllReports from "./pages/AllReports";
 import AISummaryPage from "./pages/AISummaryPage";
@@ -40,6 +41,7 @@ const App = () => (
           <Route path="/tools/ai-summary/:accountId/:summaryId" element={<AISummaryPage />} />
           <Route path="/demo/sidebar" element={<ReportsSidebarDemo />} />
           <Route path="/shared/:slug" element={<SharedReport />} />
+          <Route path="/shared/ai-summary/:slug" element={<SharedAISummary />} />
           <Route path="/:slug" element={<SharedReport />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
