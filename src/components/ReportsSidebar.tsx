@@ -245,16 +245,6 @@ export function ReportsSidebar({
             >
               Overview
             </Button>
-            <Button
-              variant={selectedReportTab === "budget" ? "secondary" : "ghost"}
-              className={cn(
-                "w-full justify-start text-left h-9 px-3",
-                selectedReportTab === "budget" && "bg-accent text-accent-foreground"
-              )}
-              onClick={() => onReportTabChange?.("budget")}
-            >
-              Budget
-            </Button>
             {aiSummaryReportTabs.map((report) => (
               <Button
                 key={report.id}
@@ -268,6 +258,16 @@ export function ReportsSidebar({
                 {report.name}
               </Button>
             ))}
+            <Button
+              variant={selectedReportTab === "budget" ? "secondary" : "ghost"}
+              className={cn(
+                "w-full justify-start text-left h-9 px-3",
+                selectedReportTab === "budget" && "bg-accent text-accent-foreground"
+              )}
+              onClick={() => onReportTabChange?.("budget")}
+            >
+              Budget
+            </Button>
           </div>
         )}
 
