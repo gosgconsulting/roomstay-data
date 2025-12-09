@@ -157,6 +157,50 @@ export type Database = {
           },
         ]
       }
+      ai_summary_forecasts: {
+        Row: {
+          ai_summary_card_id: string
+          created_at: string
+          daily_rate: number
+          id: string
+          name: string
+          occupancy_rate: number
+          rooms: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_summary_card_id: string
+          created_at?: string
+          daily_rate?: number
+          id?: string
+          name: string
+          occupancy_rate?: number
+          rooms?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_summary_card_id?: string
+          created_at?: string
+          daily_rate?: number
+          id?: string
+          name?: string
+          occupancy_rate?: number
+          rooms?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_summary_forecasts_ai_summary_card_id_fkey"
+            columns: ["ai_summary_card_id"]
+            isOneToOne: false
+            referencedRelation: "ai_summary_cards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       budgets: {
         Row: {
           account_id: string | null

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, Settings, MoreHorizontal, Database, Pencil, Share2 } from "lucide-react";
+import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, Settings, MoreHorizontal, Database, Pencil, Share2, TrendingUp } from "lucide-react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AddAICardModal } from "@/components/AddAICardModal";
 import { CreateAISummaryShareLinkModal } from "@/components/CreateAISummaryShareLinkModal";
+import { ForecastSettingsModal } from "@/components/ForecastSettingsModal";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
@@ -112,6 +113,7 @@ const AISummaryPage = () => {
   const [generateModalCard, setGenerateModalCard] = useState<AISummaryCard | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(summaryId || null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isForecastModalOpen, setIsForecastModalOpen] = useState(false);
   const [selectedDateTab, setSelectedDateTab] = useState<DateTab>(format(new Date(), "yyyy-MM"));
   const [selectedReportTab, setSelectedReportTab] = useState<ReportTab>("overview");
   const [selectedDatePeriod, setSelectedDatePeriod] = useState<string>(format(new Date(), "yyyy-MM"));
@@ -1234,6 +1236,12 @@ const AISummaryPage = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  {summaryId && (
+                    <Button variant="outline" onClick={() => setIsForecastModalOpen(true)}>
+                      <TrendingUp className="h-4 w-4 mr-2" />
+                      Forecast
+                    </Button>
+                  )}
                   <Button onClick={() => setIsAddCardModalOpen(true)}>
                     <Plus className="h-4 w-4 mr-2" />
                     Add card
@@ -1574,6 +1582,15 @@ const AISummaryPage = () => {
         cardName={generateModalCard?.name}
         initialAiPrompt={generateModalCard?.ai_prompt}
       />
+
+      {/* Forecast Settings Modal */}
+      {summaryId && (
+        <ForecastSettingsModal
+          open={isForecastModalOpen}
+          onOpenChange={setIsForecastModalOpen}
+          aiSummaryCardId={summaryId}
+        />
+      )}
         </div>
       </div>
     </SidebarProvider>

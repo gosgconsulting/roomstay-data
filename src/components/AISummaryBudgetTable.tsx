@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -33,6 +35,11 @@ interface BudgetData {
   revenue: number;
   roas: number;
   costOfSale: number;
+  // Forecast-specific fields
+  totalRevenue?: number;
+  revenueShare?: number;
+  estRevenue?: number;
+  estRevenueShare?: number;
 }
 
 interface CachedBudgetMetrics {
@@ -42,6 +49,14 @@ interface CachedBudgetMetrics {
       revenue: number;
     };
   };
+}
+
+interface ForecastRow {
+  id: string;
+  name: string;
+  rooms: number;
+  occupancy_rate: number;
+  daily_rate: number;
 }
 
 interface AISummaryBudgetTableProps {
@@ -86,6 +101,10 @@ export function AISummaryBudgetTable({
   const [editingMonth, setEditingMonth] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [savedBudgets, setSavedBudgets] = useState<Record<string, number>>({});
+  
+  // Forecast mode state (only for Overview)
+  const [forecastEnabled, setForecastEnabled] = useState(false);
+  const [forecastRows, setForecastRows] = useState<ForecastRow[]>([]);
 
   // Fetch budgets from database
   const fetchBudgets = async () => {
@@ -207,14 +226,51 @@ export function AISummaryBudgetTable({
     }
   };
 
-  // Removed fetchMetricsFromSource - refresh happens at parent level via handleRefreshPivotData
+  // Fetch forecast rows for this card
+  const fetchForecasts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("ai_summary_forecasts")
+        .select("*")
+        .eq("ai_summary_card_id", aiSummaryCardId)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("Error fetching forecasts:", error);
+        return [];
+      }
+
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        rooms: row.rooms,
+        occupancy_rate: row.occupancy_rate,
+        daily_rate: row.daily_rate,
+      }));
+    } catch (err) {
+      console.error("Error fetching forecasts:", err);
+      return [];
+    }
+  };
+
+  // Calculate monthly total revenue from forecast settings
+  const calculateMonthlyTotalRevenue = (monthIndex: number): number => {
+    // Get days in month (monthIndex is 0-indexed, but we use 1-indexed for the month)
+    const daysInMonth = new Date(currentYear, monthIndex + 1, 0).getDate();
+    
+    return forecastRows.reduce((total, row) => {
+      const revenue = row.rooms * (row.occupancy_rate / 100) * row.daily_rate * daysInMonth;
+      return total + revenue;
+    }, 0);
+  };
 
   // Build budget data array from metrics
   const buildBudgetData = (
     budgets: Record<string, number>,
-    metrics: Record<string, { cost: number; revenue: number }>
+    metrics: Record<string, { cost: number; revenue: number }>,
+    forecasts: ForecastRow[]
   ): BudgetData[] => {
-    return MONTHS.map((m) => {
+    return MONTHS.map((m, index) => {
       const monthKey = `${currentYear}-${m.key}`;
       const budget = budgets[monthKey] || 0;
       const cost = metrics[monthKey]?.cost || 0;
@@ -222,6 +278,30 @@ export function AISummaryBudgetTable({
       const difference = budget - cost;
       const roas = cost > 0 ? revenue / cost : 0;
       const costOfSale = revenue > 0 ? (cost / revenue) * 100 : 0;
+
+      // Calculate forecast-specific fields if we have forecast data
+      let totalRevenue: number | undefined;
+      let revenueShare: number | undefined;
+      let estRevenue: number | undefined;
+      let estRevenueShare: number | undefined;
+
+      if (forecasts.length > 0) {
+        const daysInMonth = new Date(currentYear, index + 1, 0).getDate();
+        totalRevenue = forecasts.reduce((total, row) => {
+          return total + row.rooms * (row.occupancy_rate / 100) * row.daily_rate * daysInMonth;
+        }, 0);
+        
+        // Revenue Share = actual revenue / total forecasted revenue
+        revenueShare = totalRevenue > 0 ? (revenue / totalRevenue) * 100 : 0;
+        
+        // Est. Revenue = budget * ROAS (estimated revenue based on budget spent)
+        // Using average ROAS from actual data if available, otherwise default to 1
+        const avgRoas = cost > 0 ? revenue / cost : 1;
+        estRevenue = budget * avgRoas;
+        
+        // Est. Revenue Share = estimated revenue / total forecasted revenue
+        estRevenueShare = totalRevenue > 0 ? (estRevenue / totalRevenue) * 100 : 0;
+      }
 
       return {
         month: monthKey,
@@ -232,6 +312,10 @@ export function AISummaryBudgetTable({
         revenue,
         roas,
         costOfSale,
+        totalRevenue,
+        revenueShare,
+        estRevenue,
+        estRevenueShare,
       };
     });
   };
@@ -239,16 +323,18 @@ export function AISummaryBudgetTable({
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // Fetch budgets and cached metrics
-      const [budgets, cachedMetrics] = await Promise.all([
+      // Fetch budgets, cached metrics, and forecasts
+      const [budgets, cachedMetrics, forecasts] = await Promise.all([
         fetchBudgets(),
         fetchCachedMetrics(),
+        isOverview ? fetchForecasts() : Promise.resolve([]),
       ]);
       
       setSavedBudgets(budgets);
+      setForecastRows(forecasts);
 
       // Always use cached data - refresh happens at parent level
-      const data = buildBudgetData(budgets, cachedMetrics || {});
+      const data = buildBudgetData(budgets, cachedMetrics || {}, forecasts);
       setBudgetData(data);
     } finally {
       setIsLoading(false);
@@ -344,23 +430,52 @@ export function AISummaryBudgetTable({
     );
   }
 
+  // Check if forecast is available
+  const hasForecastData = forecastRows.length > 0;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">{reportName}</h3>
+        
+        {/* Forecast toggle - only show on Overview if forecast data exists */}
+        {isOverview && hasForecastData && (
+          <div className="flex items-center gap-2">
+            <Switch
+              id="forecast-toggle"
+              checked={forecastEnabled}
+              onCheckedChange={setForecastEnabled}
+            />
+            <Label htmlFor="forecast-toggle" className="text-sm cursor-pointer">
+              Forecast Mode
+            </Label>
+          </div>
+        )}
       </div>
 
       <div className="border rounded-lg overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead className="w-[140px]">Date</TableHead>
+              <TableHead className="w-[120px]">Date</TableHead>
               <TableHead className="text-right">Budget</TableHead>
-              <TableHead className="text-right">Costs</TableHead>
-              <TableHead className="text-right">Difference</TableHead>
-              <TableHead className="text-right">Revenue</TableHead>
-              <TableHead className="text-right">ROAS</TableHead>
-              <TableHead className="text-right">Cost of Sale</TableHead>
+              <TableHead className="text-right">Cost</TableHead>
+              {forecastEnabled && isOverview ? (
+                <>
+                  <TableHead className="text-right">Total Revenue</TableHead>
+                  <TableHead className="text-right">Revenue</TableHead>
+                  <TableHead className="text-right">Revenue Share</TableHead>
+                  <TableHead className="text-right">Est. Revenue</TableHead>
+                  <TableHead className="text-right">Est. Rev. Share</TableHead>
+                </>
+              ) : (
+                <>
+                  <TableHead className="text-right">Difference</TableHead>
+                  <TableHead className="text-right">Revenue</TableHead>
+                  <TableHead className="text-right">ROAS</TableHead>
+                  <TableHead className="text-right">Cost of Sale</TableHead>
+                </>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -383,17 +498,29 @@ export function AISummaryBudgetTable({
                   </div>
                 </TableCell>
                 <TableCell className="text-right">{formatCurrency(row.cost)}</TableCell>
-                <TableCell
-                  className={cn(
-                    "text-right font-medium",
-                    row.difference > 0 ? "text-green-600" : row.difference < 0 ? "text-red-600" : ""
-                  )}
-                >
-                  {formatCurrency(row.difference)}
-                </TableCell>
-                <TableCell className="text-right">{formatCurrency(row.revenue)}</TableCell>
-                <TableCell className="text-right">{row.roas.toFixed(2)}</TableCell>
-                <TableCell className="text-right">{formatPercentage(row.costOfSale)}</TableCell>
+                {forecastEnabled && isOverview ? (
+                  <>
+                    <TableCell className="text-right">{formatCurrency(row.totalRevenue || 0)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(row.revenue)}</TableCell>
+                    <TableCell className="text-right">{formatPercentage(row.revenueShare || 0)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(row.estRevenue || 0)}</TableCell>
+                    <TableCell className="text-right">{formatPercentage(row.estRevenueShare || 0)}</TableCell>
+                  </>
+                ) : (
+                  <>
+                    <TableCell
+                      className={cn(
+                        "text-right font-medium",
+                        row.difference > 0 ? "text-green-600" : row.difference < 0 ? "text-red-600" : ""
+                      )}
+                    >
+                      {formatCurrency(row.difference)}
+                    </TableCell>
+                    <TableCell className="text-right">{formatCurrency(row.revenue)}</TableCell>
+                    <TableCell className="text-right">{row.roas.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{formatPercentage(row.costOfSale)}</TableCell>
+                  </>
+                )}
               </TableRow>
             ))}
           </TableBody>
