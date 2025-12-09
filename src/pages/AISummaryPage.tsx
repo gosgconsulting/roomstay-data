@@ -873,121 +873,155 @@ const AISummaryPage = () => {
       const cachedBudgetData: Record<string, Record<string, { cost: number; revenue: number }>> = {};
       
       for (const reportId of card.report_ids) {
-        // Fetch data source for this report
-        const { data: dsData } = await supabase
-          .from("data_sources")
-          .select("*")
-          .eq("report_id", reportId)
-          .limit(1)
-          .single();
-
-        if (!dsData) continue;
-
-        // Build metric name to ID mapping
-        const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
-        const metricNameToIdMap: Record<string, string> = {};
-        const dimIdToColumnHeader: Record<string, string> = {};
-        columnMappings.forEach((m: any) => {
-          if (m.dimensionName && m.dimensionId && m.dimensionId !== "none") {
-            metricNameToIdMap[m.dimensionName] = m.dimensionId;
-          }
-          if (m.dimensionId && m.dimensionId !== "none" && m.columnHeader) {
-            dimIdToColumnHeader[m.dimensionId] = m.columnHeader;
-          }
-        });
-
-        // Get filter config for this report
-        const filterConfig = filterConfigs[reportId];
-        let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
-
-        if (filterConfig?.dimensionId && filterConfig.selectedValues?.length > 0) {
-          const { data: dimData } = await supabase
-            .from("dimensions")
-            .select("name")
-            .eq("id", filterConfig.dimensionId)
-            .single();
-
-          dimensionFilter = {
-            dimensionId: filterConfig.dimensionId,
-            dimensionName: dimData?.name,
-            values: filterConfig.selectedValues,
-          };
-        }
-
-        // Helper to get dimension value
-        const getDimensionValue = (rowData: any, dimId: string, dimName?: string): string | undefined => {
-          if (rowData[dimId] !== undefined && rowData[dimId] !== null && rowData[dimId] !== '') {
-            return String(rowData[dimId]);
-          }
-          if (dimName && rowData[dimName] !== undefined && rowData[dimName] !== null && rowData[dimName] !== '') {
-            return String(rowData[dimName]);
-          }
-          const columnHeader = dimIdToColumnHeader[dimId];
-          if (columnHeader && rowData[columnHeader] !== undefined && rowData[columnHeader] !== null && rowData[columnHeader] !== '') {
-            return String(rowData[columnHeader]);
-          }
-          return undefined;
-        };
-
-        // Re-fetch source data for budget calculation
-        const sourceData = await fetchSourceData(dsData as DataSource, user.id, accountId);
-        if (!sourceData?.transformedRows) continue;
-
+        // Initialize entry for this report (even if fetch fails, we track it)
         const monthlyMetrics: Record<string, { cost: number; revenue: number }> = {};
         const currentYear = new Date().getFullYear();
+        
+        try {
+          // Fetch data source for this report
+          const { data: dsData, error: dsError } = await supabase
+            .from("data_sources")
+            .select("*")
+            .eq("report_id", reportId)
+            .limit(1)
+            .single();
 
-        sourceData.transformedRows.forEach((row: any) => {
-          const rowData = row.dimension_values || row;
-
-          // Apply dimension filter
-          if (dimensionFilter) {
-            const filterValue = getDimensionValue(rowData, dimensionFilter.dimensionId, dimensionFilter.dimensionName);
-            if (!filterValue || !dimensionFilter.values.includes(filterValue)) {
-              return;
-            }
+          if (dsError || !dsData) {
+            console.warn(`No data source found for report ${reportId}:`, dsError);
+            cachedBudgetData[reportId] = monthlyMetrics;
+            continue;
           }
 
-          // Find date value
-          let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
-          if (!dateValue) {
-            for (const [key, val] of Object.entries(rowData)) {
-              if (typeof val === "string" && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-                dateValue = val as string;
-                break;
+          // Build metric name to ID mapping
+          const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
+          const metricNameToIdMap: Record<string, string> = {};
+          const dimIdToColumnHeader: Record<string, string> = {};
+          columnMappings.forEach((m: any) => {
+            if (m.dimensionName && m.dimensionId && m.dimensionId !== "none") {
+              metricNameToIdMap[m.dimensionName] = m.dimensionId;
+            }
+            if (m.dimensionId && m.dimensionId !== "none" && m.columnHeader) {
+              dimIdToColumnHeader[m.dimensionId] = m.columnHeader;
+            }
+          });
+
+          // Get filter config for this report
+          const filterConfig = filterConfigs[reportId];
+          let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
+
+          if (filterConfig?.dimensionId && filterConfig.selectedValues?.length > 0) {
+            const { data: dimData } = await supabase
+              .from("dimensions")
+              .select("name")
+              .eq("id", filterConfig.dimensionId)
+              .single();
+
+            dimensionFilter = {
+              dimensionId: filterConfig.dimensionId,
+              dimensionName: dimData?.name,
+              values: filterConfig.selectedValues,
+            };
+          }
+
+          // Helper to get dimension value
+          const getDimensionValue = (rowData: any, dimId: string, dimName?: string): string | undefined => {
+            if (rowData[dimId] !== undefined && rowData[dimId] !== null && rowData[dimId] !== '') {
+              return String(rowData[dimId]);
+            }
+            if (dimName && rowData[dimName] !== undefined && rowData[dimName] !== null && rowData[dimName] !== '') {
+              return String(rowData[dimName]);
+            }
+            const columnHeader = dimIdToColumnHeader[dimId];
+            if (columnHeader && rowData[columnHeader] !== undefined && rowData[columnHeader] !== null && rowData[columnHeader] !== '') {
+              return String(rowData[columnHeader]);
+            }
+            return undefined;
+          };
+
+          // Re-fetch source data for budget calculation
+          const sourceData = await fetchSourceData(dsData as DataSource, user.id, accountId);
+          
+          if (!sourceData?.transformedRows || sourceData.transformedRows.length === 0) {
+            console.warn(`No transformed rows for report ${reportId}`);
+            cachedBudgetData[reportId] = monthlyMetrics;
+            continue;
+          }
+
+          console.log(`Processing ${sourceData.transformedRows.length} rows for budget report ${reportId}`);
+
+          sourceData.transformedRows.forEach((row: any) => {
+            const rowData = row.dimension_values || row;
+
+            // Apply dimension filter
+            if (dimensionFilter) {
+              const filterValue = getDimensionValue(rowData, dimensionFilter.dimensionId, dimensionFilter.dimensionName);
+              if (!filterValue || !dimensionFilter.values.includes(filterValue)) {
+                return;
               }
             }
-          }
 
-          if (!dateValue) return;
+            // Find date value
+            let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
+            if (!dateValue) {
+              for (const [key, val] of Object.entries(rowData)) {
+                if (typeof val === "string" && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+                  dateValue = val as string;
+                  break;
+                }
+              }
+            }
 
-          const date = new Date(dateValue);
-          if (isNaN(date.getTime())) return;
-          if (date.getFullYear() !== currentYear) return;
+            if (!dateValue) return;
 
-          const monthKey = `${currentYear}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+            const date = new Date(dateValue);
+            if (isNaN(date.getTime())) return;
+            if (date.getFullYear() !== currentYear) return;
 
-          if (!monthlyMetrics[monthKey]) {
-            monthlyMetrics[monthKey] = { cost: 0, revenue: 0 };
-          }
+            const monthKey = `${currentYear}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 
-          // Get Cost
-          const costId = metricNameToIdMap["Cost"];
-          const costValue = parseFloat(rowData[costId] || rowData["Cost"] || rowData["cost"] || 0);
-          if (!isNaN(costValue)) {
-            monthlyMetrics[monthKey].cost += costValue;
-          }
+            if (!monthlyMetrics[monthKey]) {
+              monthlyMetrics[monthKey] = { cost: 0, revenue: 0 };
+            }
 
-          // Get Revenue
-          const revenueId = metricNameToIdMap["Revenue"];
-          const revenueValue = parseFloat(rowData[revenueId] || rowData["Revenue"] || rowData["revenue"] || 0);
-          if (!isNaN(revenueValue)) {
-            monthlyMetrics[monthKey].revenue += revenueValue;
-          }
-        });
+            // Get Cost - try multiple possible field names/IDs
+            const costId = metricNameToIdMap["Cost"];
+            const costValue = parseFloat(
+              rowData[costId] || 
+              rowData["Cost"] || 
+              rowData["cost"] || 
+              rowData["Spend"] || 
+              rowData["spend"] ||
+              rowData["Amount spent"] ||
+              rowData["Amount Spent"] ||
+              0
+            );
+            if (!isNaN(costValue)) {
+              monthlyMetrics[monthKey].cost += costValue;
+            }
 
+            // Get Revenue - try multiple possible field names/IDs
+            const revenueId = metricNameToIdMap["Revenue"];
+            const revenueValue = parseFloat(
+              rowData[revenueId] || 
+              rowData["Revenue"] || 
+              rowData["revenue"] ||
+              rowData["Conversion value"] ||
+              rowData["Purchase value"] ||
+              0
+            );
+            if (!isNaN(revenueValue)) {
+              monthlyMetrics[monthKey].revenue += revenueValue;
+            }
+          });
+        } catch (err) {
+          console.error(`Error processing budget data for report ${reportId}:`, err);
+        }
+
+        // Always save the metrics for this report (even if empty)
         cachedBudgetData[reportId] = monthlyMetrics;
       }
 
+      console.log("Final cached budget data:", Object.keys(cachedBudgetData));
       toast.dismiss("refresh-budget");
 
       // Save to database including breakdown data, date breakdown data, and budget data
