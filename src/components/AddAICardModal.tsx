@@ -318,20 +318,20 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     }
   }, [accountId, open]);
 
-  // Fetch custom metrics (number-type dimensions) for the account
+  // Fetch custom metrics (number-type and formula-type dimensions) for the account
   useEffect(() => {
     const fetchCustomMetrics = async () => {
       if (!accountId || !open) return;
 
-      // Fetch dimensions of type "number" that could be custom metrics
-      const { data: numberDims } = await supabase
+      // Fetch dimensions of type "number" or "formula" that could be custom metrics
+      const { data: customDims } = await supabase
         .from("dimensions")
-        .select("name")
+        .select("name, type")
         .eq("account_id", accountId)
-        .eq("type", "number");
+        .in("type", ["number", "formula"]);
 
-      if (numberDims) {
-        const customNames = numberDims
+      if (customDims) {
+        const customNames = customDims
           .map(d => d.name)
           .filter(name => !AVAILABLE_METRICS.includes(name) && !FORMULA_METRIC_NAMES.includes(name));
         setCustomMetrics(customNames);
