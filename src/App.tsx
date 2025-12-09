@@ -41,7 +41,7 @@ const App = () => (
           <Route path="/tools/ai-summary/:accountId/:summaryId" element={<AISummaryPage />} />
           <Route path="/demo/sidebar" element={<ReportsSidebarDemo />} />
           <Route path="/shared/:slug" element={<SharedReport />} />
-          <Route path="/shared/ai-summary/:slug" element={<SharedAISummary />} />
+          <Route path="/shared/reports/:slug" element={<SharedAISummary />} />
           <Route path="/:slug" element={<SharedReport />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

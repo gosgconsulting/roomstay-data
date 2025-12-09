@@ -170,11 +170,11 @@ export function ReportsSidebar({
   return (
     <Sidebar collapsible="icon" className={cn("w-64 border-r bg-sidebar", className)}>
       <SidebarContent className="p-6">
-        {/* Reports Section */}
+        {/* Data Studio Section */}
         <SidebarGroup>
           <SidebarGroupLabel className="text-base font-medium text-sidebar-foreground mb-3 px-0 flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
-            Reports
+            Data Studio
           </SidebarGroupLabel>
           <SidebarGroupContent className="space-y-1">
             {reports.map((report) => (
@@ -201,11 +201,11 @@ export function ReportsSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* AI Summary Section */}
+        {/* Reports Section */}
         <SidebarGroup className="mt-6">
           <SidebarGroupLabel className="text-base font-medium text-sidebar-foreground mb-3 px-0 flex items-center gap-2">
             <Sparkles className="h-4 w-4" />
-            AI Summary
+            Reports
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <Select 

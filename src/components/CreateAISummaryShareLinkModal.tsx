@@ -72,7 +72,7 @@ export const CreateAISummaryShareLinkModal = ({
   };
 
   const copyLink = () => {
-    const link = `${window.location.origin}/shared/ai-summary/${slug}`;
+    const link = `${window.location.origin}/shared/reports/${slug}`;
     navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -152,7 +152,7 @@ export const CreateAISummaryShareLinkModal = ({
 
       toast({
         title: "Share link updated",
-        description: `Your AI Summary is available at /shared/ai-summary/${slug}`,
+        description: `Your AI Summary is available at /shared/reports/${slug}`,
       });
     } else {
       // Create new link with slug that will route to SharedAISummary
@@ -191,7 +191,7 @@ export const CreateAISummaryShareLinkModal = ({
 
       toast({
         title: "Share link created",
-        description: `Your AI Summary is available at /shared/ai-summary/${slug}`,
+        description: `Your AI Summary is available at /shared/reports/${slug}`,
       });
     }
 
@@ -228,7 +228,7 @@ export const CreateAISummaryShareLinkModal = ({
           <div className="space-y-2">
             <Label htmlFor="slug">Slug</Label>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">/shared/ai-summary/</span>
+              <span className="text-sm text-muted-foreground">/shared/reports/</span>
               <Input
                 id="slug"
                 placeholder="my-summary"
@@ -265,7 +265,7 @@ export const CreateAISummaryShareLinkModal = ({
               <div className="flex items-center gap-2">
                 <Input
                   readOnly
-                  value={`${window.location.origin}/shared/ai-summary/${slug}`}
+                  value={`${window.location.origin}/shared/reports/${slug}`}
                   className="flex-1 text-sm"
                 />
                 <Button
