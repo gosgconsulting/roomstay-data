@@ -41,6 +41,57 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_summary_budgets: {
+        Row: {
+          account_id: string | null
+          ai_summary_card_id: string
+          budget_amount: number
+          created_at: string
+          id: string
+          month_key: string
+          report_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          ai_summary_card_id: string
+          budget_amount?: number
+          created_at?: string
+          id?: string
+          month_key: string
+          report_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          ai_summary_card_id?: string
+          budget_amount?: number
+          created_at?: string
+          id?: string
+          month_key?: string
+          report_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_summary_budgets_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_summary_budgets_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_summary_cards: {
         Row: {
           account_id: string | null
