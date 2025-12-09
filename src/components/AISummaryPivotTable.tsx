@@ -718,14 +718,13 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         prevYearValue = filteredReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
       }
       
-      // Calculate percent change based on comparison type
+      // Calculate percent change based on comparison type - only when both values exist
       let percentChange: number | null = null;
       const comparisonValue = comparisonType === "previous_year" ? prevYearValue : prevPeriodValue;
       if (currentValue > 0 && comparisonValue > 0) {
         percentChange = ((currentValue - comparisonValue) / comparisonValue) * 100;
-      } else if (currentValue > 0 && comparisonValue === 0) {
-        percentChange = 100; // New data where there was none
       }
+      // Don't show percentage when comparison data is missing (comparisonValue === 0)
       
       monthlyData.push({
         month: monthLabel,
