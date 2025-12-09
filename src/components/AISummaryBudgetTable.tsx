@@ -466,7 +466,7 @@ export function AISummaryBudgetTable({
                   <TableHead className="text-right">Revenue</TableHead>
                   <TableHead className="text-right">Revenue Share</TableHead>
                   <TableHead className="text-right">Est. Revenue</TableHead>
-                  <TableHead className="text-right">Est. Rev. Share</TableHead>
+                  <TableHead className="text-right">Est. Revenue Share</TableHead>
                 </>
               ) : (
                 <>
