@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2, Sparkles, ArrowUp, ArrowDown, Minus, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
+import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Tooltip, LabelList, Cell } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
@@ -661,7 +661,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   const ytdChartData = useMemo(() => {
     const year = new Date().getFullYear();
     const prevYear = year - 1;
-    const monthlyData: { month: string; current: number; prevPeriod: number; prevYear: number }[] = [];
+    const monthlyData: { month: string; current: number; prevPeriod: number; prevYear: number; percentChange: number | null }[] = [];
     
     // Create data for all 12 months
     for (let m = 0; m < 12; m++) {
@@ -718,16 +718,26 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         prevYearValue = filteredReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
       }
       
+      // Calculate percent change based on comparison type
+      let percentChange: number | null = null;
+      const comparisonValue = comparisonType === "previous_year" ? prevYearValue : prevPeriodValue;
+      if (currentValue > 0 && comparisonValue > 0) {
+        percentChange = ((currentValue - comparisonValue) / comparisonValue) * 100;
+      } else if (currentValue > 0 && comparisonValue === 0) {
+        percentChange = 100; // New data where there was none
+      }
+      
       monthlyData.push({
         month: monthLabel,
         current: currentValue,
         prevPeriod: prevPeriodValue,
         prevYear: prevYearValue,
+        percentChange,
       });
     }
     
     return monthlyData;
-  }, [cachedPivotData?.monthly_data, cachedPivotData?.comparison_previous_period?.monthly_data, cachedPivotData?.comparison_previous_year?.monthly_data, chartKpi, activeReportTab]);
+  }, [cachedPivotData?.monthly_data, cachedPivotData?.comparison_previous_period?.monthly_data, cachedPivotData?.comparison_previous_year?.monthly_data, chartKpi, activeReportTab, comparisonType]);
 
   // Chart config for grouped bars
   const chartConfig = {
@@ -1523,7 +1533,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         </div>
         <div className="p-4">
           <ChartContainer config={chartConfig} className="h-[300px] w-full">
-            <BarChart data={ytdChartData} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
+            <BarChart data={ytdChartData} margin={{ top: 30, right: 10, left: 10, bottom: 10 }}>
               <XAxis 
                 dataKey="month" 
                 tickLine={false} 
@@ -1540,8 +1550,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                 content={
                   <ChartTooltipContent
                     formatter={(value, name) => {
-                      const label = name === 'current' ? 'Current' : name === 'prevPeriod' ? 'vs Prev Period' : 'vs Prev Year';
-                      return [formatMetricValue(chartKpi, Number(value)), label];
+                      return [formatMetricValue(chartKpi, Number(value)), 'Current'];
                     }}
                   />
                 }
@@ -1551,43 +1560,26 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                 name="current"
                 fill="hsl(var(--primary))" 
                 radius={[4, 4, 0, 0]}
-              />
-              {comparisonType === "previous_period" && (
-                <Bar 
-                  dataKey="prevPeriod" 
-                  name="prevPeriod"
-                  fill="hsl(var(--muted-foreground) / 0.6)" 
-                  radius={[4, 4, 0, 0]}
-                />
-              )}
-              {comparisonType === "previous_year" && (
-                <Bar 
-                  dataKey="prevYear" 
-                  name="prevYear"
-                  fill="hsl(var(--accent-foreground) / 0.4)" 
-                  radius={[4, 4, 0, 0]}
-                />
-              )}
+              >
+                {comparisonType !== "none" && (
+                  <LabelList 
+                    dataKey="percentChange" 
+                    position="top" 
+                    formatter={(value: number | null) => {
+                      if (value === null) return '';
+                      const sign = value > 0 ? '+' : '';
+                      return `${sign}${value.toFixed(0)}%`;
+                    }}
+                    style={{ 
+                      fontSize: 10, 
+                      fontWeight: 500,
+                    }}
+                    fill="hsl(var(--foreground))"
+                  />
+                )}
+              </Bar>
             </BarChart>
           </ChartContainer>
-          <div className="flex justify-center gap-6 mt-2 text-xs">
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm bg-primary" />
-              <span className="text-muted-foreground">Current</span>
-            </div>
-            {comparisonType === "previous_period" && (
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'hsl(var(--muted-foreground) / 0.6)' }} />
-                <span className="text-muted-foreground">vs Prev Period</span>
-              </div>
-            )}
-            {comparisonType === "previous_year" && (
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'hsl(var(--accent-foreground) / 0.4)' }} />
-                <span className="text-muted-foreground">vs Prev Year</span>
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
