@@ -1267,7 +1267,7 @@ const AISummaryPage = () => {
                   />
                 </CardContent>
                 
-                {/* Generate/Regenerate Button Bar */}
+                {/* AI Executive Summary section - TEMPORARILY HIDDEN
                 <CardContent className="p-0 border-t">
                   <div className="bg-gradient-to-r from-primary/5 to-primary/10 px-4 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1306,6 +1306,7 @@ const AISummaryPage = () => {
                     </div>
                   )}
                 </CardContent>
+                */}
               </Card>
             ))}
           </div>
