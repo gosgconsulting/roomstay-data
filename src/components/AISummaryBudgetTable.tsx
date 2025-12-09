@@ -53,6 +53,7 @@ interface AISummaryBudgetTableProps {
   reportId: string;
   reportName: string;
   accountId?: string;
+  reportConfigs?: Record<string, any>;
 }
 
 // All months of the year
@@ -76,6 +77,7 @@ export function AISummaryBudgetTable({
   reportId,
   reportName,
   accountId,
+  reportConfigs,
 }: AISummaryBudgetTableProps) {
   const currentYear = new Date().getFullYear();
   const [budgetData, setBudgetData] = useState<BudgetData[]>([]);
@@ -125,7 +127,7 @@ export function AISummaryBudgetTable({
         .select("*")
         .eq("report_id", reportId)
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (!dsData) return {};
 
@@ -135,17 +137,66 @@ export function AISummaryBudgetTable({
       // Build metric name to ID mapping
       const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
       const metricNameToIdMap: Record<string, string> = {};
+      const dimIdToColumnHeader: Record<string, string> = {};
       columnMappings.forEach((m: any) => {
         if (m.dimensionName && m.dimensionId && m.dimensionId !== "none") {
           metricNameToIdMap[m.dimensionName] = m.dimensionId;
         }
+        if (m.dimensionId && m.dimensionId !== "none" && m.columnHeader) {
+          dimIdToColumnHeader[m.dimensionId] = m.columnHeader;
+        }
       });
+
+      // Get dimension filter config for this report
+      const filterConfig = reportConfigs?.[reportId];
+      let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
+
+      if (filterConfig?.dimensionId && filterConfig.selectedValues?.length > 0) {
+        // Fetch dimension name
+        const { data: dimData } = await supabase
+          .from("dimensions")
+          .select("name")
+          .eq("id", filterConfig.dimensionId)
+          .maybeSingle();
+
+        dimensionFilter = {
+          dimensionId: filterConfig.dimensionId,
+          dimensionName: dimData?.name,
+          values: filterConfig.selectedValues,
+        };
+      }
+
+      // Helper to get dimension value from row data
+      const getDimensionValue = (rowData: any, dimId: string, dimName?: string): string | undefined => {
+        // Try dimension ID first
+        if (rowData[dimId] !== undefined && rowData[dimId] !== null && rowData[dimId] !== '') {
+          return String(rowData[dimId]);
+        }
+        // Try dimension name
+        if (dimName && rowData[dimName] !== undefined && rowData[dimName] !== null && rowData[dimName] !== '') {
+          return String(rowData[dimName]);
+        }
+        // Try column header from mappings
+        const columnHeader = dimIdToColumnHeader[dimId];
+        if (columnHeader && rowData[columnHeader] !== undefined && rowData[columnHeader] !== null && rowData[columnHeader] !== '') {
+          return String(rowData[columnHeader]);
+        }
+        return undefined;
+      };
 
       // Aggregate metrics by month
       const monthlyMetrics: Record<string, { cost: number; revenue: number }> = {};
 
       sourceData.transformedRows.forEach((row: any) => {
         const rowData = row.dimension_values || row;
+
+        // Apply dimension filter if configured
+        if (dimensionFilter) {
+          const filterValue = getDimensionValue(rowData, dimensionFilter.dimensionId, dimensionFilter.dimensionName);
+          if (!filterValue || !dimensionFilter.values.includes(filterValue)) {
+            return; // Skip this row - doesn't match filter
+          }
+        }
 
         // Find date value
         let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
