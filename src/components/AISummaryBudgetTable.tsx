@@ -87,11 +87,6 @@ export function AISummaryBudgetTable({
   const [editValue, setEditValue] = useState("");
   const [savedBudgets, setSavedBudgets] = useState<Record<string, number>>({});
 
-  // Get cache key for this tab
-  const getCacheKey = () => {
-    return isOverview ? "overview" : reportId;
-  };
-
   // Fetch budgets from database
   const fetchBudgets = async () => {
     try {
@@ -134,13 +129,18 @@ export function AISummaryBudgetTable({
         .eq("id", aiSummaryCardId)
         .maybeSingle();
 
-      if (error || !data?.cached_budget_data) {
+      if (error) {
+        console.error("Error fetching cached budget data:", error);
+        return null;
+      }
+      
+      if (!data?.cached_budget_data) {
+        console.log("No cached_budget_data found for card:", aiSummaryCardId);
         return null;
       }
 
       const cachedData = data.cached_budget_data as CachedBudgetMetrics;
-      const cacheKey = getCacheKey();
-
+      
       // For overview, aggregate all report data
       if (isOverview && allReportIds) {
         const aggregated: Record<string, { cost: number; revenue: number }> = {};
@@ -159,8 +159,14 @@ export function AISummaryBudgetTable({
         return aggregated;
       }
 
-      // For individual report, return that report's data
-      return cachedData[cacheKey] || null;
+      // For individual report, return that report's data directly using reportId prop
+      const reportMetrics = cachedData[reportId];
+      if (!reportMetrics) {
+        console.log("No cached metrics found for report:", reportId, "Available keys:", Object.keys(cachedData));
+        return null;
+      }
+      
+      return reportMetrics;
     } catch (err) {
       console.error("Error fetching cached metrics:", err);
       return null;
