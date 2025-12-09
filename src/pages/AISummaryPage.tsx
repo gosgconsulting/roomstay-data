@@ -1257,10 +1257,18 @@ const AISummaryPage = () => {
                     <div className="space-y-4">
                       {/* Budget Report Tabs */}
                       <div className="flex gap-2 border-b pb-3">
+                        <Button
+                          key="budget-overview"
+                          variant={selectedBudgetReportId === "overview" || !selectedBudgetReportId ? "default" : "ghost"}
+                          size="sm"
+                          className="px-4"
+                          onClick={() => setSelectedBudgetReportId("overview")}
+                        >
+                          Overview
+                        </Button>
                         {card.report_ids.map((reportId) => {
                           const report = reports.find(r => r.id === reportId);
-                          const isSelected = selectedBudgetReportId === reportId || 
-                            (!selectedBudgetReportId && reportId === card.report_ids[0]);
+                          const isSelected = selectedBudgetReportId === reportId;
                           return (
                             <Button
                               key={reportId}
@@ -1274,21 +1282,33 @@ const AISummaryPage = () => {
                           );
                         })}
                       </div>
-                      {/* Show only the selected report's budget table */}
-                      {(() => {
-                        const activeReportId = selectedBudgetReportId || card.report_ids[0];
-                        const report = reports.find(r => r.id === activeReportId);
-                        return activeReportId ? (
-                          <AISummaryBudgetTable
-                            key={activeReportId}
-                            aiSummaryCardId={card.id}
-                            reportId={activeReportId}
-                            reportName={report?.name || "Report"}
-                            accountId={accountId}
-                            reportConfigs={card.report_configs}
-                          />
-                        ) : null;
-                      })()}
+                      {/* Show the selected report's budget table or overview */}
+                      {selectedBudgetReportId === "overview" || !selectedBudgetReportId ? (
+                        <AISummaryBudgetTable
+                          key="budget-overview"
+                          aiSummaryCardId={card.id}
+                          reportId="overview"
+                          reportName="Overview"
+                          accountId={accountId}
+                          reportConfigs={card.report_configs}
+                          allReportIds={card.report_ids}
+                          isOverview={true}
+                        />
+                      ) : (
+                        (() => {
+                          const report = reports.find(r => r.id === selectedBudgetReportId);
+                          return (
+                            <AISummaryBudgetTable
+                              key={selectedBudgetReportId}
+                              aiSummaryCardId={card.id}
+                              reportId={selectedBudgetReportId}
+                              reportName={report?.name || "Report"}
+                              accountId={accountId}
+                              reportConfigs={card.report_configs}
+                            />
+                          );
+                        })()
+                      )}
                     </div>
                   ) : (
                     <AISummaryPivotTable
