@@ -67,6 +67,8 @@ interface AISummaryBudgetTableProps {
   reportConfigs?: Record<string, any>;
   allReportIds?: string[];
   isOverview?: boolean;
+  forecastEnabled?: boolean;
+  onForecastEnabledChange?: (enabled: boolean) => void;
 }
 
 // All months of the year
@@ -93,6 +95,8 @@ export function AISummaryBudgetTable({
   reportConfigs,
   allReportIds,
   isOverview = false,
+  forecastEnabled: externalForecastEnabled,
+  onForecastEnabledChange,
 }: AISummaryBudgetTableProps) {
   const currentYear = new Date().getFullYear();
   const [budgetData, setBudgetData] = useState<BudgetData[]>([]);
@@ -102,8 +106,10 @@ export function AISummaryBudgetTable({
   const [editValue, setEditValue] = useState("");
   const [savedBudgets, setSavedBudgets] = useState<Record<string, number>>({});
   
-  // Forecast mode state (only for Overview)
-  const [forecastEnabled, setForecastEnabled] = useState(false);
+  // Forecast mode state - use external if provided, otherwise local
+  const [localForecastEnabled, setLocalForecastEnabled] = useState(false);
+  const forecastEnabled = externalForecastEnabled !== undefined ? externalForecastEnabled : localForecastEnabled;
+  const setForecastEnabled = onForecastEnabledChange || setLocalForecastEnabled;
   const [forecastRows, setForecastRows] = useState<ForecastRow[]>([]);
 
   // Fetch budgets from database
