@@ -934,18 +934,20 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     return null;
   }
 
-  // Preferred metric display order
+  // Preferred metric display order - matches AVAILABLE_METRICS in AddAICardModal
   const METRIC_ORDER = [
     "Impressions",
-    "Clicks", 
+    "Impression share",
+    "Clicks",
     "CTR",
+    "Conversions",
     "Conversion rate",
-    "Bookings",
     "CPC",
     "Cost",
     "Revenue",
     "ROAS",
     "Cost of sale",
+    "Bookings", // Custom metric fallback
   ];
   
   // Sort metrics by preferred order
