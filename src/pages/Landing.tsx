@@ -4,11 +4,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
-import { LogOut, BarChart3, TrendingUp, Plus, DollarSign, Rocket, ChevronRight, Trash2 } from "lucide-react";
+import { LogOut, BarChart3, TrendingUp, Plus, DollarSign, Rocket, ChevronRight, Trash2, Pencil } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { CreateAccountModal } from "@/components/CreateAccountModal";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
+import { EditAccountModal } from "@/components/EditAccountModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { authKeys } from "@/lib/auth";
 
@@ -17,6 +18,7 @@ interface Account {
   name: string;
   description: string | null;
   created_at: string;
+  user_id: string;
 }
 
 interface Tool {
@@ -39,6 +41,8 @@ export default function Landing() {
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [accountToDelete, setAccountToDelete] = useState<Account | null>(null);
+  const [editAccountOpen, setEditAccountOpen] = useState(false);
+  const [accountToEdit, setAccountToEdit] = useState<Account | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -172,6 +176,39 @@ export default function Landing() {
     }
   };
 
+  const handleEditAccount = async (name: string, description: string) => {
+    if (!accountToEdit) return;
+
+    try {
+      const { error } = await supabase
+        .from('accounts')
+        .update({ name, description: description || null })
+        .eq('id', accountToEdit.id);
+
+      if (error) throw error;
+
+      setAccounts(prev => prev.map(a => 
+        a.id === accountToEdit.id ? { ...a, name, description } : a
+      ));
+      if (selectedAccount?.id === accountToEdit.id) {
+        setSelectedAccount({ ...selectedAccount, name, description });
+      }
+      setEditAccountOpen(false);
+      setAccountToEdit(null);
+      toast({
+        title: "Success",
+        description: "Account updated successfully.",
+      });
+    } catch (error) {
+      console.error('Error updating account:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update account.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const tools: Tool[] = [
     {
       id: "report",
@@ -290,6 +327,18 @@ export default function Landing() {
                               className="opacity-0 group-hover:opacity-100 transition-opacity"
                               onClick={(e) => {
                                 e.stopPropagation();
+                                setAccountToEdit(account);
+                                setEditAccountOpen(true);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setAccountToDelete(account);
                                 setDeleteAccountOpen(true);
                               }}
@@ -359,6 +408,18 @@ export default function Landing() {
                               )}
                             </div>
                             <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAccountToEdit(account);
+                                  setEditAccountOpen(true);
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -456,6 +517,13 @@ export default function Landing() {
         onOpenChange={setDeleteAccountOpen}
         accountName={accountToDelete?.name || ""}
         onDelete={handleDeleteAccount}
+      />
+
+      <EditAccountModal
+        open={editAccountOpen}
+        onOpenChange={setEditAccountOpen}
+        account={accountToEdit}
+        onEdit={handleEditAccount}
       />
     </div>
   );
