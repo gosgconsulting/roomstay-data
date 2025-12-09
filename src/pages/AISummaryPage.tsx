@@ -939,7 +939,7 @@ const AISummaryPage = () => {
         return;
       }
 
-      toast.info("Generating AI summary with GPT-4 Turbo...");
+      toast.info("Generating AI summary...");
 
       // Get the session token
       const { data: { session } } = await supabase.auth.getSession();
