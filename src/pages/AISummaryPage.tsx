@@ -115,6 +115,7 @@ const AISummaryPage = () => {
   const [selectedDateTab, setSelectedDateTab] = useState<DateTab>(format(new Date(), "yyyy-MM"));
   const [selectedReportTab, setSelectedReportTab] = useState<ReportTab>("overview");
   const [selectedDatePeriod, setSelectedDatePeriod] = useState<string>(format(new Date(), "yyyy-MM"));
+  const [selectedBudgetReportId, setSelectedBudgetReportId] = useState<string | null>(null);
 
   // Generate date options: YTD at top, then MTD (current month), then previous months
   const dateOptions = React.useMemo(() => {
@@ -1253,36 +1254,40 @@ const AISummaryPage = () => {
                 {/* Budget Table or Pivot Table based on selected tab */}
                 <CardContent className="p-4">
                   {selectedReportTab === "budget" ? (
-                    <div className="space-y-8">
+                    <div className="space-y-4">
                       {/* Budget Report Tabs */}
                       <div className="flex gap-2 border-b pb-3">
                         {card.report_ids.map((reportId) => {
                           const report = reports.find(r => r.id === reportId);
+                          const isSelected = selectedBudgetReportId === reportId || 
+                            (!selectedBudgetReportId && reportId === card.report_ids[0]);
                           return (
                             <Button
                               key={reportId}
-                              variant="ghost"
+                              variant={isSelected ? "default" : "ghost"}
                               size="sm"
                               className="px-4"
+                              onClick={() => setSelectedBudgetReportId(reportId)}
                             >
                               {report?.name || "Report"}
                             </Button>
                           );
                         })}
                       </div>
-                      {/* Budget Tables for each report */}
-                      {card.report_ids.map((reportId) => {
-                        const report = reports.find(r => r.id === reportId);
-                        return (
+                      {/* Show only the selected report's budget table */}
+                      {(() => {
+                        const activeReportId = selectedBudgetReportId || card.report_ids[0];
+                        const report = reports.find(r => r.id === activeReportId);
+                        return activeReportId ? (
                           <AISummaryBudgetTable
-                            key={reportId}
+                            key={activeReportId}
                             aiSummaryCardId={card.id}
-                            reportId={reportId}
+                            reportId={activeReportId}
                             reportName={report?.name || "Report"}
                             accountId={accountId}
                           />
-                        );
-                      })}
+                        ) : null;
+                      })()}
                     </div>
                   ) : (
                     <AISummaryPivotTable
