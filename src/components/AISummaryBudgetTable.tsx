@@ -323,11 +323,11 @@ export function AISummaryBudgetTable({
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // Fetch budgets, cached metrics, and forecasts
+      // Fetch budgets, cached metrics, and forecasts (for all tabs)
       const [budgets, cachedMetrics, forecasts] = await Promise.all([
         fetchBudgets(),
         fetchCachedMetrics(),
-        isOverview ? fetchForecasts() : Promise.resolve([]),
+        fetchForecasts(),
       ]);
       
       setSavedBudgets(budgets);
@@ -438,8 +438,8 @@ export function AISummaryBudgetTable({
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">{reportName}</h3>
         
-        {/* Forecast toggle - only show on Overview if forecast data exists */}
-        {isOverview && hasForecastData && (
+        {/* Forecast toggle - show on all tabs if forecast data exists */}
+        {hasForecastData && (
           <div className="flex items-center gap-2">
             <Switch
               id="forecast-toggle"
@@ -460,7 +460,7 @@ export function AISummaryBudgetTable({
               <TableHead className="w-[120px]">Date</TableHead>
               <TableHead className="text-right">Budget</TableHead>
               <TableHead className="text-right">Cost</TableHead>
-              {forecastEnabled && isOverview ? (
+              {forecastEnabled ? (
                 <>
                   <TableHead className="text-right">Total Revenue</TableHead>
                   <TableHead className="text-right">Revenue</TableHead>
@@ -498,7 +498,7 @@ export function AISummaryBudgetTable({
                   </div>
                 </TableCell>
                 <TableCell className="text-right">{formatCurrency(row.cost)}</TableCell>
-                {forecastEnabled && isOverview ? (
+                {forecastEnabled ? (
                   <>
                     <TableCell className="text-right">{formatCurrency(row.totalRevenue || 0)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(row.revenue)}</TableCell>
