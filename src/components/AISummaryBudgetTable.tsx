@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -19,23 +18,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Loader2, RefreshCw, Edit2, Check, X } from "lucide-react";
+import { Loader2, Edit2, Check, X } from "lucide-react";
 import { toast } from "sonner";
-import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { cn } from "@/lib/utils";
 
-interface DataSource {
-  id: string;
-  report_id: string;
-  name: string;
-  source_type: "google_sheets" | "csv_url";
-  spreadsheet_id: string | null;
-  google_sheets_url: string | null;
-  csv_url: string | null;
-  tab_name: string | null;
-  header_row: number;
-  column_mappings: any[] | null;
-}
+// DataSource interface removed - no longer fetching from source directly
 
 interface BudgetData {
   month: string;
@@ -95,7 +82,7 @@ export function AISummaryBudgetTable({
   const currentYear = new Date().getFullYear();
   const [budgetData, setBudgetData] = useState<BudgetData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  
   const [editingMonth, setEditingMonth] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [savedBudgets, setSavedBudgets] = useState<Record<string, number>>({});
@@ -214,135 +201,7 @@ export function AISummaryBudgetTable({
     }
   };
 
-  // Fetch metrics data from source
-  const fetchMetricsFromSource = async (reportIdsToFetch: string[]) => {
-    const { user } = await getUser();
-    if (!user) return {};
-
-    // Fetch metrics per report (for individual caching)
-    const perReportMetrics: Record<string, Record<string, { cost: number; revenue: number }>> = {};
-
-    for (const currentReportId of reportIdsToFetch) {
-      // Fetch data source for this report
-      const { data: dsData } = await supabase
-        .from("data_sources")
-        .select("*")
-        .eq("report_id", currentReportId)
-        .limit(1)
-        .maybeSingle();
-
-      if (!dsData) continue;
-
-      const sourceData = await fetchSourceData(dsData as DataSource, user.id, accountId);
-      if (!sourceData?.transformedRows) continue;
-
-      // Build metric name to ID mapping
-      const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
-      const metricNameToIdMap: Record<string, string> = {};
-      const dimIdToColumnHeader: Record<string, string> = {};
-      columnMappings.forEach((m: any) => {
-        if (m.dimensionName && m.dimensionId && m.dimensionId !== "none") {
-          metricNameToIdMap[m.dimensionName] = m.dimensionId;
-        }
-        if (m.dimensionId && m.dimensionId !== "none" && m.columnHeader) {
-          dimIdToColumnHeader[m.dimensionId] = m.columnHeader;
-        }
-      });
-
-      // Get dimension filter config for this report
-      const filterConfig = reportConfigs?.[currentReportId];
-      let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
-
-      if (filterConfig?.dimensionId && filterConfig.selectedValues?.length > 0) {
-        // Fetch dimension name
-        const { data: dimData } = await supabase
-          .from("dimensions")
-          .select("name")
-          .eq("id", filterConfig.dimensionId)
-          .maybeSingle();
-
-        dimensionFilter = {
-          dimensionId: filterConfig.dimensionId,
-          dimensionName: dimData?.name,
-          values: filterConfig.selectedValues,
-        };
-      }
-
-      // Helper to get dimension value from row data
-      const getDimensionValue = (rowData: any, dimId: string, dimName?: string): string | undefined => {
-        if (rowData[dimId] !== undefined && rowData[dimId] !== null && rowData[dimId] !== '') {
-          return String(rowData[dimId]);
-        }
-        if (dimName && rowData[dimName] !== undefined && rowData[dimName] !== null && rowData[dimName] !== '') {
-          return String(rowData[dimName]);
-        }
-        const columnHeader = dimIdToColumnHeader[dimId];
-        if (columnHeader && rowData[columnHeader] !== undefined && rowData[columnHeader] !== null && rowData[columnHeader] !== '') {
-          return String(rowData[columnHeader]);
-        }
-        return undefined;
-      };
-
-      const monthlyMetrics: Record<string, { cost: number; revenue: number }> = {};
-
-      sourceData.transformedRows.forEach((row: any) => {
-        const rowData = row.dimension_values || row;
-
-        // Apply dimension filter if configured
-        if (dimensionFilter) {
-          const filterValue = getDimensionValue(rowData, dimensionFilter.dimensionId, dimensionFilter.dimensionName);
-          if (!filterValue || !dimensionFilter.values.includes(filterValue)) {
-            return; // Skip this row - doesn't match filter
-          }
-        }
-
-        // Find date value
-        let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
-        if (!dateValue) {
-          for (const [key, val] of Object.entries(rowData)) {
-            if (typeof val === "string" && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-              dateValue = val as string;
-              break;
-            }
-          }
-        }
-
-        if (!dateValue) return;
-
-        const date = new Date(dateValue);
-        if (isNaN(date.getTime())) return;
-
-        // Only include current year data
-        if (date.getFullYear() !== currentYear) return;
-
-        const monthKey = `${currentYear}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-
-        if (!monthlyMetrics[monthKey]) {
-          monthlyMetrics[monthKey] = { cost: 0, revenue: 0 };
-        }
-
-        // Get Cost
-        const costId = metricNameToIdMap["Cost"];
-        const costValue = parseFloat(rowData[costId] || rowData["Cost"] || rowData["cost"] || 0);
-        if (!isNaN(costValue)) {
-          monthlyMetrics[monthKey].cost += costValue;
-        }
-
-        // Get Revenue
-        const revenueId = metricNameToIdMap["Revenue"];
-        const revenueValue = parseFloat(
-          rowData[revenueId] || rowData["Revenue"] || rowData["revenue"] || 0
-        );
-        if (!isNaN(revenueValue)) {
-          monthlyMetrics[monthKey].revenue += revenueValue;
-        }
-      });
-
-      perReportMetrics[currentReportId] = monthlyMetrics;
-    }
-
-    return perReportMetrics;
-  };
+  // Removed fetchMetricsFromSource - refresh happens at parent level via handleRefreshPivotData
 
   // Build budget data array from metrics
   const buildBudgetData = (
@@ -374,7 +233,7 @@ export function AISummaryBudgetTable({
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // Fetch budgets and try cached metrics first
+      // Fetch budgets and cached metrics
       const [budgets, cachedMetrics] = await Promise.all([
         fetchBudgets(),
         fetchCachedMetrics(),
@@ -382,90 +241,15 @@ export function AISummaryBudgetTable({
       
       setSavedBudgets(budgets);
 
-      if (cachedMetrics && Object.keys(cachedMetrics).length > 0) {
-        // Use cached data for fast load
-        const data = buildBudgetData(budgets, cachedMetrics);
-        setBudgetData(data);
-      } else {
-        // No cache - fetch from source automatically
-        const reportIdsToFetch = isOverview && allReportIds ? allReportIds : [reportId];
-        const perReportMetrics = await fetchMetricsFromSource(reportIdsToFetch);
-        
-        // Save each report's metrics to cache
-        for (const [rid, metrics] of Object.entries(perReportMetrics)) {
-          await saveCachedMetrics(metrics, rid);
-        }
-        
-        // Aggregate for display
-        const aggregatedMetrics: Record<string, { cost: number; revenue: number }> = {};
-        Object.values(perReportMetrics).forEach((reportMetrics) => {
-          Object.entries(reportMetrics).forEach(([monthKey, values]) => {
-            if (!aggregatedMetrics[monthKey]) {
-              aggregatedMetrics[monthKey] = { cost: 0, revenue: 0 };
-            }
-            aggregatedMetrics[monthKey].cost += values.cost;
-            aggregatedMetrics[monthKey].revenue += values.revenue;
-          });
-        });
-        
-        const data = buildBudgetData(budgets, aggregatedMetrics);
-        setBudgetData(data);
-      }
+      // Always use cached data - refresh happens at parent level
+      const data = buildBudgetData(budgets, cachedMetrics || {});
+      setBudgetData(data);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const refreshMetrics = async () => {
-    setIsRefreshing(true);
-    try {
-      const reportIdsToFetch = isOverview && allReportIds ? allReportIds : [reportId];
-      const perReportMetrics = await fetchMetricsFromSource(reportIdsToFetch);
-
-      // Save each report's metrics to cache
-      for (const [rid, metrics] of Object.entries(perReportMetrics)) {
-        await saveCachedMetrics(metrics, rid);
-      }
-
-      // Aggregate for display
-      const aggregatedMetrics: Record<string, { cost: number; revenue: number }> = {};
-      Object.values(perReportMetrics).forEach((reportMetrics) => {
-        Object.entries(reportMetrics).forEach(([monthKey, values]) => {
-          if (!aggregatedMetrics[monthKey]) {
-            aggregatedMetrics[monthKey] = { cost: 0, revenue: 0 };
-          }
-          aggregatedMetrics[monthKey].cost += values.cost;
-          aggregatedMetrics[monthKey].revenue += values.revenue;
-        });
-      });
-
-      setBudgetData((prev) =>
-        prev.map((row) => {
-          const cost = aggregatedMetrics[row.month]?.cost || 0;
-          const revenue = aggregatedMetrics[row.month]?.revenue || 0;
-          const difference = row.budget - cost;
-          const roas = cost > 0 ? revenue / cost : 0;
-          const costOfSale = revenue > 0 ? (cost / revenue) * 100 : 0;
-
-          return {
-            ...row,
-            cost,
-            revenue,
-            difference,
-            roas,
-            costOfSale,
-          };
-        })
-      );
-
-      toast.success("Metrics refreshed and cached");
-    } catch (err) {
-      console.error("Error refreshing metrics:", err);
-      toast.error("Failed to refresh metrics");
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
+  // Removed refreshMetrics - refresh happens at parent level via handleRefreshPivotData
 
   const handleSetBudget = (monthKey: string, currentBudget: number) => {
     setEditingMonth(monthKey);

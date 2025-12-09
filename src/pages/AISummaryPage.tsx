@@ -865,10 +865,133 @@ const AISummaryPage = () => {
         ),
       };
 
-      // Save to database including breakdown data and date breakdown data
+      // Build budget data for all reports (unified caching)
+      toast.info("Caching budget data...", { id: "refresh-budget" });
+      const cachedBudgetData: Record<string, Record<string, { cost: number; revenue: number }>> = {};
+      
+      for (const reportId of card.report_ids) {
+        // Fetch data source for this report
+        const { data: dsData } = await supabase
+          .from("data_sources")
+          .select("*")
+          .eq("report_id", reportId)
+          .limit(1)
+          .single();
+
+        if (!dsData) continue;
+
+        // Build metric name to ID mapping
+        const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
+        const metricNameToIdMap: Record<string, string> = {};
+        const dimIdToColumnHeader: Record<string, string> = {};
+        columnMappings.forEach((m: any) => {
+          if (m.dimensionName && m.dimensionId && m.dimensionId !== "none") {
+            metricNameToIdMap[m.dimensionName] = m.dimensionId;
+          }
+          if (m.dimensionId && m.dimensionId !== "none" && m.columnHeader) {
+            dimIdToColumnHeader[m.dimensionId] = m.columnHeader;
+          }
+        });
+
+        // Get filter config for this report
+        const filterConfig = filterConfigs[reportId];
+        let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
+
+        if (filterConfig?.dimensionId && filterConfig.selectedValues?.length > 0) {
+          const { data: dimData } = await supabase
+            .from("dimensions")
+            .select("name")
+            .eq("id", filterConfig.dimensionId)
+            .single();
+
+          dimensionFilter = {
+            dimensionId: filterConfig.dimensionId,
+            dimensionName: dimData?.name,
+            values: filterConfig.selectedValues,
+          };
+        }
+
+        // Helper to get dimension value
+        const getDimensionValue = (rowData: any, dimId: string, dimName?: string): string | undefined => {
+          if (rowData[dimId] !== undefined && rowData[dimId] !== null && rowData[dimId] !== '') {
+            return String(rowData[dimId]);
+          }
+          if (dimName && rowData[dimName] !== undefined && rowData[dimName] !== null && rowData[dimName] !== '') {
+            return String(rowData[dimName]);
+          }
+          const columnHeader = dimIdToColumnHeader[dimId];
+          if (columnHeader && rowData[columnHeader] !== undefined && rowData[columnHeader] !== null && rowData[columnHeader] !== '') {
+            return String(rowData[columnHeader]);
+          }
+          return undefined;
+        };
+
+        // Re-fetch source data for budget calculation
+        const sourceData = await fetchSourceData(dsData as DataSource, user.id, accountId);
+        if (!sourceData?.transformedRows) continue;
+
+        const monthlyMetrics: Record<string, { cost: number; revenue: number }> = {};
+        const currentYear = new Date().getFullYear();
+
+        sourceData.transformedRows.forEach((row: any) => {
+          const rowData = row.dimension_values || row;
+
+          // Apply dimension filter
+          if (dimensionFilter) {
+            const filterValue = getDimensionValue(rowData, dimensionFilter.dimensionId, dimensionFilter.dimensionName);
+            if (!filterValue || !dimensionFilter.values.includes(filterValue)) {
+              return;
+            }
+          }
+
+          // Find date value
+          let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
+          if (!dateValue) {
+            for (const [key, val] of Object.entries(rowData)) {
+              if (typeof val === "string" && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+                dateValue = val as string;
+                break;
+              }
+            }
+          }
+
+          if (!dateValue) return;
+
+          const date = new Date(dateValue);
+          if (isNaN(date.getTime())) return;
+          if (date.getFullYear() !== currentYear) return;
+
+          const monthKey = `${currentYear}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+
+          if (!monthlyMetrics[monthKey]) {
+            monthlyMetrics[monthKey] = { cost: 0, revenue: 0 };
+          }
+
+          // Get Cost
+          const costId = metricNameToIdMap["Cost"];
+          const costValue = parseFloat(rowData[costId] || rowData["Cost"] || rowData["cost"] || 0);
+          if (!isNaN(costValue)) {
+            monthlyMetrics[monthKey].cost += costValue;
+          }
+
+          // Get Revenue
+          const revenueId = metricNameToIdMap["Revenue"];
+          const revenueValue = parseFloat(rowData[revenueId] || rowData["Revenue"] || rowData["revenue"] || 0);
+          if (!isNaN(revenueValue)) {
+            monthlyMetrics[monthKey].revenue += revenueValue;
+          }
+        });
+
+        cachedBudgetData[reportId] = monthlyMetrics;
+      }
+
+      toast.dismiss("refresh-budget");
+
+      // Save to database including breakdown data, date breakdown data, and budget data
       const { error } = await (supabase.from("ai_summary_cards") as any)
         .update({
           cached_pivot_data: completePivotData,
+          cached_budget_data: cachedBudgetData,
           pivot_data_refreshed_at: new Date().toISOString(),
         })
         .eq("id", card.id);
@@ -897,7 +1020,7 @@ const AISummaryPage = () => {
 
       toast.success(
         <div className="space-y-1">
-          <div className="font-medium">Pivot data refreshed!</div>
+          <div className="font-medium">Data refreshed!</div>
           <div className="text-xs text-muted-foreground whitespace-pre-line">
             Latest data available:
             {"\n"}{dataRangeSummaries}
