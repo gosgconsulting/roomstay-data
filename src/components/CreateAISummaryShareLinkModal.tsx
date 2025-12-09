@@ -185,6 +185,10 @@ export const CreateAISummaryShareLinkModal = ({
         return;
       }
 
+      // Set the existing link so the UI shows the link and copy button
+      setExistingLink({ id: '', slug: slug.toLowerCase().trim() });
+      setPassword("");
+
       toast({
         title: "Share link created",
         description: `Your AI Summary is available at /shared/ai-summary/${slug}`,
