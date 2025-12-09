@@ -341,10 +341,10 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     fetchCustomMetrics();
   }, [accountId, open]);
 
-  // Fetch all data sources and source data when entering filter-dimensions step
+  // Fetch all data sources and source data when entering filter-dimensions or breakdown-dimensions step
   useEffect(() => {
     const fetchAllDataForReports = async () => {
-      if (step !== "filter-dimensions" || selectedReportIds.length === 0) return;
+      if ((step !== "filter-dimensions" && step !== "breakdown-dimensions") || selectedReportIds.length === 0) return;
 
       const { user } = await getUser();
       if (!user) return;
