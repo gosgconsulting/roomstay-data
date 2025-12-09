@@ -1813,7 +1813,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
         
-        {/* Executive Summary - for selected period in overview mode */}
+        {/* Executive Summary - TEMPORARILY HIDDEN
         {activeReportTab === "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
           const summaryContent = data.executive_summaries?.[period as DateTab];
@@ -1830,7 +1830,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               </div>
             </div>
           );
-        })()}
+        })()} */}
       </div>
     </div>
   );
