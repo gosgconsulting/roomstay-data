@@ -118,6 +118,7 @@ const AISummaryPage = () => {
   const [selectedReportTab, setSelectedReportTab] = useState<ReportTab>("overview");
   const [selectedDatePeriod, setSelectedDatePeriod] = useState<string>(format(new Date(), "yyyy-MM"));
   const [selectedBudgetReportId, setSelectedBudgetReportId] = useState<string | null>(null);
+  const [budgetForecastEnabled, setBudgetForecastEnabled] = useState(false);
 
   // Generate date options: YTD at top, then MTD (current month), then previous months
   const dateOptions = React.useMemo(() => {
@@ -1424,6 +1425,8 @@ const AISummaryPage = () => {
                           reportConfigs={card.report_configs}
                           allReportIds={card.report_ids}
                           isOverview={true}
+                          forecastEnabled={budgetForecastEnabled}
+                          onForecastEnabledChange={setBudgetForecastEnabled}
                         />
                       ) : (
                         (() => {
@@ -1436,6 +1439,8 @@ const AISummaryPage = () => {
                               reportName={report?.name || "Report"}
                               accountId={accountId}
                               reportConfigs={card.report_configs}
+                              forecastEnabled={budgetForecastEnabled}
+                              onForecastEnabledChange={setBudgetForecastEnabled}
                             />
                           );
                         })()
