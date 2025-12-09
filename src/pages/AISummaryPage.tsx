@@ -59,6 +59,7 @@ import {
   parseDate,
 } from "@/components/AISummaryPivotTable";
 import { type DateTab as SidebarDateTab, type ReportTab as SidebarReportTab } from "@/components/ReportsSidebar";
+import { AISummaryBudgetTable } from "@/components/AISummaryBudgetTable";
 
 interface AISummaryCard {
   id: string;
@@ -1249,22 +1250,56 @@ const AISummaryPage = () => {
                   </div>
                 </div>
                 
-                {/* Pivot Table */}
+                {/* Budget Table or Pivot Table based on selected tab */}
                 <CardContent className="p-4">
-                  <AISummaryPivotTable
-                    reportIds={card.report_ids}
-                    selectedMetrics={card.selected_metrics}
-                    accountId={accountId}
-                    cachedPivotData={card.cached_pivot_data}
-                    reportConfigs={card.report_configs}
-                    selectedTab={selectedDateTab}
-                    onTabChange={setSelectedDateTab}
-                    selectedReportTab={selectedReportTab}
-                    onReportTabChange={setSelectedReportTab}
-                    dateOptions={dateOptions}
-                    selectedDatePeriod={selectedDatePeriod}
-                    onDatePeriodChange={setSelectedDatePeriod}
-                  />
+                  {selectedReportTab === "budget" ? (
+                    <div className="space-y-8">
+                      {/* Budget Report Tabs */}
+                      <div className="flex gap-2 border-b pb-3">
+                        {card.report_ids.map((reportId) => {
+                          const report = reports.find(r => r.id === reportId);
+                          return (
+                            <Button
+                              key={reportId}
+                              variant="ghost"
+                              size="sm"
+                              className="px-4"
+                            >
+                              {report?.name || "Report"}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      {/* Budget Tables for each report */}
+                      {card.report_ids.map((reportId) => {
+                        const report = reports.find(r => r.id === reportId);
+                        return (
+                          <AISummaryBudgetTable
+                            key={reportId}
+                            aiSummaryCardId={card.id}
+                            reportId={reportId}
+                            reportName={report?.name || "Report"}
+                            accountId={accountId}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <AISummaryPivotTable
+                      reportIds={card.report_ids}
+                      selectedMetrics={card.selected_metrics}
+                      accountId={accountId}
+                      cachedPivotData={card.cached_pivot_data}
+                      reportConfigs={card.report_configs}
+                      selectedTab={selectedDateTab}
+                      onTabChange={setSelectedDateTab}
+                      selectedReportTab={selectedReportTab}
+                      onReportTabChange={setSelectedReportTab}
+                      dateOptions={dateOptions}
+                      selectedDatePeriod={selectedDatePeriod}
+                      onDatePeriodChange={setSelectedDatePeriod}
+                    />
+                  )}
                 </CardContent>
                 
                 {/* AI Executive Summary section - TEMPORARILY HIDDEN

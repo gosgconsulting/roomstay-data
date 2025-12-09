@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, BarChart3, Sparkles, Calendar } from "lucide-react";
+import { Plus, BarChart3, Sparkles, Calendar, Wallet } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -36,7 +36,7 @@ interface AISummary {
 export type DateTab = "mtd" | "ytd" | string;
 
 // Report tabs for AI Summary pivot table (Overview + individual reports)
-export type ReportTab = "overview" | string;
+export type ReportTab = "overview" | "budget" | string;
 
 interface ReportsSidebarProps {
   reports: Report[];
@@ -244,6 +244,17 @@ export function ReportsSidebar({
               onClick={() => onReportTabChange?.("overview")}
             >
               Overview
+            </Button>
+            <Button
+              variant={selectedReportTab === "budget" ? "secondary" : "ghost"}
+              className={cn(
+                "w-full justify-start text-left h-9 px-3",
+                selectedReportTab === "budget" && "bg-accent text-accent-foreground"
+              )}
+              onClick={() => onReportTabChange?.("budget")}
+            >
+              <Wallet className="h-4 w-4 mr-2" />
+              Budget
             </Button>
             {aiSummaryReportTabs.map((report) => (
               <Button
