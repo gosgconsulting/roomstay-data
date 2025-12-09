@@ -1285,6 +1285,7 @@ const AISummaryPage = () => {
                             reportId={activeReportId}
                             reportName={report?.name || "Report"}
                             accountId={accountId}
+                            reportConfigs={card.report_configs}
                           />
                         ) : null;
                       })()}
