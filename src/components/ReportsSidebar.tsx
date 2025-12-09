@@ -253,7 +253,6 @@ export function ReportsSidebar({
               )}
               onClick={() => onReportTabChange?.("budget")}
             >
-              <Wallet className="h-4 w-4 mr-2" />
               Budget
             </Button>
             {aiSummaryReportTabs.map((report) => (
