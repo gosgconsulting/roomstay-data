@@ -203,7 +203,7 @@ serve(async (req) => {
           'X-Title': 'AI Table Comments'
         },
         body: JSON.stringify({
-          model: 'google/gemma-2-9b-it:free',
+          model: 'google/gemini-2.0-flash-exp:free',
           messages: [
             { role: 'system', content: tableCommentPrompt },
             { role: 'user', content: aiPrompt }
@@ -439,7 +439,7 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
             'X-Title': 'AI Summary Generator'
           },
           body: JSON.stringify({
-            model: 'google/gemma-2-9b-it:free',
+            model: 'google/gemini-2.0-flash-exp:free',
             messages: [
               { role: 'system', content: getSystemPrompt(tab.label, tab.key) },
               { role: 'user', content: `Please analyze the following ${tab.label} performance data and generate an executive summary.\n\n${dataContext}` }
@@ -506,7 +506,7 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
               'X-Title': 'AI Table Insights'
             },
             body: JSON.stringify({
-              model: 'google/gemma-2-9b-it:free',
+              model: 'google/gemini-2.0-flash-exp:free',
               messages: [
                 { role: 'system', content: `You are a senior digital marketing strategist providing performance analysis. The data in the table is self-explanatory, so DO NOT simply restate the numbers. Instead, provide strategic insights about:
 
@@ -561,7 +561,7 @@ Use +/- signs when mentioning percentage changes. Focus on strategic implication
               'X-Title': 'AI Table Insights'
             },
             body: JSON.stringify({
-              model: 'google/gemma-2-9b-it:free',
+              model: 'google/gemini-2.0-flash-exp:free',
               messages: [
                 { role: 'system', content: `You are a senior digital marketing strategist analyzing ${periodType} performance trends. The data in the table shows ${periodType} breakdowns - do NOT simply restate these numbers. Instead, provide strategic insights about:
 
@@ -649,7 +649,7 @@ Focus on the story the data tells about performance trajectory, not just restati
                   'X-Title': 'AI Table Insights'
                 },
                 body: JSON.stringify({
-                  model: 'google/gemma-2-9b-it:free',
+                  model: 'google/gemini-2.0-flash-exp:free',
                   messages: [
                     { role: 'system', content: `You are a senior digital marketing strategist analyzing ${reportName} performance by ${dimensionName}. The data shows breakdown by ${dimensionName} - do NOT simply restate these numbers. Instead, provide strategic insights about:
 
