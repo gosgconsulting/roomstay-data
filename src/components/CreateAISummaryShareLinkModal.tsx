@@ -152,7 +152,7 @@ export const CreateAISummaryShareLinkModal = ({
 
       toast({
         title: "Share link updated",
-        description: `Your AI Summary is available at /shared/reports/${slug}`,
+        description: `Your report is available at /shared/reports/${slug}`,
       });
     } else {
       // Create new link with slug that will route to SharedAISummary
@@ -191,7 +191,7 @@ export const CreateAISummaryShareLinkModal = ({
 
       toast({
         title: "Share link created",
-        description: `Your AI Summary is available at /shared/reports/${slug}`,
+        description: `Your report is available at /shared/reports/${slug}`,
       });
     }
 
@@ -204,19 +204,19 @@ export const CreateAISummaryShareLinkModal = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            {existingLink ? "Update Share Link" : "Share AI Summary"}
+            {existingLink ? "Update Share Link" : "Share Report"}
           </DialogTitle>
           <DialogDescription>
             {existingLink 
               ? "Update the password for this share link."
-              : "Create a password-protected link to share this AI Summary publicly"
+              : "Create a password-protected link to share this report publicly"
             }
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label>AI Summary</Label>
+            <Label>Report</Label>
             <div className="rounded-md border p-3 bg-muted/50">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" />

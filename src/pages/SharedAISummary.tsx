@@ -144,7 +144,7 @@ const SharedAISummary = () => {
       const summaryId = linkData.report_ids?.[0];
       
       if (!summaryId) {
-        toast.error("AI Summary not found in share link");
+        toast.error("Report not found in share link");
         setIsLoading(false);
         return;
       }
@@ -155,7 +155,7 @@ const SharedAISummary = () => {
         .single();
 
       if (cardError || !cardData) {
-        toast.error("AI Summary not found");
+        toast.error("Report not found");
         setIsLoading(false);
         return;
       }
@@ -174,8 +174,8 @@ const SharedAISummary = () => {
         }
       }
     } catch (err) {
-      console.error("Error loading AI Summary:", err);
-      toast.error("Failed to load AI Summary");
+      console.error("Error loading report:", err);
+      toast.error("Failed to load report");
     } finally {
       setIsLoading(false);
     }
@@ -218,9 +218,9 @@ const SharedAISummary = () => {
             <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
               <Lock className="w-6 h-6 text-primary" />
             </div>
-            <CardTitle>Protected AI Summary</CardTitle>
+            <CardTitle>Protected Report</CardTitle>
             <CardDescription>
-              This AI Summary is password protected. Please enter the password to continue.
+              This report is password protected. Please enter the password to continue.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -252,7 +252,7 @@ const SharedAISummary = () => {
                 </div>
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Verifying..." : "Access AI Summary"}
+                {loading ? "Verifying..." : "Access Report"}
               </Button>
             </form>
           </CardContent>
@@ -267,7 +267,7 @@ const SharedAISummary = () => {
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading AI Summary...</p>
+          <p className="text-sm text-muted-foreground">Loading report...</p>
         </div>
       </div>
     );
@@ -279,8 +279,8 @@ const SharedAISummary = () => {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Sparkles className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-xl font-semibold">AI Summary Not Found</h2>
-          <p className="text-muted-foreground mt-2">The requested AI Summary could not be found.</p>
+          <h2 className="text-xl font-semibold">Report Not Found</h2>
+          <p className="text-muted-foreground mt-2">The requested report could not be found.</p>
         </div>
       </div>
     );
