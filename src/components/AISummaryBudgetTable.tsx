@@ -54,6 +54,8 @@ interface AISummaryBudgetTableProps {
   reportName: string;
   accountId?: string;
   reportConfigs?: Record<string, any>;
+  allReportIds?: string[];
+  isOverview?: boolean;
 }
 
 // All months of the year
@@ -78,6 +80,8 @@ export function AISummaryBudgetTable({
   reportName,
   accountId,
   reportConfigs,
+  allReportIds,
+  isOverview = false,
 }: AISummaryBudgetTableProps) {
   const currentYear = new Date().getFullYear();
   const [budgetData, setBudgetData] = useState<BudgetData[]>([]);
@@ -93,20 +97,25 @@ export function AISummaryBudgetTable({
       const { user } = await getUser();
       if (!user) return {};
 
+      // For overview, fetch budgets for all reports
+      const reportIdsToFetch = isOverview && allReportIds ? allReportIds : [reportId];
+      
       const { data, error } = await supabase
         .from("ai_summary_budgets")
         .select("*")
         .eq("ai_summary_card_id", aiSummaryCardId)
-        .eq("report_id", reportId);
+        .in("report_id", reportIdsToFetch);
 
       if (error) {
         console.error("Error fetching budgets:", error);
         return {};
       }
 
+      // Aggregate budgets by month (sum across all reports for overview)
       const budgetMap: Record<string, number> = {};
       (data || []).forEach((b: any) => {
-        budgetMap[b.month_key] = Number(b.budget_amount);
+        const amount = Number(b.budget_amount);
+        budgetMap[b.month_key] = (budgetMap[b.month_key] || 0) + amount;
       });
       return budgetMap;
     } catch (err) {
@@ -121,124 +130,129 @@ export function AISummaryBudgetTable({
       const { user } = await getUser();
       if (!user) return {};
 
-      // Fetch data source for this report
-      const { data: dsData } = await supabase
-        .from("data_sources")
-        .select("*")
-        .eq("report_id", reportId)
-        .limit(1)
-        .maybeSingle();
-
-      if (!dsData) return {};
-
-      const sourceData = await fetchSourceData(dsData as DataSource, user.id, accountId);
-      if (!sourceData?.transformedRows) return {};
-
-      // Build metric name to ID mapping
-      const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
-      const metricNameToIdMap: Record<string, string> = {};
-      const dimIdToColumnHeader: Record<string, string> = {};
-      columnMappings.forEach((m: any) => {
-        if (m.dimensionName && m.dimensionId && m.dimensionId !== "none") {
-          metricNameToIdMap[m.dimensionName] = m.dimensionId;
-        }
-        if (m.dimensionId && m.dimensionId !== "none" && m.columnHeader) {
-          dimIdToColumnHeader[m.dimensionId] = m.columnHeader;
-        }
-      });
-
-      // Get dimension filter config for this report
-      const filterConfig = reportConfigs?.[reportId];
-      let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
-
-      if (filterConfig?.dimensionId && filterConfig.selectedValues?.length > 0) {
-        // Fetch dimension name
-        const { data: dimData } = await supabase
-          .from("dimensions")
-          .select("name")
-          .eq("id", filterConfig.dimensionId)
-          .maybeSingle();
-
-        dimensionFilter = {
-          dimensionId: filterConfig.dimensionId,
-          dimensionName: dimData?.name,
-          values: filterConfig.selectedValues,
-        };
-      }
-
-      // Helper to get dimension value from row data
-      const getDimensionValue = (rowData: any, dimId: string, dimName?: string): string | undefined => {
-        // Try dimension ID first
-        if (rowData[dimId] !== undefined && rowData[dimId] !== null && rowData[dimId] !== '') {
-          return String(rowData[dimId]);
-        }
-        // Try dimension name
-        if (dimName && rowData[dimName] !== undefined && rowData[dimName] !== null && rowData[dimName] !== '') {
-          return String(rowData[dimName]);
-        }
-        // Try column header from mappings
-        const columnHeader = dimIdToColumnHeader[dimId];
-        if (columnHeader && rowData[columnHeader] !== undefined && rowData[columnHeader] !== null && rowData[columnHeader] !== '') {
-          return String(rowData[columnHeader]);
-        }
-        return undefined;
-      };
-
-      // Aggregate metrics by month
+      // For overview, fetch metrics for all reports
+      const reportIdsToFetch = isOverview && allReportIds ? allReportIds : [reportId];
+      
+      // Aggregate metrics across all reports
       const monthlyMetrics: Record<string, { cost: number; revenue: number }> = {};
 
-      sourceData.transformedRows.forEach((row: any) => {
-        const rowData = row.dimension_values || row;
+      for (const currentReportId of reportIdsToFetch) {
+        // Fetch data source for this report
+        const { data: dsData } = await supabase
+          .from("data_sources")
+          .select("*")
+          .eq("report_id", currentReportId)
+          .limit(1)
+          .maybeSingle();
 
-        // Apply dimension filter if configured
-        if (dimensionFilter) {
-          const filterValue = getDimensionValue(rowData, dimensionFilter.dimensionId, dimensionFilter.dimensionName);
-          if (!filterValue || !dimensionFilter.values.includes(filterValue)) {
-            return; // Skip this row - doesn't match filter
+        if (!dsData) continue;
+
+        const sourceData = await fetchSourceData(dsData as DataSource, user.id, accountId);
+        if (!sourceData?.transformedRows) continue;
+
+        // Build metric name to ID mapping
+        const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
+        const metricNameToIdMap: Record<string, string> = {};
+        const dimIdToColumnHeader: Record<string, string> = {};
+        columnMappings.forEach((m: any) => {
+          if (m.dimensionName && m.dimensionId && m.dimensionId !== "none") {
+            metricNameToIdMap[m.dimensionName] = m.dimensionId;
           }
+          if (m.dimensionId && m.dimensionId !== "none" && m.columnHeader) {
+            dimIdToColumnHeader[m.dimensionId] = m.columnHeader;
+          }
+        });
+
+        // Get dimension filter config for this report
+        const filterConfig = reportConfigs?.[currentReportId];
+        let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
+
+        if (filterConfig?.dimensionId && filterConfig.selectedValues?.length > 0) {
+          // Fetch dimension name
+          const { data: dimData } = await supabase
+            .from("dimensions")
+            .select("name")
+            .eq("id", filterConfig.dimensionId)
+            .maybeSingle();
+
+          dimensionFilter = {
+            dimensionId: filterConfig.dimensionId,
+            dimensionName: dimData?.name,
+            values: filterConfig.selectedValues,
+          };
         }
 
-        // Find date value
-        let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
-        if (!dateValue) {
-          for (const [key, val] of Object.entries(rowData)) {
-            if (typeof val === "string" && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-              dateValue = val as string;
-              break;
+        // Helper to get dimension value from row data
+        const getDimensionValue = (rowData: any, dimId: string, dimName?: string): string | undefined => {
+          // Try dimension ID first
+          if (rowData[dimId] !== undefined && rowData[dimId] !== null && rowData[dimId] !== '') {
+            return String(rowData[dimId]);
+          }
+          // Try dimension name
+          if (dimName && rowData[dimName] !== undefined && rowData[dimName] !== null && rowData[dimName] !== '') {
+            return String(rowData[dimName]);
+          }
+          // Try column header from mappings
+          const columnHeader = dimIdToColumnHeader[dimId];
+          if (columnHeader && rowData[columnHeader] !== undefined && rowData[columnHeader] !== null && rowData[columnHeader] !== '') {
+            return String(rowData[columnHeader]);
+          }
+          return undefined;
+        };
+
+        sourceData.transformedRows.forEach((row: any) => {
+          const rowData = row.dimension_values || row;
+
+          // Apply dimension filter if configured
+          if (dimensionFilter) {
+            const filterValue = getDimensionValue(rowData, dimensionFilter.dimensionId, dimensionFilter.dimensionName);
+            if (!filterValue || !dimensionFilter.values.includes(filterValue)) {
+              return; // Skip this row - doesn't match filter
             }
           }
-        }
 
-        if (!dateValue) return;
+          // Find date value
+          let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
+          if (!dateValue) {
+            for (const [key, val] of Object.entries(rowData)) {
+              if (typeof val === "string" && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+                dateValue = val as string;
+                break;
+              }
+            }
+          }
 
-        const date = new Date(dateValue);
-        if (isNaN(date.getTime())) return;
+          if (!dateValue) return;
 
-        // Only include current year data
-        if (date.getFullYear() !== currentYear) return;
+          const date = new Date(dateValue);
+          if (isNaN(date.getTime())) return;
 
-        const monthKey = `${currentYear}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+          // Only include current year data
+          if (date.getFullYear() !== currentYear) return;
 
-        if (!monthlyMetrics[monthKey]) {
-          monthlyMetrics[monthKey] = { cost: 0, revenue: 0 };
-        }
+          const monthKey = `${currentYear}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 
-        // Get Cost
-        const costId = metricNameToIdMap["Cost"];
-        const costValue = parseFloat(rowData[costId] || rowData["Cost"] || rowData["cost"] || 0);
-        if (!isNaN(costValue)) {
-          monthlyMetrics[monthKey].cost += costValue;
-        }
+          if (!monthlyMetrics[monthKey]) {
+            monthlyMetrics[monthKey] = { cost: 0, revenue: 0 };
+          }
 
-        // Get Revenue
-        const revenueId = metricNameToIdMap["Revenue"];
-        const revenueValue = parseFloat(
-          rowData[revenueId] || rowData["Revenue"] || rowData["revenue"] || 0
-        );
-        if (!isNaN(revenueValue)) {
-          monthlyMetrics[monthKey].revenue += revenueValue;
-        }
-      });
+          // Get Cost
+          const costId = metricNameToIdMap["Cost"];
+          const costValue = parseFloat(rowData[costId] || rowData["Cost"] || rowData["cost"] || 0);
+          if (!isNaN(costValue)) {
+            monthlyMetrics[monthKey].cost += costValue;
+          }
+
+          // Get Revenue
+          const revenueId = metricNameToIdMap["Revenue"];
+          const revenueValue = parseFloat(
+            rowData[revenueId] || rowData["Revenue"] || rowData["revenue"] || 0
+          );
+          if (!isNaN(revenueValue)) {
+            monthlyMetrics[monthKey].revenue += revenueValue;
+          }
+        });
+      }
 
       return monthlyMetrics;
     } catch (err) {
@@ -438,14 +452,16 @@ export function AISummaryBudgetTable({
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2">
                     <span>{formatCurrency(row.budget)}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() => handleSetBudget(row.month, row.budget)}
-                    >
-                      <Edit2 className="h-3 w-3" />
-                    </Button>
+                    {!isOverview && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => handleSetBudget(row.month, row.budget)}
+                      >
+                        <Edit2 className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell className="text-right">{formatCurrency(row.cost)}</TableCell>
