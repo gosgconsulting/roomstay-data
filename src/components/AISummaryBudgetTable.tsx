@@ -382,13 +382,33 @@ export function AISummaryBudgetTable({
       
       setSavedBudgets(budgets);
 
-      if (cachedMetrics) {
+      if (cachedMetrics && Object.keys(cachedMetrics).length > 0) {
         // Use cached data for fast load
         const data = buildBudgetData(budgets, cachedMetrics);
         setBudgetData(data);
       } else {
-        // No cache, initialize with empty metrics
-        const data = buildBudgetData(budgets, {});
+        // No cache - fetch from source automatically
+        const reportIdsToFetch = isOverview && allReportIds ? allReportIds : [reportId];
+        const perReportMetrics = await fetchMetricsFromSource(reportIdsToFetch);
+        
+        // Save each report's metrics to cache
+        for (const [rid, metrics] of Object.entries(perReportMetrics)) {
+          await saveCachedMetrics(metrics, rid);
+        }
+        
+        // Aggregate for display
+        const aggregatedMetrics: Record<string, { cost: number; revenue: number }> = {};
+        Object.values(perReportMetrics).forEach((reportMetrics) => {
+          Object.entries(reportMetrics).forEach(([monthKey, values]) => {
+            if (!aggregatedMetrics[monthKey]) {
+              aggregatedMetrics[monthKey] = { cost: 0, revenue: 0 };
+            }
+            aggregatedMetrics[monthKey].cost += values.cost;
+            aggregatedMetrics[monthKey].revenue += values.revenue;
+          });
+        });
+        
+        const data = buildBudgetData(budgets, aggregatedMetrics);
         setBudgetData(data);
       }
     } finally {
