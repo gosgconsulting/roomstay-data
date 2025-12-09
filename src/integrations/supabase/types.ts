@@ -96,6 +96,7 @@ export type Database = {
         Row: {
           account_id: string | null
           ai_prompt: string
+          cached_budget_data: Json | null
           cached_pivot_data: Json | null
           created_at: string
           generated_summary: string | null
@@ -113,6 +114,7 @@ export type Database = {
         Insert: {
           account_id?: string | null
           ai_prompt: string
+          cached_budget_data?: Json | null
           cached_pivot_data?: Json | null
           created_at?: string
           generated_summary?: string | null
@@ -130,6 +132,7 @@ export type Database = {
         Update: {
           account_id?: string | null
           ai_prompt?: string
+          cached_budget_data?: Json | null
           cached_pivot_data?: Json | null
           created_at?: string
           generated_summary?: string | null
