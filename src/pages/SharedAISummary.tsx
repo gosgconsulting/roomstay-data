@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { Loader2, Lock, Eye, EyeOff, Sparkles } from "lucide-react";
+import { Loader2, Lock, Eye, EyeOff, Sparkles, DollarSign } from "lucide-react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Sidebar,
   SidebarContent,
@@ -23,6 +24,7 @@ import {
   type DateTab,
   type ReportTab,
 } from "@/components/AISummaryPivotTable";
+import { AISummaryBudgetTable } from "@/components/AISummaryBudgetTable";
 
 interface AISummaryCard {
   id: string;
@@ -69,6 +71,11 @@ const SharedAISummary = () => {
   const [selectedDateTab, setSelectedDateTab] = useState<DateTab>(format(new Date(), "yyyy-MM"));
   const [selectedReportTab, setSelectedReportTab] = useState<ReportTab>("overview");
   const [selectedDatePeriod, setSelectedDatePeriod] = useState<string>(format(new Date(), "yyyy-MM"));
+  
+  // Sidebar section state
+  const [selectedSection, setSelectedSection] = useState<"summary" | "budget">("summary");
+  const [budgetReportTab, setBudgetReportTab] = useState<string>("overview");
+  const [budgetForecastEnabled, setBudgetForecastEnabled] = useState(false);
 
   // Generate date options: YTD at top, then MTD (current month), then previous months
   const dateOptions = useMemo(() => {
@@ -295,6 +302,30 @@ const SharedAISummary = () => {
         {/* Simplified Sidebar - Only report tabs, no dropdowns */}
         <Sidebar collapsible="icon" className="w-64 border-r bg-sidebar">
           <SidebarContent className="p-6">
+            {/* Section Tabs */}
+            <SidebarGroup className="mb-4">
+              <SidebarGroupContent className="flex gap-2">
+                <Button
+                  variant={selectedSection === "summary" ? "default" : "outline"}
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setSelectedSection("summary")}
+                >
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  Summary
+                </Button>
+                <Button
+                  variant={selectedSection === "budget" ? "default" : "outline"}
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setSelectedSection("budget")}
+                >
+                  <DollarSign className="h-3 w-3 mr-1" />
+                  Budget
+                </Button>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
             {/* Report Tabs Section */}
             <SidebarGroup>
               <SidebarGroupLabel className="text-base font-medium text-sidebar-foreground mb-3 px-0 flex items-center gap-2">
@@ -302,51 +333,112 @@ const SharedAISummary = () => {
                 {card.name}
               </SidebarGroupLabel>
               <SidebarGroupContent className="space-y-1">
-                <Button
-                  variant={selectedReportTab === "overview" ? "secondary" : "ghost"}
-                  className={cn(
-                    "w-full justify-start text-left h-9 px-3",
-                    selectedReportTab === "overview" && "bg-accent text-accent-foreground"
-                  )}
-                  onClick={() => setSelectedReportTab("overview")}
-                >
-                  Overview
-                </Button>
-                {aiSummaryReportTabs.map((report) => (
-                  <Button
-                    key={report.id}
-                    variant={selectedReportTab === report.id ? "secondary" : "ghost"}
-                    className={cn(
-                      "w-full justify-start text-left h-9 px-3",
-                      selectedReportTab === report.id && "bg-accent text-accent-foreground"
-                    )}
-                    onClick={() => setSelectedReportTab(report.id)}
-                  >
-                    {report.name}
-                  </Button>
-                ))}
+                {selectedSection === "summary" ? (
+                  <>
+                    <Button
+                      variant={selectedReportTab === "overview" ? "secondary" : "ghost"}
+                      className={cn(
+                        "w-full justify-start text-left h-9 px-3",
+                        selectedReportTab === "overview" && "bg-accent text-accent-foreground"
+                      )}
+                      onClick={() => setSelectedReportTab("overview")}
+                    >
+                      Overview
+                    </Button>
+                    {aiSummaryReportTabs.map((report) => (
+                      <Button
+                        key={report.id}
+                        variant={selectedReportTab === report.id ? "secondary" : "ghost"}
+                        className={cn(
+                          "w-full justify-start text-left h-9 px-3",
+                          selectedReportTab === report.id && "bg-accent text-accent-foreground"
+                        )}
+                        onClick={() => setSelectedReportTab(report.id)}
+                      >
+                        {report.name}
+                      </Button>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant={budgetReportTab === "overview" ? "secondary" : "ghost"}
+                      className={cn(
+                        "w-full justify-start text-left h-9 px-3",
+                        budgetReportTab === "overview" && "bg-accent text-accent-foreground"
+                      )}
+                      onClick={() => setBudgetReportTab("overview")}
+                    >
+                      Overview
+                    </Button>
+                    {aiSummaryReportTabs.map((report) => (
+                      <Button
+                        key={report.id}
+                        variant={budgetReportTab === report.id ? "secondary" : "ghost"}
+                        className={cn(
+                          "w-full justify-start text-left h-9 px-3",
+                          budgetReportTab === report.id && "bg-accent text-accent-foreground"
+                        )}
+                        onClick={() => setBudgetReportTab(report.id)}
+                      >
+                        {report.name}
+                      </Button>
+                    ))}
+                  </>
+                )}
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
         </Sidebar>
         
-        {/* Main Content - Direct pivot table, no header or card wrapper */}
+        {/* Main Content */}
         <div className="flex-1 flex flex-col">
           <div className="px-6 py-6 flex-1">
-            <AISummaryPivotTable
-              reportIds={card.report_ids}
-              selectedMetrics={card.selected_metrics}
-              accountId={shareLink?.account_id || undefined}
-              cachedPivotData={card.cached_pivot_data}
-              reportConfigs={card.report_configs}
-              selectedTab={selectedDateTab}
-              onTabChange={setSelectedDateTab}
-              selectedReportTab={selectedReportTab}
-              onReportTabChange={setSelectedReportTab}
-              dateOptions={dateOptions}
-              selectedDatePeriod={selectedDatePeriod}
-              onDatePeriodChange={setSelectedDatePeriod}
-            />
+            {selectedSection === "summary" ? (
+              <AISummaryPivotTable
+                reportIds={card.report_ids}
+                selectedMetrics={card.selected_metrics}
+                accountId={shareLink?.account_id || undefined}
+                cachedPivotData={card.cached_pivot_data}
+                reportConfigs={card.report_configs}
+                selectedTab={selectedDateTab}
+                onTabChange={setSelectedDateTab}
+                selectedReportTab={selectedReportTab}
+                onReportTabChange={setSelectedReportTab}
+                dateOptions={dateOptions}
+                selectedDatePeriod={selectedDatePeriod}
+                onDatePeriodChange={setSelectedDatePeriod}
+              />
+            ) : (
+              <div className="space-y-4">
+                <h2 className="text-xl font-semibold">Budget</h2>
+                {budgetReportTab === "overview" ? (
+                  <AISummaryBudgetTable
+                    key="overview"
+                    aiSummaryCardId={card.id}
+                    reportId="overview"
+                    reportName="Overview"
+                    accountId={shareLink?.account_id || undefined}
+                    reportConfigs={card.report_configs}
+                    allReportIds={card.report_ids}
+                    isOverview={true}
+                    forecastEnabled={budgetForecastEnabled}
+                    onForecastEnabledChange={setBudgetForecastEnabled}
+                  />
+                ) : (
+                  <AISummaryBudgetTable
+                    key={budgetReportTab}
+                    aiSummaryCardId={card.id}
+                    reportId={budgetReportTab}
+                    reportName={aiSummaryReportTabs.find(r => r.id === budgetReportTab)?.name || "Report"}
+                    accountId={shareLink?.account_id || undefined}
+                    reportConfigs={card.report_configs}
+                    forecastEnabled={budgetForecastEnabled}
+                    onForecastEnabledChange={setBudgetForecastEnabled}
+                  />
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
