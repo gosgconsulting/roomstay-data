@@ -31,6 +31,8 @@ interface BudgetData {
   monthLabel: string;
   budget: number;
   cost: number;
+  clicks: number;
+  cpc: number;
   difference: number;
   revenue: number;
   roas: number;
@@ -47,6 +49,7 @@ interface CachedBudgetMetrics {
     [monthKey: string]: {
       cost: number;
       revenue: number;
+      clicks?: number;
     };
   };
 }
@@ -146,7 +149,7 @@ export function AISummaryBudgetTable({
   };
 
   // Fetch cached metrics from database
-  const fetchCachedMetrics = async (): Promise<Record<string, { cost: number; revenue: number }> | null> => {
+  const fetchCachedMetrics = async (): Promise<Record<string, { cost: number; revenue: number; clicks?: number }> | null> => {
     try {
       const { data, error } = await supabase
         .from("ai_summary_cards")
@@ -168,16 +171,17 @@ export function AISummaryBudgetTable({
       
       // For overview, aggregate all report data
       if (isOverview && allReportIds) {
-        const aggregated: Record<string, { cost: number; revenue: number }> = {};
+        const aggregated: Record<string, { cost: number; revenue: number; clicks?: number }> = {};
         allReportIds.forEach((rid) => {
           const reportData = cachedData[rid];
           if (reportData) {
             Object.entries(reportData).forEach(([monthKey, metrics]) => {
               if (!aggregated[monthKey]) {
-                aggregated[monthKey] = { cost: 0, revenue: 0 };
+                aggregated[monthKey] = { cost: 0, revenue: 0, clicks: 0 };
               }
               aggregated[monthKey].cost += metrics.cost || 0;
               aggregated[monthKey].revenue += metrics.revenue || 0;
+              aggregated[monthKey].clicks = (aggregated[monthKey].clicks || 0) + (metrics.clicks || 0);
             });
           }
         });
@@ -273,13 +277,15 @@ export function AISummaryBudgetTable({
   // Build budget data array from metrics
   const buildBudgetData = (
     budgets: Record<string, number>,
-    metrics: Record<string, { cost: number; revenue: number }>,
+    metrics: Record<string, { cost: number; revenue: number; clicks?: number }>,
     forecasts: ForecastRow[]
   ): BudgetData[] => {
     return MONTHS.map((m, index) => {
       const monthKey = `${currentYear}-${m.key}`;
       const budget = budgets[monthKey] || 0;
       const cost = metrics[monthKey]?.cost || 0;
+      const clicks = metrics[monthKey]?.clicks || 0;
+      const cpc = clicks > 0 ? cost / clicks : 0;
       const revenue = metrics[monthKey]?.revenue || 0;
       const difference = budget - cost;
       const roas = cost > 0 ? revenue / cost : 0;
@@ -314,6 +320,8 @@ export function AISummaryBudgetTable({
         monthLabel: m.label,
         budget,
         cost,
+        clicks,
+        cpc,
         difference,
         revenue,
         roas,
@@ -466,6 +474,7 @@ export function AISummaryBudgetTable({
               <TableHead className="w-[120px]">Date</TableHead>
               <TableHead className="text-right">Budget</TableHead>
               <TableHead className="text-right">Cost</TableHead>
+              {forecastEnabled && <TableHead className="text-right">CPC</TableHead>}
               {forecastEnabled ? (
                 <>
                   <TableHead className="text-right">Total Revenue</TableHead>
@@ -504,6 +513,7 @@ export function AISummaryBudgetTable({
                   </div>
                 </TableCell>
                 <TableCell className="text-right">{formatCurrency(row.cost)}</TableCell>
+                {forecastEnabled && <TableCell className="text-right">{formatCurrency(row.cpc)}</TableCell>}
                 {forecastEnabled ? (
                   <>
                     <TableCell className="text-right">{formatCurrency(row.totalRevenue || 0)}</TableCell>
