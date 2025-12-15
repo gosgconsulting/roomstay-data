@@ -1,6 +1,6 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, BarChart3, Sparkles, Calendar, Wallet } from "lucide-react";
+import { Plus, BarChart3, Sparkles, Calendar, Wallet, Pencil, Trash2 } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -178,17 +178,45 @@ export function ReportsSidebar({
           </SidebarGroupLabel>
           <SidebarGroupContent className="space-y-1">
             {reports.map((report) => (
-              <Button
+              <div
                 key={report.id}
-                variant={selectedReportId === report.id ? "secondary" : "ghost"}
-                className={cn(
-                  "w-full justify-start text-left h-9 px-3",
-                  selectedReportId === report.id && "bg-accent text-accent-foreground"
-                )}
-                onClick={() => handleReportSelect(report.id)}
+                className="group relative flex items-center"
               >
-                {report.name}
-              </Button>
+                <Button
+                  variant={selectedReportId === report.id ? "secondary" : "ghost"}
+                  className={cn(
+                    "w-full justify-start text-left h-9 px-3 pr-16",
+                    selectedReportId === report.id && "bg-accent text-accent-foreground"
+                  )}
+                  onClick={() => handleReportSelect(report.id)}
+                >
+                  {report.name}
+                </Button>
+                <div className="absolute right-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditReport?.(report.id);
+                    }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteReport?.(report.id);
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
             ))}
             <Button
               variant="ghost"
