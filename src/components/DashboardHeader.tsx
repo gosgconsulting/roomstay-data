@@ -654,9 +654,11 @@ export function DashboardHeader({
         open={showDimensionsListModal}
         onOpenChange={setShowDimensionsListModal}
         onAddNew={() => {
+          console.log('[DIMENSION] Add new dimension clicked');
+          setShowDimensionsListModal(false); // Close the list modal first
           setEditingDimension(null);
           setDimensionModalMode('add');
-          setShowDimensionModal(true);
+          setTimeout(() => setShowDimensionModal(true), 100); // Open after closing
         }}
         onEdit={(dimension) => {
           setEditingDimension(dimension);
@@ -664,7 +666,7 @@ export function DashboardHeader({
           setShowDimensionModal(true);
         }}
         refreshTrigger={dimensionRefreshTrigger}
-        reportId={currentReport?.id || null}
+        reportId={currentReport?.id || undefined}
         accountId={accountId}
         onVisibilityChange={() => {
           onVisibilityChange?.();
@@ -682,7 +684,7 @@ export function DashboardHeader({
           setDimensionRefreshTrigger(prev => prev + 1);
           onRefreshData?.();
         }}
-        reportId={currentReport?.id || undefined}
+        reportId={currentReport?.id}
         accountId={accountId}
       />
 
