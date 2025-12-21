@@ -245,42 +245,41 @@ export const EditMappingModal = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-4 min-h-0">
-          {isFetchingHeaders ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Loading headers...
+        {isFetchingHeaders ? (
+          <div className="text-center py-8 text-muted-foreground px-6">
+            Loading headers...
+          </div>
+        ) : headers.length > 0 ? (
+          <>
+            <div className="flex-1 overflow-y-auto px-6 min-h-0">
+              <ColumnMappingStep
+                ref={mappingStepRef}
+                headers={headers}
+                sampleDataRows={sampleDataRows}
+                onSave={handleSaveMappings}
+                onBack={() => onOpenChange(false)}
+                isLoading={isLoading}
+                existingMappings={dataSource?.column_mappings || []}
+                accountId={accountId}
+                reportId={dataSource?.report_id || undefined}
+                hideButtons={true}
+              />
             </div>
-          ) : headers.length > 0 ? (
-            <ColumnMappingStep
-              ref={mappingStepRef}
-              headers={headers}
-              sampleDataRows={sampleDataRows}
-              onSave={handleSaveMappings}
-              onBack={() => onOpenChange(false)}
-              isLoading={isLoading}
-              existingMappings={dataSource?.column_mappings || []}
-              accountId={accountId}
-              reportId={dataSource?.report_id || undefined}
-              hideButtons={true}
-            />
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              No headers found
+            <div className="flex justify-between items-center px-6 py-4 flex-shrink-0 border-t bg-background">
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Back
+              </Button>
+              <Button 
+                onClick={() => mappingStepRef.current?.save()} 
+                disabled={isLoading}
+              >
+                {isLoading ? "Saving..." : "Save Mappings"}
+              </Button>
             </div>
-          )}
-        </div>
-
-        {!isFetchingHeaders && headers.length > 0 && (
-          <div className="flex justify-between items-center px-6 py-4 flex-shrink-0 border-t bg-background sticky bottom-0">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Back
-            </Button>
-            <Button 
-              onClick={() => mappingStepRef.current?.save()} 
-              disabled={isLoading}
-            >
-              {isLoading ? "Saving..." : "Save Mappings"}
-            </Button>
+          </>
+        ) : (
+          <div className="text-center py-8 text-muted-foreground px-6">
+            No headers found
           </div>
         )}
       </DialogContent>
