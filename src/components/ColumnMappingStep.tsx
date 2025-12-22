@@ -493,7 +493,11 @@ export const ColumnMappingStep = forwardRef<ColumnMappingStepRef, ColumnMappingS
                       value={mapping.dimensionId || 'none'}
                       onValueChange={(value) => handleDimensionChange(index, value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger
+                        id={`dimension-select-${index}`}
+                        className="bg-background"
+                        aria-label={`Map column "${mapping.column}" to a dimension`}
+                      >
                         <SelectValue placeholder="Select dimension" />
                       </SelectTrigger>
                       <SelectContent>
