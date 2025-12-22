@@ -325,31 +325,76 @@ export const EditDataSourceModal = ({
     if (!dataSource) return;
 
     const sourceType = dataSource.source_type || 'google_sheets';
-    const updateData: any = {
-      name: dataName,
-      header_row: parseInt(headerRow),
-      column_mappings: mappings,
-      sync_frequency: syncFrequency,
-      sync_time: syncTime,
-      sync_timezone: syncTimezone,
-    };
 
     if (sourceType === 'csv_url') {
-      updateData.csv_url = url;
-      updateData.source_type = 'csv_url';
+      // CSV-specific fields handled below after dimension creation
     } else {
       const spreadsheetId = extractSpreadsheetId(url);
       if (!spreadsheetId) return;
-      updateData.google_sheets_url = url;
-      updateData.spreadsheet_id = spreadsheetId;
-      updateData.tab_name = selectedTab;
-      updateData.source_type = 'google_sheets';
+      // Google Sheets fields handled below after dimension creation
     }
 
     setIsLoading(true);
     
     try {
       if (!user) throw new Error("User not authenticated");
+
+      // Ensure we have report_id for creating custom dimensions
+      const reportId = dataSource.report_id;
+
+      // 1) Create any new dimensions first (for mappings with dimensionId === 'create_new')
+      const updatedMappings = [...mappings];
+      for (let i = 0; i < updatedMappings.length; i++) {
+        const mapping = updatedMappings[i];
+        if (mapping.dimensionId === 'create_new' && mapping.newDimensionName) {
+          const { data: newDim, error: dimError } = await supabase
+            .from('dimensions')
+            .insert({
+              user_id: user.id,
+              report_id: reportId,
+              data_source_id: dataSource.id,
+              name: mapping.newDimensionName,
+              type: mapping.newDimensionType || 'text',
+              scope: 'custom',
+            })
+            .select()
+            .maybeSingle();
+          if (dimError) throw dimError;
+          if (newDim) {
+            updatedMappings[i] = {
+              ...mapping,
+              dimensionId: newDim.id,
+              dimensionName: newDim.name,
+              newDimensionName: undefined,
+              newDimensionType: undefined,
+            };
+          }
+        }
+      }
+
+      // 2) Mark all mappings as user-modified to prevent resync overwrite
+      const userModifiedMappings = updatedMappings.map(m => ({ ...m, user_modified: true }));
+
+      // 3) Prepare update payload including source fields
+      const updateData: any = {
+        name: dataName,
+        header_row: parseInt(headerRow),
+        column_mappings: userModifiedMappings,
+        sync_frequency: syncFrequency,
+        sync_time: syncTime,
+        sync_timezone: syncTimezone,
+      };
+      if (sourceType === 'csv_url') {
+        updateData.csv_url = url;
+        updateData.source_type = 'csv_url';
+      } else {
+        const spreadsheetId = extractSpreadsheetId(url);
+        if (!spreadsheetId) return;
+        updateData.google_sheets_url = url;
+        updateData.spreadsheet_id = spreadsheetId;
+        updateData.tab_name = selectedTab;
+        updateData.source_type = 'google_sheets';
+      }
 
       // Update data source metadata
       const { error: updateError } = await supabase

@@ -133,10 +133,15 @@ export const buildDimensionMappingWithAutoDetection = async (
 
       const dimensionName = await getDimensionName(finalMapping);
       
+      // Prefer an explicit dimensionId first if it's set (and not a special value)
       let dimensionId: string | null = null;
-      if (dimensionName) {
+      if (finalMapping.dimensionId && finalMapping.dimensionId !== 'none' && finalMapping.dimensionId !== 'create_new') {
+        dimensionId = finalMapping.dimensionId;
+      } else if (dimensionName) {
+        // Fall back to name-based resolution
         dimensionId = await resolveDimensionNameToId(dimensionName, accountId || null, reportId, userId);
       } else if (finalMapping.newDimensionName) {
+        // Or create a new dimension when requested
         dimensionId = await createOrGetDimension(finalMapping, userId, reportId, dataSourceId, accountId);
       }
       
