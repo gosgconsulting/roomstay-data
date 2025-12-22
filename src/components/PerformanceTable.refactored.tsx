@@ -160,6 +160,17 @@ export const PerformanceTable = ({
     setActiveViewId(viewsActiveViewId);
   }, [viewsActiveViewId]);
 
+  // Convert dimensionFilters from string[] to string for the hook
+  const convertedDimensionFilters = useMemo(() => {
+    const converted: Record<string, string> = {};
+    Object.entries(filters.dimensionFilters || {}).forEach(([key, values]) => {
+      if (Array.isArray(values) && values.length > 0) {
+        converted[key] = values[0]; // Take first value
+      }
+    });
+    return converted;
+  }, [filters.dimensionFilters]);
+
   // Data loading hook - use the correct interface
   const {
     data: performanceData,
@@ -171,7 +182,7 @@ export const PerformanceTable = ({
     groupByDimensions,
     breakdownByDimensions,
     thenByDimensions,
-    dimensionFilters: filters.dimensionFilters || {},
+    dimensionFilters: convertedDimensionFilters,
     dateFrom: filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined,
     dateTo: filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined,
     visibleDimensionIds: Array.from(visibleColumns),
