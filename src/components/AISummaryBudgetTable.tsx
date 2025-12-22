@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -23,8 +24,12 @@ import {
 import { Loader2, Edit2, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-
-// DataSource interface removed - no longer fetching from source directly
+import {
+  useAISummaryBudgets,
+  useAISummaryBudgetMetrics,
+  useAISummaryForecasts,
+  aiSummaryKeys,
+} from "@/hooks/useAISummaryData";
 
 interface BudgetData {
   month: string;
@@ -102,216 +107,88 @@ export function AISummaryBudgetTable({
   onForecastEnabledChange,
 }: AISummaryBudgetTableProps) {
   const currentYear = new Date().getFullYear();
-  const [budgetData, setBudgetData] = useState<BudgetData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
   
   const [editingMonth, setEditingMonth] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
-  const [savedBudgets, setSavedBudgets] = useState<Record<string, number>>({});
   
   // Forecast mode state - use external if provided, otherwise local
   const [localForecastEnabled, setLocalForecastEnabled] = useState(false);
   const forecastEnabled = externalForecastEnabled !== undefined ? externalForecastEnabled : localForecastEnabled;
   const setForecastEnabled = onForecastEnabledChange || setLocalForecastEnabled;
-  const [forecastRows, setForecastRows] = useState<ForecastRow[]>([]);
 
-  // Fetch budgets from database
-  const fetchBudgets = async () => {
-    try {
-      const { user } = await getUser();
-      if (!user) return {};
+  // Use React Query hooks for data fetching with caching
+  const reportIdsToFetch = isOverview && allReportIds ? allReportIds : [reportId];
+  
+  const { data: budgetsData = {}, isLoading: isLoadingBudgets } = useAISummaryBudgets(
+    aiSummaryCardId,
+    reportIdsToFetch,
+    { enabled: !!aiSummaryCardId }
+  );
+  
+  const { data: cachedMetrics, isLoading: isLoadingMetrics } = useAISummaryBudgetMetrics(
+    aiSummaryCardId,
+    { enabled: !!aiSummaryCardId }
+  );
+  
+  const { data: forecastRows = [], isLoading: isLoadingForecasts } = useAISummaryForecasts(
+    aiSummaryCardId,
+    { enabled: !!aiSummaryCardId }
+  );
 
-      // For overview, fetch budgets for all reports
-      const reportIdsToFetch = isOverview && allReportIds ? allReportIds : [reportId];
-      
-      const { data, error } = await supabase
-        .from("ai_summary_budgets")
-        .select("*")
-        .eq("ai_summary_card_id", aiSummaryCardId)
-        .in("report_id", reportIdsToFetch);
+  const isLoading = isLoadingBudgets || isLoadingMetrics || isLoadingForecasts;
 
-      if (error) {
-        console.error("Error fetching budgets:", error);
-        return {};
-      }
-
-      // Aggregate budgets by month (sum across all reports for overview)
-      const budgetMap: Record<string, number> = {};
-      (data || []).forEach((b: any) => {
-        const amount = Number(b.budget_amount);
-        budgetMap[b.month_key] = (budgetMap[b.month_key] || 0) + amount;
-      });
-      return budgetMap;
-    } catch (err) {
-      console.error("Error fetching budgets:", err);
-      return {};
-    }
-  };
-
-  // Fetch cached metrics from database
-  const fetchCachedMetrics = async (): Promise<Record<string, { cost: number; revenue: number; clicks?: number }> | null> => {
-    try {
-      const { data, error } = await supabase
-        .from("ai_summary_cards")
-        .select("cached_budget_data")
-        .eq("id", aiSummaryCardId)
-        .maybeSingle();
-
-      if (error) {
-        console.error("Error fetching cached budget data:", error);
-        return null;
-      }
-      
-      if (!data?.cached_budget_data) {
-        console.log("No cached_budget_data found for card:", aiSummaryCardId);
-        return null;
-      }
-
-      const cachedData = data.cached_budget_data as CachedBudgetMetrics;
-      
-      // For overview, aggregate all report data
-      if (isOverview && allReportIds) {
-        const aggregated: Record<string, { cost: number; revenue: number; clicks?: number }> = {};
-        allReportIds.forEach((rid) => {
-          const reportData = cachedData[rid];
-          if (reportData) {
-            Object.entries(reportData).forEach(([monthKey, metrics]) => {
-              if (!aggregated[monthKey]) {
-                aggregated[monthKey] = { cost: 0, revenue: 0, clicks: 0 };
-              }
-              aggregated[monthKey].cost += metrics.cost || 0;
-              aggregated[monthKey].revenue += metrics.revenue || 0;
-              aggregated[monthKey].clicks = (aggregated[monthKey].clicks || 0) + (metrics.clicks || 0);
-            });
-          }
-        });
-        return aggregated;
-      }
-
-      // For individual report, return that report's data directly using reportId prop
-      const reportMetrics = cachedData[reportId];
-      if (!reportMetrics) {
-        console.log("No cached metrics found for report:", reportId, "Available keys:", Object.keys(cachedData));
-        return null;
-      }
-      
-      return reportMetrics;
-    } catch (err) {
-      console.error("Error fetching cached metrics:", err);
-      return null;
-    }
-  };
-
-  // Save metrics to cache
-  const saveCachedMetrics = async (
-    metrics: Record<string, { cost: number; revenue: number }>,
-    forReportId: string
-  ) => {
-    try {
-      // First fetch existing cache
-      const { data: existingData } = await supabase
-        .from("ai_summary_cards")
-        .select("cached_budget_data")
-        .eq("id", aiSummaryCardId)
-        .maybeSingle();
-
-      const existingCache = (existingData?.cached_budget_data as CachedBudgetMetrics) || {};
-      
-      // Update cache for this report
-      const updatedCache = {
-        ...existingCache,
-        [forReportId]: metrics,
-      };
-
-      const { error } = await supabase
-        .from("ai_summary_cards")
-        .update({ cached_budget_data: updatedCache })
-        .eq("id", aiSummaryCardId);
-
-      if (error) {
-        console.error("Error saving cached metrics:", error);
-      }
-    } catch (err) {
-      console.error("Error saving cached metrics:", err);
-    }
-  };
-
-  // Fetch forecast rows for this card
-  const fetchForecasts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("ai_summary_forecasts")
-        .select("*")
-        .eq("ai_summary_card_id", aiSummaryCardId)
-        .order("created_at", { ascending: true });
-
-      if (error) {
-        console.error("Error fetching forecasts:", error);
-        return [];
-      }
-
-      return (data || []).map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        rooms: row.rooms,
-        occupancy_rate: row.occupancy_rate,
-        daily_rate: row.daily_rate,
-      }));
-    } catch (err) {
-      console.error("Error fetching forecasts:", err);
-      return [];
-    }
-  };
-
-  // Calculate monthly total revenue from forecast settings
-  const calculateMonthlyTotalRevenue = (monthIndex: number): number => {
-    // Get days in month (monthIndex is 0-indexed, but we use 1-indexed for the month)
-    const daysInMonth = new Date(currentYear, monthIndex + 1, 0).getDate();
+  // Process cached metrics for this view
+  const processedMetrics = useMemo(() => {
+    if (!cachedMetrics) return {};
     
-    return forecastRows.reduce((total, row) => {
-      const revenue = row.rooms * (row.occupancy_rate / 100) * row.daily_rate * daysInMonth;
-      return total + revenue;
-    }, 0);
-  };
+    if (isOverview && allReportIds) {
+      const aggregated: Record<string, { cost: number; revenue: number; clicks?: number }> = {};
+      allReportIds.forEach((rid) => {
+        const reportData = cachedMetrics[rid];
+        if (reportData) {
+          Object.entries(reportData).forEach(([monthKey, metrics]) => {
+            if (!aggregated[monthKey]) {
+              aggregated[monthKey] = { cost: 0, revenue: 0, clicks: 0 };
+            }
+            aggregated[monthKey].cost += metrics.cost || 0;
+            aggregated[monthKey].revenue += metrics.revenue || 0;
+            aggregated[monthKey].clicks = (aggregated[monthKey].clicks || 0) + (metrics.clicks || 0);
+          });
+        }
+      });
+      return aggregated;
+    }
+    
+    return cachedMetrics[reportId] || {};
+  }, [cachedMetrics, isOverview, allReportIds, reportId]);
 
-  // Build budget data array from metrics
-  const buildBudgetData = (
-    budgets: Record<string, number>,
-    metrics: Record<string, { cost: number; revenue: number; clicks?: number }>,
-    forecasts: ForecastRow[]
-  ): BudgetData[] => {
+  // Build budget data using memoization instead of useEffect
+  const budgetData = useMemo(() => {
     return MONTHS.map((m, index) => {
       const monthKey = `${currentYear}-${m.key}`;
-      const budget = budgets[monthKey] || 0;
-      const cost = metrics[monthKey]?.cost || 0;
-      const clicks = metrics[monthKey]?.clicks || 0;
+      const budget = budgetsData[monthKey] || 0;
+      const cost = processedMetrics[monthKey]?.cost || 0;
+      const clicks = processedMetrics[monthKey]?.clicks || 0;
       const cpc = clicks > 0 ? cost / clicks : 0;
-      const revenue = metrics[monthKey]?.revenue || 0;
+      const revenue = processedMetrics[monthKey]?.revenue || 0;
       const difference = budget - cost;
       const roas = cost > 0 ? revenue / cost : 0;
       const costOfSale = revenue > 0 ? (cost / revenue) * 100 : 0;
 
-      // Calculate forecast-specific fields if we have forecast data
       let totalRevenue: number | undefined;
       let revenueShare: number | undefined;
       let estRevenue: number | undefined;
       let estRevenueShare: number | undefined;
 
-      if (forecasts.length > 0) {
+      if (forecastRows.length > 0) {
         const daysInMonth = new Date(currentYear, index + 1, 0).getDate();
-        totalRevenue = forecasts.reduce((total, row) => {
+        totalRevenue = forecastRows.reduce((total, row) => {
           return total + row.rooms * (row.occupancy_rate / 100) * row.daily_rate * daysInMonth;
         }, 0);
-        
-        // Revenue Share = actual revenue / total forecasted revenue
         revenueShare = totalRevenue > 0 ? (revenue / totalRevenue) * 100 : 0;
-        
-        // Est. Revenue = budget * ROAS (estimated revenue based on budget spent)
-        // Using average ROAS from actual data if available, otherwise default to 1
         const avgRoas = cost > 0 ? revenue / cost : 1;
         estRevenue = budget * avgRoas;
-        
-        // Est. Revenue Share = estimated revenue / total forecasted revenue
         estRevenueShare = totalRevenue > 0 ? (estRevenue / totalRevenue) * 100 : 0;
       }
 
@@ -332,30 +209,7 @@ export function AISummaryBudgetTable({
         estRevenueShare,
       };
     });
-  };
-
-  const loadData = async () => {
-    setIsLoading(true);
-    try {
-      // Fetch budgets, cached metrics, and forecasts (for all tabs)
-      const [budgets, cachedMetrics, forecasts] = await Promise.all([
-        fetchBudgets(),
-        fetchCachedMetrics(),
-        fetchForecasts(),
-      ]);
-      
-      setSavedBudgets(budgets);
-      setForecastRows(forecasts);
-
-      // Always use cached data - refresh happens at parent level
-      const data = buildBudgetData(budgets, cachedMetrics || {}, forecasts);
-      setBudgetData(data);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Removed refreshMetrics - refresh happens at parent level via handleRefreshPivotData
+  }, [currentYear, budgetsData, processedMetrics, forecastRows]);
 
   const handleSetBudget = (monthKey: string, currentBudget: number) => {
     setEditingMonth(monthKey);
@@ -374,7 +228,6 @@ export function AISummaryBudgetTable({
         return;
       }
 
-      // Upsert the budget
       const { error } = await supabase.from("ai_summary_budgets").upsert(
         {
           user_id: user.id,
@@ -395,17 +248,8 @@ export function AISummaryBudgetTable({
         return;
       }
 
-      // Update local state
-      setSavedBudgets((prev) => ({ ...prev, [editingMonth]: newBudget }));
-      setBudgetData((prev) =>
-        prev.map((row) => {
-          if (row.month === editingMonth) {
-            const difference = newBudget - row.cost;
-            return { ...row, budget: newBudget, difference };
-          }
-          return row;
-        })
-      );
+      // Invalidate cache to refetch
+      queryClient.invalidateQueries({ queryKey: aiSummaryKeys.budgets(aiSummaryCardId) });
 
       toast.success("Budget saved");
       setEditingMonth(null);
@@ -418,10 +262,6 @@ export function AISummaryBudgetTable({
     setEditingMonth(null);
     setEditValue("");
   };
-
-  useEffect(() => {
-    loadData();
-  }, [aiSummaryCardId, reportId]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("en-US", {

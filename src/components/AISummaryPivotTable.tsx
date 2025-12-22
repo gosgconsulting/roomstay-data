@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -19,10 +19,8 @@ import { Loader2, Sparkles, ArrowUp, ArrowDown, Minus, ArrowUpDown, ChevronUp, C
 import { Card, CardContent } from "@/components/ui/card";
 import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Tooltip, LabelList, Cell } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { supabase } from "@/integrations/supabase/client";
-import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
-import { getUser } from "@/lib/auth";
 import FormattedAISummary from "@/components/FormattedAISummary";
+import { useAISummaryRawData, type RawSourceData } from "@/hooks/useAISummaryData";
 import {
   startOfMonth,
   endOfMonth,
@@ -106,6 +104,7 @@ export interface CachedPivotData {
 }
 
 interface AISummaryPivotTableProps {
+  cardId?: string; // Used for React Query caching
   reportIds: string[];
   selectedMetrics: string[];
   accountId?: string;
@@ -544,6 +543,7 @@ export const aggregateMetrics = (
 export type ReportTab = "overview" | string; // "overview" or reportId
 
 export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
+  cardId,
   reportIds,
   selectedMetrics,
   accountId,
@@ -567,10 +567,54 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     }
   };
   const [comparisonType, setComparisonType] = useState<ComparisonType>("none");
-  const [isLoading, setIsLoading] = useState(!cachedPivotData);
-  const [data, setData] = useState<CachedPivotData>(
-    cachedPivotData || { mtd: [], ytd: [] }
+  
+  // Use React Query for cached raw source data - persists across tab switches
+  const { data: rawSourceData = {}, isLoading: isLoadingRawData } = useAISummaryRawData(
+    cardId || reportIds.join('-'), // Use cardId or fallback to joined reportIds
+    reportIds,
+    accountId,
+    { enabled: reportIds.length > 0 }
   );
+  
+  // Compute if data is ready
+  const reportsLoaded = Object.keys(rawSourceData).length > 0;
+  
+  // Use cached pivot data if available, otherwise it will be computed from raw data
+  const data: CachedPivotData = useMemo(() => {
+    if (cachedPivotData) {
+      return cachedPivotData;
+    }
+    // If no cached data but we have raw source data, compute initial mtd/ytd
+    if (reportsLoaded) {
+      const dateRanges = {
+        mtd: getDateRange("mtd"),
+        ytd: getDateRange("ytd"),
+      };
+      const newData: CachedPivotData = { mtd: [], ytd: [] };
+      
+      for (const reportId of reportIds) {
+        const reportData = rawSourceData[reportId];
+        if (!reportData) continue;
+        
+        (["mtd", "ytd"] as const).forEach((tab) => {
+          const metrics = aggregateMetrics(
+            reportData.rows,
+            selectedMetrics,
+            dateRanges[tab]
+          );
+          newData[tab].push({
+            reportId: reportId,
+            reportName: reportData.reportName,
+            metrics,
+          });
+        });
+      }
+      return newData;
+    }
+    return { mtd: [], ytd: [] };
+  }, [cachedPivotData, rawSourceData, reportsLoaded, reportIds, selectedMetrics]);
+  
+  const isLoading = isLoadingRawData && !cachedPivotData;
   
   // Report tab state - controlled from parent if props provided, otherwise internal
   const [internalReportTab, setInternalReportTab] = useState<ReportTab>("overview");
@@ -582,10 +626,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       setInternalReportTab(tab);
     }
   };
-  
-  // Store raw source data for dynamic calculations
-  const [rawSourceData, setRawSourceData] = useState<Record<string, { reportName: string; rows: any[] }>>({});
-  const [reportsLoaded, setReportsLoaded] = useState(false);
   
   // State for YTD chart KPI selector
   const [chartKpi, setChartKpi] = useState<string>("Revenue");
@@ -754,105 +794,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     },
   };
 
-  // Load raw source data once for dynamic tab calculations
-  useEffect(() => {
-    const loadRawData = async () => {
-      if (reportIds.length === 0) {
-        setIsLoading(false);
-        return;
-      }
-
-      // If we have cached data for fixed tabs, use it
-      if (cachedPivotData) {
-        setData(cachedPivotData);
-      }
-
-      setIsLoading(true);
-
-      try {
-        const { user } = await getUser();
-        if (!user) return;
-
-        const { data: reportsData } = await supabase
-          .from("reports")
-          .select("id, name")
-          .in("id", reportIds);
-
-        const reportsList = reportsData || [];
-        const rawData: Record<string, { reportName: string; rows: any[] }> = {};
-
-        for (const reportId of reportIds) {
-          const report = reportsList.find((r: Report) => r.id === reportId);
-          if (!report) continue;
-
-          const { data: dsData } = await supabase
-            .from("data_sources")
-            .select("*")
-            .eq("report_id", reportId)
-            .limit(1)
-            .maybeSingle();
-
-          if (!dsData) continue;
-
-          const sourceData = await fetchSourceData(
-            dsData as DataSource,
-            user.id,
-            accountId
-          );
-
-          if (sourceData?.transformedRows) {
-            rawData[reportId] = {
-              reportName: report.name,
-              rows: sourceData.transformedRows,
-            };
-          }
-        }
-
-        setRawSourceData(rawData);
-        setReportsLoaded(true);
-
-        // If no cached data, compute for mtd and ytd
-        if (!cachedPivotData) {
-          const dateRanges = {
-            mtd: getDateRange("mtd"),
-            ytd: getDateRange("ytd"),
-          };
-
-          const newData: CachedPivotData = {
-            mtd: [],
-            ytd: [],
-          };
-
-          for (const reportId of reportIds) {
-            const reportData = rawData[reportId];
-            if (!reportData) continue;
-
-            (["mtd", "ytd"] as const).forEach((tab) => {
-              const metrics = aggregateMetrics(
-                reportData.rows,
-                selectedMetrics,
-                dateRanges[tab]
-              );
-
-              newData[tab].push({
-                reportId: reportId,
-                reportName: reportData.reportName,
-                metrics,
-              });
-            });
-          }
-
-          setData(newData);
-        }
-      } catch (error) {
-        console.error("Error loading pivot table data:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadRawData();
-  }, [reportIds, selectedMetrics, accountId, cachedPivotData]);
+  // Note: Raw source data is now loaded via React Query hook (useAISummaryRawData)
+  // which provides caching across tab switches and reconnections
   
   // Compute data for specific month tabs dynamically
   const computeDataForTab = (tab: DateTab): ReportMetrics[] => {
