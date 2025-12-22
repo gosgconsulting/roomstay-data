@@ -1482,6 +1482,7 @@ const AISummaryPage = () => {
                     </div>
                   ) : (
                     <AISummaryPivotTable
+                      cardId={card.id}
                       reportIds={card.report_ids}
                       selectedMetrics={card.selected_metrics}
                       accountId={accountId}
