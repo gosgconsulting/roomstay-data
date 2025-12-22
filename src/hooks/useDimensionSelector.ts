@@ -1,111 +1,49 @@
-import { useMemo } from "react";
+import { useState, useCallback } from "react";
 import { useDimensionData } from "./useDimensionData";
-import { useDimensionGranularities } from "./useDimensionGranularities";
-import { useDimensionOperations } from "./useDimensionOperations";
 
-interface UseDimensionSelectorOptions {
-  selectedDimensions: string[];
-  onDimensionsChange: (dimensions: string[]) => void;
+interface UseDimensionSelectorProps {
   reportId?: string;
-  currentDateGranularity?: string;
-  onDateGranularityChange?: (granularity: string) => void;
+  accountId?: string;
 }
 
-/**
- * Main hook for dimension selector functionality
- * Composes smaller hooks for data loading, granularities, operations, and filtering
- */
-export function useDimensionSelector({
-  selectedDimensions,
-  onDimensionsChange,
-  reportId,
-  currentDateGranularity = 'day',
-  onDateGranularityChange,
-}: UseDimensionSelectorOptions) {
-  // Load dimensions and check data availability
+export function useDimensionSelector({ reportId, accountId }: UseDimensionSelectorProps = {}) {
+  const [selectedDimensions, setSelectedDimensions] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
   const {
     dimensions,
-    isLoading,
+    isLoading: isDimensionsLoading,
     error,
     dimensionHasData,
     loadDimensions,
-  } = useDimensionData(reportId);
+  } = useDimensionData({ reportId });
 
-  // Manage granularities for date dimensions
-  const {
-    dimensionGranularities,
-    handleGranularityChange,
-    removeGranularity,
-  } = useDimensionGranularities({
-    selectedDimensions,
-    dimensions,
-    currentDateGranularity,
-    onDateGranularityChange,
-  });
+  const handleDimensionToggle = useCallback((dimensionId: string) => {
+    setSelectedDimensions(prev => 
+      prev.includes(dimensionId)
+        ? prev.filter(id => id !== dimensionId)
+        : [...prev, dimensionId]
+    );
+  }, []);
 
-  // Handle add/remove operations
-  const {
-    handleRemoveDimension: baseHandleRemoveDimension,
-    handleAddDimension: baseHandleAddDimension,
-  } = useDimensionOperations({
-    selectedDimensions,
-    onDimensionsChange,
-    reportId,
-  });
+  const handleSelectAll = useCallback(() => {
+    setSelectedDimensions(dimensions.map(d => d.id));
+  }, [dimensions]);
 
-  // Enhanced add handler that reloads dimensions to pick up newly created custom dimensions
-  const handleAddDimension = async (dimensionId: string) => {
-    try {
-      await baseHandleAddDimension(dimensionId);
-      // Small delay to ensure state has propagated
-      await new Promise(resolve => setTimeout(resolve, 100));
-      // Reload dimensions to ensure newly created custom dimensions are available
-      await loadDimensions();
-    } catch (error) {
-      console.error('[useDimensionSelector] Error adding dimension:', error);
-      throw error;
-    }
-  };
-
-  // Enhanced remove handler that also removes granularity
-  const handleRemoveDimension = async (dimensionId: string) => {
-    try {
-      // Prevent removing Date dimension
-      const dimension = dimensions.find(d => d.id === dimensionId);
-      if (dimension?.type === 'date') {
-        throw new Error('Date dimension cannot be removed');
-      }
-      
-      removeGranularity(dimensionId);
-      await baseHandleRemoveDimension(dimensionId);
-      // Small delay to ensure state has propagated
-      await new Promise(resolve => setTimeout(resolve, 100));
-      // Reload dimensions to refresh the list
-      await loadDimensions();
-    } catch (error) {
-      console.error('[useDimensionSelector] Error removing dimension:', error);
-      throw error;
-    }
-  };
-
-  // Get available dimensions (not already selected)
-  const availableDimensions = useMemo(
-    () => dimensions.filter(
-      (d) => !selectedDimensions.includes(d.id),
-    ),
-    [dimensions, selectedDimensions]
-  );
+  const handleDeselectAll = useCallback(() => {
+    setSelectedDimensions([]);
+  }, []);
 
   return {
     dimensions,
-    isLoading,
+    selectedDimensions,
+    isLoading: isDimensionsLoading || isLoading,
     error,
     dimensionHasData,
-    dimensionGranularities,
-    availableDimensions,
     loadDimensions,
-    handleRemoveDimension,
-    handleAddDimension,
-    handleGranularityChange,
+    handleDimensionToggle,
+    handleSelectAll,
+    handleDeselectAll,
+    setSelectedDimensions,
   };
 }

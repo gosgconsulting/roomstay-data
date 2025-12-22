@@ -5,7 +5,7 @@ import { formatRowName, formatValue } from "@/lib/performanceTable/formatters";
 // NEW: import formatter-compatible Dimension type
 import type { Dimension as FormatterDimension } from "@/lib/performanceTable/formatters";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
-import type { TableRow as TableRowType } from "@/hooks/performanceTable/usePerformanceTableData";
+import type { TableRow as TableRowType } from "@/hooks/performanceTable/usePerformanceTableDataFixed";
 import type { FilterState } from "@/components/FiltersBar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";

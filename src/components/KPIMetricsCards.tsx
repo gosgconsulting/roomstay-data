@@ -120,11 +120,10 @@ export function KPIMetricsCards({
   }, [user?.id, reportId, visibilityRefreshTrigger]);
 
   // Use source data hook - fetch directly from Google Sheets/CSV (same as performance table)
-  const { data: sourceData, isLoading: isLoadingSource, error: sourceError } = useSourceData(
-    dataSource,
-    accountId,
-    { enabled: !!dataSource }
-  );
+  const { data: sourceData, isLoading: isLoadingSource, error: sourceError } = useSourceData({
+    dataSourceId: dataSource?.id || '',
+    enabled: !!dataSource
+  });
 
   // Create stable filters reference
   const stableFilters = useMemo(() => ({
@@ -156,11 +155,11 @@ export function KPIMetricsCards({
       return;
     }
 
-    console.log('[KPI-CARDS] Processing source data:', sourceData.transformedRows?.length, 'rows');
+    console.log('[KPI-CARDS] Processing source data:', sourceData?.length, 'rows');
     console.log('[KPI-CARDS] Dimensions available:', dimensions.length, dimensions.map(d => ({ id: d.id, name: d.name })));
 
     try {
-      let allRows = sourceData.transformedRows || [];
+      let allRows = sourceData || [];
 
       if (allRows.length === 0) {
         console.log('[KPI-CARDS] No rows in source data');
@@ -169,11 +168,18 @@ export function KPIMetricsCards({
         return;
       }
 
+      // Transform raw sheet data to match expected format
+      const transformedRows = allRows.map((row: any) => ({
+        dimension_values: row.row_data || {},
+        row_number: row.row_number,
+        id: row.id
+      }));
+
       // Detect date dimension
       const dateDims = dimensions.filter(d => d.type === 'date');
       let dateDimInUse: { id: string; name: string } | null = null;
       for (const d of dateDims) {
-        const found = allRows.some((r: any) => {
+        const found = transformedRows.some((r: any) => {
           const dv = r.dimension_values || {};
           return dv[d.id] !== undefined && dv[d.id] !== null && dv[d.id] !== '';
         });
@@ -230,7 +236,7 @@ export function KPIMetricsCards({
 
       // Apply date filter only if not "all_time"
       const shouldFilterByDate = stableFilters.datePreset !== 'all_time' && stableFilters.dateRange;
-      let filteredRows = allRows;
+      let filteredRows = transformedRows;
       if (shouldFilterByDate) {
         filteredRows = filterRowsByDateRange(filteredRows, stableFilters.dateRange);
       }
@@ -240,7 +246,7 @@ export function KPIMetricsCards({
       let compareRows: any[] = [];
       const compareEnabled = stableFilters.compareEnabled && stableFilters.compareDateRange;
       if (compareEnabled) {
-        compareRows = filterRowsByDateRange(allRows, stableFilters.compareDateRange);
+        compareRows = filterRowsByDateRange(transformedRows, stableFilters.compareDateRange);
         compareRows = applyDimensionFilters(compareRows);
       }
 

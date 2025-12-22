@@ -48,10 +48,10 @@ const KPIChartsGrid: React.FC<KPIChartsGridProps> = ({
           key={`${metric}-${index}`}
           reportId={reportId}
           accountId={accountId}
+          metric={metric}
           filters={filters}
           visibilityRefreshTrigger={visibilityRefreshTrigger}
           onLoadingComplete={handleChildLoaded}
-          initialMetric={metric}
           isEditMode={isEditMode}
           onMetricChange={(m) => onMetricChange?.(index, m)}
         />

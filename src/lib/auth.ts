@@ -62,6 +62,15 @@ export function useUser(): UseQueryResult<{ user: User | null; error: any }, Err
 }
 
 /**
+ * Backward compatibility hook - returns just the user object
+ * @deprecated Use useUser() instead for better error handling
+ */
+export function useAuth(): { user: User | null } {
+  const { data } = useUser();
+  return { user: data?.user || null };
+}
+
+/**
  * Utility function to get the current authenticated user
  * Can be used outside React components
  * Uses React Query cache when available, otherwise fetches directly
@@ -90,4 +99,3 @@ export function getUserFromCache(queryClient: ReturnType<typeof useQueryClient>)
   const cached = queryClient.getQueryData<{ user: User | null; error: any }>(authKeys.user());
   return cached?.user || null;
 }
-

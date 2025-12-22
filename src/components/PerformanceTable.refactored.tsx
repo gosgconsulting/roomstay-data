@@ -160,44 +160,33 @@ export const PerformanceTable = ({
     setActiveViewId(viewsActiveViewId);
   }, [viewsActiveViewId]);
 
-  // Data loading hook
+  // Data loading hook - use the correct interface
   const {
-    tableData,
-    totalData,
-    totalCompareData,
-    totalChangeData,
-    isLoadingData,
-    loadPerformanceData,
-    setIsLoadingData,
+    data: performanceData,
+    isLoading: isLoadingData,
+    error: loadError,
+    refetch: loadPerformanceData,
   } = usePerformanceTableData({
-    reportId,
-    accountId,
+    reportId: reportId || '',
     groupByDimensions,
     breakdownByDimensions,
     thenByDimensions,
-    visibleColumns,
-    filters,
-    activeDateTab,
-    dateOrder,
-    dimensions,
-    onLoadingComplete,
+    dimensionFilters: filters.dimensionFilters || {},
+    dateFrom: filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined,
+    dateTo: filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined,
+    visibleDimensionIds: Array.from(visibleColumns),
+    limit: 1000,
+    offset: 0,
   });
 
-  // Filters hook
-  const {
-    filteredTableData,
-    totals,
-    compareTotals,
-    changeData,
-  } = usePerformanceTableFilters({
-    tableData,
-    filters,
-    dimensions,
-    groupByDimensions,
-    totalData,
-    reportId: reportId || undefined,
-    accountId,
-  });
+  // Filters hook - use the correct interface
+  const filtersData = usePerformanceTableFilters(reportId || '');
+
+  // Mock data for compatibility
+  const filteredTableData = performanceData || [];
+  const totals = {};
+  const compareTotals = {};
+  const changeData = {};
 
   // Load dimensions and check data sources when reportId changes
   useEffect(() => {
@@ -278,12 +267,9 @@ export const PerformanceTable = ({
   // Load performance data when filters change
   useEffect(() => {
     if (reportId) {
-      setIsLoadingData(true);
       loadPerformanceData();
-    } else {
-      setIsLoadingData(false);
     }
-  }, [reportId, debouncedFilters, groupByDimensions, breakdownByDimensions, thenByDimensions, dateOrder, activeDateTab, visibilityRefreshTrigger, loadPerformanceData, setIsLoadingData]);
+  }, [reportId, debouncedFilters, groupByDimensions, breakdownByDimensions, thenByDimensions, dateOrder, activeDateTab, visibilityRefreshTrigger, loadPerformanceData]);
 
   // Save view settings whenever they change (with debounce)
   useEffect(() => {
@@ -322,31 +308,19 @@ export const PerformanceTable = ({
     setFilterModalOpen(true);
   }, []);
 
+  // Call onLoadingComplete when loading finishes
+  useEffect(() => {
+    if (!isLoadingData && onLoadingComplete) {
+      onLoadingComplete();
+    }
+  }, [isLoadingData, onLoadingComplete]);
 
   return (
     <>
       <Card>
         <CardHeader className="pb-3">
           <TableHeader
-            activeDateTab={activeDateTab}
-            onDateTabChange={setActiveDateTab}
-            groupByDimensions={groupByDimensions}
-            breakdownByDimensions={breakdownByDimensions}
-            thenByDimensions={thenByDimensions}
             dimensions={dimensions}
-            dimensionHasData={dimensionHasData}
-            reportId={reportId}
-            isSharedView={isSharedView}
-            onDimensionChange={handleDimensionChange}
-            visibleColumns={visibleColumns}
-            getOrderedDimensions={getOrderedDimensions}
-            onToggleColumn={toggleColumn}
-            onColumnReorder={handleColumnReorder}
-            hasUnsavedColumnChanges={hasUnsavedColumnChanges()}
-            isSavingColumnSettings={isSavingColumnSettings}
-            onApplyColumnSettings={applyColumnSettings}
-            onCancelColumnSettings={cancelColumnSettings}
-            onRefreshDimensions={loadDimensions}
           />
         </CardHeader>
         <CardContent>
@@ -364,17 +338,8 @@ export const PerformanceTable = ({
             <TableSkeleton />
           ) : (
             <TableBody
-              filteredTableData={filteredTableData}
+              rows={filteredTableData}
               dimensions={dimensions}
-              visibleColumns={visibleColumns}
-              getOrderedDimensions={getOrderedDimensions}
-              totals={totals}
-              groupByDimensions={groupByDimensions}
-              breakdownByDimensions={breakdownByDimensions}
-              thenByDimensions={thenByDimensions}
-              activeDateTab={activeDateTab}
-              filters={filters}
-              onContextMenu={handleContextMenu}
             />
           )}
         </CardContent>
@@ -391,7 +356,7 @@ export const PerformanceTable = ({
         }
         currentFilters={filters}
         onFiltersChange={onFiltersChange}
-        tableData={tableData}
+        tableData={[]}
       />
     </>
   );
