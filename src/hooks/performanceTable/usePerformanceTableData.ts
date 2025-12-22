@@ -195,7 +195,10 @@ export function usePerformanceTableData({
         return rows.filter((row: any) => {
           const dv = row.dimension_values || {};
           const val = dv[dateDimInUse!.id];
-          if (!val) return true;
+
+          // STRICT: when a date range is active, exclude rows without a date
+          if (!val) return false;
+
           const rowDate = new Date(String(val));
           if (from && rowDate < from) return false;
           if (adjustedTo && rowDate >= adjustedTo) return false;

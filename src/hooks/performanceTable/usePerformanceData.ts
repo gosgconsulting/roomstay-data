@@ -99,7 +99,6 @@ function transformSourceDataToEdgeResponse(
       : null;
 
     filteredRows = filteredRows.filter((row: any) => {
-      // Find date dimension value in dimension_values
       const dimValues = row.dimension_values || {};
       const dateValue = Object.values(dimValues).find((v: any) => {
         if (typeof v === 'string' && v.match(/^\d{4}-\d{2}-\d{2}/)) {
@@ -108,7 +107,8 @@ function transformSourceDataToEdgeResponse(
         return false;
       });
 
-      if (!dateValue) return true; // Keep rows without date
+      // STRICT: when a date range is active, exclude rows without a date
+      if (!dateValue) return false;
 
       const rowDate = new Date(String(dateValue));
       if (fromDate && rowDate < fromDate) return false;
