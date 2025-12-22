@@ -63,7 +63,8 @@ export function useCacheStatus(reportId: string | null): CacheStatus {
       const cachedData = queryClient.getQueryData(queryKey);
       const queryState = queryClient.getQueryState(queryKey);
       
-      if (cachedData && queryState && !queryState.isStale) {
+      // Count as cached when we have data and the query succeeded with a valid timestamp
+      if (cachedData && queryState && queryState.status === 'success' && queryState.dataUpdatedAt > 0) {
         cachedSourceCount++;
         
         // Track oldest cache time

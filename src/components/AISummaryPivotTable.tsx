@@ -38,6 +38,7 @@ import {
   endOfWeek,
   subDays,
 } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ReportMetrics {
   reportId: string;
@@ -804,6 +805,40 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // Note: Raw source data is now loaded via React Query hook (useAISummaryRawData)
   // which provides caching across tab switches and reconnections
   
+  // Add helper to build metricNameToIdMap for selected reports
+  const [mergedMetricMap, setMergedMetricMap] = React.useState<Record<string, string>>({});
+  React.useEffect(() => {
+    // Build a merged metricNameToIdMap by reading each report's data source column_mappings
+    // so aggregateMetrics can access values by dimension IDs.
+    (async () => {
+      try {
+        if (reportIds.length === 0) {
+          setMergedMetricMap({});
+          return;
+        }
+        const map: Record<string, string> = {};
+        for (const reportId of reportIds) {
+          const { data: dsData } = await supabase
+            .from("data_sources")
+            .select("*")
+            .eq("report_id", reportId)
+            .limit(1)
+            .maybeSingle();
+          const columnMappings = Array.isArray(dsData?.column_mappings) ? dsData!.column_mappings : [];
+          columnMappings.forEach((m: any) => {
+            if (m.dimensionName && m.dimensionId && m.dimensionId !== 'none') {
+              map[m.dimensionName] = m.dimensionId;
+            }
+          });
+        }
+        setMergedMetricMap(map);
+      } catch {
+        // Fallback: empty mapping (aggregateMetrics will still try name keys)
+        setMergedMetricMap({});
+      }
+    })();
+  }, [reportIds]);
+
   // Compute data for specific month tabs dynamically
   const computeDataForTab = (tab: DateTab): ReportMetrics[] => {
     // If we have pre-computed data for this tab (mtd/ytd), use it
@@ -888,26 +923,20 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     }
 
     const now = new Date();
-    const sevenDaysAgo = subDays(now, 6); // Last 7 days including today
 
-    // Generate all 7 days and aggregate data for each
     const last7DaysRows: DateBreakdownRow[] = [];
-    
     for (let i = 6; i >= 0; i--) {
       const day = subDays(now, i);
       const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
       const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
       const dateRange = { start: dayStart, end: dayEnd };
 
-      // Aggregate metrics for this day across all reports using the same logic as other breakdowns
       const dayMetrics = aggregateMetrics(
-        // Flatten all rows from all reports
-        reportIds.flatMap(reportId => {
-          const reportData = rawSourceData[reportId];
-          return reportData?.rows || [];
-        }),
+        reportIds.flatMap(reportId => rawSourceData[reportId]?.rows || []),
         selectedMetrics,
-        dateRange
+        dateRange,
+        undefined,
+        mergedMetricMap // IMPORTANT: pass mapping so metrics resolve by ID
       );
 
       last7DaysRows.push({
@@ -919,7 +948,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     }
 
     return last7DaysRows;
-  }, [rawSourceData, reportIds, selectedMetrics, reportsLoaded]);
+  }, [rawSourceData, reportIds, selectedMetrics, reportsLoaded, mergedMetricMap]);
 
   if (isLoading) {
     return (
@@ -1303,8 +1332,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       </div>
     );
   };
-
-
 
   // Get the tab data - compute dynamically for any tab
   const tabData = computeDataForTab(activeTab);
@@ -1844,6 +1871,176 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
         
+        {/* Add per-channel weekly/last-7-days/monthly tables in individual report tabs */}
+        {activeReportTab !== "overview" && (() => {
+          // Build rows for the active report only
+          const activeRows = rawSourceData[activeReportTab]?.rows || [];
+          if (activeRows.length === 0) return null;
+
+          const buildWeeklyRows = () => {
+            const weekGroups: Record<string, any[]> = {};
+            const range = getDateRange(selectedDatePeriod || activeTab);
+            activeRows.forEach(row => {
+              const rowDate = parseDate((row.dimension_values || row).Date || (row.dimension_values || row).date || (row.dimension_values || row).Day);
+              if (!rowDate) return;
+              if (rowDate < range.start || rowDate > range.end) return;
+              const key = getDateGroupKey(rowDate, (selectedDatePeriod || activeTab) as DateTab);
+              if (!key.startsWith('Week')) return; // non-YTD tabs produce weeks
+              (weekGroups[key] ||= []).push(row);
+            });
+            return Object.entries(weekGroups).map(([dateGroup, rows]) => ({
+              dateGroup,
+              metrics: aggregateMetrics(rows, selectedMetrics, getDateRange(selectedDatePeriod || activeTab), undefined, mergedMetricMap),
+            }));
+          };
+
+          const buildMonthlyRowsYTD = () => {
+            const monthGroups: Record<string, any[]> = {};
+            const range = getDateRange('ytd');
+            activeRows.forEach(row => {
+              const rowDate = parseDate((row.dimension_values || row).Date || (row.dimension_values || row).date || (row.dimension_values || row).Day);
+              if (!rowDate) return;
+              if (rowDate < range.start || rowDate > range.end) return;
+              const key = getDateGroupKey(rowDate, 'ytd'); // "Month Year"
+              (monthGroups[key] ||= []).push(row);
+            });
+            return Object.entries(monthGroups).map(([dateGroup, rows]) => ({
+              dateGroup,
+              metrics: aggregateMetrics(rows, selectedMetrics, range, undefined, mergedMetricMap),
+            }));
+          };
+
+          const buildLast7DaysRows = () => {
+            const now = new Date();
+            const rows: DateBreakdownRow[] = [];
+            for (let i = 6; i >= 0; i--) {
+              const day = subDays(now, i);
+              const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
+              const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
+              const dateRange = { start: dayStart, end: dayEnd };
+              const metrics = aggregateMetrics(activeRows, selectedMetrics, dateRange, undefined, mergedMetricMap);
+              rows.push({
+                dateGroup: format(day, 'MMM d, yyyy'),
+                metrics,
+              });
+            }
+            return rows;
+          };
+
+          const weeklyRows = buildWeeklyRows();
+          const monthlyRowsYTD = buildMonthlyRowsYTD();
+          const last7Rows = buildLast7DaysRows();
+
+          return (
+            <div className="space-y-4">
+              {/* Results by Week (for non-YTD periods) */}
+              {weeklyRows.length > 0 && (selectedDatePeriod !== 'ytd') && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-primary/5 px-4 py-2 border-b">
+                    <h4 className="font-semibold text-sm">Results By Week</h4>
+                  </div>
+                  <div className="overflow-hidden">
+                    <Table>
+                      <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                        <TableRow className="bg-muted/30">
+                          <TableHead className="font-medium w-[200px]">Week</TableHead>
+                          {safeMetrics.map((metric) => renderSortableHeader(`channel-week-${activeReportTab}`, metric))}
+                        </TableRow>
+                      </TableHeader>
+                    </Table>
+                    <div className={weeklyRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                      <Table>
+                        <TableBody>
+                          {sortRows(weeklyRows, `channel-week-${activeReportTab}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                            <TableRow key={row.dateGroup} className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}>
+                              <TableCell className="font-medium text-sm w-[200px]">{row.dateGroup}</TableCell>
+                              {safeMetrics.map((metric) => (
+                                <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Last 7 Days for the channel */}
+              {last7Rows.length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-primary/5 px-4 py-2 border-b">
+                    <h4 className="font-semibold text-sm">Last 7 Days</h4>
+                  </div>
+                  <div className="overflow-hidden">
+                    <Table>
+                      <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                        <TableRow className="bg-muted/30">
+                          <TableHead className="font-medium w-[200px]">Day</TableHead>
+                          {safeMetrics.map((metric) => renderSortableHeader(`channel-last7-${activeReportTab}`, metric))}
+                        </TableRow>
+                      </TableHeader>
+                    </Table>
+                    <div className={last7Rows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                      <Table>
+                        <TableBody>
+                          {sortRows(last7Rows, `channel-last7-${activeReportTab}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                            <TableRow key={row.dateGroup} className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}>
+                              <TableCell className="font-medium text-sm w-[200px]">{row.dateGroup}</TableCell>
+                              {safeMetrics.map((metric) => (
+                                <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* YTD: Results by Month for the channel */}
+              {monthlyRowsYTD.length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-primary/5 px-4 py-2 border-b">
+                    <h4 className="font-semibold text-sm">Results By Month (YTD)</h4>
+                  </div>
+                  <div className="overflow-hidden">
+                    <Table>
+                      <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                        <TableRow className="bg-muted/30">
+                          <TableHead className="font-medium w-[200px]">Month</TableHead>
+                          {safeMetrics.map((metric) => renderSortableHeader(`channel-ytd-${activeReportTab}`, metric))}
+                        </TableRow>
+                      </TableHeader>
+                    </Table>
+                    <div className={monthlyRowsYTD.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                      <Table>
+                        <TableBody>
+                          {sortRows(monthlyRowsYTD, `channel-ytd-${activeReportTab}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                            <TableRow key={row.dateGroup} className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}>
+                              <TableCell className="font-medium text-sm w-[200px]">{row.dateGroup}</TableCell>
+                              {safeMetrics.map((metric) => (
+                                <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Executive Summary - TEMPORARILY HIDDEN
         {activeReportTab === "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
