@@ -41,6 +41,20 @@ export const DimensionModal = ({
   reportId,
   accountId,
 }: DimensionModalProps) => {
+  
+  // Debug props when modal opens
+  useEffect(() => {
+    if (open) {
+      console.log('[DIMENSION-MODAL] Modal opened with props:', {
+        open,
+        mode,
+        dimension: dimension ? { id: dimension.id, name: dimension.name } : null,
+        reportId,
+        accountId,
+        hasOnSaved: !!onSaved
+      });
+    }
+  }, [open, mode, dimension, reportId, accountId, onSaved]);
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [name, setName] = useState("");
@@ -174,6 +188,14 @@ export const DimensionModal = ({
       }
     } else if (open && mode === 'add') {
       console.log('[DIMENSION-MODAL] Resetting form for add mode');
+      setName("");
+      setType("number");
+      setFormula("");
+      setConditions([]);
+      setFormulaConditionPairs([]);
+    } else if (!open) {
+      console.log('[DIMENSION-MODAL] Modal closed, clearing form state');
+      // Clear form when modal is closed to ensure clean state
       setName("");
       setType("number");
       setFormula("");

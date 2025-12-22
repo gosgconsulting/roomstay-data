@@ -26,6 +26,7 @@ import { DimensionsListModal } from "@/components/DimensionsListModal";
 import VlookupModal from "@/components/VlookupModal";
 import { ReportModal } from "@/components/ReportModal";
 import { CreateAISummaryModal } from "@/components/CreateAISummaryModal";
+import { CacheStatusIndicator } from "@/components/CacheStatusIndicator";
 
 interface Account {
   id: string;
@@ -380,12 +381,23 @@ export default function ReportDashboard() {
   };
   
   const refreshData = () => {
+    console.log('[DASHBOARD] Starting comprehensive data refresh...');
+    
     // Cancel previous loading by incrementing generation
     setLoadingGeneration(prev => prev + 1);
     
     // Clear previous loading states immediately
     setLoadingComponents(new Set());
     setIsDataLoading(false);
+    
+    // Invalidate all caches to ensure fresh data
+    queryClient.invalidateQueries({ queryKey: ['performance-table-data'] });
+    queryClient.invalidateQueries({ queryKey: ['performance-table-filters'] });
+    queryClient.invalidateQueries({ queryKey: ['ai-summary'] }); // Invalidate AI Summary cache for Last 7 Days
+    queryClient.invalidateQueries({ queryKey: ['sourceData'] }); // Invalidate source data cache
+    queryClient.invalidateQueries({ queryKey: ['dataSource'] }); // Invalidate data source queries
+    
+    console.log('[DASHBOARD] Invalidated all caches for data refresh');
     
     // Start new loading cycle
     markComponentLoading('metrics');
@@ -559,6 +571,15 @@ export default function ReportDashboard() {
                     className="data-[state=checked]:bg-emerald-500"
                   />
                 </div>
+
+                {/* Cache status indicator */}
+                <CacheStatusIndicator 
+                  reportId={reportId}
+                  onRefreshData={() => {
+                    refreshData();
+                    setVisibilityRefreshTrigger(prev => prev + 1);
+                  }}
+                />
 
                 {/* Edit buttons - shown when edit mode is on */}
                 {isEditMode && (

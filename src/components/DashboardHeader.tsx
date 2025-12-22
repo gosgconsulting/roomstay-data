@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, Pencil } from "lucide-react";
+import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, Pencil, Database, Clock } from "lucide-react";
 import { DataSourceSelectionModal } from "./DataSourceSelectionModal";
 import { DataSourcesListModal } from "./DataSourcesListModal";
 import { CSVImportChoiceModal } from "./CSVImportChoiceModal";
@@ -18,6 +18,7 @@ import type { Dimension } from "@/types/dimensions";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/lib/auth";
+import { useInvalidateSourceData } from "@/hooks/dataSources/useSourceData";
 
 interface Report {
   id: string;
@@ -59,6 +60,7 @@ export function DashboardHeader({
   const { toast } = useToast();
   const navigate = useNavigate();
   const { data: userData } = useUser();
+  const invalidateCache = useInvalidateSourceData();
   const user = userData?.user || null;
   const location = useLocation();
   const isAllReportsPage = location.pathname.startsWith('/all-reports');
@@ -591,12 +593,17 @@ export function DashboardHeader({
 
       if (syncSuccess) {
         // Update last sync time
+        const updatedAt = new Date().toISOString();
         await supabase
           .from('reports')
           .update({ 
-            updated_at: new Date().toISOString()
+            updated_at: updatedAt
           })
           .eq('id', reportId);
+
+        // Invalidate cache for all data sources in this report
+        console.log('[SYNC] Invalidating cache for all data sources after successful sync');
+        invalidateCache.invalidateAll();
 
         toast({
           title: "Sync complete",
@@ -654,16 +661,52 @@ export function DashboardHeader({
         open={showDimensionsListModal}
         onOpenChange={setShowDimensionsListModal}
         onAddNew={() => {
-          console.log('[DIMENSION] Add new dimension clicked');
-          setShowDimensionsListModal(false); // Close the list modal first
-          setEditingDimension(null);
-          setDimensionModalMode('add');
-          setTimeout(() => setShowDimensionModal(true), 100); // Open after closing
+          console.log('[DASHBOARD] ===== ADD NEW DIMENSION FUNCTION CALLED =====');
+          console.log('[DASHBOARD] Current states:', { 
+            showDimensionsListModal, 
+            showDimensionModal, 
+            editingDimension,
+            dimensionModalMode 
+          });
+          
+          try {
+            console.log('[DASHBOARD] Step 1: Closing dimensions list modal');
+            setShowDimensionsListModal(false);
+            
+            console.log('[DASHBOARD] Step 2: Clearing editing dimension');
+            setEditingDimension(null);
+            
+            console.log('[DASHBOARD] Step 3: Setting mode to add');
+            setDimensionModalMode('add');
+            
+            console.log('[DASHBOARD] Step 4: Setting timeout to open dimension modal');
+            setTimeout(() => {
+              console.log('[DASHBOARD] Step 5: Opening dimension modal in add mode');
+              setShowDimensionModal(true);
+              console.log('[DASHBOARD] Step 6: Dimension modal state set to true');
+            }, 150);
+            
+            console.log('[DASHBOARD] ===== ADD NEW DIMENSION FUNCTION COMPLETED =====');
+          } catch (error) {
+            console.error('[DASHBOARD] Error in onAddNew:', error);
+            alert('Error in onAddNew: ' + error);
+          }
         }}
         onEdit={(dimension) => {
+          console.log('[DASHBOARD] Edit dimension clicked:', dimension.name);
+          console.log('[DASHBOARD] Current states before edit:', { 
+            showDimensionsListModal, 
+            showDimensionModal, 
+            editingDimension,
+            dimensionModalMode 
+          });
+          
+          // Don't close the list modal for edit - keep it open in background
           setEditingDimension(dimension);
           setDimensionModalMode('edit');
           setShowDimensionModal(true);
+          
+          console.log('[DASHBOARD] States set for edit mode');
         }}
         refreshTrigger={dimensionRefreshTrigger}
         reportId={currentReport?.id || undefined}
@@ -676,12 +719,27 @@ export function DashboardHeader({
 
       <DimensionModal
         open={showDimensionModal}
-        onOpenChange={setShowDimensionModal}
+        onOpenChange={(open) => {
+          console.log('[DASHBOARD] DimensionModal onOpenChange called with:', open);
+          setShowDimensionModal(open);
+          if (!open) {
+            // Clear editing dimension when modal is closed
+            setEditingDimension(null);
+          }
+        }}
         dimension={editingDimension || undefined}
         mode={dimensionModalMode}
         onSaved={() => {
+          console.log('[DASHBOARD] Dimension saved, closing modal and refreshing');
           setShowDimensionModal(false);
+          setEditingDimension(null); // Clear the editing dimension
           setDimensionRefreshTrigger(prev => prev + 1);
+          
+          // Refresh the dimensions list modal if it's still open
+          if (showDimensionsListModal) {
+            console.log('[DASHBOARD] Refreshing dimensions list modal');
+          }
+          
           onRefreshData?.();
         }}
         reportId={currentReport?.id}

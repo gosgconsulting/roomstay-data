@@ -28,6 +28,7 @@ import {
   type DataSource as SyncDataSource,
   type SyncOptions 
 } from "@/lib/sync-utils";
+import { useCacheStatus } from "@/hooks/useCacheStatus";
 
 interface DataSource {
   id: string;

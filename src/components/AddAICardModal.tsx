@@ -323,17 +323,60 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     const fetchCustomMetrics = async () => {
       if (!accountId || !open) return;
 
-      // Fetch dimensions of type "number" or "formula" that could be custom metrics
-      const { data: customDims } = await supabase
+      console.log('[ADD-AI-CARD] Loading custom metrics for account:', accountId);
+
+      // Load account-scoped dimensions
+      const { data: accountDims } = await supabase
         .from("dimensions")
-        .select("name, type")
+        .select("name, type, scope")
         .eq("account_id", accountId)
+        .eq("scope", "account")
         .in("type", ["number", "formula"]);
 
-      if (customDims) {
-        const customNames = customDims
+      // Load custom dimensions (user-created)
+      const { data: customDims } = await supabase
+        .from("dimensions")
+        .select("name, type, scope")
+        .eq("scope", "custom")
+        .in("type", ["number", "formula"]);
+
+      // Load global dimensions
+      const { data: globalDims } = await supabase
+        .from("dimensions")
+        .select("name, type, scope")
+        .eq("scope", "global")
+        .in("type", ["number", "formula"]);
+
+      // Combine all dimensions with priority: account > custom > global
+      const allDims = [
+        ...(accountDims || []),
+        ...(customDims || []),
+        ...(globalDims || [])
+      ];
+
+      // Deduplicate by name, keeping highest priority (first occurrence)
+      const seenNames = new Set<string>();
+      const uniqueDims = allDims.filter(dim => {
+        if (seenNames.has(dim.name)) {
+          return false;
+        }
+        seenNames.add(dim.name);
+        return true;
+      });
+
+      if (uniqueDims.length > 0) {
+        const customNames = uniqueDims
           .map(d => d.name)
           .filter(name => !AVAILABLE_METRICS.includes(name) && !FORMULA_METRIC_NAMES.includes(name));
+        
+        console.log('[ADD-AI-CARD] Found custom metrics:', {
+          account: accountDims?.length || 0,
+          custom: customDims?.length || 0,
+          global: globalDims?.length || 0,
+          total: uniqueDims.length,
+          customNames
+        });
+        
         setCustomMetrics(customNames);
       }
     };

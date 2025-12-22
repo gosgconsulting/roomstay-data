@@ -90,24 +90,75 @@ export const ColumnMappingStep = forwardRef<ColumnMappingStepRef, ColumnMappingS
       setIsLoadingDimensions(true);
       if (!user) return;
 
-      if (!accountId) {
-        console.warn("No accountId provided, cannot load dimensions");
-        setDimensions([]);
-        return;
+      console.log('[COLUMN-MAPPING] Loading dimensions for user:', user.id, 'account:', accountId, 'report:', reportId);
+
+      // Load account-specific dimensions first (highest priority)
+      let accountData: Dimension[] = [];
+      if (accountId) {
+        const { data, error: accountError } = await supabase
+          .from("dimensions")
+          .select("*")
+          .eq("scope", "account")
+          .eq("account_id", accountId)
+          .order("created_at", { ascending: false });
+
+        if (accountError) throw accountError;
+        accountData = ((data || []) as any[]).map(d => ({
+          ...d,
+          conditions: Array.isArray(d.conditions) ? d.conditions : []
+        })) as Dimension[];
       }
 
-      // ONLY load account-scoped dimensions
-      // Global scope is removed - everything is account-based now
-      const { data, error } = await supabase
+      // Load custom dimensions for this user
+      let customData: Dimension[] = [];
+      const { data, error: customError } = await supabase
         .from("dimensions")
         .select("*")
-        .eq('scope', 'account')
-        .eq('account_id', accountId)
-        .order("name", { ascending: true });
+        .eq("user_id", user.id)
+        .eq("scope", "custom")
+        .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (customError) throw customError;
+      customData = ((data || []) as any[]).map(d => ({
+        ...d,
+        conditions: Array.isArray(d.conditions) ? d.conditions : []
+      })) as Dimension[];
 
-      setDimensions(data || []);
+      // Load global dimensions (lowest priority, fallback)
+      const { data: globalData, error: globalError } = await supabase
+        .from("dimensions")
+        .select("*")
+        .eq("scope", "global")
+        .order("created_at", { ascending: false });
+
+      if (globalError) throw globalError;
+
+      // Combine all dimensions with proper priority: account > custom > global
+      const allDimensions = [
+        ...accountData,
+        ...customData,
+        ...(globalData || [])
+      ] as Dimension[];
+
+      // Deduplicate by name, keeping highest priority (first occurrence)
+      const seenNames = new Set<string>();
+      const uniqueDimensions = allDimensions.filter(dim => {
+        if (seenNames.has(dim.name)) {
+          return false;
+        }
+        seenNames.add(dim.name);
+        return true;
+      });
+
+      console.log('[COLUMN-MAPPING] Loaded dimensions:', {
+        account: accountData.length,
+        custom: customData.length,
+        global: globalData?.length || 0,
+        total: uniqueDimensions.length,
+        names: uniqueDimensions.map(d => d.name)
+      });
+
+      setDimensions(uniqueDimensions);
     } catch (error) {
       console.error("Error loading dimensions:", error);
     } finally {
@@ -163,11 +214,37 @@ export const ColumnMappingStep = forwardRef<ColumnMappingStepRef, ColumnMappingS
     const safeExistingMappings = Array.isArray(existingMappings) ? existingMappings : [];
 
     // If we have existing mappings, validate them against account-scoped dimensions
-    // Clear any mappings that reference old global/custom dimensions
+    // Preserve user-modified mappings and only fix broken ones
     if (safeExistingMappings.length > 0) {
       const updatedMappings: ColumnMapping[] = headers.map((header, index) => {
         const existingMapping = safeExistingMappings.find(m => m.column === header);
         if (existingMapping) {
+          // Check if this is a user-modified mapping
+          const isUserModified = (existingMapping as any).user_modified === true;
+          
+          // If user-modified, validate but preserve the mapping
+          if (isUserModified) {
+            const isValid = isValidDimensionId(existingMapping.dimensionId);
+            if (isValid || existingMapping.dimensionId === "none") {
+              // Preserve user-modified mapping as-is, but ensure dimensionName is set
+              const preservedMapping = {
+                ...existingMapping,
+                // Ensure dimensionName is set if we have a valid dimensionId
+                dimensionName: existingMapping.dimensionName || 
+                  (existingMapping.dimensionId && existingMapping.dimensionId !== "none" 
+                    ? dimensions.find(d => d.id === existingMapping.dimensionId)?.name || null
+                    : null)
+              };
+              
+              console.log(`[COLUMN-MAPPING] Preserving user-modified mapping for column "${header}":`, preservedMapping);
+              return preservedMapping;
+            } else {
+              console.log(`[COLUMN-MAPPING] User-modified mapping for column "${header}" references invalid dimension, will reset`);
+              // Fall through to auto-detection logic
+            }
+          }
+          
+          // For non-user-modified mappings or broken user mappings, apply validation logic
           let dimensionId: string | null = "none";
           let dimensionName: string | null = null;
           
@@ -252,6 +329,9 @@ export const ColumnMappingStep = forwardRef<ColumnMappingStepRef, ColumnMappingS
         ...newMappings[index],
         dimensionId: "none",
         dimensionName: null,
+        // Clear any temporary fields
+        newDimensionName: undefined,
+        newDimensionType: undefined,
       };
     } else {
       // Set to existing dimension
@@ -263,7 +343,16 @@ export const ColumnMappingStep = forwardRef<ColumnMappingStepRef, ColumnMappingS
           dimensionName: dimension.name,
           // Set default date format for date dimensions
           dateFormat: dimension.type === 'date' ? (newMappings[index].dateFormat || 'yyyy-mm-dd') : undefined,
+          // Clear any temporary fields when selecting existing dimension
+          newDimensionName: undefined,
+          newDimensionType: undefined,
         };
+        
+        console.log(`[COLUMN-MAPPING] Updated dimension for column "${newMappings[index].column}":`, {
+          dimensionId: dimension.id,
+          dimensionName: dimension.name,
+          column: newMappings[index].column
+        });
       }
     }
     
@@ -307,6 +396,8 @@ export const ColumnMappingStep = forwardRef<ColumnMappingStepRef, ColumnMappingS
   };
 
   const handleSave = () => {
+    console.log('[COLUMN-MAPPING] Starting save validation for', mappings.length, 'mappings');
+    
     // Validate new dimension names
     const newDimensionMappings = mappings.filter(m => m.dimensionId === 'create_new');
     
@@ -335,6 +426,7 @@ export const ColumnMappingStep = forwardRef<ColumnMappingStepRef, ColumnMappingS
       }
     }
     
+    console.log('[COLUMN-MAPPING] Validation passed, saving mappings');
     onSave(mappings);
   };
 
@@ -345,7 +437,7 @@ export const ColumnMappingStep = forwardRef<ColumnMappingStepRef, ColumnMappingS
   }));
 
   return (
-    <div className="flex flex-col space-y-4">
+    <div className="flex flex-col space-y-4 w-full">
       <div className="border rounded-md overflow-hidden">
         <Table>
           <TableHeader>

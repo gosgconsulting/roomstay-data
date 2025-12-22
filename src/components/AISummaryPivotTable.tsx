@@ -887,114 +887,33 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       return [];
     }
 
-    // Compute safeMetrics inside useMemo to avoid dependency issues
-    const METRIC_ORDER = [
-      "Impressions",
-      "Impression share",
-      "Clicks",
-      "CTR",
-      "Conversions",
-      "Conversion rate",
-      "CPC",
-      "Cost",
-      "Revenue",
-      "ROAS",
-      "Cost of sale",
-      "Bookings",
-    ];
-    
-    const safeMetricsLocal = (selectedMetrics || []).slice().sort((a, b) => {
-      const aIndex = METRIC_ORDER.indexOf(a);
-      const bIndex = METRIC_ORDER.indexOf(b);
-      const aOrder = aIndex === -1 ? 999 : aIndex;
-      const bOrder = bIndex === -1 ? 999 : bIndex;
-      return aOrder - bOrder;
-    });
-
     const now = new Date();
     const sevenDaysAgo = subDays(now, 6); // Last 7 days including today
-    const dateRange = { start: sevenDaysAgo, end: now };
 
-    // Group data by day
-    const dayGroups: Record<string, any[]> = {};
-
-    // Helper to extract date from row
-    const getRowDate = (row: any): Date | null => {
-      const rowData = row.dimension_values || row;
-      let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
-      
-      if (!dateValue) {
-        for (const [key, val] of Object.entries(rowData)) {
-          if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-            dateValue = val;
-            break;
-          }
-        }
-      }
-      
-      return parseDate(dateValue);
-    };
-
-    // Collect all rows from all reports within the last 7 days
-    for (const reportId of reportIds) {
-      const reportData = rawSourceData[reportId];
-      if (!reportData) continue;
-
-      reportData.rows.forEach((row: any) => {
-        const rowDate = getRowDate(row);
-        if (!rowDate) return;
-        
-        if (isWithinInterval(rowDate, dateRange)) {
-          const dayKey = format(rowDate, 'yyyy-MM-dd');
-          if (!dayGroups[dayKey]) {
-            dayGroups[dayKey] = [];
-          }
-          dayGroups[dayKey].push(row);
-        }
-      });
-    }
-
-    // Aggregate metrics for each day
+    // Generate all 7 days and aggregate data for each
     const last7DaysRows: DateBreakdownRow[] = [];
     
-    // Generate all 7 days (even if no data) to show complete timeline
     for (let i = 6; i >= 0; i--) {
       const day = subDays(now, i);
-      const dayKey = format(day, 'yyyy-MM-dd');
-      const dayRows = dayGroups[dayKey] || [];
+      const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
+      const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
+      const dateRange = { start: dayStart, end: dayEnd };
 
-      // Aggregate metrics for this day across all reports
-      const dayMetrics: Record<string, number> = {};
-      const allMetricsToTrack = new Set([...safeMetricsLocal, ...BASE_METRICS]);
-      allMetricsToTrack.forEach((m) => (dayMetrics[m] = 0));
-
-      dayRows.forEach((row: any) => {
-        const rowData = row.dimension_values || row;
-        allMetricsToTrack.forEach((metric) => {
-          if (FORMULA_METRICS.includes(metric)) return;
-          
-          let value = rowData[metric];
-          if (value !== undefined && value !== null) {
-            const numValue = parseFloat(String(value).replace(/[^0-9.-]/g, ""));
-            if (!isNaN(numValue)) {
-              dayMetrics[metric] += numValue;
-            }
-          }
-        });
-      });
-
-      // Calculate formula metrics
-      const formulaValues = calculateFormulaMetrics(dayMetrics);
-      safeMetricsLocal.forEach(metric => {
-        if (FORMULA_METRICS.includes(metric)) {
-          dayMetrics[metric] = formulaValues[metric] || 0;
-        }
-      });
+      // Aggregate metrics for this day across all reports using the same logic as other breakdowns
+      const dayMetrics = aggregateMetrics(
+        // Flatten all rows from all reports
+        reportIds.flatMap(reportId => {
+          const reportData = rawSourceData[reportId];
+          return reportData?.rows || [];
+        }),
+        selectedMetrics,
+        dateRange
+      );
 
       last7DaysRows.push({
         dateGroup: format(day, 'MMM d, yyyy'),
-        dateRangeStart: dayKey,
-        dateRangeEnd: dayKey,
+        dateRangeStart: format(day, 'yyyy-MM-dd'),
+        dateRangeEnd: format(day, 'yyyy-MM-dd'),
         metrics: dayMetrics,
       });
     }

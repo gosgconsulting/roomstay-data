@@ -25,6 +25,8 @@ import { UnifiedDataSourceModal } from "./UnifiedDataSourceModal";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { syncDataSource } from "@/lib/sync-utils";
 import { SyncModeModal } from "./SyncModeModal";
+import { useInvalidateSourceData } from "@/hooks/dataSources/useSourceData";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface DataSource {
   id: string;
@@ -59,6 +61,8 @@ export const DataSourcesListModal = ({
   onDataSync,
   onRefreshData
 }: DataSourcesListModalProps) => {
+  const invalidateCache = useInvalidateSourceData();
+  const queryClient = useQueryClient();
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
@@ -238,12 +242,22 @@ export const DataSourcesListModal = ({
         });
         
         // Update last_synced_at timestamp
+        const updatedAt = new Date().toISOString();
         await supabase
           .from('data_sources')
           .update({ 
-            last_synced_at: new Date().toISOString()
+            last_synced_at: updatedAt,
+            updated_at: updatedAt
           })
           .eq('id', dataSource.id);
+        
+        // Invalidate cache for this data source
+        console.log('[SYNC] Invalidating cache after successful sync');
+        invalidateCache.invalidate(dataSource.id, dataSource.report_id || reportId, updatedAt);
+        
+        // Also invalidate AI Summary cache to ensure Last 7 Days table updates
+        queryClient.invalidateQueries({ queryKey: ['ai-summary'] });
+        console.log('[SYNC] Invalidated AI Summary cache for Last 7 Days refresh');
         
         // Refresh the list
         await loadDataSources();

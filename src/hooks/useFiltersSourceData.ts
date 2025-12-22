@@ -47,7 +47,7 @@ export function useFiltersSourceData(
       return data as unknown as DataSource | null;
     },
     enabled: enabled && !!reportId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 24 * 60 * 60 * 1000, // 24 hours - keep data fresh until manual sync
   });
 
   const dataSource = dataSourceQuery.data;
@@ -72,8 +72,8 @@ export function useFiltersSourceData(
       return fetchSourceData(dataSource, user.id, accountId);
     },
     enabled: enabled && !!dataSource && !!dataSource.id,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 15 * 60 * 1000,
+    staleTime: 24 * 60 * 60 * 1000, // 24 hours - keep data fresh until manual sync
+    gcTime: 7 * 24 * 60 * 60 * 1000, // 7 days - keep in memory for a week
     retry: 2,
   });
 

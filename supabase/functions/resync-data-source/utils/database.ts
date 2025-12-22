@@ -158,19 +158,26 @@ export const fixColumnMappings = async (supabase: any, dataSourceId: string): Pr
   const fixedMappings = mappings.map((mapping: any) => {
     const fixed = { ...mapping };
     
-    // Fix create_new mappings that weren't properly resolved
-    if (mapping.dimensionId === 'create_new') {
-      console.log(`[RESYNC] Fixing create_new mapping for column: ${mapping.column}`);
-      fixed.dimensionId = 'none'; // Will be auto-detected during sync
-      fixed.newDimensionName = undefined;
-      fixed.newDimensionType = undefined;
-      hasChanges = true;
-    }
+    // Don't fix user-modified mappings unless they're truly broken
+    const isUserModified = mapping.user_modified === true;
     
-    // Fix null dimensionId
-    if (mapping.dimensionId === null) {
-      fixed.dimensionId = 'none';
-      hasChanges = true;
+    if (!isUserModified) {
+      // Fix create_new mappings that weren't properly resolved
+      if (mapping.dimensionId === 'create_new') {
+        console.log(`[RESYNC] Fixing create_new mapping for column: ${mapping.column}`);
+        fixed.dimensionId = 'none'; // Will be auto-detected during sync
+        fixed.newDimensionName = undefined;
+        fixed.newDimensionType = undefined;
+        hasChanges = true;
+      }
+      
+      // Fix null dimensionId
+      if (mapping.dimensionId === null) {
+        fixed.dimensionId = 'none';
+        hasChanges = true;
+      }
+    } else {
+      console.log(`[RESYNC] Preserving user-modified mapping for column: ${mapping.column}`);
     }
     
     return fixed;

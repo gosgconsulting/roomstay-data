@@ -67,9 +67,28 @@ export async function resyncColumnMappings(
 
     console.log(`[RESYNC] Found ${dimensionsMap.size} account-scoped dimensions`);
 
-    // Update column mappings
+    // Update column mappings with preservation logic
     const currentMappings = (dataSource.column_mappings as any || []) as ColumnMapping[];
     const updatedMappings: ColumnMapping[] = currentMappings.map((mapping) => {
+      // Check if this is a user-modified mapping that should be preserved
+      const isUserModified = (mapping as any).user_modified === true;
+      
+      // If user-modified, validate the dimension still exists but preserve the mapping
+      if (isUserModified && mapping.dimensionId && mapping.dimensionId !== "none") {
+        // Check if the dimension still exists by ID
+        const dimensionExists = Array.from(dimensionsMap.values()).some(dim => dim.id === mapping.dimensionId);
+        
+        if (dimensionExists) {
+          // Preserve user-modified mapping as-is
+          console.log(`[RESYNC] Preserved user-modified mapping for column "${mapping.column}" -> dimension ID "${mapping.dimensionId}"`);
+          return mapping;
+        } else {
+          console.log(`[RESYNC] User-modified mapping for column "${mapping.column}" references deleted dimension "${mapping.dimensionId}", will reset`);
+          // Fall through to auto-detection logic below
+        }
+      }
+      
+      // For non-user-modified mappings or broken user mappings, apply auto-detection
       // If dimensionName exists, use it to find the correct dimension ID
       if (mapping.dimensionName) {
         const normalizedName = mapping.dimensionName.toLowerCase();

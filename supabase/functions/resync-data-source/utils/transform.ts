@@ -258,6 +258,9 @@ export const updateColumnMappings = async (
   }
 
   const updatedMappings = mappings.map((mapping: ColumnMapping) => {
+    // Don't update user-modified mappings unless they need dimension creation
+    const isUserModified = (mapping as any).user_modified === true;
+    
     if (mapping.column in dimensionIdMap && (mapping.dimensionId === 'create_new' || mapping.newDimensionName)) {
       const dimensionId = dimensionIdMap[mapping.column];
       const dimensionName = dimensionNameMap[dimensionId] || null;
@@ -268,6 +271,7 @@ export const updateColumnMappings = async (
         dimensionName: dimensionName, // Store name for stable mapping
         newDimensionName: undefined, // Clear temporary fields
         newDimensionType: undefined,
+        user_modified: isUserModified, // Preserve user_modified flag
       };
     }
     return mapping;

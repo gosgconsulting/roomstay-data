@@ -64,7 +64,8 @@ export const EditMappingModal = ({
   useEffect(() => {
     if (open && dataSource) {
       fetchAccountId();
-      resyncMappingsIfNeeded();
+      // Only resync if mappings are actually broken - removed aggressive auto-resync
+      // resyncMappingsIfNeeded();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, dataSource, propAccountId]);
@@ -156,6 +157,8 @@ export const EditMappingModal = ({
   const handleSaveMappings = async (mappings: any[]) => {
     if (!dataSource) return;
 
+    console.log('[EDIT-MAPPING] Starting save process for:', dataSource.name);
+
     setIsLoading(true);
     
     try {
@@ -171,46 +174,83 @@ export const EditMappingModal = ({
       if (dsError) throw dsError;
       const reportId = dsData?.report_id;
 
+      console.log('[EDIT-MAPPING] Found report ID:', reportId);
+
       // Create any new dimensions first
       const updatedMappings = [...mappings];
       
       for (let i = 0; i < updatedMappings.length; i++) {
         const mapping = updatedMappings[i];
         if (mapping.dimensionId === 'create_new' && mapping.newDimensionName) {
+          console.log('[EDIT-MAPPING] Creating new dimension:', {
+            name: mapping.newDimensionName,
+            type: mapping.newDimensionType
+          });
+          
           // Create new dimension
+          const dimensionData = {
+            user_id: user.id,
+            report_id: reportId,
+            data_source_id: dataSource.id,
+            name: mapping.newDimensionName,
+            type: mapping.newDimensionType || 'text',
+            scope: 'custom', // Mark as custom dimension
+          };
+          
+          console.log('[EDIT-MAPPING] Creating dimension with data:', dimensionData);
+          
           const { data: newDim, error: dimError } = await supabase
             .from('dimensions')
-            .insert({
-              user_id: user.id,
-              report_id: reportId,
-              data_source_id: dataSource.id,
-              name: mapping.newDimensionName,
-              type: mapping.newDimensionType || 'text',
-            })
+            .insert(dimensionData)
             .select()
             .maybeSingle();
           
           if (dimError) throw dimError;
           
-          // Update the mapping with the new dimension ID
+          console.log('[EDIT-MAPPING] Created new dimension:', newDim);
+          
+          // Update the mapping with the new dimension ID and name
           if (newDim) {
-            updatedMappings[i] = {
+            const updatedMapping = {
               ...mapping,
               dimensionId: newDim.id,
+              dimensionName: newDim.name,
+              // Clear temporary fields
+              newDimensionName: undefined,
+              newDimensionType: undefined,
             };
+            
+            console.log('[EDIT-MAPPING] Updated mapping for column:', mapping.column, updatedMapping);
+            updatedMappings[i] = updatedMapping;
           }
         }
       }
 
+      // Mark all mappings as user-modified to prevent auto-resync from overwriting them
+      const userModifiedMappings = updatedMappings.map(mapping => ({
+        ...mapping,
+        user_modified: true
+      }));
+
       // Update data source with new mappings
+      console.log('[EDIT-MAPPING] Updating data source with mappings:', {
+        dataSourceId: dataSource.id,
+        updatedMappings: userModifiedMappings
+      });
+      
       const { error: updateError } = await supabase
         .from('data_sources')
         .update({
-          column_mappings: updatedMappings,
+          column_mappings: userModifiedMappings,
         })
         .eq('id', dataSource.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('[EDIT-MAPPING] Database update error:', updateError);
+        throw updateError;
+      }
+
+      console.log('[EDIT-MAPPING] Successfully updated data source mappings');
 
       toast({
         title: "Mappings updated",
@@ -234,7 +274,7 @@ export const EditMappingModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px] max-h-[90vh] flex flex-col p-0">
+      <DialogContent className="sm:max-w-[900px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5 text-primary" />
@@ -245,24 +285,26 @@ export const EditMappingModal = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-4 min-h-0">
+        <div className="flex-1 overflow-y-auto px-6 min-h-0">
           {isFetchingHeaders ? (
             <div className="text-center py-8 text-muted-foreground">
               Loading headers...
             </div>
           ) : headers.length > 0 ? (
-            <ColumnMappingStep
-              ref={mappingStepRef}
-              headers={headers}
-              sampleDataRows={sampleDataRows}
-              onSave={handleSaveMappings}
-              onBack={() => onOpenChange(false)}
-              isLoading={isLoading}
-              existingMappings={dataSource?.column_mappings || []}
-              accountId={accountId}
-              reportId={dataSource?.report_id || undefined}
-              hideButtons={true}
-            />
+            <div className="pb-4">
+              <ColumnMappingStep
+                ref={mappingStepRef}
+                headers={headers}
+                sampleDataRows={sampleDataRows}
+                onSave={handleSaveMappings}
+                onBack={() => onOpenChange(false)}
+                isLoading={isLoading}
+                existingMappings={dataSource?.column_mappings || []}
+                accountId={accountId}
+                reportId={dataSource?.report_id || undefined}
+                hideButtons={true}
+              />
+            </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               No headers found
@@ -271,7 +313,7 @@ export const EditMappingModal = ({
         </div>
 
         {!isFetchingHeaders && headers.length > 0 && (
-          <div className="flex justify-between items-center px-6 py-4 flex-shrink-0 border-t bg-background sticky bottom-0">
+          <div className="flex justify-between items-center px-6 py-4 flex-shrink-0 border-t bg-background">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Back
             </Button>

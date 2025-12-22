@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { extractSpreadsheetId } from '@/lib/sync-utils';
 
@@ -26,13 +26,26 @@ export function useDataSourceHeaders(dataSource: DataSource | null, enabled: boo
   const [data, setData] = useState<HeadersData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const lastFetchedRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (!enabled || !dataSource) {
+  // Memoize the data source key to prevent unnecessary re-fetches
+  const dataSourceKey = useMemo(() => {
+    if (!dataSource) return null;
+    return `${dataSource.id}-${dataSource.source_type}-${dataSource.header_row}-${dataSource.spreadsheet_id || dataSource.csv_url}`;
+  }, [dataSource?.id, dataSource?.source_type, dataSource?.header_row, dataSource?.spreadsheet_id, dataSource?.csv_url]);
+
+  // Memoized fetch function
+  const fetchHeaders = useCallback(async () => {
+    if (!dataSource || !enabled) return;
+    
+    // Prevent duplicate fetches for the same data source
+    if (lastFetchedRef.current === dataSourceKey) {
+      console.log('[HEADERS] Skipping duplicate fetch for:', dataSourceKey);
       return;
     }
 
-    const fetchHeaders = async () => {
+    console.log('[HEADERS] Starting fetch for:', dataSourceKey);
+    lastFetchedRef.current = dataSourceKey;
       setIsLoading(true);
       setError(null);
 
@@ -114,16 +127,24 @@ export function useDataSourceHeaders(dataSource: DataSource | null, enabled: boo
       } catch (err) {
         console.error('Error fetching headers:', err);
         setError(err instanceof Error ? err : new Error(String(err)));
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [dataSource, enabled, dataSourceKey]);
+
+  useEffect(() => {
+    if (!enabled || !dataSource || !dataSourceKey) {
+      return;
+    }
 
     fetchHeaders();
-  }, [dataSource, enabled]);
+  }, [dataSource, enabled, dataSourceKey, fetchHeaders]);
 
-  const refetch = async () => {
+  const refetch = useCallback(async () => {
     if (!dataSource) return;
+    
+    // Reset the last fetched key to force a new fetch
+    lastFetchedRef.current = null;
     
     setIsLoading(true);
     setError(null);
@@ -209,7 +230,7 @@ export function useDataSourceHeaders(dataSource: DataSource | null, enabled: boo
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [dataSource]);
 
   return { data, isLoading, error, refetch };
 }

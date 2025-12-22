@@ -34,6 +34,15 @@ export async function fetchSourceData(
   userId: string,
   accountId?: string | null
 ): Promise<SourceDataResult> {
+  console.log('[CACHE] Fetching source data from origin:', {
+    dataSourceId: dataSource.id,
+    name: dataSource.name,
+    sourceType: dataSource.source_type || 'google_sheets',
+    lastSynced: dataSource.last_synced_at,
+    updatedAt: dataSource.updated_at
+  });
+  
+  const startTime = performance.now();
   const sourceType = dataSource.source_type || 'google_sheets';
   let headers: string[] = [];
   let rows: any[][] = [];
@@ -105,6 +114,16 @@ export async function fetchSourceData(
     dimensions
   );
 
+  const endTime = performance.now();
+  const duration = Math.round(endTime - startTime);
+  
+  console.log('[CACHE] Source data fetch completed:', {
+    dataSourceId: dataSource.id,
+    duration: `${duration}ms`,
+    rowCount: transformedRows.length,
+    columnCount: headers.length
+  });
+
   return {
     headers,
     rows,
@@ -125,11 +144,11 @@ export function useSourceData(
   const queryClient = useQueryClient();
   const {
     enabled = true,
-    staleTime = 5 * 60 * 1000, // 5 minutes
-    gcTime = 15 * 60 * 1000, // 15 minutes
+    staleTime = 24 * 60 * 60 * 1000, // 24 hours - keep data fresh until manual sync
+    gcTime = 7 * 24 * 60 * 60 * 1000, // 7 days - keep in memory for a week
   } = options;
 
-  return useQuery({
+  const queryResult = useQuery({
     queryKey: dataSourceKeys.sourceData(
       dataSource?.id || '',
       dataSource?.report_id || '',
@@ -152,6 +171,24 @@ export function useSourceData(
     gcTime,
     retry: 2,
   });
+
+  // Log cache status for debugging
+  if (dataSource?.id) {
+    const cacheStatus = queryResult.isLoading ? 'loading' : 
+                       queryResult.isFetching ? 'fetching' : 
+                       queryResult.data ? 'cached' : 'no-data';
+    
+    if (cacheStatus !== 'loading') {
+      console.log('[CACHE] Source data query status:', {
+        dataSourceId: dataSource.id,
+        status: cacheStatus,
+        isStale: queryResult.isStale,
+        dataAge: queryResult.dataUpdatedAt ? `${Math.round((Date.now() - queryResult.dataUpdatedAt) / 1000)}s` : 'unknown'
+      });
+    }
+  }
+
+  return queryResult;
 }
 
 /**
@@ -161,15 +198,49 @@ export function useInvalidateSourceData() {
   const queryClient = useQueryClient();
   
   return {
-    invalidate: (dataSourceId: string, reportId: string) => {
+    invalidate: (dataSourceId: string, reportId: string, updatedAt?: string) => {
+      console.log('[CACHE] Invalidating source data cache:', { dataSourceId, reportId, updatedAt });
+      
+      // Invalidate specific data source with all possible updated_at values
       queryClient.invalidateQueries({
         queryKey: dataSourceKeys.sourceData(dataSourceId, reportId),
       });
+      
+      // Also invalidate any related queries
+      queryClient.invalidateQueries({
+        queryKey: ["dataSource", "forReport", reportId]
+      });
+      
+      console.log('[CACHE] Cache invalidation completed for specific data source');
     },
     invalidateAll: () => {
+      console.log('[CACHE] Invalidating all source data cache');
+      
       queryClient.invalidateQueries({
         queryKey: dataSourceKeys.all,
       });
+      
+      // Also invalidate data source queries
+      queryClient.invalidateQueries({
+        queryKey: ["dataSource"]
+      });
+      
+      console.log('[CACHE] All cache invalidation completed');
     },
+    clearAll: () => {
+      console.log('[CACHE] Clearing all source data cache');
+      
+      // Remove all cached source data
+      queryClient.removeQueries({
+        queryKey: dataSourceKeys.all
+      });
+      
+      // Remove all data source queries
+      queryClient.removeQueries({
+        queryKey: ["dataSource"]
+      });
+      
+      console.log('[CACHE] All source data cache cleared');
+    }
   };
 }

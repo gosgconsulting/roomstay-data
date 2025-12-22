@@ -67,6 +67,9 @@ export const DimensionsListModal = ({
   const [visibleDimensions, setVisibleDimensions] = useState<Set<string> | null>(null); // null = not loaded yet
   const [initialVisibleDimensions, setInitialVisibleDimensions] = useState<Set<string> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [deletingDimensionId, setDeletingDimensionId] = useState<string | null>(null);
+  const [editingDimensionId, setEditingDimensionId] = useState<string | null>(null);
+  const [isAddingDimension, setIsAddingDimension] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -459,9 +462,11 @@ export const DimensionsListModal = ({
   };
 
   const handleDelete = async (id: string, name: string, dimension: Dimension) => {
+    console.log('[DIMENSIONS] handleDelete called with:', { id, name, dimension });
+    
     // Prevent deletion of system dimensions
     if (isSystemDimension(dimension)) {
-      console.log('[testing] Attempted to delete system dimension:', name);
+      console.log('[DIMENSIONS] Attempted to delete system dimension:', name);
       toast({
         title: "Cannot delete system dimension",
         description: `"${name}" is a default dimension and cannot be deleted`,
@@ -470,31 +475,62 @@ export const DimensionsListModal = ({
       return;
     }
 
+    // Prevent multiple simultaneous deletions
+    if (deletingDimensionId) {
+      console.log('[DIMENSIONS] Delete already in progress for:', deletingDimensionId);
+      return;
+    }
+
+    // Add confirmation dialog
+    if (!window.confirm(`Are you sure you want to delete the dimension "${name}"? This action cannot be undone.`)) {
+      console.log('[DIMENSIONS] Delete cancelled by user');
+      return;
+    }
+
     try {
-      console.log('[testing] Deleting dimension:', name);
+      setDeletingDimensionId(id);
+      console.log('[DIMENSIONS] Deleting dimension:', name);
+      
       const { error } = await supabase
         .from("dimensions")
         .delete()
         .eq("id", id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('[DIMENSIONS] Delete error:', error);
+        throw error;
+      }
 
+      console.log('[DIMENSIONS] Dimension deleted successfully, updating state');
       // Remove from appropriate list
-      setTextDimensions(textDimensions.filter((d) => d.id !== id));
-      setValueDimensions(valueDimensions.filter((d) => d.id !== id));
-      setVlookupDimensions(vlookupDimensions.filter((d) => d.id !== id));
-      setAllDimensions(allDimensions.filter((d) => d.id !== id));
+      setTextDimensions(prev => prev.filter((d) => d.id !== id));
+      setValueDimensions(prev => prev.filter((d) => d.id !== id));
+      setVlookupDimensions(prev => prev.filter((d) => d.id !== id));
+      setAllDimensions(prev => prev.filter((d) => d.id !== id));
+      
+      // Also remove from visible dimensions if present
+      if (visibleDimensions && visibleDimensions.has(id)) {
+        setVisibleDimensions(prev => {
+          if (!prev) return prev;
+          const newSet = new Set(prev);
+          newSet.delete(id);
+          return newSet;
+        });
+      }
+      
       toast({
         title: "Dimension deleted",
         description: `Deleted "${name}"`,
       });
     } catch (error) {
-      console.error("Error deleting dimension:", error);
+      console.error("[DIMENSIONS] Error deleting dimension:", error);
       toast({
         title: "Error",
-        description: "Failed to delete dimension",
+        description: error instanceof Error ? error.message : "Failed to delete dimension",
         variant: "destructive",
       });
+    } finally {
+      setDeletingDimensionId(null);
     }
   };
 
@@ -530,14 +566,14 @@ export const DimensionsListModal = ({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8"
+                        className="h-8 w-8 transition-colors"
                         onClick={() => toggleDimensionVisibility(dimension.id)}
                         title={visibleDimensions === null || visibleDimensions.has(dimension.id) ? "Deactivate for report" : "Activate for report"}
                       >
                         {visibleDimensions === null || visibleDimensions.has(dimension.id) ? (
-                          <Eye className="h-4 w-4 text-primary" />
+                          <Eye className="h-4 w-4 text-primary hover:text-primary/80" />
                         ) : (
-                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                          <EyeOff className="h-4 w-4 text-muted-foreground hover:text-foreground" />
                         )}
                       </Button>
                     )}
@@ -555,21 +591,38 @@ export const DimensionsListModal = ({
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
-                      onClick={() => onEdit?.(dimension)}
-                      title="Edit dimension"
+                      onClick={() => {
+                        console.log('[DIMENSIONS] Edit button clicked for dimension:', dimension.name, dimension);
+                        console.log('[DIMENSIONS] onEdit prop available:', !!onEdit);
+                        setEditingDimensionId(dimension.id);
+                        if (onEdit) {
+                          onEdit(dimension);
+                          // Clear the editing state after a delay to show feedback
+                          setTimeout(() => setEditingDimensionId(null), 1000);
+                        } else {
+                          console.error('[DIMENSIONS] onEdit prop is missing!');
+                          setEditingDimensionId(null);
+                        }
+                      }}
+                      disabled={editingDimensionId === dimension.id}
+                      title={editingDimensionId === dimension.id ? "Opening editor..." : "Edit dimension"}
                       data-testid="edit-button"
                     >
-                      <Pencil className="h-4 w-4" data-testid="edit-icon" />
+                      <Pencil className={`h-4 w-4 ${editingDimensionId === dimension.id ? 'animate-pulse' : ''}`} data-testid="edit-icon" />
                     </Button>
                     {!isSystemDimension(dimension) && (
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => handleDelete(dimension.id, dimension.name, dimension)}
-                        title="Delete dimension"
+                        onClick={() => {
+                          console.log('[DIMENSIONS] Delete button clicked for dimension:', dimension.name, dimension);
+                          handleDelete(dimension.id, dimension.name, dimension);
+                        }}
+                        disabled={deletingDimensionId === dimension.id}
+                        title={deletingDimensionId === dimension.id ? "Deleting..." : "Delete dimension"}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className={`h-4 w-4 ${deletingDimensionId === dimension.id ? 'animate-pulse' : ''}`} />
                       </Button>
                     )}
                     {isSystemDimension(dimension) && (
@@ -658,9 +711,45 @@ export const DimensionsListModal = ({
           )}
           
           {/* Add Dimension button */}
-          <Button onClick={onAddNew} className="w-full gap-2" variant={reportId && hasUnsavedChanges() ? "secondary" : "default"}>
-            <Plus className="h-4 w-4" />
-            ADD A DIMENSION
+          <Button 
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              alert('ADD DIMENSION BUTTON CLICKED!'); // Simple test
+              console.log('[DIMENSIONS] Add dimension button clicked - DIRECT TEST');
+              console.log('[DIMENSIONS] onAddNew prop:', onAddNew);
+              console.log('[DIMENSIONS] isAddingDimension:', isAddingDimension);
+              
+              if (!onAddNew) {
+                console.error('[DIMENSIONS] onAddNew prop is missing!');
+                alert('onAddNew prop is missing!');
+                return;
+              }
+              
+              setIsAddingDimension(true);
+              console.log('[DIMENSIONS] Calling onAddNew...');
+              
+              try {
+                onAddNew();
+                console.log('[DIMENSIONS] onAddNew called successfully');
+              } catch (error) {
+                console.error('[DIMENSIONS] Error calling onAddNew:', error);
+                alert('Error calling onAddNew: ' + error);
+              }
+              
+              // Clear the adding state after a delay
+              setTimeout(() => {
+                console.log('[DIMENSIONS] Clearing isAddingDimension state');
+                setIsAddingDimension(false);
+              }, 1500);
+            }} 
+            disabled={isAddingDimension}
+            className="w-full gap-2" 
+            variant={reportId && hasUnsavedChanges() ? "secondary" : "default"}
+            type="button"
+          >
+            <Plus className={`h-4 w-4 ${isAddingDimension ? 'animate-pulse' : ''}`} />
+            {isAddingDimension ? "OPENING..." : "ADD A DIMENSION"}
           </Button>
         </div>
       </DialogContent>
