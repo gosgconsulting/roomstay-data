@@ -707,26 +707,60 @@ export function usePerformanceTableFilters({
     };
 
     const computeFormulasForRow = (row: TableRow) => {
-      dimensions.forEach(dim => {
-        // Compute formula for main data
-        const result = computeFormulaForData(row.data, dim);
-        if (result !== null) {
-          row.data[dim.name] = result;
-        }
-        
-        // Also compute formula for compareData if it exists
-        if (row.compareData) {
-          const compareResult = computeFormulaForData(row.compareData, dim);
-          if (compareResult !== null) {
-            row.compareData[dim.name] = compareResult;
-          }
-        }
-      });
-
-      // Recurse into children
+      // First, compute formulas for children so we can sum them for parent rows
       if (row.children && row.children.length > 0) {
         row.children.forEach(child => computeFormulasForRow(child));
       }
+
+      // For leaf rows, compute formulas directly
+      const isLeaf = !row.children || row.children.length === 0;
+      if (isLeaf) {
+        dimensions.forEach(dim => {
+          const result = computeFormulaForData(row.data, dim);
+          if (result !== null) {
+            row.data[dim.name] = result;
+          }
+          if (row.compareData) {
+            const compareResult = computeFormulaForData(row.compareData, dim);
+            if (compareResult !== null) {
+              row.compareData[dim.name] = compareResult;
+            }
+          }
+        });
+        return;
+      }
+
+      // For parent/group rows, sum children's formula values to avoid non-additive errors
+      dimensions.forEach(dim => {
+        const isFormulaDim = !!dim.formula || (dim.formula_condition_pairs && dim.formula_condition_pairs.length > 0);
+        if (isFormulaDim) {
+          let sum = 0;
+          row.children!.forEach(child => {
+            const value = child.data?.[dim.name];
+            if (value !== undefined && value !== null) {
+              const numValue = parseFloat(String(value));
+              if (!isNaN(numValue)) sum += numValue;
+            }
+          });
+          row.data[dim.name] = sum;
+
+          // Sum compareData for comparison metrics
+          if (row.compareData) {
+            let compareSum = 0;
+            row.children!.forEach(child => {
+              const value = child.compareData?.[dim.name];
+              if (value !== undefined && value !== null) {
+                const numValue = parseFloat(String(value));
+                if (!isNaN(numValue)) compareSum += numValue;
+              }
+            });
+            row.compareData[dim.name] = compareSum;
+          }
+        } else {
+          // Non-formula dims remain aggregated as implemented earlier
+          // (numeric/currency/percentage aggregation is already done when building hierarchy)
+        }
+      });
     };
 
     // Apply formula computation to the full hierarchy
