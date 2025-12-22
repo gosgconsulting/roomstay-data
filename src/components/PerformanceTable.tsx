@@ -1,243 +1,653 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Settings, Download, Eye, EyeOff, RotateCcw } from 'lucide-react';
-import { usePerformanceTableData } from '@/hooks/performanceTable/usePerformanceTableData';
-import { usePerformanceTableDimensions } from '@/hooks/performanceTable/usePerformanceTableDimensions';
-import { usePerformanceTableViews } from '@/hooks/performanceTable/usePerformanceTableViews';
-import { usePerformanceTableFilters } from '@/hooks/performanceTable/usePerformanceTableFilters';
-import { TableHeader } from './PerformanceTable/TableHeader';
-import { TableBody } from './PerformanceTable/TableBody';
-import { TableSkeleton } from './PerformanceTable/TableSkeleton';
-import { ColumnVisibilitySheet } from './PerformanceTable/ColumnVisibilitySheet';
-import { PerformanceSettingsModal } from './PerformanceSettingsModal';
-import { toast } from 'sonner';
-import type { FilterState } from './FiltersBar';
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "@/hooks/use-toast";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { format } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
+import { FilterState } from "./FiltersBar";
+import { ColumnFilterModal } from "./ColumnFilterModal";
+import { TableHeader } from "./PerformanceTable/TableHeader";
+import { TableBody } from "./PerformanceTable/TableBody";
+import { TableSkeleton } from "./PerformanceTable/TableSkeleton";
+import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
+import { usePerformanceTableViews } from "@/hooks/performanceTable/usePerformanceTableViews";
+import { usePerformanceTableColumns } from "@/hooks/performanceTable/usePerformanceTableColumns";
+import { usePerformanceTableData } from "@/hooks/performanceTable/usePerformanceTableData";
+import { usePerformanceTableFilters } from "@/hooks/performanceTable/usePerformanceTableFilters";
+import { checkDataSources } from "@/lib/performanceTable/dataSourceUtils";
+import PerformanceSettingsModal from "./PerformanceSettingsModal";
 
 interface PerformanceTableProps {
-  reportId: string;
-  className?: string;
-  // Optional props that may be passed but aren't used in this simplified version
-  filters?: FilterState;
+  reportId: string | null;
+  reportIds?: string[];
+  filters: FilterState;
   isSharedView?: boolean;
   accountId?: string;
   visibilityRefreshTrigger?: number;
-  isEditMode?: boolean;
   onLoadingComplete?: () => void;
-  // For consolidated views
-  reportIds?: string[];
-  onFiltersChange?: (filters: any) => void;
+  onFiltersChange?: (filters: FilterState) => void;
+  isEditMode?: boolean;
 }
 
-export const PerformanceTable: React.FC<PerformanceTableProps> = ({ 
-  reportId, 
-  className = '',
-  // Accept but ignore these props for now to maintain compatibility
+export const PerformanceTable = ({
+  reportId,
+  reportIds,
   filters,
   isSharedView = false,
   accountId,
   visibilityRefreshTrigger,
-  isEditMode = false,
   onLoadingComplete,
-  reportIds,
   onFiltersChange,
-}) => {
-  const [showSettings, setShowSettings] = useState(false);
-  const [showColumnVisibility, setShowColumnVisibility] = useState(false);
-
-  // Use stable filters to prevent unnecessary refetches
-  const filtersData = usePerformanceTableFilters(reportId);
+  isEditMode = false,
+}: PerformanceTableProps) => {
+  // Modal states
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [selectedKPI, setSelectedKPI] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   
-  // Create mock view data for now
-  const mockCurrentView = {
-    group_by_dimensions: [],
-    breakdown_by_dimensions: [],
-    then_by_dimensions: [],
-    visible_dimensions: [],
-  };
+  // Date granularity state
+  const [activeDateTab, setActiveDateTab] = useState<'day' | 'week' | 'month' | 'year'>('day');
+  const [dateOrder, setDateOrder] = useState<'asc' | 'desc'>('desc');
+  
+  // Tab editing state
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
+  const [editingTabName, setEditingTabName] = useState("");
+  const [accountName, setAccountName] = useState<string | undefined>(undefined);
+  // NEW: selector options configured via view settings
+  const [selectorDimensions, setSelectorDimensions] = useState<string[]>([]);
 
-  // Create mock dimensions data
-  const mockDimensions: any[] = [];
+  // Data source state
+  const [hasDataSources, setHasDataSources] = useState<boolean>(false);
+  const [hasCSVSource, setHasCSVSource] = useState<boolean>(false);
 
-  // Memoize query parameters to prevent unnecessary refetches
-  const queryParams = useMemo(() => ({
+  // Load account name when accountId changes
+  useEffect(() => {
+    const loadAccountName = async () => {
+      if (!accountId) {
+        setAccountName(undefined);
+        return;
+      }
+      
+      try {
+        const { data, error } = await supabase
+          .from('accounts')
+          .select('name')
+          .eq('id', accountId)
+          .single();
+        
+        if (!error && data) {
+          setAccountName(data.name);
+        }
+      } catch (error) {
+        console.error('Error loading account name:', error);
+      }
+    };
+    
+    loadAccountName();
+  }, [accountId]);
+
+  // Dimension selection state
+  const [groupByDimensions, setGroupByDimensions] = useState<string[]>([]);
+  const [breakdownByDimensions, setBreakdownByDimensions] = useState<string[]>([]);
+  const [thenByDimensions, setThenByDimensions] = useState<string[]>([]);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+
+  // Initialize column order callback
+  const handleColumnOrderInit = useCallback((order: string[]) => {
+    // This will be handled by the columns hook
+  }, []);
+
+  // Load dimensions hook
+  const {
+    dimensions,
+    dimensionHasData,
+    isLoadingDimensions,
+    loadDimensions,
+  } = usePerformanceTableDimensions({
     reportId,
-    groupByDimensions: mockCurrentView?.group_by_dimensions || [],
-    breakdownByDimensions: mockCurrentView?.breakdown_by_dimensions || [],
-    thenByDimensions: mockCurrentView?.then_by_dimensions || [],
-    dimensionFilters: filtersData.filters,
-    dateFrom: filtersData.dateRange?.from,
-    dateTo: filtersData.dateRange?.to,
-    visibleDimensionIds: mockCurrentView?.visible_dimensions || [],
-    limit: 1000,
-    offset: 0,
-  }), [
+    accountId,
+    onColumnOrderInit: handleColumnOrderInit,
+  });
+
+  // Column management hook
+  const {
+    visibleColumns,
+    initialVisibleColumns,
+    columnOrder,
+    initialColumnOrder,
+    isSavingColumnSettings,
+    setVisibleColumns,
+    setInitialVisibleColumns,
+    setColumnOrder,
+    setInitialColumnOrder,
+    toggleColumn,
+    applyColumnSettings,
+    cancelColumnSettings,
+    hasUnsavedColumnChanges,
+    getOrderedDimensions,
+    handleColumnReorder,
+  } = usePerformanceTableColumns({
     reportId,
-    mockCurrentView?.group_by_dimensions,
-    mockCurrentView?.breakdown_by_dimensions,
-    mockCurrentView?.then_by_dimensions,
-    filtersData.filters,
-    filtersData.dateRange?.from,
-    filtersData.dateRange?.to,
-    mockCurrentView?.visible_dimensions,
+    activeViewId,
+    isSharedView,
+    dimensions,
+  });
+
+  // Views management hook
+  const {
+    tableViews,
+    activeViewId: viewsActiveViewId,
+    isViewInitialized,
+    setTableViews,
+    setActiveViewId: setViewsActiveViewId,
+    loadAllViews,
+    createDefaultViews,
+    loadViewSettings,
+    loadViewSettingsFromData,
+    saveViewSettings,
+    handleViewChange,
+    handleDeleteView,
+    handleTabNameSave,
+    saveSelectorDimensions, // NEW
+  } = usePerformanceTableViews({
+    reportId,
+    isSharedView,
+    accountName,
+    dimensions,
+    onGroupByChange: setGroupByDimensions,
+    onBreakdownByChange: setBreakdownByDimensions,
+    onThenByChange: setThenByDimensions,
+    onVisibleColumnsChange: setVisibleColumns,
+    onInitialVisibleColumnsChange: setInitialVisibleColumns,
+    onColumnOrderChange: setColumnOrder,
+    onInitialColumnOrderChange: setInitialColumnOrder,
+    onDateGranularityChange: setActiveDateTab,
+    onDateOrderChange: setDateOrder,
+    onSelectorDimensionsChange: setSelectorDimensions, // NEW
+  });
+
+  // Sync activeViewId from views hook
+  useEffect(() => {
+    setActiveViewId(viewsActiveViewId);
+  }, [viewsActiveViewId]);
+
+  // Data loading hook
+  const {
+    tableData,
+    totalData,
+    totalCompareData,
+    totalChangeData,
+    isLoadingData,
+    loadPerformanceData,
+    setIsLoadingData,
+  } = usePerformanceTableData({
+    reportId,
+    reportIds,
+    accountId,
+    groupByDimensions,
+    breakdownByDimensions,
+    thenByDimensions,
+    visibleColumns,
+    filters,
+    activeDateTab,
+    dateOrder,
+    dimensions,
+    onLoadingComplete,
+  });
+
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+
+  // Filters hook
+  const {
+    filteredTableData: baseFilteredTableData,
+    totals,
+    compareTotals,
+    changeData,
+  } = usePerformanceTableFilters({
+    tableData,
+    filters,
+    dimensions,
+    groupByDimensions,
+    totalData,
+    reportId: reportId || undefined,
+    accountId,
+    activeDateTab,
+    dateOrder,
+  });
+
+  // Apply sorting to filtered data
+  const filteredTableData = useMemo(() => {
+    if (!sortColumn || !sortDirection) {
+      return baseFilteredTableData;
+    }
+
+    const sorted = [...baseFilteredTableData];
+    const dimension = dimensions.find(d => d.name === sortColumn);
+    
+    if (!dimension) return sorted;
+
+    sorted.sort((a, b) => {
+      const aValue = a.data[sortColumn];
+      const bValue = b.data[sortColumn];
+      
+      // Handle null/undefined values
+      if (aValue == null && bValue == null) return 0;
+      if (aValue == null) return 1;
+      if (bValue == null) return -1;
+
+      // Check if values are numeric
+      const aNum = parseFloat(String(aValue));
+      const bNum = parseFloat(String(bValue));
+      const isNumeric = !isNaN(aNum) && !isNaN(bNum);
+
+      if (isNumeric) {
+        // Numeric comparison
+        const diff = aNum - bNum;
+        return sortDirection === 'asc' ? diff : -diff;
+      } else {
+        // String comparison
+        const aStr = String(aValue).toLowerCase();
+        const bStr = String(bValue).toLowerCase();
+        const diff = aStr.localeCompare(bStr);
+        return sortDirection === 'asc' ? diff : -diff;
+      }
+    });
+
+    return sorted;
+  }, [baseFilteredTableData, sortColumn, sortDirection, dimensions]);
+
+  // Load dimensions and check data sources when reportId changes
+  useEffect(() => {
+    if (reportId) {
+      loadDimensions();
+      checkDataSources(reportId).then(({ hasDataSources, hasCSVSource }) => {
+        setHasDataSources(hasDataSources);
+        setHasCSVSource(hasCSVSource);
+      });
+    }
+  }, [reportId, loadDimensions]);
+
+  // Reset table state when report changes
+  useEffect(() => {
+    if (reportId) {
+      setTableViews([]);
+      setViewsActiveViewId(null);
+      setGroupByDimensions([]);
+      setBreakdownByDimensions([]);
+      setThenByDimensions([]);
+      setVisibleColumns(new Set());
+      setColumnOrder([]);
+      setHasDataSources(false);
+    }
+  }, [reportId, setTableViews, setViewsActiveViewId, setVisibleColumns, setColumnOrder]);
+
+  // Load views when dimensions are loaded
+  useEffect(() => {
+    if (reportId && dimensions.length > 0) {
+      loadAllViews();
+      checkDataSources(reportId).then(({ hasDataSources, hasCSVSource }) => {
+        setHasDataSources(hasDataSources);
+        setHasCSVSource(hasCSVSource);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportId, dimensions.length]);
+
+  // Re-check data sources when refresh is triggered
+  useEffect(() => {
+    if (reportId && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
+      console.log('[testing] Re-checking data sources after refresh trigger');
+      checkDataSources(reportId).then(({ hasDataSources, hasCSVSource }) => {
+        setHasDataSources(hasDataSources);
+        setHasCSVSource(hasCSVSource);
+      });
+    }
+  }, [visibilityRefreshTrigger, reportId]);
+
+  // Refresh view settings when dimension visibility changes
+  useEffect(() => {
+    if (reportId && visibilityRefreshTrigger && visibilityRefreshTrigger > 0) {
+      console.log('[testing] Refreshing view settings due to dimension visibility change');
+      loadAllViews();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibilityRefreshTrigger, reportId]);
+
+  // Create a stable reference for filters
+  const debouncedFilters = useMemo(() => {
+    return {
+      dimensionFilters: filters.dimensionFilters,
+      dateRange: filters.dateRange,
+      datePreset: filters.datePreset,
+      compareEnabled: filters.compareEnabled,
+      compareType: filters.compareType,
+      compareDateRange: filters.compareDateRange,
+    };
+  }, [
+    JSON.stringify(filters.dimensionFilters),
+    filters.dateRange?.from?.toISOString(),
+    filters.dateRange?.to?.toISOString(),
+    filters.datePreset,
+    filters.compareEnabled,
+    filters.compareType,
+    filters.compareDateRange?.from?.toISOString(),
+    filters.compareDateRange?.to?.toISOString(),
   ]);
 
-  const { 
-    data: performanceData, 
-    isLoading, 
-    error,
-    refetch,
-    isFetching
-  } = usePerformanceTableData(queryParams);
-
-  // Call onLoadingComplete when loading finishes
-  React.useEffect(() => {
-    if (!isLoading && onLoadingComplete) {
-      onLoadingComplete();
+  // Load performance data when filters change (wait for view initialization)
+  useEffect(() => {
+    if (reportId && isViewInitialized) {
+      console.log('[PERF-TABLE] Loading data - view initialized, dimensions:', {
+        groupBy: groupByDimensions,
+        breakdown: breakdownByDimensions,
+        thenBy: thenByDimensions
+      });
+      setIsLoadingData(true);
+      loadPerformanceData();
+    } else if (!reportId) {
+      setIsLoadingData(false);
+    } else {
+      console.log('[PERF-TABLE] Waiting for view initialization before loading data');
     }
-  }, [isLoading, onLoadingComplete]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportId, isViewInitialized, debouncedFilters, JSON.stringify(groupByDimensions), JSON.stringify(breakdownByDimensions), JSON.stringify(thenByDimensions), dateOrder, activeDateTab, visibilityRefreshTrigger]);
 
-  // Memoize handlers to prevent unnecessary re-renders
-  const handleRefresh = useCallback(async () => {
-    try {
-      await refetch();
-      toast.success('Data refreshed successfully');
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-      toast.error('Failed to refresh data');
-    }
-  }, [refetch]);
-
-  const handleExport = useCallback(() => {
-    if (!performanceData || performanceData.length === 0) {
-      toast.error('No data to export');
-      return;
-    }
-
-    try {
-      const csvContent = [
-        // Headers
-        ['Group Key', 'Dimension Values', 'Row Count'].join(','),
-        // Data rows
-        ...performanceData.map(row => [
-          `"${row.group_key || ''}"`,
-          `"${JSON.stringify(row.dimension_values || {})}"`,
-          row.row_count || 0
-        ].join(','))
-      ].join('\n');
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `performance-data-${reportId}-${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+  // Save view settings whenever they change (with debounce)
+  useEffect(() => {
+    if (reportId && dimensions.length > 0 && activeViewId) {
+      const timeoutId = setTimeout(() => {
+        saveViewSettings(
+          groupByDimensions,
+          breakdownByDimensions,
+          thenByDimensions,
+          visibleColumns,
+          columnOrder,
+          activeDateTab,
+          dateOrder
+        );
+      }, 500);
       
-      toast.success('Data exported successfully');
-    } catch (error) {
-      console.error('Error exporting data:', error);
-      toast.error('Failed to export data');
+      return () => clearTimeout(timeoutId);
     }
-  }, [performanceData, reportId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(groupByDimensions), JSON.stringify(breakdownByDimensions), JSON.stringify(thenByDimensions), JSON.stringify(Array.from(visibleColumns)), JSON.stringify(columnOrder), activeDateTab, dateOrder, reportId, activeViewId]);
 
-  if (error) {
-    return (
-      <Card className={className}>
-        <CardContent className="p-6">
-          <div className="text-center text-red-600">
-            <p>Error loading performance data: {error.message}</p>
-            <Button onClick={handleRefresh} className="mt-4">
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Retry
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+  // Handle dimension change (from dropdown - preserves custom dimensions)
+  const handleDimensionChange = useCallback((value: string, selector: "group" | "breakdown" | "then") => {
+    // Build target selections based on current picker change
+    const currentGroup = groupByDimensions[0];
+    const currentBreakdown = breakdownByDimensions[0];
+    const currentThen = thenByDimensions[0];
+
+    const targetGroup = selector === "group" ? value : currentGroup;
+    const targetBreakdown = selector === "breakdown" ? value : currentBreakdown;
+    const targetThen = selector === "then" ? value : currentThen;
+
+    // Compose new ordered list for grouping: [group, breakdown, then] (unique, preserve extras)
+    const ordered: string[] = [];
+    const pushUnique = (id?: string) => {
+      if (id && !ordered.includes(id)) ordered.push(id);
+    };
+
+    pushUnique(targetGroup);
+    pushUnique(targetBreakdown);
+    pushUnique(targetThen);
+
+    // Preserve any additional dimensions already selected after the first three
+    groupByDimensions.forEach((id) => pushUnique(id));
+
+    // Update states to reflect consistent selections
+    setGroupByDimensions(ordered);
+    setBreakdownByDimensions(targetBreakdown ? [targetBreakdown] : []);
+    setThenByDimensions(targetThen ? [targetThen] : []);
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions]);
+
+  // Auto-fix: Ensure all three dimensions are different
+  useEffect(() => {
+    const groupValue = groupByDimensions[0];
+    const breakdownValue = breakdownByDimensions[0];
+    const thenValue = thenByDimensions[0];
+    
+    // Check if all three are the same
+    if (groupValue && breakdownValue && thenValue && 
+        groupValue === breakdownValue && breakdownValue === thenValue) {
+      console.warn('[testing] All three dimensions are the same, fixing...');
+      
+      // If we have at least 2 dimensions available, fix it
+      if (groupByDimensions.length >= 2) {
+        // Find a different dimension for breakdown by
+        const alternative = groupByDimensions.find(d => d !== groupValue);
+        if (alternative) {
+          setBreakdownByDimensions([alternative]);
+        }
+      } else if (groupByDimensions.length >= 3) {
+        // If we have 3+ dimensions, set breakdown and then to different ones
+        const alternatives = groupByDimensions.filter(d => d !== groupValue);
+        if (alternatives.length >= 1) {
+          setBreakdownByDimensions([alternatives[0]]);
+        }
+        if (alternatives.length >= 2) {
+          setThenByDimensions([alternatives[1]]);
+        }
+      }
+    }
+    // Also check if two are the same (but not all three)
+    else if (groupValue && breakdownValue && groupValue === breakdownValue && groupValue !== thenValue) {
+      // Group and breakdown are same but then is different - this is okay for now
+      // But we should still try to make them different if possible
+      if (groupByDimensions.length >= 2) {
+        const alternative = groupByDimensions.find(d => d !== groupValue && d !== thenValue);
+        if (alternative) {
+          setBreakdownByDimensions([alternative]);
+        }
+      }
+    }
+    else if (groupValue && thenValue && groupValue === thenValue && groupValue !== breakdownValue) {
+      // Group and then are same but breakdown is different
+      if (groupByDimensions.length >= 2) {
+        const alternative = groupByDimensions.find(d => d !== groupValue && d !== breakdownValue);
+        if (alternative) {
+          setThenByDimensions([alternative]);
+        }
+      }
+    }
+    else if (breakdownValue && thenValue && breakdownValue === thenValue && breakdownValue !== groupValue) {
+      // Breakdown and then are same but group is different
+      if (groupByDimensions.length >= 2) {
+        const alternative = groupByDimensions.find(d => d !== breakdownValue && d !== groupValue);
+        if (alternative) {
+          setThenByDimensions([alternative]);
+        }
+      }
+    }
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions]);
+
+  // Handle date tab change with auto-save
+  const handleDateTabChange = useCallback((newDateTab: 'day' | 'week' | 'month' | 'year') => {
+    setActiveDateTab(newDateTab);
+    
+    // Save the updated date granularity to the view
+    saveViewSettings(
+      groupByDimensions,
+      breakdownByDimensions,
+      thenByDimensions,
+      visibleColumns,
+      columnOrder,
+      newDateTab,
+      dateOrder
     );
-  }
+  }, [groupByDimensions, breakdownByDimensions, thenByDimensions, visibleColumns, columnOrder, dateOrder, saveViewSettings]);
+
+  // NEW: Save selections from settings modal (only selector list; does not change group/breakdown/then)
+  const handleSettingsSave = useCallback((selected: string[]) => {
+    setSelectorDimensions(selected);
+    // Persist to the active view
+    saveSelectorDimensions(selected);
+  }, [saveSelectorDimensions]);
+
+  // Handle context menu for filters
+  const handleContextMenu = useCallback((e: React.MouseEvent, kpi: string) => {
+    e.preventDefault();
+    setSelectedKPI(kpi);
+    setFilterModalOpen(true);
+  }, []);
+
+  // Handle column sort
+  const handleSort = useCallback((dimensionName: string) => {
+    if (sortColumn === dimensionName) {
+      // Toggle direction: desc -> asc (highest -> lowest)
+      if (sortDirection === 'desc') {
+        setSortDirection('asc');
+      } else {
+        // If already asc, go back to desc
+        setSortDirection('desc');
+      }
+    } else {
+      // New column: start with desc (highest first)
+      setSortColumn(dimensionName);
+      setSortDirection('desc');
+    }
+  }, [sortColumn, sortDirection]);
+
+  // Handle reset sort
+  const handleResetSort = useCallback(() => {
+    setSortColumn(null);
+    setSortDirection(null);
+  }, []);
+
+  // Handle row click to apply filters, especially for "Then by" rows
+  const handleRowClick = useCallback((row: { level: number; name: string }) => {
+    if (!onFiltersChange) return;
+    
+    // Determine which dimension this row represents based on its level
+    let dimId: string | undefined;
+    if (row.level === 0) {
+      dimId = groupByDimensions[0];
+    } else if (row.level === 1) {
+      dimId = breakdownByDimensions[0];
+    } else if (row.level === 2) {
+      dimId = thenByDimensions[0];
+    }
+    
+    if (!dimId) return;
+    
+    // Get the dimension to find its name
+    const dimension = dimensions.find(d => d.id === dimId);
+    if (!dimension) return;
+    
+    // Apply filter for this dimension with the row's name as the value
+    const currentFilters = filters.dimensionFilters || {};
+    const existingValues = currentFilters[dimId] || [];
+    
+    // Toggle the filter: if already filtered, remove it; otherwise add it
+    const newValues = existingValues.includes(row.name)
+      ? existingValues.filter((v: string) => v !== row.name)
+      : [...existingValues, row.name];
+    
+    onFiltersChange({
+      ...filters,
+      dimensionFilters: {
+        ...currentFilters,
+        [dimId]: newValues.length > 0 ? newValues : undefined,
+      },
+    });
+  }, [onFiltersChange, filters, groupByDimensions, breakdownByDimensions, thenByDimensions, dimensions]);
+
 
   return (
     <>
-      <Card className={className}>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle className="text-lg font-semibold">Performance Data</CardTitle>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={isFetching}
-            >
-              <RotateCcw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowColumnVisibility(true)}
-            >
-              <Eye className="w-4 h-4 mr-2" />
-              Columns
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExport}
-              disabled={!performanceData || performanceData.length === 0}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSettings(true)}
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              Settings
-            </Button>
-          </div>
+      <Card className="shadow-sm">
+        <CardHeader className="pb-3 border-b">
+          <TableHeader
+            activeDateTab={activeDateTab}
+            onDateTabChange={handleDateTabChange}
+            groupByDimensions={groupByDimensions}
+            breakdownByDimensions={breakdownByDimensions}
+            thenByDimensions={thenByDimensions}
+            dimensions={dimensions}
+            dimensionHasData={dimensionHasData}
+            reportId={reportId}
+            isSharedView={isSharedView}
+            isEditMode={isEditMode}
+            onDimensionChange={handleDimensionChange}
+            visibleColumns={visibleColumns}
+            getOrderedDimensions={getOrderedDimensions}
+            onToggleColumn={toggleColumn}
+            onColumnReorder={handleColumnReorder}
+            hasUnsavedColumnChanges={hasUnsavedColumnChanges()}
+            isSavingColumnSettings={isSavingColumnSettings}
+            onApplyColumnSettings={applyColumnSettings}
+            onCancelColumnSettings={cancelColumnSettings}
+            onRefreshDimensions={loadDimensions}
+            onOpenSettings={() => setSettingsOpen(true)}
+            availableSelectorDimensions={selectorDimensions} // NEW: restrict dropdowns to configured list
+          />
         </CardHeader>
-        <CardContent>
-          {isLoading ? (
+        <CardContent className="pt-6">
+          {isLoadingDimensions || !isViewInitialized ? (
+            <TableSkeleton />
+          ) : groupByDimensions.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              {hasDataSources ? (
+                isEditMode ? "Right-click on 'Group by' to select dimensions" : "No dimensions selected"
+              ) : (
+                "No data sources found. Please add a data source to this report."
+              )}
+            </div>
+          ) : isLoadingData ? (
             <TableSkeleton />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <TableHeader 
-                  dimensions={mockDimensions}
-                />
-                <TableBody 
-                  rows={performanceData || []}
-                  dimensions={mockDimensions}
-                />
-              </table>
-            </div>
+            <TableBody
+              filteredTableData={filteredTableData}
+              dimensions={dimensions}
+              visibleColumns={visibleColumns}
+              getOrderedDimensions={getOrderedDimensions}
+              totals={totals}
+              compareTotals={compareTotals}
+              changeData={changeData}
+              compareEnabled={filters.compareEnabled || false}
+              groupByDimensions={groupByDimensions}
+              breakdownByDimensions={breakdownByDimensions}
+              thenByDimensions={thenByDimensions}
+              activeDateTab={activeDateTab}
+              filters={filters}
+              onContextMenu={handleContextMenu}
+              onRowClick={handleRowClick}
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+              onResetSort={handleResetSort}
+            />
           )}
         </CardContent>
       </Card>
 
-      <PerformanceSettingsModal
-        open={showSettings}
-        onOpenChange={setShowSettings}
-        dimensions={mockDimensions}
-        groupBy={[]}
-        breakdownBy={[]}
-        thenBy={[]}
-        selectedDimensionIds={[]}
-        isEditMode={isEditMode}
-        onSave={() => {}}
+      <ColumnFilterModal
+        open={filterModalOpen}
+        onOpenChange={setFilterModalOpen}
+        columnName={selectedKPI}
+        dimension={
+          selectedKPI === "name" && groupByDimensions[0]
+            ? dimensions.find(d => d.id === groupByDimensions[0])
+            : dimensions.find(d => d.name === selectedKPI)
+        }
+        currentFilters={filters}
+        onFiltersChange={onFiltersChange}
+        tableData={tableData}
       />
 
-      <ColumnVisibilitySheet
-        open={showColumnVisibility}
-        onOpenChange={setShowColumnVisibility}
-        dimensions={mockDimensions}
-        visibleColumns={new Set()}
-        onVisibilityChange={() => {}}
+      <PerformanceSettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        dimensions={dimensions}
+        groupBy={groupByDimensions}
+        breakdownBy={breakdownByDimensions}
+        thenBy={thenByDimensions}
+        selectedDimensionIds={selectorDimensions}
+        isEditMode={isEditMode}
+        onSave={handleSettingsSave}
       />
     </>
   );

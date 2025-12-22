@@ -1,87 +1,175 @@
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/lib/auth';
-import { dataSourceQueryKeys } from './queryKeys';
-import type { DataSource } from '@/lib/data-sources/types';
+/**
+ * React Query hook for fetching and caching source data
+ */
 
-interface UseSourceDataProps {
-  dataSourceId: string;
+import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { dataSourceKeys } from "./queryKeys";
+import { fetchGoogleSheetsAllData, extractSpreadsheetId } from "@/lib/data-sources/fetchGoogleSheets";
+import { fetchCSVAllData } from "@/lib/data-sources/fetchCSV";
+import { buildDimensionMappingWithAutoDetection, transformDataRows } from "@/lib/data-sources/transformRows";
+import type { DataSource, ColumnMapping, Dimension } from "@/lib/data-sources/types";
+import { getUser } from "@/lib/auth";
+
+export interface UseSourceDataOptions {
   enabled?: boolean;
-  filters?: Record<string, any>;
+  staleTime?: number;
+  gcTime?: number;
 }
 
 export interface SourceDataResult {
-  transformedRows: any[];
+  headers: string[];
+  rows: any[][];
   dimensionIdMap: Record<string, string>;
-  rawData: any[];
+  columnIndexMap: Record<string, number>;
+  transformedRows: any[];
 }
 
-export const useSourceData = ({ 
-  dataSourceId, 
-  enabled = true,
-  filters = {}
-}: UseSourceDataProps) => {
-  const { user } = useAuth();
-
-  return useQuery({
-    queryKey: dataSourceQueryKeys.sourceData(dataSourceId, filters),
-    queryFn: async () => {
-      if (!user) throw new Error('User not authenticated');
-
-      const { data, error } = await supabase
-        .from('sheet_data')
-        .select('*')
-        .eq('data_source_id', dataSourceId)
-        .order('row_number');
-
-      if (error) {
-        console.error('Error fetching source data:', error);
-        throw error;
-      }
-
-      return data || [];
-    },
-    enabled: enabled && !!user && !!dataSourceId,
-    // Cache source data for longer since it doesn't change frequently
-    staleTime: 10 * 60 * 1000, // 10 minutes
-    gcTime: 20 * 60 * 1000, // 20 minutes
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: 'always',
-    retry: 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-  });
-};
-
 /**
- * Fetch source data function for use outside React components
+ * Fetch source data from Google Sheets or CSV
+ * Exported for use in non-hook contexts (e.g., data-loading-fix.ts)
  */
 export async function fetchSourceData(
-  dataSource: DataSource, 
-  userId: string, 
+  dataSource: DataSource,
+  userId: string,
   accountId?: string | null
 ): Promise<SourceDataResult> {
-  // This is a placeholder implementation
-  // The actual implementation should transform raw sheet data into the expected format
-  const { data, error } = await supabase
-    .from('sheet_data')
-    .select('*')
-    .eq('data_source_id', dataSource.id)
-    .order('row_number');
+  const sourceType = dataSource.source_type || 'google_sheets';
+  let headers: string[] = [];
+  let rows: any[][] = [];
 
-  if (error) {
-    throw error;
+  if (sourceType === 'csv_url') {
+    if (!dataSource.csv_url) {
+      throw new Error('CSV URL is required for CSV data source');
+    }
+    const result = await fetchCSVAllData(dataSource.csv_url, dataSource.header_row || 1);
+    headers = result.headers;
+    rows = result.dataRows;
+  } else {
+    if (!dataSource.spreadsheet_id && !dataSource.google_sheets_url) {
+      throw new Error('Spreadsheet ID or URL is required for Google Sheets data source');
+    }
+    if (!dataSource.tab_name) {
+      throw new Error('Tab name is required for Google Sheets data source');
+    }
+    
+    const spreadsheetId = dataSource.spreadsheet_id || extractSpreadsheetId(dataSource.google_sheets_url || '');
+    if (!spreadsheetId) {
+      throw new Error('Invalid Google Sheets URL');
+    }
+    
+    const result = await fetchGoogleSheetsAllData(
+      spreadsheetId,
+      dataSource.tab_name,
+      dataSource.header_row || 1
+    );
+    headers = result.headers;
+    rows = result.dataRows;
   }
 
-  // Transform the data to match expected format
-  const transformedRows = (data || []).map((row: any) => ({
-    ...row.row_data,
-    _row_number: row.row_number,
-    _id: row.id
-  }));
+  // Build dimension mapping
+  const mappings = (dataSource.column_mappings || []) as ColumnMapping[];
+  const sampleDataRows = rows.slice(0, 10);
+  
+  const { dimensionIdMap, columnIndexMap } = await buildDimensionMappingWithAutoDetection(
+    mappings,
+    headers,
+    sampleDataRows,
+    userId,
+    dataSource.report_id || '',
+    dataSource.id,
+    accountId
+  );
+
+  // Fetch dimensions for type mapping
+  const dimensionIds = Object.values(dimensionIdMap);
+  let dimensions: Dimension[] = [];
+  
+  if (dimensionIds.length > 0) {
+    const { data: dimensionsData } = await supabase
+      .from('dimensions')
+      .select('id, name, type, formula')
+      .in('id', dimensionIds);
+    
+    if (dimensionsData) {
+      dimensions = dimensionsData as Dimension[];
+    }
+  }
+
+  // Transform rows
+  const transformedRows = await transformDataRows(
+    rows,
+    mappings,
+    dimensionIdMap,
+    columnIndexMap,
+    dimensions
+  );
 
   return {
+    headers,
+    rows,
+    dimensionIdMap,
+    columnIndexMap,
     transformedRows,
-    dimensionIdMap: {},
-    rawData: data || []
+  };
+}
+
+/**
+ * Hook to fetch and cache source data
+ */
+export function useSourceData(
+  dataSource: DataSource | null,
+  accountId?: string | null,
+  options: UseSourceDataOptions = {}
+): UseQueryResult<SourceDataResult, Error> {
+  const queryClient = useQueryClient();
+  const {
+    enabled = true,
+    staleTime = 5 * 60 * 1000, // 5 minutes
+    gcTime = 15 * 60 * 1000, // 15 minutes
+  } = options;
+
+  return useQuery({
+    queryKey: dataSourceKeys.sourceData(
+      dataSource?.id || '',
+      dataSource?.report_id || '',
+      dataSource?.updated_at || undefined
+    ),
+    queryFn: async () => {
+      if (!dataSource) {
+        throw new Error('Data source is required');
+      }
+      
+      const { user } = await getUser();
+      if (!user) {
+        throw new Error('User must be authenticated');
+      }
+      
+      return fetchSourceData(dataSource, user.id, accountId);
+    },
+    enabled: enabled && !!dataSource && !!dataSource.id,
+    staleTime,
+    gcTime,
+    retry: 2,
+  });
+}
+
+/**
+ * Invalidate source data cache
+ */
+export function useInvalidateSourceData() {
+  const queryClient = useQueryClient();
+  
+  return {
+    invalidate: (dataSourceId: string, reportId: string) => {
+      queryClient.invalidateQueries({
+        queryKey: dataSourceKeys.sourceData(dataSourceId, reportId),
+      });
+    },
+    invalidateAll: () => {
+      queryClient.invalidateQueries({
+        queryKey: dataSourceKeys.all,
+      });
+    },
   };
 }

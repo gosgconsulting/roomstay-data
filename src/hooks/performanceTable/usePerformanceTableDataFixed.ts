@@ -4,7 +4,7 @@ import { toast } from "@/hooks/use-toast";
 import { useVlookupMappings } from "@/hooks/useVlookupMappings";
 import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "./usePerformanceTableDimensions";
-import { usePerformanceData } from "./usePerformanceData";
+import { fetchPerformanceData } from "./usePerformanceData";
 import { useQueryClient } from "@tanstack/react-query";
 import { autoFixDimensionSync } from "@/lib/dimension-sync-auto-fix";
 
@@ -33,14 +33,6 @@ interface UsePerformanceTableDataOptions {
   dateOrder: 'asc' | 'desc';
   dimensions: Dimension[];
   onLoadingComplete?: () => void;
-}
-
-/**
- * Fetch performance data function for use in the hook
- */
-async function fetchPerformanceData(params: any, queryClient: any): Promise<any> {
-  // This is a placeholder - implement actual data fetching logic
-  return { data: [], totalCount: 0, hasMore: false };
 }
 
 /**
