@@ -36,6 +36,7 @@ import {
   format,
   startOfWeek,
   endOfWeek,
+  subDays,
 } from "date-fns";
 
 interface ReportMetrics {
@@ -369,10 +370,10 @@ export const parseDate = (value: any): Date | null => {
 };
 
 // Formula metrics that should be calculated, not summed
-export const FORMULA_METRICS = ['CTR', 'ROAS', 'Conversion rate', 'CPC', 'Cost of sale', 'COS'];
+const FORMULA_METRICS = ['CTR', 'ROAS', 'Conversion rate', 'CPC', 'Cost of sale', 'COS'];
 
 // Base metrics needed for formula calculations (including alternatives like Bookings)
-export const BASE_METRICS = ['Impressions', 'Clicks', 'Cost', 'Revenue', 'Conversions', 'Bookings'];
+const BASE_METRICS = ['Impressions', 'Clicks', 'Cost', 'Revenue', 'Conversions', 'Bookings'];
 
 export const calculateFormulaMetrics = (baseValues: Record<string, number>): Record<string, number> => {
   const result: Record<string, number> = {};
@@ -657,7 +658,13 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     getMetricValue: (row: T, metric: string) => number
   ): T[] => {
     const config = sortConfig[tableId];
-    if (!config?.column) return rows;
+    if (!config?.column) {
+      // For date-based tables, show most recent first by default
+      if (tableId === 'date-breakdown' || tableId === 'last-7-days') {
+        return [...rows].reverse();
+      }
+      return rows;
+    }
     
     return [...rows].sort((a, b) => {
       const aVal = getMetricValue(a, config.column!);
@@ -873,6 +880,127 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
     return totals;
   };
+
+  // Compute last 7 days data grouped by day
+  const computeLast7DaysData = useMemo((): DateBreakdownRow[] => {
+    if (!reportsLoaded || Object.keys(rawSourceData).length === 0 || !selectedMetrics || selectedMetrics.length === 0) {
+      return [];
+    }
+
+    // Compute safeMetrics inside useMemo to avoid dependency issues
+    const METRIC_ORDER = [
+      "Impressions",
+      "Impression share",
+      "Clicks",
+      "CTR",
+      "Conversions",
+      "Conversion rate",
+      "CPC",
+      "Cost",
+      "Revenue",
+      "ROAS",
+      "Cost of sale",
+      "Bookings",
+    ];
+    
+    const safeMetricsLocal = (selectedMetrics || []).slice().sort((a, b) => {
+      const aIndex = METRIC_ORDER.indexOf(a);
+      const bIndex = METRIC_ORDER.indexOf(b);
+      const aOrder = aIndex === -1 ? 999 : aIndex;
+      const bOrder = bIndex === -1 ? 999 : bIndex;
+      return aOrder - bOrder;
+    });
+
+    const now = new Date();
+    const sevenDaysAgo = subDays(now, 6); // Last 7 days including today
+    const dateRange = { start: sevenDaysAgo, end: now };
+
+    // Group data by day
+    const dayGroups: Record<string, any[]> = {};
+
+    // Helper to extract date from row
+    const getRowDate = (row: any): Date | null => {
+      const rowData = row.dimension_values || row;
+      let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
+      
+      if (!dateValue) {
+        for (const [key, val] of Object.entries(rowData)) {
+          if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+            dateValue = val;
+            break;
+          }
+        }
+      }
+      
+      return parseDate(dateValue);
+    };
+
+    // Collect all rows from all reports within the last 7 days
+    for (const reportId of reportIds) {
+      const reportData = rawSourceData[reportId];
+      if (!reportData) continue;
+
+      reportData.rows.forEach((row: any) => {
+        const rowDate = getRowDate(row);
+        if (!rowDate) return;
+        
+        if (isWithinInterval(rowDate, dateRange)) {
+          const dayKey = format(rowDate, 'yyyy-MM-dd');
+          if (!dayGroups[dayKey]) {
+            dayGroups[dayKey] = [];
+          }
+          dayGroups[dayKey].push(row);
+        }
+      });
+    }
+
+    // Aggregate metrics for each day
+    const last7DaysRows: DateBreakdownRow[] = [];
+    
+    // Generate all 7 days (even if no data) to show complete timeline
+    for (let i = 6; i >= 0; i--) {
+      const day = subDays(now, i);
+      const dayKey = format(day, 'yyyy-MM-dd');
+      const dayRows = dayGroups[dayKey] || [];
+
+      // Aggregate metrics for this day across all reports
+      const dayMetrics: Record<string, number> = {};
+      const allMetricsToTrack = new Set([...safeMetricsLocal, ...BASE_METRICS]);
+      allMetricsToTrack.forEach((m) => (dayMetrics[m] = 0));
+
+      dayRows.forEach((row: any) => {
+        const rowData = row.dimension_values || row;
+        allMetricsToTrack.forEach((metric) => {
+          if (FORMULA_METRICS.includes(metric)) return;
+          
+          let value = rowData[metric];
+          if (value !== undefined && value !== null) {
+            const numValue = parseFloat(String(value).replace(/[^0-9.-]/g, ""));
+            if (!isNaN(numValue)) {
+              dayMetrics[metric] += numValue;
+            }
+          }
+        });
+      });
+
+      // Calculate formula metrics
+      const formulaValues = calculateFormulaMetrics(dayMetrics);
+      safeMetricsLocal.forEach(metric => {
+        if (FORMULA_METRICS.includes(metric)) {
+          dayMetrics[metric] = formulaValues[metric] || 0;
+        }
+      });
+
+      last7DaysRows.push({
+        dateGroup: format(day, 'MMM d, yyyy'),
+        dateRangeStart: dayKey,
+        dateRangeEnd: dayKey,
+        metrics: dayMetrics,
+      });
+    }
+
+    return last7DaysRows;
+  }, [rawSourceData, reportIds, selectedMetrics, reportsLoaded]);
 
   if (isLoading) {
     return (
@@ -1668,6 +1796,54 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                         {sortRows(periodBreakdown, 'date-breakdown', (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
                           <TableRow
                             key={row.dateGroup}
+                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                          >
+                            <TableCell className="font-medium text-sm w-[200px]">
+                              {row.dateGroup}
+                            </TableCell>
+                            {safeMetrics.map((metric) => (
+                              <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                {formatMetricValue(metric, row.metrics[metric] || 0)}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+        
+        {/* Last 7 Days Table - for selected period in overview mode */}
+        {activeReportTab === "overview" && (() => {
+          if (!computeLast7DaysData || computeLast7DaysData.length === 0) return null;
+          
+          return (
+            <div className="space-y-4">
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-primary/5 px-4 py-2 border-b">
+                  <h4 className="font-semibold text-sm">
+                    Last 7 Days
+                  </h4>
+                </div>
+                <div className="overflow-hidden">
+                  <Table>
+                    <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="font-medium w-[200px]">Day</TableHead>
+                        {safeMetrics.map((metric) => renderSortableHeader('last-7-days', metric))}
+                      </TableRow>
+                    </TableHeader>
+                  </Table>
+                  <div className={computeLast7DaysData.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                    <Table>
+                      <TableBody>
+                        {sortRows(computeLast7DaysData, 'last-7-days', (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                          <TableRow
+                            key={row.dateRangeStart}
                             className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
                           >
                             <TableCell className="font-medium text-sm w-[200px]">
