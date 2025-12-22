@@ -393,22 +393,19 @@ export const FiltersBar = ({
         if (existingDims.length === 1 && dateDimensionId && existingDims[0] === dateDimensionId && defaultAccountDimId) {
           setActiveDimensions([defaultAccountDimId]);
 
-          // Persist fix so future loads are correct
           await supabase
             .from("report_views")
             .update({
               filter_dimensions: [defaultAccountDimId],
-              filter_values: {}, // clear since dimension changed
+              filter_values: {},
             })
             .eq("id", data.id);
         } else if (validDims.length) {
-          // Use only valid dimensions that are mapped in the data source
           setActiveDimensions(validDims);
           if (data.filter_values && Object.keys(data.filter_values).length) {
             const fv = data.filter_values as Record<string, string | string[]>;
             const normalized: Record<string, string[]> = {};
             Object.entries(fv).forEach(([key, value]) => {
-              // Only include filter values for valid dimensions
               if (validDims.includes(key) && !key.startsWith("__")) {
                 normalized[key] = Array.isArray(value) ? value : [value];
               }
@@ -416,7 +413,6 @@ export const FiltersBar = ({
             setSelectedFilters(normalized);
           }
           
-          // If saved dimensions were filtered out, update the saved view
           if (validDims.length < existingDims.length) {
             console.log('[FiltersBar] Updating saved view with valid dimensions only');
             await supabase
@@ -437,51 +433,17 @@ export const FiltersBar = ({
           setMasterDimensionId(fv.__master_dimension_id);
         }
 
-        // Check if saved date range is in the future and reset to all_time if so
-        const savedDateStart = data.date_range_start ? new Date(data.date_range_start) : null;
-        const savedDateEnd = data.date_range_end ? new Date(data.date_range_end) : null;
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        
-        // More aggressive future date detection - check if year is greater than current year
-        if (savedDateStart && (savedDateStart.getFullYear() > currentYear || savedDateStart > new Date(now.getTime() + 24 * 60 * 60 * 1000))) {
-          console.log('[FiltersBar] Saved date range is in the future, resetting to all_time');
-          console.log('[FiltersBar] Future date detected:', savedDateStart.toISOString(), 'current year:', currentYear);
-          
-          // Force this_month as default
-          applyDatePreset("this_month");
-          
-          // Update the saved view to prevent this issue in the future
-          await supabase
-            .from("report_views")
-            .update({
-              date_range_start: null,
-              date_range_end: null,
-              date_range_preset: "this_month"
-            })
-            .eq("id", data.id);
-            
-          console.log('[FiltersBar] Updated saved view to this_month');
-        } else if (savedDateStart && savedDateEnd) {
-          // Use saved date range if it's valid (not in future)
-          console.log('[FiltersBar] Using saved date range:', savedDateStart.toISOString(), 'to', savedDateEnd.toISOString());
-          setDateRange({ from: savedDateStart, to: savedDateEnd });
-          setDatePreset("custom");
-        } else {
-          // Use saved date range preset, defaulting to all_time if not set
-          const preset = (data as any).date_range_preset || "this_month";
-          console.log('[FiltersBar] Using saved preset:', preset);
-          
-          // Force all_time if preset is problematic
-          if (preset === "this_month" || preset === "last_month") {
-            console.log('[FiltersBar] Forcing this_month instead of potentially problematic preset:', preset);
-            applyDatePreset("this_month");
-          } else {
-            applyDatePreset(preset);
-          }
-        }
+        // FORCE DEFAULT: Always initialize date to 'this_month' on first load
+        console.log('[FiltersBar] Forcing default date preset to this_month on initial load');
+        applyDatePreset("this_month");
+        setCompareEnabled(false);
+        setCompareType("previous_period");
+        setCompareDateRange(undefined);
+
+        // REMOVED: Using saved custom date ranges/presets to avoid defaulting to old months
+        // (savedDateStart/savedDateEnd/preset handling removed for initial load)
       } else {
-        // No view: default to Account if available, else Date, and always use all_time for date
+        // No view: default to Account if available, else Date, and always use this_month for date
         if (defaultAccountDimId) {
           setActiveDimensions([defaultAccountDimId]);
         } else if (dateDimensionId) {
