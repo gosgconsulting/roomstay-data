@@ -3,24 +3,29 @@
  */
 
 /**
- * Get the Supabase URL from environment or client config
+ * Get the base API URL (works with localhost and domain)
  */
-function getSupabaseUrl(): string {
-  // Try to get from environment variable first
-  if (typeof window !== 'undefined' && (window as any).ENV?.SUPABASE_URL) {
-    return (window as any).ENV.SUPABASE_URL;
+function getBaseApiUrl(): string {
+  // In browser, use current origin (works with localhost and any domain)
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
   }
   
-  // Fallback to hardcoded URL from client config
-  return "https://zcxxwpwheevwavdcgfht.supabase.co";
+  // Server-side fallback
+  return process.env.VITE_API_BASE_URL || 'http://localhost:3000';
 }
 
 /**
  * Generate API URL for a report's API data endpoint
+ * Uses the application's own domain (not Supabase URL)
  * @param reportId - The report ID
  * @returns The full API URL
+ * 
+ * Example:
+ * - Localhost: http://localhost:3000/api/reports/{reportId}
+ * - Production: https://yourdomain.com/api/reports/{reportId}
  */
 export function getReportApiUrl(reportId: string): string {
-  const supabaseUrl = getSupabaseUrl();
-  return `${supabaseUrl}/functions/v1/get-report-api-data?reportId=${reportId}`;
+  const baseUrl = getBaseApiUrl();
+  return `${baseUrl}/api/reports/${reportId}`;
 }

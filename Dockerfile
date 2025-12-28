@@ -16,17 +16,27 @@ COPY . .
 # Build the application
 RUN bun run build
 
-# Production stage with Caddy
-FROM caddy:2.8-alpine
+# Production stage with Node.js
+FROM oven/bun:1.3
+
+WORKDIR /app
+
+# Copy package.json and install all dependencies (server needs express, cors)
+COPY package.json ./
+RUN bun install --frozen-lockfile || bun install
 
 # Copy built application
-COPY --from=builder /app/dist /app/dist
+COPY --from=builder /app/dist ./dist
 
-# Copy Caddyfile
-COPY Caddyfile /etc/caddy/Caddyfile
+# Copy server file
+COPY server.js ./
 
 # Expose the port
 EXPOSE 3000
 
-# Start Caddy with the configuration
-CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile"]
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Start the Express server
+CMD ["bun", "server.js"]

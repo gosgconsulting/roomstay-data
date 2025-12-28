@@ -3,6 +3,6 @@ builder = "DOCKERFILE"
 dockerfile = "Dockerfile"
 
 [deploy]
-startCommand = "caddy run --config /etc/caddy/Caddyfile"
+startCommand = "bun server.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10

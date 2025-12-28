@@ -10,6 +10,14 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
     cors: true,
+    proxy: {
+      // Proxy API routes to the Express server in development
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
   plugins: [dyadComponentTagger(), 
     react(),

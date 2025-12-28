@@ -174,15 +174,12 @@ export default function ReportDashboard() {
       setLoadingComponents(new Set());
       setIsDataLoading(false);
       
-      // Invalidate all report-specific caches to prevent cross-contamination
-      queryClient.invalidateQueries({ queryKey: ['performance-table-data'] });
-      queryClient.invalidateQueries({ queryKey: ['performance-table-filters'] });
-      queryClient.invalidateQueries({ queryKey: ['performance-table-dimensions'] });
-      queryClient.invalidateQueries({ queryKey: ['dimensions'] });
-      queryClient.invalidateQueries({ queryKey: ['vlookup-mappings'] });
-      console.log('[testing] ReportDashboard - Invalidated all caches for report change');
+      // Don't invalidate caches - let React Query use cached data if available
+      // This enables instant loading when switching between reports that have been loaded before
+      // Cache will only be invalidated when data actually changes (after sync)
+      console.log('[testing] ReportDashboard - Using cached data if available for instant loading');
       
-      // Start new loading cycle
+      // Start new loading cycle (components will use cache if available)
       markComponentLoading('metrics');
       markComponentLoading('chart');
       markComponentLoading('table');
@@ -199,7 +196,7 @@ export default function ReportDashboard() {
       // Load dimensions when reportId changes
       loadDimensions();
     }
-  }, [reportId, loadDimensions, queryClient]);
+  }, [reportId, loadDimensions]);
   
   useEffect(() => {
     checkAuth();

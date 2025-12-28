@@ -170,6 +170,9 @@ export function useSourceData(
     staleTime,
     gcTime,
     retry: 2,
+    refetchOnWindowFocus: false, // Don't refetch when window regains focus - use cached data
+    refetchOnMount: false, // Don't refetch when component mounts if cached data exists
+    refetchOnReconnect: false, // Don't refetch on network reconnect - use cached data
   });
 
   // Log cache status for debugging
