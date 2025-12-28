@@ -770,46 +770,22 @@ app.post('/api/make/create-scenario', async (req, res) => {
       claudeApiKey
     });
 
-    // Create scenario via Make.com API
-    const makeApiUrl = `https://${makeRegion}.make.com/api/v2/scenarios`;
+    // Note: This endpoint now uses Make MCP instead of direct API
+    // The actual MCP call should be made from the client or via MCP server
+    // For now, return the blueprint structure for manual creation or MCP usage
     
-    const response = await fetch(makeApiUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Token ${makeApiToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        blueprint: JSON.stringify(blueprint),
-        teamId: parseInt(teamId),
-        scheduling: JSON.stringify({
-          enabled: false // Can be enabled later
-        })
-      })
-    });
+    console.log(`[MAKE-API] Generated blueprint for report: ${reportId}`);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[MAKE-API] Make.com API error:', errorText);
-      return res.status(response.status).json({
-        success: false,
-        error: 'Failed to create Make.com scenario',
-        details: errorText
-      });
-    }
-
-    const scenarioData = await response.json();
-
-    console.log(`[MAKE-API] Scenario created successfully: ${scenarioData.id}`);
-
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
-      message: 'Make.com scenario created successfully',
-      scenario: {
-        id: scenarioData.id,
-        name: scenarioData.name,
-        url: `https://${makeRegion}.make.com/scenario/${scenarioData.id}/editor`,
-        blueprint: scenarioData.blueprint
+      message: 'Blueprint generated. Use Make MCP to create the scenario.',
+      blueprint: blueprint,
+      instructions: {
+        teamId: parseInt(teamId),
+        scheduling: {
+          enabled: false
+        },
+        note: 'Use mcp_make_scenarios_create with this blueprint'
       }
     });
 

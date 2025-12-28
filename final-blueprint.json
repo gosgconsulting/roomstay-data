@@ -1,0 +1,322 @@
+{
+  "flow": [
+    {
+      "id": 1,
+      "mapper": {
+        "hook": "custom",
+        "path": "report-analysis-4b41d292"
+      },
+      "module": "webhooks:CustomWebhook",
+      "version": 1,
+      "metadata": {
+        "designer": {
+          "x": -600,
+          "y": 0
+        }
+      },
+      "parameters": {}
+    },
+    {
+      "id": 6,
+      "mapper": {
+        "url": "https://yourdomain.com/api/make/reports/4b41d292-13f7-4695-81f9-0b4ee1761c9f/last-7-days",
+        "method": "get",
+        "headers": [
+          {
+            "name": "x-api-key",
+            "value": "{{apiKey}}"
+          }
+        ],
+        "shareCookies": false,
+        "parseResponse": true,
+        "allowRedirects": true,
+        "stopOnHttpError": true,
+        "requestCompressedContent": true
+      },
+      "module": "http:MakeRequest",
+      "version": 4,
+      "metadata": {
+        "expect": [
+          {
+            "name": "url",
+            "type": "url",
+            "label": "URL",
+            "required": true
+          },
+          {
+            "name": "method",
+            "type": "select",
+            "label": "Method",
+            "required": true,
+            "validate": {
+              "enum": [
+                "get",
+                "head",
+                "post",
+                "put",
+                "patch",
+                "delete",
+                "options"
+              ]
+            }
+          },
+          {
+            "name": "headers",
+            "spec": {
+              "name": "value",
+              "spec": [
+                {
+                  "name": "name",
+                  "type": "text",
+                  "label": "Name",
+                  "required": true,
+                  "validate": {
+                    "pattern": "^[-!#$%&'*+.^_`|~0-9A-Za-z]+$"
+                  }
+                },
+                {
+                  "name": "value",
+                  "type": "text",
+                  "label": "Value"
+                }
+              ],
+              "type": "collection",
+              "label": "Header"
+            },
+            "type": "array",
+            "label": "Headers"
+          },
+          {
+            "name": "parseResponse",
+            "type": "boolean",
+            "label": "Parse response",
+            "required": true
+          },
+          {
+            "name": "stopOnHttpError",
+            "type": "boolean",
+            "label": "Return error if HTTP request fails",
+            "required": true
+          },
+          {
+            "name": "allowRedirects",
+            "type": "boolean",
+            "label": "Allow redirects",
+            "required": true
+          },
+          {
+            "name": "shareCookies",
+            "type": "boolean",
+            "label": "Share cookies with other HTTP modules",
+            "required": true
+          },
+          {
+            "name": "requestCompressedContent",
+            "type": "boolean",
+            "label": "Request compressed content",
+            "required": true
+          }
+        ],
+        "restore": {
+          "expect": {
+            "method": {
+              "mode": "chose",
+              "label": "GET"
+            },
+            "headers": {
+              "mode": "chose"
+            },
+            "shareCookies": {
+              "mode": "chose"
+            },
+            "parseResponse": {
+              "mode": "chose"
+            },
+            "allowRedirects": {
+              "mode": "chose"
+            },
+            "stopOnHttpError": {
+              "mode": "chose"
+            },
+            "requestCompressedContent": {
+              "mode": "chose"
+            }
+          },
+          "parameters": {
+            "tlsType": {
+              "label": "Empty"
+            },
+            "proxyKeychain": {
+              "label": "Choose a key"
+            },
+            "authenticationType": {
+              "label": "No authenticationUse when no credentials are required for the request."
+            }
+          }
+        },
+        "designer": {
+          "x": -373,
+          "y": -20
+        }
+      },
+      "parameters": {
+        "tlsType": "",
+        "proxyKeychain": "",
+        "authenticationType": "noAuth"
+      }
+    },
+    {
+      "id": 7,
+      "mapper": {
+        "model": "claude-3-5-sonnet-20241022",
+        "system": "You are a data analyst specializing in marketing performance data. Analyze the provided data and create a concise, actionable summary focusing on key insights, trends, and recommendations.",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Analyze the following marketing performance data from the last 7 days:\n\nReport: Metasearch Results\nDate Range: {{6.dateRange.from}} to {{6.dateRange.to}}\nTotal Records: {{6.count}}\n\nData:\n{{6.data}}\n\nPlease provide:\n1. Key performance metrics summary\n2. Notable trends or changes\n3. Top performing channels/campaigns\n4. Areas of concern or opportunities\n5. Actionable recommendations\n\nFormat the response in a clear, structured way suitable for a Slack message."
+          }
+        ]
+      },
+      "module": "anthropic-claude:CreateAMessage",
+      "version": 1,
+      "metadata": {
+        "designer": {
+          "x": 227,
+          "y": -149
+        }
+      },
+      "parameters": {
+        "__IMTCONN__": 4200938
+      }
+    },
+    {
+      "id": 3,
+      "mapper": {
+        "text": "📊 *Data Studio Report Analysis - Last 7 Days*\n\n*Report:* Metasearch Results\n*Date Range:* {{6.dateRange.from}} to {{6.dateRange.to}}\n*Records Analyzed:* {{6.count}}\n\n---\n\n{{7.content[0].text}}\n\n---\n\n*Generated:* {{now}}",
+        "parse": false,
+        "mrkdwn": true,
+        "channel": "C098UQ18476",
+        "channelType": "private",
+        "channelWType": "list"
+      },
+      "module": "slack:CreateMessage",
+      "version": 4,
+      "metadata": {
+        "expect": [
+          {
+            "name": "channelWType",
+            "type": "select",
+            "label": "Enter a channel ID or name",
+            "required": true,
+            "validate": {
+              "enum": [
+                "manualy",
+                "list"
+              ]
+            }
+          },
+          {
+            "name": "text",
+            "type": "text",
+            "label": "Text"
+          },
+          {
+            "name": "parse",
+            "type": "boolean",
+            "label": "Parse message text"
+          },
+          {
+            "name": "mrkdwn",
+            "type": "boolean",
+            "label": "Use markdown"
+          },
+          {
+            "name": "channelType",
+            "type": "select",
+            "label": "Channel type",
+            "required": true,
+            "validate": {
+              "enum": [
+                "public",
+                "private",
+                "im",
+                "mpim"
+              ]
+            }
+          },
+          {
+            "name": "channel",
+            "type": "select",
+            "label": "Private channel",
+            "required": true
+          }
+        ],
+        "restore": {
+          "expect": {
+            "parse": {
+              "mode": "chose"
+            },
+            "mrkdwn": {
+              "mode": "chose"
+            },
+            "channel": {
+              "mode": "chose",
+              "label": "performance-paid-ads"
+            },
+            "channelType": {
+              "label": "Private channel"
+            },
+            "channelWType": {
+              "label": "Select from the list"
+            }
+          },
+          "parameters": {
+            "__IMTCONN__": {
+              "data": {
+                "scoped": "true",
+                "connection": "slack2"
+              },
+              "label": "GO SG (go-sg-consulting.slack.com - contact)"
+            }
+          }
+        },
+        "designer": {
+          "x": 600,
+          "y": 0
+        }
+      },
+      "parameters": {
+        "__IMTCONN__": 4289110
+      }
+    }
+  ],
+  "name": "Data Studio Report Analysis - Metasearch Results (Last 7 Days)",
+  "metadata": {
+    "instant": false,
+    "version": 1,
+    "designer": {
+      "orphans": []
+    },
+    "samples": {},
+    "scenario": {
+      "dlq": false,
+      "slots": null,
+      "dataloss": false,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "roundtrips": 1,
+      "sequential": false,
+      "confidential": false,
+      "freshVariables": false,
+      "autoCommitTriggerLast": true
+    }
+  },
+  "scheduling": {
+    "type": "indefinitely",
+    "interval": 900
+  },
+  "interface": {
+    "input": [],
+    "output": []
+  }
+}
