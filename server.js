@@ -2,6 +2,7 @@ import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 import cors from 'cors';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -23,16 +24,24 @@ app.use(express.json());
 // Initialize Supabase client
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://zcxxwpwheevwavdcgfht.supabase.co';
 // Use service role key for server-side access (bypasses RLS)
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Fallback to anon key if service role key is not available (for development)
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseServiceKey) {
-  console.error('ERROR: SUPABASE_SERVICE_ROLE_KEY environment variable is required');
-  console.error('This key is needed for server-side database access');
-  process.exit(1);
+  console.error('WARNING: SUPABASE_SERVICE_ROLE_KEY or VITE_SUPABASE_ANON_KEY environment variable is not set');
+  console.error('API endpoints may not work correctly without proper authentication');
+  console.error('Continuing anyway for development purposes...');
 }
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-console.log('[SERVER] Supabase client initialized with URL:', supabaseUrl);
+let supabase;
+if (supabaseServiceKey) {
+  supabase = createClient(supabaseUrl, supabaseServiceKey);
+  console.log('[SERVER] Supabase client initialized with URL:', supabaseUrl);
+} else {
+  // Create a dummy client that will fail gracefully
+  supabase = null;
+  console.log('[SERVER] Supabase client not initialized - missing credentials');
+}
 
 /**
  * Public API endpoint for report data
@@ -47,6 +56,15 @@ app.get('/api/reports/:reportId', async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'reportId is required',
+        count: 0,
+        data: []
+      });
+    }
+
+    if (!supabase) {
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error: Supabase client not initialized',
         count: 0,
         data: []
       });
@@ -91,7 +109,7 @@ app.get('/api/reports/:reportId', async (req, res) => {
     const allData = [];
     
     if (currentPeriodData && currentPeriodData.data) {
-      currentPeriodData.data.forEach((row: any, index: number) => {
+      currentPeriodData.data.forEach((row, index) => {
         allData.push({
           id: `${reportId}_current_${index}`,
           period: 'current',
@@ -104,7 +122,7 @@ app.get('/api/reports/:reportId', async (req, res) => {
     }
 
     if (comparisonPeriodData && comparisonPeriodData.data) {
-      comparisonPeriodData.data.forEach((row: any, index: number) => {
+      comparisonPeriodData.data.forEach((row, index) => {
         allData.push({
           id: `${reportId}_comparison_${index}`,
           period: 'comparison',
@@ -152,27 +170,81 @@ app.get('/api/reports/:reportId', async (req, res) => {
 // Serve static files from dist directory (for production)
 if (process.env.NODE_ENV === 'production') {
   const distPath = join(__dirname, 'dist');
-  app.use(express.static(distPath));
   
-  // Handle React Router - serve index.html for all non-API routes
-  app.get('*', (req, res) => {
-    // Don't serve index.html for API routes
-    if (req.path.startsWith('/api/')) {
-      return res.status(404).json({ error: 'API endpoint not found' });
-    }
-    res.sendFile(join(distPath, 'index.html'));
-  });
+  // Check if dist directory exists
+  if (existsSync(distPath)) {
+    app.use(express.static(distPath));
+    console.log('[SERVER] Serving static files from:', distPath);
+    
+    // Handle React Router - serve index.html for all non-API routes
+    app.get('*', (req, res) => {
+      // Don't serve index.html for API routes
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'API endpoint not found' });
+      }
+      const indexPath = join(distPath, 'index.html');
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error('[SERVER] Error serving index.html:', err);
+          res.status(500).send('Error loading application');
+        }
+      });
+    });
+  } else {
+    console.warn('[SERVER] dist directory not found, static file serving disabled');
+  }
 }
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    supabaseConfigured: !!supabase
+  });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`API endpoint: http://localhost:${PORT}/api/reports/:reportId`);
+// Root endpoint - redirect to health or show info
+app.get('/', (req, res) => {
+  // In production, this will be handled by static file serving
+  // But if static files aren't available, show API info
+  res.json({
+    message: 'API Server is running',
+    endpoints: {
+      health: '/health',
+      api: '/api/reports/:reportId'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Global error handler for unhandled errors
+process.on('uncaughtException', (err) => {
+  console.error('[SERVER] ✗ Uncaught Exception:', err);
+  // Don't exit - let the server continue running
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[SERVER] ✗ Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit - let the server continue running
+});
+
+// Start the server
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[SERVER] ✓ Server running on port ${PORT}`);
+  console.log(`[SERVER] ✓ API endpoint: http://localhost:${PORT}/api/reports/:reportId`);
+  console.log(`[SERVER] ✓ Health check: http://localhost:${PORT}/health`);
   if (process.env.NODE_ENV === 'production') {
-    console.log(`Serving static files from: ${join(__dirname, 'dist')}`);
+    console.log(`[SERVER] ✓ Production mode - serving static files`);
+  } else {
+    console.log(`[SERVER] ✓ Development mode`);
   }
+});
+
+server.on('error', (err) => {
+  console.error('[SERVER] ✗ Failed to start server:', err);
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[SERVER] Port ${PORT} is already in use. Try a different port.`);
+  }
+  process.exit(1);
 });
