@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "update-lockfile": "bun update-lockfile.js",
     "test-deployment": "bun test-deployment.js",
-    "test-domain": "bun test-domain.js"
+    "test-domain": "bun test-domain.js",
+    "create-make-workflow": "node create-make-workflow.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

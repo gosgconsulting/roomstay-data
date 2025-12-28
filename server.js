@@ -683,6 +683,269 @@ app.post('/api/webhooks/make', async (req, res) => {
 });
 
 /**
+ * Get Make.com scenario blueprint template
+ * This can be used to get a blueprint from an existing scenario and modify it
+ * Format: GET /api/make/get-blueprint/:scenarioId
+ */
+app.get('/api/make/get-blueprint/:scenarioId', async (req, res) => {
+  try {
+    const { scenarioId } = req.params;
+    const { makeApiToken, makeRegion = 'us1' } = req.query;
+
+    if (!makeApiToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'makeApiToken query parameter is required'
+      });
+    }
+
+    const makeApiUrl = `https://${makeRegion}.make.com/api/v2/scenarios/${scenarioId}/blueprint`;
+    
+    const response = await fetch(makeApiUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Token ${makeApiToken}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return res.status(response.status).json({
+        success: false,
+        error: 'Failed to get blueprint',
+        details: errorText
+      });
+    }
+
+    const blueprint = await response.json();
+
+    return res.status(200).json({
+      success: true,
+      blueprint
+    });
+
+  } catch (error) {
+    console.error('[MAKE-API] Error getting blueprint:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * Create a Make.com scenario for report analysis
+ * Format: POST /api/make/create-scenario
+ * Body: { reportId, reportName, makeApiToken, teamId, slackChannel, claudeApiKey }
+ */
+app.post('/api/make/create-scenario', async (req, res) => {
+  try {
+    const { 
+      reportId, 
+      reportName, 
+      makeApiToken, 
+      teamId, 
+      slackChannel,
+      slackWebhookUrl,
+      claudeApiKey,
+      makeRegion = 'us1' // 'us1' or 'eu1'
+    } = req.body;
+
+    if (!reportId || !reportName || !makeApiToken || !teamId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields',
+        required: ['reportId', 'reportName', 'makeApiToken', 'teamId']
+      });
+    }
+
+    console.log(`[MAKE-API] Creating scenario for report: ${reportId}`);
+
+    // Generate scenario blueprint
+    const blueprint = generateMakeScenarioBlueprint({
+      reportId,
+      reportName,
+      slackChannel: slackChannel || '#data-reports',
+      slackWebhookUrl,
+      claudeApiKey
+    });
+
+    // Create scenario via Make.com API
+    const makeApiUrl = `https://${makeRegion}.make.com/api/v2/scenarios`;
+    
+    const response = await fetch(makeApiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${makeApiToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        blueprint: JSON.stringify(blueprint),
+        teamId: parseInt(teamId),
+        scheduling: JSON.stringify({
+          enabled: false // Can be enabled later
+        })
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[MAKE-API] Make.com API error:', errorText);
+      return res.status(response.status).json({
+        success: false,
+        error: 'Failed to create Make.com scenario',
+        details: errorText
+      });
+    }
+
+    const scenarioData = await response.json();
+
+    console.log(`[MAKE-API] Scenario created successfully: ${scenarioData.id}`);
+
+    return res.status(201).json({
+      success: true,
+      message: 'Make.com scenario created successfully',
+      scenario: {
+        id: scenarioData.id,
+        name: scenarioData.name,
+        url: `https://${makeRegion}.make.com/scenario/${scenarioData.id}/editor`,
+        blueprint: scenarioData.blueprint
+      }
+    });
+
+  } catch (error) {
+    console.error('[MAKE-API] Error creating scenario:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * Generate Make.com scenario blueprint for report analysis workflow
+ * Note: Make.com blueprint format is complex. This creates a basic structure.
+ * You may need to adjust based on Make.com's actual API response format.
+ */
+function generateMakeScenarioBlueprint({ reportId, reportName, slackChannel, slackWebhookUrl, claudeApiKey }) {
+  const baseUrl = process.env.VITE_API_BASE_URL || process.env.API_BASE_URL || 'https://yourdomain.com';
+  
+  // Make.com blueprint structure (simplified - actual format may vary)
+  return {
+    version: 1,
+    name: `Data Studio Report Analysis - ${reportName}`,
+    flow: [
+      {
+        id: 1,
+        type: 'webhooks',
+        name: 'Custom webhook',
+        position: [250, 300],
+        parameters: {
+          hook: 'custom',
+          path: `report-analysis-${reportId.substring(0, 8)}`
+        },
+        metadata: {
+          label: 'Webhook Trigger'
+        }
+      },
+      {
+        id: 2,
+        type: 'http',
+        name: 'Get Last 7 Days Data',
+        position: [450, 300],
+        parameters: {
+          method: 'GET',
+          url: `${baseUrl}/api/make/reports/${reportId}/last-7-days`,
+          headers: [
+            {
+              key: 'x-api-key',
+              value: '{{apiKey}}' // Will need to be set in Make.com
+            }
+          ]
+        },
+        metadata: {
+          label: 'Fetch Report Data'
+        },
+        connections: {
+          outgoing: [
+            {
+              moduleId: 3
+            }
+          ]
+        }
+      },
+      {
+        id: 3,
+        type: 'anthropic',
+        name: 'Claude AI Analysis',
+        position: [650, 300],
+        parameters: {
+          model: 'claude-3-5-sonnet-20241022',
+          system: 'You are a data analyst specializing in marketing performance data. Analyze the provided data and create a concise, actionable summary focusing on key insights, trends, and recommendations.',
+          messages: [
+            {
+              role: 'user',
+              content: `Analyze the following marketing performance data from the last 7 days:
+
+Report: ${reportName}
+Date Range: {{2.dateRange.from}} to {{2.dateRange.to}}
+Total Records: {{2.count}}
+
+Data:
+{{2.data}}
+
+Please provide:
+1. Key performance metrics summary
+2. Notable trends or changes
+3. Top performing channels/campaigns
+4. Areas of concern or opportunities
+5. Actionable recommendations
+
+Format the response in a clear, structured way suitable for a Slack message.`
+            }
+          ]
+        },
+        metadata: {
+          label: 'AI Analysis'
+        },
+        connections: {
+          outgoing: [
+            {
+              moduleId: 4
+            }
+          ]
+        }
+      },
+      {
+        id: 4,
+        type: slackWebhookUrl ? 'http' : 'slack',
+        name: slackWebhookUrl ? 'Send to Slack (Webhook)' : 'Send to Slack',
+        position: [850, 300],
+        parameters: slackWebhookUrl ? {
+          method: 'POST',
+          url: slackWebhookUrl,
+          body: JSON.stringify({
+            text: `📊 *Data Studio Report Analysis - Last 7 Days*\n\n*Report:* ${reportName}\n*Date Range:* {{2.dateRange.from}} to {{2.dateRange.to}}\n*Records Analyzed:* {{2.count}}\n\n---\n\n{{3.content[0].text}}\n\n---\n\n*Generated:* {{now}}`
+          }),
+          headers: [
+            {
+              key: 'Content-Type',
+              value: 'application/json'
+            }
+          ]
+        } : {
+          channel: slackChannel || '#data-reports',
+          text: `📊 *Data Studio Report Analysis - Last 7 Days*\n\n*Report:* ${reportName}\n*Date Range:* {{2.dateRange.from}} to {{2.dateRange.to}}\n*Records Analyzed:* {{2.count}}\n\n---\n\n{{3.content[0].text}}\n\n---\n\n*Generated:* {{now}}`
+        },
+        metadata: {
+          label: 'Slack Notification'
+        }
+      }
+    ]
+  };
+}
+
+/**
  * Webhook endpoint that Make.com can call to trigger report analysis
  * This is the entry point for the Make.com workflow
  * Format: POST /api/webhooks/report-analysis/:reportId
