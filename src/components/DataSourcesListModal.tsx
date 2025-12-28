@@ -365,6 +365,26 @@ export const DataSourcesListModal = ({
     return 'Google Sheets';
   };
 
+  const getSourceUrl = (dataSource: DataSource): string | null => {
+    if (dataSource.source_type === 'csv_url') {
+      return dataSource.csv_url || null;
+    }
+    return dataSource.google_sheets_url || null;
+  };
+
+  const handleTypeClick = (dataSource: DataSource) => {
+    const url = getSourceUrl(dataSource);
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else {
+      toast({
+        title: "No URL available",
+        description: "This data source does not have a URL configured.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSourceTypeSelect = (sourceType: 'google_sheets' | 'csv_url') => {
     setSelectedSourceType(sourceType);
     setShowDataSourceSelectionModal(false);
@@ -411,10 +431,35 @@ export const DataSourcesListModal = ({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {dataSources.map((dataSource) => (
+                    {dataSources.map((dataSource) => {
+                      const sourceUrl = getSourceUrl(dataSource);
+                      const hasUrl = !!sourceUrl;
+                      
+                      return (
                       <TableRow key={dataSource.id}>
                         <TableCell className="font-medium">{dataSource.name}</TableCell>
-                        <TableCell>{getSourceTypeLabel(dataSource)}</TableCell>
+                        <TableCell className="max-w-md">
+                          {hasUrl ? (
+                            <button
+                              onClick={() => handleTypeClick(dataSource)}
+                              className="text-primary hover:text-primary/80 hover:underline cursor-pointer transition-colors text-left break-all max-w-full truncate block w-full"
+                              title={`Click to open, right-click to copy: ${sourceUrl}`}
+                              onContextMenu={(e) => {
+                                // Allow right-click to copy
+                                e.preventDefault();
+                                navigator.clipboard.writeText(sourceUrl);
+                                toast({
+                                  title: "URL copied",
+                                  description: "The URL has been copied to your clipboard.",
+                                });
+                              }}
+                            >
+                              <span className="truncate block">{sourceUrl}</span>
+                            </button>
+                          ) : (
+                            <span className="text-muted-foreground">{getSourceTypeLabel(dataSource)}</span>
+                          )}
+                        </TableCell>
                         <TableCell>{formatDate(dataSource.last_synced_at)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
@@ -464,7 +509,8 @@ export const DataSourcesListModal = ({
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

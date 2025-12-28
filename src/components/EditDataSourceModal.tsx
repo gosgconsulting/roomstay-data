@@ -65,6 +65,7 @@ export const EditDataSourceModal = ({
   const [step, setStep] = useState(1);
   const [dataName, setDataName] = useState("");
   const [url, setUrl] = useState("");
+  const [sourceType, setSourceType] = useState<'google_sheets' | 'csv_url'>('google_sheets');
   const [availableTabs, setAvailableTabs] = useState<string[]>([]);
   const [selectedTab, setSelectedTab] = useState("");
   const [headerRow, setHeaderRow] = useState("1");
@@ -107,8 +108,9 @@ export const EditDataSourceModal = ({
   useEffect(() => {
     if (open && dataSource) {
       setDataName(dataSource.name || "");
-      const sourceType = dataSource.source_type || 'google_sheets';
-      setUrl(sourceType === 'csv_url' ? (dataSource.csv_url || "") : (dataSource.google_sheets_url || ""));
+      const initialSourceType = dataSource.source_type || 'google_sheets';
+      setSourceType(initialSourceType);
+      setUrl(initialSourceType === 'csv_url' ? (dataSource.csv_url || "") : (dataSource.google_sheets_url || ""));
       setSelectedTab(dataSource.tab_name || "");
       setHeaderRow(String(dataSource.header_row || 1));
       setSyncFrequency((dataSource as any).sync_frequency || "manual");
@@ -121,6 +123,19 @@ export const EditDataSourceModal = ({
     }
   }, [open, dataSource, fetchSyncStatistics]);
 
+  // Update URL when source type changes - only if we have a stored URL for that type
+  useEffect(() => {
+    if (dataSource && open) {
+      const storedUrl = sourceType === 'csv_url' 
+        ? (dataSource.csv_url || "") 
+        : (dataSource.google_sheets_url || "");
+      // Only update if we have a stored URL for the selected type, otherwise keep current URL
+      if (storedUrl) {
+        setUrl(storedUrl);
+      }
+    }
+  }, [sourceType, dataSource, open]);
+
   // Remove duplicate extractSpreadsheetId - now imported from sync-utils
 
   const handleNext = async () => {
@@ -132,8 +147,6 @@ export const EditDataSourceModal = ({
       });
       return;
     }
-
-    const sourceType = dataSource?.source_type || 'google_sheets';
 
     if (sourceType === 'csv_url') {
       // For CSV, validate URL and skip to header loading
@@ -205,8 +218,6 @@ export const EditDataSourceModal = ({
   };
 
   const handleLoadHeaders = async () => {
-    const sourceType = dataSource?.source_type || 'google_sheets';
-
     if (sourceType === 'google_sheets') {
       if (!selectedTab) {
         toast({
@@ -301,8 +312,9 @@ export const EditDataSourceModal = ({
     setStep(1);
     if (dataSource) {
       setDataName(dataSource.name || "");
-      const sourceType = dataSource.source_type || 'google_sheets';
-      setUrl(sourceType === 'csv_url' ? (dataSource.csv_url || "") : (dataSource.google_sheets_url || ""));
+      const initialSourceType = dataSource.source_type || 'google_sheets';
+      setSourceType(initialSourceType);
+      setUrl(initialSourceType === 'csv_url' ? (dataSource.csv_url || "") : (dataSource.google_sheets_url || ""));
       setSelectedTab(dataSource.tab_name || "");
       setHeaderRow(String(dataSource.header_row || 1));
     }
@@ -323,8 +335,6 @@ export const EditDataSourceModal = ({
 
   const handleSaveMappings = async (mappings: any[]) => {
     if (!dataSource) return;
-
-    const sourceType = dataSource.source_type || 'google_sheets';
 
     if (sourceType === 'csv_url') {
       // CSV-specific fields handled below after dimension creation
@@ -428,7 +438,6 @@ export const EditDataSourceModal = ({
   const handleSaveSettings = async () => {
     if (!dataSource) return;
 
-    const sourceType = dataSource.source_type || 'google_sheets';
     const updateData: any = {
       name: dataName,
       header_row: parseInt(headerRow),
@@ -521,7 +530,6 @@ export const EditDataSourceModal = ({
       }
       
       console.log('[RESYNC] User authenticated:', user.id);
-      const sourceType = dataSource.source_type || 'google_sheets';
       const updateData: any = {
         name: dataName,
         header_row: parseInt(headerRow),
@@ -656,11 +664,11 @@ export const EditDataSourceModal = ({
               </Button>
             )}
             <FileSpreadsheet className="h-5 w-5 text-primary" />
-            {dataSource?.source_type === 'csv_url' ? 'Edit CSV URL Data Source' : 'Edit Google Sheets Data Source'}
+            {sourceType === 'csv_url' ? 'Edit CSV URL Data Source' : 'Edit Google Sheets Data Source'}
           </DialogTitle>
           <DialogDescription>
             {step === 1 
-              ? dataSource?.source_type === 'csv_url' 
+              ? sourceType === 'csv_url' 
                 ? "Update your CSV URL, name, and other settings"
                 : "Update your Google Sheets URL, name, and other settings"
               : step === 2
@@ -684,12 +692,45 @@ export const EditDataSourceModal = ({
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="sourceType">Data Source Type *</Label>
+                <Select value={sourceType} onValueChange={(value: 'google_sheets' | 'csv_url') => setSourceType(value)}>
+                  <SelectTrigger id="sourceType" className="bg-background">
+                    <SelectValue placeholder="Select data source type">
+                      {sourceType === 'csv_url' ? 'CSV URL' : 'Google Sheets'}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="bg-background z-50">
+                    <SelectItem value="google_sheets">
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium">Google Sheets</span>
+                        {dataSource?.google_sheets_url && (
+                          <span className="text-xs text-muted-foreground truncate max-w-[400px]" title={dataSource.google_sheets_url}>
+                            {dataSource.google_sheets_url}
+                          </span>
+                        )}
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="csv_url">
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium">CSV URL</span>
+                        {dataSource?.csv_url && (
+                          <span className="text-xs text-muted-foreground truncate max-w-[400px]" title={dataSource.csv_url}>
+                            {dataSource.csv_url}
+                          </span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="url">
-                  {dataSource?.source_type === 'csv_url' ? 'CSV URL *' : 'Google Sheets URL *'}
+                  {sourceType === 'csv_url' ? 'CSV URL *' : 'Google Sheets URL *'}
                 </Label>
                 <Input
                   id="url"
-                  placeholder={dataSource?.source_type === 'csv_url' 
+                  placeholder={sourceType === 'csv_url' 
                     ? "https://example.com/data.csv" 
                     : "https://docs.google.com/spreadsheets/d/..."}
                   value={url}
@@ -798,7 +839,7 @@ export const EditDataSourceModal = ({
             </>
           ) : step === 2 ? (
             <>
-              {dataSource?.source_type !== 'csv_url' && (
+              {sourceType !== 'csv_url' && (
                 <div className="space-y-2">
                   <Label htmlFor="tabName">Select Tab *</Label>
                   <Select value={selectedTab} onValueChange={setSelectedTab}>
@@ -825,7 +866,7 @@ export const EditDataSourceModal = ({
                   value={headerRow}
                   onChange={(e) => setHeaderRow(e.target.value)}
                 />
-                {dataSource?.source_type === 'csv_url' && (
+                {sourceType === 'csv_url' && (
                   <p className="text-xs text-muted-foreground">
                     The row number (starting from 1) that contains the column headers
                   </p>
