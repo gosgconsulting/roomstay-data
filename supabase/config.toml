@@ -38,3 +38,9 @@ verify_jwt = false
 
 [functions.generate-ai-summary]
 verify_jwt = false
+
+[functions.get-report-api-data]
+verify_jwt = false
+
+[functions.sync-report-api-data]
+verify_jwt = false

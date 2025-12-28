@@ -199,36 +199,86 @@ Deno.serve(async (req) => {
     try {
       for (const reportId of reportIds) {
         const reportName = reportMap.get(reportId) || reportId;
+        let reportData: any[] = [];
+        let usedApiData = false;
         
-        // Build query
-        let query = supabase
-          .from('dimension_data')
-          .select('dimension_values, report_id')
-          .eq('report_id', reportId);
-
-        // Apply date filters if provided
+        // Try to use pre-computed API data for fast loading (if date range matches)
         if (dateFrom && dateTo) {
-          // Find Date dimension
-          const dateDimension = dateDimensions.find(d => d.name === 'Date');
-          
-          if (dateDimension) {
-            // PostgreSQL JSONB filtering for date range
-            query = query
-              .gte(`dimension_values->>${dateDimension.id}`, dateFrom)
-              .lte(`dimension_values->>${dateDimension.id}`, dateTo);
+          try {
+            const { data: apiData, error: apiError } = await supabase
+              .from('report_api_data')
+              .select('period_type, date_from, date_to, data')
+              .eq('report_id', reportId)
+              .eq('period_type', 'current')
+              .maybeSingle();
+
+            if (!apiError && apiData) {
+              // Check if requested date range is within API data range
+              const apiFrom = apiData.date_from;
+              const apiTo = apiData.date_to;
+              
+              if (dateFrom >= apiFrom && dateTo <= apiTo) {
+                console.log(`[GET-CONSOLIDATED-PERFORMANCE-DATA] Using API data for report ${reportId} (${apiFrom} to ${apiTo})`);
+                
+                // Find Date dimension for filtering
+                const dateDimension = dateDimensions.find(d => d.name === 'Date');
+                
+                // Filter the pre-computed data by the requested date range
+                let filteredApiData = apiData.data || [];
+                
+                if (dateDimension) {
+                  filteredApiData = filteredApiData.filter((row: any) => {
+                    const dv = row.dimension_values || {};
+                    const rowDate = dv[dateDimension.id];
+                    if (!rowDate) return false;
+                    const rowDateStr = String(rowDate);
+                    return rowDateStr >= dateFrom && rowDateStr <= dateTo;
+                  });
+                }
+                
+                reportData = filteredApiData;
+                usedApiData = true;
+              }
+            }
+          } catch (apiCheckError) {
+            console.error(`[GET-CONSOLIDATED-PERFORMANCE-DATA] Error checking API data for report ${reportId}, using dimension_data:`, apiCheckError);
           }
         }
+        
+        // Fallback to dimension_data if API data not available or doesn't match
+        if (!usedApiData) {
+          // Build query
+          let query = supabase
+            .from('dimension_data')
+            .select('dimension_values, report_id')
+            .eq('report_id', reportId);
 
-        const { data: dimensionData, error: dataError } = await query.limit(10000);
+          // Apply date filters if provided
+          if (dateFrom && dateTo) {
+            // Find Date dimension
+            const dateDimension = dateDimensions.find(d => d.name === 'Date');
+            
+            if (dateDimension) {
+              // PostgreSQL JSONB filtering for date range
+              query = query
+                .gte(`dimension_values->>${dateDimension.id}`, dateFrom)
+                .lte(`dimension_values->>${dateDimension.id}`, dateTo);
+            }
+          }
 
-        if (dataError) {
-          console.error(`[GET-CONSOLIDATED-PERFORMANCE-DATA] Error fetching data for report ${reportId}:`, dataError);
-          continue;
+          const { data: dimensionData, error: dataError } = await query.limit(10000);
+
+          if (dataError) {
+            console.error(`[GET-CONSOLIDATED-PERFORMANCE-DATA] Error fetching data for report ${reportId}:`, dataError);
+            continue;
+          }
+
+          reportData = dimensionData || [];
         }
 
         // Add report name to each row's dimension values
-        if (dimensionData) {
-          dimensionData.forEach(row => {
+        if (reportData.length > 0) {
+          reportData.forEach(row => {
             allData.push({
               dimension_values: {
                 ...row.dimension_values,

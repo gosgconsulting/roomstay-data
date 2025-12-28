@@ -9,6 +9,8 @@ import {
 import { Database, Clock, RefreshCw, Trash2 } from "lucide-react";
 import { useCacheStatus, useCacheActions } from "@/hooks/useCacheStatus";
 import { formatDistanceToNow } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
+import { getReportApiUrl } from "@/lib/api-url";
 
 interface CacheStatusIndicatorProps {
   reportId: string | null;
@@ -18,6 +20,7 @@ interface CacheStatusIndicatorProps {
 export function CacheStatusIndicator({ reportId, onRefreshData }: CacheStatusIndicatorProps) {
   const cacheStatus = useCacheStatus(reportId);
   const { clearCache, refreshCache } = useCacheActions();
+  const { toast } = useToast();
 
   if (!reportId || cacheStatus.dataSourceCount === 0) {
     return null;
@@ -33,9 +36,29 @@ export function CacheStatusIndicator({ reportId, onRefreshData }: CacheStatusInd
     onRefreshData?.();
   };
 
+  const handleCopyApiUrl = async () => {
+    if (!reportId) return;
+    
+    const apiUrl = getReportApiUrl(reportId);
+    try {
+      await navigator.clipboard.writeText(apiUrl);
+      toast({
+        title: "API URL copied",
+        description: "The API URL has been copied to your clipboard.",
+      });
+    } catch (error) {
+      console.error("Failed to copy API URL:", error);
+      toast({
+        title: "Failed to copy",
+        description: "Could not copy API URL to clipboard.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const getCacheStatusText = () => {
     if (cacheStatus.cachedSourceCount === 0) {
-      return "No cached data";
+      return "api";
     }
     
     if (cacheStatus.cachedSourceCount === cacheStatus.dataSourceCount) {
@@ -88,7 +111,11 @@ export function CacheStatusIndicator({ reportId, onRefreshData }: CacheStatusInd
       <div className="flex items-center gap-2">
         <Tooltip>
           <TooltipTrigger asChild>
-            <Badge variant={variant} className="gap-1 cursor-help">
+            <Badge 
+              variant={variant} 
+              className={`gap-1 ${cacheStatus.cachedSourceCount === 0 ? 'cursor-pointer hover:bg-accent' : 'cursor-help'}`}
+              onClick={cacheStatus.cachedSourceCount === 0 ? handleCopyApiUrl : undefined}
+            >
               <IconComponent className="h-3 w-3" />
               {getCacheStatusText()}
             </Badge>
@@ -101,9 +128,16 @@ export function CacheStatusIndicator({ reportId, onRefreshData }: CacheStatusInd
                 <div className="text-muted-foreground">{getCacheAgeText()}</div>
               )}
               <div className="text-muted-foreground">{getLastSyncText()}</div>
-              <div className="text-xs text-muted-foreground mt-2">
-                Cached data loads instantly. Use "Sync" to refresh from source.
-              </div>
+              {cacheStatus.cachedSourceCount === 0 && (
+                <div className="text-xs text-muted-foreground mt-2">
+                  Click to copy API URL to clipboard
+                </div>
+              )}
+              {cacheStatus.isDataCached && (
+                <div className="text-xs text-muted-foreground mt-2">
+                  Cached data loads instantly. Use "Sync" to refresh from source.
+                </div>
+              )}
             </div>
           </TooltipContent>
         </Tooltip>

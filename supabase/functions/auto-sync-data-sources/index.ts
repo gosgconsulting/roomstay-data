@@ -141,6 +141,31 @@ Deno.serve(async (req: Request) => {
             vlookupApplied: resyncResult.vlookupApplied || false,
             vlookupRowsUpdated: resyncResult.vlookupRowsUpdated || 0
           });
+
+          // Sync API data for this report
+          try {
+            console.log(`[AUTO-SYNC] Syncing API data for report: ${ds.report_id}`);
+            const apiSyncResponse = await fetch(`${supabaseUrl}/functions/v1/sync-report-api-data`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseAnonKey}`,
+              },
+              body: JSON.stringify({
+                reportId: ds.report_id
+              }),
+            });
+
+            const apiSyncResult = await apiSyncResponse.json();
+            if (apiSyncResult.success) {
+              console.log(`[AUTO-SYNC] Successfully synced API data for report ${ds.report_id}: ${apiSyncResult.currentPeriodRows} current, ${apiSyncResult.comparisonPeriodRows} comparison rows`);
+            } else {
+              console.error(`[AUTO-SYNC] Failed to sync API data for report ${ds.report_id}:`, apiSyncResult.error);
+            }
+          } catch (apiSyncError) {
+            console.error(`[AUTO-SYNC] Error syncing API data for report ${ds.report_id}:`, apiSyncError);
+            // Don't fail the entire sync if API data sync fails
+          }
         } else {
           console.error(`[AUTO-SYNC] Failed to sync ${ds.name}:`, resyncResult.error);
           syncResults.push({ 
