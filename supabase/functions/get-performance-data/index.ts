@@ -54,6 +54,161 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Try to use pre-computed API data FIRST for instant loading (single report only, with date range)
+    // This check happens before dimension loading to minimize latency
+    if (reportId && dateFrom && dateTo && !reportIds) {
+      try {
+        console.log('[GET-PERFORMANCE-DATA] Fast path: Checking for pre-computed API data...');
+        const { data: apiData, error: apiError } = await supabase
+          .from('report_api_data')
+          .select('period_type, date_from, date_to, data')
+          .eq('report_id', reportId)
+          .eq('period_type', 'current')
+          .maybeSingle();
+
+        if (!apiError && apiData) {
+          // Check if requested date range is within or matches API data range
+          const apiFrom = apiData.date_from;
+          const apiTo = apiData.date_to;
+          
+          // Check if requested range is within API data range (more lenient check)
+          if (dateFrom >= apiFrom && dateTo <= apiTo) {
+            console.log(`[GET-PERFORMANCE-DATA] ✓ Using pre-computed API data (${apiFrom} to ${apiTo}) for instant loading`);
+            
+            // Load dimensions in parallel (we still need them for filtering)
+            const [dimensionsResult] = await Promise.all([
+              // Load dimensions
+              (async () => {
+                let dims: any[] = [];
+                if (accountId) {
+                  const { data } = await supabase.from('dimensions').select('id, name, type, scope, account_id, report_id').eq('scope', 'account').eq('account_id', accountId);
+                  dims = [...dims, ...(data || [])];
+                }
+                if (userId) {
+                  const { data } = await supabase.from('dimensions').select('id, name, type, scope, account_id, report_id').eq('scope', 'custom').eq('user_id', userId);
+                  dims = [...dims, ...(data || [])];
+                }
+                const { data: global } = await supabase.from('dimensions').select('id, name, type, scope, account_id, report_id').eq('scope', 'global');
+                dims = [...dims, ...(global || [])];
+                if (reportId) {
+                  const { data: report } = await supabase.from('dimensions').select('id, name, type, scope, account_id, report_id').eq('report_id', reportId);
+                  const existingIds = new Set(dims.map(d => d.id));
+                  dims = [...dims, ...(report?.filter(d => !existingIds.has(d.id)) || [])];
+                }
+                return dims;
+              })()
+            ]);
+
+            const allDimensions = dimensionsResult;
+            const dateDimensions = allDimensions.filter((d: any) => d.type === 'date');
+            
+            // Find date dimension for filtering
+            let dateDimIdForFilter: string | null = null;
+            if (dateDimensions.length > 0) {
+              const reportDateDim = dateDimensions.find((d: any) => d.report_id === reportId);
+              dateDimIdForFilter = reportDateDim?.id || 
+                dateDimensions.find((d: any) => d.account_id === accountId)?.id ||
+                dateDimensions.find((d: any) => d.scope === 'global')?.id ||
+                dateDimensions[0]?.id || null;
+            }
+            
+            // Filter the pre-computed data by the requested date range
+            let filteredApiData = apiData.data || [];
+            
+            // Filter by date range if we have a date dimension
+            if (dateDimIdForFilter) {
+              filteredApiData = filteredApiData.filter((row: any) => {
+                const dv = row.dimension_values || {};
+                const rowDate = dv[dateDimIdForFilter!];
+                if (!rowDate) return false;
+                const rowDateStr = String(rowDate);
+                return rowDateStr >= dateFrom && rowDateStr <= dateTo;
+              });
+            }
+            
+            // Apply dimension filters if provided
+            const normalizedFilters: Record<string, string[]> = {};
+            for (const [k, v] of Object.entries(dimensionFilters || {})) {
+              if (Array.isArray(v)) normalizedFilters[k] = v.map((x) => String(x));
+              else if (v !== undefined && v !== null) normalizedFilters[k] = [String(v)];
+            }
+            
+            if (Object.keys(normalizedFilters).length > 0) {
+              const dimIdToName: Record<string, string> = {};
+              const dimNameToIds: Record<string, string[]> = {};
+              allDimensions.forEach((dim: any) => {
+                dimIdToName[dim.id] = dim.name;
+                if (!dimNameToIds[dim.name]) dimNameToIds[dim.name] = [];
+                if (!dimNameToIds[dim.name].includes(dim.id)) {
+                  dimNameToIds[dim.name].push(dim.id);
+                }
+              });
+              
+              filteredApiData = filteredApiData.filter((row: any) => {
+                const dv = row.dimension_values || {};
+                for (const [filterDimId, values] of Object.entries(normalizedFilters)) {
+                  if (!values || values.length === 0) continue;
+                  const dimName = dimIdToName[filterDimId];
+                  const allIdsForName = dimName ? (dimNameToIds[dimName] || [filterDimId]) : [filterDimId];
+                  let foundMatch = false;
+                  for (const id of allIdsForName) {
+                    const rowVal = dv[id];
+                    if (rowVal !== undefined && rowVal !== null) {
+                      const rowStr = String(rowVal);
+                      if (values.some((v) => rowStr === v)) {
+                        foundMatch = true;
+                        break;
+                      }
+                    }
+                  }
+                  if (!foundMatch) return false;
+                }
+                return true;
+              });
+            }
+            
+            // Apply pagination
+            const startIndex = offset || 0;
+            const endIndex = startIndex + (limit || 50000);
+            const paginatedData = filteredApiData.slice(startIndex, endIndex);
+            
+            // Build response in the same format as regular query
+            const data = paginatedData.map((row: any, i: number) => ({
+              id: `row-${row.row_number ?? i + 1}`,
+              dimension_values: row.dimension_values || {},
+              row_number: row.row_number ?? i + 1,
+              data_source_id: row.data_source_id || null,
+            }));
+            
+            const total = filteredApiData.length;
+            console.log(`[GET-PERFORMANCE-DATA] ✓ Returning ${paginatedData.length} rows from API cache (total: ${total}) - INSTANT LOAD`);
+            
+            return new Response(JSON.stringify({
+              data,
+              total,
+              totalRows: total,
+              totalCount: total,
+              hasMore: endIndex < total,
+              meta: {
+                dateDimensionId: dateDimIdForFilter,
+                dimensionsCount: allDimensions.length,
+                source: 'api_cache'
+              },
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          } else {
+            console.log(`[GET-PERFORMANCE-DATA] Date range mismatch - API: ${apiFrom} to ${apiTo}, Requested: ${dateFrom} to ${dateTo} - using dimension_data`);
+          }
+        } else {
+          console.log('[GET-PERFORMANCE-DATA] No pre-computed API data available, using dimension_data');
+        }
+      } catch (apiCheckError) {
+        console.error('[GET-PERFORMANCE-DATA] Error checking API data, falling back to dimension_data:', apiCheckError);
+        // Continue with normal flow
+      }
+    }
+
     // Load dimensions (account > custom > global) using separate queries to avoid SQL injection
     let allDimensions: any[] = [];
     
@@ -174,133 +329,6 @@ Deno.serve(async (req) => {
     }
 
     const dateDimensions = allDimensions.filter((d: any) => d.type === 'date');
-
-    // Try to use pre-computed API data for fast loading (single report only, with date range)
-    if (reportId && dateFrom && dateTo && !reportIds) {
-      try {
-        console.log('[GET-PERFORMANCE-DATA] Checking for pre-computed API data...');
-        const { data: apiData, error: apiError } = await supabase
-          .from('report_api_data')
-          .select('period_type, date_from, date_to, data')
-          .eq('report_id', reportId)
-          .eq('period_type', 'current')
-          .maybeSingle();
-
-        if (!apiError && apiData) {
-          // Check if requested date range is within or matches API data range
-          const apiFrom = apiData.date_from;
-          const apiTo = apiData.date_to;
-          
-          // Check if requested range is within API data range
-          if (dateFrom >= apiFrom && dateTo <= apiTo) {
-            console.log(`[GET-PERFORMANCE-DATA] Using pre-computed API data (${apiFrom} to ${apiTo})`);
-            
-            // Filter the pre-computed data by the requested date range
-            let filteredApiData = apiData.data || [];
-            
-            // Find date dimension for filtering
-            let dateDimIdForFilter: string | null = null;
-            if (dateDimensions.length > 0) {
-              const reportDateDim = dateDimensions.find((d: any) => d.report_id === reportId);
-              dateDimIdForFilter = reportDateDim?.id || 
-                dateDimensions.find((d: any) => d.account_id === accountId)?.id ||
-                dateDimensions.find((d: any) => d.scope === 'global')?.id ||
-                dateDimensions[0]?.id || null;
-            }
-            
-            // Filter by date range if we have a date dimension
-            if (dateDimIdForFilter) {
-              filteredApiData = filteredApiData.filter((row: any) => {
-                const dv = row.dimension_values || {};
-                const rowDate = dv[dateDimIdForFilter!];
-                if (!rowDate) return false;
-                const rowDateStr = String(rowDate);
-                return rowDateStr >= dateFrom && rowDateStr <= dateTo;
-              });
-            }
-            
-            // Apply dimension filters if provided
-            const normalizedFilters: Record<string, string[]> = {};
-            for (const [k, v] of Object.entries(dimensionFilters || {})) {
-              if (Array.isArray(v)) normalizedFilters[k] = v.map((x) => String(x));
-              else if (v !== undefined && v !== null) normalizedFilters[k] = [String(v)];
-            }
-            
-            if (Object.keys(normalizedFilters).length > 0) {
-              const dimIdToName: Record<string, string> = {};
-              const dimNameToIds: Record<string, string[]> = {};
-              allDimensions.forEach((dim: any) => {
-                dimIdToName[dim.id] = dim.name;
-                if (!dimNameToIds[dim.name]) dimNameToIds[dim.name] = [];
-                if (!dimNameToIds[dim.name].includes(dim.id)) {
-                  dimNameToIds[dim.name].push(dim.id);
-                }
-              });
-              
-              filteredApiData = filteredApiData.filter((row: any) => {
-                const dv = row.dimension_values || {};
-                for (const [filterDimId, values] of Object.entries(normalizedFilters)) {
-                  if (!values || values.length === 0) continue;
-                  const dimName = dimIdToName[filterDimId];
-                  const allIdsForName = dimName ? (dimNameToIds[dimName] || [filterDimId]) : [filterDimId];
-                  let foundMatch = false;
-                  for (const id of allIdsForName) {
-                    const rowVal = dv[id];
-                    if (rowVal !== undefined && rowVal !== null) {
-                      const rowStr = String(rowVal);
-                      if (values.some((v) => rowStr === v)) {
-                        foundMatch = true;
-                        break;
-                      }
-                    }
-                  }
-                  if (!foundMatch) return false;
-                }
-                return true;
-              });
-            }
-            
-            // Apply pagination
-            const startIndex = offset || 0;
-            const endIndex = startIndex + (limit || 50000);
-            const paginatedData = filteredApiData.slice(startIndex, endIndex);
-            
-            // Build response in the same format as regular query
-            const data = paginatedData.map((row: any, i: number) => ({
-              id: `row-${row.row_number ?? i + 1}`,
-              dimension_values: row.dimension_values || {},
-              row_number: row.row_number ?? i + 1,
-              data_source_id: row.data_source_id || null,
-            }));
-            
-            const total = filteredApiData.length;
-            console.log(`[GET-PERFORMANCE-DATA] Returning ${paginatedData.length} rows from API data (total: ${total})`);
-            
-            return new Response(JSON.stringify({
-              data,
-              total,
-              totalRows: total,
-              totalCount: total,
-              hasMore: endIndex < total,
-              meta: {
-                dateDimensionId: dateDimIdForFilter,
-                dimensionsCount: allDimensions.length,
-                source: 'api_cache'
-              },
-            }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          } else {
-            console.log(`[GET-PERFORMANCE-DATA] Date range mismatch - API: ${apiFrom} to ${apiTo}, Requested: ${dateFrom} to ${dateTo}`);
-          }
-        } else {
-          console.log('[GET-PERFORMANCE-DATA] No pre-computed API data available, using dimension_data');
-        }
-      } catch (apiCheckError) {
-        console.error('[GET-PERFORMANCE-DATA] Error checking API data, falling back to dimension_data:', apiCheckError);
-        // Continue with normal flow
-      }
-    }
 
     // Determine which date dimension to use for filtering (before fetching data)
     let dateDimIdToUse: string | null = null;

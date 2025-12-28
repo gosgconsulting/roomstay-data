@@ -193,17 +193,15 @@ Deno.serve(async (req) => {
     // Create a special "Report" dimension ID
     const REPORT_DIMENSION_ID = '__report_dimension__';
 
-    // Load data from all reports
+    // Load data from all reports - use API data when available for instant loading
     let allData: any[] = [];
     
     try {
-      for (const reportId of reportIds) {
-        const reportName = reportMap.get(reportId) || reportId;
-        let reportData: any[] = [];
-        let usedApiData = false;
-        
-        // Try to use pre-computed API data for fast loading (if date range matches)
-        if (dateFrom && dateTo) {
+      // Check API data for all reports in parallel for faster loading
+      const apiDataChecks = await Promise.all(
+        reportIds.map(async (reportId) => {
+          if (!dateFrom || !dateTo) return { reportId, apiData: null };
+          
           try {
             const { data: apiData, error: apiError } = await supabase
               .from('report_api_data')
@@ -213,40 +211,49 @@ Deno.serve(async (req) => {
               .maybeSingle();
 
             if (!apiError && apiData) {
-              // Check if requested date range is within API data range
               const apiFrom = apiData.date_from;
               const apiTo = apiData.date_to;
-              
               if (dateFrom >= apiFrom && dateTo <= apiTo) {
-                console.log(`[GET-CONSOLIDATED-PERFORMANCE-DATA] Using API data for report ${reportId} (${apiFrom} to ${apiTo})`);
-                
-                // Find Date dimension for filtering
-                const dateDimension = dateDimensions.find(d => d.name === 'Date');
-                
-                // Filter the pre-computed data by the requested date range
-                let filteredApiData = apiData.data || [];
-                
-                if (dateDimension) {
-                  filteredApiData = filteredApiData.filter((row: any) => {
-                    const dv = row.dimension_values || {};
-                    const rowDate = dv[dateDimension.id];
-                    if (!rowDate) return false;
-                    const rowDateStr = String(rowDate);
-                    return rowDateStr >= dateFrom && rowDateStr <= dateTo;
-                  });
-                }
-                
-                reportData = filteredApiData;
-                usedApiData = true;
+                return { reportId, apiData };
               }
             }
-          } catch (apiCheckError) {
-            console.error(`[GET-CONSOLIDATED-PERFORMANCE-DATA] Error checking API data for report ${reportId}, using dimension_data:`, apiCheckError);
+          } catch (error) {
+            console.error(`[GET-CONSOLIDATED-PERFORMANCE-DATA] Error checking API data for report ${reportId}:`, error);
           }
-        }
+          return { reportId, apiData: null };
+        })
+      );
+
+      const apiDataMap = new Map(apiDataChecks.map(check => [check.reportId, check.apiData]));
+
+      for (const reportId of reportIds) {
+        const reportName = reportMap.get(reportId) || reportId;
+        let reportData: any[] = [];
+        const cachedApiData = apiDataMap.get(reportId);
         
-        // Fallback to dimension_data if API data not available or doesn't match
-        if (!usedApiData) {
+        // Use pre-computed API data if available
+        if (cachedApiData && dateFrom && dateTo) {
+          console.log(`[GET-CONSOLIDATED-PERFORMANCE-DATA] ✓ Using API cache for report ${reportId} - INSTANT LOAD`);
+          
+          // Find Date dimension for filtering
+          const dateDimension = dateDimensions.find(d => d.name === 'Date');
+          
+          // Filter the pre-computed data by the requested date range
+          let filteredApiData = cachedApiData.data || [];
+          
+          if (dateDimension) {
+            filteredApiData = filteredApiData.filter((row: any) => {
+              const dv = row.dimension_values || {};
+              const rowDate = dv[dateDimension.id];
+              if (!rowDate) return false;
+              const rowDateStr = String(rowDate);
+              return rowDateStr >= dateFrom && rowDateStr <= dateTo;
+            });
+          }
+          
+          reportData = filteredApiData;
+        } else {
+          // Fallback to dimension_data if API data not available
           // Build query
           let query = supabase
             .from('dimension_data')
