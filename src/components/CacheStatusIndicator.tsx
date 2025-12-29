@@ -36,29 +36,30 @@ export function CacheStatusIndicator({ reportId, onRefreshData }: CacheStatusInd
     onRefreshData?.();
   };
 
-  const handleCopyApiUrl = async () => {
-    if (!reportId) return;
-    
-    const apiUrl = getReportApiUrl(reportId);
-    try {
-      await navigator.clipboard.writeText(apiUrl);
-      toast({
-        title: "API URL copied",
-        description: "The API URL has been copied to your clipboard.",
-      });
-    } catch (error) {
-      console.error("Failed to copy API URL:", error);
-      toast({
-        title: "Failed to copy",
-        description: "Could not copy API URL to clipboard.",
-        variant: "destructive",
-      });
-    }
-  };
+  // Old API copy functionality disabled - now using API URL Builder modal in ReportDashboard
+  // const handleCopyApiUrl = async () => {
+  //   if (!reportId) return;
+  //   
+  //   const apiUrl = getReportApiUrl(reportId);
+  //   try {
+  //     await navigator.clipboard.writeText(apiUrl);
+  //     toast({
+  //       title: "API URL copied",
+  //       description: "The API URL has been copied to your clipboard.",
+  //     });
+  //   } catch (error) {
+  //     console.error("Failed to copy API URL:", error);
+  //     toast({
+  //       title: "Failed to copy",
+  //       description: "Could not copy API URL to clipboard.",
+  //       variant: "destructive",
+  //     });
+  //   }
+  // };
 
   const getCacheStatusText = () => {
     if (cacheStatus.cachedSourceCount === 0) {
-      return "api";
+      return "No cache";
     }
     
     if (cacheStatus.cachedSourceCount === cacheStatus.dataSourceCount) {
@@ -113,8 +114,7 @@ export function CacheStatusIndicator({ reportId, onRefreshData }: CacheStatusInd
           <TooltipTrigger asChild>
             <Badge 
               variant={variant} 
-              className={`gap-1 ${cacheStatus.cachedSourceCount === 0 ? 'cursor-pointer hover:bg-accent' : 'cursor-help'}`}
-              onClick={cacheStatus.cachedSourceCount === 0 ? handleCopyApiUrl : undefined}
+              className="gap-1 cursor-help"
             >
               <IconComponent className="h-3 w-3" />
               {getCacheStatusText()}
@@ -128,11 +128,6 @@ export function CacheStatusIndicator({ reportId, onRefreshData }: CacheStatusInd
                 <div className="text-muted-foreground">{getCacheAgeText()}</div>
               )}
               <div className="text-muted-foreground">{getLastSyncText()}</div>
-              {cacheStatus.cachedSourceCount === 0 && (
-                <div className="text-xs text-muted-foreground mt-2">
-                  Click to copy API URL to clipboard
-                </div>
-              )}
               {cacheStatus.isDataCached && (
                 <div className="text-xs text-muted-foreground mt-2">
                   Cached data loads instantly. Use "Sync" to refresh from source.

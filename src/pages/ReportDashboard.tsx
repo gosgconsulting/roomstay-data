@@ -15,8 +15,9 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Database, Grid3x3, GitCompare, Star, Share2, Settings } from "lucide-react";
+import { ArrowLeft, Database, Grid3x3, GitCompare, Star, Share2, Settings, Code } from "lucide-react";
 import { ShareModal } from "@/components/ShareModal";
+import { APIBuilderModal } from "@/components/APIBuilderModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
 import { resyncReportViews } from "@/lib/resync-report-views";
@@ -66,6 +67,7 @@ export default function ReportDashboard() {
 
   // FIX: Add missing state for local Share modal
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showAPIBuilderModal, setShowAPIBuilderModal] = useState(false);
 
   // NEW: Persisted chart metrics (defaults)
   const [chartMetrics, setChartMetrics] = useState<string[]>([
@@ -613,6 +615,19 @@ export default function ReportDashboard() {
                   </>
                 )}
 
+                {/* API button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowAPIBuilderModal(true)}
+                  disabled={!reportId}
+                  title="API URL Builder"
+                >
+                  <Code className="h-4 w-4" />
+                  API
+                </Button>
+
                 {/* Share button */}
                 <Button
                   variant="ghost"
@@ -730,6 +745,13 @@ export default function ReportDashboard() {
             reportId={reportId || ""}
             reportName={currentReportName}
             accountId={accountId}
+          />
+
+          {/* API URL Builder modal */}
+          <APIBuilderModal
+            open={showAPIBuilderModal}
+            onOpenChange={setShowAPIBuilderModal}
+            reportId={reportId || ""}
           />
 
           {/* Looker-style modals triggered from title area */}

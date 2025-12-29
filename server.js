@@ -108,25 +108,27 @@ async function validateApiKey(req, res, next) {
 }
 
 // Initialize Supabase client
+// Hardcoded credentials matching the frontend client (from src/integrations/supabase/client.ts)
+// For production, use environment variables instead: SUPABASE_SERVICE_ROLE_KEY
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://zcxxwpwheevwavdcgfht.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpjeHh3cHdoZWV2d2F2ZGNnZmh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE4Mzg1MjAsImV4cCI6MjA3NzQxNDUyMH0.zKmexYsPTkNWa65kjH5H6_aMosY9rHHj0lqg8j4T3Lc';
 // Use service role key for server-side access (bypasses RLS)
 // Fallback to anon key if service role key is not available (for development)
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseServiceKey) {
-  console.error('WARNING: SUPABASE_SERVICE_ROLE_KEY or VITE_SUPABASE_ANON_KEY environment variable is not set');
-  console.error('API endpoints may not work correctly without proper authentication');
-  console.error('Continuing anyway for development purposes...');
-}
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || supabaseAnonKey;
 
 let supabase;
 if (supabaseServiceKey) {
   supabase = createClient(supabaseUrl, supabaseServiceKey);
   console.log('[SERVER] Supabase client initialized with URL:', supabaseUrl);
+  if (supabaseServiceKey === supabaseAnonKey) {
+    console.log('[SERVER] Using anon key (development mode)');
+  } else {
+    console.log('[SERVER] Using service role key or environment anon key');
+  }
 } else {
-  // Create a dummy client that will fail gracefully
+  // This should never happen now since we have a fallback
   supabase = null;
-  console.log('[SERVER] Supabase client not initialized - missing credentials');
+  console.error('[SERVER] Supabase client not initialized - missing credentials');
 }
 
 /**
@@ -472,10 +474,31 @@ app.get('/api/make/reports/:reportId', validateApiKey, async (req, res) => {
  * Public API endpoint for report data
  * Format: /api/reports/:reportId
  * Example: /api/reports/2eff17d0-38de-4d5d-a15b-69ad13788c92
+ * 
+ * Query Parameters:
+ * - limit: Number of results to return (default: 100, max: 10000)
+ * - offset: Number of results to skip (default: 0)
+ * - date_from or date_start: Start date filter (YYYY-MM-DD)
+ * - date_to or date_end: End date filter (YYYY-MM-DD)
+ * - period: 'current' or 'comparison' or 'both' (default: 'current')
+ * - Any dimension name: Filter by dimension value (e.g., ?Property=Hotel%20Name)
+ * 
+ * This endpoint fetches data directly from dimension_data table,
+ * matching the frontend's data fetching approach.
  */
 app.get('/api/reports/:reportId', async (req, res) => {
   try {
     const { reportId } = req.params;
+    const { 
+      limit = 100, 
+      offset = 0, 
+      date_from, 
+      date_start,
+      date_to, 
+      date_end,
+      period = 'current',
+      ...dimensionFilters 
+    } = req.query;
 
     if (!reportId) {
       return res.status(400).json({
@@ -495,89 +518,256 @@ app.get('/api/reports/:reportId', async (req, res) => {
       });
     }
 
-    console.log(`[API] Fetching data for report: ${reportId}`);
+    // Parse pagination params
+    const limitNum = Math.min(parseInt(limit, 10) || 100, 10000); // Max 10k rows
+    const offsetNum = parseInt(offset, 10) || 0;
 
-    // Fetch API data from report_api_data table
-    const { data: apiData, error: fetchError } = await supabase
-      .from('report_api_data')
-      .select('period_type, date_from, date_to, data')
+    console.log(`[API] Fetching data for report: ${reportId}`, { 
+      limit: limitNum, 
+      offset: offsetNum, 
+      date_from: date_from || date_start, 
+      date_to: date_to || date_end, 
+      period,
+      filters: dimensionFilters 
+    });
+
+    // Fetch ALL dimensions for this report to get dimension names
+    const { data: dimensions, error: dimError } = await supabase
+      .from('dimensions')
+      .select('id, name, type')
       .eq('report_id', reportId)
-      .in('period_type', ['current', 'comparison']);
+      .order('name', { ascending: true });
 
-    if (fetchError) {
-      console.error('[API] Error fetching data:', fetchError);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to fetch data',
-        details: fetchError.message,
-        count: 0,
-        data: []
-      });
+    if (dimError) {
+      console.warn('[API] Error fetching dimensions (continuing without dimension names):', dimError);
     }
 
-    if (!apiData || apiData.length === 0) {
-      console.log(`[API] No data found for report: ${reportId}`);
-      return res.status(200).json({
-        success: true,
-        count: 0,
-        data: [],
-        message: 'No data found for this report. Data may not have been synced yet.'
+    // Create mappings: ID -> Name and Name -> ID
+    const dimensionIdToName = {};
+    const dimensionNameToId = {};
+    let dateDimensionId = null;
+
+    // If dimensions are available, create mappings
+    if (dimensions && dimensions.length > 0) {
+      dimensions.forEach(dim => {
+        dimensionIdToName[dim.id] = dim.name;
+        dimensionNameToId[dim.name] = dim.id;
+        if (dim.type === 'date' && !dateDimensionId) {
+          dateDimensionId = dim.id;
+        }
       });
+      console.log(`[API] Found ${dimensions.length} dimensions, date dimension: ${dateDimensionId}`);
+    } else {
+      console.log(`[API] No dimensions found (data will use dimension IDs instead of names)`);
     }
 
-    // Separate current and comparison data
-    const currentPeriodData = apiData.find(d => d.period_type === 'current');
-    const comparisonPeriodData = apiData.find(d => d.period_type === 'comparison');
+    // Calculate date ranges
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth(); // 0-11
+    const currentDate = now.getDate();
 
-    // Format response similar to the example
-    // Combine current and comparison data into a single array
+    // Calculate first day of last month
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+    
+    // Format as YYYY-MM-DD
+    const formatDate = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    // Use query params or defaults
+    const currentFromDate = date_from || date_start || formatDate(new Date(lastMonthYear, lastMonth, 1));
+    const currentToDate = date_to || date_end || formatDate(new Date(currentYear, currentMonth, currentDate));
+    
+    // Comparison period: Same range shifted back 1 year
+    const comparisonFromDate = new Date(currentFromDate);
+    comparisonFromDate.setFullYear(comparisonFromDate.getFullYear() - 1);
+    const comparisonToDate = new Date(currentToDate);
+    comparisonToDate.setFullYear(comparisonToDate.getFullYear() - 1);
+
+    const dateRanges = {
+      current: {
+        date_from: currentFromDate,
+        date_to: currentToDate,
+      },
+      comparison: {
+        date_from: formatDate(comparisonFromDate),
+        date_to: formatDate(comparisonToDate),
+      },
+    };
+
+    console.log(`[API] Date ranges:`, dateRanges);
+
+    // Function to fetch data for a specific period
+    const fetchDataForPeriod = async (dateFrom, dateTo) => {
+      if (!dateDimensionId) {
+        // No date dimension, fetch all data
+        const { data: dimensionData, error: dataError } = await supabase
+          .from('dimension_data')
+          .select('dimension_values, row_number, data_source_id')
+          .eq('report_id', reportId)
+          .order('row_number', { ascending: true });
+
+        if (dataError) {
+          throw dataError;
+        }
+        return dimensionData || [];
+      }
+
+      // Make dateTo inclusive by adding one day
+      const toDate = new Date(dateTo);
+      const adjustedToDate = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1);
+      const adjustedToDateStr = adjustedToDate.toISOString().split('T')[0];
+      
+      const { data: dimensionData, error: dataError } = await supabase
+        .from('dimension_data')
+        .select('dimension_values, row_number, data_source_id')
+        .eq('report_id', reportId)
+        .gte(`dimension_values->>${dateDimensionId}`, dateFrom)
+        .lt(`dimension_values->>${dateDimensionId}`, adjustedToDateStr)
+        .order('row_number', { ascending: true });
+
+      if (dataError) {
+        throw dataError;
+      }
+
+      return dimensionData || [];
+    };
+
+    // Fetch data based on period parameter
+    let currentData = [];
+    let comparisonData = [];
+
+    if (period === 'comparison') {
+      comparisonData = await fetchDataForPeriod(dateRanges.comparison.date_from, dateRanges.comparison.date_to);
+      console.log(`[API] Fetched ${comparisonData.length} rows for comparison period`);
+    } else if (period === 'both' && dateDimensionId) {
+      [currentData, comparisonData] = await Promise.all([
+        fetchDataForPeriod(dateRanges.current.date_from, dateRanges.current.date_to),
+        fetchDataForPeriod(dateRanges.comparison.date_from, dateRanges.comparison.date_to)
+      ]);
+      console.log(`[API] Fetched ${currentData.length} rows for current period, ${comparisonData.length} rows for comparison period`);
+    } else {
+      // Default: current period only
+      currentData = await fetchDataForPeriod(dateRanges.current.date_from, dateRanges.current.date_to);
+      console.log(`[API] Fetched ${currentData.length} rows for current period`);
+    }
+
+    // Combine data from all periods
     const allData = [];
     
-    if (currentPeriodData && currentPeriodData.data) {
-      currentPeriodData.data.forEach((row, index) => {
-        allData.push({
-          id: `${reportId}_current_${index}`,
-          period: 'current',
-          date_from: currentPeriodData.date_from,
-          date_to: currentPeriodData.date_to,
-          ...row.dimension_values,
-          row_number: row.row_number || index + 1
-        });
+    // Add current period data
+    currentData.forEach((row) => {
+      allData.push({
+        period: 'current',
+        date_from: dateRanges.current.date_from,
+        date_to: dateRanges.current.date_to,
+        row_number: row.row_number,
+        data_source_id: row.data_source_id,
+        dimension_values: row.dimension_values
       });
+    });
+
+    // Add comparison period data
+    comparisonData.forEach((row) => {
+      allData.push({
+        period: 'comparison',
+        date_from: dateRanges.comparison.date_from,
+        date_to: dateRanges.comparison.date_to,
+        row_number: row.row_number,
+        data_source_id: row.data_source_id,
+        dimension_values: row.dimension_values
+      });
+    });
+
+    // Apply dimension filters (filter by dimension name, not ID)
+    let filteredData = allData;
+    if (Object.keys(dimensionFilters).length > 0) {
+      filteredData = allData.filter(row => {
+        // Check each filter
+        for (const [filterName, filterValue] of Object.entries(dimensionFilters)) {
+          // Skip pagination and date params
+          if (['limit', 'offset', 'date_from', 'date_start', 'date_to', 'date_end', 'period'].includes(filterName)) {
+            continue;
+          }
+
+          // Get dimension ID from name
+          const dimensionId = dimensionNameToId[filterName];
+          if (!dimensionId) {
+            continue; // Unknown dimension name, skip
+          }
+
+          // Get value from row
+          const rowValue = row.dimension_values[dimensionId];
+          
+          // Check if value matches filter (case-insensitive)
+          const rowValueStr = String(rowValue || '').toLowerCase();
+          const filterValueStr = String(filterValue).toLowerCase();
+          
+          if (!rowValueStr.includes(filterValueStr)) {
+            return false; // Filter doesn't match
+          }
+        }
+        return true; // All filters match
+      });
+
+      console.log(`[API] Filtered from ${allData.length} to ${filteredData.length} rows`);
     }
 
-    if (comparisonPeriodData && comparisonPeriodData.data) {
-      comparisonPeriodData.data.forEach((row, index) => {
-        allData.push({
-          id: `${reportId}_comparison_${index}`,
-          period: 'comparison',
-          date_from: comparisonPeriodData.date_from,
-          date_to: comparisonPeriodData.date_to,
-          ...row.dimension_values,
-          row_number: row.row_number || index + 1
-        });
-      });
-    }
+    // Apply pagination
+    const totalCount = filteredData.length;
+    const paginatedData = filteredData.slice(offsetNum, offsetNum + limitNum);
 
-    console.log(`[API] Returning ${allData.length} rows for report: ${reportId}`);
+    // Transform data: Replace dimension IDs with names
+    const transformedData = paginatedData.map((row, index) => {
+      const transformed = {
+        id: `${reportId}_${row.period}_${row.row_number || offsetNum + index + 1}`,
+        row_number: row.row_number || offsetNum + index + 1,
+        data_source_id: row.data_source_id,
+        period: row.period,
+        date_from: row.date_from,
+        date_to: row.date_to
+      };
 
-    // Format response like the example
+      // Replace dimension IDs with dimension names
+      for (const [dimId, value] of Object.entries(row.dimension_values || {})) {
+        const dimName = dimensionIdToName[dimId] || dimId; // Fallback to ID if name not found
+        transformed[dimName] = value;
+      }
+
+      return transformed;
+    });
+
+    console.log(`[API] Returning ${transformedData.length} of ${totalCount} rows for report: ${reportId}`);
+
+    // Format JSON response
     return res.status(200).json({
       success: true,
-      count: allData.length,
-      data: allData,
+      count: transformedData.length,
+      total: totalCount,
+      data: transformedData,
+      pagination: {
+        limit: limitNum,
+        offset: offsetNum,
+        hasMore: offsetNum + limitNum < totalCount
+      },
       periods: {
-        current: currentPeriodData ? {
-          date_from: currentPeriodData.date_from,
-          date_to: currentPeriodData.date_to,
-          count: currentPeriodData.data?.length || 0
+        current: currentData.length > 0 ? {
+          date_from: dateRanges.current.date_from,
+          date_to: dateRanges.current.date_to,
+          count: currentData.length
         } : null,
-        comparison: comparisonPeriodData ? {
-          date_from: comparisonPeriodData.date_from,
-          date_to: comparisonPeriodData.date_to,
-          count: comparisonPeriodData.data?.length || 0
+        comparison: comparisonData.length > 0 ? {
+          date_from: dateRanges.comparison.date_from,
+          date_to: dateRanges.comparison.date_to,
+          count: comparisonData.length
         } : null
-      }
+      },
+      dimensions: (dimensions && dimensions.length > 0) ? dimensions.map(d => ({ id: d.id, name: d.name, type: d.type })) : []
     });
 
   } catch (error) {
