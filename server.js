@@ -600,7 +600,47 @@ app.get('/api/reports/:reportId', async (req, res) => {
       });
       console.log(`[API] Found ${dimensions.length} dimensions, date dimension: ${dateDimensionId}`);
     } else {
-      console.log(`[API] No dimensions found (data will use dimension IDs instead of names)`);
+      console.log(`[API] No dimensions metadata found - will attempt to auto-detect date dimension from data`);
+      
+      // Auto-detect date dimension by sampling data
+      const { data: sampleRows, error: sampleError } = await supabase
+        .from('dimension_data')
+        .select('dimension_values')
+        .eq('report_id', reportId)
+        .limit(10);
+      
+      if (!sampleError && sampleRows && sampleRows.length > 0) {
+        // Get all dimension IDs from the first row
+        const dimensionIds = Object.keys(sampleRows[0].dimension_values || {});
+        
+        // Check each dimension to see if it contains date-like values
+        for (const dimId of dimensionIds) {
+          let dateValueCount = 0;
+          let totalValues = 0;
+          
+          for (const row of sampleRows) {
+            const value = row.dimension_values[dimId];
+            if (value) {
+              totalValues++;
+              // Check if value looks like a date (YYYY-MM-DD format)
+              if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+                dateValueCount++;
+              }
+            }
+          }
+          
+          // If >80% of values look like dates, assume this is the date dimension
+          if (totalValues > 0 && (dateValueCount / totalValues) > 0.8) {
+            dateDimensionId = dimId;
+            console.log(`[API] Auto-detected date dimension: ${dimId} (${dateValueCount}/${totalValues} values are dates)`);
+            break;
+          }
+        }
+        
+        if (!dateDimensionId) {
+          console.log(`[API] Could not auto-detect date dimension from ${dimensionIds.length} dimensions`);
+        }
+      }
     }
 
     // Process months[] parameter if provided (ALTERNATIVE to date_start/date_end)
