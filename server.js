@@ -486,17 +486,55 @@ app.get('/api/make/reports/:reportId', validateApiKey, async (req, res) => {
  * This endpoint fetches data directly from dimension_data table,
  * matching the frontend's data fetching approach.
  */
+// Helper function to convert YYYY-MM to date range (handles leap years)
+function getDateRangeForMonth(yearMonth) {
+  const [year, month] = yearMonth.split('-').map(Number);
+  
+  if (!year || !month || month < 1 || month > 12) {
+    return null;
+  }
+  
+  // First day of the month
+  const startDate = new Date(year, month - 1, 1);
+  
+  // Last day of the month
+  const endDate = new Date(year, month, 0); // Day 0 of next month = last day of current month
+  
+  const formatDate = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+  
+  return {
+    date_from: formatDate(startDate),
+    date_to: formatDate(endDate)
+  };
+}
+
 app.get('/api/reports/:reportId', async (req, res) => {
   try {
     const { reportId } = req.params;
+    
+    // Extract months[] or months parameter (Express may parse it as either)
+    let monthsParam = req.query['months[]'] || req.query['months'];
+    if (monthsParam && !Array.isArray(monthsParam)) {
+      monthsParam = [monthsParam];
+    }
+    
+    // Then extract other parameters, excluding months variations from dimensionFilters
     const { 
       limit = 100, 
       offset = 0, 
+      page,
       date_from, 
       date_start,
       date_to, 
       date_end,
       period = 'current',
+      'months[]': _unused1, // Exclude from spreading
+      'months': _unused2,   // Exclude from spreading
       ...dimensionFilters 
     } = req.query;
 
@@ -519,17 +557,21 @@ app.get('/api/reports/:reportId', async (req, res) => {
     }
 
     // Parse pagination params
-    const limitNum = Math.min(parseInt(limit, 10) || 100, 10000); // Max 10k rows
-    const offsetNum = parseInt(offset, 10) || 0;
+    const limitNum = Math.min(parseInt(limit, 10) || 100, 5000); // Max 5k rows
+    let offsetNum = parseInt(offset, 10) || 0;
+    
+    // If page parameter is provided, convert it to offset
+    if (page) {
+      const pageNum = parseInt(page, 10);
+      if (pageNum > 0) {
+        offsetNum = (pageNum - 1) * limitNum;
+      }
+    }
 
-    console.log(`[API] Fetching data for report: ${reportId}`, { 
-      limit: limitNum, 
-      offset: offsetNum, 
-      date_from: date_from || date_start, 
-      date_to: date_to || date_end, 
-      period,
-      filters: dimensionFilters 
-    });
+    // Log API request
+    if (monthsParam) {
+      console.log(`[API] Fetching report ${reportId} with months[] parameter:`, monthsParam);
+    }
 
     // Fetch ALL dimensions for this report to get dimension names
     const { data: dimensions, error: dimError } = await supabase
@@ -561,7 +603,29 @@ app.get('/api/reports/:reportId', async (req, res) => {
       console.log(`[API] No dimensions found (data will use dimension IDs instead of names)`);
     }
 
-    // Calculate date ranges
+    // Process months[] parameter if provided (ALTERNATIVE to date_start/date_end)
+    let multipleRanges = [];
+    let useMonthsParam = false;
+    
+    if (monthsParam && Array.isArray(monthsParam) && monthsParam.length > 0) {
+      useMonthsParam = true;
+      // Validate and convert each month to a date range
+      for (const month of monthsParam) {
+        const range = getDateRangeForMonth(month);
+        if (!range) {
+          return res.status(400).json({
+            success: false,
+            error: `Invalid month format: ${month}. Expected format: YYYY-MM (e.g., 2024-01)`,
+            count: 0,
+            data: []
+          });
+        }
+        multipleRanges.push(range);
+      }
+      console.log(`[API] Using months[] parameter with ${multipleRanges.length} date ranges:`, multipleRanges);
+    }
+
+    // Calculate date ranges (legacy date_start/date_end logic)
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth(); // 0-11
@@ -579,7 +643,7 @@ app.get('/api/reports/:reportId', async (req, res) => {
       return `${year}-${month}-${day}`;
     };
 
-    // Use query params or defaults
+    // Use query params or defaults (only if not using months[] parameter)
     const currentFromDate = date_from || date_start || formatDate(new Date(lastMonthYear, lastMonth, 1));
     const currentToDate = date_to || date_end || formatDate(new Date(currentYear, currentMonth, currentDate));
     
@@ -600,9 +664,9 @@ app.get('/api/reports/:reportId', async (req, res) => {
       },
     };
 
-    console.log(`[API] Date ranges:`, dateRanges);
+    console.log(`[API] Date ranges (legacy):`, dateRanges);
 
-    // Function to fetch data for a specific period
+    // Function to fetch data for a specific period (single range)
     const fetchDataForPeriod = async (dateFrom, dateTo) => {
       if (!dateDimensionId) {
         // No date dimension, fetch all data
@@ -638,23 +702,82 @@ app.get('/api/reports/:reportId', async (req, res) => {
       return dimensionData || [];
     };
 
-    // Fetch data based on period parameter
+    // Function to fetch data for multiple date ranges with OR logic
+    const fetchDataForMultipleRanges = async (ranges) => {
+      if (!dateDimensionId) {
+        // No date dimension, fetch all data
+        const { data: dimensionData, error: dataError } = await supabase
+          .from('dimension_data')
+          .select('dimension_values, row_number, data_source_id')
+          .eq('report_id', reportId)
+          .order('row_number', { ascending: true });
+
+        if (dataError) {
+          throw dataError;
+        }
+        return dimensionData || [];
+      }
+
+      // Fetch data for each range and combine (union)
+      const allResults = [];
+      const seenRowIds = new Set();
+
+      for (const range of ranges) {
+        const toDate = new Date(range.date_to);
+        const adjustedToDate = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1);
+        const adjustedToDateStr = adjustedToDate.toISOString().split('T')[0];
+        
+        const { data: dimensionData, error: dataError } = await supabase
+          .from('dimension_data')
+          .select('dimension_values, row_number, data_source_id')
+          .eq('report_id', reportId)
+          .gte(`dimension_values->>${dateDimensionId}`, range.date_from)
+          .lt(`dimension_values->>${dateDimensionId}`, adjustedToDateStr)
+          .order('row_number', { ascending: true });
+
+        if (dataError) {
+          throw dataError;
+        }
+
+        // Add to results, avoiding duplicates based on row_number + data_source_id
+        if (dimensionData) {
+          dimensionData.forEach(row => {
+            const rowId = `${row.row_number}_${row.data_source_id}`;
+            if (!seenRowIds.has(rowId)) {
+              seenRowIds.add(rowId);
+              allResults.push(row);
+            }
+          });
+        }
+      }
+
+      return allResults;
+    };
+
+    // Fetch data based on parameter type (months[] vs date_start/date_end)
     let currentData = [];
     let comparisonData = [];
 
-    if (period === 'comparison') {
-      comparisonData = await fetchDataForPeriod(dateRanges.comparison.date_from, dateRanges.comparison.date_to);
-      console.log(`[API] Fetched ${comparisonData.length} rows for comparison period`);
-    } else if (period === 'both' && dateDimensionId) {
-      [currentData, comparisonData] = await Promise.all([
-        fetchDataForPeriod(dateRanges.current.date_from, dateRanges.current.date_to),
-        fetchDataForPeriod(dateRanges.comparison.date_from, dateRanges.comparison.date_to)
-      ]);
-      console.log(`[API] Fetched ${currentData.length} rows for current period, ${comparisonData.length} rows for comparison period`);
+    if (useMonthsParam) {
+      // Use new months[] parameter - fetch data for multiple date ranges
+      currentData = await fetchDataForMultipleRanges(multipleRanges);
+      console.log(`[API] Fetched ${currentData.length} rows for ${multipleRanges.length} month ranges using months[] parameter`);
     } else {
-      // Default: current period only
-      currentData = await fetchDataForPeriod(dateRanges.current.date_from, dateRanges.current.date_to);
-      console.log(`[API] Fetched ${currentData.length} rows for current period`);
+      // Use legacy date_start/date_end parameter logic
+      if (period === 'comparison') {
+        comparisonData = await fetchDataForPeriod(dateRanges.comparison.date_from, dateRanges.comparison.date_to);
+        console.log(`[API] Fetched ${comparisonData.length} rows for comparison period`);
+      } else if (period === 'both' && dateDimensionId) {
+        [currentData, comparisonData] = await Promise.all([
+          fetchDataForPeriod(dateRanges.current.date_from, dateRanges.current.date_to),
+          fetchDataForPeriod(dateRanges.comparison.date_from, dateRanges.comparison.date_to)
+        ]);
+        console.log(`[API] Fetched ${currentData.length} rows for current period, ${comparisonData.length} rows for comparison period`);
+      } else {
+        // Default: current period only
+        currentData = await fetchDataForPeriod(dateRanges.current.date_from, dateRanges.current.date_to);
+        console.log(`[API] Fetched ${currentData.length} rows for current period`);
+      }
     }
 
     // Combine data from all periods
@@ -690,8 +813,8 @@ app.get('/api/reports/:reportId', async (req, res) => {
       filteredData = allData.filter(row => {
         // Check each filter
         for (const [filterName, filterValue] of Object.entries(dimensionFilters)) {
-          // Skip pagination and date params
-          if (['limit', 'offset', 'date_from', 'date_start', 'date_to', 'date_end', 'period'].includes(filterName)) {
+          // Skip pagination, date params, and months[] param
+          if (['limit', 'offset', 'page', 'date_from', 'date_start', 'date_to', 'date_end', 'period', 'months[]'].includes(filterName)) {
             continue;
           }
 
@@ -744,6 +867,12 @@ app.get('/api/reports/:reportId', async (req, res) => {
 
     console.log(`[API] Returning ${transformedData.length} of ${totalCount} rows for report: ${reportId}`);
 
+    // Calculate pagination metadata
+    const currentPage = page ? parseInt(page, 10) : Math.floor(offsetNum / limitNum) + 1;
+    const totalPages = Math.ceil(totalCount / limitNum);
+    const hasMore = offsetNum + limitNum < totalCount;
+    const hasPrevious = offsetNum > 0;
+
     // Format JSON response
     return res.status(200).json({
       success: true,
@@ -751,11 +880,18 @@ app.get('/api/reports/:reportId', async (req, res) => {
       total: totalCount,
       data: transformedData,
       pagination: {
+        page: currentPage,
         limit: limitNum,
         offset: offsetNum,
-        hasMore: offsetNum + limitNum < totalCount
+        total: totalCount,
+        totalPages: totalPages,
+        hasMore: hasMore,
+        hasPrevious: hasPrevious
       },
-      periods: {
+      periods: useMonthsParam ? {
+        months: multipleRanges.map(r => ({ date_from: r.date_from, date_to: r.date_to })),
+        count: currentData.length
+      } : {
         current: currentData.length > 0 ? {
           date_from: dateRanges.current.date_from,
           date_to: dateRanges.current.date_to,

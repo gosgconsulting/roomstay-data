@@ -102,7 +102,7 @@ export default function ReportDashboard() {
   
   // Filter state - default to all_time to avoid date range issues
   const [filters, setFilters] = useState<FilterState>(() => {
-    console.log('[testing] ReportDashboard - Initializing with all_time preset to avoid date issues');
+    // console.log('[testing] ReportDashboard - Initializing with all_time preset to avoid date issues');
     
     return {
       dimensionFilters: {},
@@ -114,50 +114,50 @@ export default function ReportDashboard() {
     };
   });
 
-  // Track filter changes
-  useEffect(() => {
-    console.log('[testing] ReportDashboard - Filter state updated:', {
-      dateRange: filters.dateRange,
-      dateFrom: filters.dateRange?.from?.toISOString(),
-      dateTo: filters.dateRange?.to?.toISOString(),
-      preset: filters.datePreset,
-      timestamp: new Date().toISOString()
-    });
-  }, [filters]);
+  // // Track filter changes
+  // useEffect(() => {
+  //   console.log('[testing] ReportDashboard - Filter state updated:', {
+  //     dateRange: filters.dateRange,
+  //     dateFrom: filters.dateRange?.from?.toISOString(),
+  //     dateTo: filters.dateRange?.to?.toISOString(),
+  //     preset: filters.datePreset,
+  //     timestamp: new Date().toISOString()
+  //   });
+  // }, [filters]);
 
   // Stabilize the onFiltersChange callback to prevent unnecessary re-renders
   const handleFiltersChange = useCallback((newFilters: FilterState) => {
-    console.log('[testing] ReportDashboard - Filters changing:', newFilters);
-    console.log('[testing] ReportDashboard - Date filter change details:', {
-      oldDateRange: filters.dateRange,
-      newDateRange: newFilters.dateRange,
-      oldPreset: filters.datePreset,
-      newPreset: newFilters.datePreset,
-      dateRangeChanged: JSON.stringify(filters.dateRange) !== JSON.stringify(newFilters.dateRange),
-      timestamp: new Date().toISOString()
-    });
+    // console.log('[testing] ReportDashboard - Filters changing:', newFilters);
+    // console.log('[testing] ReportDashboard - Date filter change details:', {
+    //   oldDateRange: filters.dateRange,
+    //   newDateRange: newFilters.dateRange,
+    //   oldPreset: filters.datePreset,
+    //   newPreset: newFilters.datePreset,
+    //   dateRangeChanged: JSON.stringify(filters.dateRange) !== JSON.stringify(newFilters.dateRange),
+    //   timestamp: new Date().toISOString()
+    // });
     setFilters(newFilters);
   }, [filters.dateRange, filters.datePreset]);
   
   // Track component loading states
   const markComponentLoading = (component: string) => {
-    console.log('[LOADING-DEBUG] Component loading:', component);
+    // console.log('[LOADING-DEBUG] Component loading:', component);
     setLoadingComponents(prev => {
       const next = new Set(prev).add(component);
-      console.log('[LOADING-DEBUG] Loading components:', Array.from(next));
+      // console.log('[LOADING-DEBUG] Loading components:', Array.from(next));
       return next;
     });
     setIsDataLoading(true);
   };
   
   const markComponentLoaded = (component: string) => {
-    console.log('[LOADING-DEBUG] Component loaded:', component);
+    // console.log('[LOADING-DEBUG] Component loaded:', component);
     setLoadingComponents(prev => {
       const next = new Set(prev);
       next.delete(component);
-      console.log('[LOADING-DEBUG] Remaining components:', Array.from(next));
+      // console.log('[LOADING-DEBUG] Remaining components:', Array.from(next));
       if (next.size === 0) {
-        console.log('[LOADING-DEBUG] All components loaded, hiding loading toast');
+        // console.log('[LOADING-DEBUG] All components loaded, hiding loading toast');
         setIsDataLoading(false);
       }
       return next;
@@ -167,7 +167,7 @@ export default function ReportDashboard() {
   // Reset filters and mark loading when report changes
   useEffect(() => {
     if (reportId) {
-      console.log('[testing] ReportDashboard - reportId changed to:', reportId);
+      // console.log('[testing] ReportDashboard - reportId changed to:', reportId);
       
       // Cancel previous loading by incrementing generation
       setLoadingGeneration(prev => prev + 1);
@@ -179,7 +179,7 @@ export default function ReportDashboard() {
       // Don't invalidate caches - let React Query use cached data if available
       // This enables instant loading when switching between reports that have been loaded before
       // Cache will only be invalidated when data actually changes (after sync)
-      console.log('[testing] ReportDashboard - Using cached data if available for instant loading');
+      // console.log('[testing] ReportDashboard - Using cached data if available for instant loading');
       
       // Start new loading cycle (components will use cache if available)
       markComponentLoading('metrics');
@@ -343,7 +343,7 @@ export default function ReportDashboard() {
         // Also resync report views to ensure filter_dimensions includes all text dimensions
         resyncReportViews(selectedReportId, accountId)
           .then(() => {
-            console.log('[RESYNC] Report views resync completed successfully');
+            // console.log('[RESYNC] Report views resync completed successfully');
             // Increment refresh trigger to reload filters with updated dimensions
             setVisibilityRefreshTrigger(prev => prev + 1);
           })
@@ -380,7 +380,7 @@ export default function ReportDashboard() {
   };
   
   const refreshData = () => {
-    console.log('[DASHBOARD] Starting comprehensive data refresh...');
+    // console.log('[DASHBOARD] Starting comprehensive data refresh...');
     
     // Cancel previous loading by incrementing generation
     setLoadingGeneration(prev => prev + 1);
@@ -396,7 +396,7 @@ export default function ReportDashboard() {
     queryClient.invalidateQueries({ queryKey: ['sourceData'] }); // Invalidate source data cache
     queryClient.invalidateQueries({ queryKey: ['dataSource'] }); // Invalidate data source queries
     
-    console.log('[DASHBOARD] Invalidated all caches for data refresh');
+    // console.log('[DASHBOARD] Invalidated all caches for data refresh');
     
     // Start new loading cycle
     markComponentLoading('metrics');
@@ -425,7 +425,7 @@ export default function ReportDashboard() {
       
       if (error) throw error;
       
-      console.log('[CLEAR-RESYNC] Clear result:', data);
+      // console.log('[CLEAR-RESYNC] Clear result:', data);
       
       toast({
         title: "Data cleared",
