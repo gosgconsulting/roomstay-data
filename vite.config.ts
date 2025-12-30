@@ -8,7 +8,7 @@ import dyadComponentTagger from '@dyad-sh/react-vite-component-tagger';
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
-    port: 8080,
+    port: 8081,
     cors: true,
     proxy: {
       // Proxy API routes to the Express server in development
