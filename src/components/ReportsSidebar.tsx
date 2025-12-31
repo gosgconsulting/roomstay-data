@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, BarChart3, Sparkles, Calendar, Wallet, Pencil, Trash2 } from "lucide-react";
+import { Plus, BarChart3, Sparkles, Calendar, Wallet, Pencil, Trash2, Code } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -60,6 +60,8 @@ interface ReportsSidebarProps {
   aiSummaryReportTabs?: { id: string; name: string }[];
   selectedReportTab?: ReportTab;
   onReportTabChange?: (tab: ReportTab) => void;
+  // API Builder props
+  onOpenAPIBuilder?: () => void;
 }
 
 /**
@@ -86,6 +88,7 @@ export function ReportsSidebar({
   aiSummaryReportTabs = [],
   selectedReportTab = "overview",
   onReportTabChange,
+  onOpenAPIBuilder,
 }: ReportsSidebarProps) {
   const navigate = useNavigate();
 
@@ -226,6 +229,15 @@ export function ReportsSidebar({
               <Plus className="h-4 w-4 mr-2" />
               Add New Report
             </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-left h-9 px-3"
+              onClick={onOpenAPIBuilder}
+              disabled={!selectedReportId}
+            >
+              <Code className="h-4 w-4 mr-2" />
+              API Builder
+            </Button>
           </SidebarGroupContent>
         </SidebarGroup>
 
@@ -257,7 +269,11 @@ export function ReportsSidebar({
                 </SelectItem>
               </SelectContent>
             </Select>
+
+          {/* move API Builder button here */}
+
           </SidebarGroupContent>
+
         </SidebarGroup>
 
         {/* Report Tabs - Only shown when showDateTabs is true and there are report tabs */}

@@ -663,6 +663,48 @@ app.get('/api/reports/:reportId', async (req, res) => {
         });
         
         console.log(`[API] Found ${mappingsFound.size} dimensions from column_mappings`);
+        
+        // Add name-based date dimension detection
+        if (!dateDimensionId) {
+          for (const [dimId, dimName] of Object.entries(dimensionIdToName)) {
+            if (/date/i.test(dimName)) {
+              dateDimensionId = dimId;
+              console.log(`[API] Date dimension detected by name: ${dimName} (${dimId})`);
+              break;
+            }
+          }
+        }
+        
+        // If still no date dimension, sample data to detect it
+        if (!dateDimensionId && Object.keys(dimensionIdToName).length > 0) {
+          console.log('[API] Attempting date dimension detection from data samples...');
+          
+          const { data: sampleRows, error: sampleError } = await supabase
+            .from('dimension_data')
+            .select('dimension_values')
+            .eq('report_id', reportId)
+            .limit(10);
+          
+          if (!sampleError && sampleRows && sampleRows.length > 0) {
+            for (const [dimId, dimName] of Object.entries(dimensionIdToName)) {
+              let dateValueCount = 0;
+              
+              for (const row of sampleRows) {
+                const value = row.dimension_values?.[dimId];
+                if (value && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+                  dateValueCount++;
+                }
+              }
+              
+              // If 80%+ values are dates, this is the date dimension
+              if (dateValueCount >= 8) {
+                dateDimensionId = dimId;
+                console.log(`[API] Date dimension auto-detected from data: ${dimName} (${dimId}) - ${dateValueCount}/10 values match date format`);
+                break;
+              }
+            }
+          }
+        }
       }
       
       // If still no dimensions found, try to detect from data

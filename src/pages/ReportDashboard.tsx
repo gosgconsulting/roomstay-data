@@ -15,7 +15,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Database, Grid3x3, GitCompare, Star, Share2, Settings, Code } from "lucide-react";
+import { ArrowLeft, Database, Grid3x3, GitCompare, Star, Share2, Settings } from "lucide-react";
 import { ShareModal } from "@/components/ShareModal";
 import { APIBuilderModal } from "@/components/APIBuilderModal";
 import { useQueryClient } from "@tanstack/react-query";
@@ -523,6 +523,7 @@ export default function ReportDashboard() {
         <ReportsSidebar
           reports={reportsList}
           accountId={accountId}
+          selectedReportId={reportId}
           onEditReport={(id) => handleEditReport(id)}
           onDeleteReport={(id) => handleDeleteReport({ id, name: "", account_id: accountId || null, created_at: "", updated_at: "" } as any)}
           onAddNewReport={() => setShowCreateReportModal(true)}
@@ -531,6 +532,7 @@ export default function ReportDashboard() {
           onEditAISummary={handleEditAISummary}
           onDeleteAISummary={handleDeleteAISummary}
           aiSummaries={aiSummaries}
+          onOpenAPIBuilder={() => setShowAPIBuilderModal(true)}
         />
         <SidebarInset className="flex-1 overflow-x-hidden">
           {/* Loading toast for data loading - HIDDEN: Individual components show their own loading states */}
@@ -614,19 +616,6 @@ export default function ReportDashboard() {
                     <div className="h-4 w-px bg-border" />
                   </>
                 )}
-
-                {/* API button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-2 text-muted-foreground hover:text-foreground"
-                  onClick={() => setShowAPIBuilderModal(true)}
-                  disabled={!reportId}
-                  title="API URL Builder"
-                >
-                  <Code className="h-4 w-4" />
-                  API
-                </Button>
 
                 {/* Share button */}
                 <Button
