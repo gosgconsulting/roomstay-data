@@ -34,8 +34,10 @@ Make sure these environment variables are set in your Railway project:
 
 **Look for:**
 - `[SERVER] ✓ Server running on port...` - Server started successfully
+- `[SERVER] ✓ Using service role key (bypasses RLS)` - Correct setup (recommended)
+- `[SERVER] ⚠ Using anon key (development mode)` - RLS will apply, may cause API errors
 - `[SERVER] Supabase client initialized` - Supabase configured correctly
-- Any error messages starting with `[SERVER] ✗`
+- Any error messages starting with `[SERVER] ✗` or `[API-CARD]`
 
 ### 3. Test the Health Endpoint
 
@@ -76,6 +78,25 @@ If `supabaseConfigured: false`, the `SUPABASE_SERVICE_ROLE_KEY` is missing.
 - Check `SUPABASE_SERVICE_ROLE_KEY` is set correctly
 - Check Supabase project is accessible
 - Check `report_api_data` table exists (run migration if needed)
+
+#### Issue: API Card endpoint returns "Cannot coerce the result to a single JSON object" (PGRST116)
+**Cause:** RLS (Row Level Security) blocking access when using anon key
+**Symptoms:**
+- Error: `{"success":false,"error":"Cannot coerce the result to a single JSON object","details":{"code":"PGRST116","details":"The result contains 0 rows"}}`
+- Server logs show: `[SERVER] ⚠ Using anon key (development mode)`
+
+**Fix:**
+1. **Recommended**: Set `SUPABASE_SERVICE_ROLE_KEY` environment variable
+   - This bypasses RLS and allows server-side access
+   - Get from: Supabase Dashboard → Settings → API → service_role key
+2. **Alternative**: A public RLS policy has been created to allow API access
+   - Policy: "Public can view AI summary cards by ID for API"
+   - This allows the endpoint to work with anon key (less secure)
+
+**Verification:**
+- Check server logs on startup:
+  - `[SERVER] ✓ Using service role key (bypasses RLS)` = Correct setup
+  - `[SERVER] ⚠ Using anon key (development mode)` = Will have RLS issues
 
 ### 5. Setting Environment Variables in Railway
 

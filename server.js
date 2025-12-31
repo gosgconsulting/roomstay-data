@@ -117,13 +117,19 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || supabaseAnonKey;
 
 let supabase;
+const isServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY && supabaseServiceKey === process.env.SUPABASE_SERVICE_ROLE_KEY;
+const isUsingAnonKey = supabaseServiceKey === supabaseAnonKey;
+
 if (supabaseServiceKey) {
   supabase = createClient(supabaseUrl, supabaseServiceKey);
   console.log('[SERVER] Supabase client initialized with URL:', supabaseUrl);
-  if (supabaseServiceKey === supabaseAnonKey) {
-    console.log('[SERVER] Using anon key (development mode)');
-} else {
-    console.log('[SERVER] Using service role key or environment anon key');
+  if (isServiceRoleKey) {
+    console.log('[SERVER] ✓ Using service role key (bypasses RLS)');
+  } else if (isUsingAnonKey) {
+    console.warn('[SERVER] ⚠ Using anon key (development mode) - RLS policies will apply');
+    console.warn('[SERVER] ⚠ API endpoints may fail due to RLS restrictions. Set SUPABASE_SERVICE_ROLE_KEY for production.');
+  } else {
+    console.log('[SERVER] Using environment anon key');
   }
 } else {
   // This should never happen now since we have a fallback
@@ -1222,17 +1228,24 @@ app.get('/api/reports/card/:cardId', async (req, res) => {
     }
 
     // Fetch AI Summary card configuration
+    // Use maybeSingle() instead of single() to handle 0 rows gracefully
     const { data: card, error: cardError } = await supabase
       .from('ai_summary_cards')
       .select('id, report_ids, report_configs, selected_metrics, since_date, user_id')
       .eq('id', cardId)
-      .single();
+      .maybeSingle();
 
     if (cardError) {
       console.error('[API-CARD] Error fetching card:', cardError);
-      return res.status(500).json({
+      // Check if error is due to RLS (PGRST116 = no rows, often due to RLS)
+      const isRLSError = cardError.code === 'PGRST116' || cardError.message?.includes('0 rows');
+      const errorMessage = isRLSError 
+        ? 'Card not found or access denied. Ensure SUPABASE_SERVICE_ROLE_KEY is set for server-side access.'
+        : cardError.message || 'Error fetching card configuration';
+      
+      return res.status(isRLSError ? 404 : 500).json({
         success: false,
-        error: cardError.message || 'Error fetching card configuration',
+        error: errorMessage,
         details: cardError,
         count: 0,
         data: []
@@ -1240,9 +1253,16 @@ app.get('/api/reports/card/:cardId', async (req, res) => {
     }
 
     if (!card) {
+      // Check if we're using anon key (which would cause RLS issues)
+      const isUsingAnonKey = supabaseServiceKey === supabaseAnonKey;
+      const errorMessage = isUsingAnonKey
+        ? 'Card not found. This may be due to RLS restrictions. Set SUPABASE_SERVICE_ROLE_KEY environment variable for server-side access.'
+        : 'Card not found';
+      
+      console.warn(`[API-CARD] Card ${cardId} not found. Using anon key: ${isUsingAnonKey}`);
       return res.status(404).json({
         success: false,
-        error: 'Card not found',
+        error: errorMessage,
         count: 0,
         data: []
       });

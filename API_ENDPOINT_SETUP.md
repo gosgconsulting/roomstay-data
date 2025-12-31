@@ -4,14 +4,16 @@
 
 A public API endpoint has been created to access report data via your domain (not Supabase URL).
 
-**Endpoint Format:**
+**Endpoint Formats:**
 ```
-GET /api/reports/:reportId
+GET /api/reports/:reportId          # Single report with parameters
+GET /api/reports/card/:cardId       # AI Summary card (simplified, uses card configuration)
 ```
 
 **Examples:**
-- Localhost: `http://localhost:3000/api/reports/2eff17d0-38de-4d5d-a15b-69ad13788c92`
-- Production: `https://yourdomain.com/api/reports/2eff17d0-38de-4d5d-a15b-69ad13788c92`
+- Single Report: `http://localhost:3000/api/reports/2eff17d0-38de-4d5d-a15b-69ad13788c92`
+- Card-based (Recommended): `http://localhost:3000/api/reports/card/f48ba962-5913-43ee-9ed0-caafaba29a62`
+- Production: `https://yourdomain.com/api/reports/card/f48ba962-5913-43ee-9ed0-caafaba29a62`
 
 ## Response Format
 
@@ -53,8 +55,10 @@ Similar to the example API format:
 
 1. **SUPABASE_SERVICE_ROLE_KEY** (Required)
    - Service role key from Supabase dashboard
-   - Needed for server-side database access
+   - Needed for server-side database access to bypass RLS (Row Level Security)
+   - **Critical**: Without this, the `/api/reports/card/:cardId` endpoint will fail with RLS errors
    - Get it from: Supabase Dashboard → Settings → API → service_role key
+   - **Security Note**: Never expose this key in client-side code. It bypasses all RLS policies.
 
 2. **VITE_SUPABASE_URL** or **SUPABASE_URL** (Optional)
    - Defaults to: `https://zcxxwpwheevwavdcgfht.supabase.co`
