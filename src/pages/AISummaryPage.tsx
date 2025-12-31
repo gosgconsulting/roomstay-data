@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, Settings, MoreHorizontal, Database, Pencil, Share2, TrendingUp } from "lucide-react";
+import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, Settings, MoreHorizontal, Database, Pencil, Share2, TrendingUp, ExternalLink } from "lucide-react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,6 @@ import {
 import { AddAICardModal } from "@/components/AddAICardModal";
 import { CreateAISummaryShareLinkModal } from "@/components/CreateAISummaryShareLinkModal";
 import { ForecastSettingsModal } from "@/components/ForecastSettingsModal";
-import { APIBuilderModal } from "@/components/APIBuilderModal";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
@@ -213,35 +212,6 @@ const AISummaryPage = () => {
     return cards.find(c => c.id === selectedCardId) || null;
   }, [cards, selectedCardId]);
 
-  // Extract card configuration for API Builder
-  const getCardConfigForAPI = (card: AISummaryCard) => {
-    // Extract breakdown_configs from report_configs if nested
-    const reportConfigs = card.report_configs || {};
-    const { breakdown_configs, ...dimensionConfigs } = reportConfigs as any;
-    
-    // Convert breakdown configs format
-    // Card format: Record<string, { reportId: string; breakdownDimensionIds: string[] }>
-    // API Builder format: Record<string, string[]>
-    const breakdownConfigs: Record<string, string[]> = {};
-    if (breakdown_configs) {
-      Object.entries(breakdown_configs).forEach(([reportId, config]: [string, any]) => {
-        if (config?.breakdownDimensionIds) {
-          breakdownConfigs[reportId] = config.breakdownDimensionIds;
-        } else if (config?.breakdownDimensionId) {
-          // Legacy format - single dimension ID
-          breakdownConfigs[reportId] = [config.breakdownDimensionId];
-        }
-      });
-    }
-    
-    return {
-      reportIds: card.report_ids,
-      reportConfigs: dimensionConfigs as Record<string, { reportId: string; dimensionId: string | null; selectedValues: string[] }>,
-      breakdownConfigs,
-      selectedMetrics: card.selected_metrics,
-      sinceDate: card.since_date,
-    };
-  };
 
   const handleDeleteCard = async () => {
     if (!deleteCardId) return;
@@ -1262,6 +1232,17 @@ const AISummaryPage = () => {
     }
   };
 
+  // Generate full API URL for a card (using card ID format)
+  const getCardApiUrl = (card: AISummaryCard): string => {
+    try {
+      // Use simple card ID format: /api/reports/card/{cardId}
+      return `${window.location.origin}/api/reports/card/${card.id}`;
+    } catch (error) {
+      console.error('[AISummaryPage] Error generating API URL:', error);
+      return '';
+    }
+  };
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
@@ -1444,6 +1425,25 @@ const AISummaryPage = () => {
                             <Database className="h-4 w-4 mr-2" />
                           )}
                           Refresh Data
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            const apiUrl = getCardApiUrl(card);
+                            navigator.clipboard.writeText(apiUrl);
+                            toast.success("API URL copied to clipboard");
+                          }}
+                        >
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          Copy API URL
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            const apiUrl = getCardApiUrl(card);
+                            window.open(apiUrl, '_blank');
+                          }}
+                        >
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          Open API URL
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem 
@@ -1673,13 +1673,21 @@ const AISummaryPage = () => {
         />
       )}
 
-      {/* API Builder Modal */}
-      <APIBuilderModal
+      {/* API Builder Modal - Now using unified AddAICardModal */}
+      <AddAICardModal
         open={isAPIBuilderModalOpen}
         onOpenChange={setIsAPIBuilderModalOpen}
-        accountId={accountId}
-        cardConfig={selectedCard ? getCardConfigForAPI(selectedCard) : undefined}
-        cardName={selectedCard?.name}
+        editingCard={selectedCard ? {
+          id: selectedCard.id,
+          name: selectedCard.name,
+          report_ids: selectedCard.report_ids,
+          report_configs: selectedCard.report_configs,
+          breakdown_configs: (selectedCard.report_configs as any)?.breakdown_configs || selectedCard.breakdown_configs,
+          selected_metrics: selectedCard.selected_metrics,
+          since_date: selectedCard.since_date,
+          ai_prompt: selectedCard.ai_prompt || ""
+        } : null}
+        mode="api"
       />
         </div>
       </div>

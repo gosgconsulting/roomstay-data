@@ -538,29 +538,285 @@ function getDateRangeForMonth(yearMonth) {
 }
 
 /**
+ * Helper function to format month name (e.g., "January 2025")
+ */
+function formatMonthName(year, month) {
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  return `${monthNames[month]} ${year}`;
+}
+
+/**
+ * Helper function to get month key from date (e.g., "2025-01")
+ */
+function getMonthKey(date) {
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+/**
+ * Helper function to group data by month
+ */
+function groupDataByMonth(data, dateDimensionId, dimensionIdToSnakeName) {
+  const grouped = {};
+  
+  data.forEach(row => {
+    const dimensionValues = row.dimension_values || {};
+    let dateValue = null;
+    
+    // First try to find date by dimension ID in dimension_values
+    if (dateDimensionId && dimensionValues[dateDimensionId]) {
+      dateValue = dimensionValues[dateDimensionId];
+    }
+    
+    // Try to find date by snake_case name in transformed row
+    if (!dateValue && dateDimensionId) {
+      const dateSnakeName = dimensionIdToSnakeName[dateDimensionId];
+      if (dateSnakeName && row[dateSnakeName]) {
+        dateValue = row[dateSnakeName];
+      }
+    }
+    
+    // Try common date field names
+    if (!dateValue) {
+      const commonDateFields = ['date', 'Date', 'day', 'Day', 'date_value', 'date_value'];
+      for (const field of commonDateFields) {
+        if (row[field] && typeof row[field] === 'string' && row[field].match(/^\d{4}-\d{2}-\d{2}/)) {
+          dateValue = row[field];
+          break;
+        }
+        if (dimensionValues[field] && typeof dimensionValues[field] === 'string' && dimensionValues[field].match(/^\d{4}-\d{2}-\d{2}/)) {
+          dateValue = dimensionValues[field];
+          break;
+        }
+      }
+    }
+    
+    // Try to find any date-like field in dimension_values
+    if (!dateValue) {
+      for (const [key, value] of Object.entries(dimensionValues)) {
+        if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}/)) {
+          dateValue = value;
+          break;
+        }
+      }
+    }
+    
+    // Try to find any date-like field in row directly
+    if (!dateValue) {
+      for (const [key, value] of Object.entries(row)) {
+        if (key !== 'dimension_values' && typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}/)) {
+          dateValue = value;
+          break;
+        }
+      }
+    }
+    
+    if (dateValue) {
+      try {
+        const monthKey = getMonthKey(dateValue);
+        const d = new Date(dateValue);
+        if (!isNaN(d.getTime())) {
+          const monthName = formatMonthName(d.getFullYear(), d.getMonth());
+          
+          if (!grouped[monthKey]) {
+            grouped[monthKey] = {
+              month: monthName,
+              month_key: monthKey,
+              data: []
+            };
+          }
+          
+          // Remove dimension_values from transformed row for cleaner output
+          const cleanRow = { ...row };
+          delete cleanRow.dimension_values;
+          
+          grouped[monthKey].data.push(cleanRow);
+        }
+      } catch (e) {
+        console.warn(`[API-MULTI] Error parsing date value: ${dateValue}`, e);
+      }
+    } else {
+      // If no date found, put in "Uncategorized" month
+      const uncategorizedKey = 'uncategorized';
+      if (!grouped[uncategorizedKey]) {
+        grouped[uncategorizedKey] = {
+          month: 'Uncategorized',
+          month_key: uncategorizedKey,
+          data: []
+        };
+      }
+      const cleanRow = { ...row };
+      delete cleanRow.dimension_values;
+      grouped[uncategorizedKey].data.push(cleanRow);
+    }
+  });
+  
+  return grouped;
+}
+
+/**
+ * Combine multiple rows with different channels into a single row
+ * with comma-separated values for channels and metrics
+ */
+function combineChannelsInMonth(monthsData, channelDimensionName = 'channel') {
+  return monthsData.map(monthData => {
+    if (!monthData.data || monthData.data.length === 0) {
+      return monthData;
+    }
+
+    // Check if channel dimension exists in any row
+    const hasChannel = monthData.data.some(row => 
+      row[channelDimensionName] !== undefined && row[channelDimensionName] !== null
+    );
+
+    if (!hasChannel) {
+      return monthData;
+    }
+
+    // Collect all unique channel values
+    const channelValues = [];
+    monthData.data.forEach(row => {
+      const channelValue = row[channelDimensionName];
+      if (channelValue !== undefined && channelValue !== null) {
+        const channelStr = String(channelValue);
+        if (!channelValues.includes(channelStr)) {
+          channelValues.push(channelStr);
+        }
+      }
+    });
+
+    // If only one channel or no channels, return as-is
+    if (channelValues.length <= 1) {
+      return monthData;
+    }
+
+    // Identify metric fields (numeric fields excluding metadata)
+    const metadataFields = new Set(['report_id', 'row_number', 'data_source_id', channelDimensionName]);
+    const metricFields = new Set();
+    
+    monthData.data.forEach(row => {
+      Object.keys(row).forEach(key => {
+        if (!metadataFields.has(key) && typeof row[key] === 'number') {
+          metricFields.add(key);
+        }
+      });
+    });
+
+    // Group rows by all fields except channel and metrics
+    // Create a key from all non-channel, non-metric fields
+    const groupedRows = new Map();
+    
+    monthData.data.forEach(row => {
+      // Create grouping key from all fields except channel and metrics
+      const groupKeyParts = [];
+      Object.keys(row).forEach(key => {
+        if (key !== channelDimensionName && !metricFields.has(key)) {
+          groupKeyParts.push(`${key}:${String(row[key] || '')}`);
+        }
+      });
+      const groupKey = groupKeyParts.sort().join('|');
+      
+      if (!groupedRows.has(groupKey)) {
+        groupedRows.set(groupKey, {
+          baseRow: {},
+          channels: [],
+          metrics: {}
+        });
+      }
+      
+      const group = groupedRows.get(groupKey);
+      const channelValue = String(row[channelDimensionName] || '');
+      
+      // Store base row data (first occurrence)
+      if (group.channels.length === 0) {
+        Object.keys(row).forEach(key => {
+          if (key !== channelDimensionName && !metricFields.has(key)) {
+            group.baseRow[key] = row[key];
+          }
+        });
+      }
+      
+      // Collect channel and metric values
+      let channelIndex = group.channels.indexOf(channelValue);
+      if (channelIndex === -1) {
+        // New channel, add it
+        channelIndex = group.channels.length;
+        group.channels.push(channelValue);
+      }
+      
+      // Initialize metric arrays if needed
+      Array.from(metricFields).forEach(metric => {
+        if (!group.metrics[metric]) {
+          group.metrics[metric] = [];
+        }
+        // Ensure array is long enough
+        while (group.metrics[metric].length <= channelIndex) {
+          group.metrics[metric].push(0);
+        }
+      });
+      
+      // Add metric values for this channel (sum if channel already exists)
+      Array.from(metricFields).forEach(metric => {
+        const value = row[metric];
+        if (value !== undefined && value !== null) {
+          const numValue = typeof value === 'number' ? value : parseFloat(value);
+          if (!isNaN(numValue)) {
+            // Sum if channel already exists, otherwise set
+            group.metrics[metric][channelIndex] = (group.metrics[metric][channelIndex] || 0) + numValue;
+          }
+        }
+      });
+    });
+
+    // Create combined rows
+    const combinedData = [];
+    groupedRows.forEach((group, groupKey) => {
+      const combinedRow = { ...group.baseRow };
+      
+      // Set combined channel value
+      combinedRow[channelDimensionName] = group.channels.join(', ');
+      
+      // Set combined metric values as comma-separated strings
+      Object.keys(group.metrics).forEach(metric => {
+        combinedRow[metric] = group.metrics[metric].join(', ');
+      });
+      
+      combinedData.push(combinedRow);
+    });
+
+    return {
+      ...monthData,
+      data: combinedData
+    };
+  });
+}
+
+/**
  * Public API endpoint for multiple reports data
- * Format: /api/reports?reportIds=id1,id2,id3
- * Example: /api/reports?reportIds=2eff17d0-38de-4d5d-a15b-69ad13788c92,abc123...
+ * Format: /api/reports?reports=id1,id2,id3&since=2024-01-01
+ * Example: /api/reports?reports=2eff17d0-38de-4d5d-a15b-69ad13788c92&since=2024-01-01&metrics=Impressions,Clicks
  * 
  * Query Parameters:
- * - reportIds: Comma-separated list of report IDs (required)
- * - limit: Number of results to return (default: 100, max: 5000)
- * - offset: Number of results to skip (default: 0)
- * - date_from or date_start: Start date filter (YYYY-MM-DD)
- * - date_to or date_end: End date filter (YYYY-MM-DD)
- * - period: 'current' or 'comparison' or 'both' (default: 'current')
- * - metrics[]: Array of metric names to include
- * - dimensions[reportId][dimensionId][]: Filter by dimension value per report
- * - breakdown[reportId][]: Breakdown dimensions per report
+ * - reports: Comma-separated list of report IDs (required)
+ * - since: Start date (YYYY-MM-DD) - data from this date to today (required)
+ * - metrics: Comma-separated list of metric names to include
+ * - filter[reportId][dimensionId]: Comma-separated dimension values to filter
+ * - breakdown[reportId]: Comma-separated breakdown dimension IDs
  */
 app.get('/api/reports', async (req, res) => {
   try {
-    const { reportIds: reportIdsParam } = req.query;
+    // Support both old format (reportIds) and new format (reports)
+    const reportIdsParam = req.query.reports || req.query.reportIds;
     
     if (!reportIdsParam) {
       return res.status(400).json({
         success: false,
-        error: 'reportIds query parameter is required',
+        error: 'reports query parameter is required',
         count: 0,
         data: []
       });
@@ -576,7 +832,7 @@ app.get('/api/reports', async (req, res) => {
     if (reportIds.length === 0) {
       return res.status(400).json({
         success: false,
-        error: 'At least one valid reportId is required',
+        error: 'At least one valid report ID is required',
         count: 0,
         data: []
       });
@@ -591,33 +847,70 @@ app.get('/api/reports', async (req, res) => {
       });
     }
 
-    // Extract other query parameters
+    // Extract query parameters (new cleaner format)
     const { 
-      limit = 100, 
-      offset = 0, 
-      page,
-      date_from, 
-      date_start,
-      date_to, 
-      date_end,
-      period = 'current',
-      'metrics[]': metricsParam,
+      since,
+      metrics: metricsParam,
       ...restParams 
     } = req.query;
 
-    // Parse metrics
+    // Support legacy date_from/date_to for backward compatibility
+    const date_from = since || req.query.date_from || req.query.date_start;
+    const date_to = req.query.date_to || req.query.date_end;
+
+    if (!date_from) {
+      return res.status(400).json({
+        success: false,
+        error: 'since (or date_from) query parameter is required',
+        count: 0,
+        data: []
+      });
+    }
+
+    // Parse metrics (comma-separated or array)
     const metrics = metricsParam 
-      ? (Array.isArray(metricsParam) ? metricsParam : [metricsParam])
+      ? (typeof metricsParam === 'string' 
+          ? metricsParam.split(',').map(m => m.trim()).filter(m => m.length > 0)
+          : Array.isArray(metricsParam) 
+          ? metricsParam.map(m => String(m).trim()).filter(m => m.length > 0)
+          : [])
       : [];
 
-    // Parse dimension filters per report: dimensions[reportId][dimensionId][]
+    // Parse dimension filters per report: filter[reportId][dimensionId]=value1,value2
     const dimensionFiltersByReport = {};
-    // Parse breakdown dimensions per report: breakdown[reportId][]
+    // Parse breakdown dimensions per report: breakdown[reportId]=dimId1,dimId2
     const breakdownByReport = {};
 
     // Extract dimension filters and breakdown from query params
     Object.keys(restParams).forEach(key => {
-      // Match dimensions[reportId][dimensionId][]
+      // Match filter[reportId][dimensionId] (new format)
+      const filterMatch = key.match(/^filter\[([^\]]+)\]\[([^\]]+)\]$/);
+      if (filterMatch) {
+        const [, reportId, dimensionId] = filterMatch;
+        if (!dimensionFiltersByReport[reportId]) {
+          dimensionFiltersByReport[reportId] = {};
+        }
+        const value = restParams[key];
+        if (typeof value === 'string') {
+          dimensionFiltersByReport[reportId][dimensionId] = value.split(',').map(v => v.trim()).filter(v => v.length > 0);
+        } else if (Array.isArray(value)) {
+          dimensionFiltersByReport[reportId][dimensionId] = value.map(v => String(v).trim()).filter(v => v.length > 0);
+        }
+      }
+
+      // Match breakdown[reportId] (new format)
+      const breakdownMatch = key.match(/^breakdown\[([^\]]+)\]$/);
+      if (breakdownMatch) {
+        const [, reportId] = breakdownMatch;
+        const value = restParams[key];
+        if (typeof value === 'string') {
+          breakdownByReport[reportId] = value.split(',').map(v => v.trim()).filter(v => v.length > 0);
+        } else if (Array.isArray(value)) {
+          breakdownByReport[reportId] = value.map(v => String(v).trim()).filter(v => v.length > 0);
+        }
+      }
+
+      // Legacy format support: dimensions[reportId][dimensionId][]
       const dimMatch = key.match(/^dimensions\[([^\]]+)\]\[([^\]]+)\]\[\]$/);
       if (dimMatch) {
         const [, reportId, dimensionId] = dimMatch;
@@ -635,10 +928,10 @@ app.get('/api/reports', async (req, res) => {
         }
       }
 
-      // Match breakdown[reportId][]
-      const breakdownMatch = key.match(/^breakdown\[([^\]]+)\]\[\]$/);
-      if (breakdownMatch) {
-        const [, reportId] = breakdownMatch;
+      // Legacy format support: breakdown[reportId][]
+      const legacyBreakdownMatch = key.match(/^breakdown\[([^\]]+)\]\[\]$/);
+      if (legacyBreakdownMatch) {
+        const [, reportId] = legacyBreakdownMatch;
         if (!breakdownByReport[reportId]) {
           breakdownByReport[reportId] = [];
         }
@@ -651,26 +944,7 @@ app.get('/api/reports', async (req, res) => {
       }
     });
 
-    // Parse pagination params
-    const limitNum = Math.min(parseInt(limit, 10) || 100, 5000);
-    let offsetNum = parseInt(offset, 10) || 0;
-    
-    if (page) {
-      const pageNum = parseInt(page, 10);
-      if (pageNum > 0) {
-        offsetNum = (pageNum - 1) * limitNum;
-      }
-    }
-
-    // Calculate date ranges (same logic as single-report endpoint)
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    const currentDate = now.getDate();
-
-    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
-    
+    // Calculate date range: from since date to today
     const formatDate = (date) => {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -678,29 +952,14 @@ app.get('/api/reports', async (req, res) => {
       return `${year}-${month}-${day}`;
     };
 
-    const currentFromDate = date_from || date_start || formatDate(new Date(lastMonthYear, lastMonth, 1));
-    const currentToDate = date_to || date_end || formatDate(new Date(currentYear, currentMonth, currentDate));
-    
-    const comparisonFromDate = new Date(currentFromDate);
-    comparisonFromDate.setFullYear(comparisonFromDate.getFullYear() - 1);
-    const comparisonToDate = new Date(currentToDate);
-    comparisonToDate.setFullYear(comparisonToDate.getFullYear() - 1);
-
-    const dateRanges = {
-      current: {
-        date_from: currentFromDate,
-        date_to: currentToDate,
-      },
-      comparison: {
-        date_from: formatDate(comparisonFromDate),
-        date_to: formatDate(comparisonToDate),
-      },
-    };
+    const sinceDate = date_from;
+    const toDate = date_to || formatDate(new Date());
 
     // Process each report and combine data
     const allTransformedData = [];
     const allDimensionsMetadata = [];
     const reportMetadata = [];
+    let globalDateDimensionId = null;
 
     for (const reportId of reportIds) {
       try {
@@ -732,6 +991,9 @@ app.get('/api/reports', async (req, res) => {
             
             if (dim.type === 'date' && !dateDimensionId) {
               dateDimensionId = dim.id;
+              if (!globalDateDimensionId) {
+                globalDateDimensionId = dim.id;
+              }
             }
           });
         }
@@ -749,8 +1011,8 @@ app.get('/api/reports', async (req, res) => {
             return dimensionData || [];
           }
 
-          const toDate = new Date(dateTo);
-          const adjustedToDate = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1);
+          const toDateObj = new Date(dateTo);
+          const adjustedToDate = new Date(toDateObj.getFullYear(), toDateObj.getMonth(), toDateObj.getDate() + 1);
           const adjustedToDateStr = adjustedToDate.toISOString().split('T')[0];
           
           const { data: dimensionData, error: dataError } = await supabase
@@ -765,47 +1027,8 @@ app.get('/api/reports', async (req, res) => {
           return dimensionData || [];
         };
 
-        // Fetch data based on period
-        let currentData = [];
-        let comparisonData = [];
-
-        if (period === 'comparison') {
-          comparisonData = await fetchDataForPeriod(dateRanges.comparison.date_from, dateRanges.comparison.date_to);
-        } else if (period === 'both' && dateDimensionId) {
-          [currentData, comparisonData] = await Promise.all([
-            fetchDataForPeriod(dateRanges.current.date_from, dateRanges.current.date_to),
-            fetchDataForPeriod(dateRanges.comparison.date_from, dateRanges.comparison.date_to)
-          ]);
-        } else {
-          currentData = await fetchDataForPeriod(dateRanges.current.date_from, dateRanges.current.date_to);
-        }
-
-        // Combine data from all periods
-        const allData = [];
-        
-        currentData.forEach((row) => {
-          allData.push({
-            report_id: reportId,
-            period: 'current',
-            date_from: dateRanges.current.date_from,
-            date_to: dateRanges.current.date_to,
-            row_number: row.row_number,
-            data_source_id: row.data_source_id,
-            dimension_values: row.dimension_values
-          });
-        });
-
-        comparisonData.forEach((row) => {
-          allData.push({
-            report_id: reportId,
-            period: 'comparison',
-            date_from: dateRanges.comparison.date_from,
-            date_to: dateRanges.comparison.date_to,
-            row_number: row.row_number,
-            data_source_id: row.data_source_id,
-            dimension_values: row.dimension_values
-          });
-        });
+        // Fetch data from since date to end date
+        const allData = await fetchDataForPeriod(sinceDate, toDate);
 
         // Apply dimension filters for this report
         let filteredData = allData;
@@ -852,16 +1075,13 @@ app.get('/api/reports', async (req, res) => {
           });
         }
 
-        // Transform data: Replace dimension IDs with snake_case names
-        const transformedData = filteredData.map((row, index) => {
+        // Transform data: Replace dimension IDs with snake_case names and add report_id
+        const transformedData = filteredData.map((row) => {
           const transformed = {
-            id: `${reportId}_${row.period}_${row.row_number || index + 1}`,
             report_id: reportId,
-            row_number: row.row_number || index + 1,
+            row_number: row.row_number,
             data_source_id: row.data_source_id,
-            period: row.period,
-            date_from: row.date_from,
-            date_to: row.date_to
+            dimension_values: row.dimension_values // Keep original for month grouping
           };
 
           // Replace dimension IDs with snake_case dimension names
@@ -908,43 +1128,399 @@ app.get('/api/reports', async (req, res) => {
       }
     }
 
-    // Apply pagination to combined data
+    // Group data by month
     const totalCount = allTransformedData.length;
-    const paginatedData = allTransformedData.slice(offsetNum, offsetNum + limitNum);
+    
+    // Find date dimension ID from first report's dimensions
+    let dateDimId = globalDateDimensionId;
+    if (!dateDimId && allDimensionsMetadata.length > 0) {
+      const dateDim = allDimensionsMetadata.find(d => d.type === 'date');
+      if (dateDim) {
+        dateDimId = dateDim.id;
+      }
+    }
 
-    // Calculate pagination metadata
-    const currentPage = page ? parseInt(page, 10) : Math.floor(offsetNum / limitNum) + 1;
-    const totalPages = Math.ceil(totalCount / limitNum);
-    const hasMore = offsetNum + limitNum < totalCount;
-    const hasPrevious = offsetNum > 0;
+    // Build dimension ID to snake name mapping for all reports
+    const allDimensionIdToSnakeName = {};
+    allDimensionsMetadata.forEach(dim => {
+      allDimensionIdToSnakeName[dim.id] = dim.snake_name;
+    });
 
-    console.log(`[API-MULTI] Returning ${paginatedData.length} of ${totalCount} rows from ${reportIds.length} reports`);
+    // Group data by month
+    const groupedByMonth = groupDataByMonth(allTransformedData, dateDimId, allDimensionIdToSnakeName);
 
-    // Format JSON response
+    // Convert grouped object to array and sort by month key
+    let monthsData = Object.values(groupedByMonth).sort((a, b) => {
+      return a.month_key.localeCompare(b.month_key);
+    });
+
+    // Combine multiple channels into single rows with comma-separated values
+    // Find channel dimension name from metadata
+    const channelDimension = allDimensionsMetadata.find(d => 
+      d.name.toLowerCase() === 'channel' || 
+      d.snake_name === 'channel'
+    );
+    const channelDimName = channelDimension?.snake_name || 'channel';
+    
+    monthsData = combineChannelsInMonth(monthsData, channelDimName);
+
+    console.log(`[API-MULTI] Returning ${totalCount} rows grouped into ${monthsData.length} months from ${reportIds.length} reports`);
+
+    // Format JSON response (no pagination)
     return res.status(200).json({
       success: true,
-      count: paginatedData.length,
-      total: totalCount,
-      data: paginatedData,
-      pagination: {
-        page: currentPage,
-        limit: limitNum,
-        offset: offsetNum,
-        total: totalCount,
-        totalPages: totalPages,
-        hasMore: hasMore,
-        hasPrevious: hasPrevious
-      },
+      count: totalCount,
+      since: sinceDate,
+      to: toDate,
+      data: monthsData,
       reports: reportMetadata,
-      dimensions: allDimensionsMetadata,
-      date_range: {
-        date_from: dateRanges.current.date_from,
-        date_to: dateRanges.current.date_to
-      }
+      dimensions: allDimensionsMetadata
     });
 
   } catch (error) {
     console.error('[API-MULTI] Fatal error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({
+      success: false,
+      error: errorMessage,
+      count: 0,
+      data: []
+    });
+  }
+});
+
+/**
+ * API endpoint for AI Summary card-based reports
+ * Format: /api/reports/card/:cardId
+ * Example: /api/reports/card/550e8400-e29b-41d4-a716-446655440000
+ * 
+ * This endpoint automatically applies all settings from the AI Summary card:
+ * - report_ids, since_date, selected_metrics, report_configs (filters & breakdowns)
+ */
+app.get('/api/reports/card/:cardId', async (req, res) => {
+  try {
+    const { cardId } = req.params;
+    
+    // Validate card ID format (UUID)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(cardId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid card ID format. Expected UUID.',
+        count: 0,
+        data: []
+      });
+    }
+
+    if (!supabase) {
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error: Supabase client not initialized',
+        count: 0,
+        data: []
+      });
+    }
+
+    // Fetch AI Summary card configuration
+    const { data: card, error: cardError } = await supabase
+      .from('ai_summary_cards')
+      .select('id, report_ids, report_configs, selected_metrics, since_date, user_id')
+      .eq('id', cardId)
+      .single();
+
+    if (cardError) {
+      console.error('[API-CARD] Error fetching card:', cardError);
+      return res.status(500).json({
+        success: false,
+        error: cardError.message || 'Error fetching card configuration',
+        details: cardError,
+        count: 0,
+        data: []
+      });
+    }
+
+    if (!card) {
+      return res.status(404).json({
+        success: false,
+        error: 'Card not found',
+        count: 0,
+        data: []
+      });
+    }
+
+    // Extract configuration from card
+    const reportIds = card.report_ids || [];
+    if (reportIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Card has no reports configured',
+        count: 0,
+        data: []
+      });
+    }
+
+    const sinceDate = card.since_date;
+    if (!sinceDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'Card has no since_date configured',
+        count: 0,
+        data: []
+      });
+    }
+
+    const selectedMetrics = card.selected_metrics || [];
+    const reportConfigs = card.report_configs || {};
+
+    // Parse dimension filters and breakdowns from report_configs
+    const dimensionFiltersByReport = {};
+    const breakdownByReport = {};
+
+    // Extract filters: report_configs[reportId].dimensionId and selectedValues
+    Object.entries(reportConfigs).forEach(([reportId, config]) => {
+      if (config?.dimensionId && config?.selectedValues && Array.isArray(config.selectedValues) && config.selectedValues.length > 0) {
+        if (!dimensionFiltersByReport[reportId]) {
+          dimensionFiltersByReport[reportId] = {};
+        }
+        dimensionFiltersByReport[reportId][config.dimensionId] = config.selectedValues;
+      }
+    });
+
+    // Extract breakdowns: report_configs.breakdown_configs[reportId].breakdownDimensionIds
+    const breakdownConfigs = reportConfigs?.breakdown_configs || {};
+    Object.entries(breakdownConfigs).forEach(([reportId, config]) => {
+      if (config?.breakdownDimensionIds && Array.isArray(config.breakdownDimensionIds) && config.breakdownDimensionIds.length > 0) {
+        breakdownByReport[reportId] = config.breakdownDimensionIds;
+      }
+    });
+
+    // Calculate date range: from since date to today
+    const formatDate = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const toDate = formatDate(new Date());
+
+    // Process each report and combine data (reuse logic from /api/reports endpoint)
+    const allTransformedData = [];
+    const allDimensionsMetadata = [];
+    const reportMetadata = [];
+    let globalDateDimensionId = null;
+
+    for (const reportId of reportIds) {
+      try {
+        // Fetch dimensions for this report
+        const { data: dimensions, error: dimError } = await supabase
+          .from('dimensions')
+          .select('id, name, type')
+          .eq('report_id', reportId)
+          .order('name', { ascending: true });
+
+        if (dimError) {
+          console.warn(`[API-CARD] Error fetching dimensions for report ${reportId}:`, dimError);
+        }
+
+        // Create dimension mappings
+        const dimensionIdToName = {};
+        const dimensionIdToSnakeName = {};
+        const dimensionNameToId = {};
+        const dimensionSnakeNameToId = {};
+        let dateDimensionId = null;
+
+        if (dimensions && dimensions.length > 0) {
+          dimensions.forEach(dim => {
+            const snakeName = toSnakeCase(dim.name);
+            dimensionIdToName[dim.id] = dim.name;
+            dimensionIdToSnakeName[dim.id] = snakeName;
+            dimensionNameToId[dim.name] = dim.id;
+            dimensionSnakeNameToId[snakeName] = dim.id;
+            
+            if (dim.type === 'date' && !dateDimensionId) {
+              dateDimensionId = dim.id;
+              if (!globalDateDimensionId) {
+                globalDateDimensionId = dim.id;
+              }
+            }
+          });
+        }
+
+        // Fetch data for this report
+        const fetchDataForPeriod = async (dateFrom, dateTo) => {
+          if (!dateDimensionId) {
+            const { data: dimensionData, error: dataError } = await supabase
+              .from('dimension_data')
+              .select('dimension_values, row_number, data_source_id')
+              .eq('report_id', reportId)
+              .order('row_number', { ascending: true });
+
+            if (dataError) throw dataError;
+            return dimensionData || [];
+          }
+
+          const toDateObj = new Date(dateTo);
+          const adjustedToDate = new Date(toDateObj.getFullYear(), toDateObj.getMonth(), toDateObj.getDate() + 1);
+          const adjustedToDateStr = adjustedToDate.toISOString().split('T')[0];
+          
+          const { data: dimensionData, error: dataError } = await supabase
+            .from('dimension_data')
+            .select('dimension_values, row_number, data_source_id')
+            .eq('report_id', reportId)
+            .gte(`dimension_values->>${dateDimensionId}`, dateFrom)
+            .lt(`dimension_values->>${dateDimensionId}`, adjustedToDateStr)
+            .order('row_number', { ascending: true });
+
+          if (dataError) throw dataError;
+          return dimensionData || [];
+        };
+
+        // Fetch data from since date to end date
+        const allData = await fetchDataForPeriod(sinceDate, toDate);
+
+        // Apply dimension filters for this report
+        let filteredData = allData;
+        const reportDimFilters = dimensionFiltersByReport[reportId] || {};
+        
+        if (Object.keys(reportDimFilters).length > 0) {
+          filteredData = allData.filter(row => {
+            for (const [dimensionId, filterValues] of Object.entries(reportDimFilters)) {
+              const rowValue = row.dimension_values[dimensionId];
+              const rowValueStr = String(rowValue || '').toLowerCase();
+              
+              // Check if any filter value matches
+              const matches = filterValues.some(filterValue => {
+                const filterValueStr = String(filterValue).toLowerCase();
+                return rowValueStr.includes(filterValueStr) || filterValueStr.includes(filterValueStr);
+              });
+              
+              if (!matches) {
+                return false;
+              }
+            }
+            return true;
+          });
+        }
+
+        // Apply metrics filter if specified
+        if (selectedMetrics.length > 0) {
+          filteredData = filteredData.filter(row => {
+            return selectedMetrics.some(metric => {
+              const metricDimId = dimensionNameToId[metric] || 
+                                 Object.entries(dimensionIdToName).find(([id, name]) => 
+                                   name.toLowerCase() === metric.toLowerCase()
+                                 )?.[0];
+              if (metricDimId) {
+                const value = row.dimension_values[metricDimId];
+                return value !== undefined && value !== null && value !== '';
+              }
+              return false;
+            });
+          });
+        }
+
+        // Transform data: Replace dimension IDs with snake_case names and add report_id
+        const transformedData = filteredData.map((row) => {
+          const transformed = {
+            report_id: reportId,
+            row_number: row.row_number,
+            data_source_id: row.data_source_id,
+            dimension_values: row.dimension_values // Keep original for month grouping
+          };
+
+          // Replace dimension IDs with snake_case dimension names
+          for (const [dimId, value] of Object.entries(row.dimension_values || {})) {
+            const snakeName = dimensionIdToSnakeName[dimId] || toSnakeCase(dimensionIdToName[dimId]) || dimId;
+            transformed[snakeName] = value;
+          }
+
+          return transformed;
+        });
+
+        allTransformedData.push(...transformedData);
+
+        // Collect dimension metadata
+        if (dimensions && dimensions.length > 0) {
+          dimensions.forEach(dim => {
+            const existing = allDimensionsMetadata.find(d => d.id === dim.id);
+            if (!existing) {
+              allDimensionsMetadata.push({
+                id: dim.id,
+                name: dim.name,
+                snake_name: toSnakeCase(dim.name),
+                type: dim.type
+              });
+            }
+          });
+        }
+
+        // Store report metadata
+        reportMetadata.push({
+          report_id: reportId,
+          count: transformedData.length
+        });
+
+      } catch (error) {
+        console.error(`[API-CARD] Error processing report ${reportId}:`, error);
+        reportMetadata.push({
+          report_id: reportId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          count: 0
+        });
+      }
+    }
+
+    // Group data by month
+    const totalCount = allTransformedData.length;
+    
+    // Find date dimension ID from first report's dimensions
+    let dateDimId = globalDateDimensionId;
+    if (!dateDimId && allDimensionsMetadata.length > 0) {
+      const dateDim = allDimensionsMetadata.find(d => d.type === 'date');
+      if (dateDim) {
+        dateDimId = dateDim.id;
+      }
+    }
+
+    // Build dimension ID to snake name mapping for all reports
+    const allDimensionIdToSnakeName = {};
+    allDimensionsMetadata.forEach(dim => {
+      allDimensionIdToSnakeName[dim.id] = dim.snake_name;
+    });
+
+    // Group data by month
+    const groupedByMonth = groupDataByMonth(allTransformedData, dateDimId, allDimensionIdToSnakeName);
+
+    // Convert grouped object to array and sort by month key
+    let monthsData = Object.values(groupedByMonth).sort((a, b) => {
+      return a.month_key.localeCompare(b.month_key);
+    });
+
+    // Combine multiple channels into single rows with comma-separated values
+    const channelDimension = allDimensionsMetadata.find(d => 
+      d.name.toLowerCase() === 'channel' || 
+      d.snake_name === 'channel'
+    );
+    const channelDimName = channelDimension?.snake_name || 'channel';
+    
+    monthsData = combineChannelsInMonth(monthsData, channelDimName);
+
+    console.log(`[API-CARD] Returning ${totalCount} rows grouped into ${monthsData.length} months from ${reportIds.length} reports for card ${cardId}`);
+
+    // Format JSON response (no pagination)
+    return res.status(200).json({
+      success: true,
+      count: totalCount,
+      since: sinceDate,
+      to: toDate,
+      data: monthsData,
+      reports: reportMetadata,
+      dimensions: allDimensionsMetadata
+    });
+
+  } catch (error) {
+    console.error('[API-CARD] Fatal error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return res.status(500).json({
       success: false,

@@ -90,6 +90,7 @@ interface AddAICardModalProps {
   onCardCreated?: (newCardId?: string) => void;
   editingCard?: EditingCard | null;
   mode?: "card" | "api"; // "card" for card creation/editing, "api" for API URL preview only
+  initialReportId?: string; // Pre-select a report when opening from ReportDashboard
 }
 
 type Step = "select-reports" | "filter-dimensions" | "breakdown-dimensions" | "select-metrics" | "select-period" | "preview-url";
@@ -227,7 +228,7 @@ const getDefaultSinceDate = (): string => {
   return `${previousYear}-01-01`;
 };
 
-export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard, mode = "card" }: AddAICardModalProps) => {
+export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard, mode = "card", initialReportId }: AddAICardModalProps) => {
   const { accountId } = useParams();
   const [step, setStep] = useState<Step>("select-reports");
   const [isSaving, setIsSaving] = useState(false);
@@ -301,11 +302,19 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
         setStep("preview-url");
       }
     } else if (mode === "api" && open) {
-      // In API mode without editingCard, start at preview-url after going through steps
-      // But initially start at select-reports
-      setStep("select-reports");
+      // In API mode without editingCard
+      if (initialReportId) {
+        // Pre-select the initial report when provided
+        setSelectedReportIds([initialReportId]);
+        setActiveReportTab(initialReportId);
+        // Start at select-reports step (report is pre-selected, user can proceed)
+        setStep("select-reports");
+      } else {
+        // No initial report, start at select-reports
+        setStep("select-reports");
+      }
     }
-  }, [editingCard, open, mode]);
+  }, [editingCard, open, mode, initialReportId]);
 
   // Fetch reports for the account
   useEffect(() => {
@@ -1369,54 +1378,54 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
     }
   };
 
-  // Generate API URL
+  // Generate API URL with cleaner format
   const generateApiUrl = useMemo(() => {
+    // If editing an existing card, use the simple card ID format
+    if (editingCard?.id) {
+      return `${window.location.origin}/api/reports/card/${editingCard.id}`;
+    }
+    
+    // Otherwise, build parameter-based URL (for preview before saving)
     const params = new URLSearchParams();
     
     // Add reportIds (comma-separated)
     if (selectedReportIds.length > 0) {
-      params.append('reportIds', selectedReportIds.join(','));
+      params.append('reports', selectedReportIds.join(','));
     }
     
-    // Add since date (start date)
+    // Add since date (replaces date_from/date_to)
     if (sinceDate) {
-      params.append('date_from', sinceDate);
+      params.append('since', sinceDate);
     }
     
-    // End date is always today
-    const today = new Date().toISOString().split('T')[0];
-    params.append('date_to', today);
+    // Add metrics (cleaner format)
+    if (selectedMetrics.length > 0) {
+      params.append('metrics', selectedMetrics.join(','));
+    }
     
-    // Add metrics
-    selectedMetrics.forEach(metric => {
-      params.append('metrics[]', metric);
-    });
-    
-    // Add dimension filters per report
+    // Add dimension filters per report (cleaner format: filter[reportId][dimensionId]=value1,value2)
     selectedReportIds.forEach(reportId => {
       const config = reportConfigs[reportId];
       if (config?.dimensionId && config.selectedValues.length > 0) {
-        config.selectedValues.forEach(value => {
-          params.append(`dimensions[${reportId}][${config.dimensionId}][]`, value);
-        });
+        params.append(`filter[${reportId}][${config.dimensionId}]`, config.selectedValues.join(','));
       }
     });
     
-    // Add breakdown dimensions per report
+    // Add breakdown dimensions per report (cleaner format: breakdown[reportId]=dimId1,dimId2)
     selectedReportIds.forEach(reportId => {
       const breakdownConfig = breakdownConfigs[reportId];
       const breakdownIds = breakdownConfig?.breakdownDimensionIds || [];
-      breakdownIds.forEach(dimId => {
-        params.append(`breakdown[${reportId}][]`, dimId);
-      });
+      if (breakdownIds.length > 0) {
+        params.append(`breakdown[${reportId}]`, breakdownIds.join(','));
+      }
     });
     
     const baseUrl = `${window.location.origin}/api/reports`;
     const queryString = params.toString();
     return queryString ? `${baseUrl}?${queryString}` : baseUrl;
-  }, [selectedReportIds, sinceDate, selectedMetrics, reportConfigs, breakdownConfigs]);
+  }, [editingCard, selectedReportIds, sinceDate, selectedMetrics, reportConfigs, breakdownConfigs]);
 
-  const apiUrl = generateApiUrl();
+  const apiUrl = generateApiUrl;
 
   const handleCopyUrl = () => {
     navigator.clipboard.writeText(apiUrl);
@@ -1843,40 +1852,42 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="api-url" className="text-base font-semibold">
-                    API URL Preview
+                    API URL
                   </Label>
-                  <div className="flex gap-2 mt-2">
-                    <div className="flex-1 relative">
-                      <Input
-                        id="api-url"
-                        type="text"
-                        value={apiUrl}
-                        readOnly
-                        className="pr-10 font-mono text-xs"
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <div className="flex-1 relative">
+                        <Input
+                          id="api-url"
+                          type="text"
+                          value={apiUrl}
+                          readOnly
+                          className="pr-10 font-mono text-xs break-all"
+                          onClick={handleCopyUrl}
+                          style={{ cursor: 'pointer' }}
+                          title="Click to copy"
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="icon"
                         onClick={handleCopyUrl}
-                        style={{ cursor: 'pointer' }}
-                        title="Click to copy"
-                      />
+                        title="Copy URL"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={handleOpenInNewTab}
+                        title="Open in new tab"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={handleCopyUrl}
-                      title="Copy URL"
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={handleOpenInNewTab}
-                      title="Open in new tab"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Click the URL or copy button to copy to clipboard
+                    Click the URL or copy button to copy to clipboard. Open in new tab to view JSON response.
                   </p>
                 </div>
 
@@ -1895,8 +1906,12 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
                       <span className="text-muted-foreground">{formattedSinceDate}</span>
                     </div>
                     <div>
-                      <span className="font-medium text-foreground">End Date:</span>{" "}
+                      <span className="font-medium text-foreground">To:</span>{" "}
                       <span className="text-muted-foreground">Today</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">Grouping:</span>{" "}
+                      <span className="text-muted-foreground">By Month</span>
                     </div>
                     <div>
                       <span className="font-medium text-foreground">Metrics:</span>{" "}
@@ -1933,7 +1948,30 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
             {step === "select-reports" ? "Cancel" : "Back"}
           </Button>
 
-          {step === "select-period" ? (
+          {step === "preview-url" && mode === "api" ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setStep("select-reports");
+                }}
+              >
+                Edit Settings
+              </Button>
+              <Button onClick={handleClose}>
+                Done
+              </Button>
+            </>
+          ) : step === "select-period" && mode === "card" ? (
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 mr-1" />
+              )}
+              {isSaving ? "Saving..." : editingCard ? "Update Card" : "Create Card"}
+            </Button>
+          ) : step === "preview-url" && mode === "card" ? (
             <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? (
                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
