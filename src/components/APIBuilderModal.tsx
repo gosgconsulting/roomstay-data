@@ -16,6 +16,15 @@ interface APIBuilderModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
+// Define available dimensions (5 options)
+const DIMENSIONS = [
+  { value: 'channel', label: 'Channel' },
+  { value: 'device', label: 'Device' },
+  { value: 'hotel', label: 'Hotel' },
+  { value: 'link_type', label: 'Link Type' },
+  { value: 'market', label: 'Market' }
+];
+
 export const APIBuilderModal = ({ reportId, open, onOpenChange }: APIBuilderModalProps) => {
   const { toast } = useToast();
   
@@ -23,6 +32,8 @@ export const APIBuilderModal = ({ reportId, open, onOpenChange }: APIBuilderModa
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [limit, setLimit] = useState("100");
   const [page, setPage] = useState("1");
+  const [groupBy, setGroupBy] = useState("");                    // Single selection
+  const [breakdownBy, setBreakdownBy] = useState<string[]>([]);  // Multiple checkboxes
 
   // Reset to defaults when modal opens
   useEffect(() => {
@@ -30,8 +41,25 @@ export const APIBuilderModal = ({ reportId, open, onOpenChange }: APIBuilderModa
       setStartDate(new Date());
       setLimit("100");
       setPage("1");
+      setGroupBy("");
+      setBreakdownBy([]);
     }
   }, [open]);
+
+  // Handler: Toggle breakdown dimension
+  const toggleBreakdown = (dimension: string) => {
+    setBreakdownBy(prev => 
+      prev.includes(dimension)
+        ? prev.filter(d => d !== dimension)
+        : [...prev, dimension]
+    );
+  };
+
+  // Handler: When groupBy changes, reset breakdowns
+  const handleGroupByChange = (value: string) => {
+    setGroupBy(value);
+    setBreakdownBy([]);  // Clear breakdowns when group changes
+  };
 
   // Generate API URL dynamically
   const generateApiUrl = useCallback(() => {
@@ -48,10 +76,20 @@ export const APIBuilderModal = ({ reportId, open, onOpenChange }: APIBuilderModa
     if (limit) params.append('limit', limit);
     if (page && page !== "1") params.append('page', page);
     
+    // Add grouping parameters
+    if (groupBy) {
+      params.append('groupby', groupBy);
+      
+      // Add multiple breakdown dimensions
+      breakdownBy.forEach(bd => {
+        params.append('breakdownby[]', bd);
+      });
+    }
+    
     const baseUrl = `${window.location.origin}/api/reports/${reportId}`;
     const queryString = params.toString();
     return queryString ? `${baseUrl}?${queryString}` : baseUrl;
-  }, [reportId, startDate, limit, page]);
+  }, [reportId, startDate, limit, page, groupBy, breakdownBy]);
 
   const apiUrl = generateApiUrl();
 
@@ -77,8 +115,8 @@ export const APIBuilderModal = ({ reportId, open, onOpenChange }: APIBuilderModa
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
-          {/* Date Picker */}
+        <div className="space-y-4 py-4">
+          {/* Date Range */}
           <div className="space-y-2">
             <Label>Start Date</Label>
             <Popover>
@@ -98,84 +136,114 @@ export const APIBuilderModal = ({ reportId, open, onOpenChange }: APIBuilderModa
               </PopoverContent>
             </Popover>
             <p className="text-xs text-muted-foreground">
-              End date is automatically set to today ({format(new Date(), 'PPP')})
+              End date is set to today
             </p>
           </div>
 
-          {/* Pagination Controls */}
+          {/* Grouping Section */}
+          <div className="space-y-2">
+            <Label>Select Dimension (Group By)</Label>
+            <Select value={groupBy} onValueChange={handleGroupByChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a dimension..." />
+              </SelectTrigger>
+              <SelectContent>
+                {DIMENSIONS.map(dim => (
+                  <SelectItem key={dim.value} value={dim.value}>
+                    {dim.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Breakdown Section (appears only when groupBy is selected) */}
+          {groupBy && (
+            <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
+              <Label>Breakdown Dimensions</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Select one or more dimensions to breakdown data
+              </p>
+              <div className="space-y-2">
+                {DIMENSIONS.filter(d => d.value !== groupBy).map(dim => (
+                  <div key={dim.value} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`breakdown-${dim.value}`}
+                      checked={breakdownBy.includes(dim.value)}
+                      onChange={() => toggleBreakdown(dim.value)}
+                      className="w-4 h-4 rounded border-gray-300"
+                    />
+                    <label 
+                      htmlFor={`breakdown-${dim.value}`}
+                      className="text-sm font-medium leading-none cursor-pointer"
+                    >
+                      {dim.label}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Limit + Page (2 columns) */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="limit">Results per page</Label>
               <Select value={limit} onValueChange={setLimit}>
                 <SelectTrigger id="limit">
-                  <SelectValue placeholder="Select limit" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="25">25</SelectItem>
                   <SelectItem value="50">50</SelectItem>
                   <SelectItem value="100">100</SelectItem>
-                  <SelectItem value="250">250</SelectItem>
+                  <SelectItem value="200">200</SelectItem>
                   <SelectItem value="500">500</SelectItem>
-                  <SelectItem value="1000">1,000</SelectItem>
-                  <SelectItem value="2500">2,500</SelectItem>
-                  <SelectItem value="5000">5,000</SelectItem>
+                  <SelectItem value="1000">1000</SelectItem>
+                  <SelectItem value="5000">5000</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="page">Page Number</Label>
+              <Label htmlFor="page">Page</Label>
               <Input
                 id="page"
                 type="number"
                 min="1"
                 value={page}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === "" || parseInt(val, 10) >= 1) {
-                    setPage(val);
-                  }
-                }}
+                onChange={(e) => setPage(e.target.value)}
                 placeholder="1"
               />
             </div>
           </div>
 
-          {/* API URL Preview Section */}
+          {/* Info Message */}
+          {groupBy && (
+            <div className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950 p-2 rounded border border-blue-200 dark:border-blue-800">
+              <strong>Aggregation enabled:</strong> Data grouped by {DIMENSIONS.find(d => d.value === groupBy)?.label}
+              {breakdownBy.length > 0 && ` with ${breakdownBy.length} breakdown dimension(s)`}. 
+              Metrics will be summed and conversion_rate calculated.
+            </div>
+          )}
+
+          {/* API URL Preview */}
           <div className="space-y-2">
-            <Label htmlFor="api-url">API URL Preview</Label>
+            <Label htmlFor="api-url">API URL</Label>
             <div className="flex gap-2">
-              <div className="flex-1 relative">
-                <Input
-                  id="api-url"
-                  type="text"
-                  value={apiUrl}
-                  readOnly
-                  className="pr-10 font-mono text-xs"
-                  onClick={handleCopyUrl}
-                  style={{ cursor: 'pointer' }}
-                  title="Click to copy"
-                />
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleCopyUrl}
-                title="Copy URL"
-              >
+              <Input
+                id="api-url"
+                value={apiUrl}
+                readOnly
+                className="font-mono text-xs"
+              />
+              <Button variant="outline" size="icon" onClick={handleCopyUrl}>
                 <Copy className="h-4 w-4" />
               </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleOpenInNewTab}
-                title="Open in new tab"
-              >
+              <Button variant="outline" size="icon" onClick={handleOpenInNewTab}>
                 <ExternalLink className="h-4 w-4" />
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Click the URL or copy button to copy to clipboard
-            </p>
           </div>
         </div>
       </DialogContent>

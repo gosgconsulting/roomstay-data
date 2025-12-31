@@ -497,6 +497,19 @@ function toSnakeCase(str) {
     .toLowerCase();
 }
 
+// Helper function to calculate conversion rate: (conversions / clicks) * 100
+function calculateConversionRate(conversions, clicks) {
+  if (!clicks || clicks === 0) return 0;
+  return parseFloat(((conversions / clicks) * 100).toFixed(2));
+}
+
+// Define which fields should be summed during aggregation (NOT conversion_rate - it will be calculated)
+const summableFields = [
+  'clicks', 'impressions', 'bookings', 'conversions',
+  'revenue', 'cost', 'cpc', 'ctr',
+  'roas', 'cost_of_sale', 'impression_share'
+];
+
 // Helper function to convert YYYY-MM to date range (handles leap years)
 function getDateRangeForMonth(yearMonth) {
   const [year, month] = yearMonth.split('-').map(Number);
@@ -544,10 +557,17 @@ app.get('/api/reports/:reportId', async (req, res) => {
       date_to, 
       date_end,
       period = 'current',
+      groupby,                       // NEW: Primary grouping dimension
+      breakdownby: breakdownByParam,  // NEW: Multiple breakdown dimensions (Express parses breakdownby[] as breakdownby)
       'months[]': _unused1, // Exclude from spreading
       'months': _unused2,   // Exclude from spreading
       ...dimensionFilters 
     } = req.query;
+    
+    // Normalize breakdownby to array
+    const breakdownby = breakdownByParam 
+      ? (Array.isArray(breakdownByParam) ? breakdownByParam : [breakdownByParam])
+      : [];
 
     if (!reportId) {
       return res.status(400).json({
@@ -595,10 +615,11 @@ app.get('/api/reports/:reportId', async (req, res) => {
       console.warn('[API] Error fetching dimensions (continuing without dimension names):', dimError);
     }
 
-    // Create mappings: ID -> Name, ID -> SnakeName, and Name -> ID
+    // Create mappings: ID -> Name, ID -> SnakeName, Name -> ID, and SnakeName -> ID
     const dimensionIdToName = {};
     const dimensionIdToSnakeName = {};
     const dimensionNameToId = {};
+    const dimensionSnakeNameToId = {};  // NEW: For groupby/breakdownby parameter lookups
     const dimensionsMetadata = [];
     let dateDimensionId = null;
 
@@ -609,6 +630,7 @@ app.get('/api/reports/:reportId', async (req, res) => {
         dimensionIdToName[dim.id] = dim.name;
         dimensionIdToSnakeName[dim.id] = snakeName;
         dimensionNameToId[dim.name] = dim.id;
+        dimensionSnakeNameToId[snakeName] = dim.id;  // NEW
         dimensionsMetadata.push({
           id: dim.id,
           name: dim.name,
@@ -647,6 +669,7 @@ app.get('/api/reports/:reportId', async (req, res) => {
               dimensionIdToName[dimId] = dimName;
               dimensionIdToSnakeName[dimId] = snakeName;
               dimensionNameToId[dimName] = dimId;
+              dimensionSnakeNameToId[snakeName] = dimId;  // NEW
               dimensionsMetadata.push({
                 id: dimId,
                 name: dimName,
@@ -1006,12 +1029,164 @@ app.get('/api/reports/:reportId', async (req, res) => {
       console.log(`[API] Filtered from ${allData.length} to ${filteredData.length} rows`);
     }
 
-    // Apply pagination
-    const totalCount = filteredData.length;
+    // Aggregation logic: Group data if groupby is specified
+    let totalCount = filteredData.length;
+    
+    if (groupby) {
+      console.log(`[API] Aggregating data by ${groupby}${breakdownby.length ? ` with breakdowns: ${breakdownby.join(', ')}` : ''}`);
+      
+      // Convert groupby to dimension ID (using snake_case lookup)
+      const groupByDimId = dimensionSnakeNameToId[groupby] || 
+                           dimensionNameToId[groupby] || 
+                           Object.entries(dimensionIdToSnakeName)
+                             .find(([id, name]) => name === groupby)?.[0];
+      
+      if (!groupByDimId) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid groupby dimension: ${groupby}. Available dimensions: ${Object.keys(dimensionSnakeNameToId).join(', ')}`,
+          count: 0,
+          data: []
+        });
+      }
+      
+      // Convert breakdown dimensions to IDs (using snake_case lookup)
+      const breakdownDimIds = breakdownby.map(bd => {
+        return dimensionSnakeNameToId[bd] || 
+               dimensionNameToId[bd] || 
+               Object.entries(dimensionIdToSnakeName)
+                 .find(([id, name]) => name === bd)?.[0];
+      }).filter(Boolean);
+      
+      // Validate all breakdown dimensions
+      if (breakdownby.length !== breakdownDimIds.length) {
+        return res.status(400).json({
+          success: false,
+          error: 'One or more invalid breakdownby dimensions',
+          count: 0,
+          data: []
+        });
+      }
+      
+      // Group and aggregate data
+      const grouped = {};
+      
+      filteredData.forEach(row => {
+        const groupValue = row.dimension_values[groupByDimId] || 'Unknown';
+        const groupKey = String(groupValue);
+        
+        if (!grouped[groupKey]) {
+          // Initialize group
+          grouped[groupKey] = {
+            [groupby]: groupValue,
+            count: 0,
+            _clicks: 0,      // Track for CR calculation
+            _conversions: 0  // Track for CR calculation
+          };
+          
+          // Initialize all summable fields to 0
+          summableFields.forEach(field => {
+            const fieldSnakeName = field.toLowerCase().replace(/\s+/g, '_');
+            grouped[groupKey][fieldSnakeName] = 0;
+          });
+          
+          // Initialize breakdown structure if dimensions specified
+          if (breakdownDimIds.length > 0) {
+            grouped[groupKey].breakdown = {};
+          }
+        }
+        
+        grouped[groupKey].count++;
+        
+        // Sum numeric fields at group level
+        for (const [dimId, value] of Object.entries(row.dimension_values || {})) {
+          const snakeName = dimensionIdToSnakeName[dimId];
+          if (snakeName && summableFields.some(f => f.toLowerCase().replace(/\s+/g, '_') === snakeName)) {
+            const numValue = parseFloat(value) || 0;
+            grouped[groupKey][snakeName] = (grouped[groupKey][snakeName] || 0) + numValue;
+            
+            // Track clicks/conversions for CR calculation
+            if (snakeName === 'clicks') grouped[groupKey]._clicks += numValue;
+            if (snakeName === 'conversions') grouped[groupKey]._conversions += numValue;
+          }
+        }
+        
+        // Handle multi-level breakdown
+        if (breakdownDimIds.length > 0) {
+          // Build composite key from all breakdown dimensions
+          const breakdownValues = breakdownDimIds.map(bdId => 
+            row.dimension_values[bdId] || 'Unknown'
+          );
+          const breakdownKey = breakdownValues.join('|');
+          
+          if (!grouped[groupKey].breakdown[breakdownKey]) {
+            grouped[groupKey].breakdown[breakdownKey] = {
+              count: 0,
+              _clicks: 0,
+              _conversions: 0
+            };
+            
+            // Add breakdown dimension values
+            breakdownby.forEach((bdName, idx) => {
+              grouped[groupKey].breakdown[breakdownKey][bdName] = breakdownValues[idx];
+            });
+            
+            // Initialize summable fields
+            summableFields.forEach(field => {
+              const fieldSnakeName = field.toLowerCase().replace(/\s+/g, '_');
+              grouped[groupKey].breakdown[breakdownKey][fieldSnakeName] = 0;
+            });
+          }
+          
+          grouped[groupKey].breakdown[breakdownKey].count++;
+          
+          // Sum numeric fields at breakdown level
+          for (const [dimId, value] of Object.entries(row.dimension_values || {})) {
+            const snakeName = dimensionIdToSnakeName[dimId];
+            if (snakeName && summableFields.some(f => f.toLowerCase().replace(/\s+/g, '_') === snakeName)) {
+              const numValue = parseFloat(value) || 0;
+              grouped[groupKey].breakdown[breakdownKey][snakeName] = 
+                (grouped[groupKey].breakdown[breakdownKey][snakeName] || 0) + numValue;
+              
+              // Track clicks/conversions for CR calculation
+              if (snakeName === 'clicks') grouped[groupKey].breakdown[breakdownKey]._clicks += numValue;
+              if (snakeName === 'conversions') grouped[groupKey].breakdown[breakdownKey]._conversions += numValue;
+            }
+          }
+        }
+      });
+      
+      // Convert grouped object to array and calculate conversion_rate
+      filteredData = Object.values(grouped).map(item => {
+        // Calculate CR at group level
+        item.conversion_rate = calculateConversionRate(item._conversions, item._clicks);
+        delete item._clicks;
+        delete item._conversions;
+        
+        // Convert breakdown to array and calculate CR at breakdown level
+        if (item.breakdown) {
+          item.breakdown = Object.values(item.breakdown).map(bd => {
+            bd.conversion_rate = calculateConversionRate(bd._conversions, bd._clicks);
+            delete bd._clicks;
+            delete bd._conversions;
+            return bd;
+          });
+        }
+        
+        return item;
+      });
+      
+      // Update total count after aggregation
+      totalCount = filteredData.length;
+      console.log(`[API] Aggregated to ${totalCount} groups`);
+    }
+
+    // Apply pagination AFTER aggregation
     const paginatedData = filteredData.slice(offsetNum, offsetNum + limitNum);
 
     // Transform data: Replace dimension IDs with snake_case names
-    const transformedData = paginatedData.map((row, index) => {
+    // Skip transformation if data is already aggregated
+    const transformedData = groupby ? paginatedData : paginatedData.map((row, index) => {
       const transformed = {
         id: `${reportId}_${row.period}_${row.row_number || offsetNum + index + 1}`,
         row_number: row.row_number || offsetNum + index + 1,
