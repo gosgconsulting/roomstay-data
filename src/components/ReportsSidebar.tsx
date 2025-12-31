@@ -229,15 +229,6 @@ export function ReportsSidebar({
               <Plus className="h-4 w-4 mr-2" />
               Add New Report
             </Button>
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-left h-9 px-3"
-              onClick={onOpenAPIBuilder}
-              disabled={!selectedReportId}
-            >
-              <Code className="h-4 w-4 mr-2" />
-              API Builder
-            </Button>
           </SidebarGroupContent>
         </SidebarGroup>
 
@@ -270,7 +261,15 @@ export function ReportsSidebar({
               </SelectContent>
             </Select>
 
-          {/* move API Builder button here */}
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-left h-9 px-3 mt-2"
+              onClick={onOpenAPIBuilder}
+              disabled={!selectedReportId}
+            >
+              <Code className="h-4 w-4 mr-2" />
+              API Builder
+            </Button>
 
           </SidebarGroupContent>
 
