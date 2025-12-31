@@ -51,7 +51,7 @@ export function KPIChart({
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
 
-  console.log('[CHART-FIXED] Component render - reportId:', reportId, 'accountId:', accountId);
+  // console.log('[CHART-FIXED] Component render - reportId:', reportId, 'accountId:', accountId);
 
   // Fetch data source for the report
   useEffect(() => {
@@ -397,14 +397,14 @@ export function KPIChart({
         currentDateGroups.set(dateStr, currentTotal + numericValue);
       });
 
-      console.log('[CHART-FIXED] Data grouping stats:', {
-        totalRows: filteredData.length,
-        rowsWithData,
-        rowsWithoutDate,
-        rowsWithoutMetric,
-        uniqueDates: currentDateGroups.size,
-        sampleDates: Array.from(currentDateGroups.keys()).slice(0, 5)
-      });
+      // console.log('[CHART-FIXED] Data grouping stats:', {
+      //   totalRows: filteredData.length,
+      //   rowsWithData,
+      //   rowsWithoutDate,
+      //   rowsWithoutMetric,
+      //   uniqueDates: currentDateGroups.size,
+      //   sampleDates: Array.from(currentDateGroups.keys()).slice(0, 5)
+      // });
 
       // Only load previous period data if comparison is enabled and we have a date range
       const previousDateGroups = new Map<string, number>();

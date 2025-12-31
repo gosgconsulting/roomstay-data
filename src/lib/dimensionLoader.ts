@@ -46,12 +46,12 @@ export async function loadDimensionsForUser(
 ): Promise<Dimension[]> {
   const { filterByDataAvailability = false, alwaysIncludeDate = true, alwaysIncludeCalculated = true, fallbackOnError = true } = options;
   
-  console.log('[testing] DimensionLoader - Loading dimensions for user:', userId, {
-    reportId,
-    filterByDataAvailability,
-    alwaysIncludeDate,
-    alwaysIncludeCalculated
-  });
+  // console.log('[testing] DimensionLoader - Loading dimensions for user:', userId, {
+  //   reportId,
+  //   filterByDataAvailability,
+  //   alwaysIncludeDate,
+  //   alwaysIncludeCalculated
+  // });
 
   let accountId: string | null = null;
   let accountData: Dimension[] | null = null;
@@ -70,7 +70,7 @@ export async function loadDimensionsForUser(
 
       if (accountError) throw accountError;
       accountData = accData as Dimension[];
-      console.log('[testing] DimensionLoader - Loaded account-specific dimensions:', accData?.length || 0);
+      // console.log('[testing] DimensionLoader - Loaded account-specific dimensions:', accData?.length || 0);
     }
   }
 
@@ -106,18 +106,18 @@ export async function loadDimensionsForUser(
     arr.findIndex(d => d.name === dim.name) === index
   );
 
-  console.log('[testing] DimensionLoader - Loaded dimensions before filtering:', {
-    global: globalData?.length || 0,
-    account: accountData?.length || 0,
-    custom: customData?.length || 0,
-    total: uniqueDimensions.length
-  });
+  // console.log('[testing] DimensionLoader - Loaded dimensions before filtering:', {
+  //   global: globalData?.length || 0,
+  //   account: accountData?.length || 0,
+  //   custom: customData?.length || 0,
+  //   total: uniqueDimensions.length
+  // });
 
   // Filter by data availability if requested and reportId is provided
   let finalDimensions = uniqueDimensions;
   if (filterByDataAvailability && reportId) {
     try {
-      console.log('[testing] DimensionLoader - Filtering dimensions by data availability...');
+      // console.log('[testing] DimensionLoader - Filtering dimensions by data availability...');
       finalDimensions = await filterDimensionsByDataAvailability(
         uniqueDimensions,
         reportId,
@@ -127,11 +127,11 @@ export async function loadDimensionsForUser(
           fallbackOnError
         }
       );
-      console.log('[testing] DimensionLoader - Data availability filtering:', {
-        original: uniqueDimensions.length,
-        filtered: finalDimensions.length,
-        excluded: uniqueDimensions.length - finalDimensions.length
-      });
+      // console.log('[testing] DimensionLoader - Data availability filtering:', {
+      //   original: uniqueDimensions.length,
+      //   filtered: finalDimensions.length,
+      //   excluded: uniqueDimensions.length - finalDimensions.length
+      // });
     } catch (filterError) {
       console.error('[testing] DimensionLoader - Error filtering by data availability:', filterError);
       if (fallbackOnError) {
@@ -142,6 +142,6 @@ export async function loadDimensionsForUser(
     }
   }
 
-  console.log('[testing] DimensionLoader - Final dimensions loaded:', finalDimensions.length);
+  // console.log('[testing] DimensionLoader - Final dimensions loaded:', finalDimensions.length);
   return finalDimensions;
 }

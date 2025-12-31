@@ -1111,17 +1111,17 @@ export const PerformanceTable = ({ reportId, filters, isSharedView = false, acco
       const hasData = dataSources && dataSources.length > 0;
       const hasCSV = dataSources?.some(ds => ds.source_type === 'csv_url') || false;
       
-      console.log('[testing] Data sources found:', hasData ? 'Yes' : 'No');
-      console.log('[testing] CSV source found:', hasCSV ? 'Yes' : 'No');
+      // console.log('[testing] Data sources found:', hasData ? 'Yes' : 'No');
+      // console.log('[testing] CSV source found:', hasCSV ? 'Yes' : 'No');
       
       setHasDataSources(hasData);
       setHasCSVSource(hasCSV);
       
       // Check CSV source when activeViewId exists and isSharedView is false
-      if (hasCSV && activeViewId && !isSharedView) {
-        console.log('[testing] CSV source detected with activeViewId and non-shared view');
-        // Add any CSV-specific handling here if needed
-      }
+      // if (hasCSV && activeViewId && !isSharedView) {
+      //   console.log('[testing] CSV source detected with activeViewId and non-shared view');
+      //   // Add any CSV-specific handling here if needed
+      // }
     } catch (error) {
       console.error('Error checking data sources:', error);
       setHasDataSources(false);

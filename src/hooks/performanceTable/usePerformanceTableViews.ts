@@ -364,17 +364,17 @@ export function usePerformanceTableViews({
     
     // Load date granularity if available (default to day)
     if (view.date_granularity && view.date_granularity !== 'none') {
-      console.log('[VIEWS] Loading date granularity:', view.date_granularity);
+      // console.log('[VIEWS] Loading date granularity:', view.date_granularity);
       onDateGranularityChange(view.date_granularity as 'day' | 'week' | 'month' | 'year');
     }
     
     // Load date order if available (default to desc)
     if (view.date_order) {
-      console.log('[VIEWS] Loading date order:', view.date_order);
+      // console.log('[VIEWS] Loading date order:', view.date_order);
       onDateOrderChange(view.date_order as 'asc' | 'desc');
     }
     
-    console.log('[VIEWS] View settings loaded successfully for report:', reportId);
+    // console.log('[VIEWS] View settings loaded successfully for report:', reportId);
     setIsViewInitialized(true);
   }, [dimensions, onGroupByChange, onBreakdownByChange, onThenByChange, onVisibleColumnsChange, onInitialVisibleColumnsChange, onColumnOrderChange, onInitialColumnOrderChange, onDateGranularityChange, onDateOrderChange, reportId, onSelectorDimensionsChange]);
 

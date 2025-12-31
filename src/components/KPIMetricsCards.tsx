@@ -156,8 +156,8 @@ export function KPIMetricsCards({
       return;
     }
 
-    console.log('[KPI-CARDS] Processing source data:', sourceData.transformedRows?.length, 'rows');
-    console.log('[KPI-CARDS] Dimensions available:', dimensions.length, dimensions.map(d => ({ id: d.id, name: d.name })));
+    // console.log('[KPI-CARDS] Processing source data:', sourceData.transformedRows?.length, 'rows');
+    // console.log('[KPI-CARDS] Dimensions available:', dimensions.length, dimensions.map(d => ({ id: d.id, name: d.name })));
 
     try {
       let allRows = sourceData.transformedRows || [];
@@ -244,7 +244,7 @@ export function KPIMetricsCards({
         compareRows = applyDimensionFilters(compareRows);
       }
 
-      console.log('[KPI-CARDS] After filtering:', filteredRows.length, 'rows', compareEnabled ? `(compare: ${compareRows.length} rows)` : '');
+      // console.log('[KPI-CARDS] After filtering:', filteredRows.length, 'rows', compareEnabled ? `(compare: ${compareRows.length} rows)` : '');
 
       // Helper to calculate metrics from rows
       // Formula metrics should be calculated, not summed from source data
@@ -314,7 +314,7 @@ export function KPIMetricsCards({
         addDerivedMetrics(compareMetrics);
       }
 
-      console.log('[KPI-CARDS] Calculated metrics:', Object.keys(currentMetrics));
+      // console.log('[KPI-CARDS] Calculated metrics:', Object.keys(currentMetrics));
 
       // Build display metrics
       const defaultKPIs = [
@@ -393,7 +393,7 @@ export function KPIMetricsCards({
         });
       });
 
-      console.log('[KPI-CARDS] Display metrics created:', displayMetrics.length);
+      // console.log('[KPI-CARDS] Display metrics created:', displayMetrics.length);
       setMetrics(displayMetrics);
       onLoadingComplete?.();
 

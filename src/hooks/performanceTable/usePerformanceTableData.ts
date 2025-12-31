@@ -118,18 +118,18 @@ export function usePerformanceTableData({
     const compareDateFromFormatted = compareEnabled && filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined;
     const compareDateToFormatted = compareEnabled && filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined;
 
-    console.log('[PERF-TABLE] Loading data:', {
-      reportId,
-      datePreset: filters.datePreset,
-      shouldFilterByDate,
-      dateFromFormatted,
-      dateToFormatted,
-      compareEnabled,
-      compareDateFromFormatted,
-      compareDateToFormatted,
-      hasSourceData: !!sourceData,
-      sourceDataRows: sourceData?.transformedRows?.length || 0
-    });
+    // console.log('[PERF-TABLE] Loading data:', {
+    //   reportId,
+    //   datePreset: filters.datePreset,
+    //   shouldFilterByDate,
+    //   dateFromFormatted,
+    //   dateToFormatted,
+    //   compareEnabled,
+    //   compareDateFromFormatted,
+    //   compareDateToFormatted,
+    //   hasSourceData: !!sourceData,
+    //   sourceDataRows: sourceData?.transformedRows?.length || 0
+    // });
 
     if ((!reportId && !reportIds) || groupByDimensions.length === 0) {
       setTableData([]);
@@ -142,7 +142,7 @@ export function usePerformanceTableData({
     }
 
     if (!sourceData) {
-      console.log('[PERF-TABLE] No source data available');
+      // console.log('[PERF-TABLE] No source data available');
       setIsLoadingData(false);
       onLoadingComplete?.();
       return;
@@ -150,7 +150,7 @@ export function usePerformanceTableData({
 
     try {
       let allRows = sourceData.transformedRows;
-      console.log('[PERF-TABLE] Starting with', allRows.length, 'rows from source');
+      // console.log('[PERF-TABLE] Starting with', allRows.length, 'rows from source');
 
       // Apply vlookup mappings
       if (vlookupMappings.length > 0) {

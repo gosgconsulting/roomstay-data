@@ -27,8 +27,8 @@ export async function checkDataSources(reportId: string): Promise<{
     const hasData = dataSources && dataSources.length > 0;
     const hasCSV = dataSources?.some(ds => ds.source_type === 'csv_url') || false;
     
-    console.log('[testing] Data sources found:', hasData ? 'Yes' : 'No');
-    console.log('[testing] CSV source found:', hasCSV ? 'Yes' : 'No');
+    // console.log('[testing] Data sources found:', hasData ? 'Yes' : 'No');
+    // console.log('[testing] CSV source found:', hasCSV ? 'Yes' : 'No');
     
     return { hasDataSources: hasData, hasCSVSource: hasCSV };
   } catch (error) {

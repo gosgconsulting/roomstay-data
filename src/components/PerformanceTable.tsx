@@ -339,11 +339,11 @@ export const PerformanceTable = ({
   // Load performance data when filters change (wait for view initialization)
   useEffect(() => {
     if (reportId && isViewInitialized) {
-      console.log('[PERF-TABLE] Loading data - view initialized, dimensions:', {
-        groupBy: groupByDimensions,
-        breakdown: breakdownByDimensions,
-        thenBy: thenByDimensions
-      });
+      // console.log('[PERF-TABLE] Loading data - view initialized, dimensions:', {
+      //   groupBy: groupByDimensions,
+      //   breakdown: breakdownByDimensions,
+      //   thenBy: thenByDimensions
+      // });
       setIsLoadingData(true);
       loadPerformanceData();
     } else if (!reportId) {

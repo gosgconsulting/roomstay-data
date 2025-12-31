@@ -176,7 +176,7 @@ export function useSourceData(
   });
 
   // Log cache status for debugging
-  if (dataSource?.id) {
+  if ( false && dataSource?.id) {
     const cacheStatus = queryResult.isLoading ? 'loading' : 
                        queryResult.isFetching ? 'fetching' : 
                        queryResult.data ? 'cached' : 'no-data';

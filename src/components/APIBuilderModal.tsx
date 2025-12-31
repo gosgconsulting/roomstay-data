@@ -134,7 +134,7 @@ export const APIBuilderModal = ({ reportId, open, onOpenChange }: APIBuilderModa
         <DialogHeader>
           <DialogTitle>API URL Builder</DialogTitle>
           <DialogDescription>
-            Select months and years to filter your API data. Multiple selections will fetch data for all selected combinations.
+            Choose since date
           </DialogDescription>
         </DialogHeader>
 

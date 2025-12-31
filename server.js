@@ -122,7 +122,7 @@ if (supabaseServiceKey) {
   console.log('[SERVER] Supabase client initialized with URL:', supabaseUrl);
   if (supabaseServiceKey === supabaseAnonKey) {
     console.log('[SERVER] Using anon key (development mode)');
-  } else {
+} else {
     console.log('[SERVER] Using service role key or environment anon key');
   }
 } else {
@@ -486,6 +486,17 @@ app.get('/api/make/reports/:reportId', validateApiKey, async (req, res) => {
  * This endpoint fetches data directly from dimension_data table,
  * matching the frontend's data fetching approach.
  */
+// Helper function to convert dimension name to snake_case (e.g., "Hotel Name" -> "hotel_name")
+function toSnakeCase(str) {
+  if (!str) return '';
+  return str
+    .trim()
+    .replace(/([a-z])([A-Z])/g, '$1_$2')  // camelCase to snake_case
+    .replace(/[\s\-\/]+/g, '_')            // spaces, hyphens, slashes to underscore
+    .replace(/[^\w]+/g, '')                // remove special chars
+    .toLowerCase();
+}
+
 // Helper function to convert YYYY-MM to date range (handles leap years)
 function getDateRangeForMonth(yearMonth) {
   const [year, month] = yearMonth.split('-').map(Number);
@@ -584,61 +595,133 @@ app.get('/api/reports/:reportId', async (req, res) => {
       console.warn('[API] Error fetching dimensions (continuing without dimension names):', dimError);
     }
 
-    // Create mappings: ID -> Name and Name -> ID
+    // Create mappings: ID -> Name, ID -> SnakeName, and Name -> ID
     const dimensionIdToName = {};
+    const dimensionIdToSnakeName = {};
     const dimensionNameToId = {};
+    const dimensionsMetadata = [];
     let dateDimensionId = null;
 
     // If dimensions are available, create mappings
     if (dimensions && dimensions.length > 0) {
       dimensions.forEach(dim => {
+        const snakeName = toSnakeCase(dim.name);
         dimensionIdToName[dim.id] = dim.name;
+        dimensionIdToSnakeName[dim.id] = snakeName;
         dimensionNameToId[dim.name] = dim.id;
+        dimensionsMetadata.push({
+          id: dim.id,
+          name: dim.name,
+          snakeName: snakeName,
+          type: dim.type
+        });
         if (dim.type === 'date' && !dateDimensionId) {
           dateDimensionId = dim.id;
         }
       });
       console.log(`[API] Found ${dimensions.length} dimensions, date dimension: ${dateDimensionId}`);
     } else {
-      console.log(`[API] No dimensions metadata found - will attempt to auto-detect date dimension from data`);
+      console.log(`[API] No dimensions metadata found - attempting fallback to column_mappings`);
       
-      // Auto-detect date dimension by sampling data
-      const { data: sampleRows, error: sampleError } = await supabase
-        .from('dimension_data')
-        .select('dimension_values')
-        .eq('report_id', reportId)
-        .limit(10);
+      // Fallback: Try to get dimension names from data_sources column_mappings
+      const { data: dataSources, error: dsError } = await supabase
+        .from('data_sources')
+        .select('id, column_mappings')
+        .eq('report_id', reportId);
       
-      if (!sampleError && sampleRows && sampleRows.length > 0) {
-        // Get all dimension IDs from the first row
-        const dimensionIds = Object.keys(sampleRows[0].dimension_values || {});
+      if (!dsError && dataSources && dataSources.length > 0) {
+        // Extract dimension names from column mappings
+        const mappingsFound = new Set();
         
-        // Check each dimension to see if it contains date-like values
-        for (const dimId of dimensionIds) {
-          let dateValueCount = 0;
-          let totalValues = 0;
-          
-          for (const row of sampleRows) {
-            const value = row.dimension_values[dimId];
-            if (value) {
-              totalValues++;
-              // Check if value looks like a date (YYYY-MM-DD format)
-              if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
-                dateValueCount++;
+        dataSources.forEach(ds => {
+          const mappings = ds.column_mappings || [];
+          mappings.forEach(mapping => {
+            // Get dimension name from mapping (either dimensionName or newDimensionName)
+            const dimName = mapping.dimensionName || mapping.newDimensionName;
+            const dimId = mapping.dimensionId;
+            const dimType = mapping.dimensionType || mapping.newDimensionType || 'text';
+            
+            if (dimId && dimName && dimId !== 'none' && dimId !== 'create_new' && !mappingsFound.has(dimId)) {
+              mappingsFound.add(dimId);
+              const snakeName = toSnakeCase(dimName);
+              dimensionIdToName[dimId] = dimName;
+              dimensionIdToSnakeName[dimId] = snakeName;
+              dimensionNameToId[dimName] = dimId;
+              dimensionsMetadata.push({
+                id: dimId,
+                name: dimName,
+                snakeName: snakeName,
+                type: dimType
+              });
+              
+              // Auto-detect date dimension
+              if (dimType === 'date' && !dateDimensionId) {
+                dateDimensionId = dimId;
               }
+            }
+          });
+        });
+        
+        console.log(`[API] Found ${mappingsFound.size} dimensions from column_mappings`);
+      }
+      
+      // If still no dimensions found, try to detect from data
+      if (Object.keys(dimensionIdToName).length === 0) {
+        console.log(`[API] No column_mappings found - will attempt to auto-detect date dimension from data`);
+        
+        // Auto-detect date dimension by sampling data
+        const { data: sampleRows, error: sampleError } = await supabase
+          .from('dimension_data')
+          .select('dimension_values')
+          .eq('report_id', reportId)
+          .limit(10);
+        
+        if (!sampleError && sampleRows && sampleRows.length > 0) {
+          // Get all dimension IDs from the first row
+          const dimensionIds = Object.keys(sampleRows[0].dimension_values || {});
+          
+          // Check each dimension to see if it contains date-like values
+          for (const dimId of dimensionIds) {
+            let dateValueCount = 0;
+            let totalValues = 0;
+            
+            for (const row of sampleRows) {
+              const value = row.dimension_values[dimId];
+              if (value) {
+                totalValues++;
+                // Check if value looks like a date (YYYY-MM-DD format)
+                if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+                  dateValueCount++;
+                }
+              }
+            }
+            
+            // If >80% of values look like dates, assume this is the date dimension
+            if (totalValues > 0 && (dateValueCount / totalValues) > 0.8) {
+              dateDimensionId = dimId;
+              
+              // If we don't have metadata for this dimension yet, add it
+              if (!dimensionIdToName[dimId]) {
+                const snakeName = toSnakeCase('Date');
+                dimensionIdToName[dimId] = 'Date';
+                dimensionIdToSnakeName[dimId] = snakeName;
+                dimensionNameToId['Date'] = dimId;
+                dimensionsMetadata.push({
+                  id: dimId,
+                  name: 'Date',
+                  snakeName: snakeName,
+                  type: 'date'
+                });
+              }
+              
+              console.log(`[API] Auto-detected date dimension: ${dimId} (${dateValueCount}/${totalValues} values are dates)`);
+              break;
             }
           }
           
-          // If >80% of values look like dates, assume this is the date dimension
-          if (totalValues > 0 && (dateValueCount / totalValues) > 0.8) {
-            dateDimensionId = dimId;
-            console.log(`[API] Auto-detected date dimension: ${dimId} (${dateValueCount}/${totalValues} values are dates)`);
-            break;
+          if (!dateDimensionId) {
+            console.log(`[API] Could not auto-detect date dimension from ${dimensionIds.length} dimensions`);
           }
-        }
-        
-        if (!dateDimensionId) {
-          console.log(`[API] Could not auto-detect date dimension from ${dimensionIds.length} dimensions`);
         }
       }
     }
@@ -654,12 +737,12 @@ app.get('/api/reports/:reportId', async (req, res) => {
         const range = getDateRangeForMonth(month);
         if (!range) {
           return res.status(400).json({
-            success: false,
+        success: false,
             error: `Invalid month format: ${month}. Expected format: YYYY-MM (e.g., 2024-01)`,
-            count: 0,
-            data: []
-          });
-        }
+        count: 0,
+        data: []
+      });
+    }
         multipleRanges.push(range);
       }
       console.log(`[API] Using months[] parameter with ${multipleRanges.length} date ranges:`, multipleRanges);
@@ -825,27 +908,27 @@ app.get('/api/reports/:reportId', async (req, res) => {
     
     // Add current period data
     currentData.forEach((row) => {
-      allData.push({
-        period: 'current',
+        allData.push({
+          period: 'current',
         date_from: dateRanges.current.date_from,
         date_to: dateRanges.current.date_to,
         row_number: row.row_number,
         data_source_id: row.data_source_id,
         dimension_values: row.dimension_values
+        });
       });
-    });
 
     // Add comparison period data
     comparisonData.forEach((row) => {
-      allData.push({
-        period: 'comparison',
+        allData.push({
+          period: 'comparison',
         date_from: dateRanges.comparison.date_from,
         date_to: dateRanges.comparison.date_to,
         row_number: row.row_number,
         data_source_id: row.data_source_id,
         dimension_values: row.dimension_values
+        });
       });
-    });
 
     // Apply dimension filters (filter by dimension name, not ID)
     let filteredData = allData;
@@ -885,7 +968,7 @@ app.get('/api/reports/:reportId', async (req, res) => {
     const totalCount = filteredData.length;
     const paginatedData = filteredData.slice(offsetNum, offsetNum + limitNum);
 
-    // Transform data: Replace dimension IDs with names
+    // Transform data: Replace dimension IDs with snake_case names
     const transformedData = paginatedData.map((row, index) => {
       const transformed = {
         id: `${reportId}_${row.period}_${row.row_number || offsetNum + index + 1}`,
@@ -896,10 +979,11 @@ app.get('/api/reports/:reportId', async (req, res) => {
         date_to: row.date_to
       };
 
-      // Replace dimension IDs with dimension names
+      // Replace dimension IDs with snake_case dimension names
       for (const [dimId, value] of Object.entries(row.dimension_values || {})) {
-        const dimName = dimensionIdToName[dimId] || dimId; // Fallback to ID if name not found
-        transformed[dimName] = value;
+        // Use snake_case name if available, otherwise fall back to original name or ID
+        const snakeName = dimensionIdToSnakeName[dimId] || toSnakeCase(dimensionIdToName[dimId]) || dimId;
+        transformed[snakeName] = value;
       }
 
       return transformed;
@@ -943,7 +1027,12 @@ app.get('/api/reports/:reportId', async (req, res) => {
           count: comparisonData.length
         } : null
       },
-      dimensions: (dimensions && dimensions.length > 0) ? dimensions.map(d => ({ id: d.id, name: d.name, type: d.type })) : []
+      dimensions: dimensionsMetadata.map(d => ({
+        id: d.id,
+        name: d.name,           // Original name: "Hotel Name"
+        snake_name: d.snakeName, // API name: "hotel_name"
+        type: d.type
+      }))
     });
 
   } catch (error) {
