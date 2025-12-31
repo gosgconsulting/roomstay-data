@@ -931,24 +931,61 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
       const dateRange = { start: dayStart, end: dayEnd };
 
-      const dayMetrics = aggregateMetrics(
-        reportIds.flatMap(reportId => rawSourceData[reportId]?.rows || []),
-        selectedMetrics,
-        dateRange,
-        undefined,
-        mergedMetricMap // IMPORTANT: pass mapping so metrics resolve by ID
-      );
+      // Aggregate metrics per report with dimension filters, then combine
+      const allDayMetrics: Record<string, number> = {};
+      selectedMetrics.forEach(m => allDayMetrics[m] = 0);
+      BASE_METRICS.forEach(m => allDayMetrics[m] = 0);
+
+      for (const reportId of reportIds) {
+        const reportData = rawSourceData[reportId];
+        if (!reportData) continue;
+
+        // Get dimension filter for this report from reportConfigs
+        const filterConfig = reportConfigs?.[reportId];
+        let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
+
+        if (filterConfig?.dimensionId && filterConfig.selectedValues?.length > 0) {
+          // Try to get dimension name from mergedMetricMap or fetch it
+          // For now, we'll use the dimensionId directly and let aggregateMetrics handle it
+          dimensionFilter = {
+            dimensionId: filterConfig.dimensionId,
+            dimensionName: filterConfig.dimensionName, // May be undefined, aggregateMetrics will handle it
+            values: filterConfig.selectedValues,
+          };
+        }
+
+        const reportDayMetrics = aggregateMetrics(
+          reportData.rows,
+          selectedMetrics,
+          dateRange,
+          dimensionFilter,
+          mergedMetricMap // IMPORTANT: pass mapping so metrics resolve by ID
+        );
+
+        // Sum metrics from this report
+        Object.keys(reportDayMetrics).forEach(metric => {
+          allDayMetrics[metric] = (allDayMetrics[metric] || 0) + (reportDayMetrics[metric] || 0);
+        });
+      }
+
+      // Calculate formula metrics from combined totals
+      const formulaValues = calculateFormulaMetrics(allDayMetrics);
+      selectedMetrics.forEach(metric => {
+        if (FORMULA_METRICS.includes(metric)) {
+          allDayMetrics[metric] = formulaValues[metric] || 0;
+        }
+      });
 
       last7DaysRows.push({
         dateGroup: format(day, 'MMM d, yyyy'),
         dateRangeStart: format(day, 'yyyy-MM-dd'),
         dateRangeEnd: format(day, 'yyyy-MM-dd'),
-        metrics: dayMetrics,
+        metrics: allDayMetrics,
       });
     }
 
     return last7DaysRows;
-  }, [rawSourceData, reportIds, selectedMetrics, reportsLoaded, mergedMetricMap]);
+  }, [rawSourceData, reportIds, selectedMetrics, reportsLoaded, mergedMetricMap, reportConfigs]);
 
   if (isLoading) {
     return (

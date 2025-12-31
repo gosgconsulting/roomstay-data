@@ -740,7 +740,7 @@ export default function ReportDashboard() {
           <APIBuilderModal
             open={showAPIBuilderModal}
             onOpenChange={setShowAPIBuilderModal}
-            reportId={reportId || ""}
+            accountId={accountId}
           />
 
           {/* Looker-style modals triggered from title area */}

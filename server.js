@@ -537,6 +537,424 @@ function getDateRangeForMonth(yearMonth) {
   };
 }
 
+/**
+ * Public API endpoint for multiple reports data
+ * Format: /api/reports?reportIds=id1,id2,id3
+ * Example: /api/reports?reportIds=2eff17d0-38de-4d5d-a15b-69ad13788c92,abc123...
+ * 
+ * Query Parameters:
+ * - reportIds: Comma-separated list of report IDs (required)
+ * - limit: Number of results to return (default: 100, max: 5000)
+ * - offset: Number of results to skip (default: 0)
+ * - date_from or date_start: Start date filter (YYYY-MM-DD)
+ * - date_to or date_end: End date filter (YYYY-MM-DD)
+ * - period: 'current' or 'comparison' or 'both' (default: 'current')
+ * - metrics[]: Array of metric names to include
+ * - dimensions[reportId][dimensionId][]: Filter by dimension value per report
+ * - breakdown[reportId][]: Breakdown dimensions per report
+ */
+app.get('/api/reports', async (req, res) => {
+  try {
+    const { reportIds: reportIdsParam } = req.query;
+    
+    if (!reportIdsParam) {
+      return res.status(400).json({
+        success: false,
+        error: 'reportIds query parameter is required',
+        count: 0,
+        data: []
+      });
+    }
+
+    // Parse reportIds (comma-separated string)
+    const reportIds = typeof reportIdsParam === 'string' 
+      ? reportIdsParam.split(',').map(id => id.trim()).filter(id => id.length > 0)
+      : Array.isArray(reportIdsParam)
+      ? reportIdsParam.map(id => String(id).trim()).filter(id => id.length > 0)
+      : [];
+
+    if (reportIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'At least one valid reportId is required',
+        count: 0,
+        data: []
+      });
+    }
+
+    if (!supabase) {
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error: Supabase client not initialized',
+        count: 0,
+        data: []
+      });
+    }
+
+    // Extract other query parameters
+    const { 
+      limit = 100, 
+      offset = 0, 
+      page,
+      date_from, 
+      date_start,
+      date_to, 
+      date_end,
+      period = 'current',
+      'metrics[]': metricsParam,
+      ...restParams 
+    } = req.query;
+
+    // Parse metrics
+    const metrics = metricsParam 
+      ? (Array.isArray(metricsParam) ? metricsParam : [metricsParam])
+      : [];
+
+    // Parse dimension filters per report: dimensions[reportId][dimensionId][]
+    const dimensionFiltersByReport = {};
+    // Parse breakdown dimensions per report: breakdown[reportId][]
+    const breakdownByReport = {};
+
+    // Extract dimension filters and breakdown from query params
+    Object.keys(restParams).forEach(key => {
+      // Match dimensions[reportId][dimensionId][]
+      const dimMatch = key.match(/^dimensions\[([^\]]+)\]\[([^\]]+)\]\[\]$/);
+      if (dimMatch) {
+        const [, reportId, dimensionId] = dimMatch;
+        if (!dimensionFiltersByReport[reportId]) {
+          dimensionFiltersByReport[reportId] = {};
+        }
+        if (!dimensionFiltersByReport[reportId][dimensionId]) {
+          dimensionFiltersByReport[reportId][dimensionId] = [];
+        }
+        const value = restParams[key];
+        if (Array.isArray(value)) {
+          dimensionFiltersByReport[reportId][dimensionId].push(...value);
+        } else {
+          dimensionFiltersByReport[reportId][dimensionId].push(value);
+        }
+      }
+
+      // Match breakdown[reportId][]
+      const breakdownMatch = key.match(/^breakdown\[([^\]]+)\]\[\]$/);
+      if (breakdownMatch) {
+        const [, reportId] = breakdownMatch;
+        if (!breakdownByReport[reportId]) {
+          breakdownByReport[reportId] = [];
+        }
+        const value = restParams[key];
+        if (Array.isArray(value)) {
+          breakdownByReport[reportId].push(...value);
+        } else {
+          breakdownByReport[reportId].push(value);
+        }
+      }
+    });
+
+    // Parse pagination params
+    const limitNum = Math.min(parseInt(limit, 10) || 100, 5000);
+    let offsetNum = parseInt(offset, 10) || 0;
+    
+    if (page) {
+      const pageNum = parseInt(page, 10);
+      if (pageNum > 0) {
+        offsetNum = (pageNum - 1) * limitNum;
+      }
+    }
+
+    // Calculate date ranges (same logic as single-report endpoint)
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const currentDate = now.getDate();
+
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+    
+    const formatDate = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const currentFromDate = date_from || date_start || formatDate(new Date(lastMonthYear, lastMonth, 1));
+    const currentToDate = date_to || date_end || formatDate(new Date(currentYear, currentMonth, currentDate));
+    
+    const comparisonFromDate = new Date(currentFromDate);
+    comparisonFromDate.setFullYear(comparisonFromDate.getFullYear() - 1);
+    const comparisonToDate = new Date(currentToDate);
+    comparisonToDate.setFullYear(comparisonToDate.getFullYear() - 1);
+
+    const dateRanges = {
+      current: {
+        date_from: currentFromDate,
+        date_to: currentToDate,
+      },
+      comparison: {
+        date_from: formatDate(comparisonFromDate),
+        date_to: formatDate(comparisonToDate),
+      },
+    };
+
+    // Process each report and combine data
+    const allTransformedData = [];
+    const allDimensionsMetadata = [];
+    const reportMetadata = [];
+
+    for (const reportId of reportIds) {
+      try {
+        // Fetch dimensions for this report
+        const { data: dimensions, error: dimError } = await supabase
+          .from('dimensions')
+          .select('id, name, type')
+          .eq('report_id', reportId)
+          .order('name', { ascending: true });
+
+        if (dimError) {
+          console.warn(`[API-MULTI] Error fetching dimensions for report ${reportId}:`, dimError);
+        }
+
+        // Create dimension mappings
+        const dimensionIdToName = {};
+        const dimensionIdToSnakeName = {};
+        const dimensionNameToId = {};
+        const dimensionSnakeNameToId = {};
+        let dateDimensionId = null;
+
+        if (dimensions && dimensions.length > 0) {
+          dimensions.forEach(dim => {
+            const snakeName = toSnakeCase(dim.name);
+            dimensionIdToName[dim.id] = dim.name;
+            dimensionIdToSnakeName[dim.id] = snakeName;
+            dimensionNameToId[dim.name] = dim.id;
+            dimensionSnakeNameToId[snakeName] = dim.id;
+            
+            if (dim.type === 'date' && !dateDimensionId) {
+              dateDimensionId = dim.id;
+            }
+          });
+        }
+
+        // Fetch data for this report
+        const fetchDataForPeriod = async (dateFrom, dateTo) => {
+          if (!dateDimensionId) {
+            const { data: dimensionData, error: dataError } = await supabase
+              .from('dimension_data')
+              .select('dimension_values, row_number, data_source_id')
+              .eq('report_id', reportId)
+              .order('row_number', { ascending: true });
+
+            if (dataError) throw dataError;
+            return dimensionData || [];
+          }
+
+          const toDate = new Date(dateTo);
+          const adjustedToDate = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1);
+          const adjustedToDateStr = adjustedToDate.toISOString().split('T')[0];
+          
+          const { data: dimensionData, error: dataError } = await supabase
+            .from('dimension_data')
+            .select('dimension_values, row_number, data_source_id')
+            .eq('report_id', reportId)
+            .gte(`dimension_values->>${dateDimensionId}`, dateFrom)
+            .lt(`dimension_values->>${dateDimensionId}`, adjustedToDateStr)
+            .order('row_number', { ascending: true });
+
+          if (dataError) throw dataError;
+          return dimensionData || [];
+        };
+
+        // Fetch data based on period
+        let currentData = [];
+        let comparisonData = [];
+
+        if (period === 'comparison') {
+          comparisonData = await fetchDataForPeriod(dateRanges.comparison.date_from, dateRanges.comparison.date_to);
+        } else if (period === 'both' && dateDimensionId) {
+          [currentData, comparisonData] = await Promise.all([
+            fetchDataForPeriod(dateRanges.current.date_from, dateRanges.current.date_to),
+            fetchDataForPeriod(dateRanges.comparison.date_from, dateRanges.comparison.date_to)
+          ]);
+        } else {
+          currentData = await fetchDataForPeriod(dateRanges.current.date_from, dateRanges.current.date_to);
+        }
+
+        // Combine data from all periods
+        const allData = [];
+        
+        currentData.forEach((row) => {
+          allData.push({
+            report_id: reportId,
+            period: 'current',
+            date_from: dateRanges.current.date_from,
+            date_to: dateRanges.current.date_to,
+            row_number: row.row_number,
+            data_source_id: row.data_source_id,
+            dimension_values: row.dimension_values
+          });
+        });
+
+        comparisonData.forEach((row) => {
+          allData.push({
+            report_id: reportId,
+            period: 'comparison',
+            date_from: dateRanges.comparison.date_from,
+            date_to: dateRanges.comparison.date_to,
+            row_number: row.row_number,
+            data_source_id: row.data_source_id,
+            dimension_values: row.dimension_values
+          });
+        });
+
+        // Apply dimension filters for this report
+        let filteredData = allData;
+        const reportDimFilters = dimensionFiltersByReport[reportId] || {};
+        
+        if (Object.keys(reportDimFilters).length > 0) {
+          filteredData = allData.filter(row => {
+            for (const [dimensionId, filterValues] of Object.entries(reportDimFilters)) {
+              const rowValue = row.dimension_values[dimensionId];
+              const rowValueStr = String(rowValue || '').toLowerCase();
+              
+              // Check if any filter value matches
+              const matches = filterValues.some(filterValue => {
+                const filterValueStr = String(filterValue).toLowerCase();
+                return rowValueStr.includes(filterValueStr) || filterValueStr.includes(rowValueStr);
+              });
+              
+              if (!matches) {
+                return false;
+              }
+            }
+            return true;
+          });
+        }
+
+        // Apply metrics filter if specified
+        if (metrics.length > 0) {
+          // Filter to only include rows that have at least one of the requested metrics
+          // This assumes metrics are stored as dimensions
+          filteredData = filteredData.filter(row => {
+            // Check if any metric dimension exists in the row
+            return metrics.some(metric => {
+              // Try to find metric by name or snake_case name
+              const metricDimId = dimensionNameToId[metric] || 
+                                 Object.entries(dimensionIdToName).find(([id, name]) => 
+                                   name.toLowerCase() === metric.toLowerCase()
+                                 )?.[0];
+              if (metricDimId) {
+                const value = row.dimension_values[metricDimId];
+                return value !== undefined && value !== null && value !== '';
+              }
+              return false;
+            });
+          });
+        }
+
+        // Transform data: Replace dimension IDs with snake_case names
+        const transformedData = filteredData.map((row, index) => {
+          const transformed = {
+            id: `${reportId}_${row.period}_${row.row_number || index + 1}`,
+            report_id: reportId,
+            row_number: row.row_number || index + 1,
+            data_source_id: row.data_source_id,
+            period: row.period,
+            date_from: row.date_from,
+            date_to: row.date_to
+          };
+
+          // Replace dimension IDs with snake_case dimension names
+          for (const [dimId, value] of Object.entries(row.dimension_values || {})) {
+            const snakeName = dimensionIdToSnakeName[dimId] || toSnakeCase(dimensionIdToName[dimId]) || dimId;
+            transformed[snakeName] = value;
+          }
+
+          return transformed;
+        });
+
+        allTransformedData.push(...transformedData);
+
+        // Collect dimension metadata
+        if (dimensions && dimensions.length > 0) {
+          dimensions.forEach(dim => {
+            // Avoid duplicates by checking if dimension already exists
+            const existing = allDimensionsMetadata.find(d => d.id === dim.id);
+            if (!existing) {
+              allDimensionsMetadata.push({
+                id: dim.id,
+                name: dim.name,
+                snake_name: toSnakeCase(dim.name),
+                type: dim.type
+              });
+            }
+          });
+        }
+
+        // Store report metadata
+        reportMetadata.push({
+          report_id: reportId,
+          count: transformedData.length
+        });
+
+      } catch (error) {
+        console.error(`[API-MULTI] Error processing report ${reportId}:`, error);
+        // Continue with other reports even if one fails
+        reportMetadata.push({
+          report_id: reportId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          count: 0
+        });
+      }
+    }
+
+    // Apply pagination to combined data
+    const totalCount = allTransformedData.length;
+    const paginatedData = allTransformedData.slice(offsetNum, offsetNum + limitNum);
+
+    // Calculate pagination metadata
+    const currentPage = page ? parseInt(page, 10) : Math.floor(offsetNum / limitNum) + 1;
+    const totalPages = Math.ceil(totalCount / limitNum);
+    const hasMore = offsetNum + limitNum < totalCount;
+    const hasPrevious = offsetNum > 0;
+
+    console.log(`[API-MULTI] Returning ${paginatedData.length} of ${totalCount} rows from ${reportIds.length} reports`);
+
+    // Format JSON response
+    return res.status(200).json({
+      success: true,
+      count: paginatedData.length,
+      total: totalCount,
+      data: paginatedData,
+      pagination: {
+        page: currentPage,
+        limit: limitNum,
+        offset: offsetNum,
+        total: totalCount,
+        totalPages: totalPages,
+        hasMore: hasMore,
+        hasPrevious: hasPrevious
+      },
+      reports: reportMetadata,
+      dimensions: allDimensionsMetadata,
+      date_range: {
+        date_from: dateRanges.current.date_from,
+        date_to: dateRanges.current.date_to
+      }
+    });
+
+  } catch (error) {
+    console.error('[API-MULTI] Fatal error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({
+      success: false,
+      error: errorMessage,
+      count: 0,
+      data: []
+    });
+  }
+});
+
 app.get('/api/reports/:reportId', async (req, res) => {
   try {
     const { reportId } = req.params;

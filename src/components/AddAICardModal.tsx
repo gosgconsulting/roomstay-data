@@ -23,7 +23,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchSourceData, type SourceDataResult } from "@/hooks/dataSources/useSourceData";
 import { extractUniqueDimensionValues } from "@/lib/filters/extractDimensionValues";
 import { getUser } from "@/lib/auth";
-import { Search, ChevronRight, ChevronLeft, Sparkles, Loader2, Calendar } from "lucide-react";
+import { Search, ChevronRight, ChevronLeft, Sparkles, Loader2, Calendar, Copy, ExternalLink } from "lucide-react";
 import { 
   getDateRange, 
   getComparisonDateRange,
@@ -89,9 +89,10 @@ interface AddAICardModalProps {
   onOpenChange: (open: boolean) => void;
   onCardCreated?: (newCardId?: string) => void;
   editingCard?: EditingCard | null;
+  mode?: "card" | "api"; // "card" for card creation/editing, "api" for API URL preview only
 }
 
-type Step = "select-reports" | "filter-dimensions" | "breakdown-dimensions" | "select-metrics" | "select-period";
+type Step = "select-reports" | "filter-dimensions" | "breakdown-dimensions" | "select-metrics" | "select-period" | "preview-url";
 
 // Standard KPI metrics available
 const AVAILABLE_METRICS = [
@@ -226,7 +227,7 @@ const getDefaultSinceDate = (): string => {
   return `${previousYear}-01-01`;
 };
 
-export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard }: AddAICardModalProps) => {
+export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard, mode = "card" }: AddAICardModalProps) => {
   const { accountId } = useParams();
   const [step, setStep] = useState<Step>("select-reports");
   const [isSaving, setIsSaving] = useState(false);
@@ -262,7 +263,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     return combined;
   }, [customMetrics]);
 
-  // Initialize from editingCard when editing
+  // Initialize from editingCard when editing or when in API mode with card config
   useEffect(() => {
     if (editingCard && open) {
       setSelectedReportIds(editingCard.report_ids || []);
@@ -294,8 +295,17 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       if (editingCard.report_ids?.length > 0) {
         setActiveReportTab(editingCard.report_ids[0]);
       }
+      
+      // If in API mode, start at preview-url step
+      if (mode === "api") {
+        setStep("preview-url");
+      }
+    } else if (mode === "api" && open) {
+      // In API mode without editingCard, start at preview-url after going through steps
+      // But initially start at select-reports
+      setStep("select-reports");
     }
-  }, [editingCard, open]);
+  }, [editingCard, open, mode]);
 
   // Fetch reports for the account
   useEffect(() => {
@@ -514,6 +524,35 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     });
   };
 
+  const handleSelectAll = (reportId: string) => {
+    if (!activeReportTab) return;
+    const allValues = filteredValues; // Use filtered values (respects search)
+    setReportConfigs(prev => {
+      const config = prev[reportId] || { reportId, dimensionId: null, selectedValues: [] };
+      const existingValues = new Set(config.selectedValues);
+      // Add all filtered values that aren't already selected
+      allValues.forEach(value => existingValues.add(value));
+      return {
+        ...prev,
+        [reportId]: { ...config, selectedValues: Array.from(existingValues) },
+      };
+    });
+  };
+
+  const handleDeselectAll = (reportId: string) => {
+    if (!activeReportTab) return;
+    const filteredValuesSet = new Set(filteredValues); // Use filtered values (respects search)
+    setReportConfigs(prev => {
+      const config = prev[reportId] || { reportId, dimensionId: null, selectedValues: [] };
+      // Remove only the filtered values from selection
+      const newValues = config.selectedValues.filter(v => !filteredValuesSet.has(v));
+      return {
+        ...prev,
+        [reportId]: { ...config, selectedValues: newValues },
+      };
+    });
+  };
+
   const handleMetricToggle = (metric: string) => {
     setSelectedMetrics(prev =>
       prev.includes(metric)
@@ -553,7 +592,16 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     } else if (step === "breakdown-dimensions") {
       setStep("select-metrics");
     } else if (step === "select-metrics") {
-      setStep("select-period");
+      if (mode === "api") {
+        setStep("preview-url");
+      } else {
+        setStep("select-period");
+      }
+    } else if (step === "select-period") {
+      if (mode === "api") {
+        setStep("preview-url");
+      }
+      // In card mode, select-period is the last step before saving
     }
   };
 
@@ -567,6 +615,12 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       setStep("breakdown-dimensions");
     } else if (step === "select-period") {
       setStep("select-metrics");
+    } else if (step === "preview-url") {
+      if (mode === "api") {
+        setStep("select-metrics");
+      } else {
+        setStep("select-period");
+      }
     }
   };
 
@@ -1055,12 +1109,89 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
     return { rows: baseRows, metricMap };
   };
 
+  // Helper function to safely serialize pivot data (remove circular refs, non-serializable values)
+  const sanitizePivotData = (data: CachedPivotData): CachedPivotData => {
+    // Simple replacer to handle basic non-serializable values
+    const replacer = (key: string, value: any): any => {
+      // Skip functions
+      if (typeof value === 'function') {
+        return undefined;
+      }
+      // Convert undefined to null
+      if (value === undefined) {
+        return null;
+      }
+      // Return value as-is (JSON.stringify will handle circular refs by throwing)
+      return value;
+    };
+    
+    try {
+      // Try to stringify - this will throw if there are circular references
+      // In that case, we'll catch and return a cleaned version
+      const jsonString = JSON.stringify(data, replacer);
+      const serialized = JSON.parse(jsonString);
+      return serialized as CachedPivotData;
+    } catch (error) {
+      console.error("[AddAICardModal] Error sanitizing pivot data:", error);
+      console.error("[AddAICardModal] Error type:", error instanceof Error ? error.constructor.name : typeof error);
+      console.error("[AddAICardModal] Error message:", error instanceof Error ? error.message : String(error));
+      
+      // If serialization fails, create a clean copy manually
+      // Only include the essential data structures (metrics, not full row objects)
+      const cleaned: CachedPivotData = {
+        mtd: Array.isArray(data?.mtd) ? data.mtd.map(item => ({
+          reportId: item.reportId || '',
+          reportName: item.reportName || '',
+          metrics: item.metrics || {}
+        })) : [],
+        ytd: Array.isArray(data?.ytd) ? data.ytd.map(item => ({
+          reportId: item.reportId || '',
+          reportName: item.reportName || '',
+          metrics: item.metrics || {}
+        })) : [],
+        last_month: Array.isArray(data?.last_month) ? data.last_month.map(item => ({
+          reportId: item.reportId || '',
+          reportName: item.reportName || '',
+          metrics: item.metrics || {}
+        })) : [],
+      };
+      
+      // Add optional fields if they exist and are serializable
+      if (data?.breakdown_data) {
+        try {
+          cleaned.breakdown_data = JSON.parse(JSON.stringify(data.breakdown_data, replacer));
+        } catch {
+          // Skip if not serializable
+        }
+      }
+      
+      if (data?.comparison_previous_period) {
+        try {
+          cleaned.comparison_previous_period = JSON.parse(JSON.stringify(data.comparison_previous_period, replacer));
+        } catch {
+          // Skip if not serializable
+        }
+      }
+      
+      if (data?.comparison_previous_year) {
+        try {
+          cleaned.comparison_previous_year = JSON.parse(JSON.stringify(data.comparison_previous_year, replacer));
+        } catch {
+          // Skip if not serializable
+        }
+      }
+      
+      return cleaned;
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
       const { user } = await getUser();
       if (!user) {
         toast.error("You must be logged in to save a card");
+        setIsSaving(false);
         return;
       }
 
@@ -1069,7 +1200,10 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         duration: 10000,
         id: "computing-pivot",
       });
-      const cachedPivotData = await computePivotData();
+      const rawPivotData = await computePivotData();
+      
+      // Sanitize the pivot data before saving to prevent circular reference issues
+      const cachedPivotData = sanitizePivotData(rawPivotData);
       toast.dismiss("computing-pivot");
 
       // Generate a name based on selected reports
@@ -1100,28 +1234,66 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         toast.success("AI Summary card updated!");
       } else {
         // Create new card
+        // Validate required fields before insert
+        if (!selectedReportIds || selectedReportIds.length === 0) {
+          toast.error("Please select at least one report");
+          setIsSaving(false);
+          return;
+        }
+
+        if (!selectedMetrics || selectedMetrics.length === 0) {
+          toast.error("Please select at least one metric");
+          setIsSaving(false);
+          return;
+        }
+
+        const cardData = {
+          user_id: user.id,
+          account_id: accountId || null,
+          name: cardName,
+          report_ids: selectedReportIds,
+          report_configs: { ...reportConfigs, breakdown_configs: breakdownConfigs },
+          selected_metrics: selectedMetrics,
+          since_date: sinceDate,
+          ai_prompt: aiPrompt,
+          cached_pivot_data: cachedPivotData,
+          pivot_data_refreshed_at: new Date().toISOString(),
+        };
+
+        console.log("[AddAICardModal] Creating card with data:", {
+          ...cardData,
+          cached_pivot_data: "..." // Don't log the full pivot data
+        });
+
         const { data: newCard, error } = await (supabase.from("ai_summary_cards") as any)
-          .insert({
-            user_id: user.id,
-            account_id: accountId || null,
-            name: cardName,
-            report_ids: selectedReportIds,
-            report_configs: { ...reportConfigs, breakdown_configs: breakdownConfigs },
-            selected_metrics: selectedMetrics,
-            since_date: sinceDate,
-            ai_prompt: aiPrompt,
-            cached_pivot_data: cachedPivotData,
-            pivot_data_refreshed_at: new Date().toISOString(),
-          })
+          .insert(cardData)
           .select()
           .single();
 
         if (error) {
-          console.error("Error saving AI card:", error);
-          toast.error("Failed to save card");
+          console.error("[AddAICardModal] Error saving AI card:", error);
+          console.error("[AddAICardModal] Error details:", {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          });
+          
+          // Show more descriptive error message
+          const errorMessage = error.message || "Failed to save card";
+          toast.error(`Failed to save card: ${errorMessage}`);
+          setIsSaving(false);
           return;
         }
 
+        if (!newCard) {
+          console.error("[AddAICardModal] No card data returned from insert");
+          toast.error("Failed to save card: No data returned");
+          setIsSaving(false);
+          return;
+        }
+
+        console.log("[AddAICardModal] Card created successfully:", newCard.id);
         toast.success("AI Summary card created!");
         
         // Pass the new card ID to the callback
@@ -1135,8 +1307,9 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
       onOpenChange(false);
       resetState();
     } catch (err) {
-      console.error("Error saving AI card:", err);
-      toast.error("Failed to save card");
+      console.error("[AddAICardModal] Unexpected error saving AI card:", err);
+      const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
+      toast.error(`Failed to save card: ${errorMessage}`);
     } finally {
       setIsSaving(false);
     }
@@ -1176,6 +1349,9 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
   }, [sinceDate]);
 
   const getStepTitle = () => {
+    if (mode === "api" && editingCard) {
+      return `API URL for ${editingCard.name}`;
+    }
     const prefix = editingCard ? "Edit: " : "";
     switch (step) {
       case "select-reports":
@@ -1188,7 +1364,67 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
         return `${prefix}Select Metrics`;
       case "select-period":
         return `${prefix}Select Period`;
+      case "preview-url":
+        return mode === "api" ? "API URL Preview" : `${prefix}API URL Preview`;
     }
+  };
+
+  // Generate API URL
+  const generateApiUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    
+    // Add reportIds (comma-separated)
+    if (selectedReportIds.length > 0) {
+      params.append('reportIds', selectedReportIds.join(','));
+    }
+    
+    // Add since date (start date)
+    if (sinceDate) {
+      params.append('date_from', sinceDate);
+    }
+    
+    // End date is always today
+    const today = new Date().toISOString().split('T')[0];
+    params.append('date_to', today);
+    
+    // Add metrics
+    selectedMetrics.forEach(metric => {
+      params.append('metrics[]', metric);
+    });
+    
+    // Add dimension filters per report
+    selectedReportIds.forEach(reportId => {
+      const config = reportConfigs[reportId];
+      if (config?.dimensionId && config.selectedValues.length > 0) {
+        config.selectedValues.forEach(value => {
+          params.append(`dimensions[${reportId}][${config.dimensionId}][]`, value);
+        });
+      }
+    });
+    
+    // Add breakdown dimensions per report
+    selectedReportIds.forEach(reportId => {
+      const breakdownConfig = breakdownConfigs[reportId];
+      const breakdownIds = breakdownConfig?.breakdownDimensionIds || [];
+      breakdownIds.forEach(dimId => {
+        params.append(`breakdown[${reportId}][]`, dimId);
+      });
+    });
+    
+    const baseUrl = `${window.location.origin}/api/reports`;
+    const queryString = params.toString();
+    return queryString ? `${baseUrl}?${queryString}` : baseUrl;
+  }, [selectedReportIds, sinceDate, selectedMetrics, reportConfigs, breakdownConfigs]);
+
+  const apiUrl = generateApiUrl();
+
+  const handleCopyUrl = () => {
+    navigator.clipboard.writeText(apiUrl);
+    toast.success("API URL copied to clipboard");
+  };
+
+  const handleOpenInNewTab = () => {
+    window.open(apiUrl, '_blank');
   };
 
   return (
@@ -1199,6 +1435,11 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
             <Sparkles className="h-5 w-5 text-primary" />
             {getStepTitle()}
           </DialogTitle>
+          {mode === "api" && editingCard && (
+            <p className="text-sm text-muted-foreground">
+              API URL generated from your card configuration. Settings are synced from the card.
+            </p>
+          )}
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden">
@@ -1330,6 +1571,29 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
                                 className="pl-9"
                               />
                             </div>
+
+                            {filteredValues.length > 0 && (
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleSelectAll(activeReportTab)}
+                                  className="flex-1"
+                                >
+                                  Select All
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDeselectAll(activeReportTab)}
+                                  className="flex-1"
+                                >
+                                  Deselect All
+                                </Button>
+                              </div>
+                            )}
 
                             <ScrollArea className="flex-1 border rounded-md">
                               <div className="p-2 space-y-1">
@@ -1529,7 +1793,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
             </ScrollArea>
           )}
 
-          {/* Step 4: Select Period */}
+          {/* Step 5: Select Period */}
           {step === "select-period" && (
             <div className="space-y-6">
               <div className="bg-muted/50 rounded-lg p-6">
@@ -1568,6 +1832,91 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard 
                 <div className="space-y-1 text-sm text-muted-foreground">
                   <p><span className="font-medium text-foreground">Reports:</span> {selectedReports.map(r => r.name).join(", ")}</p>
                   <p><span className="font-medium text-foreground">Metrics:</span> {selectedMetrics.join(", ")}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 6: API URL Preview */}
+          {step === "preview-url" && (
+            <div className="space-y-6 h-[500px] overflow-y-auto">
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="api-url" className="text-base font-semibold">
+                    API URL Preview
+                  </Label>
+                  <div className="flex gap-2 mt-2">
+                    <div className="flex-1 relative">
+                      <Input
+                        id="api-url"
+                        type="text"
+                        value={apiUrl}
+                        readOnly
+                        className="pr-10 font-mono text-xs"
+                        onClick={handleCopyUrl}
+                        style={{ cursor: 'pointer' }}
+                        title="Click to copy"
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleCopyUrl}
+                      title="Copy URL"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleOpenInNewTab}
+                      title="Open in new tab"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Click the URL or copy button to copy to clipboard
+                  </p>
+                </div>
+
+                {/* Parameter Summary */}
+                <div className="bg-muted/30 rounded-lg p-4">
+                  <h4 className="font-medium mb-3 text-sm">Parameter Summary</h4>
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="font-medium text-foreground">Reports:</span>{" "}
+                      <span className="text-muted-foreground">
+                        {selectedReports.length} selected
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">Since:</span>{" "}
+                      <span className="text-muted-foreground">{formattedSinceDate}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">End Date:</span>{" "}
+                      <span className="text-muted-foreground">Today</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">Metrics:</span>{" "}
+                      <span className="text-muted-foreground">
+                        {selectedMetrics.length} selected
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">Dimensions:</span>{" "}
+                      <span className="text-muted-foreground">
+                        {Object.values(reportConfigs).filter(c => c.selectedValues.length > 0).length} reports with filters
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">Breakdown:</span>{" "}
+                      <span className="text-muted-foreground">
+                        {Object.values(breakdownConfigs).filter(b => b.breakdownDimensionIds.length > 0).length} reports with breakdown
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

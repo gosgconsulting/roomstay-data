@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, Settings, MoreHorizontal, Database, Pencil, Share2, TrendingUp } from "lucide-react";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -16,6 +16,7 @@ import {
 import { AddAICardModal } from "@/components/AddAICardModal";
 import { CreateAISummaryShareLinkModal } from "@/components/CreateAISummaryShareLinkModal";
 import { ForecastSettingsModal } from "@/components/ForecastSettingsModal";
+import { APIBuilderModal } from "@/components/APIBuilderModal";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
@@ -114,6 +115,7 @@ const AISummaryPage = () => {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(summaryId || null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isForecastModalOpen, setIsForecastModalOpen] = useState(false);
+  const [isAPIBuilderModalOpen, setIsAPIBuilderModalOpen] = useState(false);
   const [selectedDateTab, setSelectedDateTab] = useState<DateTab>(format(new Date(), "yyyy-MM"));
   const [selectedReportTab, setSelectedReportTab] = useState<ReportTab>("overview");
   const [selectedDatePeriod, setSelectedDatePeriod] = useState<string>(format(new Date(), "yyyy-MM"));
@@ -203,6 +205,42 @@ const AISummaryPage = () => {
     } else {
       navigate("/");
     }
+  };
+
+  // Get currently selected card
+  const selectedCard = useMemo(() => {
+    if (!selectedCardId) return null;
+    return cards.find(c => c.id === selectedCardId) || null;
+  }, [cards, selectedCardId]);
+
+  // Extract card configuration for API Builder
+  const getCardConfigForAPI = (card: AISummaryCard) => {
+    // Extract breakdown_configs from report_configs if nested
+    const reportConfigs = card.report_configs || {};
+    const { breakdown_configs, ...dimensionConfigs } = reportConfigs as any;
+    
+    // Convert breakdown configs format
+    // Card format: Record<string, { reportId: string; breakdownDimensionIds: string[] }>
+    // API Builder format: Record<string, string[]>
+    const breakdownConfigs: Record<string, string[]> = {};
+    if (breakdown_configs) {
+      Object.entries(breakdown_configs).forEach(([reportId, config]: [string, any]) => {
+        if (config?.breakdownDimensionIds) {
+          breakdownConfigs[reportId] = config.breakdownDimensionIds;
+        } else if (config?.breakdownDimensionId) {
+          // Legacy format - single dimension ID
+          breakdownConfigs[reportId] = [config.breakdownDimensionId];
+        }
+      });
+    }
+    
+    return {
+      reportIds: card.report_ids,
+      reportConfigs: dimensionConfigs as Record<string, { reportId: string; dimensionId: string | null; selectedValues: string[] }>,
+      breakdownConfigs,
+      selectedMetrics: card.selected_metrics,
+      sinceDate: card.since_date,
+    };
   };
 
   const handleDeleteCard = async () => {
@@ -1271,6 +1309,9 @@ const AISummaryPage = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={() => setIsAPIBuilderModalOpen(true)}>
+                    API
+                  </Button>
                   {summaryId && (
                     <Button variant="outline" onClick={() => setIsForecastModalOpen(true)}>
                       <TrendingUp className="h-4 w-4 mr-2" />
@@ -1631,6 +1672,15 @@ const AISummaryPage = () => {
           aiSummaryCardId={summaryId}
         />
       )}
+
+      {/* API Builder Modal */}
+      <APIBuilderModal
+        open={isAPIBuilderModalOpen}
+        onOpenChange={setIsAPIBuilderModalOpen}
+        accountId={accountId}
+        cardConfig={selectedCard ? getCardConfigForAPI(selectedCard) : undefined}
+        cardName={selectedCard?.name}
+      />
         </div>
       </div>
     </SidebarProvider>
