@@ -7,6 +7,77 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Formula metrics that should be calculated, not summed
+const FORMULA_METRICS = ['CTR', 'ROAS', 'Conversion rate', 'CPC', 'Cost of sale', 'COS'];
+const BASE_METRICS = ['Impressions', 'Clicks', 'Cost', 'Revenue', 'Conversions', 'Bookings'];
+
+const calculateFormulaMetrics = (baseValues: Record<string, number>): Record<string, number> => {
+  const result: Record<string, number> = {};
+  const impressions = baseValues['Impressions'] || 0;
+  const clicks = baseValues['Clicks'] || 0;
+  const cost = baseValues['Cost'] || 0;
+  const revenue = baseValues['Revenue'] || 0;
+  const conversions = baseValues['Conversions'] || baseValues['Bookings'] || 0;
+
+  result['CTR'] = impressions > 0 ? (clicks / impressions) * 100 : 0;
+  result['ROAS'] = cost > 0 ? revenue / cost : 0;
+  result['Conversion rate'] = clicks > 0 ? (conversions / clicks) * 100 : 0;
+  result['CPC'] = clicks > 0 ? cost / clicks : 0;
+  result['Cost of sale'] = revenue > 0 ? (cost / revenue) * 100 : 0;
+  result['COS'] = result['Cost of sale'];
+
+  return result;
+};
+
+const parseDate = (value: any): Date | null => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  const dateStr = String(value).trim();
+  const date = new Date(dateStr);
+  return isNaN(date.getTime()) ? null : date;
+};
+
+const isWithinDateRange = (date: Date, start: Date, end: Date): boolean => {
+  return date >= start && date <= end;
+};
+
+const getDateRange = (tab: string): { start: Date; end: Date } => {
+  const now = new Date();
+  
+  // Handle specific month keys like "2025-11"
+  if (tab.match(/^\d{4}-\d{2}$/)) {
+    const [year, month] = tab.split('-').map(Number);
+    const start = new Date(year, month - 1, 1);
+    const end = new Date(year, month, 0, 23, 59, 59, 999);
+    return { start, end };
+  }
+  
+  switch (tab) {
+    case "mtd":
+      return {
+        start: new Date(now.getFullYear(), now.getMonth(), 1),
+        end: now,
+      };
+    case "ytd":
+      return {
+        start: new Date(now.getFullYear(), 0, 1),
+        end: now,
+      };
+    default:
+      return {
+        start: new Date(now.getFullYear(), now.getMonth(), 1),
+        end: now,
+      };
+  }
+};
+
+interface ColumnMapping {
+  column: string;
+  dimensionId: string;
+  dimensionName: string;
+  visible: boolean;
+}
+
 // @ts-ignore - Deno global is available in Edge Functions runtime
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight requests
@@ -54,10 +125,10 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[GET-AI-SUMMARY-DATA] Fetching data for card: ${cardId}`);
 
-    // Fetch AI Summary card with cached data
+    // Fetch AI Summary card
     const { data: card, error: cardError } = await supabase
       .from('ai_summary_cards')
-      .select('id, report_ids, report_configs, selected_metrics, since_date, cached_pivot_data, pivot_data_refreshed_at')
+      .select('id, report_ids, report_configs, selected_metrics, since_date')
       .eq('id', cardId)
       .maybeSingle();
 
@@ -87,76 +158,172 @@ Deno.serve(async (req: Request) => {
     }
 
     const reportIds = card.report_ids || [];
+    const selectedMetrics = card.selected_metrics || [];
     const sinceDate = card.since_date;
 
     // Calculate toDate
     const now = new Date();
     const toDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-    // If cached_pivot_data exists, return it directly
-    if (card.cached_pivot_data && Object.keys(card.cached_pivot_data).length > 0) {
-      console.log(`[GET-AI-SUMMARY-DATA] Returning cached data for card ${cardId}`);
-      
-      const cachedData = card.cached_pivot_data as Record<string, unknown>;
-      
-      // Count total data rows
-      let totalCount = 0;
-      if (typeof cachedData === 'object') {
-        const monthlyData = (cachedData.monthly_data || cachedData) as Record<string, unknown>;
-        if (typeof monthlyData === 'object') {
-          Object.values(monthlyData).forEach((reportData) => {
-            if (typeof reportData === 'object' && reportData !== null) {
-              Object.values(reportData as Record<string, unknown>).forEach((monthData) => {
-                if (Array.isArray(monthData)) {
-                  totalCount += monthData.length;
-                } else if (typeof monthData === 'object' && monthData !== null && 'metrics' in monthData) {
-                  totalCount += 1;
-                }
-              });
-            }
-          });
-        }
-      }
-
-      // Build reports metadata
-      const actualDataRanges = (cachedData.actual_data_ranges || {}) as Record<string, { reportName?: string }>;
-      const reportMetadata = reportIds.map((reportId: string) => ({
-        report_id: reportId,
-        report_name: actualDataRanges[reportId]?.reportName || 'Unknown',
-        count: 0
-      }));
-
+    if (reportIds.length === 0) {
       return new Response(
         JSON.stringify({
           success: true,
-          count: totalCount,
+          count: 0,
           since: sinceDate,
           to: toDate,
-          cached: true,
-          cached_at: card.pivot_data_refreshed_at,
-          data: cachedData,
-          reports: reportMetadata,
+          data: { mtd: [], ytd: [] },
+          reports: [],
           dimensions: []
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // No cached data - return empty with message
-    console.log(`[GET-AI-SUMMARY-DATA] No cached data for card ${cardId}`);
-    
+    // Fetch reports with their names
+    const { data: reports } = await supabase
+      .from('reports')
+      .select('id, name')
+      .in('id', reportIds);
+
+    const reportNameMap: Record<string, string> = {};
+    (reports || []).forEach((r: any) => {
+      reportNameMap[r.id] = r.name;
+    });
+
+    // Fetch data sources with column mappings for each report
+    const { data: dataSources } = await supabase
+      .from('data_sources')
+      .select('id, report_id, column_mappings')
+      .in('report_id', reportIds);
+
+    // Build dimension name → ID mapping per report
+    const reportDimensionMaps: Record<string, Record<string, string>> = {};
+    const reportDateDimIds: Record<string, string> = {};
+
+    (dataSources || []).forEach((ds: any) => {
+      if (!ds.column_mappings) return;
+      
+      const mappings = ds.column_mappings as ColumnMapping[];
+      const dimMap: Record<string, string> = {};
+      
+      mappings.forEach((m: ColumnMapping) => {
+        if (m.visible && m.dimensionId && m.dimensionName) {
+          // Map dimension name to ID
+          dimMap[m.dimensionName] = m.dimensionId;
+          
+          // Also track Date dimension
+          if (m.dimensionName.toLowerCase() === 'date' || m.column.toLowerCase() === 'date') {
+            reportDateDimIds[ds.report_id] = m.dimensionId;
+          }
+        }
+      });
+      
+      reportDimensionMaps[ds.report_id] = dimMap;
+    });
+
+    console.log(`[GET-AI-SUMMARY-DATA] Built dimension maps for ${Object.keys(reportDimensionMaps).length} reports`);
+
+    // Get date ranges
+    const mtdRange = getDateRange('mtd');
+    const ytdRange = getDateRange('ytd');
+
+    // Aggregate metrics for each report
+    const mtdResults: any[] = [];
+    const ytdResults: any[] = [];
+
+    for (const reportId of reportIds) {
+      const dimMap = reportDimensionMaps[reportId] || {};
+      const dateDimId = reportDateDimIds[reportId];
+      
+      if (!dateDimId) {
+        console.log(`[GET-AI-SUMMARY-DATA] No date dimension found for report ${reportId}`);
+        // Still add empty metrics for this report
+        mtdResults.push({
+          reportId,
+          reportName: reportNameMap[reportId] || 'Unknown',
+          metrics: {}
+        });
+        ytdResults.push({
+          reportId,
+          reportName: reportNameMap[reportId] || 'Unknown',
+          metrics: {}
+        });
+        continue;
+      }
+
+      // Fetch dimension_data for this report
+      const { data: dimensionData, error: dimError } = await supabase
+        .from('dimension_data')
+        .select('dimension_values')
+        .eq('report_id', reportId);
+
+      if (dimError) {
+        console.error(`[GET-AI-SUMMARY-DATA] Error fetching dimension_data for report ${reportId}:`, dimError);
+        continue;
+      }
+
+      console.log(`[GET-AI-SUMMARY-DATA] Fetched ${dimensionData?.length || 0} rows for report ${reportId}`);
+
+      // Aggregate for MTD
+      const mtdMetrics = aggregateMetricsFromData(
+        dimensionData || [],
+        selectedMetrics,
+        dimMap,
+        dateDimId,
+        mtdRange
+      );
+
+      // Aggregate for YTD
+      const ytdMetrics = aggregateMetricsFromData(
+        dimensionData || [],
+        selectedMetrics,
+        dimMap,
+        dateDimId,
+        ytdRange
+      );
+
+      mtdResults.push({
+        reportId,
+        reportName: reportNameMap[reportId] || 'Unknown',
+        metrics: mtdMetrics
+      });
+
+      ytdResults.push({
+        reportId,
+        reportName: reportNameMap[reportId] || 'Unknown',
+        metrics: ytdMetrics
+      });
+    }
+
+    // Count total data points
+    let totalCount = 0;
+    mtdResults.forEach(r => {
+      totalCount += Object.keys(r.metrics).length;
+    });
+
+    const responseData = {
+      success: true,
+      count: totalCount,
+      since: sinceDate,
+      to: toDate,
+      cached: false,
+      data: {
+        mtd: mtdResults,
+        ytd: ytdResults
+      },
+      reports: reportIds.map((id: string) => ({
+        report_id: id,
+        report_name: reportNameMap[id] || 'Unknown',
+        count: mtdResults.find(r => r.reportId === id)?.metrics ? Object.keys(mtdResults.find(r => r.reportId === id)?.metrics || {}).length : 0
+      })),
+      dimensions: []
+    };
+
+    console.log(`[GET-AI-SUMMARY-DATA] Returning computed data for ${reportIds.length} reports`);
+
     return new Response(
-      JSON.stringify({
-        success: true,
-        count: 0,
-        since: sinceDate,
-        to: toDate,
-        cached: false,
-        message: 'No cached data available. Please refresh the data in the UI.',
-        data: {},
-        reports: reportIds.map((id: string) => ({ report_id: id, count: 0 })),
-        dimensions: []
-      }),
+      JSON.stringify(responseData),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
@@ -174,3 +341,71 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+// Helper function to aggregate metrics from dimension_data
+function aggregateMetricsFromData(
+  dimensionData: any[],
+  selectedMetrics: string[],
+  dimMap: Record<string, string>,
+  dateDimId: string,
+  dateRange: { start: Date; end: Date }
+): Record<string, number> {
+  const result: Record<string, number> = {};
+  
+  // Initialize all metrics including base metrics
+  const allMetrics = new Set([...selectedMetrics, ...BASE_METRICS]);
+  allMetrics.forEach(m => {
+    result[m] = 0;
+  });
+
+  // Filter and aggregate
+  let rowsInRange = 0;
+  dimensionData.forEach((row: any) => {
+    const dimValues = row.dimension_values || {};
+    
+    // Get date value
+    const dateValue = dimValues[dateDimId];
+    const rowDate = parseDate(dateValue);
+    
+    if (!rowDate || !isWithinDateRange(rowDate, dateRange.start, dateRange.end)) {
+      return;
+    }
+    
+    rowsInRange++;
+
+    // Sum up base metrics
+    allMetrics.forEach(metricName => {
+      if (FORMULA_METRICS.includes(metricName)) return;
+      
+      // Get dimension ID for this metric
+      const dimId = dimMap[metricName];
+      if (!dimId) return;
+      
+      const value = dimValues[dimId];
+      if (value !== undefined && value !== null) {
+        const numValue = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
+        if (!isNaN(numValue)) {
+          result[metricName] += numValue;
+        }
+      }
+    });
+  });
+
+  console.log(`[GET-AI-SUMMARY-DATA] Aggregated ${rowsInRange} rows in date range`);
+
+  // Calculate formula metrics
+  const formulaValues = calculateFormulaMetrics(result);
+  FORMULA_METRICS.forEach(metric => {
+    if (selectedMetrics.includes(metric)) {
+      result[metric] = formulaValues[metric] || 0;
+    }
+  });
+
+  // Return only selected metrics
+  const finalResult: Record<string, number> = {};
+  selectedMetrics.forEach(m => {
+    finalResult[m] = result[m] || 0;
+  });
+
+  return finalResult;
+}
