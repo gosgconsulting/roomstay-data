@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/lib/auth";
 import { useInvalidateSourceData } from "@/hooks/dataSources/useSourceData";
+import { useInvalidateCachedData } from "@/hooks/dataSources/useCachedSourceData";
 
 interface Report {
   id: string;
@@ -61,6 +62,7 @@ export function DashboardHeader({
   const navigate = useNavigate();
   const { data: userData } = useUser();
   const invalidateCache = useInvalidateSourceData();
+  const invalidateCachedData = useInvalidateCachedData();
   const user = userData?.user || null;
   const location = useLocation();
   const isAllReportsPage = location.pathname.startsWith('/all-reports');
@@ -604,6 +606,7 @@ export function DashboardHeader({
         // Invalidate cache for all data sources in this report
         console.log('[SYNC] Invalidating cache for all data sources after successful sync');
         invalidateCache.invalidateAll();
+        invalidateCachedData.invalidateAll();
 
         toast({
           title: "Sync complete",
