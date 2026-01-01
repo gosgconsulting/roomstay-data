@@ -119,12 +119,12 @@ export function useAISummaryRawData(
     queryKey: aiSummaryKeys.rawData(cardId),
     queryFn: () => fetchRawSourceData(reportIds, accountId),
     enabled: enabled && !!cardId && reportIds.length > 0,
-    staleTime: 30 * 60 * 1000, // 30 minutes - data is considered fresh
+    staleTime: 0, // Always consider data stale - fetch fresh data on mount
     gcTime: 60 * 60 * 1000, // 1 hour - keep in cache
     retry: 2,
-    refetchOnWindowFocus: false, // Don't refetch when window regains focus
-    refetchOnMount: false, // Don't refetch when component mounts if data exists
-    refetchOnReconnect: false, // Don't refetch on reconnect - use cached data
+    refetchOnWindowFocus: true, // Refetch when window regains focus to get fresh data
+    refetchOnMount: true, // Always refetch when component mounts to ensure fresh data
+    refetchOnReconnect: true, // Refetch on reconnect to get fresh data
   });
 }
 

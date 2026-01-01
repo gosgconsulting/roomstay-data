@@ -1682,7 +1682,7 @@ const AISummaryPage = () => {
           name: selectedCard.name,
           report_ids: selectedCard.report_ids,
           report_configs: selectedCard.report_configs,
-          breakdown_configs: (selectedCard.report_configs as any)?.breakdown_configs || selectedCard.breakdown_configs,
+          breakdown_configs: (selectedCard.report_configs as any)?.breakdown_configs,
           selected_metrics: selectedCard.selected_metrics,
           since_date: selectedCard.since_date,
           ai_prompt: selectedCard.ai_prompt || ""

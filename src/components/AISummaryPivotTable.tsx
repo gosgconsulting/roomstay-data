@@ -571,6 +571,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   const [comparisonType, setComparisonType] = useState<ComparisonType>("none");
   
   // Use React Query for cached raw source data - persists across tab switches
+  // Always fetch fresh data from sources (previous way of loading)
   const { data: rawSourceData = {}, isLoading: isLoadingRawData } = useAISummaryRawData(
     cardId || reportIds.join('-'), // Use cardId or fallback to joined reportIds
     reportIds,
@@ -581,23 +582,42 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // Compute if data is ready
   const reportsLoaded = Object.keys(rawSourceData).length > 0;
   
-  // Use cached pivot data if available, otherwise it will be computed from raw data
+  // ALWAYS prioritize fresh data from rawSourceData over cachedPivotData
+  // This ensures data is always up-to-date when page refreshes
   const data: CachedPivotData = useMemo(() => {
-    if (cachedPivotData) {
-      return cachedPivotData;
-    }
-    // If no cached data but we have raw source data, compute initial mtd/ytd
+    // If we have fresh raw source data, compute from that (previous way)
     if (reportsLoaded) {
       const dateRanges = {
         mtd: getDateRange("mtd"),
         ytd: getDateRange("ytd"),
       };
-      const newData: CachedPivotData = { mtd: [], ytd: [] };
       
+      // Generate month keys for the current year (from January to current month)
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth(); // 0-indexed
+      const monthKeys: string[] = [];
+      for (let m = 0; m <= currentMonth; m++) {
+        monthKeys.push(format(new Date(currentYear, m, 1), "yyyy-MM"));
+      }
+      
+      const newData: CachedPivotData = { 
+        mtd: [], 
+        ytd: [],
+        monthly_data: {}
+      };
+      
+      // Initialize monthly_data for each month
+      monthKeys.forEach(monthKey => {
+        newData.monthly_data![monthKey] = [];
+      });
+      
+      // Compute metrics for each report
       for (const reportId of reportIds) {
         const reportData = rawSourceData[reportId];
         if (!reportData) continue;
         
+        // Compute MTD and YTD
         (["mtd", "ytd"] as const).forEach((tab) => {
           const metrics = aggregateMetrics(
             reportData.rows,
@@ -610,13 +630,49 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             metrics,
           });
         });
+        
+        // Compute monthly data
+        monthKeys.forEach((monthKey) => {
+          const monthRange = getDateRange(monthKey);
+          const metrics = aggregateMetrics(
+            reportData.rows,
+            selectedMetrics,
+            monthRange
+          );
+          newData.monthly_data![monthKey].push({
+            reportId: reportId,
+            reportName: reportData.reportName,
+            metrics,
+          });
+        });
       }
+      
+      // Merge with cached data for breakdowns and other computed fields if available
+      if (cachedPivotData) {
+        return {
+          ...newData,
+          breakdown_data: cachedPivotData.breakdown_data,
+          breakdown_dimension_names: cachedPivotData.breakdown_dimension_names,
+          combined_date_breakdown: cachedPivotData.combined_date_breakdown,
+          table_insights: cachedPivotData.table_insights,
+          executive_summaries: cachedPivotData.executive_summaries,
+          comparison_previous_period: cachedPivotData.comparison_previous_period,
+          comparison_previous_year: cachedPivotData.comparison_previous_year,
+        };
+      }
+      
       return newData;
     }
+    
+    // Fallback to cached data only if no fresh data is available yet
+    if (cachedPivotData) {
+      return cachedPivotData;
+    }
+    
     return { mtd: [], ytd: [] };
-  }, [cachedPivotData, rawSourceData, reportsLoaded, reportIds, selectedMetrics]);
+  }, [rawSourceData, reportsLoaded, reportIds, selectedMetrics, cachedPivotData]);
   
-  const isLoading = isLoadingRawData && !cachedPivotData;
+  const isLoading = isLoadingRawData;
   
   // Report tab state - controlled from parent if props provided, otherwise internal
   const [internalReportTab, setInternalReportTab] = useState<ReportTab>("overview");
