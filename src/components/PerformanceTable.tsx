@@ -27,6 +27,7 @@ interface PerformanceTableProps {
   onLoadingComplete?: () => void;
   onFiltersChange?: (filters: FilterState) => void;
   isEditMode?: boolean;
+  useCachedData?: boolean; // New prop for cache toggle
 }
 
 export const PerformanceTable = ({
@@ -39,6 +40,7 @@ export const PerformanceTable = ({
   onLoadingComplete,
   onFiltersChange,
   isEditMode = false,
+  useCachedData = true, // Default to cached data for instant loading
 }: PerformanceTableProps) => {
   // Modal states
   const [filterModalOpen, setFilterModalOpen] = useState(false);
@@ -180,6 +182,7 @@ export const PerformanceTable = ({
     isLoadingData,
     loadPerformanceData,
     setIsLoadingData,
+    usingCachedData,
   } = usePerformanceTableData({
     reportId,
     reportIds,
@@ -193,6 +196,7 @@ export const PerformanceTable = ({
     dateOrder,
     dimensions,
     onLoadingComplete,
+    useCachedData, // Pass the cache toggle
   });
 
   // Sorting state

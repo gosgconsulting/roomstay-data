@@ -5,7 +5,7 @@ import { toast } from "@/hooks/use-toast";
 import { useVlookupMappings } from "@/hooks/useVlookupMappings";
 import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "./usePerformanceTableDimensions";
-import { useSourceData } from "@/hooks/dataSources";
+import { useSourceData, useCachedSourceData } from "@/hooks/dataSources";
 import type { DataSource } from "@/lib/data-sources/types";
 
 export interface TableRow {
@@ -33,10 +33,12 @@ interface UsePerformanceTableDataOptions {
   dateOrder: 'asc' | 'desc';
   dimensions: Dimension[];
   onLoadingComplete?: () => void;
+  useCachedData?: boolean; // New option to use database-cached data
 }
 
 /**
  * Hook for loading performance table data from source directly
+ * Now supports loading from database cache for instant loading
  */
 export function usePerformanceTableData({
   reportId,
@@ -51,6 +53,7 @@ export function usePerformanceTableData({
   dateOrder,
   dimensions,
   onLoadingComplete,
+  useCachedData = true, // Default to using cached data for instant loading
 }: UsePerformanceTableDataOptions) {
   const [tableData, setTableData] = useState<TableRow[]>([]);
   const [totalData, setTotalData] = useState<Record<string, any>>({});
@@ -61,6 +64,15 @@ export function usePerformanceTableData({
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
 
   const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
+
+  // Use cached database data for instant loading
+  const { 
+    data: cachedData, 
+    isLoading: isLoadingCached, 
+    error: cachedError 
+  } = useCachedSourceData(reportId, { 
+    enabled: useCachedData && !!reportId 
+  });
 
   // Fetch data source for the report
   useEffect(() => {
@@ -97,12 +109,25 @@ export function usePerformanceTableData({
     fetchDataSource();
   }, [reportId]);
 
-  // Use source data hook
+  // Use source data hook (fallback when not using cached data)
   const { data: sourceData, isLoading: isLoadingSource, error: sourceError } = useSourceData(
     dataSource,
     accountId,
-    { enabled: !!dataSource }
+    { enabled: !!dataSource && !useCachedData } // Disable when using cached data
   );
+
+  // Determine which data to use - cached data takes priority
+  const effectiveData = useMemo(() => {
+    if (useCachedData && cachedData?.transformedRows) {
+      console.log('[PERF-TABLE] Using cached database data:', cachedData.rowCount, 'rows');
+      return { transformedRows: cachedData.transformedRows };
+    }
+    if (sourceData?.transformedRows) {
+      console.log('[PERF-TABLE] Using source data:', sourceData.transformedRows.length, 'rows');
+      return { transformedRows: sourceData.transformedRows };
+    }
+    return null;
+  }, [useCachedData, cachedData, sourceData]);
 
   const loadPerformanceData = useCallback(async () => {
     setLoadError(null);
@@ -118,19 +143,6 @@ export function usePerformanceTableData({
     const compareDateFromFormatted = compareEnabled && filters.compareDateRange?.from ? format(filters.compareDateRange.from, 'yyyy-MM-dd') : undefined;
     const compareDateToFormatted = compareEnabled && filters.compareDateRange?.to ? format(filters.compareDateRange.to, 'yyyy-MM-dd') : undefined;
 
-    // console.log('[PERF-TABLE] Loading data:', {
-    //   reportId,
-    //   datePreset: filters.datePreset,
-    //   shouldFilterByDate,
-    //   dateFromFormatted,
-    //   dateToFormatted,
-    //   compareEnabled,
-    //   compareDateFromFormatted,
-    //   compareDateToFormatted,
-    //   hasSourceData: !!sourceData,
-    //   sourceDataRows: sourceData?.transformedRows?.length || 0
-    // });
-
     if ((!reportId && !reportIds) || groupByDimensions.length === 0) {
       setTableData([]);
       setTotalData({});
@@ -141,16 +153,16 @@ export function usePerformanceTableData({
       return;
     }
 
-    if (!sourceData) {
-      // console.log('[PERF-TABLE] No source data available');
+    if (!effectiveData) {
+      // console.log('[PERF-TABLE] No data available');
       setIsLoadingData(false);
       onLoadingComplete?.();
       return;
     }
 
     try {
-      let allRows = sourceData.transformedRows;
-      // console.log('[PERF-TABLE] Starting with', allRows.length, 'rows from source');
+      let allRows = effectiveData.transformedRows;
+      // console.log('[PERF-TABLE] Starting with', allRows.length, 'rows');
 
       // Apply vlookup mappings
       if (vlookupMappings.length > 0) {
@@ -401,7 +413,8 @@ export function usePerformanceTableData({
   }, [
     reportId,
     reportIds,
-    sourceData,
+    effectiveData,
+    useCachedData,
     groupByDimensions,
     breakdownByDimensions,
     thenByDimensions,
@@ -421,23 +434,31 @@ export function usePerformanceTableData({
     onLoadingComplete,
   ]);
 
-  // Load data when source data changes
+  // Load data when effective data changes (cached or source)
   useEffect(() => {
-    if (sourceData && !isLoadingSource) {
+    const isDataReady = useCachedData 
+      ? (cachedData && !isLoadingCached)
+      : (sourceData && !isLoadingSource);
+    
+    if (isDataReady) {
       loadPerformanceData();
     }
-  }, [sourceData, isLoadingSource, loadPerformanceData]);
+  }, [effectiveData, useCachedData, cachedData, isLoadingCached, sourceData, isLoadingSource, loadPerformanceData]);
 
-  // Handle source error
+  // Handle errors
   useEffect(() => {
-    if (sourceError) {
-      setLoadError(sourceError.message);
+    const error = useCachedData ? cachedError : sourceError;
+    if (error) {
+      setLoadError(error.message);
       setIsLoadingData(false);
       onLoadingComplete?.();
     }
-  }, [sourceError, onLoadingComplete]);
+  }, [useCachedData, cachedError, sourceError, onLoadingComplete]);
 
-  const isLoading = isLoadingData || isLoadingSource;
+  // Calculate loading state based on which data source is being used
+  const isLoading = useCachedData 
+    ? (isLoadingData || isLoadingCached)
+    : (isLoadingData || isLoadingSource);
 
   return {
     tableData,
@@ -447,6 +468,7 @@ export function usePerformanceTableData({
     isLoadingData: isLoading,
     loadPerformanceData,
     setIsLoadingData,
-    loadError: loadError || (sourceError ? sourceError.message : null),
+    loadError: loadError || (useCachedData ? cachedError?.message : sourceError?.message) || null,
+    usingCachedData: useCachedData && !!cachedData,
   };
 }

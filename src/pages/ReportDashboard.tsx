@@ -15,7 +15,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Database, Grid3x3, GitCompare, Star, Share2, Settings } from "lucide-react";
+import { ArrowLeft, Database, Grid3x3, GitCompare, Star, Share2, Settings, Clock } from "lucide-react";
 import { ShareModal } from "@/components/ShareModal";
 import { AddAICardModal } from "@/components/AddAICardModal";
 import { useQueryClient } from "@tanstack/react-query";
@@ -56,6 +56,7 @@ export default function ReportDashboard() {
   const [kpiSettingsOpen, setKpiSettingsOpen] = useState(false);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   const [isEditMode, setIsEditMode] = useState(false); // View mode by default
+  const [useCachedData, setUseCachedData] = useState(true); // Cache toggle - default ON for instant loading
   const [showCreateReportModal, setShowCreateReportModal] = useState(false); // NEW
   const [showAISummaryModal, setShowAISummaryModal] = useState(false);
 
@@ -572,6 +573,24 @@ export default function ReportDashboard() {
                   />
                 </div>
 
+                {/* Cache toggle button */}
+                <Button
+                  variant={useCachedData ? "outline" : "secondary"}
+                  size="sm"
+                  onClick={() => {
+                    setUseCachedData(!useCachedData);
+                    if (!useCachedData) {
+                      // Switching to cache mode - trigger refresh to use cached data
+                      refreshData();
+                    }
+                  }}
+                  className="gap-2"
+                  title={useCachedData ? "Using cached data for instant loading. Click to load from source." : "Loading from source. Click to use cached data for instant loading."}
+                >
+                  <Clock className="h-4 w-4" />
+                  {useCachedData ? "Cached" : "No cache"}
+                </Button>
+
                 {/* Cache status indicator */}
                 <CacheStatusIndicator 
                   reportId={reportId}
@@ -699,7 +718,8 @@ export default function ReportDashboard() {
                   accountId={accountId} 
                   visibilityRefreshTrigger={visibilityRefreshTrigger}
                   isEditMode={isEditMode}
-                  key={`table-${dataRefreshKey}-${loadingGeneration}`}
+                  useCachedData={useCachedData}
+                  key={`table-${dataRefreshKey}-${loadingGeneration}-${useCachedData}`}
                   onLoadingComplete={() => markComponentLoaded('table')}
                 />
 
