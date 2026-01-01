@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.sync-report-api-data]
 verify_jwt = false
+
+[functions.get-ai-summary-data]
+verify_jwt = false

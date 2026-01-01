@@ -1232,11 +1232,12 @@ const AISummaryPage = () => {
     }
   };
 
-  // Generate full API URL for a card (using card ID format)
+  // Generate full API URL for a card (using Supabase Edge Function)
   const getCardApiUrl = (card: AISummaryCard): string => {
     try {
-      // Use simple card ID format: /api/reports/card/{cardId}
-      return `${window.location.origin}/api/reports/card/${card.id}`;
+      // Use Supabase Edge Function URL for universal access
+      const supabaseUrl = 'https://zcxxwpwheevwavdcgfht.supabase.co';
+      return `${supabaseUrl}/functions/v1/get-ai-summary-data?cardId=${card.id}`;
     } catch (error) {
       console.error('[AISummaryPage] Error generating API URL:', error);
       return '';
