@@ -41,6 +41,9 @@ interface DataSource {
   column_mappings: any[] | null;
   report_id?: string;
   last_synced_at?: string | null;
+  sync_frequency?: string | null;
+  sync_time?: string | null;
+  sync_timezone?: string | null;
 }
 
 interface DataSourcesListModalProps {
@@ -621,6 +624,9 @@ export const DataSourcesListModal = ({
         isLoading={isSyncing !== null}
         lastSyncTime={syncTarget?.last_synced_at ?? null}
         totalRows={syncTotalRows}
+        currentSyncFrequency={syncTarget?.sync_frequency}
+        currentSyncTime={syncTarget?.sync_time}
+        currentSyncTimezone={syncTarget?.sync_timezone}
       />
     </>
   );
