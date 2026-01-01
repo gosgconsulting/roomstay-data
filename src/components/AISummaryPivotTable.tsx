@@ -914,7 +914,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     const config = sortConfig[tableId];
     if (!config?.column) {
       // For date-based tables, show most recent first by default
-      if (tableId === 'date-breakdown' || tableId === 'last-7-days') {
+      if (tableId === 'date-breakdown') {
         return [...rows].reverse();
       }
       return rows;
@@ -1139,76 +1139,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     return totals;
   };
 
-  // Compute last 7 days data grouped by day
-  const computeLast7DaysData = useMemo((): DateBreakdownRow[] => {
-    if (!reportsLoaded || Object.keys(rawSourceData).length === 0 || !selectedMetrics || selectedMetrics.length === 0) {
-      return [];
-    }
-
-    const now = new Date();
-
-    const last7DaysRows: DateBreakdownRow[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const day = subDays(now, i);
-      const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
-      const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
-      const dateRange = { start: dayStart, end: dayEnd };
-
-      // Aggregate metrics per report with dimension filters, then combine
-      const allDayMetrics: Record<string, number> = {};
-      selectedMetrics.forEach(m => allDayMetrics[m] = 0);
-      BASE_METRICS.forEach(m => allDayMetrics[m] = 0);
-
-      for (const reportId of reportIds) {
-        const reportData = rawSourceData[reportId];
-        if (!reportData) continue;
-
-        // Get dimension filter for this report from reportConfigs
-        const filterConfig = reportConfigs?.[reportId];
-        let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
-
-        if (filterConfig?.dimensionId && filterConfig.selectedValues?.length > 0) {
-          // Try to get dimension name from mergedMetricMap or fetch it
-          // For now, we'll use the dimensionId directly and let aggregateMetrics handle it
-          dimensionFilter = {
-            dimensionId: filterConfig.dimensionId,
-            dimensionName: filterConfig.dimensionName, // May be undefined, aggregateMetrics will handle it
-            values: filterConfig.selectedValues,
-          };
-        }
-
-        const reportDayMetrics = aggregateMetrics(
-          reportData.rows,
-          selectedMetrics,
-          dateRange,
-          dimensionFilter,
-          mergedMetricMap // IMPORTANT: pass mapping so metrics resolve by ID
-        );
-
-        // Sum metrics from this report
-        Object.keys(reportDayMetrics).forEach(metric => {
-          allDayMetrics[metric] = (allDayMetrics[metric] || 0) + (reportDayMetrics[metric] || 0);
-        });
-      }
-
-      // Calculate formula metrics from combined totals
-      const formulaValues = calculateFormulaMetrics(allDayMetrics);
-      selectedMetrics.forEach(metric => {
-        if (FORMULA_METRICS.includes(metric)) {
-          allDayMetrics[metric] = formulaValues[metric] || 0;
-        }
-      });
-
-      last7DaysRows.push({
-        dateGroup: format(day, 'MMM d, yyyy'),
-        dateRangeStart: format(day, 'yyyy-MM-dd'),
-        dateRangeEnd: format(day, 'yyyy-MM-dd'),
-        metrics: allDayMetrics,
-      });
-    }
-
-    return last7DaysRows;
-  }, [rawSourceData, reportIds, selectedMetrics, reportsLoaded, mergedMetricMap, reportConfigs]);
 
   if (isLoading) {
     return (
@@ -2036,53 +1966,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
         
-        {/* Last 7 Days Table - for selected period in overview mode */}
-        {activeReportTab === "overview" && (() => {
-          if (!computeLast7DaysData || computeLast7DaysData.length === 0) return null;
-          
-          return (
-            <div className="space-y-4">
-              <div className="border rounded-lg overflow-hidden">
-                <div className="bg-primary/5 px-4 py-2 border-b">
-                  <h4 className="font-semibold text-sm">
-                    Last 7 Days
-                  </h4>
-                </div>
-                <div className="overflow-hidden">
-                  <Table>
-                    <TableHeader className="sticky top-0 z-10 bg-muted/30">
-                      <TableRow className="bg-muted/30">
-                        <TableHead className="font-medium w-[200px]">Day</TableHead>
-                        {safeMetrics.map((metric) => renderSortableHeader('last-7-days', metric))}
-                      </TableRow>
-                    </TableHeader>
-                  </Table>
-                  <div className={computeLast7DaysData.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
-                    <Table>
-                      <TableBody>
-                        {sortRows(computeLast7DaysData, 'last-7-days', (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                          <TableRow
-                            key={row.dateRangeStart}
-                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                          >
-                            <TableCell className="font-medium text-sm w-[200px]">
-                              {row.dateGroup}
-                            </TableCell>
-                            {safeMetrics.map((metric) => (
-                              <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                {formatMetricValue(metric, row.metrics[metric] || 0)}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
         
         {/* Breakdowns - only show on individual report tabs, not on overview */}
         {activeReportTab !== "overview" && data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (() => {
@@ -2144,7 +2027,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
         
-        {/* Add per-channel weekly/last-7-days/monthly tables in individual report tabs */}
+        {/* Add per-channel weekly/monthly tables in individual report tabs */}
         {activeReportTab !== "overview" && (() => {
           // Build rows for the active report only
           const activeRows = rawSourceData[activeReportTab]?.rows || [];
