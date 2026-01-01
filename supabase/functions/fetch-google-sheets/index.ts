@@ -104,14 +104,12 @@ serve(async (req) => {
     const requestedRange = range || defaultRange;
     
     // Construct the range with tab name if provided
-    // Only include tab name if it's a non-empty string
+    // IMPORTANT: Do NOT trim the tab name because Google Sheets tab titles can legally
+    // contain leading/trailing spaces, and trimming would make the range invalid.
     let fullRange: string;
     if (tabName && typeof tabName === 'string' && tabName.trim() !== '') {
-      const trimmedTabName = tabName.trim();
-      // Always wrap tab names in single quotes for safety
-      // This prevents issues with numeric ranges like 1:101 being misinterpreted
       // Escape single quotes in tab name (double them)
-      const escapedTabName = trimmedTabName.replace(/'/g, "''");
+      const escapedTabName = tabName.replace(/'/g, "''");
       fullRange = `'${escapedTabName}'!${requestedRange}`;
     } else {
       fullRange = requestedRange;
