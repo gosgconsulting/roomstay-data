@@ -9,8 +9,7 @@ import { getCurrentMonthDateRange, Dimension } from "@/lib/data-loading-fix";
 import { format, parseISO } from "date-fns";
 import { useUser } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSourceData } from "@/hooks/dataSources";
-import type { DataSource } from "@/lib/data-sources/types";
+import { useCachedSourceData } from "@/hooks/dataSources";
 import { loadAccountDimensions } from "@/lib/data-loading-fix";
 
 interface KPIChartProps {
@@ -48,45 +47,9 @@ export function KPIChart({
   const [selectedMetric, setSelectedMetric] = useState<string>(initialMetric || "Revenue");
   const [isLoading, setIsLoading] = useState(true);
   const [availableMetrics, setAvailableMetrics] = useState<string[]>([]);
-  const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
 
   // console.log('[CHART-FIXED] Component render - reportId:', reportId, 'accountId:', accountId);
-
-  // Fetch data source for the report
-  useEffect(() => {
-    const fetchDataSource = async () => {
-      if (!reportId) {
-        setDataSource(null);
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from('data_sources')
-          .select('*')
-          .eq('report_id', reportId)
-          .limit(1)
-          .maybeSingle();
-
-        if (error) {
-          console.error('[CHART-FIXED] Error fetching data source:', error);
-          return;
-        }
-
-        if (data) {
-          setDataSource({
-            ...data,
-            column_mappings: (data.column_mappings as any) || null,
-          } as DataSource);
-        }
-      } catch (error) {
-        console.error('[CHART-FIXED] Error fetching data source:', error);
-      }
-    };
-
-    fetchDataSource();
-  }, [reportId]);
 
   // Load dimensions
   useEffect(() => {
@@ -104,12 +67,22 @@ export function KPIChart({
     loadDims();
   }, [accountId, user?.id, reportId]);
 
-  // Use source data hook
-  const { data: sourceData, isLoading: isLoadingSource } = useSourceData(
-    dataSource,
-    accountId,
-    { enabled: !!dataSource && !!reportId }
-  );
+  // Use cached source data hook - fetches from dimension_data table (instant loading)
+  const { 
+    data: cachedData, 
+    isLoading: isLoadingSource 
+  } = useCachedSourceData(reportId, { 
+    enabled: !!reportId 
+  });
+
+  // Transform cached data to match sourceData format
+  const sourceData = useMemo(() => {
+    if (!cachedData) return null;
+    return {
+      transformedRows: cachedData.transformedRows,
+      rowCount: cachedData.rowCount
+    };
+  }, [cachedData]);
 
   // Create a stable reference for filters to prevent unnecessary re-renders
   const stableFilters = useMemo(() => {

@@ -5,9 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/lib/auth";
-import { useSourceData } from "@/hooks/dataSources";
+import { useCachedSourceData } from "@/hooks/dataSources";
 import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
-import type { DataSource } from "@/lib/data-sources/types";
 
 interface KPIMetric {
   label: string;
@@ -45,7 +44,6 @@ export function KPIMetricsCards({
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
-  const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [visibleKPIs, setVisibleKPIs] = useState<string[] | null>(null);
   const [kpiOrder, setKpiOrder] = useState<string[] | null>(null);
 
@@ -61,41 +59,6 @@ export function KPIMetricsCards({
       loadDimensions();
     }
   }, [reportId, accountId, loadDimensions]);
-
-  // Fetch data source for the report
-  useEffect(() => {
-    const fetchDataSource = async () => {
-      if (!reportId) {
-        setDataSource(null);
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from('data_sources')
-          .select('*')
-          .eq('report_id', reportId)
-          .limit(1)
-          .maybeSingle();
-
-        if (error) {
-          console.error('[KPI-CARDS] Error fetching data source:', error);
-          return;
-        }
-
-        if (data) {
-          setDataSource({
-            ...data,
-            column_mappings: (data.column_mappings as any) || null,
-          } as DataSource);
-        }
-      } catch (error) {
-        console.error('[KPI-CARDS] Error fetching data source:', error);
-      }
-    };
-
-    fetchDataSource();
-  }, [reportId]);
 
   // Load KPI visibility settings
   useEffect(() => {
@@ -119,12 +82,23 @@ export function KPIMetricsCards({
     loadKPISettings();
   }, [user?.id, reportId, visibilityRefreshTrigger]);
 
-  // Use source data hook - fetch directly from Google Sheets/CSV (same as performance table)
-  const { data: sourceData, isLoading: isLoadingSource, error: sourceError } = useSourceData(
-    dataSource,
-    accountId,
-    { enabled: !!dataSource }
-  );
+  // Use cached source data hook - fetches from dimension_data table (instant loading)
+  const { 
+    data: cachedData, 
+    isLoading: isLoadingSource, 
+    error: sourceError 
+  } = useCachedSourceData(reportId, { 
+    enabled: !!reportId 
+  });
+
+  // Transform cached data to match sourceData format
+  const sourceData = useMemo(() => {
+    if (!cachedData) return null;
+    return {
+      transformedRows: cachedData.transformedRows,
+      rowCount: cachedData.rowCount
+    };
+  }, [cachedData]);
 
   // Create stable filters reference
   const stableFilters = useMemo(() => ({

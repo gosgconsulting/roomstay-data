@@ -27,6 +27,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { syncDataSource } from "@/lib/sync-utils";
 import { SyncModeModal } from "./SyncModeModal";
 import { useInvalidateSourceData } from "@/hooks/dataSources/useSourceData";
+import { useInvalidateCachedData } from "@/hooks/dataSources/useCachedSourceData";
 import { useQueryClient } from "@tanstack/react-query";
 
 interface DataSource {
@@ -66,6 +67,7 @@ export const DataSourcesListModal = ({
   onRefreshData
 }: DataSourcesListModalProps) => {
   const invalidateCache = useInvalidateSourceData();
+  const invalidateCachedData = useInvalidateCachedData();
   const queryClient = useQueryClient();
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -259,6 +261,7 @@ export const DataSourcesListModal = ({
         // Invalidate cache for this data source
         console.log('[SYNC] Invalidating cache after successful sync');
         invalidateCache.invalidate(dataSource.id, dataSource.report_id || reportId, updatedAt);
+        invalidateCachedData.invalidate(dataSource.report_id || reportId);
         
         // Also invalidate AI Summary cache to ensure Last 7 Days table updates
         queryClient.invalidateQueries({ queryKey: ['ai-summary'] });
