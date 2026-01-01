@@ -20,9 +20,67 @@ import {
 } from "@/components/ui/select";
 
 import { supabase } from "@/integrations/supabase/client";
-import { fetchSourceData, type SourceDataResult } from "@/hooks/dataSources/useSourceData";
 import { extractUniqueDimensionValues } from "@/lib/filters/extractDimensionValues";
 import { getUser } from "@/lib/auth";
+
+// Interface for cached dimension data result
+interface CachedDimensionResult {
+  transformedRows: any[];
+  rowCount: number;
+}
+
+// Helper function to fetch dimension data from database (much faster than source)
+async function fetchDimensionDataFromDB(reportId: string): Promise<CachedDimensionResult> {
+  const allRows: any[] = [];
+  const batchSize = 1000;
+  let offset = 0;
+  let hasMore = true;
+
+  console.log('[ADD-AI-CARD] Fetching dimension data from DB for report:', reportId);
+  const startTime = performance.now();
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('dimension_data')
+      .select('id, dimension_values, data_source_id, row_number')
+      .eq('report_id', reportId)
+      .order('row_number', { ascending: true })
+      .range(offset, offset + batchSize - 1);
+
+    if (error) {
+      console.error('[ADD-AI-CARD] Error fetching batch:', error);
+      throw error;
+    }
+
+    if (data && data.length > 0) {
+      allRows.push(...data);
+      offset += batchSize;
+      hasMore = data.length === batchSize;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  const duration = Math.round(performance.now() - startTime);
+  console.log('[ADD-AI-CARD] Dimension data fetch completed:', {
+    reportId,
+    rowCount: allRows.length,
+    duration: `${duration}ms`
+  });
+
+  // Transform to expected format
+  const transformedRows = allRows.map(row => ({
+    id: row.id,
+    row_number: row.row_number,
+    data_source_id: row.data_source_id,
+    dimension_values: row.dimension_values,
+  }));
+
+  return {
+    transformedRows,
+    rowCount: allRows.length,
+  };
+}
 import { Search, ChevronRight, ChevronLeft, Sparkles, Loader2, Calendar, Copy, ExternalLink } from "lucide-react";
 import { 
   getDateRange, 
@@ -236,7 +294,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
   const [activeReportTab, setActiveReportTab] = useState<string | null>(null);
   const [dataSources, setDataSources] = useState<Record<string, DataSource>>({});
-  const [sourceDataCache, setSourceDataCache] = useState<Record<string, SourceDataResult>>({});
+  const [sourceDataCache, setSourceDataCache] = useState<Record<string, CachedDimensionResult>>({});
   const [loadingReports, setLoadingReports] = useState<Set<string>>(new Set());
   const [dimensions, setDimensions] = useState<Record<string, Dimension[]>>({});
   const [reportConfigs, setReportConfigs] = useState<Record<string, ReportDimensionConfig>>({});
@@ -461,9 +519,9 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
             setDimensions(prev => ({ ...prev, [reportId]: [] }));
           }
 
-          // Fetch source data directly from Google Sheets/CSV
-          const sourceData = await fetchSourceData(dsData as any, user.id, accountId);
-          setSourceDataCache(prev => ({ ...prev, [reportId]: sourceData }));
+          // Fetch dimension data from database (cached data - much faster than source)
+          const dimensionData = await fetchDimensionDataFromDB(reportId);
+          setSourceDataCache(prev => ({ ...prev, [reportId]: dimensionData }));
 
         } catch (err) {
           console.error(`Error fetching data for report ${reportId}:`, err);
@@ -799,9 +857,9 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
       
       dsData = fetchedDsData;
 
-      console.log(`[computePivotData] Fetching source data for ${report.name}`);
+      console.log(`[computePivotData] Fetching dimension data from DB for ${report.name}`);
       try {
-        sourceData = await fetchSourceData(dsData as any, userId, accountId);
+        sourceData = await fetchDimensionDataFromDB(report.id);
         console.log(`[computePivotData] Got ${sourceData?.transformedRows?.length || 0} rows for ${report.name}`);
       } catch (err) {
         console.error(`[computePivotData] Error fetching source data for report ${report.id}:`, err);
