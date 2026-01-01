@@ -631,6 +631,24 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // Year selector state - defaults to current year
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   
+  // Reset period selection when year changes to pick first available option
+  React.useEffect(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const isCurrentYear = selectedYear === currentYear;
+    
+    // Set default period for the selected year
+    if (isCurrentYear) {
+      // Current year: default to MTD (current month key)
+      handleTabChange("mtd");
+    } else {
+      // Past year: default to January of that year
+      const janKey = format(new Date(selectedYear, 0, 1), "yyyy-MM");
+      handleTabChange(janKey);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedYear]);
+  
   // Use React Query for cached raw source data - persists across tab switches
   // Always fetch fresh data from sources (previous way of loading)
   const { data: rawSourceData = {}, isLoading: isLoadingRawData } = useAISummaryRawData(
@@ -831,6 +849,41 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     // Sort years descending (newest first)
     return Array.from(years).sort((a, b) => b - a);
   }, [rawSourceData, reportsLoaded]);
+
+  // Generate date options dynamically based on selected year
+  // Current year: YTD, MTD (current month), previous months
+  // Past years: All 12 months of that year
+  const effectiveDateOptions = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const isCurrentYear = selectedYear === currentYear;
+    const options: { value: string; label: string }[] = [];
+    
+    if (isCurrentYear) {
+      // Current year: show YTD + months from current going back to January
+      options.push({ value: "ytd", label: "YTD" });
+      
+      let current = now;
+      const yearStart = new Date(currentYear, 0, 1);
+      while (current >= yearStart) {
+        const monthKey = format(current, "yyyy-MM");
+        // Label current month as "MTD", others as month name
+        const isMtd = current.getMonth() === now.getMonth() && current.getFullYear() === now.getFullYear();
+        const monthLabel = isMtd ? "MTD" : format(current, "MMMM");
+        options.push({ value: monthKey, label: monthLabel });
+        current = subMonths(current, 1);
+      }
+    } else {
+      // Past years: show all 12 months (Jan-Dec)
+      for (let m = 0; m < 12; m++) {
+        const monthKey = format(new Date(selectedYear, m, 1), "yyyy-MM");
+        const monthLabel = format(new Date(selectedYear, m, 1), "MMMM");
+        options.push({ value: monthKey, label: monthLabel });
+      }
+    }
+    
+    return options;
+  }, [selectedYear]);
 
   // Sorting state for tables - keyed by table identifier
   const [sortConfig, setSortConfig] = useState<Record<string, { column: string | null; direction: 'asc' | 'desc' }>>({});
@@ -1439,8 +1492,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     const effectiveStart = actualStart || periodStart;
     const effectiveEnd = actualEnd || (tab === 'mtd' || tab === 'ytd' ? now : periodMaxEnd);
     
-    // Get period label from dateOptions
-    const periodLabel = dateOptions.find(o => o.value === tab)?.label || tab.toUpperCase();
+    // Get period label from effectiveDateOptions
+    const periodLabel = effectiveDateOptions.find(o => o.value === tab)?.label || tab.toUpperCase();
     const currentDateStr = `${format(effectiveStart, 'MMM d')} - ${format(effectiveEnd, 'MMM d, yyyy')}`;
     const currentLabel = `${periodLabel} (${currentDateStr})`;
     
@@ -1615,8 +1668,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           </Select>
         )}
         
-        {/* Single Date Period Select */}
-        {dateOptions.length > 0 && (
+        {/* Single Date Period Select - uses dynamically generated options based on selected year */}
+        {effectiveDateOptions.length > 0 && (
           <Select 
             value={selectedDatePeriod || activeTab} 
             onValueChange={(v) => {
@@ -1630,7 +1683,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               <SelectValue placeholder="Select date" />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border z-50">
-              {dateOptions.map((option) => (
+              {effectiveDateOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
@@ -1858,8 +1911,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           
           const periodComparisonTotals = periodComparisonData.length > 0 ? calculateTotals(periodComparisonData) : null;
           
-          // Get period label from dateOptions
-          const periodLabel = dateOptions.find(o => o.value === period)?.label || period;
+          // Get period label from effectiveDateOptions
+          const periodLabel = effectiveDateOptions.find(o => o.value === period)?.label || period;
           
           // Get date range labels for display
           const dateRangeLabels = getDateRangeLabel(period as DateTab, comparisonType);
