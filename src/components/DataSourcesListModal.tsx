@@ -15,10 +15,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useState, useEffect } from "react";
-import { FileSpreadsheet, RefreshCw, Pencil, Eye, Trash2, Plus } from "lucide-react";
+import { FileSpreadsheet, RefreshCw, Pencil, Eye, Trash2, Plus, Settings } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { EditMappingModal } from "./EditMappingModal";
+import { EditDataSourceModal } from "./EditDataSourceModal";
 import { ViewDataModal } from "./ViewDataModal";
 import { DataSourceSelectionModal } from "./DataSourceSelectionModal";
 import { UnifiedDataSourceModal } from "./UnifiedDataSourceModal";
@@ -69,6 +70,7 @@ export const DataSourcesListModal = ({
   const [editingDataSource, setEditingDataSource] = useState<DataSource | null>(null);
   const [viewingDataSource, setViewingDataSource] = useState<DataSource | null>(null);
   const [showEditMappingModal, setShowEditMappingModal] = useState(false);
+  const [showEditDataSourceModal, setShowEditDataSourceModal] = useState(false);
   const [showViewDataModal, setShowViewDataModal] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingDataSource, setDeletingDataSource] = useState<DataSource | null>(null);
@@ -479,11 +481,22 @@ export const DataSourcesListModal = ({
                               size="icon"
                               onClick={() => {
                                 setEditingDataSource(dataSource);
+                                setShowEditDataSourceModal(true);
+                              }}
+                              title="Edit Data Source"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => {
+                                setEditingDataSource(dataSource);
                                 setShowEditMappingModal(true);
                               }}
                               title="Edit Mappings"
                             >
-                              <Pencil className="h-4 w-4" />
+                              <Settings className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="outline"
@@ -547,6 +560,19 @@ export const DataSourcesListModal = ({
         reportId={reportId}
         sourceType={selectedSourceType}
         onSuccess={handleDataSourceSuccess}
+      />
+
+      {/* Edit Data Source Modal */}
+      <EditDataSourceModal
+        open={showEditDataSourceModal}
+        onOpenChange={setShowEditDataSourceModal}
+        dataSource={editingDataSource}
+        onSuccess={() => {
+          loadDataSources();
+          if (onDataSync) onDataSync();
+        }}
+        onRefreshData={onRefreshData}
+        accountId={accountId}
       />
 
       {/* Edit Mapping Modal */}
