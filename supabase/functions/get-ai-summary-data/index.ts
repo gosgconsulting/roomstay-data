@@ -41,7 +41,7 @@ const isWithinDateRange = (date: Date, start: Date, end: Date): boolean => {
   return date >= start && date <= end;
 };
 
-const getDateRange = (tab: string): { start: Date; end: Date } => {
+const getDateRange = (tab: string, sinceDate?: string): { start: Date; end: Date } => {
   const now = new Date();
   
   // Handle specific month keys like "2025-11"
@@ -50,6 +50,12 @@ const getDateRange = (tab: string): { start: Date; end: Date } => {
     const start = new Date(year, month - 1, 1);
     const end = new Date(year, month, 0, 23, 59, 59, 999);
     return { start, end };
+  }
+
+  // For "all" - use since_date to current date
+  if (tab === "all" || !tab) {
+    const start = sinceDate ? new Date(sinceDate) : new Date(now.getFullYear(), 0, 1);
+    return { start, end: now };
   }
   
   switch (tab) {
@@ -224,11 +230,15 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[GET-AI-SUMMARY-DATA] Built dimension maps for ${Object.keys(reportDimensionMaps).length} reports`);
 
-    // Get date ranges
+    // Get date ranges - use "all" to get all data since sinceDate
+    const allDataRange = getDateRange('all', sinceDate);
     const mtdRange = getDateRange('mtd');
     const ytdRange = getDateRange('ytd');
 
+    console.log(`[GET-AI-SUMMARY-DATA] Date ranges - All: ${allDataRange.start.toISOString()} to ${allDataRange.end.toISOString()}, MTD: ${mtdRange.start.toISOString()} to ${mtdRange.end.toISOString()}, YTD: ${ytdRange.start.toISOString()} to ${ytdRange.end.toISOString()}`);
+
     // Aggregate metrics for each report
+    const allResults: any[] = [];
     const mtdResults: any[] = [];
     const ytdResults: any[] = [];
 
@@ -237,8 +247,13 @@ Deno.serve(async (req: Request) => {
       const dateDimId = reportDateDimIds[reportId];
       
       if (!dateDimId) {
-        console.log(`[GET-AI-SUMMARY-DATA] No date dimension found for report ${reportId}`);
+        console.log(`[GET-AI-SUMMARY-DATA] No date dimension found for report ${reportId}, dimension map keys: ${Object.keys(dimMap).join(', ')}`);
         // Still add empty metrics for this report
+        allResults.push({
+          reportId,
+          reportName: reportNameMap[reportId] || 'Unknown',
+          metrics: {}
+        });
         mtdResults.push({
           reportId,
           reportName: reportNameMap[reportId] || 'Unknown',
@@ -265,6 +280,22 @@ Deno.serve(async (req: Request) => {
 
       console.log(`[GET-AI-SUMMARY-DATA] Fetched ${dimensionData?.length || 0} rows for report ${reportId}`);
 
+      // Sample the first row to debug date dimension
+      if (dimensionData && dimensionData.length > 0) {
+        const sampleRow = dimensionData[0].dimension_values || {};
+        const sampleDateValue = sampleRow[dateDimId];
+        console.log(`[GET-AI-SUMMARY-DATA] Sample date value for ${reportId}: "${sampleDateValue}" (dim ID: ${dateDimId})`);
+      }
+
+      // Aggregate for ALL data (since sinceDate)
+      const allMetrics = aggregateMetricsFromData(
+        dimensionData || [],
+        selectedMetrics,
+        dimMap,
+        dateDimId,
+        allDataRange
+      );
+
       // Aggregate for MTD
       const mtdMetrics = aggregateMetricsFromData(
         dimensionData || [],
@@ -283,6 +314,12 @@ Deno.serve(async (req: Request) => {
         ytdRange
       );
 
+      allResults.push({
+        reportId,
+        reportName: reportNameMap[reportId] || 'Unknown',
+        metrics: allMetrics
+      });
+
       mtdResults.push({
         reportId,
         reportName: reportNameMap[reportId] || 'Unknown',
@@ -296,10 +333,12 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Count total data points
+    // Count total data points from all results
     let totalCount = 0;
-    mtdResults.forEach(r => {
-      totalCount += Object.keys(r.metrics).length;
+    allResults.forEach(r => {
+      Object.values(r.metrics).forEach((v: any) => {
+        if (typeof v === 'number' && v > 0) totalCount++;
+      });
     });
 
     const responseData = {
@@ -309,13 +348,14 @@ Deno.serve(async (req: Request) => {
       to: toDate,
       cached: false,
       data: {
+        all: allResults,
         mtd: mtdResults,
         ytd: ytdResults
       },
       reports: reportIds.map((id: string) => ({
         report_id: id,
         report_name: reportNameMap[id] || 'Unknown',
-        count: mtdResults.find(r => r.reportId === id)?.metrics ? Object.keys(mtdResults.find(r => r.reportId === id)?.metrics || {}).length : 0
+        count: allResults.find(r => r.reportId === id)?.metrics ? Object.keys(allResults.find(r => r.reportId === id)?.metrics || {}).length : 0
       })),
       dimensions: []
     };
