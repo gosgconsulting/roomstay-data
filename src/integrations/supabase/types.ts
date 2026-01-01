@@ -887,6 +887,81 @@ export type Database = {
           },
         ]
       }
+      report_daily_metrics: {
+        Row: {
+          account_id: string | null
+          clicks: number | null
+          conversion_rate: number | null
+          conversions: number | null
+          cost: number | null
+          cpc: number | null
+          created_at: string
+          ctr: number | null
+          date: string
+          id: string
+          impressions: number | null
+          report_id: string
+          report_name: string
+          revenue: number | null
+          roas: number | null
+          row_count: number | null
+          updated_at: string
+        }
+        Insert: {
+          account_id?: string | null
+          clicks?: number | null
+          conversion_rate?: number | null
+          conversions?: number | null
+          cost?: number | null
+          cpc?: number | null
+          created_at?: string
+          ctr?: number | null
+          date: string
+          id?: string
+          impressions?: number | null
+          report_id: string
+          report_name: string
+          revenue?: number | null
+          roas?: number | null
+          row_count?: number | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string | null
+          clicks?: number | null
+          conversion_rate?: number | null
+          conversions?: number | null
+          cost?: number | null
+          cpc?: number | null
+          created_at?: string
+          ctr?: number | null
+          date?: string
+          id?: string
+          impressions?: number | null
+          report_id?: string
+          report_name?: string
+          revenue?: number | null
+          roas?: number | null
+          row_count?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_daily_metrics_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_daily_metrics_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       report_shares: {
         Row: {
           created_at: string
