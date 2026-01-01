@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,10 @@ interface SyncModeModalProps {
   isLoading?: boolean;
   lastSyncTime?: string | null;
   totalRows?: number;
+  // Current sync settings from database
+  currentSyncFrequency?: string | null;
+  currentSyncTime?: string | null;
+  currentSyncTimezone?: string | null;
 }
 
 export const SyncModeModal = ({ 
@@ -23,16 +27,30 @@ export const SyncModeModal = ({
   onSync, 
   isLoading = false,
   lastSyncTime,
-  totalRows = 0
+  totalRows = 0,
+  currentSyncFrequency,
+  currentSyncTime,
+  currentSyncTimezone
 }: SyncModeModalProps) => {
   // Only full refresh is allowed
   const selectedMode: 'full' = 'full';
 
-  // NEW: Auto sync state
+  // Initialize state from current settings or defaults
   const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(true);
   const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'monthly' | 'manual'>('daily');
   const [syncTime, setSyncTime] = useState<string>('02:00');
   const [timezone, setTimezone] = useState<string>('Asia/Singapore');
+  
+  // Update state when modal opens with new data
+  useEffect(() => {
+    if (open) {
+      const isCurrentlyEnabled = currentSyncFrequency && currentSyncFrequency !== 'manual';
+      setAutoSyncEnabled(isCurrentlyEnabled ?? true);
+      setFrequency((currentSyncFrequency as 'daily' | 'weekly' | 'monthly' | 'manual') || 'daily');
+      setSyncTime(currentSyncTime?.slice(0, 5) || '02:00');
+      setTimezone(currentSyncTimezone || 'Asia/Singapore');
+    }
+  }, [open, currentSyncFrequency, currentSyncTime, currentSyncTimezone]);
 
   const handleSync = () => {
     onSync('full', {
