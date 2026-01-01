@@ -201,6 +201,59 @@ export type Database = {
           },
         ]
       }
+      api_keys: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          key_hash: string
+          key_prefix: string
+          last_used_at: string | null
+          name: string
+          report_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          key_hash: string
+          key_prefix: string
+          last_used_at?: string | null
+          name: string
+          report_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          key_hash?: string
+          key_prefix?: string
+          last_used_at?: string | null
+          name?: string
+          report_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_keys_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       budgets: {
         Row: {
           account_id: string | null
@@ -792,6 +845,47 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      report_api_data: {
+        Row: {
+          created_at: string
+          data: Json
+          date_from: string
+          date_to: string
+          id: string
+          period_type: string
+          report_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          date_from: string
+          date_to: string
+          id?: string
+          period_type: string
+          report_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          date_from?: string
+          date_to?: string
+          id?: string
+          period_type?: string
+          report_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_api_data_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       report_shares: {
         Row: {
