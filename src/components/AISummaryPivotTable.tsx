@@ -1753,56 +1753,48 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   </>
                 )}
               </div>
-              <div className="overflow-hidden">
+              <div className="overflow-x-auto">
                 <Table>
                   <TableHeader className="sticky top-0 z-10 bg-muted/50">
                     <TableRow className="bg-muted/50">
-                      <TableHead className="font-semibold w-[200px]">
+                      <TableHead className="font-semibold min-w-[200px]">
                         Report
                       </TableHead>
                       {safeMetrics.map((metric) => renderSortableHeader('main-table', metric))}
                     </TableRow>
                   </TableHeader>
-                </Table>
-                <div className={periodData.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
-                  <Table>
-                    <TableBody>
-                      {sortRows(periodData, 'main-table', (row, metric) => row.metrics[metric] || 0).map((reportData, idx) => {
-                        const comparisonMetrics = getComparisonMetrics(reportData.reportId, period as DateTab);
-                        return (
-                          <TableRow
-                            key={reportData.reportId}
-                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}
-                          >
-                            <TableCell className="font-medium w-[200px]">
-                              {reportData.reportName}
+                  <TableBody>
+                    {sortRows(periodData, 'main-table', (row, metric) => row.metrics[metric] || 0).map((reportData, idx) => {
+                      const comparisonMetrics = getComparisonMetrics(reportData.reportId, period as DateTab);
+                      return (
+                        <TableRow
+                          key={reportData.reportId}
+                          className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}
+                        >
+                          <TableCell className="font-medium min-w-[200px]">
+                            {reportData.reportName}
+                          </TableCell>
+                          {safeMetrics.map((metric) => (
+                            <TableCell key={metric} className="text-right tabular-nums">
+                              {renderMetricCell(reportData.metrics[metric] || 0, metric, comparisonMetrics)}
                             </TableCell>
-                            {safeMetrics.map((metric) => (
-                              <TableCell key={metric} className="text-right tabular-nums">
-                                {renderMetricCell(reportData.metrics[metric] || 0, metric, comparisonMetrics)}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-                {/* Total Row - only show when multiple reports */}
-                {periodData.length > 1 && (
-                  <Table>
-                    <TableBody>
+                          ))}
+                        </TableRow>
+                      );
+                    })}
+                    {/* Total Row - only show when multiple reports */}
+                    {periodData.length > 1 && (
                       <TableRow className="bg-muted font-semibold border-t-2">
-                        <TableCell className="w-[200px]">Total</TableCell>
+                        <TableCell className="min-w-[200px]">Total</TableCell>
                         {safeMetrics.map((metric) => (
                           <TableCell key={metric} className="text-right tabular-nums">
                             {renderMetricCell(periodTotals[metric] || 0, metric, periodComparisonTotals, true)}
                           </TableCell>
                         ))}
                       </TableRow>
-                    </TableBody>
-                  </Table>
-                )}
+                    )}
+                  </TableBody>
+                </Table>
               </div>
               {data.table_insights?.summary?.[period as DateTab] && (
                 <div className="bg-muted/30 rounded-b-lg p-3 border-t border-border/50">
