@@ -250,13 +250,15 @@ const formatMetricValue = (metric: string, value: number): string => {
 };
 
 // Export these utilities for use in other files
-export const getDateRange = (tab: DateTab): { start: Date; end: Date } => {
+export const getDateRange = (tab: DateTab, targetYear?: number): { start: Date; end: Date } => {
   const now = new Date();
+  const year = targetYear || now.getFullYear();
+  const isCurrentYear = year === now.getFullYear();
   
   // Handle specific month keys like "2025-11"
   if (tab.match(/^\d{4}-\d{2}$/)) {
-    const [year, month] = tab.split('-').map(Number);
-    const monthDate = new Date(year, month - 1, 1);
+    const [monthYear, month] = tab.split('-').map(Number);
+    const monthDate = new Date(monthYear, month - 1, 1);
     return {
       start: startOfMonth(monthDate),
       end: endOfMonth(monthDate),
@@ -265,27 +267,62 @@ export const getDateRange = (tab: DateTab): { start: Date; end: Date } => {
   
   switch (tab) {
     case "last_month":
-      const lastMonth = subMonths(now, 1);
-      return {
-        start: startOfMonth(lastMonth),
-        end: endOfMonth(lastMonth),
-      };
+      // For selected year, last month is December of that year (unless current year)
+      if (isCurrentYear) {
+        const lastMonth = subMonths(now, 1);
+        return {
+          start: startOfMonth(lastMonth),
+          end: endOfMonth(lastMonth),
+        };
+      } else {
+        const lastMonth = new Date(year, 11, 1); // December
+        return {
+          start: startOfMonth(lastMonth),
+          end: endOfMonth(lastMonth),
+        };
+      }
     case "mtd":
-      return {
-        start: startOfMonth(now),
-        end: now,
-      };
+      // For selected year: if current year, use current date; otherwise use end of year
+      if (isCurrentYear) {
+        return {
+          start: startOfMonth(now),
+          end: now,
+        };
+      } else {
+        // For past years, show December (full month)
+        const dec = new Date(year, 11, 1);
+        return {
+          start: startOfMonth(dec),
+          end: endOfMonth(dec),
+        };
+      }
     case "ytd":
-      return {
-        start: startOfYear(now),
-        end: now,
-      };
+      // For selected year: Jan 1 to now (current year) or Jan 1 to Dec 31 (past years)
+      if (isCurrentYear) {
+        return {
+          start: startOfYear(now),
+          end: now,
+        };
+      } else {
+        return {
+          start: new Date(year, 0, 1),
+          end: new Date(year, 11, 31),
+        };
+      }
     default:
-      // Fallback to MTD
-      return {
-        start: startOfMonth(now),
-        end: now,
-      };
+      // Fallback to MTD logic
+      if (isCurrentYear) {
+        return {
+          start: startOfMonth(now),
+          end: now,
+        };
+      } else {
+        const dec = new Date(year, 11, 1);
+        return {
+          start: startOfMonth(dec),
+          end: endOfMonth(dec),
+        };
+      }
   }
 };
 
@@ -293,12 +330,15 @@ export const getDateRange = (tab: DateTab): { start: Date; end: Date } => {
 // Uses YTD-style comparison: same day of month/year for accurate comparison
 export const getComparisonDateRange = (
   tab: DateTab, 
-  comparisonType: ComparisonType
+  comparisonType: ComparisonType,
+  targetYear?: number
 ): { start: Date; end: Date } | null => {
   if (comparisonType === "none") return null;
   
-  const currentRange = getDateRange(tab);
+  const currentRange = getDateRange(tab, targetYear);
   const now = new Date();
+  const year = targetYear || now.getFullYear();
+  const isCurrentYear = year === now.getFullYear();
   
   // Handle specific month tabs (e.g., "2025-11")
   const isSpecificMonth = tab.match(/^\d{4}-\d{2}$/);
@@ -307,8 +347,8 @@ export const getComparisonDateRange = (
     // Previous period = same day range in the previous month/period
     if (isSpecificMonth) {
       // For specific months, compare to the previous month
-      const [year, month] = tab.split('-').map(Number);
-      const monthDate = new Date(year, month - 1, 1);
+      const [monthYear, month] = tab.split('-').map(Number);
+      const monthDate = new Date(monthYear, month - 1, 1);
       const prevMonth = subMonths(monthDate, 1);
       return {
         start: startOfMonth(prevMonth),
@@ -319,24 +359,42 @@ export const getComparisonDateRange = (
     switch (tab) {
       case "last_month": {
         // Compare to 2 months ago (full month)
-        const twoMonthsAgo = subMonths(now, 2);
-        return {
-          start: startOfMonth(twoMonthsAgo),
-          end: endOfMonth(twoMonthsAgo),
-        };
+        if (isCurrentYear) {
+          const twoMonthsAgo = subMonths(now, 2);
+          return {
+            start: startOfMonth(twoMonthsAgo),
+            end: endOfMonth(twoMonthsAgo),
+          };
+        } else {
+          // For past years, compare December to November
+          const nov = new Date(year, 10, 1);
+          return {
+            start: startOfMonth(nov),
+            end: endOfMonth(nov),
+          };
+        }
       }
       case "mtd": {
         // Compare to same day of previous month (e.g., Dec 1-8 vs Nov 1-8)
-        const prevMonth = subMonths(now, 1);
-        const dayOfMonth = now.getDate();
-        const prevMonthStart = startOfMonth(prevMonth);
-        // Ensure we don't exceed the previous month's days
-        const prevMonthEnd = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), 
-          Math.min(dayOfMonth, endOfMonth(prevMonth).getDate()));
-        return {
-          start: prevMonthStart,
-          end: prevMonthEnd,
-        };
+        if (isCurrentYear) {
+          const prevMonth = subMonths(now, 1);
+          const dayOfMonth = now.getDate();
+          const prevMonthStart = startOfMonth(prevMonth);
+          // Ensure we don't exceed the previous month's days
+          const prevMonthEnd = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), 
+            Math.min(dayOfMonth, endOfMonth(prevMonth).getDate()));
+          return {
+            start: prevMonthStart,
+            end: prevMonthEnd,
+          };
+        } else {
+          // For past years, compare December to November
+          const nov = new Date(year, 10, 1);
+          return {
+            start: startOfMonth(nov),
+            end: endOfMonth(nov),
+          };
+        }
       }
       case "ytd": {
         // Compare to same period last year (Jan 1 to same day/month)
@@ -570,6 +628,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   };
   const [comparisonType, setComparisonType] = useState<ComparisonType>("none");
   
+  // Year selector state - defaults to current year
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  
   // Use React Query for cached raw source data - persists across tab switches
   // Always fetch fresh data from sources (previous way of loading)
   const { data: rawSourceData = {}, isLoading: isLoadingRawData } = useAISummaryRawData(
@@ -623,17 +684,18 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     // If we have fresh raw source data, compute from that (previous way)
     if (reportsLoaded && Object.keys(mergedMetricMap).length > 0) {
       const dateRanges = {
-        mtd: getDateRange("mtd"),
-        ytd: getDateRange("ytd"),
+        mtd: getDateRange("mtd", selectedYear),
+        ytd: getDateRange("ytd", selectedYear),
       };
       
-      // Generate month keys for the current year (from January to current month)
+      // Generate month keys for the selected year
       const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth(); // 0-indexed
+      const isCurrentYear = selectedYear === now.getFullYear();
+      // For current year, go up to current month; for past years, include all 12 months
+      const maxMonth = isCurrentYear ? now.getMonth() : 11; // 0-indexed
       const monthKeys: string[] = [];
-      for (let m = 0; m <= currentMonth; m++) {
-        monthKeys.push(format(new Date(currentYear, m, 1), "yyyy-MM"));
+      for (let m = 0; m <= maxMonth; m++) {
+        monthKeys.push(format(new Date(selectedYear, m, 1), "yyyy-MM"));
       }
       
       const newData: CachedPivotData = { 
@@ -670,7 +732,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         
         // Compute monthly data - now passing mergedMetricMap
         monthKeys.forEach((monthKey) => {
-          const monthRange = getDateRange(monthKey);
+          const monthRange = getDateRange(monthKey, selectedYear);
           const metrics = aggregateMetrics(
             reportData.rows,
             selectedMetrics,
@@ -709,7 +771,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     }
     
     return { mtd: [], ytd: [] };
-  }, [rawSourceData, reportsLoaded, reportIds, selectedMetrics, cachedPivotData, mergedMetricMap]);
+  }, [rawSourceData, reportsLoaded, reportIds, selectedMetrics, cachedPivotData, mergedMetricMap, selectedYear]);
   
   const isLoading = isLoadingRawData;
   
@@ -726,6 +788,49 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   
   // State for YTD chart KPI selector
   const [chartKpi, setChartKpi] = useState<string>("Revenue");
+  
+  // Extract available years from raw source data
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    const currentYear = new Date().getFullYear();
+    years.add(currentYear); // Always include current year
+    
+    if (!reportsLoaded || Object.keys(rawSourceData).length === 0) {
+      return [currentYear];
+    }
+    
+    // Scan all rows in all reports for date values
+    Object.values(rawSourceData).forEach((reportData) => {
+      if (!reportData?.rows) return;
+      
+      reportData.rows.forEach((row: any) => {
+        const rowData = row.dimension_values || row;
+        
+        // Try to find date value
+        let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
+        
+        // Search for date patterns if not found by name
+        if (!dateValue) {
+          for (const [, val] of Object.entries(rowData)) {
+            if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+              dateValue = val as string;
+              break;
+            }
+          }
+        }
+        
+        if (dateValue) {
+          const parsedDate = parseDate(dateValue);
+          if (parsedDate) {
+            years.add(parsedDate.getFullYear());
+          }
+        }
+      });
+    });
+    
+    // Sort years descending (newest first)
+    return Array.from(years).sort((a, b) => b - a);
+  }, [rawSourceData, reportsLoaded]);
 
   // Sorting state for tables - keyed by table identifier
   const [sortConfig, setSortConfig] = useState<Record<string, { column: string | null; direction: 'asc' | 'desc' }>>({});
@@ -922,7 +1027,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       return [];
     }
     
-    const dateRange = getDateRange(tab);
+    const dateRange = getDateRange(tab, selectedYear);
     const results: ReportMetrics[] = [];
     
     for (const reportId of reportIds) {
@@ -1150,7 +1255,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     }
     
     const results: ReportMetrics[] = [];
-    const currentDateRange = getDateRange(tab);
+    const currentDateRange = getDateRange(tab, selectedYear);
     
     for (const reportId of reportIds) {
       const reportData = rawSourceData[reportId];
@@ -1491,6 +1596,25 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         })()}
         
         <div className="flex items-center gap-3">
+        {/* Year Selector */}
+        {availableYears.length > 0 && (
+          <Select 
+            value={selectedYear.toString()} 
+            onValueChange={(v) => setSelectedYear(parseInt(v, 10))}
+          >
+            <SelectTrigger className="w-[100px]">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent className="bg-popover border-border z-50">
+              {availableYears.map((year) => (
+                <SelectItem key={year} value={year.toString()}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        
         {/* Single Date Period Select */}
         {dateOptions.length > 0 && (
           <Select 
@@ -1975,7 +2099,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
           const buildWeeklyRows = () => {
             const weekGroups: Record<string, any[]> = {};
-            const range = getDateRange(selectedDatePeriod || activeTab);
+            const range = getDateRange(selectedDatePeriod || activeTab, selectedYear);
             activeRows.forEach(row => {
               const rowDate = parseDate((row.dimension_values || row).Date || (row.dimension_values || row).date || (row.dimension_values || row).Day);
               if (!rowDate) return;
@@ -1986,13 +2110,13 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             });
             return Object.entries(weekGroups).map(([dateGroup, rows]) => ({
               dateGroup,
-              metrics: aggregateMetrics(rows, selectedMetrics, getDateRange(selectedDatePeriod || activeTab), undefined, mergedMetricMap),
+              metrics: aggregateMetrics(rows, selectedMetrics, getDateRange(selectedDatePeriod || activeTab, selectedYear), undefined, mergedMetricMap),
             }));
           };
 
           const buildMonthlyRowsYTD = () => {
             const monthGroups: Record<string, any[]> = {};
-            const range = getDateRange('ytd');
+            const range = getDateRange('ytd', selectedYear);
             activeRows.forEach(row => {
               const rowDate = parseDate((row.dimension_values || row).Date || (row.dimension_values || row).date || (row.dimension_values || row).Day);
               if (!rowDate) return;
