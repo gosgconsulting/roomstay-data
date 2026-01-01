@@ -582,11 +582,46 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // Compute if data is ready
   const reportsLoaded = Object.keys(rawSourceData).length > 0;
   
+  // Build merged metric map for dimension ID resolution
+  // This must be computed before the data useMemo to provide mapping info
+  const [mergedMetricMap, setMergedMetricMap] = React.useState<Record<string, string>>({});
+  React.useEffect(() => {
+    // Build a merged metricNameToIdMap by reading each report's data source column_mappings
+    // so aggregateMetrics can access values by dimension IDs.
+    (async () => {
+      try {
+        if (reportIds.length === 0) {
+          setMergedMetricMap({});
+          return;
+        }
+        const map: Record<string, string> = {};
+        for (const reportId of reportIds) {
+          const { data: dsData } = await supabase
+            .from("data_sources")
+            .select("*")
+            .eq("report_id", reportId)
+            .limit(1)
+            .maybeSingle();
+          const columnMappings = Array.isArray(dsData?.column_mappings) ? dsData!.column_mappings : [];
+          columnMappings.forEach((m: any) => {
+            if (m.dimensionName && m.dimensionId && m.dimensionId !== 'none') {
+              map[m.dimensionName] = m.dimensionId;
+            }
+          });
+        }
+        setMergedMetricMap(map);
+      } catch {
+        // Fallback: empty mapping (aggregateMetrics will still try name keys)
+        setMergedMetricMap({});
+      }
+    })();
+  }, [reportIds]);
+
   // ALWAYS prioritize fresh data from rawSourceData over cachedPivotData
   // This ensures data is always up-to-date when page refreshes
   const data: CachedPivotData = useMemo(() => {
     // If we have fresh raw source data, compute from that (previous way)
-    if (reportsLoaded) {
+    if (reportsLoaded && Object.keys(mergedMetricMap).length > 0) {
       const dateRanges = {
         mtd: getDateRange("mtd"),
         ytd: getDateRange("ytd"),
@@ -617,12 +652,14 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         const reportData = rawSourceData[reportId];
         if (!reportData) continue;
         
-        // Compute MTD and YTD
+        // Compute MTD and YTD - now passing mergedMetricMap for dimension ID resolution
         (["mtd", "ytd"] as const).forEach((tab) => {
           const metrics = aggregateMetrics(
             reportData.rows,
             selectedMetrics,
-            dateRanges[tab]
+            dateRanges[tab],
+            undefined, // no dimension filter
+            mergedMetricMap // pass mapping for ID-based lookup
           );
           newData[tab].push({
             reportId: reportId,
@@ -631,13 +668,15 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           });
         });
         
-        // Compute monthly data
+        // Compute monthly data - now passing mergedMetricMap
         monthKeys.forEach((monthKey) => {
           const monthRange = getDateRange(monthKey);
           const metrics = aggregateMetrics(
             reportData.rows,
             selectedMetrics,
-            monthRange
+            monthRange,
+            undefined, // no dimension filter
+            mergedMetricMap // pass mapping for ID-based lookup
           );
           newData.monthly_data![monthKey].push({
             reportId: reportId,
@@ -670,7 +709,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     }
     
     return { mtd: [], ytd: [] };
-  }, [rawSourceData, reportsLoaded, reportIds, selectedMetrics, cachedPivotData]);
+  }, [rawSourceData, reportsLoaded, reportIds, selectedMetrics, cachedPivotData, mergedMetricMap]);
   
   const isLoading = isLoadingRawData;
   
@@ -860,40 +899,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
   // Note: Raw source data is now loaded via React Query hook (useAISummaryRawData)
   // which provides caching across tab switches and reconnections
-  
-  // Add helper to build metricNameToIdMap for selected reports
-  const [mergedMetricMap, setMergedMetricMap] = React.useState<Record<string, string>>({});
-  React.useEffect(() => {
-    // Build a merged metricNameToIdMap by reading each report's data source column_mappings
-    // so aggregateMetrics can access values by dimension IDs.
-    (async () => {
-      try {
-        if (reportIds.length === 0) {
-          setMergedMetricMap({});
-          return;
-        }
-        const map: Record<string, string> = {};
-        for (const reportId of reportIds) {
-          const { data: dsData } = await supabase
-            .from("data_sources")
-            .select("*")
-            .eq("report_id", reportId)
-            .limit(1)
-            .maybeSingle();
-          const columnMappings = Array.isArray(dsData?.column_mappings) ? dsData!.column_mappings : [];
-          columnMappings.forEach((m: any) => {
-            if (m.dimensionName && m.dimensionId && m.dimensionId !== 'none') {
-              map[m.dimensionName] = m.dimensionId;
-            }
-          });
-        }
-        setMergedMetricMap(map);
-      } catch {
-        // Fallback: empty mapping (aggregateMetrics will still try name keys)
-        setMergedMetricMap({});
-      }
-    })();
-  }, [reportIds]);
+  // mergedMetricMap is declared at the top (before data useMemo) for proper dependency ordering
+
 
   // Compute data for specific month tabs dynamically
   const computeDataForTab = (tab: DateTab): ReportMetrics[] => {
@@ -925,7 +932,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       const metrics = aggregateMetrics(
         reportData.rows,
         selectedMetrics,
-        dateRange
+        dateRange,
+        undefined, // no dimension filter
+        mergedMetricMap // pass mapping for ID-based lookup
       );
       
       results.push({
@@ -1221,7 +1230,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       const metrics = aggregateMetrics(
         reportData.rows,
         selectedMetrics,
-        comparisonDateRange
+        comparisonDateRange,
+        undefined, // no dimension filter
+        mergedMetricMap // pass mapping for ID-based lookup
       );
       
       results.push({
