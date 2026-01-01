@@ -1378,52 +1378,18 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
     }
   };
 
-  // Generate API URL with cleaner format
+  // Generate API URL using Supabase Edge Function
   const generateApiUrl = useMemo(() => {
-    // If editing an existing card, use the simple card ID format
+    const supabaseUrl = 'https://zcxxwpwheevwavdcgfht.supabase.co';
+    
+    // If editing an existing card, use edge function with card ID
     if (editingCard?.id) {
-      return `${window.location.origin}/api/reports/card/${editingCard.id}`;
+      return `${supabaseUrl}/functions/v1/get-ai-summary-data?cardId=${editingCard.id}`;
     }
     
-    // Otherwise, build parameter-based URL (for preview before saving)
-    const params = new URLSearchParams();
-    
-    // Add reportIds (comma-separated)
-    if (selectedReportIds.length > 0) {
-      params.append('reports', selectedReportIds.join(','));
-    }
-    
-    // Add since date (replaces date_from/date_to)
-    if (sinceDate) {
-      params.append('since', sinceDate);
-    }
-    
-    // Add metrics (cleaner format)
-    if (selectedMetrics.length > 0) {
-      params.append('metrics', selectedMetrics.join(','));
-    }
-    
-    // Add dimension filters per report (cleaner format: filter[reportId][dimensionId]=value1,value2)
-    selectedReportIds.forEach(reportId => {
-      const config = reportConfigs[reportId];
-      if (config?.dimensionId && config.selectedValues.length > 0) {
-        params.append(`filter[${reportId}][${config.dimensionId}]`, config.selectedValues.join(','));
-      }
-    });
-    
-    // Add breakdown dimensions per report (cleaner format: breakdown[reportId]=dimId1,dimId2)
-    selectedReportIds.forEach(reportId => {
-      const breakdownConfig = breakdownConfigs[reportId];
-      const breakdownIds = breakdownConfig?.breakdownDimensionIds || [];
-      if (breakdownIds.length > 0) {
-        params.append(`breakdown[${reportId}]`, breakdownIds.join(','));
-      }
-    });
-    
-    const baseUrl = `${window.location.origin}/api/reports`;
-    const queryString = params.toString();
-    return queryString ? `${baseUrl}?${queryString}` : baseUrl;
-  }, [editingCard, selectedReportIds, sinceDate, selectedMetrics, reportConfigs, breakdownConfigs]);
+    // Otherwise, show placeholder URL (card not yet saved)
+    return `${supabaseUrl}/functions/v1/get-ai-summary-data?cardId=<card-id-after-save>`;
+  }, [editingCard]);
 
   const apiUrl = generateApiUrl;
 
