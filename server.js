@@ -1227,11 +1227,11 @@ app.get('/api/reports/card/:cardId', async (req, res) => {
       });
     }
 
-    // Fetch AI Summary card configuration
+    // Fetch AI Summary card configuration including cached data
     // Use maybeSingle() instead of single() to handle 0 rows gracefully
     const { data: card, error: cardError } = await supabase
       .from('ai_summary_cards')
-      .select('id, report_ids, report_configs, selected_metrics, since_date, user_id')
+      .select('id, report_ids, report_configs, selected_metrics, since_date, user_id, cached_pivot_data, pivot_data_refreshed_at')
       .eq('id', cardId)
       .maybeSingle();
 
@@ -1289,6 +1289,64 @@ app.get('/api/reports/card/:cardId', async (req, res) => {
       });
     }
 
+    // Check if cached_pivot_data exists and return it directly
+    if (card.cached_pivot_data && Object.keys(card.cached_pivot_data).length > 0) {
+      console.log(`[API-CARD] Returning cached_pivot_data for card ${cardId}, refreshed at ${card.pivot_data_refreshed_at}`);
+      
+      // Calculate date range for response
+      const formatDate = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+      const toDate = formatDate(new Date());
+      
+      // Count total data rows from cached data
+      let totalCount = 0;
+      const cachedData = card.cached_pivot_data;
+      
+      // Extract monthly_data if present
+      const monthlyData = cachedData.monthly_data || cachedData;
+      if (typeof monthlyData === 'object') {
+        Object.values(monthlyData).forEach((reportData) => {
+          if (typeof reportData === 'object') {
+            Object.values(reportData).forEach((monthData) => {
+              if (Array.isArray(monthData)) {
+                totalCount += monthData.length;
+              } else if (typeof monthData === 'object' && monthData.metrics) {
+                totalCount += 1;
+              }
+            });
+          }
+        });
+      }
+      
+      // Build reports metadata
+      const reportMetadata = reportIds.map(reportId => {
+        const reportData = cachedData.actual_data_ranges?.[reportId] || {};
+        return {
+          report_id: reportId,
+          report_name: reportData.reportName || 'Unknown',
+          count: 0 // Not tracking per-report count in cached data
+        };
+      });
+      
+      return res.status(200).json({
+        success: true,
+        count: totalCount,
+        since: sinceDate,
+        to: toDate,
+        cached: true,
+        cached_at: card.pivot_data_refreshed_at,
+        data: cachedData,
+        reports: reportMetadata,
+        dimensions: []
+      });
+    }
+
+    console.log(`[API-CARD] No cached data, fetching live data for card ${cardId}`);
+
     const selectedMetrics = card.selected_metrics || [];
     const reportConfigs = card.report_configs || {};
 
@@ -1332,11 +1390,11 @@ app.get('/api/reports/card/:cardId', async (req, res) => {
 
     for (const reportId of reportIds) {
       try {
-        // Fetch dimensions for this report
+        // Fetch dimensions for this report (including global dimensions with report_id IS NULL)
         const { data: dimensions, error: dimError } = await supabase
           .from('dimensions')
           .select('id, name, type')
-          .eq('report_id', reportId)
+          .or(`report_id.eq.${reportId},report_id.is.null,scope.eq.global`)
           .order('name', { ascending: true });
 
         if (dimError) {
