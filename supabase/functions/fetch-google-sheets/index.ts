@@ -108,18 +108,11 @@ serve(async (req) => {
     let fullRange: string;
     if (tabName && typeof tabName === 'string' && tabName.trim() !== '') {
       const trimmedTabName = tabName.trim();
-      // Check if tab name contains spaces, special characters, or starts with a number
-      // If so, wrap in single quotes and escape internal quotes
-      const needsQuotes = /[\s\-_0-9]/.test(trimmedTabName) || /^[0-9]/.test(trimmedTabName);
-      
-      if (needsQuotes) {
-        // Escape single quotes in tab name (double them)
-        const escapedTabName = trimmedTabName.replace(/'/g, "''");
-        fullRange = `'${escapedTabName}'!${requestedRange}`;
-      } else {
-        // Simple tab name without spaces - no quotes needed
-        fullRange = `${trimmedTabName}!${requestedRange}`;
-      }
+      // Always wrap tab names in single quotes for safety
+      // This prevents issues with numeric ranges like 1:101 being misinterpreted
+      // Escape single quotes in tab name (double them)
+      const escapedTabName = trimmedTabName.replace(/'/g, "''");
+      fullRange = `'${escapedTabName}'!${requestedRange}`;
     } else {
       fullRange = requestedRange;
     }
