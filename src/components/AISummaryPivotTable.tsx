@@ -1705,6 +1705,38 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         </Tabs>
         
         <div className="flex items-center gap-3">
+        {/* Filter Dropdowns - before Date dropdown */}
+        {activeFilterDimensions.map((dimId) => {
+          const dimName = filterDimensionNames[dimId] || dimId;
+          const values = filterDimensionValues[dimId] || [];
+          const selectedValues = filterValues[dimId] || [];
+          
+          return (
+            <Select
+              key={dimId}
+              value={selectedValues.length > 0 ? selectedValues[0] : "all"}
+              onValueChange={(value) => {
+                setFilterValues(prev => ({
+                  ...prev,
+                  [dimId]: value === "all" ? [] : [value],
+                }));
+              }}
+            >
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder={dimName} />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border z-50">
+                <SelectItem value="all">All {dimName}</SelectItem>
+                {values.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          );
+        })}
+        
         {/* Year Selector */}
         {availableYears.length > 0 && (
           <Select 
