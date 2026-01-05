@@ -1166,6 +1166,71 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // which provides caching across tab switches and reconnections
   // mergedMetricMap is declared at the top (before data useMemo) for proper dependency ordering
 
+  // Extract filter configs from reportConfigs
+  const filterConfigs = useMemo(() => {
+    return reportConfigs?.filter_configs || {};
+  }, [reportConfigs]);
+
+  // Get filter dimensions for active report tab
+  const activeFilterDimensions = useMemo(() => {
+    if (activeReportTab === "overview") return [];
+    const config = filterConfigs[activeReportTab];
+    if (!config?.filterDimensionIds || config.filterDimensionIds.length === 0) return [];
+    return config.filterDimensionIds;
+  }, [filterConfigs, activeReportTab]);
+
+  // Fetch unique values for filter dimensions
+  const filterDimensionValues = useMemo(() => {
+    if (activeFilterDimensions.length === 0) return {};
+    if (activeReportTab === "overview") return {};
+    
+    const reportData = rawSourceData[activeReportTab];
+    if (!reportData?.rows || reportData.rows.length === 0) return {};
+    
+    return extractMultipleDimensionValues(reportData.rows, activeFilterDimensions);
+  }, [activeFilterDimensions, activeReportTab, rawSourceData]);
+
+  // Fetch dimension names for filter dimensions
+  const [filterDimensionNames, setFilterDimensionNames] = useState<Record<string, string>>({});
+  
+  useEffect(() => {
+    if (activeFilterDimensions.length === 0) {
+      setFilterDimensionNames({});
+      return;
+    }
+    
+    (async () => {
+      const names: Record<string, string> = {};
+      for (const dimId of activeFilterDimensions) {
+        const { data } = await supabase
+          .from("dimensions")
+          .select("name")
+          .eq("id", dimId)
+          .single();
+        if (data) names[dimId] = data.name;
+      }
+      setFilterDimensionNames(names);
+    })();
+  }, [activeFilterDimensions]);
+
+  // Helper to get dimension filter for a specific report
+  const getDimensionFilterForReport = useCallback((reportId: string) => {
+    if (reportId === "overview") return undefined;
+    const filterConfig = filterConfigs[reportId];
+    if (!filterConfig?.filterDimensionIds || filterConfig.filterDimensionIds.length === 0) return undefined;
+    
+    // Apply filters for the first filter dimension (can be extended to support multiple)
+    const firstFilterDimId = filterConfig.filterDimensionIds[0];
+    const filterValuesForDim = filterValues[firstFilterDimId] || [];
+    if (filterValuesForDim.length === 0) return undefined;
+    
+    const dimName = filterDimensionNames[firstFilterDimId] || firstFilterDimId;
+    return {
+      dimensionId: firstFilterDimId,
+      dimensionName: dimName,
+      values: filterValuesForDim,
+    };
+  }, [filterConfigs, filterValues, filterDimensionNames]);
 
   // Compute data for specific month tabs dynamically
   const computeDataForTab = (tab: DateTab): ReportMetrics[] => {
@@ -1194,11 +1259,14 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       const reportData = rawSourceData[reportId];
       if (!reportData) continue;
       
+      // Get dimension filter for this report
+      const dimensionFilter = getDimensionFilterForReport(reportId);
+      
       const metrics = aggregateMetrics(
         reportData.rows,
         selectedMetrics,
         dateRange,
-        undefined, // no dimension filter
+        dimensionFilter, // apply dimension filter if configured
         mergedMetricMap // pass mapping for ID-based lookup
       );
       
