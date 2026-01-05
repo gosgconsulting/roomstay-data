@@ -470,7 +470,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
   // Fetch all data sources and source data when entering filter-dimensions or breakdown-dimensions step
   useEffect(() => {
     const fetchAllDataForReports = async () => {
-      if ((step !== "filter-dimensions" && step !== "breakdown-dimensions") || selectedReportIds.length === 0) return;
+      if ((step !== "filter-dimensions" && step !== "breakdown-dimensions" && step !== "filter-by") || selectedReportIds.length === 0) return;
 
       const { user } = await getUser();
       if (!user) return;
@@ -655,6 +655,22 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
     });
   };
 
+  const handleFilterToggle = (reportId: string, dimensionId: string) => {
+    setFilterConfigs(prev => {
+      const currentIds = prev[reportId]?.filterDimensionIds || [];
+      const newIds = currentIds.includes(dimensionId)
+        ? currentIds.filter(id => id !== dimensionId)
+        : [...currentIds, dimensionId];
+      return {
+        ...prev,
+        [reportId]: {
+          reportId,
+          filterDimensionIds: newIds,
+        },
+      };
+    });
+  };
+
   const handleNext = () => {
     if (step === "select-reports" && selectedReportIds.length > 0) {
       setStep("filter-dimensions");
@@ -663,6 +679,8 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
       setStep("breakdown-dimensions");
       setActiveReportTab(selectedReportIds[0]);
     } else if (step === "breakdown-dimensions") {
+      setStep("filter-by");
+    } else if (step === "filter-by") {
       setStep("select-metrics");
     } else if (step === "select-metrics") {
       if (mode === "api") {
@@ -685,6 +703,8 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
       setStep("filter-dimensions");
       setActiveReportTab(selectedReportIds[0]);
     } else if (step === "select-metrics") {
+      setStep("filter-by");
+    } else if (step === "filter-by") {
       setStep("breakdown-dimensions");
     } else if (step === "select-period") {
       setStep("select-metrics");

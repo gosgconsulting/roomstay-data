@@ -21,6 +21,7 @@ import { Bar, BarChart, LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tool
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import FormattedAISummary from "@/components/FormattedAISummary";
 import { useAISummaryRawData, type RawSourceData } from "@/hooks/useAISummaryData";
+import { extractMultipleDimensionValues } from "@/lib/filters/extractDimensionValues";
 import {
   startOfMonth,
   endOfMonth,
@@ -640,6 +641,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   
   // State for chart period selector
   const [chartPeriod, setChartPeriod] = useState<"30days" | "3months" | "6months">("3months");
+  
+  // State for filter values (dimensionId -> selected values)
+  const [filterValues, setFilterValues] = useState<Record<string, string[]>>({});
   
   // Reset period selection when year changes to pick latest available option (December)
   React.useEffect(() => {
@@ -1636,6 +1640,53 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     : comparisonTabData.length > 0 
       ? calculateTotals(comparisonTabData.filter(r => r.reportId === activeReportTab))
       : null;
+
+  // Extract filter configs from reportConfigs
+  const filterConfigs = useMemo(() => {
+    return reportConfigs?.filter_configs || {};
+  }, [reportConfigs]);
+
+  // Get filter dimensions for active report tab
+  const activeFilterDimensions = useMemo(() => {
+    if (activeReportTab === "overview") return [];
+    const config = filterConfigs[activeReportTab];
+    if (!config?.filterDimensionIds || config.filterDimensionIds.length === 0) return [];
+    return config.filterDimensionIds;
+  }, [filterConfigs, activeReportTab]);
+
+  // Fetch unique values for filter dimensions
+  const filterDimensionValues = useMemo(() => {
+    if (activeFilterDimensions.length === 0) return {};
+    if (activeReportTab === "overview") return {};
+    
+    const reportData = rawSourceData[activeReportTab];
+    if (!reportData?.rows || reportData.rows.length === 0) return {};
+    
+    return extractMultipleDimensionValues(reportData.rows, activeFilterDimensions);
+  }, [activeFilterDimensions, activeReportTab, rawSourceData]);
+
+  // Fetch dimension names for filter dimensions
+  const [filterDimensionNames, setFilterDimensionNames] = useState<Record<string, string>>({});
+  
+  useEffect(() => {
+    if (activeFilterDimensions.length === 0) {
+      setFilterDimensionNames({});
+      return;
+    }
+    
+    (async () => {
+      const names: Record<string, string> = {};
+      for (const dimId of activeFilterDimensions) {
+        const { data } = await supabase
+          .from("dimensions")
+          .select("name")
+          .eq("id", dimId)
+          .single();
+        if (data) names[dimId] = data.name;
+      }
+      setFilterDimensionNames(names);
+    })();
+  }, [activeFilterDimensions]);
 
   return (
     <div className="w-full space-y-6">
