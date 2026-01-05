@@ -752,13 +752,30 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         const reportData = rawSourceData[reportId];
         if (!reportData) continue;
         
+        // Get filter config for this report
+        const filterConfig = filterConfigs[reportId];
+        let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
+        if (filterConfig?.filterDimensionIds && filterConfig.filterDimensionIds.length > 0) {
+          // Apply filters for the first filter dimension (can be extended to support multiple)
+          const firstFilterDimId = filterConfig.filterDimensionIds[0];
+          const filterValuesForDim = filterValues[firstFilterDimId] || [];
+          if (filterValuesForDim.length > 0) {
+            const dimName = filterDimensionNames[firstFilterDimId] || firstFilterDimId;
+            dimensionFilter = {
+              dimensionId: firstFilterDimId,
+              dimensionName: dimName,
+              values: filterValuesForDim,
+            };
+          }
+        }
+        
         // Compute MTD and YTD - now passing mergedMetricMap for dimension ID resolution
         (["mtd", "ytd"] as const).forEach((tab) => {
           const metrics = aggregateMetrics(
             reportData.rows,
             selectedMetrics,
             dateRanges[tab],
-            undefined, // no dimension filter
+            dimensionFilter, // apply dimension filter if configured
             mergedMetricMap // pass mapping for ID-based lookup
           );
           newData[tab].push({
@@ -775,7 +792,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             reportData.rows,
             selectedMetrics,
             monthRange,
-            undefined, // no dimension filter
+            dimensionFilter, // apply dimension filter if configured
             mergedMetricMap // pass mapping for ID-based lookup
           );
           newData.monthly_data![monthKey].push({
