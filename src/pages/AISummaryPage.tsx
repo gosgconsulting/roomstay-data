@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, Settings, MoreHorizontal, Database, Pencil, Share2, TrendingUp, ExternalLink } from "lucide-react";
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { ReportsSidebar } from "@/components/ReportsSidebar";
+import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, Settings, MoreHorizontal, Database, Pencil, Share2, ExternalLink, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -59,7 +56,6 @@ import {
   getDateGroupKey,
   parseDate,
 } from "@/components/AISummaryPivotTable";
-import { type DateTab as SidebarDateTab, type ReportTab as SidebarReportTab } from "@/components/ReportsSidebar";
 import { AISummaryBudgetTable } from "@/components/AISummaryBudgetTable";
 
 interface AISummaryCard {
@@ -121,22 +117,21 @@ const AISummaryPage = () => {
   const [selectedBudgetReportId, setSelectedBudgetReportId] = useState<string | null>(null);
   const [budgetForecastEnabled, setBudgetForecastEnabled] = useState(false);
 
-  // Generate date options: YTD at top, then MTD (current month), then previous months
+  // Generate date options: Year to date at top, then current month, then previous months
   const dateOptions = React.useMemo(() => {
     const options: { value: string; label: string }[] = [];
     const now = new Date();
     const yearStart = startOfYear(now);
-    const currentMonthKey = format(now, "yyyy-MM");
     
-    // Add YTD at the top
-    options.push({ value: "ytd", label: "YTD" });
+    // Add Year to date at the top
+    options.push({ value: "ytd", label: "Year to date" });
     
     // Start from current month and go back to January
     let current = now;
     while (current >= yearStart) {
       const monthKey = format(current, "yyyy-MM");
-      // Label current month as "MTD", others as month name
-      const monthLabel = monthKey === currentMonthKey ? "MTD" : format(current, "MMMM yyyy");
+      // Use actual month name instead of "MTD"
+      const monthLabel = format(current, "MMMM yyyy");
       options.push({ value: monthKey, label: monthLabel });
       current = subMonths(current, 1);
     }
@@ -1244,76 +1239,133 @@ const AISummaryPage = () => {
     }
   };
 
+  // Get report tabs for the selected AI Summary card
+  const aiSummaryReportTabs = selectedCard 
+    ? reports.filter(r => selectedCard.report_ids.includes(r.id))
+    : [];
+
+  const handleReportSelect = (cardId: string) => {
+    if (cardId === "add-new") {
+      setIsAddCardModalOpen(true);
+      return;
+    }
+    if (accountId) {
+      navigate(`/tools/report/${accountId}/${cardId}`);
+    }
+  };
+
+  const handleReportTabSelect = (tab: ReportTab) => {
+    setSelectedReportTab(tab);
+  };
+
+  // Build report tabs list (Overview + reports + Budget)
+  const reportTabOptions: { value: ReportTab; label: string }[] = [
+    { value: "overview", label: "Overview" },
+    ...aiSummaryReportTabs.map(r => ({ value: r.id, label: r.name })),
+    { value: "budget", label: "Budget" },
+  ];
+
   return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-background">
-        {/* Compute report tabs for the selected AI Summary card */}
-        {(() => {
-          const selectedCard = summaryId ? cards.find(c => c.id === summaryId) : null;
-          const aiSummaryReportTabs = selectedCard 
-            ? reports.filter(r => selectedCard.report_ids.includes(r.id))
-            : [];
-          
-          return (
-            <ReportsSidebar
-              reports={reports.map(r => ({ 
-                id: r.id, 
-                name: r.name, 
-                account_id: accountId || null,
-                created_at: '',
-                updated_at: ''
-              }))}
-              accountId={accountId}
-              selectedAISummaryId={summaryId}
-              aiSummaries={cards.map(c => ({ id: c.id, name: c.name }))}
-              onAddAISummary={() => setIsAddCardModalOpen(true)}
-              showDateTabs={!!summaryId}
-              selectedDateTab={selectedDateTab}
-              onDateTabChange={setSelectedDateTab}
-              aiSummaryReportTabs={aiSummaryReportTabs}
-              selectedReportTab={selectedReportTab}
-              onReportTabChange={setSelectedReportTab}
-            />
-          );
-        })()}
-        
-        <div className="flex-1 flex flex-col">
-          <div className="border-b">
-            <div className="px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <Button variant="ghost" size="icon" onClick={handleBack}>
-                    <ArrowLeft className="h-5 w-5" />
-                  </Button>
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-primary" />
-                    <h1 className="text-xl font-semibold">AI Summary</h1>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={() => setIsAPIBuilderModalOpen(true)}>
-                    API
-                  </Button>
-                  {summaryId && (
-                    <Button variant="outline" onClick={() => setIsForecastModalOpen(true)}>
-                      <TrendingUp className="h-4 w-4 mr-2" />
-                      Forecast
+    <div className="min-h-screen flex flex-col w-full bg-background">
+      <div className="border-b">
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" onClick={handleBack}>
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              
+              {/* Reports Dropdown */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground">Reports</span>
+                <Select 
+                  value={selectedCardId || ""} 
+                  onValueChange={handleReportSelect}
+                >
+                  <SelectTrigger className="w-[200px] bg-background border-border">
+                    <SelectValue placeholder="Select report" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border z-50">
+                    {cards.map((card) => (
+                      <SelectItem key={card.id} value={card.id}>
+                        {card.name}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="add-new" className="text-primary">
+                      <span className="flex items-center gap-2">
+                        <Plus className="h-4 w-4" />
+                        Add New Report
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+            </div>
+            <div className="flex items-center gap-2">
+                  {selectedCard && (
+                    <Button 
+                      variant="outline" 
+                      onClick={() => handleRefreshPivotData(selectedCard)}
+                      disabled={refreshingPivotCardId === selectedCard.id}
+                    >
+                      {refreshingPivotCardId === selectedCard.id ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Refreshing...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Refresh
+                        </>
+                      )}
                     </Button>
                   )}
-                  <Button onClick={() => setIsAddCardModalOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add card
-                  </Button>
                   <Button variant="outline" onClick={() => setIsShareModalOpen(true)}>
                     <Share2 className="h-4 w-4 mr-2" />
                     Share
                   </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-9 w-9">
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="bg-popover">
+                      <DropdownMenuItem onClick={() => setIsAddCardModalOpen(true)}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add New Report
+                      </DropdownMenuItem>
+                      {selectedCard && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleStartRename(selectedCard)}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleOpenSettings(selectedCard)}>
+                            <Database className="h-4 w-4 mr-2" />
+                            Edit source
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => setDeleteCardId(selectedCard.id)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-              </div>
-            </div>
           </div>
+        </div>
+      </div>
 
-          <div className="px-6 py-8 flex-1">
+      <div className="px-6 py-8 flex-1">
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1323,144 +1375,15 @@ const AISummaryPage = () => {
             <Sparkles className="h-16 w-16 text-muted-foreground mb-4" />
             <h2 className="text-2xl font-semibold mb-2">No AI Summary Cards</h2>
             <p className="text-muted-foreground max-w-md">
-              Click "Add card" to create an AI-powered executive summary based on your report data.
+              Click the settings icon and select "Add New Report" to create an AI-powered executive summary based on your report data.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6">
+          <div className="w-full">
             {cards
               .filter(card => !selectedCardId || card.id === selectedCardId)
               .map(card => (
-              <Card key={card.id} className="overflow-hidden group">
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5 text-muted-foreground">
-                      <div className="grid grid-cols-2 gap-0.5">
-                        <div className="w-1 h-1 rounded-full bg-current" />
-                        <div className="w-1 h-1 rounded-full bg-current" />
-                        <div className="w-1 h-1 rounded-full bg-current" />
-                        <div className="w-1 h-1 rounded-full bg-current" />
-                        <div className="w-1 h-1 rounded-full bg-current" />
-                        <div className="w-1 h-1 rounded-full bg-current" />
-                      </div>
-                    </div>
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    {renamingCardId === card.id ? (
-                      <Input
-                        autoFocus
-                        value={newCardName}
-                        onChange={(e) => setNewCardName(e.target.value)}
-                        onBlur={() => handleRenameCard(card.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleRenameCard(card.id);
-                          if (e.key === "Escape") setRenamingCardId(null);
-                        }}
-                        className="h-7 w-48 text-sm font-medium"
-                      />
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{card.name}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => handleStartRename(card)}
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                          onClick={() => setDeleteCardId(card.id)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {card.pivot_data_refreshed_at && (
-                      <span className="text-xs text-muted-foreground mr-2">
-                        Data: {format(new Date(card.pivot_data_refreshed_at), "MMM d 'at' h:mm a")}
-                      </span>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setViewingSummary(card)}
-                      disabled={!card.generated_summary}
-                    >
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-                      </svg>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => handleOpenSettings(card)}
-                    >
-                      <Settings className="h-4 w-4" />
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="bg-popover">
-                        <DropdownMenuItem onClick={() => handleStartRename(card)}>
-                          <Pencil className="h-4 w-4 mr-2" />
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => handleRefreshPivotData(card)}
-                          disabled={refreshingPivotCardId === card.id}
-                        >
-                          {refreshingPivotCardId === card.id ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <Database className="h-4 w-4 mr-2" />
-                          )}
-                          Refresh Data
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => {
-                            const apiUrl = getCardApiUrl(card);
-                            navigator.clipboard.writeText(apiUrl);
-                            toast.success("API URL copied to clipboard");
-                          }}
-                        >
-                          <ExternalLink className="h-4 w-4 mr-2" />
-                          Copy API URL
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => {
-                            const apiUrl = getCardApiUrl(card);
-                            window.open(apiUrl, '_blank');
-                          }}
-                        >
-                          <ExternalLink className="h-4 w-4 mr-2" />
-                          Open API URL
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => setDeleteCardId(card.id)}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-                
-                {/* Budget Table or Pivot Table based on selected tab */}
-                <CardContent className="p-4">
+              <div key={card.id} className="w-full">
                   {selectedReportTab === "budget" ? (
                     <div className="space-y-4">
                       {/* Budget Report Tabs */}
@@ -1539,7 +1462,6 @@ const AISummaryPage = () => {
                       onDatePeriodChange={setSelectedDatePeriod}
                     />
                   )}
-                </CardContent>
                 
                 {/* AI Executive Summary section - TEMPORARILY HIDDEN
                 <CardContent className="p-0 border-t">
@@ -1581,7 +1503,7 @@ const AISummaryPage = () => {
                   )}
                 </CardContent>
                 */}
-              </Card>
+              </div>
             ))}
           </div>
         )}
@@ -1690,9 +1612,7 @@ const AISummaryPage = () => {
         } : null}
         mode="api"
       />
-        </div>
-      </div>
-    </SidebarProvider>
+    </div>
   );
 };
 

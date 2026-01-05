@@ -631,20 +631,26 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // Year selector state - defaults to current year
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   
-  // Reset period selection when year changes to pick first available option
+  // Reset period selection when year changes to pick latest available option (December)
   React.useEffect(() => {
     const now = new Date();
     const currentYear = now.getFullYear();
     const isCurrentYear = selectedYear === currentYear;
     
     // Set default period for the selected year
+    let newPeriod: string;
     if (isCurrentYear) {
-      // Current year: default to MTD (current month key)
-      handleTabChange("mtd");
+      // Current year: default to current month (using actual month key)
+      newPeriod = format(now, "yyyy-MM");
     } else {
-      // Past year: default to January of that year
-      const janKey = format(new Date(selectedYear, 0, 1), "yyyy-MM");
-      handleTabChange(janKey);
+      // Past year: default to December of that year (latest month)
+      newPeriod = format(new Date(selectedYear, 11, 1), "yyyy-MM");
+    }
+    
+    // Update both the tab and the date period
+    handleTabChange(newPeriod as DateTab);
+    if (onDatePeriodChange) {
+      onDatePeriodChange(newPeriod);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedYear]);
@@ -851,8 +857,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   }, [rawSourceData, reportsLoaded]);
 
   // Generate date options dynamically based on selected year
-  // Current year: YTD, MTD (current month), previous months
-  // Past years: All 12 months of that year
+  // Current year: Year to date, current month, previous months
+  // Past years: Full year + all 12 months (December at top, January at bottom)
   const effectiveDateOptions = useMemo(() => {
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -860,22 +866,22 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     const options: { value: string; label: string }[] = [];
     
     if (isCurrentYear) {
-      // Current year: show YTD + months from current going back to January
-      options.push({ value: "ytd", label: "YTD" });
+      // Current year: show Year to date + months from current going back to January
+      options.push({ value: "ytd", label: "Year to date" });
       
       let current = now;
       const yearStart = new Date(currentYear, 0, 1);
       while (current >= yearStart) {
         const monthKey = format(current, "yyyy-MM");
-        // Label current month as "MTD", others as month name
-        const isMtd = current.getMonth() === now.getMonth() && current.getFullYear() === now.getFullYear();
-        const monthLabel = isMtd ? "MTD" : format(current, "MMMM");
+        // Use actual month name instead of "MTD"
+        const monthLabel = format(current, "MMMM");
         options.push({ value: monthKey, label: monthLabel });
         current = subMonths(current, 1);
       }
     } else {
-      // Past years: show all 12 months (Jan-Dec)
-      for (let m = 0; m < 12; m++) {
+      // Past years: show "Full year" + all 12 months (December at top, January at bottom)
+      options.push({ value: "ytd", label: "Full year" });
+      for (let m = 11; m >= 0; m--) {
         const monthKey = format(new Date(selectedYear, m, 1), "yyyy-MM");
         const monthLabel = format(new Date(selectedYear, m, 1), "MMMM");
         options.push({ value: monthKey, label: monthLabel });
@@ -957,10 +963,11 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // Max rows before scroll
   const MAX_VISIBLE_ROWS = 10;
 
-  // Prepare YTD monthly chart data - full year January to December with comparisons
+  // Prepare monthly chart data - full year January to December with comparisons
   // Filter by activeReportTab when not in overview mode
+  // Uses selectedYear instead of current year to support past years
   const ytdChartData = useMemo(() => {
-    const year = new Date().getFullYear();
+    const year = selectedYear;
     const prevYear = year - 1;
     const monthlyData: { month: string; current: number; prevPeriod: number; prevYear: number; percentChange: number | null }[] = [];
     
@@ -1037,7 +1044,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     }
     
     return monthlyData;
-  }, [cachedPivotData?.monthly_data, cachedPivotData?.comparison_previous_period?.monthly_data, cachedPivotData?.comparison_previous_year?.monthly_data, chartKpi, activeReportTab, comparisonType]);
+  }, [cachedPivotData?.monthly_data, cachedPivotData?.comparison_previous_period?.monthly_data, cachedPivotData?.comparison_previous_year?.monthly_data, chartKpi, activeReportTab, comparisonType, selectedYear]);
 
   // Chart config for grouped bars
   const chartConfig = {
@@ -1555,28 +1562,17 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     <div className="w-full space-y-6">
 
       <div className="flex items-center justify-between gap-3 mb-4">
-        {/* Period Label */}
-        {(() => {
-          const period = selectedDatePeriod || activeTab;
-          const { currentLabel, comparisonLabel } = getDateRangeLabel(period as DateTab, comparisonType);
-          const reportTabLabel = activeReportTab === "overview" 
-            ? "Overview" 
-            : reportTabsList.find(r => r.id === activeReportTab)?.name || "Report";
-          
-          return (
-            <div className="text-sm font-medium text-foreground">
-              <span className="font-semibold">{reportTabLabel}</span>
-              <span className="text-muted-foreground"> - Period: </span>
-              <span>{currentLabel}</span>
-              {comparisonLabel && (
-                <>
-                  <span className="text-muted-foreground"> vs </span>
-                  <span>{comparisonLabel}</span>
-                </>
-              )}
-            </div>
-          );
-        })()}
+        {/* Report Tabs */}
+        <Tabs value={activeReportTab} onValueChange={(value) => handleReportTabChange(value as ReportTab)} className="w-auto">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            {reportTabsList.map((report) => (
+              <TabsTrigger key={report.id} value={report.id}>
+                {report.name}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         
         <div className="flex items-center gap-3">
         {/* Year Selector */}
@@ -1734,11 +1730,11 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         );
       })()}
 
-      {/* YTD Monthly Bar Chart - shown after KPI cards on all tabs */}
+      {/* Monthly Bar Chart - shown after KPI cards on all tabs */}
       <div className="border rounded-lg overflow-hidden">
         <div className="bg-primary/5 px-4 py-2 border-b flex items-center justify-between">
           <h4 className="font-semibold text-sm">
-            Results By Month (YTD){activeReportTab !== "overview" && (() => {
+            Results By Month{activeReportTab !== "overview" && (() => {
               const period = selectedDatePeriod || activeTab;
               const periodData = computeDataForTab(period as DateTab);
               const reportName = periodData.find(r => r.reportId === activeReportTab)?.reportName;
@@ -1919,8 +1915,16 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         {/* Combined Date Breakdown Table - for selected period in overview mode */}
         {activeReportTab === "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
-          const periodBreakdown = combinedDateBreakdown[period as DateTab];
+          let periodBreakdown = combinedDateBreakdown[period as DateTab];
           if (!periodBreakdown || periodBreakdown.length === 0) return null;
+          
+          // Reverse week-based breakdowns to show latest first (not month-based)
+          // Only reverse if this is a week view (not ytd/month)
+          const isWeekView = period !== 'ytd' && period !== 'mtd' && !period.match(/^\d{4}-\d{2}$/);
+          if (isWeekView) {
+            // Reverse the array to show latest week first
+            periodBreakdown = [...periodBreakdown].reverse();
+          }
           
           return (
             <div className="space-y-4">
@@ -2044,10 +2048,24 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               if (!key.startsWith('Week')) return; // non-YTD tabs produce weeks
               (weekGroups[key] ||= []).push(row);
             });
-            return Object.entries(weekGroups).map(([dateGroup, rows]) => ({
-              dateGroup,
-              metrics: aggregateMetrics(rows, selectedMetrics, getDateRange(selectedDatePeriod || activeTab, selectedYear), undefined, mergedMetricMap),
-            }));
+            // Sort by dateGroup descending (latest week first) - reverse the entries
+            return Object.entries(weekGroups)
+              .sort(([a], [b]) => {
+                // Extract week numbers or dates for comparison
+                // Week keys are like "Week 1, 2025" or "Week of Jan 1, 2025"
+                // Try to parse and compare
+                const aMatch = a.match(/Week (\d+)/);
+                const bMatch = b.match(/Week (\d+)/);
+                if (aMatch && bMatch) {
+                  return parseInt(bMatch[1], 10) - parseInt(aMatch[1], 10);
+                }
+                // Fallback: reverse alphabetical order (latest dates come first)
+                return b.localeCompare(a);
+              })
+              .map(([dateGroup, rows]) => ({
+                dateGroup,
+                metrics: aggregateMetrics(rows, selectedMetrics, getDateRange(selectedDatePeriod || activeTab, selectedYear), undefined, mergedMetricMap),
+              }));
           };
 
           const buildMonthlyRowsYTD = () => {
@@ -2069,6 +2087,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           const buildLast7DaysRows = () => {
             const now = new Date();
             const rows: DateBreakdownRow[] = [];
+            // Build from 6 days ago to today (oldest to newest)
             for (let i = 6; i >= 0; i--) {
               const day = subDays(now, i);
               const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
@@ -2080,7 +2099,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                 metrics,
               });
             }
-            return rows;
+            // Reverse to show latest day first
+            return rows.reverse();
           };
 
           const weeklyRows = buildWeeklyRows();
@@ -2163,7 +2183,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               {monthlyRowsYTD.length > 0 && (
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-primary/5 px-4 py-2 border-b">
-                    <h4 className="font-semibold text-sm">Results By Month (YTD)</h4>
+                    <h4 className="font-semibold text-sm">Results By Month</h4>
                   </div>
                   <div className="overflow-hidden">
                     <Table>

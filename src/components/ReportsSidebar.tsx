@@ -60,6 +60,8 @@ interface ReportsSidebarProps {
   aiSummaryReportTabs?: { id: string; name: string }[];
   selectedReportTab?: ReportTab;
   onReportTabChange?: (tab: ReportTab) => void;
+  // Hide Data Studio section (for Reports page)
+  hideDataStudio?: boolean;
 }
 
 /**
@@ -86,6 +88,7 @@ export function ReportsSidebar({
   aiSummaryReportTabs = [],
   selectedReportTab = "overview",
   onReportTabChange,
+  hideDataStudio = false,
 }: ReportsSidebarProps) {
   const navigate = useNavigate();
 
@@ -170,64 +173,66 @@ export function ReportsSidebar({
   return (
     <Sidebar collapsible="icon" className={cn("w-64 border-r bg-sidebar", className)}>
       <SidebarContent className="p-6">
-        {/* Data Studio Section */}
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-base font-medium text-sidebar-foreground mb-3 px-0 flex items-center gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Data Studio
-          </SidebarGroupLabel>
-          <SidebarGroupContent className="space-y-1">
-            {reports.map((report) => (
-              <div
-                key={report.id}
-                className="group relative flex items-center"
-              >
-                <Button
-                  variant={selectedReportId === report.id ? "secondary" : "ghost"}
-                  className={cn(
-                    "w-full justify-start text-left h-9 px-3 pr-16",
-                    selectedReportId === report.id && "bg-accent text-accent-foreground"
-                  )}
-                  onClick={() => handleReportSelect(report.id)}
+        {/* Data Studio Section - Only show if not hidden */}
+        {!hideDataStudio && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-base font-medium text-sidebar-foreground mb-3 px-0 flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Data Studio
+            </SidebarGroupLabel>
+            <SidebarGroupContent className="space-y-1">
+              {reports.map((report) => (
+                <div
+                  key={report.id}
+                  className="group relative flex items-center"
                 >
-                  {report.name}
-                </Button>
-                <div className="absolute right-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEditReport?.(report.id);
-                    }}
+                    variant={selectedReportId === report.id ? "secondary" : "ghost"}
+                    className={cn(
+                      "w-full justify-start text-left h-9 px-3 pr-16",
+                      selectedReportId === report.id && "bg-accent text-accent-foreground"
+                    )}
+                    onClick={() => handleReportSelect(report.id)}
                   >
-                    <Pencil className="h-3.5 w-3.5" />
+                    {report.name}
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteReport?.(report.id);
-                    }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  <div className="absolute right-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEditReport?.(report.id);
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteReport?.(report.id);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))}
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-left h-9 px-3 text-primary hover:text-primary"
-              onClick={handleAddNewClick}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add New Report
-            </Button>
-          </SidebarGroupContent>
-        </SidebarGroup>
+              ))}
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-left h-9 px-3 text-primary hover:text-primary"
+                onClick={handleAddNewClick}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add New Report
+              </Button>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {/* Reports Section */}
         <SidebarGroup className="mt-6">
