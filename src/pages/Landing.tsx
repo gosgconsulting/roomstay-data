@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
-import { LogOut, BarChart3, TrendingUp, Plus, DollarSign, Rocket, ChevronRight, Trash2, Pencil } from "lucide-react";
+import { LogOut, BarChart3, TrendingUp, Plus, ChevronRight, Trash2, Pencil, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { CreateAccountModal } from "@/components/CreateAccountModal";
@@ -211,7 +211,7 @@ export default function Landing() {
 
   const tools: Tool[] = [
     {
-      id: "report",
+      id: "data-studio",
       name: "Data Studio",
       description: "Looker Studio feature for adding and managing data sources",
       icon: <BarChart3 className="h-6 w-6" />,
@@ -219,29 +219,12 @@ export default function Landing() {
       available: true,
     },
     {
-      id: "forecasting",
-      name: "Forecasting",
-      description: "Predict future trends and performance",
-      icon: <TrendingUp className="h-6 w-6" />,
-      getPath: (accountId: string) => `/tools/forecasting/${accountId}`,
+      id: "reports",
+      name: "Reports",
+      description: "Current reports created with AI summary slug",
+      icon: <Sparkles className="h-6 w-6" />,
+      getPath: (accountId: string) => `/tools/report/${accountId}`,
       available: true,
-    },
-    {
-      id: "budget",
-      name: "Budget",
-      description: "Manage budgets and allocations",
-      icon: <DollarSign className="h-6 w-6" />,
-      getPath: (accountId: string) => `/tools/budget/${accountId}`,
-      available: true,
-    },
-    {
-      id: "alerts",
-      name: "Alerts",
-      description: "Get notified of important changes",
-      icon: <Rocket className="h-6 w-6" />,
-      getPath: (accountId: string) => `#`,
-      available: false,
-      badge: "Soon",
     },
   ];
 
