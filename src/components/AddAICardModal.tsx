@@ -131,6 +131,11 @@ interface ReportBreakdownConfig {
   breakdownDimensionIds: string[]; // Changed to array for multi-select
 }
 
+interface ReportFilterConfig {
+  reportId: string;
+  filterDimensionIds: string[]; // Array of dimension IDs to use as filters
+}
+
 interface EditingCard {
   id: string;
   name: string;
@@ -151,7 +156,7 @@ interface AddAICardModalProps {
   initialReportId?: string; // Pre-select a report when opening from ReportDashboard
 }
 
-type Step = "select-reports" | "filter-dimensions" | "breakdown-dimensions" | "select-metrics" | "select-period" | "preview-url";
+type Step = "select-reports" | "filter-dimensions" | "breakdown-dimensions" | "filter-by" | "select-metrics" | "select-period" | "preview-url";
 
 // Standard KPI metrics available
 const AVAILABLE_METRICS = [
@@ -299,6 +304,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
   const [dimensions, setDimensions] = useState<Record<string, Dimension[]>>({});
   const [reportConfigs, setReportConfigs] = useState<Record<string, ReportDimensionConfig>>({});
   const [breakdownConfigs, setBreakdownConfigs] = useState<Record<string, ReportBreakdownConfig>>({});
+  const [filterConfigs, setFilterConfigs] = useState<Record<string, ReportFilterConfig>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [customMetrics, setCustomMetrics] = useState<string[]>([]);
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([
@@ -1427,6 +1433,8 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
         return `${prefix}Filter Dimensions`;
       case "breakdown-dimensions":
         return `${prefix}Breakdown By`;
+      case "filter-by":
+        return `${prefix}Filter By`;
       case "select-metrics":
         return `${prefix}Select Metrics`;
       case "select-period":

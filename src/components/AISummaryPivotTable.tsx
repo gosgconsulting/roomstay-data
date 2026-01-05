@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2, Sparkles, ArrowUp, ArrowDown, Minus, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Tooltip, LabelList, Cell } from "recharts";
+import { Bar, BarChart, LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, LabelList, Cell, CartesianGrid, Legend } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import FormattedAISummary from "@/components/FormattedAISummary";
 import { useAISummaryRawData, type RawSourceData } from "@/hooks/useAISummaryData";
@@ -37,6 +37,10 @@ import {
   startOfWeek,
   endOfWeek,
   subDays,
+  eachDayOfInterval,
+  subWeeks,
+  eachWeekOfInterval,
+  differenceInDays,
 } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -631,6 +635,12 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // Year selector state - defaults to current year
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   
+  // State for Day/Week tabs in unified table (applies to all reports)
+  const [unifiedTableViewTab, setUnifiedTableViewTab] = useState<"day" | "week">("day");
+  
+  // State for chart period selector
+  const [chartPeriod, setChartPeriod] = useState<"30days" | "3months" | "6months">("3months");
+  
   // Reset period selection when year changes to pick latest available option (December)
   React.useEffect(() => {
     const now = new Date();
@@ -810,8 +820,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     }
   };
   
-  // State for YTD chart KPI selector
-  const [chartKpi, setChartKpi] = useState<string>("Revenue");
   
   // Extract available years from raw source data
   const availableYears = useMemo(() => {
@@ -983,84 +991,155 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       const monthLabel = MONTH_NAMES[m].substring(0, 3); // Jan, Feb, etc.
       
       // Get current period data - filter by report if not overview
-      let currentValue = 0;
+      // Always get Cost and Revenue
+      let costValue = 0;
+      let revenueValue = 0;
       if (cachedPivotData?.monthly_data?.[monthKey]) {
         const monthReports = cachedPivotData.monthly_data[monthKey];
         const filteredReports = activeReportTab === "overview" 
           ? monthReports 
           : monthReports.filter(r => r.reportId === activeReportTab);
-        currentValue = filteredReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
+        costValue = filteredReports.reduce((sum, r) => sum + (r.metrics['Cost'] || 0), 0);
+        revenueValue = filteredReports.reduce((sum, r) => sum + (r.metrics['Revenue'] || 0), 0);
       }
-      
-      // Get previous period (previous month) data from comparison cache or monthly_data
-      let prevPeriodValue = 0;
-      if (cachedPivotData?.comparison_previous_period?.monthly_data?.[monthKey]) {
-        const compReports = cachedPivotData.comparison_previous_period.monthly_data[monthKey];
-        const filteredReports = activeReportTab === "overview" 
-          ? compReports 
-          : compReports.filter(r => r.reportId === activeReportTab);
-        prevPeriodValue = filteredReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
-      } else if (cachedPivotData?.monthly_data?.[prevPeriodMonthKey]) {
-        // Fallback: use previous month data as "previous period"
-        const prevMonthReports = cachedPivotData.monthly_data[prevPeriodMonthKey];
-        const filteredReports = activeReportTab === "overview" 
-          ? prevMonthReports 
-          : prevMonthReports.filter(r => r.reportId === activeReportTab);
-        prevPeriodValue = filteredReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
-      }
-      
-      // Get previous year data
-      let prevYearValue = 0;
-      if (cachedPivotData?.comparison_previous_year?.monthly_data?.[monthKey]) {
-        const compReports = cachedPivotData.comparison_previous_year.monthly_data[monthKey];
-        const filteredReports = activeReportTab === "overview" 
-          ? compReports 
-          : compReports.filter(r => r.reportId === activeReportTab);
-        prevYearValue = filteredReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
-      } else if (cachedPivotData?.monthly_data?.[prevYearMonthKey]) {
-        // Fallback: use same month from previous year
-        const prevYearReports = cachedPivotData.monthly_data[prevYearMonthKey];
-        const filteredReports = activeReportTab === "overview" 
-          ? prevYearReports 
-          : prevYearReports.filter(r => r.reportId === activeReportTab);
-        prevYearValue = filteredReports.reduce((sum, r) => sum + (r.metrics[chartKpi] || 0), 0);
-      }
-      
-      // Calculate percent change based on comparison type - only when both values exist
-      let percentChange: number | null = null;
-      const comparisonValue = comparisonType === "previous_year" ? prevYearValue : prevPeriodValue;
-      if (currentValue > 0 && comparisonValue > 0) {
-        percentChange = ((currentValue - comparisonValue) / comparisonValue) * 100;
-      }
-      // Don't show percentage when comparison data is missing (comparisonValue === 0)
       
       monthlyData.push({
         month: monthLabel,
-        current: currentValue,
-        prevPeriod: prevPeriodValue,
-        prevYear: prevYearValue,
-        percentChange,
+        Cost: costValue,
+        Revenue: revenueValue,
       });
     }
     
     return monthlyData;
-  }, [cachedPivotData?.monthly_data, cachedPivotData?.comparison_previous_period?.monthly_data, cachedPivotData?.comparison_previous_year?.monthly_data, chartKpi, activeReportTab, comparisonType, selectedYear]);
+  }, [cachedPivotData?.monthly_data, activeReportTab, selectedYear]);
 
-  // Chart config for grouped bars
-  const chartConfig = {
-    current: {
-      label: `${chartKpi} (Current)`,
-      color: "hsl(var(--primary))",
-    },
-    prevPeriod: {
-      label: `${chartKpi} (vs Prev Period)`,
-      color: "hsl(var(--muted-foreground))",
-    },
-    prevYear: {
-      label: `${chartKpi} (vs Prev Year)`,
-      color: "hsl(var(--accent-foreground) / 0.5)",
-    },
-  };
+  // Prepare aggregated chart data based on selected period (Last 30 days, 3 months, 6 months)
+  const aggregatedChartData = useMemo(() => {
+    const now = new Date();
+    let rangeStart: Date;
+    let rangeEnd: Date = now;
+    let aggregationType: "days" | "weeks" | "months";
+
+    // Determine date range and aggregation type based on chartPeriod
+    if (chartPeriod === "30days") {
+      rangeStart = subDays(now, 30);
+      aggregationType = "days";
+    } else if (chartPeriod === "3months") {
+      rangeStart = subMonths(now, 3);
+      aggregationType = "weeks";
+    } else { // 6months
+      rangeStart = subMonths(now, 6);
+      aggregationType = "months";
+    }
+
+    // Get all rows from all reports, filtered by activeReportTab
+    const allRows: any[] = [];
+    Object.entries(rawSourceData).forEach(([reportId, reportData]) => {
+      if (reportData?.rows) {
+        if (activeReportTab === "overview" || reportId === activeReportTab) {
+          allRows.push(...reportData.rows);
+        }
+      }
+    });
+
+    const aggregatedData: { period: string; Cost: number; Revenue: number }[] = [];
+
+    if (aggregationType === "days") {
+      // Last 30 days: cluster every 3 days
+      const allDays = eachDayOfInterval({ start: rangeStart, end: rangeEnd });
+      for (let i = 0; i < allDays.length; i += 3) {
+        const clusterDays = allDays.slice(i, Math.min(i + 3, allDays.length));
+        if (clusterDays.length === 0) continue;
+        
+        const clusterStart = clusterDays[0];
+        const clusterEnd = clusterDays[clusterDays.length - 1];
+        const dateRange = { 
+          start: new Date(clusterStart.getFullYear(), clusterStart.getMonth(), clusterStart.getDate(), 0, 0, 0),
+          end: new Date(clusterEnd.getFullYear(), clusterEnd.getMonth(), clusterEnd.getDate(), 23, 59, 59)
+        };
+        
+        const metrics = aggregateMetrics(allRows, selectedMetrics, dateRange, undefined, mergedMetricMap);
+        aggregatedData.push({
+          period: clusterDays.length === 1 
+            ? format(clusterStart, 'MMM d')
+            : `${format(clusterStart, 'MMM d')} - ${format(clusterEnd, 'MMM d')}`,
+          Cost: metrics['Cost'] || 0,
+          Revenue: metrics['Revenue'] || 0,
+        });
+      }
+    } else if (aggregationType === "weeks") {
+      // Last 3 months: show by weeks
+      const weeks = eachWeekOfInterval({ start: rangeStart, end: rangeEnd }, { weekStartsOn: 1 });
+      weeks.forEach((weekStart) => {
+        const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+        const dateRange = { start: weekStart, end: weekEnd > rangeEnd ? rangeEnd : weekEnd };
+        const metrics = aggregateMetrics(allRows, selectedMetrics, dateRange, undefined, mergedMetricMap);
+        aggregatedData.push({
+          period: `Week ${format(weekStart, 'MMM d')}`,
+          Cost: metrics['Cost'] || 0,
+          Revenue: metrics['Revenue'] || 0,
+        });
+      });
+    } else {
+      // Last 6 months: show by months
+      let current = startOfMonth(rangeStart);
+      while (current <= rangeEnd) {
+        const monthEnd = endOfMonth(current);
+        const dateRange = { 
+          start: current, 
+          end: monthEnd > rangeEnd ? rangeEnd : monthEnd 
+        };
+        const metrics = aggregateMetrics(allRows, selectedMetrics, dateRange, undefined, mergedMetricMap);
+        aggregatedData.push({
+          period: format(current, 'MMM yyyy'),
+          Cost: metrics['Cost'] || 0,
+          Revenue: metrics['Revenue'] || 0,
+        });
+        current = startOfMonth(subMonths(current, -1));
+      }
+    }
+
+    // Reverse to show latest period first
+    return aggregatedData.reverse();
+  }, [chartPeriod, rawSourceData, activeReportTab, selectedMetrics, mergedMetricMap]);
+
+  // Prepare daily chart data for specific month selection (legacy - for backward compatibility)
+  const dailyChartData = useMemo(() => {
+    const period = selectedDatePeriod || activeTab;
+    const isSpecificMonth = period.match(/^\d{4}-\d{2}$/);
+    if (!isSpecificMonth) return [];
+
+    const range = getDateRange(period as DateTab, selectedYear);
+    const allDays = eachDayOfInterval({ start: range.start, end: range.end });
+    const dailyData: { day: string; Cost: number; Revenue: number }[] = [];
+
+    // Get all rows from all reports, filtered by activeReportTab
+    const allRows: any[] = [];
+    Object.entries(rawSourceData).forEach(([reportId, reportData]) => {
+      if (reportData?.rows) {
+        // Filter by activeReportTab if not overview
+        if (activeReportTab === "overview" || reportId === activeReportTab) {
+          allRows.push(...reportData.rows);
+        }
+      }
+    });
+
+    // Build data for each day
+    allDays.forEach((day) => {
+      const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
+      const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
+      const dateRange = { start: dayStart, end: dayEnd };
+      const metrics = aggregateMetrics(allRows, selectedMetrics, dateRange, undefined, mergedMetricMap);
+      
+      dailyData.push({
+        day: format(day, 'MMM d'),
+        Cost: metrics['Cost'] || 0,
+        Revenue: metrics['Revenue'] || 0,
+      });
+    });
+
+    return dailyData;
+  }, [selectedDatePeriod, activeTab, selectedYear, rawSourceData, activeReportTab, selectedMetrics, mergedMetricMap]);
 
   // Note: Raw source data is now loaded via React Query hook (useAISummaryRawData)
   // which provides caching across tab switches and reconnections
@@ -1730,83 +1809,259 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         );
       })()}
 
-      {/* Monthly Bar Chart - shown after KPI cards on all tabs */}
-      <div className="border rounded-lg overflow-hidden">
-        <div className="bg-primary/5 px-4 py-2 border-b flex items-center justify-between">
-          <h4 className="font-semibold text-sm">
-            Results By Month{activeReportTab !== "overview" && (() => {
-              const period = selectedDatePeriod || activeTab;
-              const periodData = computeDataForTab(period as DateTab);
-              const reportName = periodData.find(r => r.reportId === activeReportTab)?.reportName;
-              return reportName ? ` - ${reportName}` : '';
-            })()}
-          </h4>
-          <Select value={chartKpi} onValueChange={setChartKpi}>
-            <SelectTrigger className="w-[140px] h-8 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-popover border-border z-50">
-              {safeMetrics.map((metric) => (
-                <SelectItem key={metric} value={metric}>
-                  {metric}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="p-4">
-          <ChartContainer config={chartConfig} className="h-[300px] w-full">
-            <BarChart data={ytdChartData} margin={{ top: 30, right: 10, left: 10, bottom: 10 }}>
-              <XAxis 
-                dataKey="month" 
-                tickLine={false} 
-                axisLine={false}
-                tick={{ fontSize: 12 }}
-              />
-              <YAxis 
-                tickLine={false} 
-                axisLine={false}
-                tick={{ fontSize: 12 }}
-                tickFormatter={(value) => formatNumber(value)}
-              />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    formatter={(value, name) => {
-                      return [formatMetricValue(chartKpi, Number(value)), 'Current'];
-                    }}
+      {/* Chart with period selector - shown after KPI cards */}
+      {(() => {
+        // Use aggregated chart data based on chartPeriod selector
+        const chartData = aggregatedChartData;
+        const xAxisKey = "period";
+        
+        if (chartData.length === 0) return null;
+
+        return (
+          <div className="border rounded-lg overflow-hidden">
+            <div className="bg-primary/5 px-4 py-2 border-b flex items-center justify-between">
+              <h4 className="font-semibold text-sm">
+                Results{activeReportTab !== "overview" && (() => {
+                  const period = selectedDatePeriod || activeTab;
+                  const periodData = computeDataForTab(period as DateTab);
+                  const reportName = periodData.find(r => r.reportId === activeReportTab)?.reportName;
+                  return reportName ? ` - ${reportName}` : '';
+                })()}
+              </h4>
+              <Select value={chartPeriod} onValueChange={(v) => setChartPeriod(v as "30days" | "3months" | "6months")}>
+                <SelectTrigger className="w-[160px] h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border z-50">
+                  <SelectItem value="30days">Last 30 days</SelectItem>
+                  <SelectItem value="3months">Last 3 months</SelectItem>
+                  <SelectItem value="6months">Last 6 months</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="p-4">
+              <ChartContainer config={{
+                Cost: {
+                  label: "Cost",
+                  color: "hsl(var(--destructive))",
+                },
+                Revenue: {
+                  label: "Revenue",
+                  color: "hsl(var(--primary))",
+                },
+              }} className="h-[300px] w-full">
+                <BarChart data={chartData} margin={{ top: 30, right: 10, left: 10, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                  <XAxis 
+                    dataKey={xAxisKey} 
+                    tickLine={false} 
+                    axisLine={false}
+                    tick={{ fontSize: 12 }}
                   />
-                }
-              />
-              <Bar 
-                dataKey="current" 
-                name="current"
-                fill="hsl(var(--primary))" 
-                radius={[4, 4, 0, 0]}
-              >
-                {comparisonType !== "none" && (
-                  <LabelList 
-                    dataKey="percentChange" 
-                    position="top" 
-                    formatter={(value: number | null) => {
-                      if (value === null) return '';
-                      const sign = value > 0 ? '+' : '';
-                      return `${sign}${value.toFixed(0)}%`;
-                    }}
-                    style={{ 
-                      fontSize: 10, 
-                      fontWeight: 500,
-                    }}
-                    fill="hsl(var(--foreground))"
+                  <YAxis 
+                    tickLine={false} 
+                    axisLine={false}
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value) => formatNumber(value)}
                   />
-                )}
-              </Bar>
-            </BarChart>
-          </ChartContainer>
-        </div>
-      </div>
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value, name) => {
+                          return [formatMetricValue(name as string, Number(value)), name];
+                        }}
+                      />
+                    }
+                  />
+                  <Legend />
+                  <Bar 
+                    dataKey="Revenue" 
+                    fill="hsl(var(--primary))" 
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar 
+                    dataKey="Cost" 
+                    fill="hsl(var(--destructive))" 
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ChartContainer>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="space-y-6">
+        {/* Unified Day/Week table - applies to all reports (Overview and individual) */}
+        {(() => {
+          const period = selectedDatePeriod || activeTab;
+          const isSpecificMonth = period.match(/^\d{4}-\d{2}$/);
+          
+          // Get rows based on active report tab
+          const getRowsForTab = () => {
+            const allRows: any[] = [];
+            
+            if (activeReportTab === "overview") {
+              // Get all rows from all reports
+              Object.values(rawSourceData).forEach((reportData) => {
+                if (reportData?.rows) {
+                  allRows.push(...reportData.rows);
+                }
+              });
+            } else {
+              // Get rows for specific report
+              const reportData = rawSourceData[activeReportTab];
+              if (reportData?.rows) {
+                allRows.push(...reportData.rows);
+              }
+            }
+            
+            return allRows;
+          };
+
+          const allRows = getRowsForTab();
+          if (allRows.length === 0) return null;
+
+          // Build daily rows
+          const buildDailyRows = () => {
+            const rows: DateBreakdownRow[] = [];
+            let range: { start: Date; end: Date };
+            
+            if (isSpecificMonth) {
+              range = getDateRange(period as DateTab, selectedYear);
+            } else {
+              // For YTD/Full year, show last 30 days
+              const now = new Date();
+              range = { start: subDays(now, 30), end: now };
+            }
+            
+            const allDays = eachDayOfInterval({ start: range.start, end: range.end });
+            
+            allDays.reverse().forEach((day) => {
+              const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
+              const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
+              const dateRange = { start: dayStart, end: dayEnd };
+              const metrics = aggregateMetrics(allRows, selectedMetrics, dateRange, undefined, mergedMetricMap);
+              rows.push({
+                dateGroup: format(day, 'MMM d, yyyy'),
+                metrics,
+              });
+            });
+            
+            return rows;
+          };
+
+          // Build weekly rows
+          const buildWeeklyRows = () => {
+            const weekGroups: Record<string, any[]> = {};
+            let range: { start: Date; end: Date };
+            
+            if (isSpecificMonth) {
+              range = getDateRange(period as DateTab, selectedYear);
+            } else {
+              // For YTD/Full year, show last 3 months
+              const now = new Date();
+              range = { start: subMonths(now, 3), end: now };
+            }
+            
+            allRows.forEach((row: any) => {
+              const rowDate = parseDate((row.dimension_values || row).Date || (row.dimension_values || row).date || (row.dimension_values || row).Day);
+              if (!rowDate) return;
+              if (rowDate < range.start || rowDate > range.end) return;
+              
+              // Group by week
+              const weekStart = startOfWeek(rowDate, { weekStartsOn: 1 });
+              const key = `Week of ${format(weekStart, 'MMM d, yyyy')}`;
+              (weekGroups[key] ||= []).push(row);
+            });
+
+            // Sort by date descending (latest week first)
+            return Object.entries(weekGroups)
+              .sort(([a], [b]) => {
+                // Extract dates from "Week of MMM d, yyyy"
+                try {
+                  const aDateStr = a.replace('Week of ', '');
+                  const bDateStr = b.replace('Week of ', '');
+                  const aDate = parseISO(aDateStr);
+                  const bDate = parseISO(bDateStr);
+                  if (isValid(aDate) && isValid(bDate)) {
+                    return bDate.getTime() - aDate.getTime();
+                  }
+                } catch (e) {
+                  // Fallback to string comparison
+                }
+                return b.localeCompare(a);
+              })
+              .map(([dateGroup, rows]) => {
+                const weekStart = parseISO(dateGroup.replace('Week of ', ''));
+                const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+                const dateRange = { 
+                  start: weekStart, 
+                  end: weekEnd > range.end ? range.end : weekEnd 
+                };
+                return {
+                  dateGroup,
+                  metrics: aggregateMetrics(rows, selectedMetrics, dateRange, undefined, mergedMetricMap),
+                };
+              });
+          };
+
+          const dailyRows = buildDailyRows();
+          const weeklyRows = buildWeeklyRows();
+          const hasData = unifiedTableViewTab === "day" ? dailyRows.length > 0 : weeklyRows.length > 0;
+
+          if (!hasData) return null;
+
+          const tableRows = unifiedTableViewTab === "day" ? dailyRows : weeklyRows;
+          const sortKey = `unified-${unifiedTableViewTab}-${activeReportTab}`;
+
+          return (
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-primary/5 px-4 py-2 border-b flex items-center justify-between">
+                <h4 className="font-semibold text-sm">
+                  {activeReportTab === "overview" ? "Results" : (() => {
+                    const periodData = computeDataForTab(period as DateTab);
+                    const reportName = periodData.find(r => r.reportId === activeReportTab)?.reportName || 'Report';
+                    return reportName;
+                  })()}
+                </h4>
+                <Tabs value={unifiedTableViewTab} onValueChange={(v) => setUnifiedTableViewTab(v as "day" | "week")} className="w-auto">
+                  <TabsList>
+                    <TabsTrigger value="day">Day</TabsTrigger>
+                    <TabsTrigger value="week">Week</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+              <div className="overflow-hidden">
+                <Table>
+                  <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                    <TableRow className="bg-muted/30">
+                      <TableHead className="font-medium w-[200px]">{unifiedTableViewTab === "week" ? "Week" : "Day"}</TableHead>
+                      {safeMetrics.map((metric) => renderSortableHeader(sortKey, metric))}
+                    </TableRow>
+                  </TableHeader>
+                </Table>
+                <div className={tableRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                  <Table>
+                    <TableBody>
+                      {sortRows(tableRows, sortKey, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                        <TableRow key={row.dateGroup} className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}>
+                          <TableCell className="font-medium text-sm w-[200px]">{row.dateGroup}</TableCell>
+                          {safeMetrics.map((metric) => (
+                            <TableCell key={metric} className="text-right tabular-nums text-sm">
+                              {formatMetricValue(metric, row.metrics[metric] || 0)}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Render a table for the selected date period - ONLY on Overview tab */}
         {activeReportTab === "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
@@ -2031,191 +2286,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
         
-        {/* Add per-channel weekly/monthly tables in individual report tabs */}
-        {activeReportTab !== "overview" && (() => {
-          // Build rows for the active report only
-          const activeRows = rawSourceData[activeReportTab]?.rows || [];
-          if (activeRows.length === 0) return null;
-
-          const buildWeeklyRows = () => {
-            const weekGroups: Record<string, any[]> = {};
-            const range = getDateRange(selectedDatePeriod || activeTab, selectedYear);
-            activeRows.forEach(row => {
-              const rowDate = parseDate((row.dimension_values || row).Date || (row.dimension_values || row).date || (row.dimension_values || row).Day);
-              if (!rowDate) return;
-              if (rowDate < range.start || rowDate > range.end) return;
-              const key = getDateGroupKey(rowDate, (selectedDatePeriod || activeTab) as DateTab);
-              if (!key.startsWith('Week')) return; // non-YTD tabs produce weeks
-              (weekGroups[key] ||= []).push(row);
-            });
-            // Sort by dateGroup descending (latest week first) - reverse the entries
-            return Object.entries(weekGroups)
-              .sort(([a], [b]) => {
-                // Extract week numbers or dates for comparison
-                // Week keys are like "Week 1, 2025" or "Week of Jan 1, 2025"
-                // Try to parse and compare
-                const aMatch = a.match(/Week (\d+)/);
-                const bMatch = b.match(/Week (\d+)/);
-                if (aMatch && bMatch) {
-                  return parseInt(bMatch[1], 10) - parseInt(aMatch[1], 10);
-                }
-                // Fallback: reverse alphabetical order (latest dates come first)
-                return b.localeCompare(a);
-              })
-              .map(([dateGroup, rows]) => ({
-                dateGroup,
-                metrics: aggregateMetrics(rows, selectedMetrics, getDateRange(selectedDatePeriod || activeTab, selectedYear), undefined, mergedMetricMap),
-              }));
-          };
-
-          const buildMonthlyRowsYTD = () => {
-            const monthGroups: Record<string, any[]> = {};
-            const range = getDateRange('ytd', selectedYear);
-            activeRows.forEach(row => {
-              const rowDate = parseDate((row.dimension_values || row).Date || (row.dimension_values || row).date || (row.dimension_values || row).Day);
-              if (!rowDate) return;
-              if (rowDate < range.start || rowDate > range.end) return;
-              const key = getDateGroupKey(rowDate, 'ytd'); // "Month Year"
-              (monthGroups[key] ||= []).push(row);
-            });
-            return Object.entries(monthGroups).map(([dateGroup, rows]) => ({
-              dateGroup,
-              metrics: aggregateMetrics(rows, selectedMetrics, range, undefined, mergedMetricMap),
-            }));
-          };
-
-          const buildLast7DaysRows = () => {
-            const now = new Date();
-            const rows: DateBreakdownRow[] = [];
-            // Build from 6 days ago to today (oldest to newest)
-            for (let i = 6; i >= 0; i--) {
-              const day = subDays(now, i);
-              const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
-              const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
-              const dateRange = { start: dayStart, end: dayEnd };
-              const metrics = aggregateMetrics(activeRows, selectedMetrics, dateRange, undefined, mergedMetricMap);
-              rows.push({
-                dateGroup: format(day, 'MMM d, yyyy'),
-                metrics,
-              });
-            }
-            // Reverse to show latest day first
-            return rows.reverse();
-          };
-
-          const weeklyRows = buildWeeklyRows();
-          const monthlyRowsYTD = buildMonthlyRowsYTD();
-          const last7Rows = buildLast7DaysRows();
-
-          return (
-            <div className="space-y-4">
-              {/* Results by Week (for non-YTD periods) */}
-              {weeklyRows.length > 0 && (selectedDatePeriod !== 'ytd') && (
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-primary/5 px-4 py-2 border-b">
-                    <h4 className="font-semibold text-sm">Results By Week</h4>
-                  </div>
-                  <div className="overflow-hidden">
-                    <Table>
-                      <TableHeader className="sticky top-0 z-10 bg-muted/30">
-                        <TableRow className="bg-muted/30">
-                          <TableHead className="font-medium w-[200px]">Week</TableHead>
-                          {safeMetrics.map((metric) => renderSortableHeader(`channel-week-${activeReportTab}`, metric))}
-                        </TableRow>
-                      </TableHeader>
-                    </Table>
-                    <div className={weeklyRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
-                      <Table>
-                        <TableBody>
-                          {sortRows(weeklyRows, `channel-week-${activeReportTab}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                            <TableRow key={row.dateGroup} className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}>
-                              <TableCell className="font-medium text-sm w-[200px]">{row.dateGroup}</TableCell>
-                              {safeMetrics.map((metric) => (
-                                <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Last 7 Days for the channel */}
-              {last7Rows.length > 0 && (
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-primary/5 px-4 py-2 border-b">
-                    <h4 className="font-semibold text-sm">Last 7 Days</h4>
-                  </div>
-                  <div className="overflow-hidden">
-                    <Table>
-                      <TableHeader className="sticky top-0 z-10 bg-muted/30">
-                        <TableRow className="bg-muted/30">
-                          <TableHead className="font-medium w-[200px]">Day</TableHead>
-                          {safeMetrics.map((metric) => renderSortableHeader(`channel-last7-${activeReportTab}`, metric))}
-                        </TableRow>
-                      </TableHeader>
-                    </Table>
-                    <div className={last7Rows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
-                      <Table>
-                        <TableBody>
-                          {sortRows(last7Rows, `channel-last7-${activeReportTab}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                            <TableRow key={row.dateGroup} className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}>
-                              <TableCell className="font-medium text-sm w-[200px]">{row.dateGroup}</TableCell>
-                              {safeMetrics.map((metric) => (
-                                <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* YTD: Results by Month for the channel */}
-              {monthlyRowsYTD.length > 0 && (
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-primary/5 px-4 py-2 border-b">
-                    <h4 className="font-semibold text-sm">Results By Month</h4>
-                  </div>
-                  <div className="overflow-hidden">
-                    <Table>
-                      <TableHeader className="sticky top-0 z-10 bg-muted/30">
-                        <TableRow className="bg-muted/30">
-                          <TableHead className="font-medium w-[200px]">Month</TableHead>
-                          {safeMetrics.map((metric) => renderSortableHeader(`channel-ytd-${activeReportTab}`, metric))}
-                        </TableRow>
-                      </TableHeader>
-                    </Table>
-                    <div className={monthlyRowsYTD.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
-                      <Table>
-                        <TableBody>
-                          {sortRows(monthlyRowsYTD, `channel-ytd-${activeReportTab}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                            <TableRow key={row.dateGroup} className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}>
-                              <TableCell className="font-medium text-sm w-[200px]">{row.dateGroup}</TableCell>
-                              {safeMetrics.map((metric) => (
-                                <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })()}
+        {/* Removed: Individual report weekly/monthly/last7 tables - now using unified Day/Week table above */}
 
         {/* Executive Summary - TEMPORARILY HIDDEN
         {activeReportTab === "overview" && (() => {
