@@ -542,7 +542,6 @@ export const DimensionModal = ({
                 <SelectItem value="number">Number</SelectItem>
                 <SelectItem value="currency">Currency</SelectItem>
                 <SelectItem value="percentage">Percentage</SelectItem>
-                <SelectItem value="vlookup">Vlookup</SelectItem>
               </SelectContent>
             </Select>
           </div>

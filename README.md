@@ -71,3 +71,7 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## Development Workflow
+
+When making code changes, you must update the corresponding task in `/dev` kanban board to reflect the changes made. This ensures proper tracking of feature development and code modifications.

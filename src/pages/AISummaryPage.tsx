@@ -200,7 +200,7 @@ const AISummaryPage = () => {
 
   const handleBack = () => {
     if (accountId) {
-      navigate(`/tools/report/${accountId}`);
+      navigate(`/tools/data/${accountId}`);
     } else {
       navigate("/");
     }
@@ -1597,7 +1597,7 @@ const AISummaryPage = () => {
           fetchCards();
           // Navigate to the new card if an ID was returned
           if (newCardId && accountId) {
-            navigate(`/tools/ai-summary/${accountId}/${newCardId}`);
+            navigate(`/tools/report/${accountId}/${newCardId}`);
           }
         }}
         editingCard={editingCard}

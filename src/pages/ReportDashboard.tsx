@@ -11,11 +11,10 @@ import { LoadingToast } from "@/components/LoadingToast";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { ReportsSidebar } from "@/components/ReportsSidebar";
+import { DataStudioDropdowns } from "@/components/DataStudioDropdowns";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Database, Grid3x3, GitCompare, Star, Share2, Settings, Clock } from "lucide-react";
+import { ArrowLeft, Database, Grid3x3, GitCompare, Share2, Settings, Clock } from "lucide-react";
 import { ShareModal } from "@/components/ShareModal";
 import { AddAICardModal } from "@/components/AddAICardModal";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,7 +23,6 @@ import { resyncReportViews } from "@/lib/resync-report-views";
 import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import { DataSourcesListModal } from "@/components/DataSourcesListModal";
 import { DimensionsListModal } from "@/components/DimensionsListModal";
-import VlookupModal from "@/components/VlookupModal";
 import { ReportModal } from "@/components/ReportModal";
 import { CreateAISummaryModal } from "@/components/CreateAISummaryModal";
 import { CacheStatusIndicator } from "@/components/CacheStatusIndicator";
@@ -85,7 +83,6 @@ export default function ReportDashboard() {
   // NEW: local modals for Looker-style controls
   const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
-  const [showVlookupModal, setShowVlookupModal] = useState(false);
 
   // Derive current report name
   const currentReportName = reportsList.find(r => r.id === reportId)?.name || "Reports";
@@ -232,7 +229,7 @@ export default function ReportDashboard() {
 
   const handleEditAISummary = (summaryId: string) => {
     // Navigate to the AI summary page where editing is handled
-    navigate(`/tools/ai-summary/${accountId}/${summaryId}`);
+    navigate(`/tools/report/${accountId}/${summaryId}`);
   };
 
   const handleDeleteAISummary = async (summaryId: string) => {
@@ -304,7 +301,7 @@ export default function ReportDashboard() {
           description: "This account does not exist or you don't have access to it.",
           variant: "destructive",
         });
-        navigate('/tools/report');
+        navigate('/tools/data');
         return;
       }
       
@@ -471,8 +468,8 @@ export default function ReportDashboard() {
   const handleEditReport = (id: string) => {
     // Navigate to the report tool for editing the selected report
     const url = accountId
-      ? `/tools/report/${accountId}?reportId=${id}`
-      : `/tools/report?reportId=${id}`;
+      ? `/tools/data/${accountId}?reportId=${id}`
+      : `/tools/data?reportId=${id}`;
     navigate(url);
   };
 
@@ -519,33 +516,18 @@ export default function ReportDashboard() {
   }
 
   return (
-    <SidebarProvider>
-      <div className="min-h-screen bg-background flex overflow-x-hidden">
-        <ReportsSidebar
-          reports={reportsList}
-          accountId={accountId}
-          selectedReportId={reportId}
-          onEditReport={(id) => handleEditReport(id)}
-          onDeleteReport={(id) => handleDeleteReport({ id, name: "", account_id: accountId || null, created_at: "", updated_at: "" } as any)}
-          onAddNewReport={() => setShowCreateReportModal(true)}
-          onSelectReport={(id) => setReportId(id)}
-          onAddAISummary={() => setShowAISummaryModal(true)}
-          onEditAISummary={handleEditAISummary}
-          onDeleteAISummary={handleDeleteAISummary}
-          aiSummaries={aiSummaries}
-        />
-        <SidebarInset className="flex-1 overflow-x-hidden">
+    <div className="min-h-screen bg-background flex flex-col overflow-x-hidden">
           {/* Loading toast for data loading - HIDDEN: Individual components show their own loading states */}
           {/* <LoadingToast 
             isVisible={isDataLoading} 
             loadingComponents={loadingComponents}
           /> */}
           
-          {/* Top Bar - Row 1: Title and main actions */}
+          {/* Top Bar - Row 1: Dropdowns and main actions */}
           <header className="bg-card border-b">
             <div className="container mx-auto px-6 py-3 flex items-center justify-between">
-              {/* Left: Back + Title + Star */}
-              <div className="flex items-center gap-3">
+              {/* Left: Back + Dropdowns */}
+              <div className="flex items-center gap-4">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -555,10 +537,19 @@ export default function ReportDashboard() {
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-lg font-semibold text-foreground">{currentReportName}</h1>
-                  <Star className="h-4 w-4 text-yellow-400 fill-yellow-400" />
-                </div>
+                <DataStudioDropdowns
+                  reports={reportsList}
+                  accountId={accountId}
+                  selectedReportId={reportId}
+                  onEditReport={(id) => handleEditReport(id)}
+                  onDeleteReport={(id) => handleDeleteReport({ id, name: "", account_id: accountId || null, created_at: "", updated_at: "" } as any)}
+                  onAddNewReport={() => setShowCreateReportModal(true)}
+                  onSelectReport={(id) => setReportId(id)}
+                  onAddAISummary={() => setShowAISummaryModal(true)}
+                  onEditAISummary={handleEditAISummary}
+                  onDeleteAISummary={handleDeleteAISummary}
+                  aiSummaries={aiSummaries}
+                />
               </div>
 
               {/* Right: Edit mode toggle, edit buttons, share */}
@@ -622,16 +613,6 @@ export default function ReportDashboard() {
                       <Grid3x3 className="h-4 w-4" />
                       Dimensions
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2"
-                      onClick={() => setShowVlookupModal(true)}
-                    >
-                      <GitCompare className="h-4 w-4" />
-                      Vlookup
-                    </Button>
-                    <div className="h-4 w-px bg-border" />
                   </>
                 )}
 
@@ -769,7 +750,7 @@ export default function ReportDashboard() {
             onOpenChange={setShowDataSourcesListModal}
             reportId={reportId || ""}
             accountId={accountId}
-            onAddNew={() => navigate(accountId ? `/tools/report/${accountId}?reportId=${reportId}` : `/tools/report?reportId=${reportId}`)}
+            onAddNew={() => navigate(accountId ? `/tools/data/${accountId}?reportId=${reportId}` : `/tools/data?reportId=${reportId}`)}
             onDataSync={() => refreshData()}
             onRefreshData={() => refreshData()}
           />
@@ -777,24 +758,15 @@ export default function ReportDashboard() {
           <DimensionsListModal
             open={showDimensionsListModal}
             onOpenChange={setShowDimensionsListModal}
-            onAddNew={() => navigate(accountId ? `/tools/report/${accountId}?reportId=${reportId}` : `/tools/report?reportId=${reportId}`)}
-            onEdit={() => navigate(accountId ? `/tools/report/${accountId}?reportId=${reportId}` : `/tools/report?reportId=${reportId}`)}
+            onAddNew={() => navigate(accountId ? `/tools/data/${accountId}?reportId=${reportId}` : `/tools/data?reportId=${reportId}`)}
+            onEdit={() => navigate(accountId ? `/tools/data/${accountId}?reportId=${reportId}` : `/tools/data?reportId=${reportId}`)}
             refreshTrigger={loadingGeneration}
             reportId={reportId}
             accountId={accountId}
             onVisibilityChange={() => setVisibilityRefreshTrigger(prev => prev + 1)}
           />
 
-          <VlookupModal
-            open={showVlookupModal}
-            onOpenChange={setShowVlookupModal}
-            reportId={reportId || null}
-            accountId={accountId}
-          />
-        </SidebarInset>
-      </div>
-
-      {/* NEW: Create Report modal */}
+          {/* NEW: Create Report modal */}
       <ReportModal
         open={showCreateReportModal}
         onOpenChange={setShowCreateReportModal}
@@ -837,9 +809,9 @@ export default function ReportDashboard() {
         userId={session?.user?.id}
         onSummaryCreated={(summary) => {
           setAiSummaries((prev) => [summary, ...prev]);
-          navigate(`/tools/ai-summary/${accountId}/${summary.id}`);
+          navigate(`/tools/report/${accountId}/${summary.id}`);
         }}
       />
-    </SidebarProvider>
+    </div>
   );
 }

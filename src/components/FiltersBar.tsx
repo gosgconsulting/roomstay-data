@@ -13,7 +13,6 @@ import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff, filterDimensionsByFilterSettings } from "@/lib/debug";
 import { useToast } from "@/components/ui/use-toast";
-import { useVlookupMappings, getMappedValue } from "@/hooks/useVlookupMappings";
 import PerformanceSettingsModal from "@/components/PerformanceSettingsModal";
 import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 import { useUser } from "@/lib/auth";
@@ -103,8 +102,6 @@ export const FiltersBar = ({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dateDimensionIdForModal, setDateDimensionIdForModal] = useState<string | null>(null);
 
-  // vlookup mappings
-  const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
   
   // Get current user
   const { data: userData } = useUser();
@@ -133,9 +130,9 @@ export const FiltersBar = ({
       // Use the centralized dimension loader to get ALL dimensions
       const allAvailableDimensions = await loadDimensionsForUser(user.id, reportId);
       
-      // Filter to only text, vlookup, and date types (same as PerformanceSettingsModal expects)
+      // Filter to only text and date types (same as PerformanceSettingsModal expects)
       const textDateDimensions = allAvailableDimensions.filter(d => 
-        d.type === "text" || d.type === "vlookup" || d.type === "date"
+        d.type === "text" || d.type === "date"
       );
       
       // For the settings modal, show ALL text/date dimensions regardless of data availability
@@ -225,43 +222,6 @@ export const FiltersBar = ({
     ...allDimensions, // Use allDimensions instead of dimensions
   ];
 
-  // Helper: expand Cluster (vlookup target) filters to their source values
-  const expandFiltersWithVlookup = (filters: Record<string, string[]>) => {
-    const expanded: Record<string, string[]> = { ...filters };
-
-    // For each selected dimension that is a vlookup target, replace with its source values
-    Object.keys(filters).forEach((targetDimId) => {
-      const selectedClusters = filters[targetDimId];
-      if (!selectedClusters || selectedClusters.length === 0) return;
-
-      const mappingsForTarget = (vlookupMappings || []).filter(m => m.targetDimensionId === targetDimId);
-      if (mappingsForTarget.length === 0) return;
-
-      // Group by sourceDimensionId and collect source values for selected cluster names
-      const selectedSet = new Set(selectedClusters.map(s => String(s).trim()));
-      const bySource: Record<string, Set<string>> = {};
-
-      mappingsForTarget.forEach(m => {
-        if (selectedSet.has(String(m.targetValue).trim())) {
-          const srcId = m.sourceDimensionId;
-          if (!bySource[srcId]) bySource[srcId] = new Set<string>();
-          bySource[srcId].add(String(m.sourceValue).trim());
-        }
-      });
-
-      // Merge into expanded filters under source dimension(s)
-      Object.entries(bySource).forEach(([srcId, srcSet]) => {
-        const existing = expanded[srcId] || [];
-        const merged = Array.from(new Set([...existing, ...Array.from(srcSet)]));
-        expanded[srcId] = merged;
-      });
-
-      // Remove the target dim filter itself (no raw data column exists for it)
-      delete expanded[targetDimId];
-    });
-
-    return expanded;
-  };
 
   // Persist filter settings after changes (only in Edit mode)
   useEffect(() => {
@@ -280,7 +240,7 @@ export const FiltersBar = ({
 
   // Notify parent
   useEffect(() => {
-    const effectiveFilters = expandFiltersWithVlookup(selectedFilters);
+    const effectiveFilters = selectedFilters;
     onFiltersChange?.({
       dimensionFilters: effectiveFilters,
       dateRange,
@@ -291,7 +251,7 @@ export const FiltersBar = ({
       masterDimensionId,
       masterDimensionValues,
     });
-  }, [onFiltersChange, selectedFilters, dateRange, datePreset, compareEnabled, compareType, compareDateRange, masterDimensionId, masterDimensionValues, vlookupMappings]);
+  }, [onFiltersChange, selectedFilters, dateRange, datePreset, compareEnabled, compareType, compareDateRange, masterDimensionId, masterDimensionValues]);
 
   const getDateDimensionId = async (): Promise<string | null> => {
     try {
@@ -658,9 +618,9 @@ export const FiltersBar = ({
 
       console.log('[FiltersBar] loadDimensions - All dimensions loaded:', allAvailableDimensions.map(d => `${d.name} (${d.type})`));
       
-      // Filter to only text and vlookup dimensions (suitable for filtering)
-      const filterable = allAvailableDimensions.filter(d => d.type === "text" || d.type === "vlookup");
-      console.log('[FiltersBar] loadDimensions - After type filter (text/vlookup only):', filterable.map(d => d.name));
+      // Filter to only text dimensions (suitable for filtering)
+      const filterable = allAvailableDimensions.filter(d => d.type === "text");
+      console.log('[FiltersBar] loadDimensions - After type filter (text only):', filterable.map(d => d.name));
       
       // Apply filter settings filtering, but with fallback to ensure some dimensions are always available
       let final = filterable;
@@ -739,51 +699,19 @@ export const FiltersBar = ({
     try {
       const valuesArray: Record<string, string[]> = {};
       
-      // First, handle vlookup dimensions separately
-      const vlookupDimIds: string[] = [];
-      const regularDimIds: string[] = [];
-      
-      activeDimensions.forEach(dimId => {
-        const mappingsForDim = (vlookupMappings || []).filter(m => m.targetDimensionId === dimId);
-        if (mappingsForDim.length > 0) {
-          vlookupDimIds.push(dimId);
-          // For vlookup targets, list cluster names directly
-          const namesSet = new Set<string>();
-          mappingsForDim.forEach(m => {
-            const name = String(m.targetValue || '').trim();
-            if (name) namesSet.add(name);
-          });
-          valuesArray[dimId] = Array.from(namesSet).sort();
-          console.log('[FiltersBar] Vlookup values loaded:', dimId, valuesArray[dimId].length);
-        } else {
-          regularDimIds.push(dimId);
-        }
-      });
-
-      // Extract values for regular dimensions from source data
-      if (regularDimIds.length > 0 && sourceRows.length > 0) {
-        console.log('[FiltersBar] Extracting dimension values from source data for:', regularDimIds);
-        const extracted = extractMultipleDimensionValues(sourceRows, regularDimIds, 10000);
+      // Extract values for dimensions from source data
+      if (activeDimensions.length > 0 && sourceRows.length > 0) {
+        console.log('[FiltersBar] Extracting dimension values from source data for:', activeDimensions);
+        const extracted = extractMultipleDimensionValues(sourceRows, activeDimensions, 10000);
         
-        regularDimIds.forEach(dimId => {
+        activeDimensions.forEach(dimId => {
           const values = extracted[dimId] || [];
           console.log(`[FiltersBar] Extracted ${values.length} unique values for dimension ${dimId}`);
-          
-          // Apply vlookup mapping for source dimensions if relevant
-          const valuesSet = new Set<string>();
-          values.forEach(value => {
-            valuesSet.add(value);
-            const mappedValue = getMappedValue(value, vlookupMappings, dimId);
-            if (mappedValue !== value) {
-              valuesSet.add(mappedValue);
-            }
-          });
-          
-          valuesArray[dimId] = Array.from(valuesSet).sort();
+          valuesArray[dimId] = values.sort();
         });
-      } else if (regularDimIds.length > 0) {
+      } else if (activeDimensions.length > 0) {
         // No source data yet, set empty arrays
-        regularDimIds.forEach(dimId => {
+        activeDimensions.forEach(dimId => {
           valuesArray[dimId] = [];
         });
       }
@@ -1066,7 +994,7 @@ export const FiltersBar = ({
                     None (No master dimension)
                   </Button>
 
-                  {dimensions.filter(d => d.type === "text" || d.type === "vlookup").map(dim => (
+                  {dimensions.filter(d => d.type === "text").map(dim => (
                     <Button
                       key={dim.id}
                       variant={masterDimensionId === dim.id ? "secondary" : "ghost"}

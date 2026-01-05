@@ -27,7 +27,6 @@ export async function getAccountIdFromReport(reportId: string): Promise<string |
  * 1. Account-specific dimensions (highest priority)
  * 2. Custom dimensions (user-specific)
  * 3. Global dimensions (templates/fallback)
- * 4. Vlookup dimensions (now included as regular dimensions)
  * 
  * @param userId - The ID of the user
  * @param reportId - Optional report ID to get account-specific dimensions
@@ -83,7 +82,7 @@ export async function loadDimensionsForUser(
 
   if (globalError) throw globalError;
 
-  // Load user's custom dimensions (including vlookup dimensions)
+  // Load user's custom dimensions
   const { data: customData, error: customError } = await supabase
     .from("dimensions")
     .select("*")

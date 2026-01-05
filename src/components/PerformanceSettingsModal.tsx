@@ -42,7 +42,7 @@ export function PerformanceSettingsModal({
   const [isSaving, setIsSaving] = useState(false);
 
   const textDateDims = useMemo(
-    () => localDimensions.filter(d => d.type === "text" || d.type === "vlookup" || d.type === "date"),
+    () => localDimensions.filter(d => d.type === "text" || d.type === "date"),
     [localDimensions]
   );
 

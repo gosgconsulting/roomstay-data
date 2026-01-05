@@ -509,7 +509,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
               .from("dimensions")
               .select("id, name, type")
               .in("id", dimensionIds)
-              .in("type", ["text", "vlookup"])
+              .in("type", ["text"])
               .order("name");
 
             if (dimData) {

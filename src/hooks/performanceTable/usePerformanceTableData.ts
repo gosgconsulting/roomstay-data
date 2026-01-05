@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { useVlookupMappings } from "@/hooks/useVlookupMappings";
 import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "./usePerformanceTableDimensions";
 import { useSourceData, useCachedSourceData } from "@/hooks/dataSources";
@@ -63,7 +62,6 @@ export function usePerformanceTableData({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
 
-  const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
 
   // Use cached database data for instant loading
   const { 
@@ -164,21 +162,6 @@ export function usePerformanceTableData({
       let allRows = effectiveData.transformedRows;
       // console.log('[PERF-TABLE] Starting with', allRows.length, 'rows');
 
-      // Apply vlookup mappings
-      if (vlookupMappings.length > 0) {
-        allRows = allRows.map((row: any) => {
-          const dv = { ...row.dimension_values };
-          for (const m of vlookupMappings) {
-            const src = dv[m.sourceDimensionId];
-            if (src !== undefined && src !== null) {
-              if (String(src).toLowerCase() === m.sourceValue.toLowerCase()) {
-                dv[m.targetDimensionId] = m.targetValue;
-              }
-            }
-          }
-          return { ...row, dimension_values: dv };
-        });
-      }
 
       // Detect date dimension
       const dateDims = dimensions.filter(d => d.type === 'date');
@@ -295,15 +278,6 @@ export function usePerformanceTableData({
           if (dv[dim.id] !== undefined) {
             let value = dv[dim.id];
 
-            if (vlookupMappings.length > 0) {
-              const mapping = vlookupMappings.find(m =>
-                m.targetDimensionId === dim.id &&
-                m.sourceValue.toLowerCase() === String(value).toLowerCase()
-              );
-              if (mapping) {
-                value = mapping.targetValue;
-              }
-            }
 
             if (dim.type === 'number' || dim.type === 'currency' || dim.type === 'percentage') {
               const numValue = parseFloat(String(value));
@@ -430,7 +404,6 @@ export function usePerformanceTableData({
     activeDateTab,
     dateOrder,
     dimensions,
-    vlookupMappings.length,
     onLoadingComplete,
   ]);
 

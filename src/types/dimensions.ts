@@ -26,7 +26,7 @@ export interface FormulaConditionPair {
 export interface Dimension {
   id: string;
   name: string;
-  type: 'text' | 'date' | 'number' | 'currency' | 'percentage' | 'vlookup';
+  type: 'text' | 'date' | 'number' | 'currency' | 'percentage';
   user_id?: string;
   formula?: string | null; // Keep for backward compatibility
   is_system?: boolean;

@@ -87,7 +87,7 @@ export function useDimensionData(reportId?: string, accountId?: string) {
       }
 
       // Load ALL dimensions without filtering by data availability
-      // Per user memory: all text, vlookup, and date dimensions should be displayed
+      // Per user memory: all text and date dimensions should be displayed
       // regardless of whether they currently contain data
       const loadedDimensions = await loadDimensionsForUser(
         user.id, 

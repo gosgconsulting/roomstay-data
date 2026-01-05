@@ -247,9 +247,9 @@ export default function AllReports() {
     // Navigate to report edit page
     const report = reports.find(r => r.id === reportId);
     if (report?.account_id) {
-      navigate(`/tools/report/${report.account_id}?reportId=${reportId}&edit=true`);
+      navigate(`/tools/data/${report.account_id}?reportId=${reportId}&edit=true`);
     } else if (accountId) {
-      navigate(`/tools/report/${accountId}?reportId=${reportId}&edit=true`);
+      navigate(`/tools/data/${accountId}?reportId=${reportId}&edit=true`);
     }
   };
 
@@ -328,12 +328,12 @@ export default function AllReports() {
             onReportChange={(selectedReportId) => {
               // Navigate back to individual report view
               if (accountId) {
-                navigate(`/tools/report/${accountId}?reportId=${selectedReportId}`);
+                navigate(`/tools/data/${accountId}?reportId=${selectedReportId}`);
               } else {
                 // If no accountId, try to find the report's account_id
                 const selectedReport = reports.find(r => r.id === selectedReportId);
                 if (selectedReport?.account_id) {
-                  navigate(`/tools/report/${selectedReport.account_id}?reportId=${selectedReportId}`);
+                  navigate(`/tools/data/${selectedReport.account_id}?reportId=${selectedReportId}`);
                 }
               }
             }}

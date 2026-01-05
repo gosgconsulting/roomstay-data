@@ -17,6 +17,7 @@ import AISummaryPage from "./pages/AISummaryPage";
 
 import ForecastScenarioPage from "./pages/ForecastScenarioPage";
 import { ReportsSidebarDemo } from "./components/ReportsSidebarDemo";
+import DevPage from "./pages/DevPage";
 
 const queryClient = new QueryClient();
 
@@ -32,14 +33,15 @@ const App = () => (
           <Route path="/all-reports/:accountId" element={<AllReports />} />
           <Route path="/all-reports" element={<AllReports />} />
           <Route path="/auth" element={<Auth />} />
-          <Route path="/tools/report" element={<ReportTool />} />
-          <Route path="/tools/report/:accountId" element={<ReportDashboard />} />
+          <Route path="/tools/data" element={<ReportTool />} />
+          <Route path="/tools/data/:accountId" element={<ReportDashboard />} />
           <Route path="/tools/forecasting" element={<ForecastingTool />} />
           <Route path="/tools/forecasting/scenario/:scenarioId" element={<ForecastScenarioPage />} />
           <Route path="/tools/forecasting/:accountId" element={<ForecastingDashboard />} />
-          <Route path="/tools/ai-summary/:accountId" element={<AISummaryPage />} />
-          <Route path="/tools/ai-summary/:accountId/:summaryId" element={<AISummaryPage />} />
+          <Route path="/tools/report/:accountId" element={<AISummaryPage />} />
+          <Route path="/tools/report/:accountId/:summaryId" element={<AISummaryPage />} />
           <Route path="/demo/sidebar" element={<ReportsSidebarDemo />} />
+          <Route path="/dev" element={<DevPage />} />
           <Route path="/shared/:slug" element={<SharedReport />} />
           <Route path="/shared/reports/:slug" element={<SharedAISummary />} />
           <Route path="/:slug" element={<SharedReport />} />

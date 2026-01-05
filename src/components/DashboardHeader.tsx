@@ -11,7 +11,6 @@ import { DimensionModal } from "./DimensionModal";
 import { ReportModal } from "./ReportModal";
 import { ShareModal } from "./ShareModal";
 import { SyncModeModal } from "./SyncModeModal";
-import VlookupModal from "./VlookupModal";
 import { Session } from "@supabase/supabase-js";
 import type { Dimension } from "@/types/dimensions";
 
@@ -41,7 +40,6 @@ interface DashboardHeaderProps {
   isSharedView?: boolean;
   title?: string; // Custom title for consolidated views
   allowedReportIds?: string[]; // For shared views - only show these reports
-  onVlookupClick?: () => void;
 }
 
 export function DashboardHeader({
@@ -56,7 +54,6 @@ export function DashboardHeader({
   isSharedView, 
   title, 
   allowedReportIds,
-  onVlookupClick,
 }: DashboardHeaderProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -78,7 +75,6 @@ export function DashboardHeader({
   const [showReportModal, setShowReportModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSyncModeModal, setShowSyncModeModal] = useState(false);
-  const [showVlookupModal, setShowVlookupModal] = useState(false);
 
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [editingDimension, setEditingDimension] = useState<Dimension | null>(null);
@@ -781,12 +777,6 @@ export function DashboardHeader({
         totalRows={totalRows}
       />
 
-      <VlookupModal
-        open={showVlookupModal}
-        onOpenChange={setShowVlookupModal}
-        reportId={currentReport?.id || null}
-        accountId={accountId}
-      />
 
       <CSVImportChoiceModal
         open={showCSVImportChoiceModal}

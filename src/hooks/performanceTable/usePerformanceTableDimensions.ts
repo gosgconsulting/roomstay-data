@@ -221,7 +221,7 @@ export function usePerformanceTableDimensions({
         ? [...allDimensions, budgetDimension]
         : allDimensions;
 
-      // Per user memory: all text, vlookup, and date dimensions should be displayed
+      // Per user memory: all text and date dimensions should be displayed
       // regardless of whether they currently contain data.
       // Do NOT filter by data availability - show ALL dimensions
       let finalDimensions = allDimensionsWithBudget;

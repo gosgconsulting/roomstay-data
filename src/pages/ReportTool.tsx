@@ -238,7 +238,7 @@ export default function ReportTool() {
   };
 
   const handleSelectAccount = (account: Account) => {
-    navigate(`/tools/report/${account.id}`);
+    navigate(`/tools/data/${account.id}`);
   };
 
   const handleSourceTypeSelect = (sourceType: 'google_sheets' | 'csv_url') => {

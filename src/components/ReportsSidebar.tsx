@@ -101,11 +101,11 @@ export function ReportsSidebar({
     }
 
     if (accountId) {
-      navigate(`/tools/report/${accountId}?reportId=${reportId}`);
+      navigate(`/tools/data/${accountId}?reportId=${reportId}`);
     } else {
       const report = reports.find(r => r.id === reportId);
       if (report?.account_id) {
-        navigate(`/tools/report/${report.account_id}?reportId=${reportId}`);
+        navigate(`/tools/data/${report.account_id}?reportId=${reportId}`);
       }
     }
   };
@@ -115,9 +115,9 @@ export function ReportsSidebar({
       onAddNewReport();
     } else {
       if (accountId) {
-        navigate(`/tools/report/${accountId}`);
+        navigate(`/tools/data/${accountId}`);
       } else {
-        navigate('/tools/report');
+        navigate('/tools/data');
       }
     }
   };
@@ -129,7 +129,7 @@ export function ReportsSidebar({
     }
     
     if (accountId) {
-      navigate(`/tools/ai-summary/${accountId}/${summaryId}`);
+      navigate(`/tools/report/${accountId}/${summaryId}`);
     }
   };
 

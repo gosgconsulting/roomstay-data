@@ -3,7 +3,6 @@ import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "./usePerformanceTableDimensions";
 import type { TableRow } from "./usePerformanceTableData";
 import { calculateTotals, calculateComparisonTotalsAndChanges } from "@/lib/performanceTable/calculators";
-import { useVlookupMappings } from "@/hooks/useVlookupMappings";
 
 interface UsePerformanceTableFiltersOptions {
   tableData: TableRow[];
@@ -61,7 +60,7 @@ function addChangeDataToHierarchy(rows: TableRow[], compareEnabled: boolean): vo
 }
 
 /**
- * Hook for filtering table data and calculating filtered totals with vlookup support
+ * Hook for filtering table data and calculating filtered totals
  */
 export function usePerformanceTableFilters({
   tableData,
@@ -74,8 +73,6 @@ export function usePerformanceTableFilters({
   activeDateTab = 'day',
   dateOrder = 'desc',
 }: UsePerformanceTableFiltersOptions) {
-  // Load vlookup mappings for filtering and pivot functionality
-  const { data: vlookupMappings = [] } = useVlookupMappings(reportId, accountId);
   
   // First, filter the data based on dimension filters
   const filteredData = useMemo(() => {
@@ -98,7 +95,6 @@ export function usePerformanceTableFilters({
 
         const isNumeric = dimension.type === 'number' || dimension.type === 'currency' || dimension.type === 'percentage';
         const isGroupDimension = groupByDimensions[0] === dimId;
-        const isVlookupDimension = dimension.type === 'text' && dimension.scope === 'custom';
         
         // Check each filter value
         let matchesAnyValue = false;
@@ -150,34 +146,6 @@ export function usePerformanceTableFilters({
                 break;
               }
               
-              // For vlookup dimensions, check if the filter value matches the mapped target value
-              if (isVlookupDimension && vlookupMappings.length > 0) {
-                // Check if the current row value is a target value that matches the filter
-                const targetMatches = vlookupMappings.some(m => 
-                  m.targetDimensionId === dimId && 
-                  m.targetValue.toLowerCase().includes(filterLower)
-                );
-                
-                if (targetMatches && dimValueStr.includes(filterLower)) {
-                  matchesAnyValue = true;
-                  break;
-                }
-                
-                // Also check if the filter value maps to source values that match this row
-                const sourceMappings = vlookupMappings.filter(
-                  m => m.targetDimensionId === dimId && 
-                       m.targetValue.toLowerCase() === filterLower
-                );
-                
-                for (const mapping of sourceMappings) {
-                  if (dimValueStr.includes(mapping.sourceValue.toLowerCase())) {
-                    matchesAnyValue = true;
-                    break;
-                  }
-                }
-                
-                if (matchesAnyValue) break;
-              }
             }
           }
         }
@@ -190,7 +158,7 @@ export function usePerformanceTableFilters({
 
       return true; // All filters passed
     });
-  }, [tableData, filters.dimensionFilters, dimensions, groupByDimensions, vlookupMappings]);
+  }, [tableData, filters.dimensionFilters, dimensions, groupByDimensions]);
 
   // Transform the filtered data into a hierarchical structure for the pivot table
   const filteredTableData = useMemo(() => {
@@ -199,7 +167,6 @@ export function usePerformanceTableFilters({
     }
 
     console.log('[PERF-FILTERS] Creating hierarchical data with dimensions:', groupByDimensions);
-    console.log('[PERF-FILTERS] Available vlookup mappings:', vlookupMappings.length);
 
     // Get dimension objects for the group by dimensions
     const groupDimensions = groupByDimensions
@@ -211,17 +178,6 @@ export function usePerformanceTableFilters({
       return filteredData;
     }
 
-    // Check if any group dimension is a vlookup dimension (pivot dimension)
-    const vlookupDimensions = groupDimensions.filter(dim =>
-      dim.type === 'text' && (
-        // Recognize account-scoped or custom if targeted by vlookup mappings
-        vlookupMappings.some(m => m.targetDimensionId === dim.id)
-      )
-    );
-
-    if (vlookupDimensions.length > 0) {
-      console.log('[PERF-FILTERS] Found vlookup dimensions for pivot:', vlookupDimensions.map(d => d.name));
-    }
 
     // Helper function to aggregate dates by granularity
     const aggregateDateByGranularity = (dateStr: string | number | Date): string => {
@@ -310,13 +266,11 @@ export function usePerformanceTableFilters({
     const level1Map: Record<string, TableRow> = {};
     const level2Map: Record<string, TableRow> = {};
     
-    // Process each row and group by dimensions (with vlookup pivot support)
+    // Process each row and group by dimensions
     processedData.forEach(row => {
       const firstLevelValue = row.data[firstDimension.name];
       if (firstLevelValue === undefined || firstLevelValue === null) return; // Skip rows without the first dimension value
       
-      // For vlookup dimensions, the value has already been mapped in the data loading hook
-      // So we can use it directly for grouping
       const displayValue = String(firstLevelValue);
       
       // Create a unique key for this group
@@ -337,9 +291,6 @@ export function usePerformanceTableFilters({
         groupMap[firstLevelKey] = newGroup;
         hierarchicalData.push(newGroup);
         
-        if (firstDimension.type === 'text' && firstDimension.scope === 'custom') {
-          console.log(`[PERF-FILTERS] Created vlookup pivot group: ${displayValue}`);
-        }
       } else {
         // Aggregate numeric values for pivot functionality
         Object.keys(row.data).forEach(key => {
@@ -374,7 +325,6 @@ export function usePerformanceTableFilters({
       if (groupDimensions.length > 1) {
         const secondDimension = groupDimensions[1];
         const isSecondDimDate = secondDimension.type === 'date';
-        const isSecondDimVlookup = vlookupMappings.some(m => m.targetDimensionId === secondDimension.id);
         const secondLevelValue = row.data[secondDimension.name];
         
         if (secondLevelValue !== undefined && secondLevelValue !== null) {
@@ -397,9 +347,6 @@ export function usePerformanceTableFilters({
             groupMap[firstLevelKey].children = groupMap[firstLevelKey].children || [];
             groupMap[firstLevelKey].children.push(newSubGroup);
             
-            if (isSecondDimVlookup) {
-              console.log(`[PERF-FILTERS] Created level 2 vlookup pivot group: ${secondDisplayValue}`);
-            }
           } else {
             // Aggregate numeric values
             Object.keys(row.data).forEach(key => {
@@ -434,7 +381,6 @@ export function usePerformanceTableFilters({
           if (groupDimensions.length > 2) {
             const thirdDimension = groupDimensions[2];
             const isThirdDimDate = thirdDimension.type === 'date';
-            const isThirdDimVlookup = vlookupMappings.some(m => m.targetDimensionId === thirdDimension.id);
             const thirdLevelValue = row.data[thirdDimension.name];
             
             if (thirdLevelValue !== undefined && thirdLevelValue !== null) {
@@ -456,9 +402,6 @@ export function usePerformanceTableFilters({
                 level1Map[secondLevelKey].children = level1Map[secondLevelKey].children || [];
                 level1Map[secondLevelKey].children.push(newSubSubGroup);
                 
-                if (isThirdDimVlookup) {
-                  console.log(`[PERF-FILTERS] Created level 3 vlookup pivot group: ${thirdDisplayValue}`);
-                }
               } else {
                 // Aggregate numeric values
                 Object.keys(row.data).forEach(key => {
@@ -530,7 +473,7 @@ export function usePerformanceTableFilters({
               return dateOrder === 'desc' ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
             });
           } else {
-            // For non-date dimensions (including vlookup), sort alphabetically
+            // For non-date dimensions, sort alphabetically
             row.children.sort((a, b) => {
               return String(a.name).localeCompare(String(b.name));
             });
@@ -565,7 +508,7 @@ export function usePerformanceTableFilters({
         }
       });
     } else {
-      // For non-date first dimensions (including vlookup), sort alphabetically
+      // For non-date first dimensions, sort alphabetically
       hierarchicalData.sort((a, b) => {
         return String(a.name).localeCompare(String(b.name));
       });
@@ -770,12 +713,9 @@ export function usePerformanceTableFilters({
     addChangeDataToHierarchy(hierarchicalData, filters.compareEnabled || false);
 
     console.log('[PERF-FILTERS] Created hierarchical data with', hierarchicalData.length, 'top-level groups');
-    if (vlookupDimensions.length > 0) {
-      console.log('[PERF-FILTERS] Pivot functionality applied for vlookup dimensions');
-    }
     
     return hierarchicalData;
-  }, [filteredData, groupByDimensions, dimensions, dateOrder, vlookupMappings, activeDateTab, filters.compareEnabled]);
+  }, [filteredData, groupByDimensions, dimensions, dateOrder, activeDateTab, filters.compareEnabled]);
 
   // Calculate totals from filtered data
   const totals = useMemo(() => {

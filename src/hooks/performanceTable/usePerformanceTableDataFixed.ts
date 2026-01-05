@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
-import { useVlookupMappings } from "@/hooks/useVlookupMappings";
 import type { FilterState } from "@/components/FiltersBar";
 import type { Dimension } from "./usePerformanceTableDimensions";
 import { fetchPerformanceData } from "./usePerformanceData";
@@ -60,8 +59,6 @@ export function usePerformanceTableDataFixed({
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Load vlookup mappings for applying to data (if edge function doesn't handle it)
-  const { data: vlookupMappings = [] } = useVlookupMappings(reportId || undefined, accountId);
 
   const loadPerformanceData = useCallback(async () => {
     console.log('[PERF-DATA-FIXED] ============= STARTING DATA LOAD =============');
@@ -208,17 +205,6 @@ export function usePerformanceTableDataFixed({
           });
         }
         
-        // Apply vlookup mappings (client-side) if present
-        if (vlookupMappings.length > 0) {
-          for (const m of vlookupMappings) {
-            const src = dv[m.sourceDimensionId];
-            if (src !== undefined && src !== null) {
-              if (String(src).toLowerCase() === m.sourceValue.toLowerCase()) {
-                dv[m.targetDimensionId] = m.targetValue;
-              }
-            }
-          }
-        }
 
         // Build row.data keyed by dimension names with numeric conversion
         const rowData: Record<string, any> = {};
@@ -344,7 +330,6 @@ export function usePerformanceTableDataFixed({
     dateOrder,
     dimensions.length,
     onLoadingComplete,
-    vlookupMappings.length,
     queryClient
   ]);
 

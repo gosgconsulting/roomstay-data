@@ -185,7 +185,7 @@ export default function ForecastingDashboard() {
             <p className="text-muted-foreground mb-6">
               You don't have any reports for this account yet. Create a report in the Report tool first.
             </p>
-            <Button onClick={() => navigate('/tools/report')}>Go to Report Tool</Button>
+            <Button onClick={() => navigate('/tools/data')}>Go to Data Studio</Button>
           </div>
         </main>
       )}

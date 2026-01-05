@@ -1535,7 +1535,7 @@ export const syncDataSource = async (
       await updateColumnMappings(dataSource.id, dataSource.column_mappings || [], dimensionIdMap);
     }
 
-    console.log(`[SYNC] Complete! Processed ${allData.length} rows with ${Object.keys(dimensionIdMap).length} dimensions. Vlookup mappings will be applied dynamically during filtering.`);
+    console.log(`[SYNC] Complete! Processed ${allData.length} rows with ${Object.keys(dimensionIdMap).length} dimensions.`);
 
     return {
       success: true,

@@ -212,10 +212,10 @@ export default function Landing() {
   const tools: Tool[] = [
     {
       id: "report",
-      name: "Reports",
-      description: "Analyze performance metrics and KPIs",
+      name: "Data Studio",
+      description: "Looker Studio feature for adding and managing data sources",
       icon: <BarChart3 className="h-6 w-6" />,
-      getPath: (accountId: string) => `/tools/report/${accountId}`,
+      getPath: (accountId: string) => `/tools/data/${accountId}`,
       available: true,
     },
     {

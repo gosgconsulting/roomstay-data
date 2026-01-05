@@ -153,7 +153,7 @@ export default function ForecastingTool() {
               <p className="text-muted-foreground mb-6">
                 Create an account in the Report tool first to use forecasting.
               </p>
-              <Button onClick={() => navigate('/tools/report')}>
+              <Button onClick={() => navigate('/tools/data')}>
                 Go to Report Tool
               </Button>
             </div>
