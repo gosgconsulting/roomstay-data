@@ -1683,7 +1683,16 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
   return (
     <LoadingTransition isPending={isPending} message="Loading...">
-      <div className="w-full space-y-6">
+      {/* WRAP: Add blur + subtle overlay while loading/transitioning even if cached data is shown */}
+      <div className={`relative w-full space-y-6 ${ (isLoadingRawData || isPending) ? 'pointer-events-none opacity-70 blur-[1.5px] transition' : 'transition' }`}>
+        {(isLoadingRawData || isPending) && (
+          <div className="absolute left-1/2 -translate-x-1/2 -top-2 z-20">
+            <div className="px-3 py-1 rounded-md border bg-card text-xs text-muted-foreground shadow-sm">
+              Loading...
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between gap-3 mb-4">
           {/* Report Tabs */}
           <div className="flex gap-2 border-b pb-3">
@@ -1996,7 +2005,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       })()}
 
       <div className="space-y-6">
-        {/* Render a table for the selected date period - ONLY on Overview tab */}
+        {/* OVERVIEW: Period table (unchanged) */}
         {activeReportTab === "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
           const periodData = computeDataForTab(period as DateTab);
@@ -2100,183 +2109,242 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             </div>
           );
         })()}
-        
-        {/* Combined Date Breakdown Table - for selected period in overview mode */}
+
+        {/* OVERVIEW: Combined Date Breakdown -> Convert to single-line month unless YTD */}
         {activeReportTab === "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
-          let periodBreakdown = combinedDateBreakdown[period as DateTab];
-          if (!periodBreakdown || periodBreakdown.length === 0) return null;
-          
-          // Reverse week-based breakdowns to show latest first (not month-based)
-          // Only reverse if this is a week view (not ytd/month)
-          const isWeekView = period !== 'ytd' && period !== 'mtd' && !period.match(/^\d{4}-\d{2}$/);
-          if (isWeekView) {
-            // Reverse the array to show latest week first
-            periodBreakdown = [...periodBreakdown].reverse();
+
+          // Rule:
+          // - YTD -> keep existing month-by-month breakdown (use combined_date_breakdown if available)
+          // - Else (mtd or specific yyyy-MM) -> show ONE row aggregated for the selected month/period
+          if (period === 'ytd') {
+            let periodBreakdown = combinedDateBreakdown[period as DateTab];
+            if (!periodBreakdown || periodBreakdown.length === 0) return null;
+
+            const isWeekView = false; // ytd is month-based
+            return (
+              <div className="space-y-4">
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-primary/5 px-4 py-2 border-b">
+                    <h4 className="font-semibold text-sm">Results By Month</h4>
+                  </div>
+                  <div className="overflow-hidden">
+                    <Table>
+                      <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                        <TableRow className="bg-muted/30">
+                          <TableHead className="font-medium w-[200px]">Month</TableHead>
+                          {safeMetrics.map((metric) => renderSortableHeader('date-breakdown', metric))}
+                        </TableRow>
+                      </TableHeader>
+                    </Table>
+                    <div className={periodBreakdown.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                      <Table>
+                        <TableBody>
+                          {sortRows(periodBreakdown, 'date-breakdown', (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                            <TableRow
+                              key={row.dateGroup}
+                              className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                            >
+                              <TableCell className="font-medium text-sm w-[200px]">
+                                {row.dateGroup}
+                              </TableCell>
+                              {safeMetrics.map((metric) => (
+                                <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
           }
-          
+
+          // NON-YTD: render one aggregated line for the month/period
+          const periodData = computeDataForTab(period as DateTab);
+          const periodTotals = calculateTotals(periodData);
+
+          // Label for row
+          let rowLabel = 'This month';
+          const now = new Date();
+          const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+          if (period !== 'mtd') {
+            // specific yyyy-MM
+            const isCurrentMonth = period === currentYearMonth;
+            if (isCurrentMonth) {
+              rowLabel = 'This month';
+            } else {
+              const [y, m] = (period as string).split('-').map(Number);
+              rowLabel = `${MONTH_NAMES[(m - 1)]} ${y}`;
+            }
+          }
+
           return (
             <div className="space-y-4">
               <div className="border rounded-lg overflow-hidden">
                 <div className="bg-primary/5 px-4 py-2 border-b">
-                  <h4 className="font-semibold text-sm">
-                    Results By {period === 'ytd' ? 'Month' : 'Week'}
-                  </h4>
+                  <h4 className="font-semibold text-sm">Results By Month</h4>
                 </div>
                 <div className="overflow-hidden">
                   <Table>
                     <TableHeader className="sticky top-0 z-10 bg-muted/30">
                       <TableRow className="bg-muted/30">
-                        <TableHead className="font-medium w-[200px]">{period === 'ytd' ? 'Month' : 'Week'}</TableHead>
-                        {safeMetrics.map((metric) => renderSortableHeader('date-breakdown', metric))}
+                        <TableHead className="font-medium w-[200px]">Month</TableHead>
+                        {safeMetrics.map((metric) => (
+                          <TableHead key={metric} className="font-semibold text-right">{metric}</TableHead>
+                        ))}
                       </TableRow>
                     </TableHeader>
-                  </Table>
-                  <div className={periodBreakdown.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
-                    <Table>
-                      <TableBody>
-                        {sortRows(periodBreakdown, 'date-breakdown', (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                          <TableRow
-                            key={row.dateGroup}
-                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                          >
-                            <TableCell className="font-medium text-sm w-[200px]">
-                              {row.dateGroup}
-                            </TableCell>
-                            {safeMetrics.map((metric) => (
-                              <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                {formatMetricValue(metric, row.metrics[metric] || 0)}
-                              </TableCell>
-                            ))}
-                          </TableRow>
+                    <TableBody>
+                      <TableRow className="bg-background">
+                        <TableCell className="font-medium text-sm w-[200px]">
+                          {rowLabel}
+                        </TableCell>
+                        {safeMetrics.map((metric) => (
+                          <TableCell key={metric} className="text-right tabular-nums text-sm">
+                            {formatMetricValue(metric, periodTotals[metric] || 0)}
+                          </TableCell>
                         ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
             </div>
           );
         })()}
 
-        {/* Results by Week table - for individual report tabs */}
+        {/* INDIVIDUAL REPORT: Results by Week/Month -> single-line for month, monthly rows only for YTD */}
         {activeReportTab !== "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
-          
-          // Get data for the active report tab
-          const reportData = data[period as DateTab]?.find(r => r.reportId === activeReportTab);
-          if (!reportData) return null;
-          
-          // Compute date breakdown for this specific report
-          const reportId = activeReportTab;
-          const reportRawData = rawSourceData[reportId];
-          if (!reportRawData || !reportRawData.rows || reportRawData.rows.length === 0) return null;
-          
-          // Get date range for the period
-          const dateRange = getDateRange(period as DateTab, selectedYear);
-          
-          // Group rows by week/month
-          const dateGroups: Record<string, any[]> = {};
-          const dateDimId = mergedMetricMap['Date'] || mergedMetricMap['date'] || mergedMetricMap['Day'];
-          
-          reportRawData.rows.forEach((row: any) => {
-            const rowData = row.dimension_values || row;
-            let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
-            if (!dateValue && dateDimId) {
-              dateValue = rowData[dateDimId];
-            }
-            if (!dateValue) {
-              for (const [key, val] of Object.entries(rowData)) {
-                if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-                  dateValue = val;
-                  break;
-                }
+
+          // Find the single report's data for this period
+          const periodData = computeDataForTab(period as DateTab);
+          const reportRow = periodData.find(r => r.reportId === activeReportTab);
+          if (!reportRow) return null;
+
+          if (period === 'ytd') {
+            // Compute monthly rows for this report (use raw data, same logic as before but for months)
+            const reportRawData = rawSourceData[activeReportTab];
+            if (!reportRawData || !reportRawData.rows?.length) return null;
+
+            const year = selectedYear;
+            const monthRows: DateBreakdownRow[] = [];
+            for (let m = 0; m < 12; m++) {
+              const monthKey = `${year}-${String(m + 1).padStart(2, '0')}`;
+              const dateRange = getDateRange(monthKey, selectedYear);
+              const metrics = aggregateMetrics(
+                reportRawData.rows,
+                selectedMetrics,
+                dateRange,
+                getDimensionFilterForReport(activeReportTab),
+                mergedMetricMap
+              );
+              const hasAny = Object.values(metrics).some(v => v && v !== 0);
+              if (hasAny) {
+                monthRows.push({
+                  dateGroup: `${MONTH_NAMES[m]} ${year}`,
+                  metrics,
+                });
               }
             }
-            
-            const rowDate = parseDate(dateValue);
-            if (!rowDate) return;
-            if (rowDate < dateRange.start || rowDate > dateRange.end) return;
-            
-            const groupKey = getDateGroupKey(rowDate, period as DateTab);
-            if (!dateGroups[groupKey]) {
-              dateGroups[groupKey] = [];
-            }
-            dateGroups[groupKey].push(row);
-          });
-          
-          // Convert to DateBreakdownRow format
-          const reportDateBreakdown: DateBreakdownRow[] = [];
-          Object.entries(dateGroups).forEach(([dateGroup, groupRows]) => {
-            const dimensionFilter = getDimensionFilterForReport(reportId);
-            const metrics = aggregateMetrics(
-              groupRows,
-              selectedMetrics,
-              dateRange,
-              dimensionFilter,
-              mergedMetricMap
+
+            if (monthRows.length === 0) return null;
+
+            return (
+              <div className="mt-6 space-y-4">
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-primary/5 px-4 py-2 border-b">
+                    <h4 className="font-semibold text-sm">Results By Month</h4>
+                  </div>
+                  <div className="overflow-hidden">
+                    <Table>
+                      <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                        <TableRow className="bg-muted/30">
+                          <TableHead className="font-medium w-[200px]">Month</TableHead>
+                          {safeMetrics.map((metric) => renderSortableHeader(`report-date-breakdown-${activeReportTab}`, metric))}
+                        </TableRow>
+                      </TableHeader>
+                    </Table>
+                    <div className={monthRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                      <Table>
+                        <TableBody>
+                          {sortRows(monthRows, `report-date-breakdown-${activeReportTab}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                            <TableRow
+                              key={row.dateGroup}
+                              className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                            >
+                              <TableCell className="font-medium text-sm w-[200px]">
+                                {row.dateGroup}
+                              </TableCell>
+                              {safeMetrics.map((metric) => (
+                                <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </div>
+              </div>
             );
-            
-            reportDateBreakdown.push({
-              dateGroup,
-              metrics,
-            });
-          });
-          
-          // Sort by date group
-          reportDateBreakdown.sort((a, b) => a.dateGroup.localeCompare(b.dateGroup));
-          
-          // Reverse week-based breakdowns to show latest first (not month-based)
-          const isWeekView = period !== 'ytd' && period !== 'mtd' && !period.match(/^\d{4}-\d{2}$/);
-          const sortedBreakdown = isWeekView ? [...reportDateBreakdown].reverse() : reportDateBreakdown;
-          
-          if (sortedBreakdown.length === 0) return null;
-          
+          }
+
+          // NON-YTD: single aggregated line for the month/period
+          let rowLabel = 'This month';
+          const now = new Date();
+          const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+          if (period !== 'mtd') {
+            const isCurrentMonth = period === currentYearMonth;
+            if (!isCurrentMonth) {
+              const [y, m] = (period as string).split('-').map(Number);
+              rowLabel = `${MONTH_NAMES[(m - 1)]} ${y}`;
+            }
+          }
+
           return (
             <div className="mt-6 space-y-4">
               <div className="border rounded-lg overflow-hidden">
                 <div className="bg-primary/5 px-4 py-2 border-b">
-                  <h4 className="font-semibold text-sm">
-                    Results By {period === 'ytd' ? 'Month' : 'Week'}
-                  </h4>
+                  <h4 className="font-semibold text-sm">Results By Month</h4>
                 </div>
                 <div className="overflow-hidden">
                   <Table>
                     <TableHeader className="sticky top-0 z-10 bg-muted/30">
                       <TableRow className="bg-muted/30">
-                        <TableHead className="font-medium w-[200px]">{period === 'ytd' ? 'Month' : 'Week'}</TableHead>
-                        {safeMetrics.map((metric) => renderSortableHeader(`report-date-breakdown-${reportId}`, metric))}
+                        <TableHead className="font-medium w-[200px]">Month</TableHead>
+                        {safeMetrics.map((metric) => (
+                          <TableHead key={metric} className="font-semibold text-right">{metric}</TableHead>
+                        ))}
                       </TableRow>
                     </TableHeader>
-                  </Table>
-                  <div className={sortedBreakdown.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
-                    <Table>
-                      <TableBody>
-                        {sortRows(sortedBreakdown, `report-date-breakdown-${reportId}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                          <TableRow
-                            key={row.dateGroup}
-                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                          >
-                            <TableCell className="font-medium text-sm w-[200px]">
-                              {row.dateGroup}
-                            </TableCell>
-                            {safeMetrics.map((metric) => (
-                              <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                {formatMetricValue(metric, row.metrics[metric] || 0)}
-                              </TableCell>
-                            ))}
-                          </TableRow>
+                    <TableBody>
+                      <TableRow className="bg-background">
+                        <TableCell className="font-medium text-sm w-[200px]">
+                          {rowLabel}
+                        </TableCell>
+                        {safeMetrics.map((metric) => (
+                          <TableCell key={metric} className="text-right tabular-nums text-sm">
+                            {formatMetricValue(metric, (reportRow.metrics[metric] || 0))}
+                          </TableCell>
                         ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
             </div>
           );
         })()}
 
-        {/* Breakdowns - only show on individual report tabs, not on overview */}
+        {/* BREAKDOWNS (per dimension) remain unchanged */}
         {activeReportTab !== "overview" && data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (() => {
           const period = selectedDatePeriod || activeTab;
           
@@ -2418,8 +2486,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             </div>
           );
         })()}
-        
-        {/* Removed: Individual report weekly/monthly/last7 tables - now using unified Day/Week table above */}
 
         {/* Executive Summary - TEMPORARILY HIDDEN
         {activeReportTab === "overview" && (() => {
