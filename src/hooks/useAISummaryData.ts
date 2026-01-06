@@ -176,17 +176,21 @@ export function useAISummaryRawData(
 ) {
   const { enabled = true } = options;
 
+  const queryClient = useQueryClient();
+  
   return useQuery({
     queryKey: aiSummaryKeys.rawData(cardId),
     queryFn: () => fetchRawSourceData(reportIds, accountId),
     enabled: enabled && !!cardId && reportIds.length > 0,
-    staleTime: 5 * 60 * 1000, // 5 minutes - data is fresh for 5 min
+    staleTime: 10 * 60 * 1000, // 10 minutes - data is fresh for 10 min
     gcTime: 60 * 60 * 1000, // 1 hour - keep in cache
     retry: 1, // Reduce retries from 2 to 1
     refetchOnWindowFocus: false, // Don't refetch on focus
-    refetchOnMount: false, // Use cached data if available
+    refetchOnMount: false, // Use cached data if available - INSTANT loading on tab switch
     refetchOnReconnect: false, // Don't refetch on reconnect
     refetchInterval: false, // No automatic polling
+    // Use cached data as placeholder while refetching for instant display
+    placeholderData: (previousData) => previousData,
   });
 }
 
