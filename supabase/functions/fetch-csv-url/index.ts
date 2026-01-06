@@ -158,6 +158,7 @@ serve(async (req) => {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/csv, text/plain, application/csv, application/octet-stream, */*',
         'Accept-Language': 'en-US,en;q=0.9',
+        'x-make-apikey': 'https://hook.eu1.make.com/s8zvaavkt27i95n8hikde9ubh66u2prq',
       },
     });
     
