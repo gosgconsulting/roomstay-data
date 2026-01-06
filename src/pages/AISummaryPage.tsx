@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useTransition } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Sparkles, Plus, Trash2, Loader2, Settings, MoreHorizontal, Database, Pencil, Share2, ExternalLink, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -59,7 +59,6 @@ import {
   parseDate,
 } from "@/components/AISummaryPivotTable";
 import { AISummaryBudgetTable } from "@/components/AISummaryBudgetTable";
-import { LoadingTransition } from "@/components/ui/loading-transition";
 
 interface AISummaryCard {
   id: string;
@@ -1345,18 +1344,13 @@ const AISummaryPage = () => {
     ? reports.filter(r => selectedCard.report_ids.includes(r.id))
     : [];
 
-  // Transition for smooth report switching
-  const [isReportSwitching, startReportTransition] = useTransition();
-
   const handleReportSelect = (cardId: string) => {
     if (cardId === "add-new") {
       setIsAddCardModalOpen(true);
       return;
     }
     if (cardId === "all-reports") {
-      startReportTransition(() => {
-        setSelectedCardId(null);
-      });
+      setSelectedCardId(null);
       // Use report name if available, otherwise use first report for the account
       if (reportName) {
         navigate(getReportUrl(reportName));
@@ -1368,9 +1362,7 @@ const AISummaryPage = () => {
       }
       return;
     }
-    startReportTransition(() => {
-      setSelectedCardId(cardId);
-    });
+    setSelectedCardId(cardId);
     // Use report name if available, otherwise use first report for the account
     if (reportName) {
       navigate(getReportUrlWithSummary(reportName, cardId));
@@ -1514,7 +1506,7 @@ const AISummaryPage = () => {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <LoadingTransition isPending={isReportSwitching} message="Switching report..."  position="center">
+          <div className="w-full">
             {!selectedCardId ? (
               /* All Reports view - show table with empty data */
               <AISummaryPivotTable
@@ -1659,7 +1651,7 @@ const AISummaryPage = () => {
               </div>
             ))
             )}
-          </LoadingTransition>
+          </div>
         )}
       </div>
 
