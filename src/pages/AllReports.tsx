@@ -80,6 +80,15 @@ export default function AllReports() {
   // Active channel tab
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
 
+  // NEW: Main tabs for All Reports
+  const [mainTab, setMainTab] = useState<"overview" | "metasearch" | "sem" | "social">("overview");
+
+  // Helper: find report by name (case-insensitive)
+  const findChannelReport = (targetName: string): Report | undefined => {
+    const lower = targetName.toLowerCase();
+    return reports.find(r => r.name.toLowerCase() === lower);
+  };
+
   // Load configs from database when session and reports are ready
   useEffect(() => {
     if (session && reports.length > 0) {
@@ -474,66 +483,193 @@ export default function AllReports() {
                 </div>
 
                 {/* Channel Tabs */}
-                <Tabs
-                  value={activeChannel || reports[0]?.id}
-                  onValueChange={setActiveChannel}
-                >
+                <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as typeof mainTab)}>
                   <TabsList className="mb-4">
-                    {reports.map((report) => (
-                      <TabsTrigger key={report.id} value={report.id}>
-                        {report.name}
-                      </TabsTrigger>
-                    ))}
+                    <TabsTrigger value="overview">Overview</TabsTrigger>
+                    <TabsTrigger value="metasearch">Metasearch</TabsTrigger>
+                    <TabsTrigger value="sem">SEM</TabsTrigger>
+                    <TabsTrigger value="social">Social</TabsTrigger>
                   </TabsList>
 
-                  {reports.map((report) => (
-                    <TabsContent key={`${report.id}-${dataRefreshKey}`} value={report.id}>
-                      {/* Channel Header */}
-                      <div className="mb-4">
-                        <h3 className="text-lg font-semibold">
-                          {report.name}
-                        </h3>
-                        {channelConfigs[report.id]?.groupByDimensionName && (
-                          <p className="text-sm text-muted-foreground">
-                            Grouped by:{" "}
-                            {channelConfigs[report.id].groupByDimensionName}
-                            {channelConfigs[report.id].selectedValues.length >
-                              0 && (
-                              <>
-                                {" "}
-                                ({channelConfigs[report.id].selectedValues.length}{" "}
-                                values)
-                              </>
-                            )}
-                          </p>
-                        )}
-                      </div>
+                  {/* Overview: show all reports */}
+                  <TabsContent value="overview">
+                    {reports.map((report) => (
+                      <div key={`${report.id}-${dataRefreshKey}`} className="mb-8">
+                        {/* Channel Header */}
+                        <div className="mb-4">
+                          <h3 className="text-lg font-semibold">
+                            {report.name}
+                          </h3>
+                          {channelConfigs[report.id]?.groupByDimensionName && (
+                            <p className="text-sm text-muted-foreground">
+                              Grouped by:{" "}
+                              {channelConfigs[report.id].groupByDimensionName}
+                              {channelConfigs[report.id].selectedValues.length > 0 && (
+                                <>
+                                  {" "}
+                                  ({channelConfigs[report.id].selectedValues.length} values)
+                                </>
+                              )}
+                            </p>
+                          )}
+                        </div>
 
-                      {/* KPI Metrics Cards */}
-                      <div className="mb-6">
-                        <KPIMetricsCards
-                          key={`kpi-${report.id}-${dataRefreshKey}`}
+                        {/* KPI Metrics Cards */}
+                        <div className="mb-6">
+                          <KPIMetricsCards
+                            key={`kpi-${report.id}-${dataRefreshKey}`}
+                            reportId={report.id}
+                            accountId={accountId || null}
+                            filters={{
+                              dimensionFilters: {},
+                              datePreset: "this_month",
+                            }}
+                          />
+                        </div>
+
+                        {/* Data Table with Date Tabs */}
+                        <MasterReportTable
+                          key={`table-${report.id}-${dataRefreshKey}`}
                           reportId={report.id}
-                          accountId={accountId || null}
-                          filters={{
-                            dimensionFilters: {},
-                            datePreset: "this_month",
-                          }}
+                          reportName={report.name}
+                          config={channelConfigs[report.id] || DEFAULT_CHANNEL_CONFIG}
+                          accountId={accountId}
                         />
                       </div>
+                    ))}
+                  </TabsContent>
 
-                      {/* Data Table with Date Tabs */}
-                      <MasterReportTable
-                        key={`table-${report.id}-${dataRefreshKey}`}
-                        reportId={report.id}
-                        reportName={report.name}
-                        config={
-                          channelConfigs[report.id] || DEFAULT_CHANNEL_CONFIG
-                        }
-                        accountId={accountId}
-                      />
-                    </TabsContent>
-                  ))}
+                  {/* Metasearch: show report named 'Metasearch' */}
+                  <TabsContent value="metasearch">
+                    {(() => {
+                      const report = findChannelReport("Metasearch");
+                      if (!report) {
+                        return (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No report named "Metasearch" found. Create or rename a report to "Metasearch" to display it here.
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={`${report.id}-${dataRefreshKey}`}>
+                          <div className="mb-4">
+                            <h3 className="text-lg font-semibold">{report.name}</h3>
+                            {channelConfigs[report.id]?.groupByDimensionName && (
+                              <p className="text-sm text-muted-foreground">
+                                Grouped by: {channelConfigs[report.id].groupByDimensionName}
+                              </p>
+                            )}
+                          </div>
+                          <div className="mb-6">
+                            <KPIMetricsCards
+                              key={`kpi-${report.id}-${dataRefreshKey}`}
+                              reportId={report.id}
+                              accountId={accountId || null}
+                              filters={{
+                                dimensionFilters: {},
+                                datePreset: "this_month",
+                              }}
+                            />
+                          </div>
+                          <MasterReportTable
+                            key={`table-${report.id}-${dataRefreshKey}`}
+                            reportId={report.id}
+                            reportName={report.name}
+                            config={channelConfigs[report.id] || DEFAULT_CHANNEL_CONFIG}
+                            accountId={accountId}
+                          />
+                        </div>
+                      );
+                    })()}
+                  </TabsContent>
+
+                  {/* SEM: show report named 'SEM' */}
+                  <TabsContent value="sem">
+                    {(() => {
+                      const report = findChannelReport("SEM");
+                      if (!report) {
+                        return (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No report named "SEM" found. Create or rename a report to "SEM" to display it here.
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={`${report.id}-${dataRefreshKey}`}>
+                          <div className="mb-4">
+                            <h3 className="text-lg font-semibold">{report.name}</h3>
+                            {channelConfigs[report.id]?.groupByDimensionName && (
+                              <p className="text-sm text-muted-foreground">
+                                Grouped by: {channelConfigs[report.id].groupByDimensionName}
+                              </p>
+                            )}
+                          </div>
+                          <div className="mb-6">
+                            <KPIMetricsCards
+                              key={`kpi-${report.id}-${dataRefreshKey}`}
+                              reportId={report.id}
+                              accountId={accountId || null}
+                              filters={{
+                                dimensionFilters: {},
+                                datePreset: "this_month",
+                              }}
+                            />
+                          </div>
+                          <MasterReportTable
+                            key={`table-${report.id}-${dataRefreshKey}`}
+                            reportId={report.id}
+                            reportName={report.name}
+                            config={channelConfigs[report.id] || DEFAULT_CHANNEL_CONFIG}
+                            accountId={accountId}
+                          />
+                        </div>
+                      );
+                    })()}
+                  </TabsContent>
+
+                  {/* Social: show report named 'Social' */}
+                  <TabsContent value="social">
+                    {(() => {
+                      const report = findChannelReport("Social");
+                      if (!report) {
+                        return (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No report named "Social" found. Create or rename a report to "Social" to display it here.
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={`${report.id}-${dataRefreshKey}`}>
+                          <div className="mb-4">
+                            <h3 className="text-lg font-semibold">{report.name}</h3>
+                            {channelConfigs[report.id]?.groupByDimensionName && (
+                              <p className="text-sm text-muted-foreground">
+                                Grouped by: {channelConfigs[report.id].groupByDimensionName}
+                              </p>
+                            )}
+                          </div>
+                          <div className="mb-6">
+                            <KPIMetricsCards
+                              key={`kpi-${report.id}-${dataRefreshKey}`}
+                              reportId={report.id}
+                              accountId={accountId || null}
+                              filters={{
+                                dimensionFilters: {},
+                                datePreset: "this_month",
+                              }}
+                            />
+                          </div>
+                          <MasterReportTable
+                            key={`table-${report.id}-${dataRefreshKey}`}
+                            reportId={report.id}
+                            reportName={report.name}
+                            config={channelConfigs[report.id] || DEFAULT_CHANNEL_CONFIG}
+                            accountId={accountId}
+                          />
+                        </div>
+                      );
+                    })()}
+                  </TabsContent>
                 </Tabs>
               </Card>
             </main>
