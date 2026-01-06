@@ -679,8 +679,8 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl h-[600px] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             {currentStep === 1 && "Set Up Master Report"}
             {currentStep === 2 && (
@@ -701,72 +701,46 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
               Configure how each report is grouped in the master report view. Select a dimension to group by and filter the values you want to include.
             </p>
           )}
+          {currentStep === 2 && (
+            <p className="text-sm text-muted-foreground">
+              Select the metrics to include in your master report.
+            </p>
+          )}
         </DialogHeader>
 
-        {/* Step indicator */}
-        <div className="flex items-center gap-2 pb-4 border-b">
-          {STEPS.map((step, idx) => (
-            <React.Fragment key={step.id}>
-              <div
-                className={cn(
-                  "flex items-center gap-2 text-sm",
-                  currentStep === step.id
-                    ? "text-primary font-medium"
-                    : currentStep > step.id
-                    ? "text-muted-foreground"
-                    : "text-muted-foreground/50"
-                )}
-              >
-                <div
-                  className={cn(
-                    "w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium",
-                    currentStep === step.id
-                      ? "bg-primary text-primary-foreground"
-                      : currentStep > step.id
-                      ? "bg-primary/20 text-primary"
-                      : "bg-muted text-muted-foreground"
-                  )}
-                >
-                  {currentStep > step.id ? "✓" : step.id}
-                </div>
-                <span className="hidden sm:inline">{step.title}</span>
-              </div>
-              {idx < STEPS.length - 1 && (
-                <div className="flex-1 h-px bg-border" />
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-
-        {/* Step content */}
-        <div className="flex-1 min-h-0 py-4">
-          {currentStep === 1 && renderStep1()}
-          {currentStep === 2 && renderStep2()}
-          {currentStep === 3 && renderStep3()}
-        </div>
-
-        <DialogFooter className="pt-4 border-t flex justify-between">
-          <div>
-            {currentStep > 1 && (
-              <Button variant="outline" onClick={handleBack}>
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Back
-              </Button>
-            )}
+        {/* Step content with scroll */}
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="py-4 pr-4">
+            {currentStep === 1 && renderStep1()}
+            {currentStep === 2 && renderStep2()}
+            {currentStep === 3 && renderStep3()}
           </div>
-          <div className="flex gap-2">
-            {currentStep < 3 ? (
-              <Button onClick={handleNext}>
-                Next
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            ) : (
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                <Sparkles className="h-4 w-4 mr-2" />
-                Save Configuration
-              </Button>
-            )}
+        </ScrollArea>
+
+        <DialogFooter className="flex-shrink-0 pt-4 border-t">
+          <div className="flex w-full justify-between">
+            <div>
+              {currentStep > 1 && (
+                <Button variant="outline" onClick={handleBack}>
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Back
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              {currentStep < 3 ? (
+                <Button onClick={handleNext}>
+                  Next
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              ) : (
+                <Button onClick={handleSave} disabled={isSaving}>
+                  {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Save Configuration
+                </Button>
+              )}
+            </div>
           </div>
         </DialogFooter>
       </DialogContent>
