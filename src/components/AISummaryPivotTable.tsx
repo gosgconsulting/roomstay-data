@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -684,40 +685,45 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // Compute if data is ready
   const reportsLoaded = Object.keys(rawSourceData).length > 0;
   
-  // Build merged metric map for dimension ID resolution
-  // This must be computed before the data useMemo to provide mapping info
-  const [mergedMetricMap, setMergedMetricMap] = React.useState<Record<string, string>>({});
-  React.useEffect(() => {
-    // Build a merged metricNameToIdMap by reading each report's data source column_mappings
-    // so aggregateMetrics can access values by dimension IDs.
-    (async () => {
-      try {
-        if (reportIds.length === 0) {
-          setMergedMetricMap({});
-          return;
-        }
-        const map: Record<string, string> = {};
-        for (const reportId of reportIds) {
-          const { data: dsData } = await supabase
-            .from("data_sources")
-            .select("*")
-            .eq("report_id", reportId)
-            .limit(1)
-            .maybeSingle();
-          const columnMappings = Array.isArray(dsData?.column_mappings) ? dsData!.column_mappings : [];
-          columnMappings.forEach((m: any) => {
-            if (m.dimensionName && m.dimensionId && m.dimensionId !== 'none') {
-              map[m.dimensionName] = m.dimensionId;
-            }
-          });
-        }
-        setMergedMetricMap(map);
-      } catch {
-        // Fallback: empty mapping (aggregateMetrics will still try name keys)
-        setMergedMetricMap({});
-      }
-    })();
-  }, [reportIds]);
+  // Build merged metric map for dimension ID resolution - CACHED for instant loading
+  // Cache key includes reportIds so switching tabs uses cached map
+  const metricMapCacheKey = useMemo(() => ['metric-map', ...reportIds.sort()], [reportIds]);
+  
+  const { data: mergedMetricMap = {} } = useQuery({
+    queryKey: metricMapCacheKey,
+    queryFn: async () => {
+      if (reportIds.length === 0) return {};
+      const map: Record<string, string> = {};
+      
+      // Fetch all data sources in parallel for speed
+      const fetchPromises = reportIds.map(async (reportId) => {
+        const { data: dsData } = await supabase
+          .from("data_sources")
+          .select("column_mappings")
+          .eq("report_id", reportId)
+          .limit(1)
+          .maybeSingle();
+        return { reportId, columnMappings: Array.isArray(dsData?.column_mappings) ? dsData!.column_mappings : [] };
+      });
+      
+      const results = await Promise.all(fetchPromises);
+      results.forEach(({ columnMappings }) => {
+        columnMappings.forEach((m: any) => {
+          if (m.dimensionName && m.dimensionId && m.dimensionId !== 'none') {
+            map[m.dimensionName] = m.dimensionId;
+          }
+        });
+      });
+      return map;
+    },
+    enabled: reportIds.length > 0,
+    staleTime: 30 * 60 * 1000, // 30 minutes - column mappings rarely change
+    gcTime: 60 * 60 * 1000, // 1 hour
+    refetchOnWindowFocus: false,
+    refetchOnMount: false, // Use cached data for instant loading
+    refetchOnReconnect: false,
+    placeholderData: (prev) => prev, // Show previous data instantly
+  });
 
   // Extract filter configs from reportConfigs - MUST be before data useMemo
   const filterConfigs = useMemo(() => {
