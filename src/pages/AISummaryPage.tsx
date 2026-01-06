@@ -1515,6 +1515,18 @@ const AISummaryPage = () => {
               <div key={card.id} className="w-full">
                   {selectedReportTab === "budget" ? (
                     <div className="space-y-4">
+                      <div className="flex">
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="px-0"
+                          onClick={() => setSelectedReportTab("overview")}
+                          title="Back to report"
+                        >
+                          <ArrowLeft className="h-4 w-4 mr-1" />
+                          Back to report
+                        </Button>
+                      </div>
                       {/* Budget Report Tabs */}
                       <div className="flex gap-2 border-b pb-3">
                         <Button
