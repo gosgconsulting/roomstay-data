@@ -1664,8 +1664,17 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   const comparisonTotals = comparisonTabData.length > 0 ? calculateTotals(comparisonTabData) : null;
 
   // Get list of reports with names for tabs
-  const reportTabsList = tabData.map(r => ({ id: r.reportId, name: r.reportName }));
-  
+  const reportTabsList = useMemo(() => {
+    return reportIds.map((id) => {
+      const nameFromRaw = rawSourceData[id]?.reportName;
+      const nameFromCached =
+        cachedPivotData?.mtd?.find((r) => r.reportId === id)?.reportName ||
+        cachedPivotData?.ytd?.find((r) => r.reportId === id)?.reportName;
+      const fallbackName = nameFromRaw || nameFromCached || "Report";
+      return { id, name: fallbackName };
+    });
+  }, [reportIds, rawSourceData, cachedPivotData]);
+
   // Filter data based on active report tab
   const filteredTabData = activeReportTab === "overview" 
     ? tabData 
@@ -1940,11 +1949,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             result,
           });
         });
-        
-        // Check if we have any actual data
-        const hasChartData = monthlyChartData.some(d => d.result !== 0);
-        if (!hasChartData) return null;
-        
+
         return (
           <div className="border rounded-lg overflow-hidden">
             <div className="bg-primary/5 px-4 py-2 border-b">

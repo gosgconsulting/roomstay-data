@@ -513,9 +513,9 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
 
       for (const reportId of selectedReportIds) {
         // Skip if already loaded
-        if (sourceDataCache[reportId]) continue;
+        if (dataSources[reportId] && dimensions[reportId] && sourceDataCache[reportId]) continue;
 
-        // Mark as loading
+        // Mark as loading only for meta (data source + dimension names)
         setLoadingReports(prev => new Set([...prev, reportId]));
 
         try {
@@ -529,56 +529,58 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
 
           if (dsError || !dsData) {
             console.error(`Error fetching data source for report ${reportId}:`, dsError);
-            setLoadingReports(prev => {
-              const next = new Set(prev);
-              next.delete(reportId);
-              return next;
-            });
-            continue;
-          }
-
-          setDataSources(prev => ({ ...prev, [reportId]: dsData as DataSource }));
-
-          // Extract dimension IDs from column mappings (filter out "none" and invalid values)
-          const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
-          const dimensionIds = columnMappings
-            .filter((m: any) => m.dimensionId && m.dimensionId !== "none" && m.dimensionId.length > 10)
-            .map((m: any) => m.dimensionId);
-
-          if (dimensionIds.length > 0) {
-            // Fetch dimension details
-            const { data: dimData } = await supabase
-              .from("dimensions")
-              .select("id, name, type")
-              .in("id", dimensionIds)
-              .in("type", ["text"])
-              .order("name");
-
-            if (dimData) {
-              setDimensions(prev => ({ ...prev, [reportId]: dimData as Dimension[] }));
-            }
-          } else {
+            setDataSources(prev => ({ ...prev, [reportId]: undefined as any }));
             setDimensions(prev => ({ ...prev, [reportId]: [] }));
+          } else {
+            setDataSources(prev => ({ ...prev, [reportId]: dsData as DataSource }));
+
+            // Extract dimension IDs from column mappings (filter out "none" and invalid values)
+            const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
+            const dimensionIds = columnMappings
+              .filter((m: any) => m.dimensionId && m.dimensionId !== "none" && m.dimensionId.length > 10)
+              .map((m: any) => m.dimensionId);
+
+            if (dimensionIds.length > 0) {
+              // Fetch dimension details
+              const { data: dimData } = await supabase
+                .from("dimensions")
+                .select("id, name, type")
+                .in("id", dimensionIds)
+                .in("type", ["text"])
+                .order("name");
+
+              setDimensions(prev => ({ ...prev, [reportId]: (dimData as Dimension[]) || [] }));
+            } else {
+              setDimensions(prev => ({ ...prev, [reportId]: [] }));
+            }
           }
-
-          // Fetch dimension data from database (cached data - much faster than source)
-          const dimensionData = await fetchDimensionDataFromDB(reportId);
-          setSourceDataCache(prev => ({ ...prev, [reportId]: dimensionData }));
-
         } catch (err) {
-          console.error(`Error fetching data for report ${reportId}:`, err);
+          console.error(`Error fetching meta for report ${reportId}:`, err);
+          setDimensions(prev => ({ ...prev, [reportId]: [] }));
         } finally {
+          // Meta loaded → allow UI to render
           setLoadingReports(prev => {
             const next = new Set(prev);
             next.delete(reportId);
             return next;
           });
         }
+
+        // Fetch rows in background (does not block UI)
+        if (!sourceDataCache[reportId]) {
+          fetchDimensionDataFromDB(reportId)
+            .then((dimensionData) => {
+              setSourceDataCache(prev => ({ ...prev, [reportId]: dimensionData }));
+            })
+            .catch((err) => {
+              console.error(`Error fetching rows for report ${reportId}:`, err);
+            });
+        }
       }
     };
 
     fetchAllDataForReports();
-  }, [step, selectedReportIds, accountId]);
+  }, [step, selectedReportIds, accountId, dataSources, dimensions, sourceDataCache]);
 
   // Extract dimension values from source data
   const currentDimensionValues = useMemo(() => {
