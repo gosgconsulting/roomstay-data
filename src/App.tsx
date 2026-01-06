@@ -45,6 +45,9 @@ const App = () => (
           <Route path="/dev" element={<DevPage />} />
           <Route path="/shared/:slug" element={<SharedReport />} />
           <Route path="/shared/reports/:slug" element={<SharedAISummary />} />
+          {/* Alias routes to support typo/legacy links */}
+          <Route path="/sared/:slug" element={<SharedReport />} />
+          <Route path="/sared/reports/:slug" element={<SharedAISummary />} />
           <Route path="/:slug" element={<SharedReport />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
