@@ -759,11 +759,22 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     };
   }, [filterConfigs, filterValues, filterDimensionNames]);
 
-  // ALWAYS prioritize fresh data from rawSourceData over cachedPivotData
-  // This ensures data is always up-to-date when page refreshes
-  const data: CachedPivotData = useMemo(() => {
-    // If we have fresh raw source data, compute from that (previous way)
-    if (reportsLoaded && Object.keys(mergedMetricMap).length > 0) {
+  // Stable filter key that only changes when filter VALUES change, not on every render
+  const filterValuesKey = useMemo(() => JSON.stringify(filterValues), [filterValues]);
+  
+  // Cache computed pivot data with React Query for instant tab switching
+  // This prevents heavy recalculation on every tab switch - data is computed once and cached
+  const computedDataQueryKey = useMemo(() => 
+    ['computed-pivot-data', cardId || reportIds.join('-'), selectedYear, filterValuesKey, selectedMetrics.sort().join(',')],
+    [cardId, reportIds, selectedYear, filterValuesKey, selectedMetrics]
+  );
+  
+  const { data: computedPivotData } = useQuery({
+    queryKey: computedDataQueryKey,
+    queryFn: (): CachedPivotData => {
+      console.log('[PIVOT] Computing data for year:', selectedYear);
+      const startTime = performance.now();
+      
       const dateRanges = {
         mtd: getDateRange("mtd", selectedYear),
         ytd: getDateRange("ytd", selectedYear),
@@ -795,8 +806,25 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         const reportData = rawSourceData[reportId];
         if (!reportData) continue;
         
-        // Get dimension filter for this report
-        const dimensionFilter = getDimensionFilterForReport(reportId);
+        // Get dimension filter for this report (using parsed filterValues from key)
+        const parsedFilters = JSON.parse(filterValuesKey) as Record<string, string[]>;
+        let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
+        
+        if (reportId !== "overview") {
+          const filterConfig = filterConfigs[reportId];
+          if (filterConfig?.filterDimensionIds && filterConfig.filterDimensionIds.length > 0) {
+            const firstFilterDimId = filterConfig.filterDimensionIds[0];
+            const filterValuesForDim = parsedFilters[firstFilterDimId] || [];
+            if (filterValuesForDim.length > 0) {
+              const dimName = filterDimensionNames[firstFilterDimId] || firstFilterDimId;
+              dimensionFilter = {
+                dimensionId: firstFilterDimId,
+                dimensionName: dimName,
+                values: filterValuesForDim,
+              };
+            }
+          }
+        }
         
         // Compute MTD and YTD - now passing mergedMetricMap for dimension ID resolution
         (["mtd", "ytd"] as const).forEach((tab) => {
@@ -832,10 +860,25 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         });
       }
       
+      console.log('[PIVOT] Data computed in', Math.round(performance.now() - startTime), 'ms');
+      return newData;
+    },
+    enabled: reportsLoaded && Object.keys(mergedMetricMap).length > 0,
+    staleTime: 30 * 60 * 1000, // 30 minutes - matching Budget tab
+    gcTime: 60 * 60 * 1000, // 1 hour
+    refetchOnWindowFocus: false,
+    refetchOnMount: false, // Use cached data for instant tab switching
+    refetchOnReconnect: false,
+    placeholderData: (prev) => prev, // Show previous data instantly
+  });
+  
+  // Final data combines computed data with cached breakdown data
+  const data: CachedPivotData = useMemo(() => {
+    if (computedPivotData) {
       // Merge with cached data for breakdowns and other computed fields if available
       if (cachedPivotData) {
         return {
-          ...newData,
+          ...computedPivotData,
           breakdown_data: cachedPivotData.breakdown_data,
           breakdown_dimension_names: cachedPivotData.breakdown_dimension_names,
           combined_date_breakdown: cachedPivotData.combined_date_breakdown,
@@ -845,17 +888,16 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           comparison_previous_year: cachedPivotData.comparison_previous_year,
         };
       }
-      
-      return newData;
+      return computedPivotData;
     }
     
-    // Fallback to cached data only if no fresh data is available yet
+    // Fallback to cached data only if no computed data is available yet
     if (cachedPivotData) {
       return cachedPivotData;
     }
     
     return { mtd: [], ytd: [] };
-  }, [rawSourceData, reportsLoaded, reportIds, selectedMetrics, cachedPivotData, mergedMetricMap, selectedYear, getDimensionFilterForReport]);
+  }, [computedPivotData, cachedPivotData]);
   
   // Only show loading if we have no cached data and are actively loading
   const isLoading = isLoadingRawData && Object.keys(rawSourceData).length === 0 && !cachedPivotData;
