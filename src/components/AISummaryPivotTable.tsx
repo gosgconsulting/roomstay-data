@@ -127,6 +127,7 @@ interface AISummaryPivotTableProps {
   dateOptions?: { value: string; label: string }[];
   selectedDatePeriod?: string;
   onDatePeriodChange?: (period: string) => void;
+  hideOverviewAndBudget?: boolean; // ADDED: used to hide overview/budget UI in All Reports mode
 }
 
 interface DataSource {
@@ -624,6 +625,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   dateOptions = [],
   selectedDatePeriod,
   onDatePeriodChange,
+  hideOverviewAndBudget = false, // ADDED: default to false
 }) => {
   const [internalTab, setInternalTab] = useState<DateTab>("mtd");
   const activeTab = selectedTab || internalTab;
@@ -1919,8 +1921,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         );
       })()}
 
-      {/* Monthly Results Bar Chart - placed right after KPI cards */}
-      {activeReportTab === "overview" && (() => {
+      {/* Monthly Results Bar Chart - placed right after KPI cards, hidden in All Reports view */}
+      {!hideOverviewAndBudget && (() => {
         // Build monthly data for the chart based on available data
         const monthlyChartData: { month: string; result: number }[] = [];
         
@@ -1930,27 +1932,21 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         months.forEach((monthLabel, monthIdx) => {
           const monthKey = `${selectedYear}-${String(monthIdx + 1).padStart(2, '0')}`;
           
-          // Get data for this month from monthly_data or compute from cached data
-          let monthData = data.monthly_data?.[monthKey];
+          const monthReports = data.monthly_data?.[monthKey] || [];
+          const filteredReports = activeReportTab === "overview" 
+            ? monthReports 
+            : monthReports.filter(r => r.reportId === activeReportTab);
           
-          if (monthData && monthData.length > 0) {
-            // Calculate "result" as Revenue - Cost for each month
-            const totals = calculateTotals(monthData);
-            const revenue = totals['Revenue'] || totals['revenue'] || 0;
-            const cost = totals['Cost'] || totals['cost'] || 0;
-            const result = revenue - cost;
-            
-            monthlyChartData.push({
-              month: monthLabel,
-              result,
-            });
-          } else {
-            // Month has no data yet
-            monthlyChartData.push({
-              month: monthLabel,
-              result: 0,
-            });
-          }
+          // Calculate "result" as Revenue - Cost for each month
+          const totals = calculateTotals(filteredReports);
+          const revenue = totals['Revenue'] || 0;
+          const cost = totals['Cost'] || 0;
+          const result = revenue - cost;
+          
+          monthlyChartData.push({
+            month: monthLabel,
+            result,
+          });
         });
         
         // Check if we have any actual data
@@ -1987,7 +1983,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                       tickFormatter={(value) => {
                         if (Math.abs(value) >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
                         if (Math.abs(value) >= 1000) return `$${(value / 1000).toFixed(0)}K`;
-                        return `$${value.toFixed(0)}`;
+                        return `$${(value as number).toFixed(0)}`;
                       }}
                     />
                     <ChartTooltip 
