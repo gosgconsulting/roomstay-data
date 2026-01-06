@@ -635,7 +635,16 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   
   // Report tab state - MUST be declared here before any early returns (Rules of Hooks)
   const [internalReportTab, setInternalReportTab] = useState<ReportTab>("overview");
-  const activeReportTab = selectedReportTab || internalReportTab;
+  
+  // For All Reports view (hideOverviewAndBudget), use first report as default if overview is selected
+  const activeReportTab = useMemo(() => {
+    const current = selectedReportTab || internalReportTab;
+    // If in All Reports mode and current tab is "overview", use first report ID
+    if (hideOverviewAndBudget && current === "overview" && reportIds.length > 0) {
+      return reportIds[0];
+    }
+    return current;
+  }, [selectedReportTab, internalReportTab, hideOverviewAndBudget, reportIds]);
   
   const handleTabChange = (tab: DateTab) => {
     startTransition(() => {
@@ -1713,21 +1722,32 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   return (
     <div className="w-full space-y-6">
       <div className="flex items-center justify-between gap-3 mb-4">
-          {/* Report Tabs */}
-          {!hideOverviewAndBudget && (
-          <Tabs value={activeReportTab} onValueChange={(value) => handleReportTabChange(value as ReportTab)} className="w-auto">
-            <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              {reportTabsList.map((report) => (
-                <TabsTrigger key={report.id} value={report.id}>
-                  {report.name}
-                </TabsTrigger>
-              ))}
-              <TabsTrigger value="budget">Budget</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {/* Report Tabs - show different variants based on hideOverviewAndBudget */}
+          {hideOverviewAndBudget ? (
+            /* All Reports view: show only report tabs without Overview/Budget */
+            <Tabs value={activeReportTab} onValueChange={(value) => handleReportTabChange(value as ReportTab)} className="w-auto">
+              <TabsList>
+                {reportTabsList.map((report) => (
+                  <TabsTrigger key={report.id} value={report.id}>
+                    {report.name}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          ) : (
+            /* Regular view: show Overview + reports + Budget */
+            <Tabs value={activeReportTab} onValueChange={(value) => handleReportTabChange(value as ReportTab)} className="w-auto">
+              <TabsList>
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+                {reportTabsList.map((report) => (
+                  <TabsTrigger key={report.id} value={report.id}>
+                    {report.name}
+                  </TabsTrigger>
+                ))}
+                <TabsTrigger value="budget">Budget</TabsTrigger>
+              </TabsList>
+            </Tabs>
           )}
-          
           <div className="flex items-center gap-3">
           {/* Filter Dropdowns - before Date dropdown */}
           {activeFilterDimensions.map((dimId) => {
@@ -1916,8 +1936,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         );
       })()}
 
-      {/* Monthly Results Bar Chart - placed right after KPI cards */}
-      {activeReportTab === "overview" && (() => {
+      {/* Monthly Results Bar Chart - placed right after KPI cards, hidden in All Reports view */}
+      {!hideOverviewAndBudget && activeReportTab === "overview" && (() => {
         // Build monthly data for the chart based on available data
         const monthlyChartData: { month: string; result: number }[] = [];
         
