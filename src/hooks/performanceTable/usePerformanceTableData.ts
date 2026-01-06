@@ -64,10 +64,13 @@ export function usePerformanceTableData({
 
 
   // Use cached database data for instant loading
+  // With placeholderData enabled, this will show previous data instantly while loading new
   const { 
     data: cachedData, 
     isLoading: isLoadingCached, 
-    error: cachedError 
+    error: cachedError,
+    isFetching: isFetchingCached,
+    isPlaceholderData: isPlaceholderCached
   } = useCachedSourceData(reportId, { 
     enabled: useCachedData && !!reportId 
   });
@@ -429,8 +432,10 @@ export function usePerformanceTableData({
   }, [useCachedData, cachedError, sourceError, onLoadingComplete]);
 
   // Calculate loading state based on which data source is being used
+  // Only show as "loading" if we have no data at all (not when using placeholder data)
+  const hasAnyData = tableData.length > 0 || (useCachedData && !!cachedData);
   const isLoading = useCachedData 
-    ? (isLoadingData || isLoadingCached)
+    ? (isLoadingData || (isLoadingCached && !hasAnyData))
     : (isLoadingData || isLoadingSource);
 
   return {
@@ -443,5 +448,6 @@ export function usePerformanceTableData({
     setIsLoadingData,
     loadError: loadError || (useCachedData ? cachedError?.message : sourceError?.message) || null,
     usingCachedData: useCachedData && !!cachedData,
+    isFetchingInBackground: isFetchingCached && !isLoadingCached, // Background refresh indicator
   };
 }

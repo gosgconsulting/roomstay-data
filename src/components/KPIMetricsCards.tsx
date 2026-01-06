@@ -83,10 +83,13 @@ export function KPIMetricsCards({
   }, [user?.id, reportId, visibilityRefreshTrigger]);
 
   // Use cached source data hook - fetches from dimension_data table (instant loading)
+  // With placeholderData enabled, this will show previous data instantly while loading new
   const { 
     data: cachedData, 
     isLoading: isLoadingSource, 
-    error: sourceError 
+    error: sourceError,
+    isFetching: isFetchingSource, // Shows if background refresh is happening
+    isPlaceholderData // True when showing previous data while loading new
   } = useCachedSourceData(reportId, { 
     enabled: !!reportId 
   });
@@ -398,7 +401,10 @@ export function KPIMetricsCards({
     return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  if (isLoadingSource || isLoadingDimensions) {
+  // Only show skeleton on initial load, not when placeholder data is available
+  const showSkeleton = (isLoadingSource || isLoadingDimensions) && !cachedData;
+
+  if (showSkeleton) {
     return (
       <div>
         <div className="flex items-center justify-end mb-4">

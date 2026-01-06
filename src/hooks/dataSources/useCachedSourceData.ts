@@ -1,9 +1,14 @@
 /**
  * Optimized hook for instant data loading using database-cached dimension_data
  * This provides instant loading instead of fetching from Google Sheets/CSV each time
+ * 
+ * Features:
+ * - Long staleTime (10 min) to prevent re-fetches
+ * - placeholderData to show previous data instantly while loading new
+ * - Shared query key so all components share the same cache
  */
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface CachedDataRow {
@@ -81,6 +86,8 @@ function transformCachedRows(rows: CachedDataRow[]): any[] {
 /**
  * Hook to fetch data from Supabase dimension_data table (cached/synced data)
  * This is MUCH faster than fetching from Google Sheets/CSV each time
+ * 
+ * Uses placeholderData to show previous data instantly while loading new data
  */
 export function useCachedSourceData(
   reportId: string | null,
@@ -106,11 +113,12 @@ export function useCachedSourceData(
       };
     },
     enabled: enabled && !!reportId,
-    staleTime: forceRefresh ? 0 : 5 * 60 * 1000, // 5 minutes unless force refresh
+    staleTime: forceRefresh ? 0 : 10 * 60 * 1000, // 10 minutes (increased from 5)
     gcTime: 60 * 60 * 1000, // 1 hour in garbage collection
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    refetchOnMount: false, // Don't refetch when component mounts (use cached data)
     refetchOnReconnect: false,
+    placeholderData: keepPreviousData, // Show previous data instantly while loading
   });
 }
 
