@@ -840,7 +840,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     }
     
     return { mtd: [], ytd: [] };
-  }, [rawSourceData, reportsLoaded, reportIds, selectedMetrics, cachedPivotData, mergedMetricMap, selectedYear]);
+  }, [rawSourceData, reportsLoaded, reportIds, selectedMetrics, cachedPivotData, mergedMetricMap, selectedYear, getDimensionFilterForReport]);
   
   // Only show loading if we have no cached data and are actively loading
   const isLoading = isLoadingRawData && Object.keys(rawSourceData).length === 0 && !cachedPivotData;
