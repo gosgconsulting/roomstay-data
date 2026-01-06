@@ -5,9 +5,10 @@ import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { ReportModal } from "@/components/ReportModal";
 import { MasterReportTable } from "@/components/MasterReportTable";
 import {
-  MasterReportSettingsModal,
-  type ChannelConfig,
-} from "@/components/MasterReportSettingsModal";
+  MasterReportSetupModal,
+  type MasterReportConfig,
+} from "@/components/MasterReportSetupModal";
+import type { ChannelConfig } from "@/components/MasterReportSettingsModal";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
@@ -53,7 +54,11 @@ export default function AllReports() {
   );
   const [showCreateReportModal, setShowCreateReportModal] = useState(false);
 
-  // Channel configurations (session only)
+  // Master Report Setup Modal state
+  const [showMasterSetupModal, setShowMasterSetupModal] = useState(false);
+  const [masterConfigs, setMasterConfigs] = useState<Record<string, MasterReportConfig>>({});
+
+  // Channel configurations (loaded from DB)
   const [channelConfigs, setChannelConfigs] = useState<
     Record<string, ChannelConfig>
   >({});
@@ -66,7 +71,68 @@ export default function AllReports() {
   // Active channel tab
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
 
-  // Initialize default configs when reports load
+  // Load configs from database when session and reports are ready
+  useEffect(() => {
+    if (session && reports.length > 0) {
+      loadMasterReportConfigs();
+    }
+  }, [session, reports, accountId]);
+
+  const loadMasterReportConfigs = async () => {
+    try {
+      let query = supabase
+        .from('master_report_configs')
+        .select('*')
+        .eq('user_id', session?.user?.id);
+
+      // Handle null account_id correctly
+      if (accountId) {
+        query = query.eq('account_id', accountId);
+      } else {
+        query = query.is('account_id', null);
+      }
+
+      const { data: configs, error } = await query;
+
+      if (error) {
+        console.error('[AllReports] Error loading master configs:', error);
+        return;
+      }
+
+      if (configs && configs.length > 0) {
+        console.log('[AllReports] Loaded master configs from DB:', configs.length);
+        
+        // Convert to MasterReportConfig and ChannelConfig format
+        const newMasterConfigs: Record<string, MasterReportConfig> = {};
+        const newChannelConfigs: Record<string, ChannelConfig> = {};
+
+        configs.forEach((config) => {
+          const report = reports.find(r => r.id === config.report_id);
+          newMasterConfigs[config.report_id] = {
+            reportId: config.report_id,
+            reportName: report?.name || '',
+            groupByDimensionId: config.group_by_dimension_id,
+            groupByDimensionName: config.group_by_dimension_name,
+            selectedValues: config.selected_values || [],
+            selectedMetrics: config.selected_metrics || ["Cost", "Revenue", "ROAS", "Conversions"],
+          };
+          newChannelConfigs[config.report_id] = {
+            groupByDimensionId: config.group_by_dimension_id,
+            groupByDimensionName: config.group_by_dimension_name,
+            selectedValues: config.selected_values || [],
+            selectedMetrics: config.selected_metrics || ["Cost", "Revenue", "ROAS", "Conversions"],
+          };
+        });
+
+        setMasterConfigs(newMasterConfigs);
+        setChannelConfigs(prev => ({ ...prev, ...newChannelConfigs }));
+      }
+    } catch (error) {
+      console.error('[AllReports] Error loading configs:', error);
+    }
+  };
+
+  // Initialize default configs for reports without saved configs
   useEffect(() => {
     if (reports.length > 0) {
       const initialConfigs: Record<string, ChannelConfig> = {};
@@ -247,23 +313,34 @@ export default function AllReports() {
     setShowCreateReportModal(true);
   };
 
-  const openSettingsModal = (report: Report) => {
-    setSelectedReportForSettings(report);
-    setSettingsModalOpen(true);
+  const openMasterSetupModal = () => {
+    setShowMasterSetupModal(true);
   };
 
-  const handleSaveConfig = (config: ChannelConfig) => {
-    if (selectedReportForSettings) {
-      setChannelConfigs((prev) => ({
-        ...prev,
-        [selectedReportForSettings.id]: config,
-      }));
-    }
+  const handleSaveMasterConfigs = (configs: Record<string, MasterReportConfig>) => {
+    // Update both masterConfigs and channelConfigs
+    setMasterConfigs(configs);
+    
+    const newChannelConfigs: Record<string, ChannelConfig> = {};
+    Object.entries(configs).forEach(([reportId, config]) => {
+      newChannelConfigs[reportId] = {
+        groupByDimensionId: config.groupByDimensionId,
+        groupByDimensionName: config.groupByDimensionName,
+        selectedValues: config.selectedValues,
+        selectedMetrics: config.selectedMetrics || ["Cost", "Revenue", "ROAS", "Conversions"],
+      };
+    });
+    setChannelConfigs(prev => ({ ...prev, ...newChannelConfigs }));
+    
+    toast({
+      title: "Configuration Saved",
+      description: "Master report settings have been saved.",
+    });
   };
 
   const refreshData = () => {
-    // Trigger re-render by updating configs
-    setChannelConfigs((prev) => ({ ...prev }));
+    // Reload configs from database and trigger re-render
+    loadMasterReportConfigs();
   };
 
   if (isLoading) {
@@ -317,14 +394,24 @@ export default function AllReports() {
             <main className="container mx-auto px-6 py-6">
               <Card className="p-6">
                 {/* Header */}
-                <div className="border-b pb-4 mb-6">
-                  <h2 className="text-2xl font-bold text-foreground">
-                    {account?.name || "Master Report"}
-                  </h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {reports.length} channel{reports.length !== 1 ? "s" : ""}{" "}
-                    configured
-                  </p>
+                <div className="border-b pb-4 mb-6 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-foreground">
+                      {account?.name || "Master Report"}
+                    </h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {reports.length} channel{reports.length !== 1 ? "s" : ""}{" "}
+                      configured
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={openMasterSetupModal}
+                  >
+                    <Settings className="h-4 w-4 mr-2" />
+                    Set Up Master Report
+                  </Button>
                 </div>
 
                 {/* Channel Tabs */}
@@ -332,47 +419,35 @@ export default function AllReports() {
                   value={activeChannel || reports[0]?.id}
                   onValueChange={setActiveChannel}
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <TabsList>
-                      {reports.map((report) => (
-                        <TabsTrigger key={report.id} value={report.id}>
-                          {report.name}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                  </div>
+                  <TabsList className="mb-4">
+                    {reports.map((report) => (
+                      <TabsTrigger key={report.id} value={report.id}>
+                        {report.name}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
 
                   {reports.map((report) => (
                     <TabsContent key={report.id} value={report.id}>
-                      {/* Channel Header with Settings */}
-                      <div className="flex items-center justify-between mb-4">
-                        <div>
-                          <h3 className="text-lg font-semibold">
-                            {report.name}
-                          </h3>
-                          {channelConfigs[report.id]?.groupByDimensionName && (
-                            <p className="text-sm text-muted-foreground">
-                              Grouped by:{" "}
-                              {channelConfigs[report.id].groupByDimensionName}
-                              {channelConfigs[report.id].selectedValues.length >
-                                0 && (
-                                <>
-                                  {" "}
-                                  ({channelConfigs[report.id].selectedValues.length}{" "}
-                                  values)
-                                </>
-                              )}
-                            </p>
-                          )}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openSettingsModal(report)}
-                        >
-                          <Settings className="h-4 w-4 mr-2" />
-                          Configure
-                        </Button>
+                      {/* Channel Header */}
+                      <div className="mb-4">
+                        <h3 className="text-lg font-semibold">
+                          {report.name}
+                        </h3>
+                        {channelConfigs[report.id]?.groupByDimensionName && (
+                          <p className="text-sm text-muted-foreground">
+                            Grouped by:{" "}
+                            {channelConfigs[report.id].groupByDimensionName}
+                            {channelConfigs[report.id].selectedValues.length >
+                              0 && (
+                              <>
+                                {" "}
+                                ({channelConfigs[report.id].selectedValues.length}{" "}
+                                values)
+                              </>
+                            )}
+                          </p>
+                        )}
                       </div>
 
                       {/* Data Table with Date Tabs */}
@@ -405,19 +480,15 @@ export default function AllReports() {
         </SidebarInset>
       </div>
 
-      {/* Settings Modal */}
-      {selectedReportForSettings && (
-        <MasterReportSettingsModal
-          open={settingsModalOpen}
-          onOpenChange={setSettingsModalOpen}
-          reportId={selectedReportForSettings.id}
-          reportName={selectedReportForSettings.name}
-          currentConfig={
-            channelConfigs[selectedReportForSettings.id] || DEFAULT_CHANNEL_CONFIG
-          }
-          onSave={handleSaveConfig}
-        />
-      )}
+      {/* Master Report Setup Modal */}
+      <MasterReportSetupModal
+        open={showMasterSetupModal}
+        onOpenChange={setShowMasterSetupModal}
+        reports={reports.map(r => ({ id: r.id, name: r.name }))}
+        accountId={accountId}
+        currentConfigs={masterConfigs}
+        onSave={handleSaveMasterConfigs}
+      />
 
       {/* Create Report Modal */}
       <ReportModal

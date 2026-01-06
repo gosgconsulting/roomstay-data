@@ -88,6 +88,7 @@ export interface MasterReportConfig {
   groupByDimensionId: string | null;
   groupByDimensionName: string | null;
   selectedValues: string[];
+  selectedMetrics: string[];
 }
 
 interface MasterReportSetupModalProps {
@@ -137,6 +138,7 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
           groupByDimensionId: null,
           groupByDimensionName: null,
           selectedValues: [],
+          selectedMetrics: ["Cost", "Revenue", "ROAS", "Conversions"],
         };
       });
       setConfigs(initialConfigs);
@@ -147,6 +149,12 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
       // Load dimensions for all reports
       reports.forEach((report) => {
         loadDimensionsForReport(report.id);
+        
+        // Also load values if dimension is already set in current config
+        const existingConfig = currentConfigs[report.id];
+        if (existingConfig?.groupByDimensionId && existingConfig.groupByDimensionId !== "none") {
+          loadValuesForDimension(report.id, existingConfig.groupByDimensionId);
+        }
       });
     } else if (!open) {
       // Reset active tab when modal closes
@@ -287,11 +295,65 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
     }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setIsSaving(true);
-    onSave(configs);
-    setIsSaving(false);
-    onOpenChange(false);
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('[MasterReportSetup] No user found');
+        return;
+      }
+
+      // Save each config to the database
+      for (const [reportId, config] of Object.entries(configs)) {
+        // Check if config exists - handle null account_id correctly
+        let existingQuery = supabase
+          .from('master_report_configs')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('report_id', reportId);
+
+        if (accountId) {
+          existingQuery = existingQuery.eq('account_id', accountId);
+        } else {
+          existingQuery = existingQuery.is('account_id', null);
+        }
+
+        const { data: existing } = await existingQuery.maybeSingle();
+
+        const configData = {
+          user_id: user.id,
+          account_id: accountId || null,
+          report_id: reportId,
+          group_by_dimension_id: config.groupByDimensionId || null,
+          group_by_dimension_name: config.groupByDimensionName || null,
+          selected_values: config.selectedValues,
+          selected_metrics: config.selectedMetrics || ["Cost", "Revenue", "ROAS", "Conversions"],
+        };
+
+        if (existing) {
+          // Update existing config
+          await supabase
+            .from('master_report_configs')
+            .update(configData)
+            .eq('id', existing.id);
+        } else {
+          // Insert new config
+          await supabase
+            .from('master_report_configs')
+            .insert(configData);
+        }
+      }
+
+      console.log('[MasterReportSetup] Configs saved to database');
+      onSave(configs);
+      onOpenChange(false);
+    } catch (error) {
+      console.error('[MasterReportSetup] Error saving configs:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleClose = () => {
