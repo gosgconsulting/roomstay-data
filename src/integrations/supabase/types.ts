@@ -826,6 +826,132 @@ export type Database = {
           },
         ]
       }
+      master_report_daily_aggregates: {
+        Row: {
+          id: string
+          report_id: string
+          group_by_dimension_id: string | null
+          group_by_value: string
+          date: string
+          cost: number | null
+          revenue: number | null
+          clicks: number | null
+          impressions: number | null
+          conversions: number | null
+          bookings: number | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          report_id: string
+          group_by_dimension_id?: string | null
+          group_by_value: string
+          date: string
+          cost?: number | null
+          revenue?: number | null
+          clicks?: number | null
+          impressions?: number | null
+          conversions?: number | null
+          bookings?: number | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          report_id?: string
+          group_by_dimension_id?: string | null
+          group_by_value?: string
+          date?: string
+          cost?: number | null
+          revenue?: number | null
+          clicks?: number | null
+          impressions?: number | null
+          conversions?: number | null
+          bookings?: number | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "master_report_daily_aggregates_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "master_report_daily_aggregates_group_by_dimension_id_fkey"
+            columns: ["group_by_dimension_id"]
+            isOneToOne: false
+            referencedRelation: "dimensions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      master_report_monthly_aggregates: {
+        Row: {
+          id: string
+          report_id: string
+          group_by_dimension_id: string | null
+          group_by_value: string
+          year_month: string
+          cost: number | null
+          revenue: number | null
+          clicks: number | null
+          impressions: number | null
+          conversions: number | null
+          bookings: number | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          report_id: string
+          group_by_dimension_id?: string | null
+          group_by_value: string
+          year_month: string
+          cost?: number | null
+          revenue?: number | null
+          clicks?: number | null
+          impressions?: number | null
+          conversions?: number | null
+          bookings?: number | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          report_id?: string
+          group_by_dimension_id?: string | null
+          group_by_value?: string
+          year_month?: string
+          cost?: number | null
+          revenue?: number | null
+          clicks?: number | null
+          impressions?: number | null
+          conversions?: number | null
+          bookings?: number | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "master_report_monthly_aggregates_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "master_report_monthly_aggregates_group_by_dimension_id_fkey"
+            columns: ["group_by_dimension_id"]
+            isOneToOne: false
+            referencedRelation: "dimensions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       master_report_global_configs: {
         Row: {
           account_id: string | null

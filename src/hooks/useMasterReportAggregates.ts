@@ -138,12 +138,12 @@ async function fetchDailyAggregates(
       };
     }
 
-    grouped[groupValue].cost += parseFloat(row.cost || "0") || 0;
-    grouped[groupValue].revenue += parseFloat(row.revenue || "0") || 0;
-    grouped[groupValue].clicks += parseFloat(row.clicks || "0") || 0;
-    grouped[groupValue].impressions += parseFloat(row.impressions || "0") || 0;
-    grouped[groupValue].conversions += parseFloat(row.conversions || "0") || 0;
-    grouped[groupValue].bookings += parseFloat(row.bookings || "0") || 0;
+    grouped[groupValue].cost += Number(row.cost ?? 0);
+    grouped[groupValue].revenue += Number(row.revenue ?? 0);
+    grouped[groupValue].clicks += Number(row.clicks ?? 0);
+    grouped[groupValue].impressions += Number(row.impressions ?? 0);
+    grouped[groupValue].conversions += Number(row.conversions ?? 0);
+    grouped[groupValue].bookings += Number(row.bookings ?? 0);
   }
 
   // Convert to AggregatedRow format with calculated metrics
@@ -250,12 +250,12 @@ async function fetchMonthlyAggregates(
       };
     }
 
-    grouped[groupValue].cost += parseFloat(row.cost || "0") || 0;
-    grouped[groupValue].revenue += parseFloat(row.revenue || "0") || 0;
-    grouped[groupValue].clicks += parseFloat(row.clicks || "0") || 0;
-    grouped[groupValue].impressions += parseFloat(row.impressions || "0") || 0;
-    grouped[groupValue].conversions += parseFloat(row.conversions || "0") || 0;
-    grouped[groupValue].bookings += parseFloat(row.bookings || "0") || 0;
+    grouped[groupValue].cost += Number(row.cost ?? 0);
+    grouped[groupValue].revenue += Number(row.revenue ?? 0);
+    grouped[groupValue].clicks += Number(row.clicks ?? 0);
+    grouped[groupValue].impressions += Number(row.impressions ?? 0);
+    grouped[groupValue].conversions += Number(row.conversions ?? 0);
+    grouped[groupValue].bookings += Number(row.bookings ?? 0);
   }
 
   // Convert to AggregatedRow format with calculated metrics

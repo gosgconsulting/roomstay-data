@@ -1587,7 +1587,7 @@ const AISummaryPage = () => {
                 reportIds={reports.map(r => r.id)}
                 selectedMetrics={masterGlobalConfig.selectedMetrics || ["Impressions", "Clicks", "Cost", "Revenue", "ROAS"]}
                 accountId={accountId}
-                cachedPivotData={undefined}
+                cachedPivotData={{ mtd: [], ytd: [], monthly_data: {} }}
                 reportConfigs={Object.fromEntries(
                   Object.entries(masterReportConfigs).map(([reportId, config]) => [
                     reportId,
