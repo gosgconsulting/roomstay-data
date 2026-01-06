@@ -1349,19 +1349,6 @@ const AISummaryPage = () => {
       setIsAddCardModalOpen(true);
       return;
     }
-    if (cardId === "all-reports") {
-      setSelectedCardId(null);
-      // Use report name if available, otherwise use first report for the account
-      if (reportName) {
-        navigate(getReportUrl(reportName));
-      } else if (reports.length > 0) {
-        navigate(getReportUrl(reports[0].name));
-      } else if (accountId) {
-        // Fallback to legacy route
-        navigate(`/tools/report/${accountId}`);
-      }
-      return;
-    }
     setSelectedCardId(cardId);
     // Use report name if available, otherwise use first report for the account
     if (reportName) {
@@ -1399,16 +1386,13 @@ const AISummaryPage = () => {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-muted-foreground">Reports</span>
                 <Select 
-                  value={selectedCardId || "all-reports"} 
+                  value={selectedCardId || (cards[0]?.id ?? "")} 
                   onValueChange={handleReportSelect}
                 >
                   <SelectTrigger className="w-[200px] bg-background border-border">
                     <SelectValue placeholder="Select report" />
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-border z-50">
-                    <SelectItem value="all-reports" className="font-medium">
-                      All reports:
-                    </SelectItem>
                     {cards.map((card) => (
                       <SelectItem key={card.id} value={card.id}>
                         {card.name}
