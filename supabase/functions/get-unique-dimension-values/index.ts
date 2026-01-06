@@ -210,131 +210,132 @@ Deno.serve(async (req) => {
         // Fallback to dimension_data table if data source fetch fails
         console.log('[get-unique-dimension-values] Falling back to dimension_data table');
       } else if (dataSources && dataSources.length > 0) {
-      console.log(`[get-unique-dimension-values] Found ${dataSources.length} data source(s), loading from source...`);
+        console.log(`[get-unique-dimension-values] Found ${dataSources.length} data source(s), loading from source...`);
 
-      // Process each data source
-      for (const dataSource of dataSources) {
-        try {
-          let headers: string[] = [];
-          let dataRows: any[][] = [];
+        // Process each data source
+        for (const dataSource of dataSources) {
+          try {
+            let headers: string[] = [];
+            let dataRows: any[][] = [];
 
-          // Load data based on source type
-          if (dataSource.source_type === 'csv_url') {
-            if (!dataSource.csv_url) {
-              console.warn(`[get-unique-dimension-values] CSV URL missing for data source ${dataSource.id}`);
-              continue;
-            }
-
-            const csvData = await fetchCSVData(supabaseUrl, supabaseAnonKey, dataSource.csv_url);
-            if (csvData && csvData.length > 0) {
-              const headerRow = (dataSource.header_row || 1) - 1;
-              headers = csvData[headerRow]?.map((h: any) => String(h || '').trim()) || [];
-              dataRows = csvData.slice(headerRow + 1);
-            }
-          } else {
-            // Google Sheets
-            if (!dataSource.tab_name || (!dataSource.spreadsheet_id && !dataSource.google_sheets_url)) {
-              console.warn(`[get-unique-dimension-values] Missing tab_name or spreadsheet_id for data source ${dataSource.id}`);
-              continue;
-            }
-
-            const spreadsheetId = dataSource.spreadsheet_id || extractSpreadsheetId(dataSource.google_sheets_url || '');
-            if (!spreadsheetId) {
-              console.warn(`[get-unique-dimension-values] Could not extract spreadsheet ID for data source ${dataSource.id}`);
-              continue;
-            }
-
-            // Fetch headers
-            const headerRow = dataSource.header_row || 1;
-            const headerRange = `A${headerRow}:Z${headerRow}`;
-            const headerData = await fetchGoogleSheetsData(supabaseUrl, supabaseAnonKey, spreadsheetId, dataSource.tab_name, headerRange);
-            headers = headerData[0]?.map((h: any) => String(h || '').trim()) || [];
-
-            // Fetch data rows (limit to first 50000 rows for performance)
-            const dataStartRow = headerRow + 1;
-            const dataRange = `A${dataStartRow}:Z${dataStartRow + 50000}`;
-            dataRows = await fetchGoogleSheetsData(supabaseUrl, supabaseAnonKey, spreadsheetId, dataSource.tab_name, dataRange);
-          }
-
-          if (headers.length === 0 || dataRows.length === 0) {
-            console.warn(`[get-unique-dimension-values] No data found for data source ${dataSource.id}`);
-            continue;
-          }
-
-          // Build column index map
-          const columnIndexMap: Record<string, number> = {};
-          headers.forEach((header, index) => {
-            if (header) {
-              columnIndexMap[header] = index;
-            }
-          });
-
-          // Get column mappings
-          const mappings = Array.isArray(dataSource.column_mappings) ? dataSource.column_mappings : [];
-          const visibleMappings = mappings.filter((m: any) => m.visible);
-
-          // Find columns mapped to our target dimension IDs
-          const targetColumns: string[] = [];
-          visibleMappings.forEach((mapping: any) => {
-            if (mapping.dimensionId && ids.includes(mapping.dimensionId)) {
-              if (mapping.column && columnIndexMap[mapping.column] !== undefined) {
-                targetColumns.push(mapping.column);
+            // Load data based on source type
+            if (dataSource.source_type === 'csv_url') {
+              if (!dataSource.csv_url) {
+                console.warn(`[get-unique-dimension-values] CSV URL missing for data source ${dataSource.id}`);
+                continue;
               }
+
+              const csvData = await fetchCSVData(supabaseUrl, supabaseAnonKey, dataSource.csv_url);
+              if (csvData && csvData.length > 0) {
+                const headerRow = (dataSource.header_row || 1) - 1;
+                headers = csvData[headerRow]?.map((h: any) => String(h || '').trim()) || [];
+                dataRows = csvData.slice(headerRow + 1);
+              }
+            } else {
+              // Google Sheets
+              if (!dataSource.tab_name || (!dataSource.spreadsheet_id && !dataSource.google_sheets_url)) {
+                console.warn(`[get-unique-dimension-values] Missing tab_name or spreadsheet_id for data source ${dataSource.id}`);
+                continue;
+              }
+
+              const spreadsheetId = dataSource.spreadsheet_id || extractSpreadsheetId(dataSource.google_sheets_url || '');
+              if (!spreadsheetId) {
+                console.warn(`[get-unique-dimension-values] Could not extract spreadsheet ID for data source ${dataSource.id}`);
+                continue;
+              }
+
+              // Fetch headers
+              const headerRow = dataSource.header_row || 1;
+              const headerRange = `A${headerRow}:Z${headerRow}`;
+              const headerData = await fetchGoogleSheetsData(supabaseUrl, supabaseAnonKey, spreadsheetId, dataSource.tab_name, headerRange);
+              headers = headerData[0]?.map((h: any) => String(h || '').trim()) || [];
+
+              // Fetch data rows (limit to first 50000 rows for performance)
+              const dataStartRow = headerRow + 1;
+              const dataRange = `A${dataStartRow}:Z${dataStartRow + 50000}`;
+              dataRows = await fetchGoogleSheetsData(supabaseUrl, supabaseAnonKey, spreadsheetId, dataSource.tab_name, dataRange);
             }
-          });
 
-          if (targetColumns.length === 0) {
-            console.warn(`[get-unique-dimension-values] No columns mapped to target dimensions for data source ${dataSource.id}`);
-            continue;
-          }
+            if (headers.length === 0 || dataRows.length === 0) {
+              console.warn(`[get-unique-dimension-values] No data found for data source ${dataSource.id}`);
+              continue;
+            }
 
-          // Get dimension types for parsing
-          const { data: dimensionsData } = await supabase
-            .from('dimensions')
-            .select('id, type')
-            .in('id', ids);
-
-          const dimensionTypeMap: Record<string, string> = {};
-          if (dimensionsData) {
-            dimensionsData.forEach((dim: any) => {
-              dimensionTypeMap[dim.id] = dim.type;
+            // Build column index map
+            const columnIndexMap: Record<string, number> = {};
+            headers.forEach((header, index) => {
+              if (header) {
+                columnIndexMap[header] = index;
+              }
             });
-          }
 
-          // Extract unique values from data rows
-          for (const row of dataRows) {
-            if (!Array.isArray(row)) continue;
+            // Get column mappings
+            const mappings = Array.isArray(dataSource.column_mappings) ? dataSource.column_mappings : [];
+            const visibleMappings = mappings.filter((m: any) => m.visible);
 
-            for (const column of targetColumns) {
-              const colIndex = columnIndexMap[column];
-              if (colIndex === undefined || colIndex < 0 || colIndex >= row.length) continue;
-
-              const rawValue = row[colIndex];
-              if (rawValue === null || rawValue === undefined || rawValue === '') continue;
-
-              // Find the dimension ID for this column
-              const mapping = visibleMappings.find((m: any) => m.column === column);
-              if (!mapping || !mapping.dimensionId || !ids.includes(mapping.dimensionId)) continue;
-
-              const dimensionType = mapping.newDimensionType || mapping.dimensionType || dimensionTypeMap[mapping.dimensionId] || 'text';
-              const value = parseValue(rawValue, dimensionType, mapping.dateFormat);
-              
-              if (value !== null && value !== undefined) {
-                const str = String(value).trim();
-                if (str !== '') {
-                  uniqueValues.add(str);
-                  if (uniqueValues.size >= limit) break;
+            // Find columns mapped to our target dimension IDs
+            const targetColumns: string[] = [];
+            visibleMappings.forEach((mapping: any) => {
+              if (mapping.dimensionId && ids.includes(mapping.dimensionId)) {
+                if (mapping.column && columnIndexMap[mapping.column] !== undefined) {
+                  targetColumns.push(mapping.column);
                 }
               }
+            });
+
+            if (targetColumns.length === 0) {
+              console.warn(`[get-unique-dimension-values] No columns mapped to target dimensions for data source ${dataSource.id}`);
+              continue;
             }
 
-            if (uniqueValues.size >= limit) break;
-          }
+            // Get dimension types for parsing
+            const { data: dimensionsData } = await supabase
+              .from('dimensions')
+              .select('id, type')
+              .in('id', ids);
 
-          console.log(`[get-unique-dimension-values] Extracted ${uniqueValues.size} unique values from data source ${dataSource.id}`);
-        } catch (sourceError) {
-          console.error(`[get-unique-dimension-values] Error processing data source ${dataSource.id}:`, sourceError);
-          // Continue with next data source
+            const dimensionTypeMap: Record<string, string> = {};
+            if (dimensionsData) {
+              dimensionsData.forEach((dim: any) => {
+                dimensionTypeMap[dim.id] = dim.type;
+              });
+            }
+
+            // Extract unique values from data rows
+            for (const row of dataRows) {
+              if (!Array.isArray(row)) continue;
+
+              for (const column of targetColumns) {
+                const colIndex = columnIndexMap[column];
+                if (colIndex === undefined || colIndex < 0 || colIndex >= row.length) continue;
+
+                const rawValue = row[colIndex];
+                if (rawValue === null || rawValue === undefined || rawValue === '') continue;
+
+                // Find the dimension ID for this column
+                const mapping = visibleMappings.find((m: any) => m.column === column);
+                if (!mapping || !mapping.dimensionId || !ids.includes(mapping.dimensionId)) continue;
+
+                const dimensionType = mapping.newDimensionType || mapping.dimensionType || dimensionTypeMap[mapping.dimensionId] || 'text';
+                const value = parseValue(rawValue, dimensionType, mapping.dateFormat);
+                
+                if (value !== null && value !== undefined) {
+                  const str = String(value).trim();
+                  if (str !== '') {
+                    uniqueValues.add(str);
+                    if (uniqueValues.size >= limit) break;
+                  }
+                }
+              }
+
+              if (uniqueValues.size >= limit) break;
+            }
+
+            console.log(`[get-unique-dimension-values] Extracted ${uniqueValues.size} unique values from data source ${dataSource.id}`);
+          } catch (sourceError) {
+            console.error(`[get-unique-dimension-values] Error processing data source ${dataSource.id}:`, sourceError);
+            // Continue with next data source
+          }
         }
       }
     } else {
