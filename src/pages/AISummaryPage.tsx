@@ -13,6 +13,7 @@ import {
 import { AddAICardModal } from "@/components/AddAICardModal";
 import { CreateAISummaryShareLinkModal } from "@/components/CreateAISummaryShareLinkModal";
 import { ForecastSettingsModal } from "@/components/ForecastSettingsModal";
+import { MasterReportSetupModal, type MasterReportConfig } from "@/components/MasterReportSetupModal";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
@@ -116,6 +117,8 @@ const AISummaryPage = () => {
   const [selectedDatePeriod, setSelectedDatePeriod] = useState<string>(format(new Date(), "yyyy-MM"));
   const [selectedBudgetReportId, setSelectedBudgetReportId] = useState<string | null>(null);
   const [budgetForecastEnabled, setBudgetForecastEnabled] = useState(false);
+  const [isMasterReportSetupOpen, setIsMasterReportSetupOpen] = useState(false);
+  const [masterReportConfigs, setMasterReportConfigs] = useState<Record<string, MasterReportConfig>>({});
 
   // Generate date options: Year to date at top, then current month, then previous months
   const dateOptions = React.useMemo(() => {
@@ -1316,7 +1319,7 @@ const AISummaryPage = () => {
                     variant="ghost" 
                     size="icon" 
                     className="h-8 w-8"
-                    onClick={() => setIsAddCardModalOpen(true)}
+                    onClick={() => setIsMasterReportSetupOpen(true)}
                     title="Set up Master Report"
                   >
                     <Settings className="h-4 w-4" />
@@ -1401,7 +1404,7 @@ const AISummaryPage = () => {
             <p className="text-muted-foreground max-w-md mb-4">
               Select a report from the dropdown to view its data, or click the settings icon to set up the master report.
             </p>
-            <Button variant="outline" onClick={() => setIsAddCardModalOpen(true)}>
+            <Button variant="outline" onClick={() => setIsMasterReportSetupOpen(true)}>
               <Settings className="h-4 w-4 mr-2" />
               Set Up Master Report
             </Button>
@@ -1639,6 +1642,16 @@ const AISummaryPage = () => {
           ai_prompt: selectedCard.ai_prompt || ""
         } : null}
         mode="api"
+      />
+
+      {/* Master Report Setup Modal */}
+      <MasterReportSetupModal
+        open={isMasterReportSetupOpen}
+        onOpenChange={setIsMasterReportSetupOpen}
+        reports={reports}
+        accountId={accountId}
+        currentConfigs={masterReportConfigs}
+        onSave={setMasterReportConfigs}
       />
     </div>
   );
