@@ -1722,19 +1722,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   return (
     <div className="w-full space-y-6">
       <div className="flex items-center justify-between gap-3 mb-4">
-          {/* Report Tabs - show different variants based on hideOverviewAndBudget */}
-          {hideOverviewAndBudget ? (
-            /* All Reports view: show only report tabs without Overview/Budget */
-            <Tabs value={activeReportTab} onValueChange={(value) => handleReportTabChange(value as ReportTab)} className="w-auto">
-              <TabsList>
-                {reportTabsList.map((report) => (
-                  <TabsTrigger key={report.id} value={report.id}>
-                    {report.name}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          ) : (
+          {/* Report Tabs - hide completely in All Reports mode since we show all tables */}
+          {!hideOverviewAndBudget && (
             /* Regular view: show Overview + reports + Budget */
             <Tabs value={activeReportTab} onValueChange={(value) => handleReportTabChange(value as ReportTab)} className="w-auto">
               <TabsList>
@@ -1748,6 +1737,10 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               </TabsList>
             </Tabs>
           )}
+          
+          {/* Spacer when no tabs */}
+          {hideOverviewAndBudget && <div />}
+          
           <div className="flex items-center gap-3">
           {/* Filter Dropdowns - before Date dropdown */}
           {activeFilterDimensions.map((dimId) => {
@@ -2033,9 +2026,104 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         );
       })()}
 
+      {/* All Reports View - Show one table per report with breakdown by configured dimension */}
+      {hideOverviewAndBudget && (() => {
+        const period = selectedDatePeriod || activeTab;
+        
+        // Get all reports with their breakdown data
+        const reportTables = reportIds.map(reportId => {
+          // Find the report config to get the dimension name
+          const config = reportConfigs?.[reportId];
+          const dimensionName = config?.dimensionName || 'Group';
+          
+          // Find the breakdown key for this report
+          const breakdownKey = Object.keys(data.breakdown_data || {}).find(key => 
+            key.startsWith(reportId + '_')
+          );
+          
+          // Get breakdown rows for this report and period
+          const breakdownRows = breakdownKey 
+            ? (data.breakdown_data?.[breakdownKey]?.[period as DateTab] || [])
+            : [];
+          
+          // Get report name from tab data
+          const reportData = tabData.find(r => r.reportId === reportId);
+          const reportName = reportData?.reportName || reportId;
+          
+          // Calculate totals for this report's breakdown
+          const reportTotals = calculateBreakdownTotals(breakdownRows);
+          
+          return {
+            reportId,
+            reportName,
+            dimensionName,
+            breakdownRows,
+            totals: reportTotals,
+          };
+        }).filter(r => r.breakdownRows.length > 0);
+        
+        if (reportTables.length === 0) {
+          return (
+            <div className="text-center py-8 text-muted-foreground">
+              No breakdown data available. Configure group by dimensions in Master Report Setup.
+            </div>
+          );
+        }
+        
+        return (
+          <div className="space-y-8">
+            {reportTables.map(({ reportId, reportName, dimensionName, breakdownRows, totals }) => (
+              <div key={reportId} className="border rounded-lg overflow-hidden">
+                <div className="bg-primary/5 px-4 py-2 border-b">
+                  <h4 className="font-semibold text-sm">{reportName}</h4>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="font-medium min-w-[200px]">{dimensionName}</TableHead>
+                        {safeMetrics.map((metric) => renderSortableHeader(`all-reports-${reportId}`, metric))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortRows(breakdownRows, `all-reports-${reportId}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                        <TableRow
+                          key={row.groupValue}
+                          className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                        >
+                          <TableCell className="font-medium text-sm min-w-[200px]">
+                            {row.groupValue}
+                          </TableCell>
+                          {safeMetrics.map((metric) => (
+                            <TableCell key={metric} className="text-right tabular-nums text-sm">
+                              {formatMetricValue(metric, row.metrics[metric] || 0)}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                      {/* Total Row */}
+                      {breakdownRows.length > 1 && (
+                        <TableRow className="bg-muted font-semibold border-t-2">
+                          <TableCell className="min-w-[200px]">Total</TableCell>
+                          {safeMetrics.map((metric) => (
+                            <TableCell key={metric} className="text-right tabular-nums">
+                              {formatMetricValue(metric, totals[metric] || 0)}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       <div className="space-y-6">
-        {/* Render a table for the selected date period - ONLY on Overview tab */}
-        {activeReportTab === "overview" && (() => {
+        {/* Render a table for the selected date period - ONLY on Overview tab (not in All Reports mode) */}
+        {!hideOverviewAndBudget && activeReportTab === "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
           const periodData = computeDataForTab(period as DateTab);
           const periodTotals = calculateTotals(periodData);
@@ -2139,8 +2227,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
         
-        {/* Combined Date Breakdown Table - for selected period in overview mode */}
-        {activeReportTab === "overview" && (() => {
+        {/* Combined Date Breakdown Table - for selected period in overview mode (not in All Reports) */}
+        {!hideOverviewAndBudget && activeReportTab === "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
           let periodBreakdown = combinedDateBreakdown[period as DateTab];
           if (!periodBreakdown || periodBreakdown.length === 0) return null;
@@ -2197,8 +2285,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
 
-        {/* Results by Week table - for individual report tabs */}
-        {activeReportTab !== "overview" && (() => {
+        {/* Results by Week table - for individual report tabs (not in All Reports) */}
+        {!hideOverviewAndBudget && activeReportTab !== "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
           
           // Get data for the active report tab
@@ -2314,8 +2402,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
 
-        {/* Breakdowns - only show on individual report tabs, not on overview */}
-        {activeReportTab !== "overview" && data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (() => {
+        {/* Breakdowns - only show on individual report tabs, not on overview or All Reports */}
+        {!hideOverviewAndBudget && activeReportTab !== "overview" && data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (() => {
           const period = selectedDatePeriod || activeTab;
           
           // Extract breakdown dimensions for the active report tab
