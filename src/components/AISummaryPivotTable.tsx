@@ -127,6 +127,7 @@ interface AISummaryPivotTableProps {
   dateOptions?: { value: string; label: string }[];
   selectedDatePeriod?: string;
   onDatePeriodChange?: (period: string) => void;
+  hideOverviewAndBudget?: boolean; // Hide Overview and Budget tabs (for All Reports view)
 }
 
 interface DataSource {
@@ -624,6 +625,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   dateOptions = [],
   selectedDatePeriod,
   onDatePeriodChange,
+  hideOverviewAndBudget = false,
 }) => {
   const [internalTab, setInternalTab] = useState<DateTab>("mtd");
   const activeTab = selectedTab || internalTab;
@@ -1712,6 +1714,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     <div className="w-full space-y-6">
       <div className="flex items-center justify-between gap-3 mb-4">
           {/* Report Tabs */}
+          {!hideOverviewAndBudget && (
           <Tabs value={activeReportTab} onValueChange={(value) => handleReportTabChange(value as ReportTab)} className="w-auto">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -1723,6 +1726,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               <TabsTrigger value="budget">Budget</TabsTrigger>
             </TabsList>
           </Tabs>
+          )}
           
           <div className="flex items-center gap-3">
           {/* Filter Dropdowns - before Date dropdown */}

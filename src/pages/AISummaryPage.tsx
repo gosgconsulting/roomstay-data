@@ -1600,11 +1600,10 @@ const AISummaryPage = () => {
                 )}
                 selectedTab={selectedDateTab}
                 onTabChange={setSelectedDateTab}
-                selectedReportTab={selectedReportTab}
-                onReportTabChange={setSelectedReportTab}
                 dateOptions={dateOptions}
                 selectedDatePeriod={selectedDatePeriod}
                 onDatePeriodChange={setSelectedDatePeriod}
+                hideOverviewAndBudget={true}
               />
             ) : (
               cards
