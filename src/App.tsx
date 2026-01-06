@@ -12,7 +12,6 @@ import Auth from "./pages/Auth";
 import SharedReport from "./pages/SharedReport";
 import SharedAISummary from "./pages/SharedAISummary";
 import NotFound from "./pages/NotFound";
-import AllReports from "./pages/AllReports";
 import AISummaryPage from "./pages/AISummaryPage";
 
 import ForecastScenarioPage from "./pages/ForecastScenarioPage";
@@ -30,8 +29,6 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/landing" element={<Landing />} />
-          <Route path="/all-reports/:accountId" element={<AllReports />} />
-          <Route path="/all-reports" element={<AllReports />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/tools/data" element={<ReportTool />} />
           <Route path="/tools/data/:accountId" element={<ReportDashboard />} />
