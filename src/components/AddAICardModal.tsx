@@ -154,9 +154,10 @@ interface AddAICardModalProps {
   editingCard?: EditingCard | null;
   mode?: "card" | "api"; // "card" for card creation/editing, "api" for API URL preview only
   initialReportId?: string; // Pre-select a report when opening from ReportDashboard
+  accountId?: string; // Account ID - can be passed as prop or will use from URL params
 }
 
-type Step = "select-reports" | "filter-dimensions" | "breakdown-dimensions" | "filter-by" | "select-metrics" | "select-period" | "preview-url";
+type Step = "select-reports" | "filter-dimensions" | "breakdown-dimensions" | "select-metrics" | "select-period" | "preview-url";
 
 // Standard KPI metrics available
 const AVAILABLE_METRICS = [
@@ -291,8 +292,10 @@ const getDefaultSinceDate = (): string => {
   return `${previousYear}-01-01`;
 };
 
-export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard, mode = "card", initialReportId }: AddAICardModalProps) => {
-  const { accountId } = useParams();
+export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard, mode = "card", initialReportId, accountId: propAccountId }: AddAICardModalProps) => {
+  const { accountId: urlAccountId } = useParams();
+  // Use prop accountId first, then URL param, then try to get from editingCard
+  const accountId = propAccountId || urlAccountId || (editingCard as any)?.account_id || null;
   const [step, setStep] = useState<Step>("select-reports");
   const [isSaving, setIsSaving] = useState(false);
   const [reports, setReports] = useState<Report[]>([]);
@@ -383,7 +386,17 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
   // Fetch reports for the account
   useEffect(() => {
     const fetchReports = async () => {
-      if (!accountId) return;
+      if (!accountId) {
+        console.log('[AddAICardModal] No accountId available:', {
+          propAccountId: propAccountId,
+          urlAccountId: urlAccountId,
+          editingCardAccountId: (editingCard as any)?.account_id,
+          finalAccountId: accountId
+        });
+        return;
+      }
+      
+      console.log('[AddAICardModal] Fetching reports for accountId:', accountId);
       
       const { data, error } = await supabase
         .from("reports")
@@ -391,7 +404,30 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
         .eq("account_id", accountId)
         .order("name");
 
-      if (!error && data) {
+      if (error) {
+        console.error('[AddAICardModal] Error fetching reports:', error);
+        return;
+      }
+
+      console.log('[AddAICardModal] Found reports:', data?.length || 0, data);
+      
+      // Check for duplicate report names
+      if (data && data.length > 0) {
+        const nameCounts = new Map<string, number>();
+        data.forEach(report => {
+          nameCounts.set(report.name, (nameCounts.get(report.name) || 0) + 1);
+        });
+        
+        const duplicates = Array.from(nameCounts.entries())
+          .filter(([_, count]) => count > 1)
+          .map(([name]) => name);
+        
+        if (duplicates.length > 0) {
+          console.warn('[AddAICardModal] Found duplicate report names:', duplicates);
+        }
+      }
+
+      if (data) {
         setReports(data);
       }
     };
@@ -399,7 +435,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
     if (open) {
       fetchReports();
     }
-  }, [accountId, open]);
+  }, [accountId, open, propAccountId, editingCard]);
 
   // Fetch custom metrics (number-type and formula-type dimensions) for the account
   useEffect(() => {
@@ -470,7 +506,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
   // Fetch all data sources and source data when entering filter-dimensions or breakdown-dimensions step
   useEffect(() => {
     const fetchAllDataForReports = async () => {
-      if ((step !== "filter-dimensions" && step !== "breakdown-dimensions" && step !== "filter-by") || selectedReportIds.length === 0) return;
+      if ((step !== "filter-dimensions" && step !== "breakdown-dimensions") || selectedReportIds.length === 0) return;
 
       const { user } = await getUser();
       if (!user) return;
@@ -679,8 +715,6 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
       setStep("breakdown-dimensions");
       setActiveReportTab(selectedReportIds[0]);
     } else if (step === "breakdown-dimensions") {
-      setStep("filter-by");
-    } else if (step === "filter-by") {
       setStep("select-metrics");
     } else if (step === "select-metrics") {
       if (mode === "api") {
@@ -703,8 +737,6 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
       setStep("filter-dimensions");
       setActiveReportTab(selectedReportIds[0]);
     } else if (step === "select-metrics") {
-      setStep("filter-by");
-    } else if (step === "filter-by") {
       setStep("breakdown-dimensions");
     } else if (step === "select-period") {
       setStep("select-metrics");
@@ -1452,9 +1484,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
       case "filter-dimensions":
         return `${prefix}Filter Dimensions`;
       case "breakdown-dimensions":
-        return `${prefix}Breakdown By`;
-      case "filter-by":
-        return `${prefix}Filter By`;
+        return `${prefix}Choose Dimensions`;
       case "select-metrics":
         return `${prefix}Select Metrics`;
       case "select-period":

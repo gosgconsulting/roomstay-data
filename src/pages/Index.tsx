@@ -139,7 +139,7 @@ export default function Index() {
       // Cancel previous loading by incrementing generation
       setLoadingGeneration(prev => prev + 1);
       
-      // Clear previous loading states immediately
+      // Clear previous loading states immediately - don't block UI
       setLoadingComponents(new Set());
       setIsDataLoading(false);
       
@@ -149,12 +149,16 @@ export default function Index() {
       console.log('[testing] Index - Using cached data if available for instant loading');
       
       // Start new loading cycle (components will use cache if available)
+      // Mark components as loading but don't block the UI - show page structure immediately
       markComponentLoading('metrics');
       markComponentLoading('chart');
       markComponentLoading('table');
+      
+      // Only increment refresh key if we need fresh data, otherwise use cached
+      // Components will check cache first and only fetch if needed
       setDataRefreshKey(prev => prev + 1);
 
-      // Load dimensions when reportId changes
+      // Load dimensions when reportId changes (non-blocking)
       loadDimensions();
     }
   }, [reportId, loadDimensions]);
@@ -391,8 +395,15 @@ export default function Index() {
           <DashboardHeader 
             reportId={reportId} 
             onReportChange={(newReportId) => {
-              setReportId(newReportId);
-              if (newReportId) {
+              // Use cached data from reportsList for instant switching
+              const selected = reportsList.find(r => r.id === newReportId);
+              if (selected) {
+                // Update both reportId and accountId instantly from cache
+                setReportId(newReportId);
+                setAccountId(selected.account_id || null);
+              } else {
+                // Fallback: only fetch if not in cache (shouldn't happen normally)
+                setReportId(newReportId);
                 supabase
                   .from('reports')
                   .select('account_id')
@@ -434,7 +445,9 @@ export default function Index() {
                     reportId={reportId} 
                     filters={filters}
                     accountId={accountId || undefined}
-                    key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
+                    // Use reportId as key instead of refresh keys to avoid unnecessary remounts
+                    // Components will handle data updates internally using React Query cache
+                    key={`metrics-${reportId}`}
                     onLoadingComplete={() => markComponentLoaded('metrics')}
                     visibilityRefreshTrigger={visibilityRefreshTrigger}
                   />
@@ -443,7 +456,8 @@ export default function Index() {
                   reportId={reportId}
                   filters={filters}
                   accountId={accountId}
-                  key={`charts-${dataRefreshKey}-${loadingGeneration}`}
+                  // Use reportId as key instead of refresh keys to avoid unnecessary remounts
+                  key={`charts-${reportId}`}
                 />
                 <PerformanceTable 
                   reportId={reportId} 
@@ -451,7 +465,8 @@ export default function Index() {
                   isSharedView={false}
                   accountId={accountId || undefined}
                   onFiltersChange={setFilters}
-                  key={`table-${dataRefreshKey}-${loadingGeneration}`}
+                  // Use reportId as key instead of refresh keys to avoid unnecessary remounts
+                  key={`table-${reportId}`}
                   onLoadingComplete={() => markComponentLoaded('table')}
                   visibilityRefreshTrigger={visibilityRefreshTrigger}
                 />

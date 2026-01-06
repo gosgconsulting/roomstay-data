@@ -131,7 +131,12 @@ export function ReportsSidebar({
       return;
     }
     
-    if (accountId) {
+    // Use first report's name if available, otherwise fallback to legacy route
+    if (reports.length > 0) {
+      import("@/lib/report-url").then(({ getReportUrlWithSummary }) => {
+        navigate(getReportUrlWithSummary(reports[0].name, summaryId));
+      });
+    } else if (accountId) {
       navigate(`/tools/report/${accountId}/${summaryId}`);
     }
   };

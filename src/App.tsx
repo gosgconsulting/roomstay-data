@@ -38,7 +38,8 @@ const App = () => (
           <Route path="/tools/forecasting" element={<ForecastingTool />} />
           <Route path="/tools/forecasting/scenario/:scenarioId" element={<ForecastScenarioPage />} />
           <Route path="/tools/forecasting/:accountId" element={<ForecastingDashboard />} />
-          <Route path="/tools/report/:accountId" element={<AISummaryPage />} />
+          <Route path="/tools/report/:reportName" element={<AISummaryPage />} />
+          {/* Legacy route support - redirect old UUID-based routes */}
           <Route path="/tools/report/:accountId/:summaryId" element={<AISummaryPage />} />
           <Route path="/demo/sidebar" element={<ReportsSidebarDemo />} />
           <Route path="/dev" element={<DevPage />} />

@@ -227,9 +227,15 @@ export default function ReportDashboard() {
     }
   };
 
-  const handleEditAISummary = (summaryId: string) => {
+  const handleEditAISummary = async (summaryId: string) => {
     // Navigate to the AI summary page where editing is handled
-    navigate(`/tools/report/${accountId}/${summaryId}`);
+    // Use first report's name if available, otherwise fallback to legacy route
+    if (reportsList.length > 0) {
+      const { getReportUrlWithSummary } = await import("@/lib/report-url");
+      navigate(getReportUrlWithSummary(reportsList[0].name, summaryId));
+    } else if (accountId) {
+      navigate(`/tools/report/${accountId}/${summaryId}`);
+    }
   };
 
   const handleDeleteAISummary = async (summaryId: string) => {
@@ -635,7 +641,8 @@ export default function ReportDashboard() {
                     filters={filters}
                     accountId={accountId}
                     visibilityRefreshTrigger={visibilityRefreshTrigger}
-                    key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
+                    // Use reportId as key to avoid unnecessary remounts - components handle data updates internally
+                    key={`metrics-${reportId}`}
                     onLoadingComplete={() => markComponentLoaded('metrics')}
                     headerAction={
                       !isSharedView && isEditMode ? (
@@ -659,7 +666,8 @@ export default function ReportDashboard() {
                   accountId={accountId}
                   filters={filters}
                   visibilityRefreshTrigger={visibilityRefreshTrigger}
-                  key={`charts-${dataRefreshKey}-${loadingGeneration}-${chartMetrics.join(",")}`}
+                  // Include chartMetrics in key since changing metrics should remount
+                  key={`charts-${reportId}-${chartMetrics.join(",")}`}
                   onLoadingComplete={() => markComponentLoaded('chart')}
                   isEditMode={isEditMode}
                   metrics={chartMetrics}
@@ -674,7 +682,8 @@ export default function ReportDashboard() {
                   visibilityRefreshTrigger={visibilityRefreshTrigger}
                   isEditMode={isEditMode}
                   useCachedData={useCachedData}
-                  key={`table-${dataRefreshKey}-${loadingGeneration}-${useCachedData}`}
+                  // Use reportId and useCachedData as key - useCachedData changes should remount
+                  key={`table-${reportId}-${useCachedData}`}
                   onLoadingComplete={() => markComponentLoaded('table')}
                 />
 
@@ -781,9 +790,15 @@ export default function ReportDashboard() {
         onOpenChange={setShowAISummaryModal}
         accountId={accountId}
         userId={session?.user?.id}
-        onSummaryCreated={(summary) => {
+        onSummaryCreated={async (summary) => {
           setAiSummaries((prev) => [summary, ...prev]);
-          navigate(`/tools/report/${accountId}/${summary.id}`);
+          // Use first report's name if available, otherwise fallback to legacy route
+          if (reportsList.length > 0) {
+            const { getReportUrlWithSummary } = await import("@/lib/report-url");
+            navigate(getReportUrlWithSummary(reportsList[0].name, summary.id));
+          } else if (accountId) {
+            navigate(`/tools/report/${accountId}/${summary.id}`);
+          }
         }}
       />
     </div>

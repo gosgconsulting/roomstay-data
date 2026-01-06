@@ -645,6 +645,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // State for filter values (dimensionId -> selected values)
   const [filterValues, setFilterValues] = useState<Record<string, string[]>>({});
   
+  // State for active breakdown sub-tab (per report tab)
+  const [activeBreakdownTab, setActiveBreakdownTab] = useState<Record<string, string | null>>({});
+  
   // Reset period selection when year changes to pick latest available option (December)
   React.useEffect(() => {
     const now = new Date();
@@ -871,7 +874,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     );
   }
 
-  if (reportIds.length === 0 || !selectedMetrics || selectedMetrics.length === 0) {
+  // Allow rendering with empty data - show table structure even when no reports
+  // Only return null if metrics are not selected
+  if (!selectedMetrics || selectedMetrics.length === 0) {
     return null;
   }
   
@@ -1247,7 +1252,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     );
   }
 
-  if (reportIds.length === 0 || !selectedMetrics || selectedMetrics.length === 0) {
+  // Allow rendering with empty data - show table structure even when no reports
+  // Only return null if metrics are not selected
+  if (!selectedMetrics || selectedMetrics.length === 0) {
     return null;
   }
 
@@ -1856,8 +1863,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
 
       <div className="space-y-6">
-        {/* Unified Day/Week table - applies to all reports (Overview and individual) */}
-        {(() => {
+        {/* Unified Day/Week table - only for individual report tabs, NOT overview */}
+        {activeReportTab !== "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
           const isSpecificMonth = period.match(/^\d{4}-\d{2}$/);
           
@@ -1865,19 +1872,10 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           const getRowsForTab = () => {
             const allRows: any[] = [];
             
-            if (activeReportTab === "overview") {
-              // Get all rows from all reports
-              Object.values(rawSourceData).forEach((reportData) => {
-                if (reportData?.rows) {
-                  allRows.push(...reportData.rows);
-                }
-              });
-            } else {
-              // Get rows for specific report
-              const reportData = rawSourceData[activeReportTab];
-              if (reportData?.rows) {
-                allRows.push(...reportData.rows);
-              }
+            // Get rows for specific report
+            const reportData = rawSourceData[activeReportTab];
+            if (reportData?.rows) {
+              allRows.push(...reportData.rows);
             }
             
             return allRows;
@@ -2189,62 +2187,262 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
 
+        {/* Results by Week table - for individual report tabs */}
+        {activeReportTab !== "overview" && (() => {
+          const period = selectedDatePeriod || activeTab;
+          
+          // Get data for the active report tab
+          const reportData = data[period as DateTab]?.find(r => r.reportId === activeReportTab);
+          if (!reportData) return null;
+          
+          // Compute date breakdown for this specific report
+          const reportId = activeReportTab;
+          const reportRawData = rawSourceData[reportId];
+          if (!reportRawData || !reportRawData.rows || reportRawData.rows.length === 0) return null;
+          
+          // Get date range for the period
+          const dateRange = getDateRange(period as DateTab, selectedYear);
+          
+          // Group rows by week/month
+          const dateGroups: Record<string, any[]> = {};
+          const dateDimId = mergedMetricMap['Date'] || mergedMetricMap['date'] || mergedMetricMap['Day'];
+          
+          reportRawData.rows.forEach((row: any) => {
+            const rowData = row.dimension_values || row;
+            let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
+            if (!dateValue && dateDimId) {
+              dateValue = rowData[dateDimId];
+            }
+            if (!dateValue) {
+              for (const [key, val] of Object.entries(rowData)) {
+                if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+                  dateValue = val;
+                  break;
+                }
+              }
+            }
+            
+            const rowDate = parseDate(dateValue);
+            if (!rowDate) return;
+            if (rowDate < dateRange.start || rowDate > dateRange.end) return;
+            
+            const groupKey = getDateGroupKey(rowDate, period as DateTab);
+            if (!dateGroups[groupKey]) {
+              dateGroups[groupKey] = [];
+            }
+            dateGroups[groupKey].push(row);
+          });
+          
+          // Convert to DateBreakdownRow format
+          const reportDateBreakdown: DateBreakdownRow[] = [];
+          Object.entries(dateGroups).forEach(([dateGroup, groupRows]) => {
+            const dimensionFilter = getDimensionFilterForReport(reportId);
+            const metrics = aggregateMetrics(
+              groupRows,
+              selectedMetrics,
+              dateRange,
+              dimensionFilter,
+              mergedMetricMap
+            );
+            
+            reportDateBreakdown.push({
+              dateGroup,
+              metrics,
+            });
+          });
+          
+          // Sort by date group
+          reportDateBreakdown.sort((a, b) => a.dateGroup.localeCompare(b.dateGroup));
+          
+          // Reverse week-based breakdowns to show latest first (not month-based)
+          const isWeekView = period !== 'ytd' && period !== 'mtd' && !period.match(/^\d{4}-\d{2}$/);
+          const sortedBreakdown = isWeekView ? [...reportDateBreakdown].reverse() : reportDateBreakdown;
+          
+          if (sortedBreakdown.length === 0) return null;
+          
+          return (
+            <div className="mt-6 space-y-4">
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-primary/5 px-4 py-2 border-b">
+                  <h4 className="font-semibold text-sm">
+                    Results By {period === 'ytd' ? 'Month' : 'Week'}
+                  </h4>
+                </div>
+                <div className="overflow-hidden">
+                  <Table>
+                    <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="font-medium w-[200px]">{period === 'ytd' ? 'Month' : 'Week'}</TableHead>
+                        {safeMetrics.map((metric) => renderSortableHeader(`report-date-breakdown-${reportId}`, metric))}
+                      </TableRow>
+                    </TableHeader>
+                  </Table>
+                  <div className={sortedBreakdown.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                    <Table>
+                      <TableBody>
+                        {sortRows(sortedBreakdown, `report-date-breakdown-${reportId}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                          <TableRow
+                            key={row.dateGroup}
+                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                          >
+                            <TableCell className="font-medium text-sm w-[200px]">
+                              {row.dateGroup}
+                            </TableCell>
+                            {safeMetrics.map((metric) => (
+                              <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                {formatMetricValue(metric, row.metrics[metric] || 0)}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Breakdowns - only show on individual report tabs, not on overview */}
         {activeReportTab !== "overview" && data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (() => {
           const period = selectedDatePeriod || activeTab;
           
+          // Extract breakdown dimensions for the active report tab
+          const breakdownEntries = Object.entries(data.breakdown_data!)
+            .filter(([breakdownKey]) => {
+              const [reportId] = breakdownKey.split('_');
+              return reportId === activeReportTab;
+            });
+          
+          if (breakdownEntries.length === 0) return null;
+          
+          // Group breakdowns by dimension name and get unique dimensions
+          const breakdownDimensions = breakdownEntries
+            .map(([breakdownKey]) => {
+              const dimensionName = data.breakdown_dimension_names?.[breakdownKey] || 'Group';
+              return {
+                key: breakdownKey,
+                name: dimensionName,
+              };
+            })
+            // Remove duplicates by name (in case same dimension appears multiple times)
+            .filter((dim, index, self) => 
+              index === self.findIndex(d => d.name === dim.name)
+            );
+          
+          // Get current active breakdown tab for this report, default to first dimension
+          const currentBreakdownTab = activeBreakdownTab[activeReportTab] || breakdownDimensions[0]?.key || null;
+          
+          // If only one breakdown dimension, show it directly without sub-tabs
+          if (breakdownDimensions.length === 1) {
+            const breakdownRows = data.breakdown_data![breakdownDimensions[0].key]?.[period as DateTab] || [];
+            if (breakdownRows.length === 0) return null;
+            
+            const dimensionName = breakdownDimensions[0].name;
+            
+            return (
+              <div className="mt-6">
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="overflow-hidden">
+                    <Table>
+                      <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                        <TableRow className="bg-muted/30">
+                          <TableHead className="font-medium w-[200px]">{dimensionName}</TableHead>
+                          {safeMetrics.map((metric) => renderSortableHeader(`breakdown-${breakdownDimensions[0].key}`, metric))}
+                        </TableRow>
+                      </TableHeader>
+                    </Table>
+                    <div className={breakdownRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                      <Table>
+                        <TableBody>
+                          {sortRows(breakdownRows, `breakdown-${breakdownDimensions[0].key}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                            <TableRow
+                              key={row.groupValue}
+                              className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                            >
+                              <TableCell className="font-medium text-sm w-[200px]">
+                                {row.groupValue}
+                              </TableCell>
+                              {safeMetrics.map((metric) => (
+                                <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          
+          // Multiple breakdown dimensions - show sub-tabs
           return (
-            <div className="space-y-4">
-              {Object.entries(data.breakdown_data!)
-                .filter(([breakdownKey]) => {
-                  const [reportId] = breakdownKey.split('_');
-                  return reportId === activeReportTab;
-                })
-                .map(([breakdownKey, tabsData]) => {
-                  const breakdownRows = tabsData?.[period as DateTab] || [];
+            <div className="mt-6">
+              <Tabs
+                value={currentBreakdownTab || ""}
+                onValueChange={(value) => {
+                  setActiveBreakdownTab((prev) => ({
+                    ...prev,
+                    [activeReportTab]: value,
+                  }));
+                }}
+              >
+                <TabsList className="mb-4">
+                  {breakdownDimensions.map((dim) => (
+                    <TabsTrigger key={dim.key} value={dim.key}>
+                      {dim.name}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+                
+                {breakdownDimensions.map((dim) => {
+                  const breakdownRows = data.breakdown_data![dim.key]?.[period as DateTab] || [];
                   if (breakdownRows.length === 0) return null;
                   
-                  const [reportId] = breakdownKey.split('_');
-                  const periodData = computeDataForTab(period as DateTab);
-                  const reportName = periodData.find(r => r.reportId === reportId)?.reportName || 'Report';
-                  const dimensionName = data.breakdown_dimension_names?.[breakdownKey] || 'Group';
-                  
                   return (
-                    <div key={`${breakdownKey}-${period}`} className="border rounded-lg overflow-hidden">
-                      <div className="overflow-hidden">
-                        <Table>
-                          <TableHeader className="sticky top-0 z-10 bg-muted/30">
-                            <TableRow className="bg-muted/30">
-                              <TableHead className="font-medium w-[200px]">{dimensionName}</TableHead>
-                              {safeMetrics.map((metric) => renderSortableHeader(`breakdown-${breakdownKey}`, metric))}
-                            </TableRow>
-                          </TableHeader>
-                        </Table>
-                        <div className={breakdownRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                    <TabsContent key={dim.key} value={dim.key}>
+                      <div className="border rounded-lg overflow-hidden">
+                        <div className="overflow-hidden">
                           <Table>
-                            <TableBody>
-                              {sortRows(breakdownRows, `breakdown-${breakdownKey}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                                <TableRow
-                                  key={row.groupValue}
-                                  className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                                >
-                                  <TableCell className="font-medium text-sm w-[200px]">
-                                    {row.groupValue}
-                                  </TableCell>
-                                  {safeMetrics.map((metric) => (
-                                    <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                      {formatMetricValue(metric, row.metrics[metric] || 0)}
-                                    </TableCell>
-                                  ))}
-                                </TableRow>
-                              ))}
-                            </TableBody>
+                            <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                              <TableRow className="bg-muted/30">
+                                <TableHead className="font-medium w-[200px]">{dim.name}</TableHead>
+                                {safeMetrics.map((metric) => renderSortableHeader(`breakdown-${dim.key}`, metric))}
+                              </TableRow>
+                            </TableHeader>
                           </Table>
+                          <div className={breakdownRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                            <Table>
+                              <TableBody>
+                                {sortRows(breakdownRows, `breakdown-${dim.key}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                                  <TableRow
+                                    key={row.groupValue}
+                                    className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                                  >
+                                    <TableCell className="font-medium text-sm w-[200px]">
+                                      {row.groupValue}
+                                    </TableCell>
+                                    {safeMetrics.map((metric) => (
+                                      <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                        {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                      </TableCell>
+                                    ))}
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    </TabsContent>
                   );
                 })}
+              </Tabs>
             </div>
           );
         })()}

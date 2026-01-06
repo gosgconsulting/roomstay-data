@@ -19,6 +19,7 @@ import { getUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { format, subMonths, subYears, startOfYear } from "date-fns";
 import { toast } from "sonner";
+import { reportNameToSlug, findReportBySlug, getReportUrl, getReportUrlWithSummary } from "@/lib/report-url";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,6 +71,7 @@ interface AISummaryCard {
   generated_summary: string | null;
   last_generated_at: string | null;
   created_at: string;
+  account_id?: string | null;
   cached_pivot_data?: CachedPivotData | null;
   pivot_data_refreshed_at?: string | null;
 }
@@ -93,8 +95,14 @@ interface DataSource {
 }
 
 const AISummaryPage = () => {
-  const { accountId, summaryId } = useParams();
+  const { reportName, accountId: legacyAccountId, summaryId: legacySummaryId } = useParams();
   const navigate = useNavigate();
+  const [resolvedAccountId, setResolvedAccountId] = useState<string | undefined>(undefined);
+  const [resolvedSummaryId, setResolvedSummaryId] = useState<string | null>(null);
+  
+  // Get summaryId from query params if provided
+  const searchParams = new URLSearchParams(window.location.search);
+  const querySummaryId = searchParams.get('summary') || null;
   const [isAddCardModalOpen, setIsAddCardModalOpen] = useState(false);
   const [cards, setCards] = useState<AISummaryCard[]>([]);
   const [editingCard, setEditingCard] = useState<AISummaryCard | null>(null);
@@ -108,7 +116,7 @@ const AISummaryPage = () => {
   const [renamingCardId, setRenamingCardId] = useState<string | null>(null);
   const [newCardName, setNewCardName] = useState("");
   const [generateModalCard, setGenerateModalCard] = useState<AISummaryCard | null>(null);
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(summaryId || null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(legacySummaryId || querySummaryId || null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isForecastModalOpen, setIsForecastModalOpen] = useState(false);
   const [isAPIBuilderModalOpen, setIsAPIBuilderModalOpen] = useState(false);
@@ -171,6 +179,93 @@ const AISummaryPage = () => {
     }
   };
 
+  // Resolve accountId from reportName if provided
+  useEffect(() => {
+    const resolveReport = async () => {
+      // If using new route with reportName
+      if (reportName) {
+        try {
+          const { user } = await getUser();
+          if (!user) return;
+
+          // Check if reportName is a UUID (legacy format)
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          const isUUID = uuidRegex.test(reportName);
+
+          if (isUUID) {
+            // Legacy UUID format - treat as accountId
+            console.log('[AISummaryPage] Detected UUID in reportName, treating as accountId');
+            setResolvedAccountId(reportName);
+            if (querySummaryId) {
+              setResolvedSummaryId(querySummaryId);
+            }
+            return;
+          }
+
+          // Fetch all reports for the user
+          const { data: allReports, error } = await supabase
+            .from("reports")
+            .select("id, name, account_id")
+            .eq("user_id", user.id);
+
+          if (error) {
+            console.error("Error fetching reports:", error);
+            toast.error("Failed to load report");
+            setIsLoading(false);
+            return;
+          }
+
+          // Find report by slug
+          const report = findReportBySlug(reportName, allReports || []);
+          
+          console.log('[AISummaryPage] Looking up report:', {
+            reportName,
+            allReportsCount: allReports?.length || 0,
+            reportNames: allReports?.map(r => r.name),
+            reportSlugs: allReports?.map(r => ({ name: r.name, slug: reportNameToSlug(r.name) })),
+            foundReport: report
+          });
+          
+          if (report && report.account_id) {
+            setResolvedAccountId(report.account_id);
+            // Set summaryId from query param if provided
+            if (querySummaryId) {
+              setResolvedSummaryId(querySummaryId);
+            }
+          } else {
+            console.error('[AISummaryPage] Report not found:', {
+              reportName,
+              decodedSlug: decodeURIComponent(reportName).toLowerCase(),
+              availableReports: allReports?.map(r => ({ 
+                name: r.name, 
+                slug: reportNameToSlug(r.name),
+                account_id: r.account_id 
+              }))
+            });
+            toast.error(`Report "${reportName}" not found`);
+            setIsLoading(false);
+          }
+        } catch (err) {
+          console.error("Error resolving report:", err);
+          toast.error("Failed to load report");
+          setIsLoading(false);
+        }
+      } else if (legacyAccountId) {
+        // Legacy route support
+        setResolvedAccountId(legacyAccountId);
+        if (legacySummaryId) {
+          setResolvedSummaryId(legacySummaryId);
+        }
+      }
+    };
+
+    resolveReport();
+  }, [reportName, legacyAccountId, legacySummaryId, querySummaryId, navigate]);
+
+  // Use resolved accountId
+  const accountId = resolvedAccountId || legacyAccountId;
+  const summaryId = resolvedSummaryId || legacySummaryId || querySummaryId;
+
   const fetchReports = async () => {
     if (!accountId) return;
 
@@ -185,8 +280,10 @@ const AISummaryPage = () => {
   };
 
   useEffect(() => {
-    fetchCards();
-    fetchReports();
+    if (accountId) {
+      fetchCards();
+      fetchReports();
+    }
   }, [accountId]);
 
   // Update selectedCardId when summaryId from URL changes
@@ -198,7 +295,7 @@ const AISummaryPage = () => {
 
   const handleBack = () => {
     if (accountId) {
-      navigate(`/tools/data/${accountId}`);
+      navigate(`/?account=${accountId}`);
     } else {
       navigate("/");
     }
@@ -1254,13 +1351,25 @@ const AISummaryPage = () => {
     }
     if (cardId === "all-reports") {
       setSelectedCardId(null);
-      if (accountId) {
+      // Use report name if available, otherwise use first report for the account
+      if (reportName) {
+        navigate(getReportUrl(reportName));
+      } else if (reports.length > 0) {
+        navigate(getReportUrl(reports[0].name));
+      } else if (accountId) {
+        // Fallback to legacy route
         navigate(`/tools/report/${accountId}`);
       }
       return;
     }
     setSelectedCardId(cardId);
-    if (accountId) {
+    // Use report name if available, otherwise use first report for the account
+    if (reportName) {
+      navigate(getReportUrlWithSummary(reportName, cardId));
+    } else if (reports.length > 0) {
+      navigate(getReportUrlWithSummary(reports[0].name, cardId));
+    } else if (accountId) {
+      // Fallback to legacy route
       navigate(`/tools/report/${accountId}/${cardId}`);
     }
   };
@@ -1396,24 +1505,29 @@ const AISummaryPage = () => {
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
-        ) : !selectedCardId ? (
-          /* All Reports view - empty placeholder */
-          <div className="flex flex-col items-center justify-center text-center py-16">
-            <Sparkles className="h-16 w-16 text-muted-foreground mb-4" />
-            <h2 className="text-2xl font-semibold mb-2">All Reports</h2>
-            <p className="text-muted-foreground max-w-md mb-4">
-              Select a report from the dropdown to view its data, or click the settings icon to set up the master report.
-            </p>
-            <Button variant="outline" onClick={() => setIsMasterReportSetupOpen(true)}>
-              <Settings className="h-4 w-4 mr-2" />
-              Set Up Master Report
-            </Button>
-          </div>
         ) : (
           <div className="w-full">
-            {cards
-              .filter(card => card.id === selectedCardId)
-              .map(card => (
+            {!selectedCardId ? (
+              /* All Reports view - show table with empty data */
+              <AISummaryPivotTable
+                cardId={undefined}
+                reportIds={[]}
+                selectedMetrics={["Impressions", "Clicks", "Cost", "Revenue", "ROAS"]}
+                accountId={accountId}
+                cachedPivotData={undefined}
+                reportConfigs={{}}
+                selectedTab={selectedDateTab}
+                onTabChange={setSelectedDateTab}
+                selectedReportTab={selectedReportTab}
+                onReportTabChange={setSelectedReportTab}
+                dateOptions={dateOptions}
+                selectedDatePeriod={selectedDatePeriod}
+                onDatePeriodChange={setSelectedDatePeriod}
+              />
+            ) : (
+              cards
+                .filter(card => card.id === selectedCardId)
+                .map(card => (
               <div key={card.id} className="w-full">
                   {selectedReportTab === "budget" ? (
                     <div className="space-y-4">
@@ -1535,7 +1649,8 @@ const AISummaryPage = () => {
                 </CardContent>
                 */}
               </div>
-            ))}
+            ))
+            )}
           </div>
         )}
       </div>
@@ -1549,11 +1664,20 @@ const AISummaryPage = () => {
         onCardCreated={(newCardId) => {
           fetchCards();
           // Navigate to the new card if an ID was returned
-          if (newCardId && accountId) {
-            navigate(`/tools/report/${accountId}/${newCardId}`);
+          if (newCardId) {
+            // Use report name if available, otherwise use first report for the account
+            if (reportName) {
+              navigate(getReportUrlWithSummary(reportName, newCardId));
+            } else if (reports.length > 0) {
+              navigate(getReportUrlWithSummary(reports[0].name, newCardId));
+            } else if (accountId) {
+              // Fallback to legacy route
+              navigate(`/tools/report/${accountId}/${newCardId}`);
+            }
           }
         }}
         editingCard={editingCard}
+        accountId={accountId}
       />
 
       {selectedCardId && cards.find(c => c.id === selectedCardId) && (
