@@ -1438,7 +1438,7 @@ const AISummaryPage = () => {
 
             </div>
             <div className="flex items-center gap-2">
-                  {selectedCard && (
+                  {selectedCard ? (
                     <Button 
                       variant="outline" 
                       onClick={() => handleRefreshPivotData(selectedCard)}
@@ -1455,6 +1455,14 @@ const AISummaryPage = () => {
                           Refresh
                         </>
                       )}
+                    </Button>
+                  ) : (
+                    <Button 
+                      variant="outline" 
+                      onClick={() => window.location.reload()}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh
                     </Button>
                   )}
                   <Button variant="outline" onClick={() => setIsShareModalOpen(true)}>
