@@ -299,38 +299,6 @@ Deno.serve(async (req) => {
         result.vlookupApplied = false;
         result.vlookupError = vlookupError instanceof Error ? vlookupError.message : 'Unknown error';
       }
-      
-      // Trigger master report aggregation after successful resync
-      console.log('[RESYNC] Triggering master report aggregation after successful resync...');
-      try {
-        const aggregateResponse = await fetch(`${supabaseUrl}/functions/v1/aggregate-master-reports`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseAnonKey}`,
-          },
-          body: JSON.stringify({
-            reportId: updatedDataSource.report_id
-          }),
-        });
-
-        const aggregateResult = await aggregateResponse.json();
-        
-        if (aggregateResult.success) {
-          console.log(`[RESYNC] Successfully aggregated master reports: ${aggregateResult.aggregated || 0} report(s), ${aggregateResult.totalDailyRows || 0} daily rows, ${aggregateResult.totalMonthlyRows || 0} monthly rows`);
-          result.aggregationApplied = true;
-          result.aggregationDailyRows = aggregateResult.totalDailyRows || 0;
-          result.aggregationMonthlyRows = aggregateResult.totalMonthlyRows || 0;
-        } else {
-          console.warn('[RESYNC] Failed to aggregate master reports:', aggregateResult.error);
-          result.aggregationApplied = false;
-          result.aggregationError = aggregateResult.error;
-        }
-      } catch (aggregateError) {
-        console.error('[RESYNC] Error calling aggregate-master-reports:', aggregateError);
-        result.aggregationApplied = false;
-        result.aggregationError = aggregateError instanceof Error ? aggregateError.message : 'Unknown error';
-      }
     }
 
     // Return response

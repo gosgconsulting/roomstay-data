@@ -1,5 +1,5 @@
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ColumnVisibilitySheet } from "./ColumnVisibilitySheet";
-import { DimensionSelectorGroup } from "./DimensionSelectorGroup";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import type { DragEndEvent } from '@dnd-kit/core';
 import { Button } from "@/components/ui/button";
@@ -32,12 +32,10 @@ interface TableHeaderProps {
   availableSelectorDimensions?: string[];
 }
 
-const DATE_TABS = ['day', 'week', 'month', 'year'] as const;
-
 /**
- * Table header with:
- * Row 1: Report name + Day/Week/Month/Year tabs + Settings
- * Row 2: Group by / Breakdown by / Then by selectors
+ * Table header with unified design:
+ * Row 1: Report name + Day/Week toggle
+ * Row 2: Dimension tabs (Date, Hotel, Device, etc.)
  */
 export function TableHeader({
   activeDateTab,
@@ -74,18 +72,27 @@ export function TableHeader({
     ? Array.from(new Set([dateId, ...configured])) // Ensure Date is always included
     : configured;
 
+  // Get dimension objects for the selector options
+  const dimensionTabs = selectorOptions
+    .map(id => dimensions.find(d => d.id === id))
+    .filter((d): d is Dimension => d !== undefined);
+
+  // Current active dimension (first in groupByDimensions)
+  const activeDimensionId = groupByDimensions[0] || dimensionTabs[0]?.id;
+  const activeDimension = dimensions.find(d => d.id === activeDimensionId);
+
   return (
     <div className="px-4">
-      {/* Row 1: Report name + Date Tabs + Settings */}
+      {/* Row 1: Report name + Day/Week toggle + Settings */}
       <div className="flex items-center justify-between py-3">
         <h3 className="font-semibold text-foreground">
           {reportName || "Performance"}
         </h3>
         
         <div className="flex items-center gap-2">
-          {/* Day/Week/Month/Year tabs */}
+          {/* Day/Week/Month/Year toggle */}
           <div className="flex items-center bg-muted rounded-md p-0.5">
-            {DATE_TABS.map((tab) => (
+            {(['day', 'week'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => onDateTabChange(tab)}
@@ -131,43 +138,33 @@ export function TableHeader({
         </div>
       </div>
       
-      {/* Row 2: Dimension Selectors (Group by / Breakdown by / Then by) */}
-      <div className="flex items-center gap-6 py-3 border-t border-border">
-        <DimensionSelectorGroup
-          label="Group by"
-          dimensions={groupByDimensions}
-          availableDimensions={selectorOptions}
-          allDimensions={dimensions}
-          dimensionHasData={dimensionHasData}
-          reportId={reportId}
-          isSharedView={isSharedView}
-          isEditMode={isEditMode}
-          onValueChange={(value) => onDimensionChange(value, "group")}
-        />
-        
-        <DimensionSelectorGroup
-          label="Breakdown by"
-          dimensions={breakdownByDimensions}
-          availableDimensions={selectorOptions}
-          allDimensions={dimensions}
-          dimensionHasData={dimensionHasData}
-          reportId={reportId}
-          isSharedView={isSharedView}
-          isEditMode={isEditMode}
-          onValueChange={(value) => onDimensionChange(value, "breakdown")}
-        />
-        
-        <DimensionSelectorGroup
-          label="Then by"
-          dimensions={thenByDimensions}
-          availableDimensions={selectorOptions}
-          allDimensions={dimensions}
-          dimensionHasData={dimensionHasData}
-          reportId={reportId}
-          isSharedView={isSharedView}
-          isEditMode={isEditMode}
-          onValueChange={(value) => onDimensionChange(value, "then")}
-        />
+      {/* Row 2: Dimension Tabs */}
+      <div className="border-b -mx-4 px-4">
+        <div className="flex items-center gap-0 overflow-x-auto">
+          {dimensionTabs.map((dim) => {
+            const isActive = dim.id === activeDimensionId;
+            return (
+              <button
+                key={dim.id}
+                onClick={() => {
+                  if (!isSharedView || isEditMode) {
+                    onDimensionChange(dim.id, "group");
+                  }
+                }}
+                disabled={isSharedView && !isEditMode}
+                className={cn(
+                  "px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors relative border-b-2",
+                  isActive 
+                    ? "text-foreground border-primary" 
+                    : "text-muted-foreground hover:text-foreground border-transparent hover:border-muted-foreground/30",
+                  (isSharedView && !isEditMode) && "cursor-default"
+                )}
+              >
+                {dim.name}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

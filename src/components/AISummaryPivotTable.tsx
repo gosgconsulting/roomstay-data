@@ -127,7 +127,6 @@ interface AISummaryPivotTableProps {
   dateOptions?: { value: string; label: string }[];
   selectedDatePeriod?: string;
   onDatePeriodChange?: (period: string) => void;
-  hideOverviewAndBudget?: boolean; // Hide Overview and Budget tabs (for All Reports view)
 }
 
 interface DataSource {
@@ -625,26 +624,12 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   dateOptions = [],
   selectedDatePeriod,
   onDatePeriodChange,
-  hideOverviewAndBudget = false,
 }) => {
   const [internalTab, setInternalTab] = useState<DateTab>("mtd");
   const activeTab = selectedTab || internalTab;
   
   // Use transition for non-blocking tab switches
   const [isPending, startTransition] = useTransition();
-  
-  // Report tab state - MUST be declared here before any early returns (Rules of Hooks)
-  const [internalReportTab, setInternalReportTab] = useState<ReportTab>("overview");
-  
-  // For All Reports view (hideOverviewAndBudget), use first report as default if overview is selected
-  const activeReportTab = useMemo(() => {
-    const current = selectedReportTab || internalReportTab;
-    // If in All Reports mode and current tab is "overview", use first report ID
-    if (hideOverviewAndBudget && current === "overview" && reportIds.length > 0) {
-      return reportIds[0];
-    }
-    return current;
-  }, [selectedReportTab, internalReportTab, hideOverviewAndBudget, reportIds]);
   
   const handleTabChange = (tab: DateTab) => {
     startTransition(() => {
@@ -655,17 +640,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       }
     });
   };
-  
-  const handleReportTabChange = (tab: ReportTab) => {
-    startTransition(() => {
-      if (onReportTabChange) {
-        onReportTabChange(tab);
-      } else {
-        setInternalReportTab(tab);
-      }
-    });
-  };
-  
   const [comparisonType, setComparisonType] = useState<ComparisonType>("none");
   
   // Year selector state - defaults to current year
@@ -790,14 +764,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   
   // Cache computed pivot data with React Query for instant tab switching
   // This prevents heavy recalculation on every tab switch - data is computed once and cached
-  const reportConfigsKey = useMemo(() => 
-    JSON.stringify(Object.entries(reportConfigs || {}).map(([id, cfg]) => [id, cfg?.dimensionId]).sort()),
-    [reportConfigs]
-  );
-  
   const computedDataQueryKey = useMemo(() => 
-    ['computed-pivot-data', cardId || reportIds.join('-'), selectedYear, filterValuesKey, selectedMetrics.sort().join(','), reportConfigsKey],
-    [cardId, reportIds, selectedYear, filterValuesKey, selectedMetrics, reportConfigsKey]
+    ['computed-pivot-data', cardId || reportIds.join('-'), selectedYear, filterValuesKey, selectedMetrics.sort().join(',')],
+    [cardId, reportIds, selectedYear, filterValuesKey, selectedMetrics]
   );
   
   const { data: computedPivotData } = useQuery({
@@ -824,9 +793,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       const newData: CachedPivotData = { 
         mtd: [], 
         ytd: [],
-        monthly_data: {},
-        breakdown_data: {},
-        breakdown_dimension_names: {},
+        monthly_data: {}
       };
       
       // Initialize monthly_data for each month
@@ -891,101 +858,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             metrics,
           });
         });
-        
-        // Compute breakdown data using reportConfigs dimension settings
-        const reportConfig = reportConfigs?.[reportId];
-        if (reportConfig?.dimensionId) {
-          const dimensionId = reportConfig.dimensionId;
-          const dimensionName = reportConfig.dimensionName || 'Group';
-          const breakdownKey = `${reportId}_${dimensionId}`;
-          
-          // Store dimension name for later lookup
-          newData.breakdown_dimension_names![breakdownKey] = dimensionName;
-          
-          // Initialize breakdown data structure
-          if (!newData.breakdown_data![breakdownKey]) {
-            newData.breakdown_data![breakdownKey] = {};
-          }
-          
-          // Group rows by dimension value for each date period
-          const allPeriods = ["mtd", "ytd", ...monthKeys];
-          
-          allPeriods.forEach((period) => {
-            const periodRange = period === "mtd" || period === "ytd" 
-              ? dateRanges[period as "mtd" | "ytd"]
-              : getDateRange(period, selectedYear);
-            
-            // Group rows by dimension value
-            const groupedByDimension: Record<string, any[]> = {};
-            
-            reportData.rows.forEach((row: any) => {
-              const rowData = row.dimension_values || row;
-              
-              // Check date is in range
-              let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
-              if (!dateValue) {
-                for (const [key, val] of Object.entries(rowData)) {
-                  if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-                    dateValue = val;
-                    break;
-                  }
-                }
-              }
-              
-              const rowDate = parseDate(dateValue);
-              if (!rowDate || rowDate < periodRange.start || rowDate > periodRange.end) {
-                return;
-              }
-              
-              // Get dimension value - try by ID first, then by name
-              let dimValue = rowData[dimensionId] || rowData[dimensionName];
-              
-              // Try case variations
-              if (!dimValue && dimensionName) {
-                const lowerName = dimensionName.toLowerCase();
-                for (const [key, val] of Object.entries(rowData)) {
-                  if (key.toLowerCase() === lowerName) {
-                    dimValue = val as string;
-                    break;
-                  }
-                }
-              }
-              
-              if (!dimValue || dimValue === '') {
-                dimValue = 'Unknown';
-              }
-              
-              if (!groupedByDimension[dimValue]) {
-                groupedByDimension[dimValue] = [];
-              }
-              groupedByDimension[dimValue].push(row);
-            });
-            
-            // Compute metrics for each group
-            const breakdownRows: BreakdownRow[] = [];
-            Object.entries(groupedByDimension).forEach(([groupValue, rows]) => {
-              const metrics = aggregateMetrics(
-                rows,
-                selectedMetrics,
-                periodRange,
-                undefined,
-                mergedMetricMap
-              );
-              breakdownRows.push({
-                groupValue,
-                metrics,
-              });
-            });
-            
-            // Sort by a primary metric (Cost descending)
-            breakdownRows.sort((a, b) => (b.metrics['Cost'] || 0) - (a.metrics['Cost'] || 0));
-            
-            newData.breakdown_data![breakdownKey][period as DateTab] = breakdownRows;
-          });
-        }
       }
       
-      console.log('[PIVOT] Data computed in', Math.round(performance.now() - startTime), 'ms, breakdown keys:', Object.keys(newData.breakdown_data || {}));
+      console.log('[PIVOT] Data computed in', Math.round(performance.now() - startTime), 'ms');
       return newData;
     },
     enabled: reportsLoaded && Object.keys(mergedMetricMap).length > 0,
@@ -1002,19 +877,10 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     if (computedPivotData) {
       // Merge with cached data for breakdowns and other computed fields if available
       if (cachedPivotData) {
-        // Prefer computed breakdown_data if available (for All Reports mode with reportConfigs)
-        const hasComputedBreakdowns = computedPivotData.breakdown_data && 
-          Object.keys(computedPivotData.breakdown_data).length > 0;
-        
         return {
           ...computedPivotData,
-          // Use computed breakdowns if available, otherwise fallback to cached
-          breakdown_data: hasComputedBreakdowns 
-            ? computedPivotData.breakdown_data 
-            : cachedPivotData.breakdown_data,
-          breakdown_dimension_names: hasComputedBreakdowns 
-            ? computedPivotData.breakdown_dimension_names 
-            : cachedPivotData.breakdown_dimension_names,
+          breakdown_data: cachedPivotData.breakdown_data,
+          breakdown_dimension_names: cachedPivotData.breakdown_dimension_names,
           combined_date_breakdown: cachedPivotData.combined_date_breakdown,
           table_insights: cachedPivotData.table_insights,
           executive_summaries: cachedPivotData.executive_summaries,
@@ -1036,8 +902,51 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // Only show loading if we have no cached data and are actively loading
   const isLoading = isLoadingRawData && Object.keys(rawSourceData).length === 0 && !cachedPivotData;
 
-  // Early returns moved to AFTER all hooks to comply with Rules of Hooks
-  // See lines below (after useEffect for filterDimensionNames)
+  // Show error state if query failed and we have no cached data
+  if (isError && Object.keys(rawSourceData).length === 0 && !cachedPivotData) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 px-4">
+        <AlertCircle className="h-8 w-8 text-destructive mb-4" />
+        <h3 className="text-lg font-semibold mb-2">Failed to Load Report Data</h3>
+        <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
+          {error?.message || 'An error occurred while loading data from the data sources. Please check that all data sources are properly configured.'}
+        </p>
+        <Button
+          onClick={() => refetch()}
+          variant="default"
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Allow rendering with empty data - show table structure even when no reports
+  // Only return null if metrics are not selected
+  if (!selectedMetrics || selectedMetrics.length === 0) {
+    return null;
+  }
+  
+  // Report tab state - controlled from parent if props provided, otherwise internal
+  const [internalReportTab, setInternalReportTab] = useState<ReportTab>("overview");
+  const activeReportTab = selectedReportTab || internalReportTab;
+  const handleReportTabChange = (tab: ReportTab) => {
+    startTransition(() => {
+      if (onReportTabChange) {
+        onReportTabChange(tab);
+      } else {
+        setInternalReportTab(tab);
+      }
+    });
+  };
 
   // Extract available years from raw source data
   const availableYears = useMemo(() => {
@@ -1391,27 +1300,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
     return totals;
   };
-
-  // === ALL EARLY RETURNS - placed after all hooks to comply with Rules of Hooks ===
-  
-  // Show error state if query failed and we have no cached data
-  if (isError && Object.keys(rawSourceData).length === 0 && !cachedPivotData) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 px-4">
-        <AlertCircle className="h-8 w-8 text-destructive mb-4" />
-        <h3 className="text-lg font-semibold mb-2">Failed to Load Report Data</h3>
-        <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
-          {error?.message || 'An error occurred while loading data from the data sources. Please check that all data sources are properly configured.'}
-        </p>
-        <Button
-          onClick={() => refetch()}
-          variant="default"
-        >
-          Retry
-        </Button>
-      </div>
-    );
-  }
 
   if (isLoading) {
     return (
@@ -1826,28 +1714,22 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       ? calculateTotals(comparisonTabData.filter(r => r.reportId === activeReportTab))
       : null;
 
-  // Note: No loading overlay on tab switch - data is cached via React Query for instant loading
   return (
-    <div className="w-full space-y-6">
-      <div className="flex items-center justify-between gap-3 mb-4">
-          {/* Report Tabs - hide completely in All Reports mode since we show all tables */}
-          {!hideOverviewAndBudget && (
-            /* Regular view: show Overview + reports + Budget */
-            <Tabs value={activeReportTab} onValueChange={(value) => handleReportTabChange(value as ReportTab)} className="w-auto">
-              <TabsList>
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                {reportTabsList.map((report) => (
-                  <TabsTrigger key={report.id} value={report.id}>
-                    {report.name}
-                  </TabsTrigger>
-                ))}
-                <TabsTrigger value="budget">Budget</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          )}
-          
-          {/* Spacer when no tabs */}
-          {hideOverviewAndBudget && <div />}
+    <LoadingTransition isPending={isPending} message="Loading...">
+      <div className="w-full space-y-6">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          {/* Report Tabs */}
+          <Tabs value={activeReportTab} onValueChange={(value) => handleReportTabChange(value as ReportTab)} className="w-auto">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              {reportTabsList.map((report) => (
+                <TabsTrigger key={report.id} value={report.id}>
+                  {report.name}
+                </TabsTrigger>
+              ))}
+              <TabsTrigger value="budget">Budget</TabsTrigger>
+            </TabsList>
+          </Tabs>
           
           <div className="flex items-center gap-3">
           {/* Filter Dropdowns - before Date dropdown */}
@@ -2037,8 +1919,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         );
       })()}
 
-      {/* Monthly Results Bar Chart - placed right after KPI cards, hidden in All Reports view */}
-      {!hideOverviewAndBudget && (() => {
+      {/* Monthly Results Bar Chart - placed right after KPI cards */}
+      {activeReportTab === "overview" && (() => {
         // Build monthly data for the chart based on available data
         const monthlyChartData: { month: string; result: number }[] = [];
         
@@ -2049,14 +1931,11 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           const monthKey = `${selectedYear}-${String(monthIdx + 1).padStart(2, '0')}`;
           
           // Get data for this month from monthly_data or compute from cached data
-          const monthReports = data.monthly_data?.[monthKey] || [];
-          const filteredReports = activeReportTab === "overview" 
-            ? monthReports 
-            : monthReports.filter(r => r.reportId === activeReportTab);
+          let monthData = data.monthly_data?.[monthKey];
           
-          if (filteredReports.length > 0) {
+          if (monthData && monthData.length > 0) {
             // Calculate "result" as Revenue - Cost for each month
-            const totals = calculateTotals(filteredReports);
+            const totals = calculateTotals(monthData);
             const revenue = totals['Revenue'] || totals['revenue'] || 0;
             const cost = totals['Cost'] || totals['cost'] || 0;
             const result = revenue - cost;
@@ -2137,104 +2016,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         );
       })()}
 
-      {/* All Reports View - Show one table per report with breakdown by configured dimension */}
-      {hideOverviewAndBudget && (() => {
-        const period = selectedDatePeriod || activeTab;
-        
-        // Get all reports with their breakdown data
-        const reportTables = reportIds.map(reportId => {
-          // Find the report config to get the dimension name
-          const config = reportConfigs?.[reportId];
-          const dimensionName = config?.dimensionName || 'Group';
-          
-          // Find the breakdown key for this report
-          const breakdownKey = Object.keys(data.breakdown_data || {}).find(key => 
-            key.startsWith(reportId + '_')
-          );
-          
-          // Get breakdown rows for this report and period
-          const breakdownRows = breakdownKey 
-            ? (data.breakdown_data?.[breakdownKey]?.[period as DateTab] || [])
-            : [];
-          
-          // Get report name from tab data
-          const reportData = tabData.find(r => r.reportId === reportId);
-          const reportName = reportData?.reportName || reportId;
-          
-          // Calculate totals for this report's breakdown
-          const reportTotals = calculateBreakdownTotals(breakdownRows);
-          
-          return {
-            reportId,
-            reportName,
-            dimensionName,
-            breakdownRows,
-            totals: reportTotals,
-          };
-        }).filter(r => r.breakdownRows.length > 0);
-        
-        if (reportTables.length === 0) {
-          return (
-            <div className="text-center py-8 text-muted-foreground">
-              No breakdown data available. Configure group by dimensions in Master Report Setup.
-            </div>
-          );
-        }
-        
-        return (
-          <div className="space-y-8">
-            {reportTables.map(({ reportId, reportName, dimensionName, breakdownRows, totals }) => (
-              <div key={reportId} className="border rounded-lg overflow-hidden">
-                <div className="bg-primary/5 px-4 py-2 border-b">
-                  <h4 className="font-semibold text-sm">{reportName}</h4>
-                </div>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="sticky top-0 z-10 bg-muted/30">
-                      <TableRow className="bg-muted/30">
-                        <TableHead className="font-medium min-w-[200px]">{dimensionName}</TableHead>
-                        {safeMetrics.map((metric) => renderSortableHeader(`all-reports-${reportId}`, metric))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sortRows(breakdownRows, `all-reports-${reportId}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                        <TableRow
-                          key={row.groupValue}
-                          className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                        >
-                          <TableCell className="font-medium text-sm min-w-[200px]">
-                            {row.groupValue}
-                          </TableCell>
-                          {safeMetrics.map((metric) => (
-                            <TableCell key={metric} className="text-right tabular-nums text-sm">
-                              {formatMetricValue(metric, row.metrics[metric] || 0)}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))}
-                      {/* Total Row */}
-                      {breakdownRows.length > 1 && (
-                        <TableRow className="bg-muted font-semibold border-t-2">
-                          <TableCell className="min-w-[200px]">Total</TableCell>
-                          {safeMetrics.map((metric) => (
-                            <TableCell key={metric} className="text-right tabular-nums">
-                              {formatMetricValue(metric, totals[metric] || 0)}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            ))}
-          </div>
-        );
-      })()}
-
       <div className="space-y-6">
-        {/* Render a table for the selected date period - ONLY on Overview tab (not in All Reports mode) */}
-        {!hideOverviewAndBudget && activeReportTab === "overview" && (() => {
+        {/* Render a table for the selected date period - ONLY on Overview tab */}
+        {activeReportTab === "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
           const periodData = computeDataForTab(period as DateTab);
           const periodTotals = calculateTotals(periodData);
@@ -2338,8 +2122,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
         
-        {/* Combined Date Breakdown Table - for selected period in overview mode (not in All Reports) */}
-        {!hideOverviewAndBudget && activeReportTab === "overview" && (() => {
+        {/* Combined Date Breakdown Table - for selected period in overview mode */}
+        {activeReportTab === "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
           let periodBreakdown = combinedDateBreakdown[period as DateTab];
           if (!periodBreakdown || periodBreakdown.length === 0) return null;
@@ -2396,8 +2180,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
 
-        {/* Results by Week table - for individual report tabs (not in All Reports) */}
-        {!hideOverviewAndBudget && activeReportTab !== "overview" && (() => {
+        {/* Results by Week table - for individual report tabs */}
+        {activeReportTab !== "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
           
           // Get data for the active report tab
@@ -2513,8 +2297,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
 
-        {/* Breakdowns - only show on individual report tabs, not on overview or All Reports */}
-        {!hideOverviewAndBudget && activeReportTab !== "overview" && data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (() => {
+        {/* Breakdowns - only show on individual report tabs, not on overview */}
+        {activeReportTab !== "overview" && data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (() => {
           const period = selectedDatePeriod || activeTab;
           
           // Extract breakdown dimensions for the active report tab
@@ -2677,6 +2461,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()} */}
       </div>
-    </div>
+      </div>
+    </LoadingTransition>
   );
 };

@@ -13,7 +13,7 @@ import {
 import { AddAICardModal } from "@/components/AddAICardModal";
 import { CreateAISummaryShareLinkModal } from "@/components/CreateAISummaryShareLinkModal";
 import { ForecastSettingsModal } from "@/components/ForecastSettingsModal";
-import { MasterReportSetupModal, type MasterReportConfig, type MasterReportGlobalConfig } from "@/components/MasterReportSetupModal";
+import { MasterReportSetupModal, type MasterReportConfig } from "@/components/MasterReportSetupModal";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
@@ -127,10 +127,6 @@ const AISummaryPage = () => {
   const [budgetForecastEnabled, setBudgetForecastEnabled] = useState(false);
   const [isMasterReportSetupOpen, setIsMasterReportSetupOpen] = useState(false);
   const [masterReportConfigs, setMasterReportConfigs] = useState<Record<string, MasterReportConfig>>({});
-  const [masterGlobalConfig, setMasterGlobalConfig] = useState<MasterReportGlobalConfig>({
-    sinceDate: new Date().getFullYear() + "-01-01",
-    selectedMetrics: ["Impressions", "Clicks", "Cost", "Revenue", "ROAS"],
-  });
 
   // Generate date options: Year to date at top, then current month, then previous months
   const dateOptions = React.useMemo(() => {
@@ -197,22 +193,9 @@ const AISummaryPage = () => {
           const isUUID = uuidRegex.test(reportName);
 
           if (isUUID) {
-            // Route contains a UUID; treat it as a reportId when possible (new /tools/report/:reportId route)
-            const { data: reportById, error: reportByIdError } = await supabase
-              .from("reports")
-              .select("id, account_id")
-              .eq("id", reportName)
-              .maybeSingle();
-
-            if (!reportByIdError && reportById?.account_id) {
-              console.log('[AISummaryPage] Detected UUID reportId, resolved accountId from report:', reportById.account_id);
-              setResolvedAccountId(reportById.account_id);
-            } else {
-              // Fallback for truly legacy routes where the UUID was an accountId
-              console.log('[AISummaryPage] UUID not found as report id; treating as legacy accountId');
-              setResolvedAccountId(reportName);
-            }
-
+            // Legacy UUID format - treat as accountId
+            console.log('[AISummaryPage] Detected UUID in reportName, treating as accountId');
+            setResolvedAccountId(reportName);
             if (querySummaryId) {
               setResolvedSummaryId(querySummaryId);
             }
@@ -296,67 +279,12 @@ const AISummaryPage = () => {
     }
   };
 
-  const loadMasterReportConfigs = async () => {
-    if (!accountId) return;
-
-    const { user } = await getUser();
-    if (!user) return;
-
-    // Per-report master configs
-    const { data: configs, error } = await supabase
-      .from("master_report_configs")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("account_id", accountId);
-
-    if (error) {
-      console.error("[AISummaryPage] Error loading master report configs:", error);
-      return;
-    }
-
-    const mapped: Record<string, MasterReportConfig> = {};
-    (configs || []).forEach((c: any) => {
-      const report = reports.find((r) => r.id === c.report_id);
-      mapped[c.report_id] = {
-        reportId: c.report_id,
-        reportName: report?.name || "",
-        groupByDimensionId: c.group_by_dimension_id,
-        groupByDimensionName: c.group_by_dimension_name,
-        selectedValues: c.selected_values || [],
-        selectedMetrics: c.selected_metrics || ["Cost", "Revenue", "ROAS", "Conversions"],
-      };
-    });
-    setMasterReportConfigs(mapped);
-
-    // Global config
-    const { data: globalConfigData, error: globalError } = await supabase
-      .from("master_report_global_configs")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("account_id", accountId)
-      .maybeSingle();
-
-    if (!globalError && globalConfigData) {
-      setMasterGlobalConfig({
-        sinceDate: globalConfigData.since_date,
-        selectedMetrics: globalConfigData.selected_metrics || ["Impressions", "Clicks", "Cost", "Revenue", "ROAS"],
-      });
-    }
-  };
-
   useEffect(() => {
     if (accountId) {
       fetchCards();
       fetchReports();
     }
   }, [accountId]);
-
-  useEffect(() => {
-    if (accountId && reports.length > 0) {
-      loadMasterReportConfigs();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, reports.length]);
 
   // Update selectedCardId when summaryId from URL changes
   useEffect(() => {
@@ -1492,13 +1420,25 @@ const AISummaryPage = () => {
                         Add New Report
                       </span>
                     </SelectItem>
-                </SelectContent>
+                  </SelectContent>
                 </Select>
+                {/* Settings icon for All Reports - only show when All reports is selected */}
+                {!selectedCardId && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8"
+                    onClick={() => setIsMasterReportSetupOpen(true)}
+                    title="Set up Master Report"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
 
             </div>
             <div className="flex items-center gap-2">
-                  {selectedCard ? (
+                  {selectedCard && (
                     <Button 
                       variant="outline" 
                       onClick={() => handleRefreshPivotData(selectedCard)}
@@ -1516,14 +1456,6 @@ const AISummaryPage = () => {
                         </>
                       )}
                     </Button>
-                  ) : (
-                    <Button 
-                      variant="outline" 
-                      onClick={() => window.location.reload()}
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Refresh
-                    </Button>
                   )}
                   <Button variant="outline" onClick={() => setIsShareModalOpen(true)}>
                     <Share2 className="h-4 w-4 mr-2" />
@@ -1536,11 +1468,6 @@ const AISummaryPage = () => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-popover">
-                      <DropdownMenuItem onClick={() => setIsMasterReportSetupOpen(true)}>
-                        <Settings className="h-4 w-4 mr-2" />
-                        Edit Master Report
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => setIsAddCardModalOpen(true)}>
                         <Plus className="h-4 w-4 mr-2" />
                         Add New Report
@@ -1581,23 +1508,14 @@ const AISummaryPage = () => {
         ) : (
           <div className="w-full">
             {!selectedCardId ? (
-              /* All Reports view - show data from all reports for this account */
+              /* All Reports view - show table with empty data */
               <AISummaryPivotTable
-                cardId="all-reports"
-                reportIds={reports.map(r => r.id)}
-                selectedMetrics={masterGlobalConfig.selectedMetrics || ["Impressions", "Clicks", "Cost", "Revenue", "ROAS"]}
+                cardId={undefined}
+                reportIds={[]}
+                selectedMetrics={["Impressions", "Clicks", "Cost", "Revenue", "ROAS"]}
                 accountId={accountId}
-                cachedPivotData={{ mtd: [], ytd: [], monthly_data: {} }}
-                reportConfigs={Object.fromEntries(
-                  Object.entries(masterReportConfigs).map(([reportId, config]) => [
-                    reportId,
-                    {
-                      dimensionId: config.groupByDimensionId,
-                      dimensionName: config.groupByDimensionName,
-                      selectedValues: config.selectedValues,
-                    }
-                  ])
-                )}
+                cachedPivotData={undefined}
+                reportConfigs={{}}
                 selectedTab={selectedDateTab}
                 onTabChange={setSelectedDateTab}
                 selectedReportTab={selectedReportTab}
@@ -1605,7 +1523,6 @@ const AISummaryPage = () => {
                 dateOptions={dateOptions}
                 selectedDatePeriod={selectedDatePeriod}
                 onDatePeriodChange={setSelectedDatePeriod}
-                hideOverviewAndBudget={true}
               />
             ) : (
               cards
@@ -1858,11 +1775,7 @@ const AISummaryPage = () => {
         reports={reports}
         accountId={accountId}
         currentConfigs={masterReportConfigs}
-        globalConfig={masterGlobalConfig}
-        onSave={(configs, globalConfig) => {
-          setMasterReportConfigs(configs);
-          setMasterGlobalConfig(globalConfig);
-        }}
+        onSave={setMasterReportConfigs}
       />
     </div>
   );

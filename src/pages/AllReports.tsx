@@ -1,26 +1,22 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { ReportModal } from "@/components/ReportModal";
 import { MasterReportTable } from "@/components/MasterReportTable";
-import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import {
-  MasterReportSetupModal,
-  type MasterReportConfig,
-  type MasterReportGlobalConfig,
-} from "@/components/MasterReportSetupModal";
-import type { ChannelConfig } from "@/components/MasterReportSettingsModal";
+  MasterReportSettingsModal,
+  type ChannelConfig,
+} from "@/components/MasterReportSettingsModal";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { Settings, RefreshCw } from "lucide-react";
+import { Settings } from "lucide-react";
 
 interface Report {
   id: string;
@@ -46,10 +42,8 @@ const DEFAULT_CHANNEL_CONFIG: ChannelConfig = {
 export default function AllReports() {
   const navigate = useNavigate();
   const { accountId } = useParams<{ accountId?: string }>();
-  const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [reports, setReports] = useState<Report[]>([]);
   const [account, setAccount] = useState<{ id: string; name: string } | null>(
     null
@@ -58,16 +52,8 @@ export default function AllReports() {
     {}
   );
   const [showCreateReportModal, setShowCreateReportModal] = useState(false);
-  const [dataRefreshKey, setDataRefreshKey] = useState(0);
 
-  // Master Report Setup Modal state
-  const [showMasterSetupModal, setShowMasterSetupModal] = useState(false);
-  const [masterConfigs, setMasterConfigs] = useState<Record<string, MasterReportConfig>>({});
-  const [masterGlobalConfig, setMasterGlobalConfig] = useState<MasterReportGlobalConfig>({
-    sinceDate: new Date().getFullYear() + "-01-01",
-  });
-
-  // Channel configurations (loaded from DB)
+  // Channel configurations (session only)
   const [channelConfigs, setChannelConfigs] = useState<
     Record<string, ChannelConfig>
   >({});
@@ -80,98 +66,7 @@ export default function AllReports() {
   // Active channel tab
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
 
-  // NEW: Main tabs for All Reports
-  const [mainTab, setMainTab] = useState<"overview" | "metasearch" | "sem" | "social">("overview");
-
-  // Helper: find report by name (case-insensitive)
-  const findChannelReport = (targetName: string): Report | undefined => {
-    const lower = targetName.toLowerCase();
-    return reports.find(r => r.name.toLowerCase() === lower);
-  };
-
-  // Load configs from database when session and reports are ready
-  useEffect(() => {
-    if (session && reports.length > 0) {
-      loadMasterReportConfigs();
-    }
-  }, [session, reports, accountId]);
-
-  const loadMasterReportConfigs = async () => {
-    try {
-      let query = supabase
-        .from('master_report_configs')
-        .select('*')
-        .eq('user_id', session?.user?.id);
-
-      // Handle null account_id correctly
-      if (accountId) {
-        query = query.eq('account_id', accountId);
-      } else {
-        query = query.is('account_id', null);
-      }
-
-      const { data: configs, error } = await query;
-
-      if (error) {
-        console.error('[AllReports] Error loading master configs:', error);
-        return;
-      }
-
-      if (configs && configs.length > 0) {
-        console.log('[AllReports] Loaded master configs from DB:', configs.length);
-        
-        // Convert to MasterReportConfig and ChannelConfig format
-        const newMasterConfigs: Record<string, MasterReportConfig> = {};
-        const newChannelConfigs: Record<string, ChannelConfig> = {};
-
-        configs.forEach((config) => {
-          const report = reports.find(r => r.id === config.report_id);
-          newMasterConfigs[config.report_id] = {
-            reportId: config.report_id,
-            reportName: report?.name || '',
-            groupByDimensionId: config.group_by_dimension_id,
-            groupByDimensionName: config.group_by_dimension_name,
-            selectedValues: config.selected_values || [],
-            selectedMetrics: config.selected_metrics || ["Cost", "Revenue", "ROAS", "Conversions"],
-          };
-          newChannelConfigs[config.report_id] = {
-            groupByDimensionId: config.group_by_dimension_id,
-            groupByDimensionName: config.group_by_dimension_name,
-            selectedValues: config.selected_values || [],
-            selectedMetrics: config.selected_metrics || ["Cost", "Revenue", "ROAS", "Conversions"],
-          };
-        });
-
-        setMasterConfigs(newMasterConfigs);
-        setChannelConfigs(prev => ({ ...prev, ...newChannelConfigs }));
-      }
-
-      // Load global config
-      let globalQuery = supabase
-        .from('master_report_global_configs')
-        .select('*')
-        .eq('user_id', session?.user?.id);
-
-      if (accountId) {
-        globalQuery = globalQuery.eq('account_id', accountId);
-      } else {
-        globalQuery = globalQuery.is('account_id', null);
-      }
-
-      const { data: globalConfigData, error: globalError } = await globalQuery.maybeSingle();
-
-      if (!globalError && globalConfigData) {
-        console.log('[AllReports] Loaded global config from DB:', globalConfigData);
-        setMasterGlobalConfig({
-          sinceDate: globalConfigData.since_date,
-        });
-      }
-    } catch (error) {
-      console.error('[AllReports] Error loading configs:', error);
-    }
-  };
-
-  // Initialize default configs for reports without saved configs
+  // Initialize default configs when reports load
   useEffect(() => {
     if (reports.length > 0) {
       const initialConfigs: Record<string, ChannelConfig> = {};
@@ -352,53 +247,24 @@ export default function AllReports() {
     setShowCreateReportModal(true);
   };
 
-  const openMasterSetupModal = () => {
-    setShowMasterSetupModal(true);
+  const openSettingsModal = (report: Report) => {
+    setSelectedReportForSettings(report);
+    setSettingsModalOpen(true);
   };
 
-  const handleSaveMasterConfigs = (
-    configs: Record<string, MasterReportConfig>,
-    globalConfig: MasterReportGlobalConfig
-  ) => {
-    // Update masterConfigs and globalConfig
-    setMasterConfigs(configs);
-    setMasterGlobalConfig(globalConfig);
-    
-    const newChannelConfigs: Record<string, ChannelConfig> = {};
-    Object.entries(configs).forEach(([reportId, config]) => {
-      newChannelConfigs[reportId] = {
-        groupByDimensionId: config.groupByDimensionId,
-        groupByDimensionName: config.groupByDimensionName,
-        selectedValues: config.selectedValues,
-        selectedMetrics: config.selectedMetrics || ["Cost", "Revenue", "ROAS", "Conversions"],
-      };
-    });
-    setChannelConfigs(prev => ({ ...prev, ...newChannelConfigs }));
-    
-    toast({
-      title: "Configuration Saved",
-      description: "Master report settings have been saved.",
-    });
+  const handleSaveConfig = (config: ChannelConfig) => {
+    if (selectedReportForSettings) {
+      setChannelConfigs((prev) => ({
+        ...prev,
+        [selectedReportForSettings.id]: config,
+      }));
+    }
   };
 
-  const refreshData = useCallback(async () => {
-    setIsRefreshing(true);
-    
-    // Invalidate all caches to ensure fresh data
-    queryClient.invalidateQueries({ queryKey: ['sourceData'] });
-    queryClient.invalidateQueries({ queryKey: ['dataSource'] });
-    queryClient.invalidateQueries({ queryKey: ['cachedSourceData'] });
-    
-    // Reload configs from database and trigger re-render
-    await loadMasterReportConfigs();
-    setDataRefreshKey(prev => prev + 1);
-    
-    setIsRefreshing(false);
-    toast({
-      title: "Data refreshed",
-      description: "All reports have been refreshed.",
-    });
-  }, [queryClient, loadMasterReportConfigs]);
+  const refreshData = () => {
+    // Trigger re-render by updating configs
+    setChannelConfigs((prev) => ({ ...prev }));
+  };
 
   if (isLoading) {
     return (
@@ -451,52 +317,36 @@ export default function AllReports() {
             <main className="container mx-auto px-6 py-6">
               <Card className="p-6">
                 {/* Header */}
-                <div className="border-b pb-4 mb-6 flex items-center justify-between">
-                  <div>
-                    <h2 className="text-2xl font-bold text-foreground">
-                      {account?.name || "Master Report"}
-                    </h2>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {reports.length} channel{reports.length !== 1 ? "s" : ""}{" "}
-                      configured
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={refreshData}
-                      disabled={isRefreshing}
-                    >
-                      <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                      {isRefreshing ? 'Refreshing...' : 'Refresh'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={openMasterSetupModal}
-                    >
-                      <Settings className="h-4 w-4 mr-2" />
-                      Set Up Master Report
-                    </Button>
-                  </div>
+                <div className="border-b pb-4 mb-6">
+                  <h2 className="text-2xl font-bold text-foreground">
+                    {account?.name || "Master Report"}
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {reports.length} channel{reports.length !== 1 ? "s" : ""}{" "}
+                    configured
+                  </p>
                 </div>
 
                 {/* Channel Tabs */}
-                <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as typeof mainTab)}>
-                  <TabsList className="mb-4">
-                    <TabsTrigger value="overview">Overview</TabsTrigger>
-                    <TabsTrigger value="metasearch">Metasearch</TabsTrigger>
-                    <TabsTrigger value="sem">SEM</TabsTrigger>
-                    <TabsTrigger value="social">Social</TabsTrigger>
-                  </TabsList>
+                <Tabs
+                  value={activeChannel || reports[0]?.id}
+                  onValueChange={setActiveChannel}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <TabsList>
+                      {reports.map((report) => (
+                        <TabsTrigger key={report.id} value={report.id}>
+                          {report.name}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </div>
 
-                  {/* Overview: show all reports */}
-                  <TabsContent value="overview">
-                    {reports.map((report) => (
-                      <div key={`${report.id}-${dataRefreshKey}`} className="mb-8">
-                        {/* Channel Header */}
-                        <div className="mb-4">
+                  {reports.map((report) => (
+                    <TabsContent key={report.id} value={report.id}>
+                      {/* Channel Header with Settings */}
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
                           <h3 className="text-lg font-semibold">
                             {report.name}
                           </h3>
@@ -504,172 +354,38 @@ export default function AllReports() {
                             <p className="text-sm text-muted-foreground">
                               Grouped by:{" "}
                               {channelConfigs[report.id].groupByDimensionName}
-                              {channelConfigs[report.id].selectedValues.length > 0 && (
+                              {channelConfigs[report.id].selectedValues.length >
+                                0 && (
                                 <>
                                   {" "}
-                                  ({channelConfigs[report.id].selectedValues.length} values)
+                                  ({channelConfigs[report.id].selectedValues.length}{" "}
+                                  values)
                                 </>
                               )}
                             </p>
                           )}
                         </div>
-
-                        {/* KPI Metrics Cards */}
-                        <div className="mb-6">
-                          <KPIMetricsCards
-                            key={`kpi-${report.id}-${dataRefreshKey}`}
-                            reportId={report.id}
-                            accountId={accountId || null}
-                            filters={{
-                              dimensionFilters: {},
-                              datePreset: "this_month",
-                            }}
-                          />
-                        </div>
-
-                        {/* Data Table with Date Tabs */}
-                        <MasterReportTable
-                          key={`table-${report.id}-${dataRefreshKey}`}
-                          reportId={report.id}
-                          reportName={report.name}
-                          config={channelConfigs[report.id] || DEFAULT_CHANNEL_CONFIG}
-                          accountId={accountId}
-                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openSettingsModal(report)}
+                        >
+                          <Settings className="h-4 w-4 mr-2" />
+                          Configure
+                        </Button>
                       </div>
-                    ))}
-                  </TabsContent>
 
-                  {/* Metasearch: show report named 'Metasearch' */}
-                  <TabsContent value="metasearch">
-                    {(() => {
-                      const report = findChannelReport("Metasearch");
-                      if (!report) {
-                        return (
-                          <div className="text-center py-8 text-muted-foreground">
-                            No report named "Metasearch" found. Create or rename a report to "Metasearch" to display it here.
-                          </div>
-                        );
-                      }
-                      return (
-                        <div key={`${report.id}-${dataRefreshKey}`}>
-                          <div className="mb-4">
-                            <h3 className="text-lg font-semibold">{report.name}</h3>
-                            {channelConfigs[report.id]?.groupByDimensionName && (
-                              <p className="text-sm text-muted-foreground">
-                                Grouped by: {channelConfigs[report.id].groupByDimensionName}
-                              </p>
-                            )}
-                          </div>
-                          <div className="mb-6">
-                            <KPIMetricsCards
-                              key={`kpi-${report.id}-${dataRefreshKey}`}
-                              reportId={report.id}
-                              accountId={accountId || null}
-                              filters={{
-                                dimensionFilters: {},
-                                datePreset: "this_month",
-                              }}
-                            />
-                          </div>
-                          <MasterReportTable
-                            key={`table-${report.id}-${dataRefreshKey}`}
-                            reportId={report.id}
-                            reportName={report.name}
-                            config={channelConfigs[report.id] || DEFAULT_CHANNEL_CONFIG}
-                            accountId={accountId}
-                          />
-                        </div>
-                      );
-                    })()}
-                  </TabsContent>
-
-                  {/* SEM: show report named 'SEM' */}
-                  <TabsContent value="sem">
-                    {(() => {
-                      const report = findChannelReport("SEM");
-                      if (!report) {
-                        return (
-                          <div className="text-center py-8 text-muted-foreground">
-                            No report named "SEM" found. Create or rename a report to "SEM" to display it here.
-                          </div>
-                        );
-                      }
-                      return (
-                        <div key={`${report.id}-${dataRefreshKey}`}>
-                          <div className="mb-4">
-                            <h3 className="text-lg font-semibold">{report.name}</h3>
-                            {channelConfigs[report.id]?.groupByDimensionName && (
-                              <p className="text-sm text-muted-foreground">
-                                Grouped by: {channelConfigs[report.id].groupByDimensionName}
-                              </p>
-                            )}
-                          </div>
-                          <div className="mb-6">
-                            <KPIMetricsCards
-                              key={`kpi-${report.id}-${dataRefreshKey}`}
-                              reportId={report.id}
-                              accountId={accountId || null}
-                              filters={{
-                                dimensionFilters: {},
-                                datePreset: "this_month",
-                              }}
-                            />
-                          </div>
-                          <MasterReportTable
-                            key={`table-${report.id}-${dataRefreshKey}`}
-                            reportId={report.id}
-                            reportName={report.name}
-                            config={channelConfigs[report.id] || DEFAULT_CHANNEL_CONFIG}
-                            accountId={accountId}
-                          />
-                        </div>
-                      );
-                    })()}
-                  </TabsContent>
-
-                  {/* Social: show report named 'Social' */}
-                  <TabsContent value="social">
-                    {(() => {
-                      const report = findChannelReport("Social");
-                      if (!report) {
-                        return (
-                          <div className="text-center py-8 text-muted-foreground">
-                            No report named "Social" found. Create or rename a report to "Social" to display it here.
-                          </div>
-                        );
-                      }
-                      return (
-                        <div key={`${report.id}-${dataRefreshKey}`}>
-                          <div className="mb-4">
-                            <h3 className="text-lg font-semibold">{report.name}</h3>
-                            {channelConfigs[report.id]?.groupByDimensionName && (
-                              <p className="text-sm text-muted-foreground">
-                                Grouped by: {channelConfigs[report.id].groupByDimensionName}
-                              </p>
-                            )}
-                          </div>
-                          <div className="mb-6">
-                            <KPIMetricsCards
-                              key={`kpi-${report.id}-${dataRefreshKey}`}
-                              reportId={report.id}
-                              accountId={accountId || null}
-                              filters={{
-                                dimensionFilters: {},
-                                datePreset: "this_month",
-                              }}
-                            />
-                          </div>
-                          <MasterReportTable
-                            key={`table-${report.id}-${dataRefreshKey}`}
-                            reportId={report.id}
-                            reportName={report.name}
-                            config={channelConfigs[report.id] || DEFAULT_CHANNEL_CONFIG}
-                            accountId={accountId}
-                          />
-                        </div>
-                      );
-                    })()}
-                  </TabsContent>
+                      {/* Data Table with Date Tabs */}
+                      <MasterReportTable
+                        reportId={report.id}
+                        reportName={report.name}
+                        config={
+                          channelConfigs[report.id] || DEFAULT_CHANNEL_CONFIG
+                        }
+                        accountId={accountId}
+                      />
+                    </TabsContent>
+                  ))}
                 </Tabs>
               </Card>
             </main>
@@ -689,16 +405,19 @@ export default function AllReports() {
         </SidebarInset>
       </div>
 
-      {/* Master Report Setup Modal */}
-      <MasterReportSetupModal
-        open={showMasterSetupModal}
-        onOpenChange={setShowMasterSetupModal}
-        reports={reports.map(r => ({ id: r.id, name: r.name }))}
-        accountId={accountId}
-        currentConfigs={masterConfigs}
-        globalConfig={masterGlobalConfig}
-        onSave={handleSaveMasterConfigs}
-      />
+      {/* Settings Modal */}
+      {selectedReportForSettings && (
+        <MasterReportSettingsModal
+          open={settingsModalOpen}
+          onOpenChange={setSettingsModalOpen}
+          reportId={selectedReportForSettings.id}
+          reportName={selectedReportForSettings.name}
+          currentConfig={
+            channelConfigs[selectedReportForSettings.id] || DEFAULT_CHANNEL_CONFIG
+          }
+          onSave={handleSaveConfig}
+        />
+      )}
 
       {/* Create Report Modal */}
       <ReportModal

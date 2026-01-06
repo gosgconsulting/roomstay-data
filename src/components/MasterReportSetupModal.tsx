@@ -19,58 +19,8 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, ChevronLeft, ChevronRight, Sparkles, Calendar } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { extractUniqueDimensionValues } from "@/lib/filters/extractDimensionValues";
-import { format } from "date-fns";
-
-// Helper function to fetch dimension data from database (same as AddAICardModal)
-async function fetchDimensionDataFromDB(reportId: string): Promise<any[]> {
-  const allRows: any[] = [];
-  const batchSize = 1000;
-  let offset = 0;
-  let hasMore = true;
-
-  console.log('[MasterReportSetup] Fetching dimension data from DB for report:', reportId);
-  const startTime = performance.now();
-
-  while (hasMore) {
-    const { data, error } = await supabase
-      .from('dimension_data')
-      .select('id, dimension_values, data_source_id, row_number')
-      .eq('report_id', reportId)
-      .order('row_number', { ascending: true })
-      .range(offset, offset + batchSize - 1);
-
-    if (error) {
-      console.error('[MasterReportSetup] Error fetching batch:', error);
-      throw error;
-    }
-
-    if (data && data.length > 0) {
-      allRows.push(...data);
-      offset += batchSize;
-      hasMore = data.length === batchSize;
-    } else {
-      hasMore = false;
-    }
-  }
-
-  const duration = Math.round(performance.now() - startTime);
-  console.log('[MasterReportSetup] Dimension data fetch completed:', {
-    reportId,
-    rowCount: allRows.length,
-    duration: `${duration}ms`
-  });
-
-  // Transform to expected format
-  return allRows.map(row => ({
-    id: row.id,
-    row_number: row.row_number,
-    data_source_id: row.data_source_id,
-    dimension_values: row.dimension_values,
-  }));
-}
 
 interface Report {
   id: string;
@@ -89,12 +39,6 @@ export interface MasterReportConfig {
   groupByDimensionId: string | null;
   groupByDimensionName: string | null;
   selectedValues: string[];
-  selectedMetrics: string[];
-}
-
-export interface MasterReportGlobalConfig {
-  sinceDate: string;
-  selectedMetrics?: string[];
 }
 
 interface MasterReportSetupModalProps {
@@ -103,26 +47,18 @@ interface MasterReportSetupModalProps {
   reports: Report[];
   accountId?: string;
   currentConfigs: Record<string, MasterReportConfig>;
-  globalConfig?: MasterReportGlobalConfig;
-  onSave: (configs: Record<string, MasterReportConfig>, globalConfig: MasterReportGlobalConfig) => void;
+  onSave: (configs: Record<string, MasterReportConfig>) => void;
 }
 
 const AVAILABLE_METRICS = [
-  "Impressions",
-  "Clicks",
-  "CTR",
   "Cost",
-  "CPC",
-  "Conversions",
-  "Conversion Rate",
   "Revenue",
   "ROAS",
-];
-
-const STEPS = [
-  { id: 1, title: "Dimensions & Values", description: "Select group by dimension and filter values" },
-  { id: 2, title: "Metrics", description: "Choose which metrics to display" },
-  { id: 3, title: "Date Period", description: "Set the data period for analysis" },
+  "Conversions",
+  "Clicks",
+  "Impressions",
+  "CTR",
+  "CPC",
 ];
 
 export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
@@ -131,59 +67,30 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
   reports,
   accountId,
   currentConfigs,
-  globalConfig: initialGlobalConfig,
   onSave,
 }) => {
-  const [currentStep, setCurrentStep] = useState(1);
   const [configs, setConfigs] = useState<Record<string, MasterReportConfig>>({});
-  const [globalConfig, setGlobalConfig] = useState<MasterReportGlobalConfig>({
-    sinceDate: initialGlobalConfig?.sinceDate || new Date().getFullYear() + "-01-01",
-  });
   const [dimensionsByReport, setDimensionsByReport] = useState<Record<string, Dimension[]>>({});
   const [valuesByReport, setValuesByReport] = useState<Record<string, string[]>>({});
   const [loadingDimensions, setLoadingDimensions] = useState<Record<string, boolean>>({});
   const [loadingValues, setLoadingValues] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [activeReportTab, setActiveReportTab] = useState<string | null>(null);
-  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(["Cost", "Revenue", "ROAS", "Conversions"]);
 
   // Initialize configs when modal opens
   useEffect(() => {
     if (open && reports.length > 0) {
       const initialConfigs: Record<string, MasterReportConfig> = {};
-      let commonMetrics: string[] | null = null;
-      
       reports.forEach((report) => {
-        const existing = currentConfigs[report.id];
-        initialConfigs[report.id] = existing || {
+        initialConfigs[report.id] = currentConfigs[report.id] || {
           reportId: report.id,
           reportName: report.name,
           groupByDimensionId: null,
           groupByDimensionName: null,
           selectedValues: [],
-          selectedMetrics: ["Cost", "Revenue", "ROAS", "Conversions"],
         };
-        
-        // Get common metrics from existing configs
-        if (existing?.selectedMetrics?.length) {
-          if (commonMetrics === null) {
-            commonMetrics = [...existing.selectedMetrics];
-          }
-        }
       });
-      
       setConfigs(initialConfigs);
-      if (commonMetrics) {
-        setSelectedMetrics(commonMetrics);
-      }
-      
-      // Set global config
-      if (initialGlobalConfig) {
-        setGlobalConfig(initialGlobalConfig);
-      }
-      
-      // Reset to step 1
-      setCurrentStep(1);
       
       // Set first report as active tab
       setActiveReportTab(reports[0].id);
@@ -191,17 +98,10 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
       // Load dimensions for all reports
       reports.forEach((report) => {
         loadDimensionsForReport(report.id);
-        
-        // Also load values if dimension is already set in current config
-        const existingConfig = currentConfigs[report.id];
-        if (existingConfig?.groupByDimensionId && existingConfig.groupByDimensionId !== "none") {
-          loadValuesForDimension(report.id, existingConfig.groupByDimensionId);
-        }
       });
     } else if (!open) {
       // Reset active tab when modal closes
       setActiveReportTab(null);
-      setCurrentStep(1);
     }
   }, [open, reports]);
 
@@ -258,25 +158,18 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
   const loadValuesForDimension = async (reportId: string, dimensionId: string) => {
     setLoadingValues((prev) => ({ ...prev, [reportId]: true }));
     try {
-      console.log('[MasterReportSetup] Loading values for dimension:', { reportId, dimensionId });
-      
-      // Use the same approach as AddAICardModal - fetch from dimension_data table directly
-      const rows = await fetchDimensionDataFromDB(reportId);
-      
-      if (rows.length === 0) {
-        console.log('[MasterReportSetup] No dimension data found for report');
-        setValuesByReport((prev) => ({ ...prev, [reportId]: [] }));
-        return;
-      }
+      const { data, error } = await supabase.functions.invoke(
+        "get-unique-dimension-values",
+        {
+          body: { reportId, dimensionId },
+        }
+      );
 
-      // Extract unique values using the same utility as AddAICardModal
-      const values = extractUniqueDimensionValues(rows, { dimensionId });
-      console.log('[MasterReportSetup] Extracted values:', { count: values.length, sample: values.slice(0, 5) });
-      
-      setValuesByReport((prev) => ({ ...prev, [reportId]: values }));
+      if (!error && data?.values) {
+        setValuesByReport((prev) => ({ ...prev, [reportId]: data.values }));
+      }
     } catch (err) {
       console.error("Error loading dimension values:", err);
-      setValuesByReport((prev) => ({ ...prev, [reportId]: [] }));
     } finally {
       setLoadingValues((prev) => ({ ...prev, [reportId]: false }));
     }
@@ -338,131 +231,15 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
     }));
   };
 
-  const handleMetricToggle = (metric: string) => {
-    setSelectedMetrics((prev) => 
-      prev.includes(metric)
-        ? prev.filter((m) => m !== metric)
-        : [...prev, metric]
-    );
-  };
-
-  const handleNext = () => {
-    if (currentStep < 3) {
-      setCurrentStep(currentStep + 1);
-    }
-  };
-
-  const handleBack = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
-  };
-
-  const handleSave = async () => {
+  const handleSave = () => {
     setIsSaving(true);
-    try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('[MasterReportSetup] No user found');
-        return;
-      }
-
-      // Apply selected metrics to all configs
-      const finalConfigs: Record<string, MasterReportConfig> = {};
-      for (const [reportId, config] of Object.entries(configs)) {
-        finalConfigs[reportId] = {
-          ...config,
-          selectedMetrics: selectedMetrics,
-        };
-      }
-
-      // Save each config to the database
-      for (const [reportId, config] of Object.entries(finalConfigs)) {
-        // Check if config exists - handle null account_id correctly
-        let existingQuery = supabase
-          .from('master_report_configs')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('report_id', reportId);
-
-        if (accountId) {
-          existingQuery = existingQuery.eq('account_id', accountId);
-        } else {
-          existingQuery = existingQuery.is('account_id', null);
-        }
-
-        const { data: existing } = await existingQuery.maybeSingle();
-
-        const configData = {
-          user_id: user.id,
-          account_id: accountId || null,
-          report_id: reportId,
-          group_by_dimension_id: config.groupByDimensionId || null,
-          group_by_dimension_name: config.groupByDimensionName || null,
-          selected_values: config.selectedValues,
-          selected_metrics: config.selectedMetrics || ["Cost", "Revenue", "ROAS", "Conversions"],
-        };
-
-        if (existing) {
-          // Update existing config
-          await supabase
-            .from('master_report_configs')
-            .update(configData)
-            .eq('id', existing.id);
-        } else {
-          // Insert new config
-          await supabase
-            .from('master_report_configs')
-            .insert(configData);
-        }
-      }
-
-      // Save global config to master_report_global_configs table
-      let globalExistingQuery = supabase
-        .from('master_report_global_configs')
-        .select('id')
-        .eq('user_id', user.id);
-
-      if (accountId) {
-        globalExistingQuery = globalExistingQuery.eq('account_id', accountId);
-      } else {
-        globalExistingQuery = globalExistingQuery.is('account_id', null);
-      }
-
-      const { data: existingGlobal } = await globalExistingQuery.maybeSingle();
-
-      const globalConfigData = {
-        user_id: user.id,
-        account_id: accountId || null,
-        since_date: globalConfig.sinceDate,
-        selected_metrics: selectedMetrics,
-      };
-
-      if (existingGlobal) {
-        await supabase
-          .from('master_report_global_configs')
-          .update(globalConfigData)
-          .eq('id', existingGlobal.id);
-      } else {
-        await supabase
-          .from('master_report_global_configs')
-          .insert(globalConfigData);
-      }
-
-      console.log('[MasterReportSetup] Configs saved to database');
-      onSave(finalConfigs, globalConfig);
-      onOpenChange(false);
-    } catch (error) {
-      console.error('[MasterReportSetup] Error saving configs:', error);
-    } finally {
-      setIsSaving(false);
-    }
+    onSave(configs);
+    setIsSaving(false);
+    onOpenChange(false);
   };
 
   const handleClose = () => {
     setActiveReportTab(null);
-    setCurrentStep(1);
     onOpenChange(false);
   };
 
@@ -472,309 +249,155 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
   const isLoadingDims = activeReportTab ? loadingDimensions[activeReportTab] : false;
   const isLoadingVals = activeReportTab ? loadingValues[activeReportTab] : false;
 
-  // Get configured reports for summary
-  const configuredReports = reports.filter(
-    (r) => configs[r.id]?.groupByDimensionId && configs[r.id]?.selectedValues.length > 0
-  );
-
-  const renderStep1 = () => (
-    <div className="flex-1 flex gap-4 min-h-0">
-      {/* Left: Report tabs */}
-      <div className="w-48 border-r pr-4">
-        <ScrollArea className="h-full">
-          <div className="space-y-1">
-            {reports.map((report) => {
-              const config = configs[report.id];
-              const hasGrouping = config?.groupByDimensionId && config.groupByDimensionId !== "none";
-              return (
-                <button
-                  key={report.id}
-                  className={cn(
-                    "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
-                    activeReportTab === report.id
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted"
-                  )}
-                  onClick={() => setActiveReportTab(report.id)}
-                >
-                  <span className="truncate">{report.name}</span>
-                  {hasGrouping && (
-                    <span className="text-xs opacity-70">✓</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </ScrollArea>
-      </div>
-
-      {/* Right: Configuration for active report */}
-      <div className="flex-1 flex flex-col gap-4 min-h-0">
-        {activeReportTab && activeConfig ? (
-          <>
-            {/* Group By Dimension */}
-            <div className="space-y-2">
-              <Label>Group By Dimension</Label>
-              {isLoadingDims ? (
-                <Skeleton className="h-10 w-full" />
-              ) : (
-                <Select
-                  value={activeConfig.groupByDimensionId || "none"}
-                  onValueChange={(value) => handleDimensionChange(activeReportTab, value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select dimension..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No grouping</SelectItem>
-                    {activeDimensions.map((dim) => (
-                      <SelectItem key={dim.id} value={dim.id}>
-                        {dim.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
-            {/* Filter Values */}
-            {activeConfig.groupByDimensionId && activeConfig.groupByDimensionId !== "none" && (
-              <div className="space-y-2 flex-1 flex flex-col min-h-0">
-                <div className="flex items-center justify-between">
-                  <Label>Filter Values</Label>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleSelectAllValues(activeReportTab)}
-                      disabled={isLoadingVals || activeValues.length === 0}
-                    >
-                      Select All
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleClearValues(activeReportTab)}
-                      disabled={isLoadingVals}
-                    >
-                      Clear
-                    </Button>
-                  </div>
-                </div>
-                {isLoadingVals ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading values...
-                  </div>
-                ) : activeValues.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-2">
-                    No values found for this dimension.
-                  </p>
-                ) : (
-                  <ScrollArea className="flex-1 border rounded-md p-2">
-                    <div className="space-y-2">
-                      {activeValues.map((value) => (
-                        <div key={value} className="flex items-center gap-2">
-                          <Checkbox
-                            id={`${activeReportTab}-${value}`}
-                            checked={activeConfig.selectedValues.includes(value)}
-                            onCheckedChange={() => handleValueToggle(activeReportTab, value)}
-                          />
-                          <label
-                            htmlFor={`${activeReportTab}-${value}`}
-                            className="text-sm cursor-pointer flex-1"
-                          >
-                            {value}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                )}
-                {activeConfig.selectedValues.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {activeConfig.selectedValues.length} value(s) selected
-                  </p>
-                )}
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            Select a report to configure
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  const renderStep2 = () => (
-    <div className="flex-1 flex flex-col min-h-0">
-      <div className="flex items-center gap-2 mb-4">
-        <Sparkles className="h-5 w-5 text-primary" />
-        <h3 className="text-lg font-medium">Select Metrics</h3>
-      </div>
-      <p className="text-sm text-muted-foreground mb-4">
-        Select the metrics to include in your master report.
-      </p>
-      <ScrollArea className="flex-1">
-        <div className="space-y-2">
-          {AVAILABLE_METRICS.map((metric) => {
-            const isSelected = selectedMetrics.includes(metric);
-            return (
-              <div
-                key={metric}
-                className={cn(
-                  "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
-                  isSelected
-                    ? "bg-primary/10 border-primary"
-                    : "hover:bg-muted border-border"
-                )}
-                onClick={() => handleMetricToggle(metric)}
-              >
-                <Checkbox
-                  checked={isSelected}
-                  onCheckedChange={() => handleMetricToggle(metric)}
-                />
-                <span className="font-medium">{metric}</span>
-              </div>
-            );
-          })}
-        </div>
-      </ScrollArea>
-      {selectedMetrics.length > 0 && (
-        <p className="text-sm text-muted-foreground mt-4">
-          {selectedMetrics.length} metric(s) selected
-        </p>
-      )}
-    </div>
-  );
-
-  const renderStep3 = () => {
-    const sinceDate = new Date(globalConfig.sinceDate);
-    const formattedDate = format(sinceDate, "MMMM d, yyyy");
-
-    return (
-      <div className="flex-1 flex flex-col min-h-0">
-        <div className="flex items-center gap-2 mb-4">
-          <Calendar className="h-5 w-5 text-primary" />
-          <h3 className="text-lg font-medium">Select Period</h3>
-        </div>
-
-        <div className="space-y-6">
-          {/* Data Period */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <Label className="font-medium">Data Period</Label>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Since</Label>
-              <input
-                type="date"
-                value={globalConfig.sinceDate}
-                onChange={(e) => setGlobalConfig({ ...globalConfig, sinceDate: e.target.value })}
-                className="w-64 px-3 py-2 border rounded-md bg-background"
-              />
-              <p className="text-sm text-muted-foreground">
-                Data will be analyzed from this date up to today.
-              </p>
-            </div>
-            <div className="text-sm text-primary font-medium">
-              Selected Period: {formattedDate} → Today
-            </div>
-          </div>
-
-          {/* Configuration Summary */}
-          <div className="border-t pt-6 space-y-3">
-            <h4 className="font-medium">Configuration Summary</h4>
-            <div className="space-y-2 text-sm">
-              <div>
-                <span className="text-muted-foreground">Reports: </span>
-                <span className="text-primary">
-                  {configuredReports.length > 0
-                    ? configuredReports.map((r) => r.name).join(", ")
-                    : reports.map((r) => r.name).join(", ")}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Metrics: </span>
-                <span className="text-primary">{selectedMetrics.join(", ")}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl h-[600px] flex flex-col overflow-hidden">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            {currentStep === 1 && "Set Up Master Report"}
-            {currentStep === 2 && (
-              <>
-                <Sparkles className="h-5 w-5" />
-                Select Metrics
-              </>
-            )}
-            {currentStep === 3 && (
-              <>
-                <Sparkles className="h-5 w-5" />
-                Select Period
-              </>
-            )}
-          </DialogTitle>
-          {currentStep === 1 && (
-            <p className="text-sm text-muted-foreground">
-              Configure how each report is grouped in the master report view. Select a dimension to group by and filter the values you want to include.
-            </p>
-          )}
-          {currentStep === 2 && (
-            <p className="text-sm text-muted-foreground">
-              Select the metrics to include in your master report.
-            </p>
-          )}
+      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Set Up Master Report</DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Configure how each report is grouped in the master report view. Select a dimension to group by and filter the values you want to include.
+          </p>
         </DialogHeader>
 
-        {/* Step content with scroll */}
-        <ScrollArea className="flex-1 min-h-0">
-          <div className="py-4 pr-4">
-            {currentStep === 1 && renderStep1()}
-            {currentStep === 2 && renderStep2()}
-            {currentStep === 3 && renderStep3()}
+        <div className="flex-1 flex gap-4 min-h-0">
+          {/* Left: Report tabs */}
+          <div className="w-48 border-r pr-4">
+            <ScrollArea className="h-full">
+              <div className="space-y-1">
+                {reports.map((report) => {
+                  const config = configs[report.id];
+                  const hasGrouping = config?.groupByDimensionId && config.groupByDimensionId !== "none";
+                  return (
+                    <button
+                      key={report.id}
+                      className={cn(
+                        "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
+                        activeReportTab === report.id
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-muted"
+                      )}
+                      onClick={() => setActiveReportTab(report.id)}
+                    >
+                      <span className="truncate">{report.name}</span>
+                      {hasGrouping && (
+                        <span className="text-xs opacity-70">✓</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </ScrollArea>
           </div>
-        </ScrollArea>
 
-        <DialogFooter className="flex-shrink-0 pt-4 border-t">
-          <div className="flex w-full justify-between">
-            <div>
-              {currentStep > 1 && (
-                <Button variant="outline" onClick={handleBack}>
-                  <ChevronLeft className="h-4 w-4 mr-1" />
-                  Back
-                </Button>
-              )}
-            </div>
-            <div className="flex gap-2">
-              {currentStep < 3 ? (
-                <Button onClick={handleNext}>
-                  Next
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              ) : (
-                <Button onClick={handleSave} disabled={isSaving}>
-                  {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Save Configuration
-                </Button>
-              )}
-            </div>
+          {/* Right: Configuration for active report */}
+          <div className="flex-1 flex flex-col gap-4 min-h-0">
+            {activeReportTab && activeConfig ? (
+              <>
+                {/* Group By Dimension */}
+                <div className="space-y-2">
+                  <Label>Group By Dimension</Label>
+                  {isLoadingDims ? (
+                    <Skeleton className="h-10 w-full" />
+                  ) : (
+                    <Select
+                      value={activeConfig.groupByDimensionId || "none"}
+                      onValueChange={(value) => handleDimensionChange(activeReportTab, value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select dimension..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No grouping</SelectItem>
+                        {activeDimensions.map((dim) => (
+                          <SelectItem key={dim.id} value={dim.id}>
+                            {dim.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                {/* Filter Values */}
+                {activeConfig.groupByDimensionId && activeConfig.groupByDimensionId !== "none" && (
+                  <div className="space-y-2 flex-1 flex flex-col min-h-0">
+                    <div className="flex items-center justify-between">
+                      <Label>Filter Values</Label>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSelectAllValues(activeReportTab)}
+                          disabled={isLoadingVals || activeValues.length === 0}
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleClearValues(activeReportTab)}
+                          disabled={isLoadingVals}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    </div>
+                    {isLoadingVals ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading values...
+                      </div>
+                    ) : activeValues.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-2">
+                        No values found for this dimension.
+                      </p>
+                    ) : (
+                      <ScrollArea className="flex-1 border rounded-md p-2">
+                        <div className="space-y-2">
+                          {activeValues.map((value) => (
+                            <div key={value} className="flex items-center gap-2">
+                              <Checkbox
+                                id={`${activeReportTab}-${value}`}
+                                checked={activeConfig.selectedValues.includes(value)}
+                                onCheckedChange={() => handleValueToggle(activeReportTab, value)}
+                              />
+                              <label
+                                htmlFor={`${activeReportTab}-${value}`}
+                                className="text-sm cursor-pointer flex-1"
+                              >
+                                {value}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    )}
+                    {activeConfig.selectedValues.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        {activeConfig.selectedValues.length} value(s) selected
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                Select a report to configure
+              </div>
+            )}
           </div>
+        </div>
+
+        <DialogFooter className="pt-4 border-t">
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Save Configuration
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

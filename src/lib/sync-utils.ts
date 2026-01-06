@@ -1537,22 +1537,6 @@ export const syncDataSource = async (
 
     console.log(`[SYNC] Complete! Processed ${allData.length} rows with ${Object.keys(dimensionIdMap).length} dimensions.`);
 
-    // Trigger master report aggregation after successful sync (non-blocking)
-    if (reportId) {
-      console.log('[SYNC] Triggering master report aggregation after successful sync...');
-      supabase.functions.invoke('aggregate-master-reports', {
-        body: { reportId }
-      }).then(({ data, error }) => {
-        if (error) {
-          console.warn('[SYNC] Failed to trigger aggregation (non-blocking):', error);
-        } else {
-          console.log(`[SYNC] Successfully triggered aggregation: ${data?.aggregated || 0} report(s), ${data?.totalDailyRows || 0} daily rows, ${data?.totalMonthlyRows || 0} monthly rows`);
-        }
-      }).catch((err) => {
-        console.warn('[SYNC] Error triggering aggregation (non-blocking):', err);
-      });
-    }
-
     return {
       success: true,
       rowsProcessed: allData.length,
