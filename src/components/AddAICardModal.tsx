@@ -340,6 +340,18 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
   // Initialize from editingCard when editing or when in API mode with card config
   useEffect(() => {
     if (editingCard && open) {
+      // Clear refs to force re-fetch when modal opens
+      metaLoadedRef.current.clear();
+      metaInFlightRef.current.clear();
+      rowsLoadedRef.current.clear();
+      rowsInFlightRef.current.clear();
+      
+      // Clear cached data to ensure fresh fetch
+      setDataSources({});
+      setSourceDataCache({});
+      setDimensions({});
+      setLoadingReports(new Set());
+      
       setSelectedReportIds(editingCard.report_ids || []);
       // Extract breakdown_configs from report_configs if stored together
       const storedConfigs = editingCard.report_configs || {};
@@ -386,6 +398,15 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
         // No initial report, start at select-reports
         setStep("select-reports");
       }
+    } else if (open && !editingCard) {
+      // Modal opened for new card - clear refs
+      metaLoadedRef.current.clear();
+      metaInFlightRef.current.clear();
+      rowsLoadedRef.current.clear();
+      rowsInFlightRef.current.clear();
+      setDataSources({});
+      setSourceDataCache({});
+      setDimensions({});
     }
   }, [editingCard, open, mode, initialReportId]);
 
@@ -1493,7 +1514,12 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
   };
 
   const activeDimensions = activeReportTab ? dimensions[activeReportTab] || [] : [];
-  const isActiveReportLoading = activeReportTab ? loadingReports.has(activeReportTab) : false;
+  // Show loading if meta is loading OR if we don't have source data yet
+  const isActiveReportLoading = activeReportTab 
+    ? loadingReports.has(activeReportTab) || (!sourceDataCache[activeReportTab] && rowsInFlightRef.current.has(activeReportTab))
+    : false;
+  // Check if source data is still being fetched in background
+  const isSourceDataLoading = activeReportTab && !sourceDataCache[activeReportTab];
 
   // Format the "since" date for display
   const formattedSinceDate = useMemo(() => {
@@ -1746,6 +1772,11 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
                                       <span className="text-sm">{value}</span>
                                     </div>
                                   ))
+                                ) : isSourceDataLoading ? (
+                                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                                    <Loader2 className="h-6 w-6 animate-spin mb-2" />
+                                    <p className="text-sm">Loading dimension values...</p>
+                                  </div>
                                 ) : (
                                   <p className="text-center text-muted-foreground py-4">
                                     No values found.
