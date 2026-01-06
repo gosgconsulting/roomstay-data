@@ -790,9 +790,14 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   
   // Cache computed pivot data with React Query for instant tab switching
   // This prevents heavy recalculation on every tab switch - data is computed once and cached
+  const reportConfigsKey = useMemo(() => 
+    JSON.stringify(Object.entries(reportConfigs || {}).map(([id, cfg]) => [id, cfg?.dimensionId]).sort()),
+    [reportConfigs]
+  );
+  
   const computedDataQueryKey = useMemo(() => 
-    ['computed-pivot-data', cardId || reportIds.join('-'), selectedYear, filterValuesKey, selectedMetrics.sort().join(',')],
-    [cardId, reportIds, selectedYear, filterValuesKey, selectedMetrics]
+    ['computed-pivot-data', cardId || reportIds.join('-'), selectedYear, filterValuesKey, selectedMetrics.sort().join(','), reportConfigsKey],
+    [cardId, reportIds, selectedYear, filterValuesKey, selectedMetrics, reportConfigsKey]
   );
   
   const { data: computedPivotData } = useQuery({
@@ -819,7 +824,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       const newData: CachedPivotData = { 
         mtd: [], 
         ytd: [],
-        monthly_data: {}
+        monthly_data: {},
+        breakdown_data: {},
+        breakdown_dimension_names: {},
       };
       
       // Initialize monthly_data for each month
@@ -884,9 +891,101 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             metrics,
           });
         });
+        
+        // Compute breakdown data using reportConfigs dimension settings
+        const reportConfig = reportConfigs?.[reportId];
+        if (reportConfig?.dimensionId) {
+          const dimensionId = reportConfig.dimensionId;
+          const dimensionName = reportConfig.dimensionName || 'Group';
+          const breakdownKey = `${reportId}_${dimensionId}`;
+          
+          // Store dimension name for later lookup
+          newData.breakdown_dimension_names![breakdownKey] = dimensionName;
+          
+          // Initialize breakdown data structure
+          if (!newData.breakdown_data![breakdownKey]) {
+            newData.breakdown_data![breakdownKey] = {};
+          }
+          
+          // Group rows by dimension value for each date period
+          const allPeriods = ["mtd", "ytd", ...monthKeys];
+          
+          allPeriods.forEach((period) => {
+            const periodRange = period === "mtd" || period === "ytd" 
+              ? dateRanges[period as "mtd" | "ytd"]
+              : getDateRange(period, selectedYear);
+            
+            // Group rows by dimension value
+            const groupedByDimension: Record<string, any[]> = {};
+            
+            reportData.rows.forEach((row: any) => {
+              const rowData = row.dimension_values || row;
+              
+              // Check date is in range
+              let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
+              if (!dateValue) {
+                for (const [key, val] of Object.entries(rowData)) {
+                  if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+                    dateValue = val;
+                    break;
+                  }
+                }
+              }
+              
+              const rowDate = parseDate(dateValue);
+              if (!rowDate || rowDate < periodRange.start || rowDate > periodRange.end) {
+                return;
+              }
+              
+              // Get dimension value - try by ID first, then by name
+              let dimValue = rowData[dimensionId] || rowData[dimensionName];
+              
+              // Try case variations
+              if (!dimValue && dimensionName) {
+                const lowerName = dimensionName.toLowerCase();
+                for (const [key, val] of Object.entries(rowData)) {
+                  if (key.toLowerCase() === lowerName) {
+                    dimValue = val as string;
+                    break;
+                  }
+                }
+              }
+              
+              if (!dimValue || dimValue === '') {
+                dimValue = 'Unknown';
+              }
+              
+              if (!groupedByDimension[dimValue]) {
+                groupedByDimension[dimValue] = [];
+              }
+              groupedByDimension[dimValue].push(row);
+            });
+            
+            // Compute metrics for each group
+            const breakdownRows: BreakdownRow[] = [];
+            Object.entries(groupedByDimension).forEach(([groupValue, rows]) => {
+              const metrics = aggregateMetrics(
+                rows,
+                selectedMetrics,
+                periodRange,
+                undefined,
+                mergedMetricMap
+              );
+              breakdownRows.push({
+                groupValue,
+                metrics,
+              });
+            });
+            
+            // Sort by a primary metric (Cost descending)
+            breakdownRows.sort((a, b) => (b.metrics['Cost'] || 0) - (a.metrics['Cost'] || 0));
+            
+            newData.breakdown_data![breakdownKey][period as DateTab] = breakdownRows;
+          });
+        }
       }
       
-      console.log('[PIVOT] Data computed in', Math.round(performance.now() - startTime), 'ms');
+      console.log('[PIVOT] Data computed in', Math.round(performance.now() - startTime), 'ms, breakdown keys:', Object.keys(newData.breakdown_data || {}));
       return newData;
     },
     enabled: reportsLoaded && Object.keys(mergedMetricMap).length > 0,
@@ -903,10 +1002,19 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     if (computedPivotData) {
       // Merge with cached data for breakdowns and other computed fields if available
       if (cachedPivotData) {
+        // Prefer computed breakdown_data if available (for All Reports mode with reportConfigs)
+        const hasComputedBreakdowns = computedPivotData.breakdown_data && 
+          Object.keys(computedPivotData.breakdown_data).length > 0;
+        
         return {
           ...computedPivotData,
-          breakdown_data: cachedPivotData.breakdown_data,
-          breakdown_dimension_names: cachedPivotData.breakdown_dimension_names,
+          // Use computed breakdowns if available, otherwise fallback to cached
+          breakdown_data: hasComputedBreakdowns 
+            ? computedPivotData.breakdown_data 
+            : cachedPivotData.breakdown_data,
+          breakdown_dimension_names: hasComputedBreakdowns 
+            ? computedPivotData.breakdown_dimension_names 
+            : cachedPivotData.breakdown_dimension_names,
           combined_date_breakdown: cachedPivotData.combined_date_breakdown,
           table_insights: cachedPivotData.table_insights,
           executive_summaries: cachedPivotData.executive_summaries,
