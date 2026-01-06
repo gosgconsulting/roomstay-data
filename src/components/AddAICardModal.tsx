@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 import {
   Dialog,
@@ -319,6 +319,12 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
   ]);
   const [sinceDate, setSinceDate] = useState<string>(getDefaultSinceDate());
   const [aiPrompt, setAiPrompt] = useState(DEFAULT_AI_PROMPT);
+
+  // Prevent infinite re-fetch loops while editing (meta/rows are cached per report in refs)
+  const metaLoadedRef = useRef<Set<string>>(new Set());
+  const metaInFlightRef = useRef<Set<string>>(new Set());
+  const rowsLoadedRef = useRef<Set<string>>(new Set());
+  const rowsInFlightRef = useRef<Set<string>>(new Set());
   
   // Combine standard and custom metrics
   const allAvailableMetrics = useMemo(() => {
@@ -505,82 +511,100 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
 
   // Fetch all data sources and source data when entering filter-dimensions or breakdown-dimensions step
   useEffect(() => {
+    if (!open) return;
+    if ((step !== "filter-dimensions" && step !== "breakdown-dimensions") || selectedReportIds.length === 0) return;
+
+    let cancelled = false;
+
     const fetchAllDataForReports = async () => {
-      if ((step !== "filter-dimensions" && step !== "breakdown-dimensions") || selectedReportIds.length === 0) return;
-
       const { user } = await getUser();
-      if (!user) return;
+      if (!user || cancelled) return;
 
+      // Meta fetch (data source + dimension names) - sequential to avoid thrashing state
       for (const reportId of selectedReportIds) {
-        // Skip if already loaded
-        if (dataSources[reportId] && dimensions[reportId] && sourceDataCache[reportId]) continue;
+        if (cancelled) return;
 
-        // Mark as loading only for meta (data source + dimension names)
-        setLoadingReports(prev => new Set([...prev, reportId]));
+        // META
+        if (!metaLoadedRef.current.has(reportId) && !metaInFlightRef.current.has(reportId)) {
+          metaInFlightRef.current.add(reportId);
+          setLoadingReports(prev => new Set([...prev, reportId]));
 
-        try {
-          // Fetch data source for the report
-          const { data: dsData, error: dsError } = await supabase
-            .from("data_sources")
-            .select("*")
-            .eq("report_id", reportId)
-            .limit(1)
-            .single();
+          try {
+            const { data: dsData, error: dsError } = await supabase
+              .from("data_sources")
+              .select("*")
+              .eq("report_id", reportId)
+              .limit(1)
+              .single();
 
-          if (dsError || !dsData) {
-            console.error(`Error fetching data source for report ${reportId}:`, dsError);
-            setDataSources(prev => ({ ...prev, [reportId]: undefined as any }));
-            setDimensions(prev => ({ ...prev, [reportId]: [] }));
-          } else {
-            setDataSources(prev => ({ ...prev, [reportId]: dsData as DataSource }));
-
-            // Extract dimension IDs from column mappings (filter out "none" and invalid values)
-            const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
-            const dimensionIds = columnMappings
-              .filter((m: any) => m.dimensionId && m.dimensionId !== "none" && m.dimensionId.length > 10)
-              .map((m: any) => m.dimensionId);
-
-            if (dimensionIds.length > 0) {
-              // Fetch dimension details
-              const { data: dimData } = await supabase
-                .from("dimensions")
-                .select("id, name, type")
-                .in("id", dimensionIds)
-                .in("type", ["text"])
-                .order("name");
-
-              setDimensions(prev => ({ ...prev, [reportId]: (dimData as Dimension[]) || [] }));
-            } else {
+            if (dsError || !dsData) {
+              console.error(`Error fetching data source for report ${reportId}:`, dsError);
+              setDataSources(prev => ({ ...prev, [reportId]: undefined as any }));
               setDimensions(prev => ({ ...prev, [reportId]: [] }));
+            } else {
+              setDataSources(prev => ({ ...prev, [reportId]: dsData as DataSource }));
+
+              const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
+              const dimensionIds = columnMappings
+                .filter((m: any) => m.dimensionId && m.dimensionId !== "none" && m.dimensionId.length > 10)
+                .map((m: any) => m.dimensionId);
+
+              if (dimensionIds.length > 0) {
+                const { data: dimData } = await supabase
+                  .from("dimensions")
+                  .select("id, name, type")
+                  .in("id", dimensionIds)
+                  .in("type", ["text"])
+                  .order("name");
+
+                setDimensions(prev => ({ ...prev, [reportId]: (dimData as Dimension[]) || [] }));
+              } else {
+                setDimensions(prev => ({ ...prev, [reportId]: [] }));
+              }
             }
+
+            metaLoadedRef.current.add(reportId);
+          } catch (err) {
+            console.error(`Error fetching meta for report ${reportId}:`, err);
+            setDimensions(prev => ({ ...prev, [reportId]: [] }));
+            // Still mark as loaded so we don't loop forever on a bad report
+            metaLoadedRef.current.add(reportId);
+          } finally {
+            metaInFlightRef.current.delete(reportId);
+            setLoadingReports(prev => {
+              const next = new Set(prev);
+              next.delete(reportId);
+              return next;
+            });
           }
-        } catch (err) {
-          console.error(`Error fetching meta for report ${reportId}:`, err);
-          setDimensions(prev => ({ ...prev, [reportId]: [] }));
-        } finally {
-          // Meta loaded → allow UI to render
-          setLoadingReports(prev => {
-            const next = new Set(prev);
-            next.delete(reportId);
-            return next;
-          });
         }
 
-        // Fetch rows in background (does not block UI)
-        if (!sourceDataCache[reportId]) {
+        // ROWS (background)
+        if (!rowsLoadedRef.current.has(reportId) && !rowsInFlightRef.current.has(reportId)) {
+          rowsInFlightRef.current.add(reportId);
           fetchDimensionDataFromDB(reportId)
             .then((dimensionData) => {
+              if (cancelled) return;
               setSourceDataCache(prev => ({ ...prev, [reportId]: dimensionData }));
+              rowsLoadedRef.current.add(reportId);
             })
             .catch((err) => {
               console.error(`Error fetching rows for report ${reportId}:`, err);
+              // Mark as loaded to avoid infinite spinner; user can still edit dimensions
+              rowsLoadedRef.current.add(reportId);
+            })
+            .finally(() => {
+              rowsInFlightRef.current.delete(reportId);
             });
         }
       }
     };
 
     fetchAllDataForReports();
-  }, [step, selectedReportIds, accountId, dataSources, dimensions, sourceDataCache]);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, step, accountId, selectedReportIds]);
 
   // Extract dimension values from source data
   const currentDimensionValues = useMemo(() => {
@@ -1456,6 +1480,11 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
     setSinceDate(getDefaultSinceDate());
     setAiPrompt(DEFAULT_AI_PROMPT);
     setLoadingReports(new Set());
+
+    metaLoadedRef.current.clear();
+    metaInFlightRef.current.clear();
+    rowsLoadedRef.current.clear();
+    rowsInFlightRef.current.clear();
   };
 
   const handleClose = () => {
