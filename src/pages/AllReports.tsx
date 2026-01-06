@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { ReportsSidebar } from "@/components/ReportsSidebar";
 import { ReportModal } from "@/components/ReportModal";
 import { MasterReportTable } from "@/components/MasterReportTable";
+import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import {
   MasterReportSetupModal,
   type MasterReportConfig,
@@ -13,11 +14,12 @@ import type { ChannelConfig } from "@/components/MasterReportSettingsModal";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { Settings } from "lucide-react";
+import { Settings, RefreshCw } from "lucide-react";
 
 interface Report {
   id: string;
@@ -43,8 +45,10 @@ const DEFAULT_CHANNEL_CONFIG: ChannelConfig = {
 export default function AllReports() {
   const navigate = useNavigate();
   const { accountId } = useParams<{ accountId?: string }>();
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [reports, setReports] = useState<Report[]>([]);
   const [account, setAccount] = useState<{ id: string; name: string } | null>(
     null
@@ -53,6 +57,7 @@ export default function AllReports() {
     {}
   );
   const [showCreateReportModal, setShowCreateReportModal] = useState(false);
+  const [dataRefreshKey, setDataRefreshKey] = useState(0);
 
   // Master Report Setup Modal state
   const [showMasterSetupModal, setShowMasterSetupModal] = useState(false);
@@ -338,10 +343,24 @@ export default function AllReports() {
     });
   };
 
-  const refreshData = () => {
+  const refreshData = useCallback(async () => {
+    setIsRefreshing(true);
+    
+    // Invalidate all caches to ensure fresh data
+    queryClient.invalidateQueries({ queryKey: ['sourceData'] });
+    queryClient.invalidateQueries({ queryKey: ['dataSource'] });
+    queryClient.invalidateQueries({ queryKey: ['cachedSourceData'] });
+    
     // Reload configs from database and trigger re-render
-    loadMasterReportConfigs();
-  };
+    await loadMasterReportConfigs();
+    setDataRefreshKey(prev => prev + 1);
+    
+    setIsRefreshing(false);
+    toast({
+      title: "Data refreshed",
+      description: "All reports have been refreshed.",
+    });
+  }, [queryClient, loadMasterReportConfigs]);
 
   if (isLoading) {
     return (
@@ -404,14 +423,25 @@ export default function AllReports() {
                       configured
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={openMasterSetupModal}
-                  >
-                    <Settings className="h-4 w-4 mr-2" />
-                    Set Up Master Report
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={refreshData}
+                      disabled={isRefreshing}
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                      {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={openMasterSetupModal}
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Set Up Master Report
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Channel Tabs */}
@@ -428,7 +458,7 @@ export default function AllReports() {
                   </TabsList>
 
                   {reports.map((report) => (
-                    <TabsContent key={report.id} value={report.id}>
+                    <TabsContent key={`${report.id}-${dataRefreshKey}`} value={report.id}>
                       {/* Channel Header */}
                       <div className="mb-4">
                         <h3 className="text-lg font-semibold">
@@ -450,8 +480,22 @@ export default function AllReports() {
                         )}
                       </div>
 
+                      {/* KPI Metrics Cards */}
+                      <div className="mb-6">
+                        <KPIMetricsCards
+                          key={`kpi-${report.id}-${dataRefreshKey}`}
+                          reportId={report.id}
+                          accountId={accountId || null}
+                          filters={{
+                            dimensionFilters: {},
+                            datePreset: "this_month",
+                          }}
+                        />
+                      </div>
+
                       {/* Data Table with Date Tabs */}
                       <MasterReportTable
+                        key={`table-${report.id}-${dataRefreshKey}`}
                         reportId={report.id}
                         reportName={report.name}
                         config={
