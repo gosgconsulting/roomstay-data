@@ -21,6 +21,55 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { extractUniqueDimensionValues } from "@/lib/filters/extractDimensionValues";
+
+// Helper function to fetch dimension data from database (same as AddAICardModal)
+async function fetchDimensionDataFromDB(reportId: string): Promise<any[]> {
+  const allRows: any[] = [];
+  const batchSize = 1000;
+  let offset = 0;
+  let hasMore = true;
+
+  console.log('[MasterReportSetup] Fetching dimension data from DB for report:', reportId);
+  const startTime = performance.now();
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('dimension_data')
+      .select('id, dimension_values, data_source_id, row_number')
+      .eq('report_id', reportId)
+      .order('row_number', { ascending: true })
+      .range(offset, offset + batchSize - 1);
+
+    if (error) {
+      console.error('[MasterReportSetup] Error fetching batch:', error);
+      throw error;
+    }
+
+    if (data && data.length > 0) {
+      allRows.push(...data);
+      offset += batchSize;
+      hasMore = data.length === batchSize;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  const duration = Math.round(performance.now() - startTime);
+  console.log('[MasterReportSetup] Dimension data fetch completed:', {
+    reportId,
+    rowCount: allRows.length,
+    duration: `${duration}ms`
+  });
+
+  // Transform to expected format
+  return allRows.map(row => ({
+    id: row.id,
+    row_number: row.row_number,
+    data_source_id: row.data_source_id,
+    dimension_values: row.dimension_values,
+  }));
+}
 
 interface Report {
   id: string;
@@ -158,18 +207,25 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
   const loadValuesForDimension = async (reportId: string, dimensionId: string) => {
     setLoadingValues((prev) => ({ ...prev, [reportId]: true }));
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "get-unique-dimension-values",
-        {
-          body: { reportId, dimensionId },
-        }
-      );
-
-      if (!error && data?.values) {
-        setValuesByReport((prev) => ({ ...prev, [reportId]: data.values }));
+      console.log('[MasterReportSetup] Loading values for dimension:', { reportId, dimensionId });
+      
+      // Use the same approach as AddAICardModal - fetch from dimension_data table directly
+      const rows = await fetchDimensionDataFromDB(reportId);
+      
+      if (rows.length === 0) {
+        console.log('[MasterReportSetup] No dimension data found for report');
+        setValuesByReport((prev) => ({ ...prev, [reportId]: [] }));
+        return;
       }
+
+      // Extract unique values using the same utility as AddAICardModal
+      const values = extractUniqueDimensionValues(rows, { dimensionId });
+      console.log('[MasterReportSetup] Extracted values:', { count: values.length, sample: values.slice(0, 5) });
+      
+      setValuesByReport((prev) => ({ ...prev, [reportId]: values }));
     } catch (err) {
       console.error("Error loading dimension values:", err);
+      setValuesByReport((prev) => ({ ...prev, [reportId]: [] }));
     } finally {
       setLoadingValues((prev) => ({ ...prev, [reportId]: false }));
     }
