@@ -1685,6 +1685,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   {report.name}
                 </TabsTrigger>
               ))}
+              <TabsTrigger value="budget">Budget</TabsTrigger>
             </TabsList>
           </Tabs>
           
