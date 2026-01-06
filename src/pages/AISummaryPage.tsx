@@ -127,6 +127,8 @@ const AISummaryPage = () => {
   const [budgetForecastEnabled, setBudgetForecastEnabled] = useState(false);
   const [isMasterReportSetupOpen, setIsMasterReportSetupOpen] = useState(false);
   const [masterReportConfigs, setMasterReportConfigs] = useState<Record<string, MasterReportConfig>>({});
+  // ADD: Budget year selector state (this year / last year)
+  const [selectedBudgetYear, setSelectedBudgetYear] = useState<number>(new Date().getFullYear());
 
   // Generate date options: Year to date at top, then current month, then previous months
   const dateOptions = React.useMemo(() => {
@@ -1527,6 +1529,26 @@ const AISummaryPage = () => {
                           Back to report
                         </Button>
                       </div>
+                      {/* ADD: Year selector (this year, last year) */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-muted-foreground">Year</span>
+                        <Select
+                          value={selectedBudgetYear.toString()}
+                          onValueChange={(v) => setSelectedBudgetYear(parseInt(v, 10))}
+                        >
+                          <SelectTrigger className="w-[120px] bg-background border-border">
+                            <SelectValue placeholder="Year" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-popover border-border z-50">
+                            <SelectItem value={new Date().getFullYear().toString()}>
+                              {new Date().getFullYear()}
+                            </SelectItem>
+                            <SelectItem value={(new Date().getFullYear() - 1).toString()}>
+                              {new Date().getFullYear() - 1}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                       {/* Budget Report Tabs */}
                       <div className="flex gap-2 border-b pb-3">
                         <Button
@@ -1567,6 +1589,7 @@ const AISummaryPage = () => {
                           isOverview={true}
                           forecastEnabled={budgetForecastEnabled}
                           onForecastEnabledChange={setBudgetForecastEnabled}
+                          selectedYear={selectedBudgetYear}
                         />
                       ) : (
                         (() => {
@@ -1581,6 +1604,7 @@ const AISummaryPage = () => {
                               reportConfigs={card.report_configs}
                               forecastEnabled={budgetForecastEnabled}
                               onForecastEnabledChange={setBudgetForecastEnabled}
+                              selectedYear={selectedBudgetYear}
                             />
                           );
                         })()

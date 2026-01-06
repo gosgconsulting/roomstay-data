@@ -77,6 +77,7 @@ interface AISummaryBudgetTableProps {
   isOverview?: boolean;
   forecastEnabled?: boolean;
   onForecastEnabledChange?: (enabled: boolean) => void;
+  selectedYear?: number;
 }
 
 // All months of the year
@@ -105,8 +106,9 @@ export function AISummaryBudgetTable({
   isOverview = false,
   forecastEnabled: externalForecastEnabled,
   onForecastEnabledChange,
+  selectedYear,
 }: AISummaryBudgetTableProps) {
-  const currentYear = new Date().getFullYear();
+  const currentYear = selectedYear ?? new Date().getFullYear();
   const queryClient = useQueryClient();
   
   const [editingMonth, setEditingMonth] = useState<string | null>(null);

@@ -952,46 +952,11 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
   // Extract available years from raw source data
   const availableYears = useMemo(() => {
-    const years = new Set<number>();
     const currentYear = new Date().getFullYear();
-    years.add(currentYear); // Always include current year
-    
-    if (!reportsLoaded || Object.keys(rawSourceData).length === 0) {
-      return [currentYear];
-    }
-    
-    // Scan all rows in all reports for date values
-    Object.values(rawSourceData).forEach((reportData) => {
-      if (!reportData?.rows) return;
-      
-      reportData.rows.forEach((row: any) => {
-        const rowData = row.dimension_values || row;
-        
-        // Try to find date value
-        let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
-        
-        // Search for date patterns if not found by name
-        if (!dateValue) {
-          for (const [, val] of Object.entries(rowData)) {
-            if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-              dateValue = val as string;
-              break;
-            }
-          }
-        }
-        
-        if (dateValue) {
-          const parsedDate = parseDate(dateValue);
-          if (parsedDate) {
-            years.add(parsedDate.getFullYear());
-          }
-        }
-      });
-    });
-    
-    // Sort years descending (newest first)
-    return Array.from(years).sort((a, b) => b - a);
-  }, [rawSourceData, reportsLoaded]);
+    // LIMIT: only this year and last year
+    const years = [currentYear, currentYear - 1];
+    return years;
+  }, []);
 
   // Generate date options dynamically based on selected year
   // Current year: Year to date, current month, previous months
