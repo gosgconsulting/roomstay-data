@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useTransition } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -626,12 +626,18 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 }) => {
   const [internalTab, setInternalTab] = useState<DateTab>("mtd");
   const activeTab = selectedTab || internalTab;
+  
+  // Use transition for non-blocking tab switches
+  const [isPending, startTransition] = useTransition();
+  
   const handleTabChange = (tab: DateTab) => {
-    if (onTabChange) {
-      onTabChange(tab);
-    } else {
-      setInternalTab(tab);
-    }
+    startTransition(() => {
+      if (onTabChange) {
+        onTabChange(tab);
+      } else {
+        setInternalTab(tab);
+      }
+    });
   };
   const [comparisonType, setComparisonType] = useState<ComparisonType>("none");
   
@@ -890,11 +896,13 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   const [internalReportTab, setInternalReportTab] = useState<ReportTab>("overview");
   const activeReportTab = selectedReportTab || internalReportTab;
   const handleReportTabChange = (tab: ReportTab) => {
-    if (onReportTabChange) {
-      onReportTabChange(tab);
-    } else {
-      setInternalReportTab(tab);
-    }
+    startTransition(() => {
+      if (onReportTabChange) {
+        onReportTabChange(tab);
+      } else {
+        setInternalReportTab(tab);
+      }
+    });
   };
 
   // Extract available years from raw source data
@@ -1664,9 +1672,18 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       : null;
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-6 relative">
+      {/* Tab transition loading overlay */}
+      {isPending && (
+        <div className="absolute inset-0 bg-background/50 backdrop-blur-[1px] z-10 flex items-start justify-center pt-20 animate-fade-in">
+          <div className="flex items-center gap-2 bg-background/90 px-4 py-2 rounded-lg shadow-lg border border-border">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">Loading...</span>
+          </div>
+        </div>
+      )}
 
-      <div className="flex items-center justify-between gap-3 mb-4">
+      <div className={`flex items-center justify-between gap-3 mb-4 transition-opacity duration-150 ${isPending ? 'opacity-70' : 'opacity-100'}`}>
         {/* Report Tabs */}
         <Tabs value={activeReportTab} onValueChange={(value) => handleReportTabChange(value as ReportTab)} className="w-auto">
           <TabsList>
@@ -1716,7 +1733,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         {availableYears.length > 0 && (
           <Select 
             value={selectedYear.toString()} 
-            onValueChange={(v) => setSelectedYear(parseInt(v, 10))}
+            onValueChange={(v) => startTransition(() => setSelectedYear(parseInt(v, 10)))}
           >
             <SelectTrigger className="w-[100px]">
               <SelectValue placeholder="Year" />
@@ -1756,7 +1773,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         )}
         
         {/* Comparison Filter */}
-        <Select value={comparisonType} onValueChange={(v) => setComparisonType(v as ComparisonType)}>
+        <Select value={comparisonType} onValueChange={(v) => startTransition(() => setComparisonType(v as ComparisonType))}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Comparison" />
           </SelectTrigger>
@@ -1768,6 +1785,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         </Select>
         </div>
       </div>
+
+      {/* Main content with transition effect */}
+      <div className={`transition-opacity duration-150 ${isPending ? 'opacity-60' : 'opacity-100'}`}>
 
       {/* KPI Cards Grid */}
       {(() => {
@@ -2408,6 +2428,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             </div>
           );
         })()} */}
+      </div>
       </div>
     </div>
   );
