@@ -3,7 +3,7 @@ import { ColumnVisibilitySheet } from "./ColumnVisibilitySheet";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import type { DragEndEvent } from '@dnd-kit/core';
 import { Button } from "@/components/ui/button";
-import { Settings, SlidersHorizontal } from "lucide-react";
+import { Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TableHeaderProps {
@@ -15,6 +15,7 @@ interface TableHeaderProps {
   dimensions: Dimension[];
   dimensionHasData: Record<string, boolean>;
   reportId: string | null;
+  reportName?: string;
   isSharedView: boolean;
   isEditMode?: boolean;
   onDimensionChange: (value: string, selector: "group" | "breakdown" | "then") => void;
@@ -32,9 +33,9 @@ interface TableHeaderProps {
 }
 
 /**
- * Table header component with Google Search Console-style tabs
- * Row 1: Dimension tabs (Group by options)
- * Row 2: Date granularity tabs + settings
+ * Table header with unified design:
+ * Row 1: Report name + Day/Week toggle
+ * Row 2: Dimension tabs (Date, Hotel, Device, etc.)
  */
 export function TableHeader({
   activeDateTab,
@@ -45,6 +46,7 @@ export function TableHeader({
   dimensions,
   dimensionHasData,
   reportId,
+  reportName,
   isSharedView,
   isEditMode = false,
   onDimensionChange,
@@ -77,12 +79,68 @@ export function TableHeader({
 
   // Current active dimension (first in groupByDimensions)
   const activeDimensionId = groupByDimensions[0] || dimensionTabs[0]?.id;
+  const activeDimension = dimensions.find(d => d.id === activeDimensionId);
 
   return (
-    <div className="space-y-0">
-      {/* Row 1: Dimension Tabs (Google Search Console style) */}
-      <div className="border-b">
-        <div className="flex items-center">
+    <div className="px-4">
+      {/* Row 1: Report name + Day/Week toggle + Settings */}
+      <div className="flex items-center justify-between py-3">
+        <h3 className="font-semibold text-foreground">
+          {reportName || "Performance"}
+        </h3>
+        
+        <div className="flex items-center gap-2">
+          {/* Day/Week/Month/Year toggle */}
+          <div className="flex items-center bg-muted rounded-md p-0.5">
+            {(['day', 'week'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => onDateTabChange(tab)}
+                className={cn(
+                  "px-3 py-1 text-sm font-medium rounded transition-colors capitalize",
+                  activeDateTab === tab
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+          
+          {!isSharedView && (
+            <>
+              <ColumnVisibilitySheet
+                dimensions={dimensions}
+                visibleColumns={visibleColumns}
+                getOrderedDimensions={getOrderedDimensions}
+                onToggleColumn={onToggleColumn}
+                onColumnReorder={onColumnReorder}
+                hasUnsavedChanges={hasUnsavedColumnChanges}
+                isSaving={isSavingColumnSettings}
+                onApply={onApplyColumnSettings}
+                onCancel={onCancelColumnSettings}
+                onRefreshDimensions={onRefreshDimensions}
+              />
+              {isEditMode && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onOpenSettings}
+                  title="Table settings"
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      
+      {/* Row 2: Dimension Tabs */}
+      <div className="border-b -mx-4 px-4">
+        <div className="flex items-center gap-0 overflow-x-auto">
           {dimensionTabs.map((dim) => {
             const isActive = dim.id === activeDimensionId;
             return (
@@ -95,65 +153,18 @@ export function TableHeader({
                 }}
                 disabled={isSharedView && !isEditMode}
                 className={cn(
-                  "px-4 py-3 text-sm font-medium uppercase tracking-wide transition-colors relative",
+                  "px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors relative border-b-2",
                   isActive 
-                    ? "text-primary" 
-                    : "text-muted-foreground hover:text-foreground",
+                    ? "text-foreground border-primary" 
+                    : "text-muted-foreground hover:text-foreground border-transparent hover:border-muted-foreground/30",
                   (isSharedView && !isEditMode) && "cursor-default"
                 )}
               >
                 {dim.name}
-                {/* Active indicator line */}
-                {isActive && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                )}
               </button>
             );
           })}
         </div>
-      </div>
-      
-      {/* Row 2: Date Granularity + Settings */}
-      <div className="flex items-center justify-between py-2">
-        <div className="flex items-center gap-2">
-          {/* Day/Week/Month/Year Tabs */}
-          <Tabs value={activeDateTab} onValueChange={(value) => onDateTabChange(value as 'day' | 'week' | 'month' | 'year')}>
-            <TabsList className="h-8">
-              <TabsTrigger value="day" className="text-xs px-3 h-7">Day</TabsTrigger>
-              <TabsTrigger value="week" className="text-xs px-3 h-7">Week</TabsTrigger>
-              <TabsTrigger value="month" className="text-xs px-3 h-7">Month</TabsTrigger>
-              <TabsTrigger value="year" className="text-xs px-3 h-7">Year</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-        
-        {!isSharedView && (
-          <div className="flex items-center gap-1">
-            <ColumnVisibilitySheet
-              dimensions={dimensions}
-              visibleColumns={visibleColumns}
-              getOrderedDimensions={getOrderedDimensions}
-              onToggleColumn={onToggleColumn}
-              onColumnReorder={onColumnReorder}
-              hasUnsavedChanges={hasUnsavedColumnChanges}
-              isSaving={isSavingColumnSettings}
-              onApply={onApplyColumnSettings}
-              onCancel={onCancelColumnSettings}
-              onRefreshDimensions={onRefreshDimensions}
-            />
-            {isEditMode && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={onOpenSettings}
-                title="Table settings"
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
