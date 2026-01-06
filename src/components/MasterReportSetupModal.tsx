@@ -94,6 +94,7 @@ export interface MasterReportConfig {
 
 export interface MasterReportGlobalConfig {
   sinceDate: string;
+  selectedMetrics?: string[];
 }
 
 interface MasterReportSetupModalProps {
