@@ -55,6 +55,7 @@ export const PerformanceTable = ({
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingTabName, setEditingTabName] = useState("");
   const [accountName, setAccountName] = useState<string | undefined>(undefined);
+  const [reportName, setReportName] = useState<string | undefined>(undefined);
   // NEW: selector options configured via view settings
   const [selectorDimensions, setSelectorDimensions] = useState<string[]>([]);
 
@@ -87,6 +88,32 @@ export const PerformanceTable = ({
     
     loadAccountName();
   }, [accountId]);
+
+  // Load report name when reportId changes
+  useEffect(() => {
+    const loadReportName = async () => {
+      if (!reportId) {
+        setReportName(undefined);
+        return;
+      }
+      
+      try {
+        const { data, error } = await supabase
+          .from('reports')
+          .select('name')
+          .eq('id', reportId)
+          .single();
+        
+        if (!error && data) {
+          setReportName(data.name);
+        }
+      } catch (error) {
+        console.error('Error loading report name:', error);
+      }
+    };
+    
+    loadReportName();
+  }, [reportId]);
 
   // Dimension selection state
   const [groupByDimensions, setGroupByDimensions] = useState<string[]>([]);
@@ -573,6 +600,7 @@ export const PerformanceTable = ({
             dimensions={dimensions}
             dimensionHasData={dimensionHasData}
             reportId={reportId}
+            reportName={reportName}
             isSharedView={isSharedView}
             isEditMode={isEditMode}
             onDimensionChange={handleDimensionChange}
