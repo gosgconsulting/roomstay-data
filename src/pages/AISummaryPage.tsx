@@ -1310,6 +1310,18 @@ const AISummaryPage = () => {
                     </SelectItem>
                   </SelectContent>
                 </Select>
+                {/* Settings icon for All Reports - only show when All reports is selected */}
+                {!selectedCardId && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8"
+                    onClick={() => setIsAddCardModalOpen(true)}
+                    title="Set up Master Report"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
 
             </div>
@@ -1381,18 +1393,23 @@ const AISummaryPage = () => {
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
-        ) : cards.length === 0 ? (
+        ) : !selectedCardId ? (
+          /* All Reports view - empty placeholder */
           <div className="flex flex-col items-center justify-center text-center py-16">
             <Sparkles className="h-16 w-16 text-muted-foreground mb-4" />
-            <h2 className="text-2xl font-semibold mb-2">No AI Summary Cards</h2>
-            <p className="text-muted-foreground max-w-md">
-              Click the settings icon and select "Add New Report" to create an AI-powered executive summary based on your report data.
+            <h2 className="text-2xl font-semibold mb-2">All Reports</h2>
+            <p className="text-muted-foreground max-w-md mb-4">
+              Select a report from the dropdown to view its data, or click the settings icon to set up the master report.
             </p>
+            <Button variant="outline" onClick={() => setIsAddCardModalOpen(true)}>
+              <Settings className="h-4 w-4 mr-2" />
+              Set Up Master Report
+            </Button>
           </div>
         ) : (
           <div className="w-full">
             {cards
-              .filter(card => !selectedCardId || card.id === selectedCardId)
+              .filter(card => card.id === selectedCardId)
               .map(card => (
               <div key={card.id} className="w-full">
                   {selectedReportTab === "budget" ? (
