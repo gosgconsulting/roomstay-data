@@ -564,32 +564,6 @@ export default function ReportDashboard() {
                   />
                 </div>
 
-                {/* Cache toggle button */}
-                <Button
-                  variant={useCachedData ? "outline" : "secondary"}
-                  size="sm"
-                  onClick={() => {
-                    setUseCachedData(!useCachedData);
-                    if (!useCachedData) {
-                      // Switching to cache mode - trigger refresh to use cached data
-                      refreshData();
-                    }
-                  }}
-                  className="gap-2"
-                  title={useCachedData ? "Using cached data for instant loading. Click to load from source." : "Loading from source. Click to use cached data for instant loading."}
-                >
-                  <Clock className="h-4 w-4" />
-                  {useCachedData ? "Cached" : "No cache"}
-                </Button>
-
-                {/* Cache status indicator */}
-                <CacheStatusIndicator 
-                  reportId={reportId}
-                  onRefreshData={() => {
-                    refreshData();
-                    setVisibilityRefreshTrigger(prev => prev + 1);
-                  }}
-                />
 
                 {/* Edit buttons - shown when edit mode is on */}
                 {isEditMode && (
