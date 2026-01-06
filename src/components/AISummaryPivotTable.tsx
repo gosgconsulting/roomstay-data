@@ -1017,16 +1017,11 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   const ytdChartData = useMemo(() => {
     const year = selectedYear;
     const prevYear = year - 1;
-    const monthlyData: { month: string; current: number; prevPeriod: number; prevYear: number; percentChange: number | null }[] = [];
+    const monthlyData: { month: string; Cost: number; Revenue: number }[] = [];
     
     // Create data for all 12 months
     for (let m = 0; m < 12; m++) {
       const monthKey = `${year}-${String(m + 1).padStart(2, '0')}`;
-      const prevYearMonthKey = `${prevYear}-${String(m + 1).padStart(2, '0')}`;
-      // Previous period = previous month (m-1), or December of prev year if January
-      const prevPeriodMonth = m === 0 ? 11 : m - 1;
-      const prevPeriodYear = m === 0 ? prevYear : year;
-      const prevPeriodMonthKey = `${prevPeriodYear}-${String(prevPeriodMonth + 1).padStart(2, '0')}`;
       
       const monthLabel = MONTH_NAMES[m].substring(0, 3); // Jan, Feb, etc.
       

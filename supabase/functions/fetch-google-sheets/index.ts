@@ -35,9 +35,10 @@ serve(async (req) => {
 
   const corsHeaders = getCorsHeaders();
 
+  let requestBody: { spreadsheetId?: string; range?: string; tabName?: string; action?: string } | undefined;
+  
   try {
     // Parse request body with better error handling
-    let requestBody;
     try {
       requestBody = await req.json();
     } catch (parseError) {
@@ -56,7 +57,7 @@ serve(async (req) => {
       );
     }
     
-    const { spreadsheetId, range, tabName, action } = requestBody;
+    const { spreadsheetId, range, tabName, action } = requestBody || {};
     const apiKey = Deno.env.get('GOOGLE_SHEETS_API_KEY');
 
     if (!apiKey) {
