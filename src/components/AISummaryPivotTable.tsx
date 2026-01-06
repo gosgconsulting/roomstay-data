@@ -1861,6 +1861,102 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         );
       })()}
 
+      {/* Monthly Results Bar Chart - placed right after KPI cards */}
+      {activeReportTab === "overview" && (() => {
+        // Build monthly data for the chart based on available data
+        const monthlyChartData: { month: string; result: number }[] = [];
+        
+        // Use selectedYear instead of current year
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        
+        months.forEach((monthLabel, monthIdx) => {
+          const monthKey = `${selectedYear}-${String(monthIdx + 1).padStart(2, '0')}`;
+          
+          // Get data for this month from monthly_data or compute from cached data
+          let monthData = data.monthly_data?.[monthKey];
+          
+          if (monthData && monthData.length > 0) {
+            // Calculate "result" as Revenue - Cost for each month
+            const totals = calculateTotals(monthData);
+            const revenue = totals['Revenue'] || totals['revenue'] || 0;
+            const cost = totals['Cost'] || totals['cost'] || 0;
+            const result = revenue - cost;
+            
+            monthlyChartData.push({
+              month: monthLabel,
+              result,
+            });
+          } else {
+            // Month has no data yet
+            monthlyChartData.push({
+              month: monthLabel,
+              result: 0,
+            });
+          }
+        });
+        
+        // Check if we have any actual data
+        const hasChartData = monthlyChartData.some(d => d.result !== 0);
+        if (!hasChartData) return null;
+        
+        return (
+          <div className="border rounded-lg overflow-hidden">
+            <div className="bg-primary/5 px-4 py-2 border-b">
+              <h4 className="font-semibold text-sm">Monthly Results ({selectedYear})</h4>
+            </div>
+            <div className="p-4">
+              <ChartContainer
+                config={{
+                  result: {
+                    label: "Result",
+                    color: "hsl(var(--primary))",
+                  },
+                }}
+                className="h-[300px] w-full"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={monthlyChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                    <XAxis 
+                      dataKey="month" 
+                      tick={{ fontSize: 12 }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => {
+                        if (Math.abs(value) >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+                        if (Math.abs(value) >= 1000) return `$${(value / 1000).toFixed(0)}K`;
+                        return `$${value.toFixed(0)}`;
+                      }}
+                    />
+                    <ChartTooltip 
+                      content={<ChartTooltipContent />}
+                      formatter={(value: any) => [
+                        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value),
+                        'Result'
+                      ]}
+                    />
+                    <Bar 
+                      dataKey="result" 
+                      radius={[4, 4, 0, 0]}
+                    >
+                      {monthlyChartData.map((entry, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={entry.result >= 0 ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartContainer>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="space-y-6">
         {/* Unified Day/Week table - only for individual report tabs, NOT overview */}
@@ -2448,107 +2544,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         })()}
         
         {/* Removed: Individual report weekly/monthly/last7 tables - now using unified Day/Week table above */}
-
-        {/* Monthly Results Bar Chart */}
-        {activeReportTab === "overview" && (() => {
-          const period = selectedDatePeriod || activeTab;
-          
-          // Build monthly data for the chart based on available data
-          const monthlyChartData: { month: string; result: number }[] = [];
-          
-          // Get data for all months in the year
-          const now = new Date();
-          const currentYear = now.getFullYear();
-          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          
-          months.forEach((monthLabel, monthIdx) => {
-            const monthKey = `${currentYear}-${String(monthIdx + 1).padStart(2, '0')}`;
-            
-            // Get data for this month from monthly_data or compute from cached data
-            let monthData = data.monthly_data?.[monthKey];
-            
-            if (monthData && monthData.length > 0) {
-              // Calculate "result" as Revenue - Cost for each month
-              const totals = calculateTotals(monthData);
-              const revenue = totals['Revenue'] || totals['revenue'] || 0;
-              const cost = totals['Cost'] || totals['cost'] || 0;
-              const result = revenue - cost;
-              
-              monthlyChartData.push({
-                month: monthLabel,
-                result,
-              });
-            } else {
-              // Month has no data yet
-              monthlyChartData.push({
-                month: monthLabel,
-                result: 0,
-              });
-            }
-          });
-          
-          // Check if we have any actual data
-          const hasChartData = monthlyChartData.some(d => d.result !== 0);
-          if (!hasChartData) return null;
-          
-          return (
-            <div className="border rounded-lg overflow-hidden">
-              <div className="bg-primary/5 px-4 py-2 border-b">
-                <h4 className="font-semibold text-sm">Monthly Results ({currentYear})</h4>
-              </div>
-              <div className="p-4">
-                <ChartContainer
-                  config={{
-                    result: {
-                      label: "Result",
-                      color: "hsl(var(--primary))",
-                    },
-                  }}
-                  className="h-[300px] w-full"
-                >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlyChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                      <XAxis 
-                        dataKey="month" 
-                        tick={{ fontSize: 12 }}
-                        tickLine={false}
-                        axisLine={false}
-                      />
-                      <YAxis 
-                        tick={{ fontSize: 11 }}
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(value) => {
-                          if (Math.abs(value) >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-                          if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(0)}K`;
-                          return value.toFixed(0);
-                        }}
-                      />
-                      <ChartTooltip 
-                        content={<ChartTooltipContent />}
-                        formatter={(value: any) => [
-                          new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value),
-                          'Result'
-                        ]}
-                      />
-                      <Bar 
-                        dataKey="result" 
-                        radius={[4, 4, 0, 0]}
-                      >
-                        {monthlyChartData.map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`} 
-                            fill={entry.result >= 0 ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'}
-                          />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartContainer>
-              </div>
-            </div>
-          );
-        })()}
 
         {/* Executive Summary - TEMPORARILY HIDDEN
         {activeReportTab === "overview" && (() => {
