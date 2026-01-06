@@ -1249,6 +1249,14 @@ const AISummaryPage = () => {
       setIsAddCardModalOpen(true);
       return;
     }
+    if (cardId === "all-reports") {
+      setSelectedCardId(null);
+      if (accountId) {
+        navigate(`/tools/report/${accountId}`);
+      }
+      return;
+    }
+    setSelectedCardId(cardId);
     if (accountId) {
       navigate(`/tools/report/${accountId}/${cardId}`);
     }
@@ -1279,13 +1287,16 @@ const AISummaryPage = () => {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-muted-foreground">Reports</span>
                 <Select 
-                  value={selectedCardId || ""} 
+                  value={selectedCardId || "all-reports"} 
                   onValueChange={handleReportSelect}
                 >
                   <SelectTrigger className="w-[200px] bg-background border-border">
                     <SelectValue placeholder="Select report" />
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-border z-50">
+                    <SelectItem value="all-reports" className="font-medium">
+                      All reports:
+                    </SelectItem>
                     {cards.map((card) => (
                       <SelectItem key={card.id} value={card.id}>
                         {card.name}
