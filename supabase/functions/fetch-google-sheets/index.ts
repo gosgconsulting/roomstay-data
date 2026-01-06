@@ -42,8 +42,13 @@ serve(async (req) => {
       requestBody = await req.json();
     } catch (parseError) {
       console.error('[fetch-google-sheets] Failed to parse request body:', parseError);
+      const errorResponse = {
+        error: 'Invalid request body. Expected JSON.',
+        details: parseError instanceof Error ? parseError.message : String(parseError),
+        timestamp: new Date().toISOString(),
+      };
       return new Response(
-        JSON.stringify({ error: 'Invalid request body. Expected JSON.' }),
+        JSON.stringify(errorResponse),
         { 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 400 
@@ -55,11 +60,25 @@ serve(async (req) => {
     const apiKey = Deno.env.get('GOOGLE_SHEETS_API_KEY');
 
     if (!apiKey) {
-      throw new Error('Google Sheets API key not configured');
+      console.error('[fetch-google-sheets] Google Sheets API key not configured');
+      return new Response(
+        JSON.stringify({ error: 'Google Sheets API key not configured' }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 500 
+        }
+      );
     }
 
     if (!spreadsheetId || typeof spreadsheetId !== 'string' || spreadsheetId.trim() === '') {
-      throw new Error('Spreadsheet ID is required and must be a non-empty string');
+      console.error('[fetch-google-sheets] Invalid spreadsheetId:', spreadsheetId);
+      return new Response(
+        JSON.stringify({ error: 'Spreadsheet ID is required and must be a non-empty string' }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400 
+        }
+      );
     }
 
     // If action is 'metadata', return spreadsheet metadata including available tabs
@@ -107,7 +126,17 @@ serve(async (req) => {
     // IMPORTANT: Do NOT trim the tab name because Google Sheets tab titles can legally
     // contain leading/trailing spaces, and trimming would make the range invalid.
     let fullRange: string;
-    if (tabName && typeof tabName === 'string' && tabName.trim() !== '') {
+    if (tabName !== undefined && tabName !== null) {
+      if (typeof tabName !== 'string' || tabName.trim() === '') {
+        console.error('[fetch-google-sheets] Invalid tabName:', tabName);
+        return new Response(
+          JSON.stringify({ error: 'Tab name must be a non-empty string if provided' }),
+          { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400 
+          }
+        );
+      }
       // Escape single quotes in tab name (double them)
       const escapedTabName = tabName.replace(/'/g, "''");
       fullRange = `'${escapedTabName}'!${requestedRange}`;
@@ -115,7 +144,12 @@ serve(async (req) => {
       fullRange = requestedRange;
     }
     
-    console.log(`Fetching Google Sheets data: ${spreadsheetId}, range: ${fullRange}`);
+    console.log(`[fetch-google-sheets] Fetching Google Sheets data:`, {
+      spreadsheetId,
+      tabName: tabName || 'none',
+      range: requestedRange,
+      fullRange,
+    });
 
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(fullRange)}?key=${apiKey}`;
     
@@ -139,15 +173,35 @@ serve(async (req) => {
         errorMessage = errorText || errorMessage;
       }
       
-      console.error('[fetch-google-sheets] Google Sheets API error:', {
+      const errorInfo = {
         status: response.status,
         statusText: response.statusText,
         message: errorMessage,
         details: errorDetails,
+        requestParams: {
+          spreadsheetId,
+          tabName: tabName || 'none',
+          range: requestedRange,
+          fullRange,
+        },
         url: url.replace(apiKey, 'REDACTED')
-      });
+      };
       
-      throw new Error(`Google Sheets API error (${response.status}): ${errorMessage}`);
+      console.error('[fetch-google-sheets] Google Sheets API error:', errorInfo);
+      
+      // Return detailed error in response body for debugging
+      return new Response(
+        JSON.stringify({ 
+          error: errorMessage,
+          details: errorDetails,
+          status: response.status,
+          requestParams: errorInfo.requestParams
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: response.status 
+        }
+      );
     }
 
     const data = await response.json();
@@ -161,10 +215,22 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error('Error in fetch-google-sheets:', error);
+    console.error('[fetch-google-sheets] Error in fetch-google-sheets:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    
+    // Include request parameters in error response for debugging
+    const errorResponse = {
+      error: errorMessage,
+      requestParams: {
+        spreadsheetId: requestBody?.spreadsheetId || 'not provided',
+        tabName: requestBody?.tabName || 'not provided',
+        range: requestBody?.range || 'not provided',
+      },
+      timestamp: new Date().toISOString(),
+    };
+    
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify(errorResponse),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400 

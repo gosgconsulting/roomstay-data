@@ -20,24 +20,89 @@ export const fetchGoogleSheetsData = async (
   tabName: string,
   range: string
 ): Promise<any[][]> => {
-  console.log(`[DATA-SOURCE] Fetching Google Sheets data:`, { spreadsheetId, tabName, range });
+  // Validate inputs before making the request
+  if (!spreadsheetId || typeof spreadsheetId !== 'string' || spreadsheetId.trim() === '') {
+    const errorMsg = `Spreadsheet ID is required and must be a non-empty string. Received: ${JSON.stringify(spreadsheetId)}`;
+    console.error('[DATA-SOURCE] Validation error:', errorMsg);
+    throw new Error(errorMsg);
+  }
+  
+  if (!tabName || typeof tabName !== 'string' || tabName.trim() === '') {
+    const errorMsg = `Tab name is required and must be a non-empty string. Received: ${JSON.stringify(tabName)}`;
+    console.error('[DATA-SOURCE] Validation error:', errorMsg);
+    throw new Error(errorMsg);
+  }
+  
+  if (!range || typeof range !== 'string' || range.trim() === '') {
+    const errorMsg = `Range is required and must be a non-empty string. Received: ${JSON.stringify(range)}`;
+    console.error('[DATA-SOURCE] Validation error:', errorMsg);
+    throw new Error(errorMsg);
+  }
+  
+  const requestBody = {
+    spreadsheetId: spreadsheetId.trim(),
+    tabName: tabName.trim(),
+    range: range.trim(),
+  };
+  
+  console.log(`[DATA-SOURCE] Fetching Google Sheets data:`, requestBody);
   
   const { data: sheetsData, error: sheetsError } = await supabase.functions.invoke('fetch-google-sheets', {
-    body: {
-      spreadsheetId,
-      tabName,
-      range,
-    },
+    body: requestBody,
   });
-
-  if (sheetsError) {
-    console.error('[DATA-SOURCE] Edge function invocation error:', sheetsError);
-    throw new Error(`Failed to fetch Google Sheets data: ${sheetsError.message || JSON.stringify(sheetsError)}`);
+  
+  // Log full response for debugging
+  if (sheetsError || sheetsData?.error) {
+    console.log(`[DATA-SOURCE] Request body sent:`, requestBody);
+    console.log(`[DATA-SOURCE] Response data:`, sheetsData);
+    console.log(`[DATA-SOURCE] Response error:`, sheetsError);
   }
 
+  // Check for invocation error or error in response body
+  if (sheetsError) {
+    console.error('[DATA-SOURCE] Edge function invocation error:', sheetsError);
+    console.error('[DATA-SOURCE] Error context:', sheetsError.context);
+    console.error('[DATA-SOURCE] Response data (if any):', sheetsData);
+    
+    // Try to extract error details from multiple sources
+    let errorMessage = sheetsError.message || 'Unknown error';
+    let errorDetails: string[] = [];
+    
+    // Check if error details are in the error object
+    if (sheetsError.context) {
+      errorDetails.push(`Context: ${JSON.stringify(sheetsError.context)}`);
+    }
+    
+    // Also check if error details are in the data (when edge function returns 400 with JSON body)
+    // Supabase might still parse the response body into data even with an error
+    if (sheetsData) {
+      if (sheetsData.error) {
+        errorMessage = typeof sheetsData.error === 'string' 
+          ? sheetsData.error 
+          : (sheetsData.error as any)?.message || errorMessage;
+      }
+      if (sheetsData.details) {
+        errorDetails.push(`Details: ${JSON.stringify(sheetsData.details)}`);
+      }
+      if (sheetsData.requestParams) {
+        errorDetails.push(`Request params: ${JSON.stringify(sheetsData.requestParams)}`);
+      }
+    }
+    
+    // Build comprehensive error message
+    const fullError = errorDetails.length > 0 
+      ? `${errorMessage} (${errorDetails.join(', ')})`
+      : errorMessage;
+    
+    throw new Error(`Failed to fetch Google Sheets data: ${fullError}`);
+  }
+
+  // Check if edge function returned an error in the response body (even with 200 status)
   if (sheetsData?.error) {
     console.error('[DATA-SOURCE] Edge function returned error:', sheetsData.error);
-    throw new Error(`Google Sheets error: ${sheetsData.error}`);
+    const errorDetails = sheetsData.details ? ` Details: ${JSON.stringify(sheetsData.details)}` : '';
+    const requestParams = sheetsData.requestParams ? ` Request params: ${JSON.stringify(sheetsData.requestParams)}` : '';
+    throw new Error(`Google Sheets error: ${sheetsData.error}${errorDetails}${requestParams}`);
   }
 
   if (!sheetsData?.values || sheetsData.values.length === 0) {
@@ -77,18 +142,31 @@ export const fetchGoogleSheetsAllData = async (
   tabName: string,
   headerRow: number
 ): Promise<{ headers: string[]; dataRows: any[][] }> => {
+  // Validate inputs
+  if (!spreadsheetId || typeof spreadsheetId !== 'string' || spreadsheetId.trim() === '') {
+    throw new Error('Spreadsheet ID is required and must be a non-empty string');
+  }
+  
+  if (!tabName || typeof tabName !== 'string' || tabName.trim() === '') {
+    throw new Error('Tab name is required and must be a non-empty string');
+  }
+  
+  if (!headerRow || headerRow < 1) {
+    throw new Error('Header row must be a positive integer');
+  }
+  
   const dataStartRow = headerRow + 1;
   const dataRange = `A${dataStartRow}:Z`;
   
   // Fetch headers
-  const headers = await fetchGoogleSheetsHeaders(spreadsheetId, tabName, headerRow);
+  const headers = await fetchGoogleSheetsHeaders(spreadsheetId.trim(), tabName.trim(), headerRow);
   
   // Fetch data rows
   let dataRows: any[][] = [];
   
   try {
     // Try to fetch all data at once
-    const allData = await fetchGoogleSheetsData(spreadsheetId, tabName, dataRange);
+    const allData = await fetchGoogleSheetsData(spreadsheetId.trim(), tabName.trim(), dataRange);
     dataRows = allData;
   } catch (error) {
     // If single fetch fails, try chunked approach for large datasets
@@ -102,7 +180,7 @@ export const fetchGoogleSheetsAllData = async (
       const chunkRange = `A${startRow}:Z${endRow}`;
       
       try {
-        const chunkData = await fetchGoogleSheetsData(spreadsheetId, tabName, chunkRange);
+        const chunkData = await fetchGoogleSheetsData(spreadsheetId.trim(), tabName.trim(), chunkRange);
         if (chunkData && chunkData.length > 0) {
           dataRows = [...dataRows, ...chunkData];
           if (chunkData.length < SHEET_CHUNK_SIZE) {

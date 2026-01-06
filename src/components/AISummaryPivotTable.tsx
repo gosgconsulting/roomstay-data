@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -15,8 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Sparkles, ArrowUp, ArrowDown, Minus, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
+import { Loader2, Sparkles, ArrowUp, ArrowDown, Minus, ArrowUpDown, ChevronUp, ChevronDown, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Bar, BarChart, LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, LabelList, Cell, CartesianGrid, Legend } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import FormattedAISummary from "@/components/FormattedAISummary";
@@ -671,7 +672,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   
   // Use React Query for cached raw source data - persists across tab switches
   // Always fetch fresh data from sources (previous way of loading)
-  const { data: rawSourceData = {}, isLoading: isLoadingRawData } = useAISummaryRawData(
+  const { data: rawSourceData = {}, isLoading: isLoadingRawData, isError, error, refetch } = useAISummaryRawData(
     cardId || reportIds.join('-'), // Use cardId or fallback to joined reportIds
     reportIds,
     accountId,
@@ -814,7 +815,39 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     return { mtd: [], ytd: [] };
   }, [rawSourceData, reportsLoaded, reportIds, selectedMetrics, cachedPivotData, mergedMetricMap, selectedYear]);
   
-  const isLoading = isLoadingRawData;
+  // Only show loading if we have no cached data and are actively loading
+  const isLoading = isLoadingRawData && Object.keys(rawSourceData).length === 0 && !cachedPivotData;
+
+  // Show error state if query failed and we have no cached data
+  if (isError && Object.keys(rawSourceData).length === 0 && !cachedPivotData) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 px-4">
+        <AlertCircle className="h-8 w-8 text-destructive mb-4" />
+        <h3 className="text-lg font-semibold mb-2">Failed to Load Report Data</h3>
+        <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
+          {error?.message || 'An error occurred while loading data from the data sources. Please check that all data sources are properly configured.'}
+        </p>
+        <Button
+          onClick={() => refetch()}
+          variant="default"
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (reportIds.length === 0 || !selectedMetrics || selectedMetrics.length === 0) {
+    return null;
+  }
   
   // Report tab state - controlled from parent if props provided, otherwise internal
   const [internalReportTab, setInternalReportTab] = useState<ReportTab>("overview");

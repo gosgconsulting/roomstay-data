@@ -75,7 +75,10 @@ async function fetchRawSourceData(
 
   for (const reportId of reportIds) {
     const report = reportsList.find((r: Report) => r.id === reportId);
-    if (!report) continue;
+    if (!report) {
+      console.warn(`[AI-SUMMARY] Report ${reportId} not found, skipping`);
+      continue;
+    }
 
     const { data: dsData } = await supabase
       .from("data_sources")
@@ -84,19 +87,45 @@ async function fetchRawSourceData(
       .limit(1)
       .maybeSingle();
 
-    if (!dsData) continue;
+    if (!dsData) {
+      console.warn(`[AI-SUMMARY] No data source found for report ${reportId}, skipping`);
+      continue;
+    }
 
-    const sourceData = await fetchSourceData(
-      dsData as DataSource,
-      user.id,
-      accountId
-    );
+    // Validate data source before fetching
+    if (dsData.source_type === 'google_sheets') {
+      if (!dsData.tab_name || typeof dsData.tab_name !== 'string' || dsData.tab_name.trim() === '') {
+        console.warn(`[AI-SUMMARY] Skipping report ${reportId} (${report.name}): missing or invalid tab_name`);
+        continue;
+      }
+      if (!dsData.spreadsheet_id && !dsData.google_sheets_url) {
+        console.warn(`[AI-SUMMARY] Skipping report ${reportId} (${report.name}): missing spreadsheet_id and google_sheets_url`);
+        continue;
+      }
+    } else if (dsData.source_type === 'csv_url') {
+      if (!dsData.csv_url || typeof dsData.csv_url !== 'string' || dsData.csv_url.trim() === '') {
+        console.warn(`[AI-SUMMARY] Skipping report ${reportId} (${report.name}): missing or invalid csv_url`);
+        continue;
+      }
+    }
 
-    if (sourceData?.transformedRows) {
-      rawData[reportId] = {
-        reportName: report.name,
-        rows: sourceData.transformedRows,
-      };
+    try {
+      const sourceData = await fetchSourceData(
+        dsData as DataSource,
+        user.id,
+        accountId
+      );
+
+      if (sourceData?.transformedRows) {
+        rawData[reportId] = {
+          reportName: report.name,
+          rows: sourceData.transformedRows,
+        };
+      }
+    } catch (error) {
+      console.error(`[AI-SUMMARY] Failed to load data for report ${reportId} (${report.name}):`, error);
+      // Continue with other reports instead of failing completely
+      // This allows partial data to be displayed
     }
   }
 
@@ -119,12 +148,13 @@ export function useAISummaryRawData(
     queryKey: aiSummaryKeys.rawData(cardId),
     queryFn: () => fetchRawSourceData(reportIds, accountId),
     enabled: enabled && !!cardId && reportIds.length > 0,
-    staleTime: 0, // Always consider data stale - fetch fresh data on mount
+    staleTime: 5 * 60 * 1000, // 5 minutes - data is fresh for 5 min
     gcTime: 60 * 60 * 1000, // 1 hour - keep in cache
-    retry: 2,
-    refetchOnWindowFocus: true, // Refetch when window regains focus to get fresh data
-    refetchOnMount: true, // Always refetch when component mounts to ensure fresh data
-    refetchOnReconnect: true, // Refetch on reconnect to get fresh data
+    retry: 1, // Reduce retries from 2 to 1
+    refetchOnWindowFocus: false, // Don't refetch on focus
+    refetchOnMount: false, // Use cached data if available
+    refetchOnReconnect: false, // Don't refetch on reconnect
+    refetchInterval: false, // No automatic polling
   });
 }
 

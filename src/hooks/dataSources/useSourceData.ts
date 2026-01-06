@@ -55,16 +55,17 @@ export async function fetchSourceData(
     headers = result.headers;
     rows = result.dataRows;
   } else {
+    // Validate Google Sheets data source
     if (!dataSource.spreadsheet_id && !dataSource.google_sheets_url) {
-      throw new Error('Spreadsheet ID or URL is required for Google Sheets data source');
+      throw new Error(`Spreadsheet ID or URL is required for Google Sheets data source (${dataSource.name || dataSource.id})`);
     }
-    if (!dataSource.tab_name) {
-      throw new Error('Tab name is required for Google Sheets data source');
+    if (!dataSource.tab_name || typeof dataSource.tab_name !== 'string' || dataSource.tab_name.trim() === '') {
+      throw new Error(`Tab name is required and must be a non-empty string for Google Sheets data source (${dataSource.name || dataSource.id})`);
     }
     
     const spreadsheetId = dataSource.spreadsheet_id || extractSpreadsheetId(dataSource.google_sheets_url || '');
-    if (!spreadsheetId) {
-      throw new Error('Invalid Google Sheets URL');
+    if (!spreadsheetId || spreadsheetId.trim() === '') {
+      throw new Error(`Invalid Google Sheets URL or spreadsheet ID for data source (${dataSource.name || dataSource.id})`);
     }
     
     const result = await fetchGoogleSheetsAllData(
