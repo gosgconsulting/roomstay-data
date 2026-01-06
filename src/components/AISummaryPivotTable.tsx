@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useTransition } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { LoadingTransition } from "@/components/ui/loading-transition";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -631,7 +630,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   const activeTab = selectedTab || internalTab;
   
   // Use transition for non-blocking tab switches
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   
   const handleTabChange = (tab: DateTab) => {
     startTransition(() => {
@@ -1691,20 +1690,10 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       : null;
 
   return (
-    <LoadingTransition isPending={isPending} message="Loading...">
-      {/* WRAP: Add blur + subtle overlay while loading/transitioning even if cached data is shown */}
-      <div className={`relative w-full space-y-6 ${ (isLoadingRawData || isPending) ? 'pointer-events-none opacity-70 blur-[1.5px] transition' : 'transition' }`}>
-        {(isLoadingRawData || isPending) && (
-          <div className="absolute left-1/2 -translate-x-1/2 -top-2 z-20">
-            <div className="px-3 py-1 rounded-md border bg-card text-xs text-muted-foreground shadow-sm">
-              Loading...
-            </div>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between gap-3 mb-4">
-          {/* Report Tabs */}
-          <div className="flex gap-2 border-b pb-3">
+    <div className="relative w-full space-y-6">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        {/* Report Tabs */}
+        <div className="flex gap-2 border-b pb-3">
             <Button
               variant={activeReportTab === "overview" ? "default" : "ghost"}
               size="sm"
@@ -2511,7 +2500,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()} */}
       </div>
-      </div>
-    </LoadingTransition>
+    </div>
   );
 };
