@@ -129,6 +129,7 @@ const AISummaryPage = () => {
   const [masterReportConfigs, setMasterReportConfigs] = useState<Record<string, MasterReportConfig>>({});
   const [masterGlobalConfig, setMasterGlobalConfig] = useState<MasterReportGlobalConfig>({
     sinceDate: new Date().getFullYear() + "-01-01",
+    selectedMetrics: ["Impressions", "Clicks", "Cost", "Revenue", "ROAS"],
   });
 
   // Generate date options: Year to date at top, then current month, then previous months
@@ -338,6 +339,7 @@ const AISummaryPage = () => {
     if (!globalError && globalConfigData) {
       setMasterGlobalConfig({
         sinceDate: globalConfigData.since_date,
+        selectedMetrics: globalConfigData.selected_metrics || ["Impressions", "Clicks", "Cost", "Revenue", "ROAS"],
       });
     }
   };
@@ -1579,14 +1581,23 @@ const AISummaryPage = () => {
         ) : (
           <div className="w-full">
             {!selectedCardId ? (
-              /* All Reports view - show table with empty data */
+              /* All Reports view - show data from all reports for this account */
               <AISummaryPivotTable
-                cardId={undefined}
-                reportIds={[]}
-                selectedMetrics={["Impressions", "Clicks", "Cost", "Revenue", "ROAS"]}
+                cardId="all-reports"
+                reportIds={reports.map(r => r.id)}
+                selectedMetrics={masterGlobalConfig.selectedMetrics || ["Impressions", "Clicks", "Cost", "Revenue", "ROAS"]}
                 accountId={accountId}
                 cachedPivotData={undefined}
-                reportConfigs={{}}
+                reportConfigs={Object.fromEntries(
+                  Object.entries(masterReportConfigs).map(([reportId, config]) => [
+                    reportId,
+                    {
+                      dimensionId: config.groupByDimensionId,
+                      dimensionName: config.groupByDimensionName,
+                      selectedValues: config.selectedValues,
+                    }
+                  ])
+                )}
                 selectedTab={selectedDateTab}
                 onTabChange={setSelectedDateTab}
                 selectedReportTab={selectedReportTab}
