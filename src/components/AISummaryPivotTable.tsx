@@ -2038,7 +2038,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       })()}
 
       {/* Monthly Results Bar Chart - placed right after KPI cards, hidden in All Reports view */}
-      {!hideOverviewAndBudget && activeReportTab === "overview" && (() => {
+      {!hideOverviewAndBudget && (() => {
         // Build monthly data for the chart based on available data
         const monthlyChartData: { month: string; result: number }[] = [];
         
@@ -2049,11 +2049,14 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           const monthKey = `${selectedYear}-${String(monthIdx + 1).padStart(2, '0')}`;
           
           // Get data for this month from monthly_data or compute from cached data
-          let monthData = data.monthly_data?.[monthKey];
+          const monthReports = data.monthly_data?.[monthKey] || [];
+          const filteredReports = activeReportTab === "overview" 
+            ? monthReports 
+            : monthReports.filter(r => r.reportId === activeReportTab);
           
-          if (monthData && monthData.length > 0) {
+          if (filteredReports.length > 0) {
             // Calculate "result" as Revenue - Cost for each month
-            const totals = calculateTotals(monthData);
+            const totals = calculateTotals(filteredReports);
             const revenue = totals['Revenue'] || totals['revenue'] || 0;
             const cost = totals['Cost'] || totals['cost'] || 0;
             const result = revenue - cost;
