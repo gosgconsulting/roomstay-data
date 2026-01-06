@@ -1721,17 +1721,35 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       <div className="w-full space-y-6">
         <div className="flex items-center justify-between gap-3 mb-4">
           {/* Report Tabs */}
-          <Tabs value={activeReportTab} onValueChange={(value) => handleReportTabChange(value as ReportTab)} className="w-auto">
-            <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              {reportTabsList.map((report) => (
-                <TabsTrigger key={report.id} value={report.id}>
-                  {report.name}
-                </TabsTrigger>
-              ))}
-              <TabsTrigger value="budget">Budget</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="flex gap-2 border-b pb-3">
+            <Button
+              variant={activeReportTab === "overview" ? "default" : "ghost"}
+              size="sm"
+              className="px-4"
+              onClick={() => handleReportTabChange("overview")}
+            >
+              Overview
+            </Button>
+            {reportTabsList.map((report) => (
+              <Button
+                key={report.id}
+                variant={activeReportTab === report.id ? "default" : "ghost"}
+                size="sm"
+                className="px-4"
+                onClick={() => handleReportTabChange(report.id)}
+              >
+                {report.name}
+              </Button>
+            ))}
+            <Button
+              variant={activeReportTab === "budget" ? "default" : "ghost"}
+              size="sm"
+              className="px-4"
+              onClick={() => handleReportTabChange("budget")}
+            >
+              Budget
+            </Button>
+          </div>
           
           <div className="flex items-center gap-3">
           {/* Filter Dropdowns - before Date dropdown */}
