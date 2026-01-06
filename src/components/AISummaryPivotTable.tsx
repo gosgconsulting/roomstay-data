@@ -1714,10 +1714,10 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       ? calculateTotals(comparisonTabData.filter(r => r.reportId === activeReportTab))
       : null;
 
+  // Note: No loading overlay on tab switch - data is cached via React Query for instant loading
   return (
-    <LoadingTransition isPending={isPending} message="Loading...">
-      <div className="w-full space-y-6">
-        <div className="flex items-center justify-between gap-3 mb-4">
+    <div className="w-full space-y-6">
+      <div className="flex items-center justify-between gap-3 mb-4">
           {/* Report Tabs */}
           <Tabs value={activeReportTab} onValueChange={(value) => handleReportTabChange(value as ReportTab)} className="w-auto">
             <TabsList>
@@ -2461,7 +2461,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()} */}
       </div>
-      </div>
-    </LoadingTransition>
+    </div>
   );
 };
