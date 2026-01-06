@@ -563,7 +563,7 @@ export const PerformanceTable = ({
   return (
     <>
       <Card className="shadow-sm">
-        <CardHeader className="pb-3 border-b">
+        <CardHeader className="p-0">
           <TableHeader
             activeDateTab={activeDateTab}
             onDateTabChange={handleDateTabChange}
@@ -586,10 +586,10 @@ export const PerformanceTable = ({
             onCancelColumnSettings={cancelColumnSettings}
             onRefreshDimensions={loadDimensions}
             onOpenSettings={() => setSettingsOpen(true)}
-            availableSelectorDimensions={selectorDimensions} // NEW: restrict dropdowns to configured list
+            availableSelectorDimensions={selectorDimensions}
           />
         </CardHeader>
-        <CardContent className="pt-6">
+        <CardContent className="pt-4">
           {isLoadingDimensions || !isViewInitialized ? (
             <TableSkeleton />
           ) : groupByDimensions.length === 0 ? (
