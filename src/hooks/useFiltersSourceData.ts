@@ -26,6 +26,9 @@ export function useFiltersSourceData(
   const { enabled = true } = options;
 
   // First, fetch the data source for this report
+  // IMPORTANT: keep this query "fresh" because data source settings (like tab_name)
+  // can be edited outside the app (or via migrations) and stale cached values will
+  // keep calling edge functions with the wrong tab.
   const dataSourceQuery = useQuery({
     queryKey: ["dataSource", "forReport", reportId],
     queryFn: async () => {
@@ -47,7 +50,9 @@ export function useFiltersSourceData(
       return data as unknown as DataSource | null;
     },
     enabled: enabled && !!reportId,
-    staleTime: 24 * 60 * 60 * 1000, // 24 hours - keep data fresh until manual sync
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   const dataSource = dataSourceQuery.data;
