@@ -1,10 +1,10 @@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DimensionSelectorGroup } from "./DimensionSelectorGroup";
 import { ColumnVisibilitySheet } from "./ColumnVisibilitySheet";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import type { DragEndEvent } from '@dnd-kit/core';
 import { Button } from "@/components/ui/button";
-import { Settings } from "lucide-react";
+import { Settings, SlidersHorizontal } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface TableHeaderProps {
   activeDateTab: 'day' | 'week' | 'month' | 'year';
@@ -32,7 +32,9 @@ interface TableHeaderProps {
 }
 
 /**
- * Table header component with date granularity tabs and dimension selectors
+ * Table header component with Google Search Console-style tabs
+ * Row 1: Dimension tabs (Group by options)
+ * Row 2: Date granularity tabs + settings
  */
 export function TableHeader({
   activeDateTab,
@@ -68,63 +70,65 @@ export function TableHeader({
     ? Array.from(new Set([dateId, ...configured])) // Ensure Date is always included
     : configured;
 
+  // Get dimension objects for the selector options
+  const dimensionTabs = selectorOptions
+    .map(id => dimensions.find(d => d.id === id))
+    .filter((d): d is Dimension => d !== undefined);
+
+  // Current active dimension (first in groupByDimensions)
+  const activeDimensionId = groupByDimensions[0] || dimensionTabs[0]?.id;
+
   return (
-    <>
-      {/* Date Granularity Tabs */}
-      <Tabs value={activeDateTab} onValueChange={(value) => onDateTabChange(value as 'day' | 'week' | 'month' | 'year')} className="mb-4">
-        <TabsList>
-          <TabsTrigger value="day">Day</TabsTrigger>
-          <TabsTrigger value="week">Week</TabsTrigger>
-          <TabsTrigger value="month">Month</TabsTrigger>
-          <TabsTrigger value="year">Year</TabsTrigger>
-        </TabsList>
-      </Tabs>
+    <div className="space-y-0">
+      {/* Row 1: Dimension Tabs (Google Search Console style) */}
+      <div className="border-b">
+        <div className="flex items-center">
+          {dimensionTabs.map((dim) => {
+            const isActive = dim.id === activeDimensionId;
+            return (
+              <button
+                key={dim.id}
+                onClick={() => {
+                  if (!isSharedView || isEditMode) {
+                    onDimensionChange(dim.id, "group");
+                  }
+                }}
+                disabled={isSharedView && !isEditMode}
+                className={cn(
+                  "px-4 py-3 text-sm font-medium uppercase tracking-wide transition-colors relative",
+                  isActive 
+                    ? "text-primary" 
+                    : "text-muted-foreground hover:text-foreground",
+                  (isSharedView && !isEditMode) && "cursor-default"
+                )}
+              >
+                {dim.name}
+                {/* Active indicator line */}
+                {isActive && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
       
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3 text-sm">
-          <DimensionSelectorGroup
-            label="Group by"
-            dimensions={groupByDimensions}
-            availableDimensions={selectorOptions}
-            allDimensions={dimensions}
-            dimensionHasData={dimensionHasData}
-            reportId={reportId}
-            isSharedView={isSharedView}
-            isEditMode={isEditMode}
-            onValueChange={(value) => onDimensionChange(value, "group")}
-          />
-          
-          {groupByDimensions.length >= 1 && dimensions.length >= 2 && (
-            <DimensionSelectorGroup
-              label="Breakdown by"
-              dimensions={breakdownByDimensions}
-              availableDimensions={selectorOptions}
-              allDimensions={dimensions}
-              dimensionHasData={dimensionHasData}
-              reportId={reportId}
-              isSharedView={isSharedView}
-              isEditMode={isEditMode}
-              onValueChange={(value) => onDimensionChange(value, "breakdown")}
-            />
-          )}
-          
-          {(breakdownByDimensions.length >= 1 || dimensions.length >= 3) && (
-            <DimensionSelectorGroup
-              label="Then by"
-              dimensions={thenByDimensions}
-              availableDimensions={selectorOptions}
-              allDimensions={dimensions}
-              dimensionHasData={dimensionHasData}
-              reportId={reportId}
-              isSharedView={isSharedView}
-              isEditMode={isEditMode}
-              onValueChange={(value) => onDimensionChange(value, "then")}
-            />
-          )}
+      {/* Row 2: Date Granularity + Settings */}
+      <div className="flex items-center justify-between py-2">
+        <div className="flex items-center gap-2">
+          {/* Day/Week/Month/Year Tabs */}
+          <Tabs value={activeDateTab} onValueChange={(value) => onDateTabChange(value as 'day' | 'week' | 'month' | 'year')}>
+            <TabsList className="h-8">
+              <TabsTrigger value="day" className="text-xs px-3 h-7">Day</TabsTrigger>
+              <TabsTrigger value="week" className="text-xs px-3 h-7">Week</TabsTrigger>
+              <TabsTrigger value="month" className="text-xs px-3 h-7">Month</TabsTrigger>
+              <TabsTrigger value="year" className="text-xs px-3 h-7">Year</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
         
         {!isSharedView && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <ColumnVisibilitySheet
               dimensions={dimensions}
               visibleColumns={visibleColumns}
@@ -140,8 +144,8 @@ export function TableHeader({
             {isEditMode && (
               <Button
                 variant="ghost"
-                size="sm"
-                className="gap-2"
+                size="icon"
+                className="h-8 w-8"
                 onClick={onOpenSettings}
                 title="Table settings"
               >
@@ -151,6 +155,6 @@ export function TableHeader({
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }
