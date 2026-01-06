@@ -2336,6 +2336,210 @@ app.get('/api/reports/:reportId', async (req, res) => {
   }
 });
 
+/**
+ * API endpoint for pre-aggregated master report data
+ * Format: /api/reports/:reportId/aggregates
+ * 
+ * Returns pre-aggregated data from master_report_daily_aggregates and
+ * master_report_monthly_aggregates tables for fast loading.
+ * 
+ * Query parameters:
+ * - dateTab: 'this_month' | 'last_month' | 'ytd' (default: 'this_month')
+ * - groupByDimensionId: UUID of the dimension to group by (required)
+ * - selectedValues: Comma-separated list of group values to filter (optional)
+ * - selectedMetrics: Comma-separated list of metrics to return (optional)
+ */
+app.get('/api/reports/:reportId/aggregates', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const { dateTab = 'this_month', groupByDimensionId, selectedValues, selectedMetrics } = req.query;
+    
+    if (!reportId) {
+      return res.status(400).json({
+        success: false,
+        error: 'reportId is required',
+        data: []
+      });
+    }
+    
+    if (!groupByDimensionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'groupByDimensionId is required',
+        data: []
+      });
+    }
+    
+    if (!supabase) {
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error: Supabase client not initialized',
+        data: []
+      });
+    }
+    
+    // Parse date range based on dateTab
+    const now = new Date();
+    let startDate, endDate, useMonthly = false;
+    
+    switch (dateTab) {
+      case 'this_month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = now;
+        useMonthly = false;
+        break;
+      case 'last_month':
+        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        startDate = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
+        endDate = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0);
+        useMonthly = true;
+        break;
+      case 'ytd':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        endDate = now;
+        useMonthly = true;
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid dateTab. Must be one of: this_month, last_month, ytd',
+          data: []
+        });
+    }
+    
+    // Build query
+    let query;
+    if (useMonthly) {
+      const startYearMonth = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`;
+      const endYearMonth = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}`;
+      
+      query = supabase
+        .from('master_report_monthly_aggregates')
+        .select('*')
+        .eq('report_id', reportId)
+        .eq('group_by_dimension_id', groupByDimensionId)
+        .gte('year_month', startYearMonth)
+        .lte('year_month', endYearMonth);
+    } else {
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+      
+      query = supabase
+        .from('master_report_daily_aggregates')
+        .select('*')
+        .eq('report_id', reportId)
+        .eq('group_by_dimension_id', groupByDimensionId)
+        .gte('date', startDateStr)
+        .lte('date', endDateStr);
+    }
+    
+    // Filter by selected values if provided
+    if (selectedValues && typeof selectedValues === 'string') {
+      const values = selectedValues.split(',').map(v => v.trim());
+      query = query.in('group_by_value', values);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error('[API-AGGREGATES] Error fetching aggregates:', error);
+      return res.status(500).json({
+        success: false,
+        error: error.message,
+        data: []
+      });
+    }
+    
+    // Group by group_by_value and sum metrics
+    const grouped: Record<string, {
+      cost: number;
+      revenue: number;
+      clicks: number;
+      impressions: number;
+      conversions: number;
+      bookings: number;
+    }> = {};
+    
+    for (const row of data || []) {
+      const groupValue = row.group_by_value;
+      if (!grouped[groupValue]) {
+        grouped[groupValue] = {
+          cost: 0,
+          revenue: 0,
+          clicks: 0,
+          impressions: 0,
+          conversions: 0,
+          bookings: 0,
+        };
+      }
+      
+      grouped[groupValue].cost += parseFloat(row.cost || '0') || 0;
+      grouped[groupValue].revenue += parseFloat(row.revenue || '0') || 0;
+      grouped[groupValue].clicks += parseFloat(row.clicks || '0') || 0;
+      grouped[groupValue].impressions += parseFloat(row.impressions || '0') || 0;
+      grouped[groupValue].conversions += parseFloat(row.conversions || '0') || 0;
+      grouped[groupValue].bookings += parseFloat(row.bookings || '0') || 0;
+    }
+    
+    // Parse selected metrics
+    const metrics = selectedMetrics && typeof selectedMetrics === 'string'
+      ? selectedMetrics.split(',').map(m => m.trim())
+      : ['Cost', 'Revenue', 'ROAS', 'Conversions'];
+    
+    // Convert to response format
+    const result = Object.entries(grouped).map(([groupValue, base]) => {
+      const rowData: Record<string, any> = {
+        groupValue,
+      };
+      
+      // Add base metrics
+      if (metrics.includes('Cost')) rowData.Cost = base.cost;
+      if (metrics.includes('Revenue')) rowData.Revenue = base.revenue;
+      if (metrics.includes('Clicks')) rowData.Clicks = base.clicks;
+      if (metrics.includes('Impressions')) rowData.Impressions = base.impressions;
+      if (metrics.includes('Conversions')) rowData.Conversions = base.conversions;
+      
+      // Calculate derived metrics
+      if (metrics.includes('ROAS')) {
+        rowData.ROAS = base.cost > 0 ? base.revenue / base.cost : 0;
+      }
+      if (metrics.includes('CPC')) {
+        rowData.CPC = base.clicks > 0 ? base.cost / base.clicks : 0;
+      }
+      if (metrics.includes('CTR')) {
+        rowData.CTR = base.impressions > 0 ? (base.clicks / base.impressions) * 100 : 0;
+      }
+      if (metrics.includes('Conversion Rate')) {
+        rowData['Conversion Rate'] = base.clicks > 0 ? (base.conversions / base.clicks) * 100 : 0;
+      }
+      
+      return rowData;
+    });
+    
+    // Sort by first metric descending
+    if (result.length > 0 && metrics.length > 0) {
+      const firstMetric = metrics[0];
+      result.sort((a, b) => (b[firstMetric] || 0) - (a[firstMetric] || 0));
+    }
+    
+    return res.status(200).json({
+      success: true,
+      count: result.length,
+      dateTab,
+      data: result
+    });
+    
+  } catch (error) {
+    console.error('[API-AGGREGATES] Fatal error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({
+      success: false,
+      error: errorMessage,
+      data: []
+    });
+  }
+});
+
 // Serve static files from dist directory (for production)
 if (process.env.NODE_ENV === 'production') {
   const distPath = join(__dirname, 'dist');

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -9,17 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCachedSourceData } from "@/hooks/dataSources/useCachedSourceData";
-import {
-  startOfMonth,
-  endOfMonth,
-  subMonths,
-  startOfYear,
-  endOfDay,
-  isWithinInterval,
-  parseISO,
-  format,
-} from "date-fns";
+import { useMasterReportAggregates } from "@/hooks/useMasterReportAggregates";
 import type { ChannelConfig } from "./MasterReportSettingsModal";
 
 interface MasterReportTableProps {
@@ -42,40 +32,6 @@ const DATE_TAB_LABELS: Record<DateTab, string> = {
   ytd: "Year to Date",
 };
 
-function getDateRange(tab: DateTab): { start: Date; end: Date } {
-  const now = new Date();
-  switch (tab) {
-    case "this_month":
-      return { start: startOfMonth(now), end: endOfDay(now) };
-    case "last_month":
-      const lastMonth = subMonths(now, 1);
-      return { start: startOfMonth(lastMonth), end: endOfMonth(lastMonth) };
-    case "ytd":
-      return { start: startOfYear(now), end: endOfDay(now) };
-  }
-}
-
-function parseDate(dateValue: any): Date | null {
-  if (!dateValue) return null;
-  if (dateValue instanceof Date) return dateValue;
-  if (typeof dateValue === "string") {
-    // Try ISO format first
-    if (dateValue.match(/^\d{4}-\d{2}-\d{2}/)) {
-      try {
-        return parseISO(dateValue);
-      } catch {
-        return null;
-      }
-    }
-    // Try other formats
-    try {
-      return new Date(dateValue);
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
 
 function formatMetricValue(metricName: string, value: number): string {
   if (value === 0 || isNaN(value)) return "-";
@@ -112,184 +68,13 @@ export function MasterReportTable({
 }: MasterReportTableProps) {
   const [activeTab, setActiveTab] = useState<DateTab>("this_month");
 
-  // Use cached dimension_data for instant loading
-  const { data: cachedData, isLoading } = useCachedSourceData(reportId, {
+  // Use pre-aggregated data for instant loading
+  const { data: aggregatedData = [], isLoading } = useMasterReportAggregates({
+    reportId,
+    config,
+    dateTab: activeTab,
     enabled: !!reportId,
   });
-
-  // Transform cached data to expected format
-  const rawRows: any[] = useMemo(() => {
-    if (!cachedData?.rows) return [];
-    return cachedData.rows.map(row => {
-      const dimensionVals = row.dimension_values || {};
-      return {
-        ...dimensionVals,
-        dimension_values: dimensionVals,
-        id: row.id,
-        row_number: row.row_number,
-        data_source_id: row.data_source_id,
-      };
-    });
-  }, [cachedData]);
-
-  // Aggregate data based on config and active tab
-  const aggregatedData = useMemo(() => {
-    if (rawRows.length === 0) return [];
-
-    const dateRange = getDateRange(activeTab);
-    const { groupByDimensionId, selectedValues, selectedMetrics } = config;
-
-    // Filter rows by date range
-    const filteredRows = rawRows.filter((row) => {
-      const rowData = row.dimension_values || row;
-      const dateValue =
-        rowData.Date || rowData.date || rowData.Day || rowData.day;
-      const parsedDate = parseDate(dateValue);
-      if (!parsedDate) return false;
-
-      return isWithinInterval(parsedDate, {
-        start: dateRange.start,
-        end: dateRange.end,
-      });
-    });
-
-    // If no grouping, return totals
-    if (!groupByDimensionId) {
-      const totals: Record<string, number> = {};
-      selectedMetrics.forEach((metric) => {
-        totals[metric] = 0;
-      });
-
-      filteredRows.forEach((row) => {
-        const rowData = row.dimension_values || row;
-        selectedMetrics.forEach((metric) => {
-          const value = parseFloat(rowData[metric] || rowData[metric.toLowerCase()] || 0);
-          if (!isNaN(value)) {
-            totals[metric] += value;
-          }
-        });
-      });
-
-      // Calculate derived metrics
-      if (selectedMetrics.includes("ROAS") && totals.Revenue && totals.Cost) {
-        totals.ROAS = totals.Cost > 0 ? totals.Revenue / totals.Cost : 0;
-      }
-      if (selectedMetrics.includes("CPC") && totals.Clicks && totals.Cost) {
-        totals.CPC = totals.Clicks > 0 ? totals.Cost / totals.Clicks : 0;
-      }
-      if (selectedMetrics.includes("CTR") && totals.Impressions && totals.Clicks) {
-        totals.CTR = totals.Impressions > 0 ? (totals.Clicks / totals.Impressions) * 100 : 0;
-      }
-      if (selectedMetrics.includes("Conversion Rate") && totals.Clicks && totals.Conversions) {
-        totals["Conversion Rate"] = totals.Clicks > 0 ? (totals.Conversions / totals.Clicks) * 100 : 0;
-      }
-
-      return [{ groupValue: "Total", metrics: totals }];
-    }
-
-    // Group by dimension
-    const groups: Record<string, Record<string, number>> = {};
-
-    filteredRows.forEach((row) => {
-      const rowData = row.dimension_values || row;
-
-      // Get group value
-      let groupValue =
-        rowData[groupByDimensionId] ||
-        rowData[config.groupByDimensionName || ""] ||
-        "Unknown";
-
-      // Skip if not in selected values (when values are selected)
-      if (selectedValues.length > 0 && !selectedValues.includes(groupValue)) {
-        return;
-      }
-
-      if (!groups[groupValue]) {
-        groups[groupValue] = {};
-        selectedMetrics.forEach((metric) => {
-          groups[groupValue][metric] = 0;
-        });
-        // Also track base metrics for calculations
-        groups[groupValue]["_cost"] = 0;
-        groups[groupValue]["_revenue"] = 0;
-        groups[groupValue]["_clicks"] = 0;
-        groups[groupValue]["_impressions"] = 0;
-        groups[groupValue]["_conversions"] = 0;
-      }
-
-      // Sum base metrics
-      const cost = parseFloat(rowData.Cost || rowData.cost || 0);
-      const revenue = parseFloat(rowData.Revenue || rowData.revenue || 0);
-      const clicks = parseFloat(rowData.Clicks || rowData.clicks || 0);
-      const impressions = parseFloat(rowData.Impressions || rowData.impressions || 0);
-      const conversions = parseFloat(rowData.Conversions || rowData.conversions || 0);
-
-      if (!isNaN(cost)) groups[groupValue]["_cost"] += cost;
-      if (!isNaN(revenue)) groups[groupValue]["_revenue"] += revenue;
-      if (!isNaN(clicks)) groups[groupValue]["_clicks"] += clicks;
-      if (!isNaN(impressions)) groups[groupValue]["_impressions"] += impressions;
-      if (!isNaN(conversions)) groups[groupValue]["_conversions"] += conversions;
-    });
-
-    // Calculate final metrics including derived ones
-    const result: AggregatedRow[] = Object.entries(groups).map(
-      ([groupValue, baseMetrics]) => {
-        const metrics: Record<string, number> = {};
-
-        selectedMetrics.forEach((metric) => {
-          switch (metric) {
-            case "Cost":
-              metrics[metric] = baseMetrics["_cost"];
-              break;
-            case "Revenue":
-              metrics[metric] = baseMetrics["_revenue"];
-              break;
-            case "Clicks":
-              metrics[metric] = baseMetrics["_clicks"];
-              break;
-            case "Impressions":
-              metrics[metric] = baseMetrics["_impressions"];
-              break;
-            case "Conversions":
-              metrics[metric] = baseMetrics["_conversions"];
-              break;
-            case "ROAS":
-              metrics[metric] =
-                baseMetrics["_cost"] > 0
-                  ? baseMetrics["_revenue"] / baseMetrics["_cost"]
-                  : 0;
-              break;
-            case "CPC":
-              metrics[metric] =
-                baseMetrics["_clicks"] > 0
-                  ? baseMetrics["_cost"] / baseMetrics["_clicks"]
-                  : 0;
-              break;
-            case "CTR":
-              metrics[metric] =
-                baseMetrics["_impressions"] > 0
-                  ? (baseMetrics["_clicks"] / baseMetrics["_impressions"]) * 100
-                  : 0;
-              break;
-            case "Conversion Rate":
-              metrics[metric] =
-                baseMetrics["_clicks"] > 0
-                  ? (baseMetrics["_conversions"] / baseMetrics["_clicks"]) * 100
-                  : 0;
-              break;
-          }
-        });
-
-        return { groupValue, metrics };
-      }
-    );
-
-    // Sort by first metric descending
-    const firstMetric = selectedMetrics[0];
-    result.sort((a, b) => (b.metrics[firstMetric] || 0) - (a.metrics[firstMetric] || 0));
-
-    return result;
-  }, [rawRows, activeTab, config]);
 
   if (isLoading) {
     return (
