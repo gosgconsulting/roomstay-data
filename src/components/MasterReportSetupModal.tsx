@@ -19,9 +19,10 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2 } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Sparkles, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { extractUniqueDimensionValues } from "@/lib/filters/extractDimensionValues";
+import { format } from "date-fns";
 
 // Helper function to fetch dimension data from database (same as AddAICardModal)
 async function fetchDimensionDataFromDB(reportId: string): Promise<any[]> {
@@ -91,24 +92,36 @@ export interface MasterReportConfig {
   selectedMetrics: string[];
 }
 
+export interface MasterReportGlobalConfig {
+  sinceDate: string;
+}
+
 interface MasterReportSetupModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   reports: Report[];
   accountId?: string;
   currentConfigs: Record<string, MasterReportConfig>;
-  onSave: (configs: Record<string, MasterReportConfig>) => void;
+  globalConfig?: MasterReportGlobalConfig;
+  onSave: (configs: Record<string, MasterReportConfig>, globalConfig: MasterReportGlobalConfig) => void;
 }
 
 const AVAILABLE_METRICS = [
+  "Impressions",
+  "Clicks",
+  "CTR",
   "Cost",
+  "CPC",
+  "Conversions",
+  "Conversion Rate",
   "Revenue",
   "ROAS",
-  "Conversions",
-  "Clicks",
-  "Impressions",
-  "CTR",
-  "CPC",
+];
+
+const STEPS = [
+  { id: 1, title: "Dimensions & Values", description: "Select group by dimension and filter values" },
+  { id: 2, title: "Metrics", description: "Choose which metrics to display" },
+  { id: 3, title: "Date Period", description: "Set the data period for analysis" },
 ];
 
 export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
@@ -117,22 +130,31 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
   reports,
   accountId,
   currentConfigs,
+  globalConfig: initialGlobalConfig,
   onSave,
 }) => {
+  const [currentStep, setCurrentStep] = useState(1);
   const [configs, setConfigs] = useState<Record<string, MasterReportConfig>>({});
+  const [globalConfig, setGlobalConfig] = useState<MasterReportGlobalConfig>({
+    sinceDate: initialGlobalConfig?.sinceDate || new Date().getFullYear() + "-01-01",
+  });
   const [dimensionsByReport, setDimensionsByReport] = useState<Record<string, Dimension[]>>({});
   const [valuesByReport, setValuesByReport] = useState<Record<string, string[]>>({});
   const [loadingDimensions, setLoadingDimensions] = useState<Record<string, boolean>>({});
   const [loadingValues, setLoadingValues] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [activeReportTab, setActiveReportTab] = useState<string | null>(null);
+  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(["Cost", "Revenue", "ROAS", "Conversions"]);
 
   // Initialize configs when modal opens
   useEffect(() => {
     if (open && reports.length > 0) {
       const initialConfigs: Record<string, MasterReportConfig> = {};
+      let commonMetrics: string[] | null = null;
+      
       reports.forEach((report) => {
-        initialConfigs[report.id] = currentConfigs[report.id] || {
+        const existing = currentConfigs[report.id];
+        initialConfigs[report.id] = existing || {
           reportId: report.id,
           reportName: report.name,
           groupByDimensionId: null,
@@ -140,8 +162,27 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
           selectedValues: [],
           selectedMetrics: ["Cost", "Revenue", "ROAS", "Conversions"],
         };
+        
+        // Get common metrics from existing configs
+        if (existing?.selectedMetrics?.length) {
+          if (commonMetrics === null) {
+            commonMetrics = [...existing.selectedMetrics];
+          }
+        }
       });
+      
       setConfigs(initialConfigs);
+      if (commonMetrics) {
+        setSelectedMetrics(commonMetrics);
+      }
+      
+      // Set global config
+      if (initialGlobalConfig) {
+        setGlobalConfig(initialGlobalConfig);
+      }
+      
+      // Reset to step 1
+      setCurrentStep(1);
       
       // Set first report as active tab
       setActiveReportTab(reports[0].id);
@@ -159,6 +200,7 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
     } else if (!open) {
       // Reset active tab when modal closes
       setActiveReportTab(null);
+      setCurrentStep(1);
     }
   }, [open, reports]);
 
@@ -295,6 +337,26 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
     }));
   };
 
+  const handleMetricToggle = (metric: string) => {
+    setSelectedMetrics((prev) => 
+      prev.includes(metric)
+        ? prev.filter((m) => m !== metric)
+        : [...prev, metric]
+    );
+  };
+
+  const handleNext = () => {
+    if (currentStep < 3) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const handleBack = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -305,8 +367,17 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
         return;
       }
 
-      // Save each config to the database
+      // Apply selected metrics to all configs
+      const finalConfigs: Record<string, MasterReportConfig> = {};
       for (const [reportId, config] of Object.entries(configs)) {
+        finalConfigs[reportId] = {
+          ...config,
+          selectedMetrics: selectedMetrics,
+        };
+      }
+
+      // Save each config to the database
+      for (const [reportId, config] of Object.entries(finalConfigs)) {
         // Check if config exists - handle null account_id correctly
         let existingQuery = supabase
           .from('master_report_configs')
@@ -347,7 +418,7 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
       }
 
       console.log('[MasterReportSetup] Configs saved to database');
-      onSave(configs);
+      onSave(finalConfigs, globalConfig);
       onOpenChange(false);
     } catch (error) {
       console.error('[MasterReportSetup] Error saving configs:', error);
@@ -358,6 +429,7 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
 
   const handleClose = () => {
     setActiveReportTab(null);
+    setCurrentStep(1);
     onOpenChange(false);
   };
 
@@ -367,155 +439,335 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
   const isLoadingDims = activeReportTab ? loadingDimensions[activeReportTab] : false;
   const isLoadingVals = activeReportTab ? loadingValues[activeReportTab] : false;
 
+  // Get configured reports for summary
+  const configuredReports = reports.filter(
+    (r) => configs[r.id]?.groupByDimensionId && configs[r.id]?.selectedValues.length > 0
+  );
+
+  const renderStep1 = () => (
+    <div className="flex-1 flex gap-4 min-h-0">
+      {/* Left: Report tabs */}
+      <div className="w-48 border-r pr-4">
+        <ScrollArea className="h-full">
+          <div className="space-y-1">
+            {reports.map((report) => {
+              const config = configs[report.id];
+              const hasGrouping = config?.groupByDimensionId && config.groupByDimensionId !== "none";
+              return (
+                <button
+                  key={report.id}
+                  className={cn(
+                    "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
+                    activeReportTab === report.id
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted"
+                  )}
+                  onClick={() => setActiveReportTab(report.id)}
+                >
+                  <span className="truncate">{report.name}</span>
+                  {hasGrouping && (
+                    <span className="text-xs opacity-70">✓</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      </div>
+
+      {/* Right: Configuration for active report */}
+      <div className="flex-1 flex flex-col gap-4 min-h-0">
+        {activeReportTab && activeConfig ? (
+          <>
+            {/* Group By Dimension */}
+            <div className="space-y-2">
+              <Label>Group By Dimension</Label>
+              {isLoadingDims ? (
+                <Skeleton className="h-10 w-full" />
+              ) : (
+                <Select
+                  value={activeConfig.groupByDimensionId || "none"}
+                  onValueChange={(value) => handleDimensionChange(activeReportTab, value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select dimension..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No grouping</SelectItem>
+                    {activeDimensions.map((dim) => (
+                      <SelectItem key={dim.id} value={dim.id}>
+                        {dim.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            {/* Filter Values */}
+            {activeConfig.groupByDimensionId && activeConfig.groupByDimensionId !== "none" && (
+              <div className="space-y-2 flex-1 flex flex-col min-h-0">
+                <div className="flex items-center justify-between">
+                  <Label>Filter Values</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleSelectAllValues(activeReportTab)}
+                      disabled={isLoadingVals || activeValues.length === 0}
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleClearValues(activeReportTab)}
+                      disabled={isLoadingVals}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                </div>
+                {isLoadingVals ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading values...
+                  </div>
+                ) : activeValues.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    No values found for this dimension.
+                  </p>
+                ) : (
+                  <ScrollArea className="flex-1 border rounded-md p-2">
+                    <div className="space-y-2">
+                      {activeValues.map((value) => (
+                        <div key={value} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`${activeReportTab}-${value}`}
+                            checked={activeConfig.selectedValues.includes(value)}
+                            onCheckedChange={() => handleValueToggle(activeReportTab, value)}
+                          />
+                          <label
+                            htmlFor={`${activeReportTab}-${value}`}
+                            className="text-sm cursor-pointer flex-1"
+                          >
+                            {value}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+                {activeConfig.selectedValues.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {activeConfig.selectedValues.length} value(s) selected
+                  </p>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-muted-foreground">
+            Select a report to configure
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderStep2 = () => (
+    <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex items-center gap-2 mb-4">
+        <Sparkles className="h-5 w-5 text-primary" />
+        <h3 className="text-lg font-medium">Select Metrics</h3>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        Select the metrics to include in your master report.
+      </p>
+      <ScrollArea className="flex-1">
+        <div className="space-y-2">
+          {AVAILABLE_METRICS.map((metric) => {
+            const isSelected = selectedMetrics.includes(metric);
+            return (
+              <div
+                key={metric}
+                className={cn(
+                  "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                  isSelected
+                    ? "bg-primary/10 border-primary"
+                    : "hover:bg-muted border-border"
+                )}
+                onClick={() => handleMetricToggle(metric)}
+              >
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={() => handleMetricToggle(metric)}
+                />
+                <span className="font-medium">{metric}</span>
+              </div>
+            );
+          })}
+        </div>
+      </ScrollArea>
+      {selectedMetrics.length > 0 && (
+        <p className="text-sm text-muted-foreground mt-4">
+          {selectedMetrics.length} metric(s) selected
+        </p>
+      )}
+    </div>
+  );
+
+  const renderStep3 = () => {
+    const sinceDate = new Date(globalConfig.sinceDate);
+    const formattedDate = format(sinceDate, "MMMM d, yyyy");
+
+    return (
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex items-center gap-2 mb-4">
+          <Calendar className="h-5 w-5 text-primary" />
+          <h3 className="text-lg font-medium">Select Period</h3>
+        </div>
+
+        <div className="space-y-6">
+          {/* Data Period */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <Label className="font-medium">Data Period</Label>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Since</Label>
+              <input
+                type="date"
+                value={globalConfig.sinceDate}
+                onChange={(e) => setGlobalConfig({ ...globalConfig, sinceDate: e.target.value })}
+                className="w-64 px-3 py-2 border rounded-md bg-background"
+              />
+              <p className="text-sm text-muted-foreground">
+                Data will be analyzed from this date up to today.
+              </p>
+            </div>
+            <div className="text-sm text-primary font-medium">
+              Selected Period: {formattedDate} → Today
+            </div>
+          </div>
+
+          {/* Configuration Summary */}
+          <div className="border-t pt-6 space-y-3">
+            <h4 className="font-medium">Configuration Summary</h4>
+            <div className="space-y-2 text-sm">
+              <div>
+                <span className="text-muted-foreground">Reports: </span>
+                <span className="text-primary">
+                  {configuredReports.length > 0
+                    ? configuredReports.map((r) => r.name).join(", ")
+                    : reports.map((r) => r.name).join(", ")}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Metrics: </span>
+                <span className="text-primary">{selectedMetrics.join(", ")}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Set Up Master Report</DialogTitle>
-          <p className="text-sm text-muted-foreground">
-            Configure how each report is grouped in the master report view. Select a dimension to group by and filter the values you want to include.
-          </p>
+          <DialogTitle className="flex items-center gap-2">
+            {currentStep === 1 && "Set Up Master Report"}
+            {currentStep === 2 && (
+              <>
+                <Sparkles className="h-5 w-5" />
+                Select Metrics
+              </>
+            )}
+            {currentStep === 3 && (
+              <>
+                <Sparkles className="h-5 w-5" />
+                Select Period
+              </>
+            )}
+          </DialogTitle>
+          {currentStep === 1 && (
+            <p className="text-sm text-muted-foreground">
+              Configure how each report is grouped in the master report view. Select a dimension to group by and filter the values you want to include.
+            </p>
+          )}
         </DialogHeader>
 
-        <div className="flex-1 flex gap-4 min-h-0">
-          {/* Left: Report tabs */}
-          <div className="w-48 border-r pr-4">
-            <ScrollArea className="h-full">
-              <div className="space-y-1">
-                {reports.map((report) => {
-                  const config = configs[report.id];
-                  const hasGrouping = config?.groupByDimensionId && config.groupByDimensionId !== "none";
-                  return (
-                    <button
-                      key={report.id}
-                      className={cn(
-                        "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
-                        activeReportTab === report.id
-                          ? "bg-primary text-primary-foreground"
-                          : "hover:bg-muted"
-                      )}
-                      onClick={() => setActiveReportTab(report.id)}
-                    >
-                      <span className="truncate">{report.name}</span>
-                      {hasGrouping && (
-                        <span className="text-xs opacity-70">✓</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </ScrollArea>
-          </div>
-
-          {/* Right: Configuration for active report */}
-          <div className="flex-1 flex flex-col gap-4 min-h-0">
-            {activeReportTab && activeConfig ? (
-              <>
-                {/* Group By Dimension */}
-                <div className="space-y-2">
-                  <Label>Group By Dimension</Label>
-                  {isLoadingDims ? (
-                    <Skeleton className="h-10 w-full" />
-                  ) : (
-                    <Select
-                      value={activeConfig.groupByDimensionId || "none"}
-                      onValueChange={(value) => handleDimensionChange(activeReportTab, value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select dimension..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No grouping</SelectItem>
-                        {activeDimensions.map((dim) => (
-                          <SelectItem key={dim.id} value={dim.id}>
-                            {dim.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-
-                {/* Filter Values */}
-                {activeConfig.groupByDimensionId && activeConfig.groupByDimensionId !== "none" && (
-                  <div className="space-y-2 flex-1 flex flex-col min-h-0">
-                    <div className="flex items-center justify-between">
-                      <Label>Filter Values</Label>
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSelectAllValues(activeReportTab)}
-                          disabled={isLoadingVals || activeValues.length === 0}
-                        >
-                          Select All
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleClearValues(activeReportTab)}
-                          disabled={isLoadingVals}
-                        >
-                          Clear
-                        </Button>
-                      </div>
-                    </div>
-                    {isLoadingVals ? (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Loading values...
-                      </div>
-                    ) : activeValues.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-2">
-                        No values found for this dimension.
-                      </p>
-                    ) : (
-                      <ScrollArea className="flex-1 border rounded-md p-2">
-                        <div className="space-y-2">
-                          {activeValues.map((value) => (
-                            <div key={value} className="flex items-center gap-2">
-                              <Checkbox
-                                id={`${activeReportTab}-${value}`}
-                                checked={activeConfig.selectedValues.includes(value)}
-                                onCheckedChange={() => handleValueToggle(activeReportTab, value)}
-                              />
-                              <label
-                                htmlFor={`${activeReportTab}-${value}`}
-                                className="text-sm cursor-pointer flex-1"
-                              >
-                                {value}
-                              </label>
-                            </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    )}
-                    {activeConfig.selectedValues.length > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        {activeConfig.selectedValues.length} value(s) selected
-                      </p>
-                    )}
-                  </div>
+        {/* Step indicator */}
+        <div className="flex items-center gap-2 pb-4 border-b">
+          {STEPS.map((step, idx) => (
+            <React.Fragment key={step.id}>
+              <div
+                className={cn(
+                  "flex items-center gap-2 text-sm",
+                  currentStep === step.id
+                    ? "text-primary font-medium"
+                    : currentStep > step.id
+                    ? "text-muted-foreground"
+                    : "text-muted-foreground/50"
                 )}
-              </>
-            ) : (
-              <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                Select a report to configure
+              >
+                <div
+                  className={cn(
+                    "w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium",
+                    currentStep === step.id
+                      ? "bg-primary text-primary-foreground"
+                      : currentStep > step.id
+                      ? "bg-primary/20 text-primary"
+                      : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {currentStep > step.id ? "✓" : step.id}
+                </div>
+                <span className="hidden sm:inline">{step.title}</span>
               </div>
-            )}
-          </div>
+              {idx < STEPS.length - 1 && (
+                <div className="flex-1 h-px bg-border" />
+              )}
+            </React.Fragment>
+          ))}
         </div>
 
-        <DialogFooter className="pt-4 border-t">
-          <Button variant="outline" onClick={handleClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Save Configuration
-          </Button>
+        {/* Step content */}
+        <div className="flex-1 min-h-0 py-4">
+          {currentStep === 1 && renderStep1()}
+          {currentStep === 2 && renderStep2()}
+          {currentStep === 3 && renderStep3()}
+        </div>
+
+        <DialogFooter className="pt-4 border-t flex justify-between">
+          <div>
+            {currentStep > 1 && (
+              <Button variant="outline" onClick={handleBack}>
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {currentStep < 3 ? (
+              <Button onClick={handleNext}>
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            ) : (
+              <Button onClick={handleSave} disabled={isSaving}>
+                {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                <Sparkles className="h-4 w-4 mr-2" />
+                Save Configuration
+              </Button>
+            )}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

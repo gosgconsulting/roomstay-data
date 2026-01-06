@@ -8,6 +8,7 @@ import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import {
   MasterReportSetupModal,
   type MasterReportConfig,
+  type MasterReportGlobalConfig,
 } from "@/components/MasterReportSetupModal";
 import type { ChannelConfig } from "@/components/MasterReportSettingsModal";
 
@@ -62,6 +63,9 @@ export default function AllReports() {
   // Master Report Setup Modal state
   const [showMasterSetupModal, setShowMasterSetupModal] = useState(false);
   const [masterConfigs, setMasterConfigs] = useState<Record<string, MasterReportConfig>>({});
+  const [masterGlobalConfig, setMasterGlobalConfig] = useState<MasterReportGlobalConfig>({
+    sinceDate: new Date().getFullYear() + "-01-01",
+  });
 
   // Channel configurations (loaded from DB)
   const [channelConfigs, setChannelConfigs] = useState<
@@ -322,9 +326,13 @@ export default function AllReports() {
     setShowMasterSetupModal(true);
   };
 
-  const handleSaveMasterConfigs = (configs: Record<string, MasterReportConfig>) => {
-    // Update both masterConfigs and channelConfigs
+  const handleSaveMasterConfigs = (
+    configs: Record<string, MasterReportConfig>,
+    globalConfig: MasterReportGlobalConfig
+  ) => {
+    // Update masterConfigs and globalConfig
     setMasterConfigs(configs);
+    setMasterGlobalConfig(globalConfig);
     
     const newChannelConfigs: Record<string, ChannelConfig> = {};
     Object.entries(configs).forEach(([reportId, config]) => {
@@ -531,6 +539,7 @@ export default function AllReports() {
         reports={reports.map(r => ({ id: r.id, name: r.name }))}
         accountId={accountId}
         currentConfigs={masterConfigs}
+        globalConfig={masterGlobalConfig}
         onSave={handleSaveMasterConfigs}
       />
 
