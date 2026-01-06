@@ -1420,20 +1420,8 @@ const AISummaryPage = () => {
                         Add New Report
                       </span>
                     </SelectItem>
-                  </SelectContent>
+                </SelectContent>
                 </Select>
-                {/* Settings icon for All Reports - only show when All reports is selected */}
-                {!selectedCardId && (
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8"
-                    onClick={() => setIsMasterReportSetupOpen(true)}
-                    title="Set up Master Report"
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                )}
               </div>
 
             </div>
@@ -1476,6 +1464,11 @@ const AISummaryPage = () => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-popover">
+                      <DropdownMenuItem onClick={() => setIsMasterReportSetupOpen(true)}>
+                        <Settings className="h-4 w-4 mr-2" />
+                        Edit Master Report
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => setIsAddCardModalOpen(true)}>
                         <Plus className="h-4 w-4 mr-2" />
                         Add New Report
