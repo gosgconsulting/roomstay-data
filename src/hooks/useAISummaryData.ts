@@ -1,11 +1,12 @@
 /**
  * React Query hook for caching AI Summary pivot and budget data
  * This ensures data persists across tab switches and reconnections
+ * 
+ * OPTIMIZED: Uses cached dimension_data from Supabase instead of fetching from Google Sheets/CSV
  */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { getUser } from "@/lib/auth";
 import type { CachedPivotData, DateTab } from "@/components/AISummaryPivotTable";
 import {
@@ -50,7 +51,59 @@ export const aiSummaryKeys = {
 };
 
 /**
+ * Fetch dimension_data from Supabase (cached/synced data) - INSTANT loading
+ */
+async function fetchDimensionDataForReport(reportId: string): Promise<any[]> {
+  const allRows: any[] = [];
+  const batchSize = 1000;
+  let offset = 0;
+  let hasMore = true;
+
+  console.log('[AI-SUMMARY] Fetching cached dimension_data for report:', reportId);
+  const startTime = performance.now();
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('dimension_data')
+      .select('id, dimension_values, data_source_id, row_number')
+      .eq('report_id', reportId)
+      .order('row_number', { ascending: true })
+      .range(offset, offset + batchSize - 1);
+
+    if (error) {
+      console.error('[AI-SUMMARY] Error fetching dimension_data batch:', error);
+      throw error;
+    }
+
+    if (data && data.length > 0) {
+      allRows.push(...data);
+      offset += batchSize;
+      hasMore = data.length === batchSize;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  const duration = Math.round(performance.now() - startTime);
+  console.log('[AI-SUMMARY] Dimension data fetch completed:', {
+    reportId,
+    rowCount: allRows.length,
+    duration: `${duration}ms`
+  });
+
+  // Transform to expected format (dimension_values is already the row data)
+  return allRows.map(row => ({
+    id: row.id,
+    row_number: row.row_number,
+    data_source_id: row.data_source_id,
+    ...row.dimension_values, // Spread dimension values as top-level properties
+    dimension_values: row.dimension_values, // Also keep original for compatibility
+  }));
+}
+
+/**
  * Fetch raw source data for all reports in an AI Summary card
+ * OPTIMIZED: Uses cached dimension_data from Supabase for instant loading
  */
 async function fetchRawSourceData(
   reportIds: string[],
@@ -65,6 +118,9 @@ async function fetchRawSourceData(
     throw new Error("User not authenticated");
   }
 
+  console.log('[AI-SUMMARY] Loading data for', reportIds.length, 'reports using cached dimension_data');
+  const startTime = performance.now();
+
   const { data: reportsData } = await supabase
     .from("reports")
     .select("id, name")
@@ -73,61 +129,37 @@ async function fetchRawSourceData(
   const reportsList = reportsData || [];
   const rawData: RawSourceData = {};
 
-  for (const reportId of reportIds) {
+  // Fetch all reports in parallel for faster loading
+  const fetchPromises = reportIds.map(async (reportId) => {
     const report = reportsList.find((r: Report) => r.id === reportId);
     if (!report) {
       console.warn(`[AI-SUMMARY] Report ${reportId} not found, skipping`);
-      continue;
-    }
-
-    const { data: dsData } = await supabase
-      .from("data_sources")
-      .select("*")
-      .eq("report_id", reportId)
-      .limit(1)
-      .maybeSingle();
-
-    if (!dsData) {
-      console.warn(`[AI-SUMMARY] No data source found for report ${reportId}, skipping`);
-      continue;
-    }
-
-    // Validate data source before fetching
-    if (dsData.source_type === 'google_sheets') {
-      if (!dsData.tab_name || typeof dsData.tab_name !== 'string' || dsData.tab_name.trim() === '') {
-        console.warn(`[AI-SUMMARY] Skipping report ${reportId} (${report.name}): missing or invalid tab_name`);
-        continue;
-      }
-      if (!dsData.spreadsheet_id && !dsData.google_sheets_url) {
-        console.warn(`[AI-SUMMARY] Skipping report ${reportId} (${report.name}): missing spreadsheet_id and google_sheets_url`);
-        continue;
-      }
-    } else if (dsData.source_type === 'csv_url') {
-      if (!dsData.csv_url || typeof dsData.csv_url !== 'string' || dsData.csv_url.trim() === '') {
-        console.warn(`[AI-SUMMARY] Skipping report ${reportId} (${report.name}): missing or invalid csv_url`);
-        continue;
-      }
+      return;
     }
 
     try {
-      const sourceData = await fetchSourceData(
-        dsData as DataSource,
-        user.id,
-        accountId
-      );
-
-      if (sourceData?.transformedRows) {
+      const rows = await fetchDimensionDataForReport(reportId);
+      
+      if (rows.length > 0) {
         rawData[reportId] = {
           reportName: report.name,
-          rows: sourceData.transformedRows,
+          rows: rows,
         };
+      } else {
+        console.warn(`[AI-SUMMARY] No cached data for report ${reportId} (${report.name})`);
       }
     } catch (error) {
-      console.error(`[AI-SUMMARY] Failed to load data for report ${reportId} (${report.name}):`, error);
-      // Continue with other reports instead of failing completely
-      // This allows partial data to be displayed
+      console.error(`[AI-SUMMARY] Failed to load cached data for report ${reportId} (${report.name}):`, error);
     }
-  }
+  });
+
+  await Promise.all(fetchPromises);
+
+  const duration = Math.round(performance.now() - startTime);
+  console.log('[AI-SUMMARY] All reports loaded:', {
+    reportCount: Object.keys(rawData).length,
+    totalDuration: `${duration}ms`
+  });
 
   return rawData;
 }

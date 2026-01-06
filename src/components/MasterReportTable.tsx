@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -9,9 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { supabase } from "@/integrations/supabase/client";
-import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
-import { getUser } from "@/lib/auth";
+import { useCachedSourceData } from "@/hooks/dataSources/useCachedSourceData";
 import {
   startOfMonth,
   endOfMonth,
@@ -113,58 +111,26 @@ export function MasterReportTable({
   accountId,
 }: MasterReportTableProps) {
   const [activeTab, setActiveTab] = useState<DateTab>("this_month");
-  const [isLoading, setIsLoading] = useState(true);
-  const [rawRows, setRawRows] = useState<any[]>([]);
-  const [dimensionIdMap, setDimensionIdMap] = useState<Record<string, string>>(
-    {}
-  );
 
-  // Fetch source data
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      try {
-        const { user } = await getUser();
-        if (!user) {
-          console.error("User not authenticated");
-          setIsLoading(false);
-          return;
-        }
+  // Use cached dimension_data for instant loading
+  const { data: cachedData, isLoading } = useCachedSourceData(reportId, {
+    enabled: !!reportId,
+  });
 
-        // Get data source
-        const { data: dsData } = await supabase
-          .from("data_sources")
-          .select("*")
-          .eq("report_id", reportId)
-          .limit(1)
-          .maybeSingle();
-
-        if (!dsData) {
-          console.warn(`No data source found for report ${reportId}`);
-          setRawRows([]);
-          setIsLoading(false);
-          return;
-        }
-
-        // Fetch source data
-        const sourceData = await fetchSourceData(
-          dsData as any,
-          user.id,
-          accountId
-        );
-
-        setRawRows(sourceData.transformedRows || []);
-        setDimensionIdMap(sourceData.dimensionIdMap || {});
-      } catch (error) {
-        console.error("Error loading data for report:", reportId, error);
-        setRawRows([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
-  }, [reportId, accountId]);
+  // Transform cached data to expected format
+  const rawRows: any[] = useMemo(() => {
+    if (!cachedData?.rows) return [];
+    return cachedData.rows.map(row => {
+      const dimensionVals = row.dimension_values || {};
+      return {
+        ...dimensionVals,
+        dimension_values: dimensionVals,
+        id: row.id,
+        row_number: row.row_number,
+        data_source_id: row.data_source_id,
+      };
+    });
+  }, [cachedData]);
 
   // Aggregate data based on config and active tab
   const aggregatedData = useMemo(() => {
