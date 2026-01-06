@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useTransition } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,9 +45,10 @@ export function KPIChart({
   const user = userData?.user || null;
   const [chartData, setChartData] = useState<any[]>([]);
   const [selectedMetric, setSelectedMetric] = useState<string>(initialMetric || "Revenue");
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [availableMetrics, setAvailableMetrics] = useState<string[]>([]);
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
+  const [isPending, startTransition] = useTransition();
 
   // console.log('[CHART-FIXED] Component render - reportId:', reportId, 'accountId:', accountId);
 
@@ -107,9 +108,11 @@ export function KPIChart({
 
   useEffect(() => {
     if (reportId && accountId && sourceData && dimensions.length > 0) {
-      loadChartData();
+      // Use startTransition to make chart loading non-blocking
+      startTransition(() => {
+        loadChartData();
+      });
     } else {
-      setIsLoading(false);
       onLoadingComplete?.();
     }
   }, [reportId, accountId, stableFilters, selectedMetric, sourceData, dimensions.length]);
@@ -532,7 +535,8 @@ export function KPIChart({
      }
    };
 
-  if (isLoading) {
+  // Show skeleton only on initial load when source data is loading, not on transitions
+  if (isLoadingSource) {
     return (
       <Card className="shadow-sm">
         <CardHeader className="flex flex-col items-end pb-2">
