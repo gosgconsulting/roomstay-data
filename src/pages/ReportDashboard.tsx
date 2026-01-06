@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { DataStudioDropdowns } from "@/components/DataStudioDropdowns";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Database, Grid3x3, GitCompare, Share2, Settings, Clock } from "lucide-react";
+import { ArrowLeft, Database, Grid3x3, GitCompare, Share2, Settings, Clock, RefreshCw } from "lucide-react";
 import { ShareModal } from "@/components/ShareModal";
 import { AddAICardModal } from "@/components/AddAICardModal";
 import { useQueryClient } from "@tanstack/react-query";
@@ -595,6 +595,18 @@ export default function ReportDashboard() {
                     </Button>
                   </>
                 )}
+
+                {/* Refresh button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 text-muted-foreground hover:text-foreground"
+                  onClick={refreshData}
+                  disabled={isDataLoading}
+                >
+                  <RefreshCw className={`h-4 w-4 ${isDataLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
 
                 {/* Share button */}
                 <Button
