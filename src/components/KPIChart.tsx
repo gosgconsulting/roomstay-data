@@ -69,9 +69,12 @@ export function KPIChart({
   }, [accountId, user?.id, reportId]);
 
   // Use cached source data hook - fetches from dimension_data table (instant loading)
+  // With placeholderData enabled, this will show previous data instantly while loading new
   const { 
     data: cachedData, 
-    isLoading: isLoadingSource 
+    isLoading: isLoadingSource,
+    isFetching: isFetchingSource,
+    isPlaceholderData
   } = useCachedSourceData(reportId, { 
     enabled: !!reportId 
   });
@@ -535,8 +538,11 @@ export function KPIChart({
      }
    };
 
-  // Show skeleton only on initial load when source data is loading, not on transitions
-  if (isLoadingSource) {
+  // Show skeleton only on initial load when no cached data is available
+  // When we have placeholder data, don't show skeleton
+  const showSkeleton = isLoadingSource && !cachedData && chartData.length === 0;
+  
+  if (showSkeleton) {
     return (
       <Card className="shadow-sm">
         <CardHeader className="flex flex-col items-end pb-2">

@@ -628,7 +628,8 @@ export const PerformanceTable = ({
                 "No data sources found. Please add a data source to this report."
               )}
             </div>
-          ) : isLoadingData ? (
+          ) : isLoadingData && filteredTableData.length === 0 ? (
+            // Only show skeleton when loading AND no data to display (not when background refreshing)
             <TableSkeleton />
           ) : (
             <TableBody
