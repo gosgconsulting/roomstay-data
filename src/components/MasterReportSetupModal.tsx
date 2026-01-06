@@ -417,6 +417,38 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
         }
       }
 
+      // Save global config to master_report_global_configs table
+      let globalExistingQuery = supabase
+        .from('master_report_global_configs')
+        .select('id')
+        .eq('user_id', user.id);
+
+      if (accountId) {
+        globalExistingQuery = globalExistingQuery.eq('account_id', accountId);
+      } else {
+        globalExistingQuery = globalExistingQuery.is('account_id', null);
+      }
+
+      const { data: existingGlobal } = await globalExistingQuery.maybeSingle();
+
+      const globalConfigData = {
+        user_id: user.id,
+        account_id: accountId || null,
+        since_date: globalConfig.sinceDate,
+        selected_metrics: selectedMetrics,
+      };
+
+      if (existingGlobal) {
+        await supabase
+          .from('master_report_global_configs')
+          .update(globalConfigData)
+          .eq('id', existingGlobal.id);
+      } else {
+        await supabase
+          .from('master_report_global_configs')
+          .insert(globalConfigData);
+      }
+
       console.log('[MasterReportSetup] Configs saved to database');
       onSave(finalConfigs, globalConfig);
       onOpenChange(false);

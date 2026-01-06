@@ -826,6 +826,44 @@ export type Database = {
           },
         ]
       }
+      master_report_global_configs: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          id: string
+          selected_metrics: string[]
+          since_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          id?: string
+          selected_metrics?: string[]
+          since_date?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          id?: string
+          selected_metrics?: string[]
+          since_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "master_report_global_configs_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       monthly_dimension_data: {
         Row: {
           aggregated_metrics: Json

@@ -136,6 +136,27 @@ export default function AllReports() {
         setMasterConfigs(newMasterConfigs);
         setChannelConfigs(prev => ({ ...prev, ...newChannelConfigs }));
       }
+
+      // Load global config
+      let globalQuery = supabase
+        .from('master_report_global_configs')
+        .select('*')
+        .eq('user_id', session?.user?.id);
+
+      if (accountId) {
+        globalQuery = globalQuery.eq('account_id', accountId);
+      } else {
+        globalQuery = globalQuery.is('account_id', null);
+      }
+
+      const { data: globalConfigData, error: globalError } = await globalQuery.maybeSingle();
+
+      if (!globalError && globalConfigData) {
+        console.log('[AllReports] Loaded global config from DB:', globalConfigData);
+        setMasterGlobalConfig({
+          sinceDate: globalConfigData.since_date,
+        });
+      }
     } catch (error) {
       console.error('[AllReports] Error loading configs:', error);
     }
