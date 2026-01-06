@@ -640,8 +640,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // State for Day/Week tabs in unified table (applies to all reports)
   const [unifiedTableViewTab, setUnifiedTableViewTab] = useState<"day" | "week">("day");
   
-  // State for chart period selector
-  const [chartPeriod, setChartPeriod] = useState<"30days" | "3months" | "6months">("3months");
+  // chartPeriod state removed - no longer needed
   
   // State for filter values (dimensionId -> selected values)
   const [filterValues, setFilterValues] = useState<Record<string, string[]>>({});
@@ -1074,95 +1073,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     return monthlyData;
   }, [cachedPivotData?.monthly_data, activeReportTab, selectedYear]);
 
-  // Prepare aggregated chart data based on selected period (Last 30 days, 3 months, 6 months)
-  const aggregatedChartData = useMemo(() => {
-    const now = new Date();
-    let rangeStart: Date;
-    let rangeEnd: Date = now;
-    let aggregationType: "days" | "weeks" | "months";
-
-    // Determine date range and aggregation type based on chartPeriod
-    if (chartPeriod === "30days") {
-      rangeStart = subDays(now, 30);
-      aggregationType = "days";
-    } else if (chartPeriod === "3months") {
-      rangeStart = subMonths(now, 3);
-      aggregationType = "weeks";
-    } else { // 6months
-      rangeStart = subMonths(now, 6);
-      aggregationType = "months";
-    }
-
-    // Get all rows from all reports, filtered by activeReportTab
-    const allRows: any[] = [];
-    Object.entries(rawSourceData).forEach(([reportId, reportData]) => {
-      if (reportData?.rows) {
-        if (activeReportTab === "overview" || reportId === activeReportTab) {
-          allRows.push(...reportData.rows);
-        }
-      }
-    });
-
-    const aggregatedData: { period: string; Cost: number; Revenue: number }[] = [];
-
-    if (aggregationType === "days") {
-      // Last 30 days: cluster every 3 days
-      const allDays = eachDayOfInterval({ start: rangeStart, end: rangeEnd });
-      for (let i = 0; i < allDays.length; i += 3) {
-        const clusterDays = allDays.slice(i, Math.min(i + 3, allDays.length));
-        if (clusterDays.length === 0) continue;
-        
-        const clusterStart = clusterDays[0];
-        const clusterEnd = clusterDays[clusterDays.length - 1];
-        const dateRange = { 
-          start: new Date(clusterStart.getFullYear(), clusterStart.getMonth(), clusterStart.getDate(), 0, 0, 0),
-          end: new Date(clusterEnd.getFullYear(), clusterEnd.getMonth(), clusterEnd.getDate(), 23, 59, 59)
-        };
-        
-        const metrics = aggregateMetrics(allRows, selectedMetrics, dateRange, undefined, mergedMetricMap);
-        aggregatedData.push({
-          period: clusterDays.length === 1 
-            ? format(clusterStart, 'MMM d')
-            : `${format(clusterStart, 'MMM d')} - ${format(clusterEnd, 'MMM d')}`,
-          Cost: metrics['Cost'] || 0,
-          Revenue: metrics['Revenue'] || 0,
-        });
-      }
-    } else if (aggregationType === "weeks") {
-      // Last 3 months: show by weeks
-      const weeks = eachWeekOfInterval({ start: rangeStart, end: rangeEnd }, { weekStartsOn: 1 });
-      weeks.forEach((weekStart) => {
-        const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
-        const dateRange = { start: weekStart, end: weekEnd > rangeEnd ? rangeEnd : weekEnd };
-        const metrics = aggregateMetrics(allRows, selectedMetrics, dateRange, undefined, mergedMetricMap);
-        aggregatedData.push({
-          period: `Week ${format(weekStart, 'MMM d')}`,
-          Cost: metrics['Cost'] || 0,
-          Revenue: metrics['Revenue'] || 0,
-        });
-      });
-    } else {
-      // Last 6 months: show by months
-      let current = startOfMonth(rangeStart);
-      while (current <= rangeEnd) {
-        const monthEnd = endOfMonth(current);
-        const dateRange = { 
-          start: current, 
-          end: monthEnd > rangeEnd ? rangeEnd : monthEnd 
-        };
-        const metrics = aggregateMetrics(allRows, selectedMetrics, dateRange, undefined, mergedMetricMap);
-        aggregatedData.push({
-          period: format(current, 'MMM yyyy'),
-          Cost: metrics['Cost'] || 0,
-          Revenue: metrics['Revenue'] || 0,
-        });
-        current = startOfMonth(subMonths(current, -1));
-      }
-    }
-
-    // Reverse to show latest period first
-    return aggregatedData.reverse();
-  }, [chartPeriod, rawSourceData, activeReportTab, selectedMetrics, mergedMetricMap]);
+  // aggregatedChartData removed - now using simple monthly chart inline
 
   // Prepare daily chart data for specific month selection (legacy - for backward compatibility)
   const dailyChartData = useMemo(() => {
@@ -1943,83 +1854,97 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         );
       })()}
 
-      {/* Chart with period selector - shown after KPI cards */}
+      {/* Simple Monthly Results Bar Chart */}
       {(() => {
-        // Use aggregated chart data based on chartPeriod selector
-        const chartData = aggregatedChartData;
-        const xAxisKey = "period";
+        // Build monthly data for the selected year
+        const monthlyChartData: { month: string; Revenue: number }[] = [];
         
-        if (chartData.length === 0) return null;
+        // Get all rows based on active report tab
+        const allRows: any[] = [];
+        if (activeReportTab === "overview") {
+          Object.values(rawSourceData).forEach((reportData) => {
+            if (reportData?.rows) {
+              allRows.push(...reportData.rows);
+            }
+          });
+        } else {
+          const reportData = rawSourceData[activeReportTab];
+          if (reportData?.rows) {
+            allRows.push(...reportData.rows);
+          }
+        }
+        
+        if (allRows.length === 0) return null;
+        
+        // Generate months for the selected year
+        const months = [
+          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+        ];
+        
+        months.forEach((monthName, monthIndex) => {
+          const monthStart = new Date(selectedYear, monthIndex, 1);
+          const monthEnd = endOfMonth(monthStart);
+          
+          // Only include months up to current date if it's the current year
+          const now = new Date();
+          if (selectedYear === now.getFullYear() && monthIndex > now.getMonth()) {
+            return;
+          }
+          
+          const dateRange = { start: monthStart, end: monthEnd };
+          const metrics = aggregateMetrics(allRows, ['Revenue'], dateRange, undefined, mergedMetricMap);
+          
+          monthlyChartData.push({
+            month: monthName,
+            Revenue: metrics.Revenue || 0,
+          });
+        });
+        
+        if (monthlyChartData.length === 0) return null;
 
         return (
           <div className="border rounded-lg overflow-hidden">
-            <div className="bg-primary/5 px-4 py-2 border-b flex items-center justify-between">
+            <div className="bg-primary/5 px-4 py-2 border-b">
               <h4 className="font-semibold text-sm">
-                Results{activeReportTab !== "overview" && (() => {
-                  const period = selectedDatePeriod || activeTab;
-                  const periodData = computeDataForTab(period as DateTab);
-                  const reportName = periodData.find(r => r.reportId === activeReportTab)?.reportName;
-                  return reportName ? ` - ${reportName}` : '';
-                })()}
+                Results {selectedYear}
               </h4>
-              <Select value={chartPeriod} onValueChange={(v) => setChartPeriod(v as "30days" | "3months" | "6months")}>
-                <SelectTrigger className="w-[160px] h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-border z-50">
-                  <SelectItem value="30days">Last 30 days</SelectItem>
-                  <SelectItem value="3months">Last 3 months</SelectItem>
-                  <SelectItem value="6months">Last 6 months</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
             <div className="p-4">
-              <ChartContainer config={{
-                Cost: {
-                  label: "Cost",
-                  color: "hsl(var(--destructive))",
-                },
-                Revenue: {
-                  label: "Revenue",
-                  color: "hsl(var(--primary))",
-                },
-              }} className="h-[300px] w-full">
-                <BarChart data={chartData} margin={{ top: 30, right: 10, left: 10, bottom: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={monthlyChartData} margin={{ top: 20, right: 10, left: 10, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis 
-                    dataKey={xAxisKey} 
+                    dataKey="month" 
                     tickLine={false} 
                     axisLine={false}
-                    tick={{ fontSize: 12 }}
+                    tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
                   />
                   <YAxis 
                     tickLine={false} 
                     axisLine={false}
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => formatNumber(value)}
+                    tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                    tickFormatter={(value) => {
+                      if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+                      if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
+                      return `$${value}`;
+                    }}
                   />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        formatter={(value, name) => {
-                          return [formatMetricValue(name as string, Number(value)), name];
-                        }}
-                      />
-                    }
+                  <Tooltip 
+                    formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--popover))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '6px',
+                    }}
                   />
-                  <Legend />
                   <Bar 
                     dataKey="Revenue" 
                     fill="hsl(var(--primary))" 
                     radius={[4, 4, 0, 0]}
                   />
-                  <Bar 
-                    dataKey="Cost" 
-                    fill="hsl(var(--destructive))" 
-                    radius={[4, 4, 0, 0]}
-                  />
                 </BarChart>
-              </ChartContainer>
+              </ResponsiveContainer>
             </div>
           </div>
         );
