@@ -122,37 +122,90 @@ serve(async (req) => {
     // Validate and construct the range
     const defaultRange = 'A:Z';
     const requestedRange = range || defaultRange;
-    
-    // Construct the range with tab name if provided
-    // IMPORTANT: Do NOT trim the tab name because Google Sheets tab titles can legally
-    // contain leading/trailing spaces, and trimming would make the range invalid.
-    let fullRange: string;
+
+    // If a tab name is provided, validate it exists and normalize it to the exact sheet title.
+    // NOTE: Many Google Sheets API errors show up as "Unable to parse range" when the sheet title
+    // doesn't match exactly OR when the range isn't properly URL-encoded.
+    let normalizedTabName: string | undefined;
     if (tabName !== undefined && tabName !== null) {
       if (typeof tabName !== 'string' || tabName.trim() === '') {
         console.error('[fetch-google-sheets] Invalid tabName:', tabName);
         return new Response(
           JSON.stringify({ error: 'Tab name must be a non-empty string if provided' }),
-          { 
+          {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 400 
+            status: 400,
           }
         );
       }
-      // Escape single quotes in tab name (double them)
-      const escapedTabName = tabName.replace(/'/g, "''");
-      fullRange = `'${escapedTabName}'!${requestedRange}`;
+
+      // Fetch sheet titles and normalize to an exact match when possible.
+      const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title&key=${apiKey}`;
+      const metaRes = await fetch(metaUrl);
+      if (metaRes.ok) {
+        const meta = await metaRes.json();
+        const titles: string[] = (meta.sheets || [])
+          .map((s: any) => s?.properties?.title)
+          .filter((t: any) => typeof t === 'string');
+
+        // Prefer exact match first, then trimmed match.
+        normalizedTabName =
+          titles.find((t) => t === tabName) ||
+          titles.find((t) => t.trim() === tabName.trim());
+
+        if (!normalizedTabName) {
+          console.error('[fetch-google-sheets] Tab not found in spreadsheet:', {
+            spreadsheetId,
+            requestedTabName: tabName,
+            availableTabs: titles,
+          });
+          return new Response(
+            JSON.stringify({
+              error: `Tab not found: "${tabName}"`,
+              availableTabs: titles,
+              status: 400,
+              requestParams: {
+                spreadsheetId,
+                tabName,
+                range: requestedRange,
+              },
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 400,
+            }
+          );
+        }
+      } else {
+        // If metadata fetch fails (permissions, etc.), fall back to using provided tabName.
+        normalizedTabName = tabName;
+      }
+    }
+
+    // Construct the A1 notation range.
+    // Only wrap the sheet name in single quotes when needed (spaces/special chars).
+    // Also escape quotes inside the name.
+    let fullRange: string;
+    if (normalizedTabName !== undefined) {
+      const escapedTabName = normalizedTabName.replace(/'/g, "''");
+      const needsQuotes = /[^A-Za-z0-9_]/.test(normalizedTabName);
+      const sheetPart = needsQuotes ? `'${escapedTabName}'` : escapedTabName;
+      fullRange = `${sheetPart}!${requestedRange}`;
     } else {
       fullRange = requestedRange;
     }
-    
+
     console.log(`[fetch-google-sheets] Fetching Google Sheets data:`, {
       spreadsheetId,
-      tabName: tabName || 'none',
+      tabName: normalizedTabName || tabName || 'none',
       range: requestedRange,
       fullRange,
     });
 
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(fullRange)}?key=${apiKey}`;
+    // IMPORTANT: encodeURIComponent does NOT encode apostrophes (') which breaks the Sheets API path parsing.
+    const encodedRange = encodeURIComponent(fullRange).replace(/'/g, '%27');
+
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodedRange}?key=${apiKey}`;
     
     console.log(`[fetch-google-sheets] Request URL: ${url.replace(apiKey, 'REDACTED')}`);
     console.log(`[fetch-google-sheets] Full range: ${fullRange}`);
