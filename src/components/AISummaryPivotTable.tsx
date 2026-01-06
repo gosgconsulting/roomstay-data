@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useTransition } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { LoadingTransition } from "@/components/ui/loading-transition";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -1672,125 +1673,113 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       : null;
 
   return (
-    <div className="w-full space-y-6 relative">
-      {/* Tab transition loading overlay */}
-      {isPending && (
-        <div className="absolute inset-0 bg-background/50 backdrop-blur-[1px] z-10 flex items-start justify-center pt-20 animate-fade-in">
-          <div className="flex items-center gap-2 bg-background/90 px-4 py-2 rounded-lg shadow-lg border border-border">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            <span className="text-sm text-muted-foreground">Loading...</span>
-          </div>
-        </div>
-      )}
-
-      <div className={`flex items-center justify-between gap-3 mb-4 transition-opacity duration-150 ${isPending ? 'opacity-70' : 'opacity-100'}`}>
-        {/* Report Tabs */}
-        <Tabs value={activeReportTab} onValueChange={(value) => handleReportTabChange(value as ReportTab)} className="w-auto">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            {reportTabsList.map((report) => (
-              <TabsTrigger key={report.id} value={report.id}>
-                {report.name}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-        
-        <div className="flex items-center gap-3">
-        {/* Filter Dropdowns - before Date dropdown */}
-        {activeFilterDimensions.map((dimId) => {
-          const dimName = filterDimensionNames[dimId] || dimId;
-          const values = filterDimensionValues[dimId] || [];
-          const selectedValues = filterValues[dimId] || [];
+    <LoadingTransition isPending={isPending} message="Loading...">
+      <div className="w-full space-y-6">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          {/* Report Tabs */}
+          <Tabs value={activeReportTab} onValueChange={(value) => handleReportTabChange(value as ReportTab)} className="w-auto">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              {reportTabsList.map((report) => (
+                <TabsTrigger key={report.id} value={report.id}>
+                  {report.name}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
           
-          return (
-            <Select
-              key={dimId}
-              value={selectedValues.length > 0 ? selectedValues[0] : "all"}
-              onValueChange={(value) => {
-                setFilterValues(prev => ({
-                  ...prev,
-                  [dimId]: value === "all" ? [] : [value],
-                }));
-              }}
+          <div className="flex items-center gap-3">
+          {/* Filter Dropdowns - before Date dropdown */}
+          {activeFilterDimensions.map((dimId) => {
+            const dimName = filterDimensionNames[dimId] || dimId;
+            const values = filterDimensionValues[dimId] || [];
+            const selectedValues = filterValues[dimId] || [];
+            
+            return (
+              <Select
+                key={dimId}
+                value={selectedValues.length > 0 ? selectedValues[0] : "all"}
+                onValueChange={(value) => {
+                  setFilterValues(prev => ({
+                    ...prev,
+                    [dimId]: value === "all" ? [] : [value],
+                  }));
+                }}
+              >
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder={dimName} />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border z-50">
+                  <SelectItem value="all">All {dimName}</SelectItem>
+                  {values.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {value}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            );
+          })}
+          
+          {/* Year Selector */}
+          {availableYears.length > 0 && (
+            <Select 
+              value={selectedYear.toString()} 
+              onValueChange={(v) => startTransition(() => setSelectedYear(parseInt(v, 10)))}
             >
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder={dimName} />
+              <SelectTrigger className="w-[100px]">
+                <SelectValue placeholder="Year" />
               </SelectTrigger>
               <SelectContent className="bg-popover border-border z-50">
-                <SelectItem value="all">All {dimName}</SelectItem>
-                {values.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {value}
+                {availableYears.map((year) => (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          );
-        })}
-        
-        {/* Year Selector */}
-        {availableYears.length > 0 && (
-          <Select 
-            value={selectedYear.toString()} 
-            onValueChange={(v) => startTransition(() => setSelectedYear(parseInt(v, 10)))}
-          >
-            <SelectTrigger className="w-[100px]">
-              <SelectValue placeholder="Year" />
-            </SelectTrigger>
-            <SelectContent className="bg-popover border-border z-50">
-              {availableYears.map((year) => (
-                <SelectItem key={year} value={year.toString()}>
-                  {year}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        
-        {/* Single Date Period Select - uses dynamically generated options based on selected year */}
-        {effectiveDateOptions.length > 0 && (
-          <Select 
-            value={selectedDatePeriod || activeTab} 
-            onValueChange={(v) => {
-              if (onDatePeriodChange) {
-                onDatePeriodChange(v);
-              }
-              handleTabChange(v as DateTab);
-            }}
-          >
+          )}
+          
+          {/* Single Date Period Select - uses dynamically generated options based on selected year */}
+          {effectiveDateOptions.length > 0 && (
+            <Select 
+              value={selectedDatePeriod || activeTab} 
+              onValueChange={(v) => {
+                if (onDatePeriodChange) {
+                  onDatePeriodChange(v);
+                }
+                handleTabChange(v as DateTab);
+              }}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select date" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border z-50">
+                {effectiveDateOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          
+          {/* Comparison Filter */}
+          <Select value={comparisonType} onValueChange={(v) => startTransition(() => setComparisonType(v as ComparisonType))}>
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select date" />
+              <SelectValue placeholder="Comparison" />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border z-50">
-              {effectiveDateOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
+              <SelectItem value="none">No Comparison</SelectItem>
+              <SelectItem value="previous_period">vs Previous Period</SelectItem>
+              <SelectItem value="previous_year">vs Previous Year</SelectItem>
             </SelectContent>
           </Select>
-        )}
-        
-        {/* Comparison Filter */}
-        <Select value={comparisonType} onValueChange={(v) => startTransition(() => setComparisonType(v as ComparisonType))}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Comparison" />
-          </SelectTrigger>
-          <SelectContent className="bg-popover border-border z-50">
-            <SelectItem value="none">No Comparison</SelectItem>
-            <SelectItem value="previous_period">vs Previous Period</SelectItem>
-            <SelectItem value="previous_year">vs Previous Year</SelectItem>
-          </SelectContent>
-        </Select>
+          </div>
         </div>
-      </div>
 
-      {/* Main content with transition effect */}
-      <div className={`transition-opacity duration-150 ${isPending ? 'opacity-60' : 'opacity-100'}`}>
-
-      {/* KPI Cards Grid */}
-      {(() => {
+        {/* KPI Cards Grid */}
+        {(() => {
         const period = selectedDatePeriod || activeTab;
         const periodData = computeDataForTab(period as DateTab);
         
@@ -2430,6 +2419,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         })()} */}
       </div>
       </div>
-    </div>
+    </LoadingTransition>
   );
 };
