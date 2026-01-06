@@ -765,6 +765,67 @@ export type Database = {
           },
         ]
       }
+      master_report_configs: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          group_by_dimension_id: string | null
+          group_by_dimension_name: string | null
+          id: string
+          report_id: string
+          selected_metrics: string[] | null
+          selected_values: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          group_by_dimension_id?: string | null
+          group_by_dimension_name?: string | null
+          id?: string
+          report_id: string
+          selected_metrics?: string[] | null
+          selected_values?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          group_by_dimension_id?: string | null
+          group_by_dimension_name?: string | null
+          id?: string
+          report_id?: string
+          selected_metrics?: string[] | null
+          selected_values?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "master_report_configs_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "master_report_configs_group_by_dimension_id_fkey"
+            columns: ["group_by_dimension_id"]
+            isOneToOne: false
+            referencedRelation: "dimensions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "master_report_configs_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       monthly_dimension_data: {
         Row: {
           aggregated_metrics: Json
