@@ -13,7 +13,7 @@ import {
 import { AddAICardModal } from "@/components/AddAICardModal";
 import { CreateAISummaryShareLinkModal } from "@/components/CreateAISummaryShareLinkModal";
 import { ForecastSettingsModal } from "@/components/ForecastSettingsModal";
-import { MasterReportSetupModal, type MasterReportConfig } from "@/components/MasterReportSetupModal";
+import { MasterReportSetupModal, type MasterReportConfig, type MasterReportGlobalConfig } from "@/components/MasterReportSetupModal";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
@@ -127,6 +127,9 @@ const AISummaryPage = () => {
   const [budgetForecastEnabled, setBudgetForecastEnabled] = useState(false);
   const [isMasterReportSetupOpen, setIsMasterReportSetupOpen] = useState(false);
   const [masterReportConfigs, setMasterReportConfigs] = useState<Record<string, MasterReportConfig>>({});
+  const [masterGlobalConfig, setMasterGlobalConfig] = useState<MasterReportGlobalConfig>({
+    sinceDate: new Date().getFullYear() + "-01-01",
+  });
 
   // Generate date options: Year to date at top, then current month, then previous months
   const dateOptions = React.useMemo(() => {
@@ -193,9 +196,22 @@ const AISummaryPage = () => {
           const isUUID = uuidRegex.test(reportName);
 
           if (isUUID) {
-            // Legacy UUID format - treat as accountId
-            console.log('[AISummaryPage] Detected UUID in reportName, treating as accountId');
-            setResolvedAccountId(reportName);
+            // Route contains a UUID; treat it as a reportId when possible (new /tools/report/:reportId route)
+            const { data: reportById, error: reportByIdError } = await supabase
+              .from("reports")
+              .select("id, account_id")
+              .eq("id", reportName)
+              .maybeSingle();
+
+            if (!reportByIdError && reportById?.account_id) {
+              console.log('[AISummaryPage] Detected UUID reportId, resolved accountId from report:', reportById.account_id);
+              setResolvedAccountId(reportById.account_id);
+            } else {
+              // Fallback for truly legacy routes where the UUID was an accountId
+              console.log('[AISummaryPage] UUID not found as report id; treating as legacy accountId');
+              setResolvedAccountId(reportName);
+            }
+
             if (querySummaryId) {
               setResolvedSummaryId(querySummaryId);
             }
@@ -279,12 +295,66 @@ const AISummaryPage = () => {
     }
   };
 
+  const loadMasterReportConfigs = async () => {
+    if (!accountId) return;
+
+    const { user } = await getUser();
+    if (!user) return;
+
+    // Per-report master configs
+    const { data: configs, error } = await supabase
+      .from("master_report_configs")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("account_id", accountId);
+
+    if (error) {
+      console.error("[AISummaryPage] Error loading master report configs:", error);
+      return;
+    }
+
+    const mapped: Record<string, MasterReportConfig> = {};
+    (configs || []).forEach((c: any) => {
+      const report = reports.find((r) => r.id === c.report_id);
+      mapped[c.report_id] = {
+        reportId: c.report_id,
+        reportName: report?.name || "",
+        groupByDimensionId: c.group_by_dimension_id,
+        groupByDimensionName: c.group_by_dimension_name,
+        selectedValues: c.selected_values || [],
+        selectedMetrics: c.selected_metrics || ["Cost", "Revenue", "ROAS", "Conversions"],
+      };
+    });
+    setMasterReportConfigs(mapped);
+
+    // Global config
+    const { data: globalConfigData, error: globalError } = await supabase
+      .from("master_report_global_configs")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("account_id", accountId)
+      .maybeSingle();
+
+    if (!globalError && globalConfigData) {
+      setMasterGlobalConfig({
+        sinceDate: globalConfigData.since_date,
+      });
+    }
+  };
+
   useEffect(() => {
     if (accountId) {
       fetchCards();
       fetchReports();
     }
   }, [accountId]);
+
+  useEffect(() => {
+    if (accountId && reports.length > 0) {
+      loadMasterReportConfigs();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, reports.length]);
 
   // Update selectedCardId when summaryId from URL changes
   useEffect(() => {
@@ -1776,7 +1846,11 @@ const AISummaryPage = () => {
         reports={reports}
         accountId={accountId}
         currentConfigs={masterReportConfigs}
-        onSave={setMasterReportConfigs}
+        globalConfig={masterGlobalConfig}
+        onSave={(configs, globalConfig) => {
+          setMasterReportConfigs(configs);
+          setMasterGlobalConfig(globalConfig);
+        }}
       />
     </div>
   );
