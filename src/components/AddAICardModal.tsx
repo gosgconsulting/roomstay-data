@@ -81,6 +81,84 @@ async function fetchDimensionDataFromDB(reportId: string): Promise<CachedDimensi
     rowCount: allRows.length,
   };
 }
+
+// Progressive version that updates state as batches arrive
+async function fetchDimensionDataFromDBProgressive(
+  reportId: string,
+  onBatchLoaded: (batch: CachedDimensionResult) => void
+): Promise<CachedDimensionResult> {
+  const allRows: any[] = [];
+  const batchSize = 1000;
+  let offset = 0;
+  let hasMore = true;
+
+  console.log('[ADD-AI-CARD] Fetching dimension data progressively from DB for report:', reportId);
+  const startTime = performance.now();
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('dimension_data')
+      .select('id, dimension_values, data_source_id, row_number')
+      .eq('report_id', reportId)
+      .order('row_number', { ascending: true })
+      .range(offset, offset + batchSize - 1);
+
+    if (error) {
+      console.error('[ADD-AI-CARD] Error fetching batch:', error);
+      throw error;
+    }
+
+    if (data && data.length > 0) {
+      allRows.push(...data);
+      
+      // Transform current batch
+      const transformedRows = data.map(row => ({
+        id: row.id,
+        row_number: row.row_number,
+        data_source_id: row.data_source_id,
+        dimension_values: row.dimension_values,
+      }));
+
+      // Update state with current batch (merge with previous)
+      const currentBatch: CachedDimensionResult = {
+        transformedRows: allRows.map(row => ({
+          id: row.id,
+          row_number: row.row_number,
+          data_source_id: row.data_source_id,
+          dimension_values: row.dimension_values,
+        })),
+        rowCount: allRows.length,
+      };
+      
+      onBatchLoaded(currentBatch);
+      
+      offset += batchSize;
+      hasMore = data.length === batchSize;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  const duration = Math.round(performance.now() - startTime);
+  console.log('[ADD-AI-CARD] Progressive dimension data fetch completed:', {
+    reportId,
+    rowCount: allRows.length,
+    duration: `${duration}ms`
+  });
+
+  // Return final result
+  const transformedRows = allRows.map(row => ({
+    id: row.id,
+    row_number: row.row_number,
+    data_source_id: row.data_source_id,
+    dimension_values: row.dimension_values,
+  }));
+
+  return {
+    transformedRows,
+    rowCount: allRows.length,
+  };
+}
 import { Search, ChevronRight, ChevronLeft, Sparkles, Loader2, Calendar, Copy, ExternalLink } from "lucide-react";
 import { 
   getDateRange, 
@@ -600,12 +678,20 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
           }
         }
 
-        // ROWS (background)
+        // ROWS (background) - progressive loading
         if (!rowsLoadedRef.current.has(reportId) && !rowsInFlightRef.current.has(reportId)) {
           rowsInFlightRef.current.add(reportId);
-          fetchDimensionDataFromDB(reportId)
+          fetchDimensionDataFromDBProgressive(
+            reportId,
+            (batch) => {
+              if (cancelled) return;
+              // Update state progressively as batches arrive
+              setSourceDataCache(prev => ({ ...prev, [reportId]: batch }));
+            }
+          )
             .then((dimensionData) => {
               if (cancelled) return;
+              // Final update with complete data
               setSourceDataCache(prev => ({ ...prev, [reportId]: dimensionData }));
               rowsLoadedRef.current.add(reportId);
             })
@@ -1747,32 +1833,40 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
                             <ScrollArea className="flex-1 border rounded-md">
                               <div className="p-2 space-y-1">
                                 {filteredValues.length > 0 ? (
-                                  filteredValues.map(value => (
-                                    <div
-                                      key={value}
-                                      className={cn(
-                                        "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                                        reportConfigs[activeReportTab]?.selectedValues.includes(
-                                          value
-                                        )
-                                          ? "bg-primary/10"
-                                          : "hover:bg-muted/50"
-                                      )}
-                                      onClick={() =>
-                                        handleValueToggle(activeReportTab, value)
-                                      }
-                                    >
-                                      <Checkbox
-                                        checked={reportConfigs[
-                                          activeReportTab
-                                        ]?.selectedValues.includes(value)}
-                                        onCheckedChange={() =>
+                                  <>
+                                    {filteredValues.map(value => (
+                                      <div
+                                        key={value}
+                                        className={cn(
+                                          "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
+                                          reportConfigs[activeReportTab]?.selectedValues.includes(
+                                            value
+                                          )
+                                            ? "bg-primary/10"
+                                            : "hover:bg-muted/50"
+                                        )}
+                                        onClick={() =>
                                           handleValueToggle(activeReportTab, value)
                                         }
-                                      />
-                                      <span className="text-sm">{value}</span>
-                                    </div>
-                                  ))
+                                      >
+                                        <Checkbox
+                                          checked={reportConfigs[
+                                            activeReportTab
+                                          ]?.selectedValues.includes(value)}
+                                          onCheckedChange={() =>
+                                            handleValueToggle(activeReportTab, value)
+                                          }
+                                        />
+                                        <span className="text-sm">{value}</span>
+                                      </div>
+                                    ))}
+                                    {isSourceDataLoading && (
+                                      <div className="flex items-center justify-center gap-2 py-3 text-muted-foreground border-t mt-2">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <p className="text-xs">Loading more values...</p>
+                                      </div>
+                                    )}
+                                  </>
                                 ) : isSourceDataLoading ? (
                                   <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                                     <Loader2 className="h-6 w-6 animate-spin mb-2" />

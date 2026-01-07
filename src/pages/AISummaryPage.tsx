@@ -1636,6 +1636,7 @@ const AISummaryPage = () => {
                       dateOptions={dateOptions}
                       selectedDatePeriod={selectedDatePeriod}
                       onDatePeriodChange={setSelectedDatePeriod}
+                      sinceDate={card.since_date}
                     />
                   )}
                 

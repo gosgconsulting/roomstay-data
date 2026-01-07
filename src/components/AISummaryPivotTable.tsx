@@ -127,6 +127,7 @@ interface AISummaryPivotTableProps {
   selectedDatePeriod?: string;
   onDatePeriodChange?: (period: string) => void;
   hideOverviewAndBudget?: boolean; // ADDED: used to hide overview/budget UI in All Reports mode
+  sinceDate?: string; // Date from which data is available (e.g., "2023-01-01")
 }
 
 interface DataSource {
@@ -625,6 +626,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   selectedDatePeriod,
   onDatePeriodChange,
   hideOverviewAndBudget = false, // ADDED: default to false
+  sinceDate,
 }) => {
   const [internalTab, setInternalTab] = useState<DateTab>("mtd");
   const activeTab = selectedTab || internalTab;
@@ -950,12 +952,30 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   };
 
   // Extract available years from raw source data
+  // If sinceDate is provided, include all years from sinceDate to current year
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
-    // LIMIT: only this year and last year
-    const years = [currentYear, currentYear - 1];
-    return years;
-  }, []);
+    
+    if (sinceDate) {
+      try {
+        const sinceDateObj = parseISO(sinceDate);
+        if (isValid(sinceDateObj)) {
+          const sinceYear = getYear(sinceDateObj);
+          const years: number[] = [];
+          // Include all years from sinceDate year to current year
+          for (let year = currentYear; year >= sinceYear; year--) {
+            years.push(year);
+          }
+          return years;
+        }
+      } catch (error) {
+        console.warn('[AISummaryPivotTable] Invalid sinceDate:', sinceDate, error);
+      }
+    }
+    
+    // Fallback: only this year and last year
+    return [currentYear, currentYear - 1];
+  }, [sinceDate]);
 
   // Generate date options dynamically based on selected year
   // Current year: Year to date, current month, previous months
