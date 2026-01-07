@@ -1514,9 +1514,10 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
   };
 
   const activeDimensions = activeReportTab ? dimensions[activeReportTab] || [] : [];
-  // Show loading if meta is loading OR if we don't have source data yet
+  // Show loading only if meta (dimension names) is loading - don't wait for source data
+  // Source data can load in background and is only needed when showing dimension values
   const isActiveReportLoading = activeReportTab 
-    ? loadingReports.has(activeReportTab) || (!sourceDataCache[activeReportTab] && rowsInFlightRef.current.has(activeReportTab))
+    ? loadingReports.has(activeReportTab)
     : false;
   // Check if source data is still being fetched in background
   const isSourceDataLoading = activeReportTab && !sourceDataCache[activeReportTab];
