@@ -113,6 +113,7 @@ const AISummaryPage = () => {
   const [generatingCardId, setGeneratingCardId] = useState<string | null>(null);
   const [viewingSummary, setViewingSummary] = useState<AISummaryCard | null>(null);
   const [refreshingPivotCardId, setRefreshingPivotCardId] = useState<string | null>(null);
+  const [refreshConfirmCardId, setRefreshConfirmCardId] = useState<string | null>(null);
   const [renamingCardId, setRenamingCardId] = useState<string | null>(null);
   const [newCardName, setNewCardName] = useState("");
   const [generateModalCard, setGenerateModalCard] = useState<AISummaryCard | null>(null);
@@ -331,6 +332,16 @@ const AISummaryPage = () => {
     } finally {
       setIsDeleting(false);
       setDeleteCardId(null);
+    }
+  };
+
+  const handleConfirmRefresh = () => {
+    if (!refreshConfirmCardId) return;
+    
+    const cardToRefresh = cards.find(c => c.id === refreshConfirmCardId);
+    if (cardToRefresh) {
+      setRefreshConfirmCardId(null);
+      handleRefreshPivotData(cardToRefresh);
     }
   };
 
@@ -1427,7 +1438,7 @@ const AISummaryPage = () => {
                   {selectedCard && (
                     <Button 
                       variant="outline" 
-                      onClick={() => handleRefreshPivotData(selectedCard)}
+                      onClick={() => setRefreshConfirmCardId(selectedCard.id)}
                       disabled={refreshingPivotCardId === selectedCard.id}
                     >
                       {refreshingPivotCardId === selectedCard.id ? (
@@ -1730,6 +1741,27 @@ const AISummaryPage = () => {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Refresh Data Confirmation Dialog */}
+      <AlertDialog open={!!refreshConfirmCardId} onOpenChange={() => setRefreshConfirmCardId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Refresh Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will refresh all pivot data from the source. This may take a few moments. Continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!refreshingPivotCardId}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmRefresh}
+              disabled={!!refreshingPivotCardId}
+            >
+              {refreshingPivotCardId ? "Refreshing..." : "Refresh"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
