@@ -900,12 +900,12 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       return newData;
     },
     enabled: reportsLoaded && Object.keys(mergedMetricMap).length > 0,
-    staleTime: 30 * 60 * 1000, // 30 minutes - matching Budget tab
+    staleTime: 0, // Always recompute when year/filters change - data is in memory anyway
     gcTime: 60 * 60 * 1000, // 1 hour
     refetchOnWindowFocus: false,
-    refetchOnMount: false, // Use cached data for instant tab switching
+    refetchOnMount: true, // Recompute when query key changes (year change)
     refetchOnReconnect: false,
-    placeholderData: (prev) => prev, // Show previous data instantly
+    // Don't use placeholderData to avoid showing stale year data
   });
   
   // Final data combines computed data with cached breakdown data
