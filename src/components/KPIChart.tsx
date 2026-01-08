@@ -10,7 +10,7 @@ import { format, parseISO } from "date-fns";
 import { useUser } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCachedSourceData, useSourceData } from "@/hooks/dataSources";
-import { loadAccountDimensions } from "@/lib/data-loading-fix";
+import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import type { DataSource } from "@/lib/data-sources/types";
 
 interface KPIChartProps {
@@ -50,25 +50,22 @@ export function KPIChart({
   const [selectedMetric, setSelectedMetric] = useState<string>(initialMetric || "Revenue");
   const [isLoading, setIsLoading] = useState(false);
   const [availableMetrics, setAvailableMetrics] = useState<string[]>([]);
-  const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [isPending, startTransition] = useTransition();
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
 
-  // Load dimensions
-  useEffect(() => {
-    const loadDims = async () => {
-      if (!accountId || !user?.id || !reportId) return;
-      
-      try {
-        const dims = await loadAccountDimensions(accountId, user.id, reportId);
-        setDimensions(dims);
-      } catch (error) {
-        console.error('[CHART-FIXED] Error loading dimensions:', error);
-      }
-    };
+  // Load dimensions using the same hook as PerformanceTable for consistency
+  const { dimensions, isLoadingDimensions, loadDimensions } = usePerformanceTableDimensions({
+    reportId,
+    accountId: accountId || undefined,
+  });
 
-    loadDims();
-  }, [accountId, user?.id, reportId]);
+  // Trigger dimension loading when reportId, accountId, or user changes
+  // Important: user needs to be in deps because loadDimensions depends on it
+  useEffect(() => {
+    if ((reportId || accountId) && user) {
+      loadDimensions();
+    }
+  }, [reportId, accountId, loadDimensions, user]);
 
   // Fetch data source config for direct source loading
   useEffect(() => {
@@ -159,15 +156,27 @@ export function KPIChart({
   ]);
 
   useEffect(() => {
-    if (reportId && accountId && sourceData && dimensions.length > 0) {
-      // Use startTransition to make chart loading non-blocking
-      startTransition(() => {
-        loadChartData();
-      });
-    } else {
+    // Wait for all required data before processing
+    if (!reportId || !accountId) {
       onLoadingComplete?.();
+      return;
     }
-  }, [reportId, accountId, stableFilters, selectedMetric, sourceData, dimensions.length]);
+    
+    if (!sourceData || isLoadingSource) {
+      // Still loading source data
+      return;
+    }
+    
+    if (!dimensions || dimensions.length === 0 || isLoadingDimensions) {
+      // Still loading dimensions
+      return;
+    }
+    
+    // All data ready - process chart
+    startTransition(() => {
+      loadChartData();
+    });
+  }, [reportId, accountId, stableFilters, selectedMetric, sourceData, isLoadingSource, dimensions, isLoadingDimensions]);
 
   // Keep selectedMetric in sync if parent changes initialMetric
   useEffect(() => {
@@ -589,8 +598,10 @@ export function KPIChart({
 
   // Show skeleton only on initial load when no data is available
   // Use same pattern as PerformanceTable - show data immediately if cached
+  // Include dimensions loading state to match table behavior
   const hasAnyData = chartData.length > 0 || (useCachedData && !!cachedData);
-  const showSkeleton = isLoadingSource && !hasAnyData;
+  const isStillLoading = isLoadingSource || isLoadingDimensions;
+  const showSkeleton = isStillLoading && !hasAnyData;
   
   if (showSkeleton) {
     return (
