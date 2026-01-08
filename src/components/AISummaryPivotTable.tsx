@@ -128,6 +128,8 @@ interface AISummaryPivotTableProps {
   onDatePeriodChange?: (period: string) => void;
   hideOverviewAndBudget?: boolean; // ADDED: used to hide overview/budget UI in All Reports mode
   sinceDate?: string; // Date from which data is available (e.g., "2023-01-01")
+  selectedYear?: number; // Year to filter data (e.g., 2025)
+  onYearChange?: (year: number) => void; // Callback when year changes
 }
 
 interface DataSource {
@@ -627,6 +629,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   onDatePeriodChange,
   hideOverviewAndBudget = false, // ADDED: default to false
   sinceDate,
+  selectedYear: externalSelectedYear,
+  onYearChange,
 }) => {
   const [internalTab, setInternalTab] = useState<DateTab>("mtd");
   const activeTab = selectedTab || internalTab;
@@ -645,8 +649,17 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   };
   const [comparisonType, setComparisonType] = useState<ComparisonType>("none");
   
-  // Year selector state - defaults to current year
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  // Year selector state - use external prop if provided, otherwise internal state
+  const [internalSelectedYear, setInternalSelectedYear] = useState<number>(new Date().getFullYear());
+  const selectedYear = externalSelectedYear ?? internalSelectedYear;
+  
+  const handleYearChange = (year: number) => {
+    if (onYearChange) {
+      onYearChange(year);
+    } else {
+      setInternalSelectedYear(year);
+    }
+  };
   
   // State for Day/Week tabs in unified table (applies to all reports)
   const [unifiedTableViewTab, setUnifiedTableViewTab] = useState<"day" | "week">("day");
@@ -1780,7 +1793,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           {availableYears.length > 0 && (
             <Select 
               value={selectedYear.toString()} 
-              onValueChange={(v) => startTransition(() => setSelectedYear(parseInt(v, 10)))}
+              onValueChange={(v) => startTransition(() => handleYearChange(parseInt(v, 10)))}
             >
               <SelectTrigger className="w-[100px]">
                 <SelectValue placeholder="Year" />

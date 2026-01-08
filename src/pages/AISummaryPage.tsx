@@ -131,27 +131,54 @@ const AISummaryPage = () => {
   // ADD: Budget year selector state (this year / last year)
   const [selectedBudgetYear, setSelectedBudgetYear] = useState<number>(new Date().getFullYear());
 
-  // Generate date options: Year to date at top, then current month, then previous months
+  // Generate date options based on selected year
   const dateOptions = React.useMemo(() => {
     const options: { value: string; label: string }[] = [];
     const now = new Date();
-    const yearStart = startOfYear(now);
+    const isCurrentYear = selectedBudgetYear === now.getFullYear();
     
     // Add Year to date at the top
     options.push({ value: "ytd", label: "Year to date" });
     
-    // Start from current month and go back to January
-    let current = now;
-    while (current >= yearStart) {
-      const monthKey = format(current, "yyyy-MM");
-      // Use actual month name instead of "MTD"
-      const monthLabel = format(current, "MMMM yyyy");
-      options.push({ value: monthKey, label: monthLabel });
-      current = subMonths(current, 1);
+    if (isCurrentYear) {
+      // For current year: start from current month and go back to January
+      let current = now;
+      const yearStart = startOfYear(now);
+      while (current >= yearStart) {
+        const monthKey = format(current, "yyyy-MM");
+        const monthLabel = format(current, "MMMM");
+        options.push({ value: monthKey, label: monthLabel });
+        current = subMonths(current, 1);
+      }
+    } else {
+      // For past years: show all 12 months of that year (Dec to Jan)
+      for (let month = 11; month >= 0; month--) {
+        const monthDate = new Date(selectedBudgetYear, month, 1);
+        const monthKey = format(monthDate, "yyyy-MM");
+        const monthLabel = format(monthDate, "MMMM");
+        options.push({ value: monthKey, label: monthLabel });
+      }
     }
     
     return options;
-  }, []);
+  }, [selectedBudgetYear]);
+
+  // Reset date period when year changes to the first available month
+  useEffect(() => {
+    const now = new Date();
+    const isCurrentYear = selectedBudgetYear === now.getFullYear();
+    
+    if (isCurrentYear) {
+      // Current year: default to current month
+      setSelectedDatePeriod(format(now, "yyyy-MM"));
+      setSelectedDateTab(format(now, "yyyy-MM") as DateTab);
+    } else {
+      // Past year: default to December of that year
+      const decemberKey = format(new Date(selectedBudgetYear, 11, 1), "yyyy-MM");
+      setSelectedDatePeriod(decemberKey);
+      setSelectedDateTab(decemberKey as DateTab);
+    }
+  }, [selectedBudgetYear]);
 
   const fetchCards = async () => {
     try {
@@ -1520,6 +1547,8 @@ const AISummaryPage = () => {
                 dateOptions={dateOptions}
                 selectedDatePeriod={selectedDatePeriod}
                 onDatePeriodChange={setSelectedDatePeriod}
+                selectedYear={selectedBudgetYear}
+                onYearChange={setSelectedBudgetYear}
               />
             ) : (
               cards
@@ -1637,6 +1666,8 @@ const AISummaryPage = () => {
                       selectedDatePeriod={selectedDatePeriod}
                       onDatePeriodChange={setSelectedDatePeriod}
                       sinceDate={card.since_date}
+                      selectedYear={selectedBudgetYear}
+                      onYearChange={setSelectedBudgetYear}
                     />
                   )}
                 
