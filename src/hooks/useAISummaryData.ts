@@ -250,11 +250,12 @@ interface ForecastRow {
 
 /**
  * Fetch budgets for an AI Summary card
+ * Returns a nested structure: { reportId: { monthKey: amount } }
  */
 async function fetchBudgets(
   cardId: string,
   reportIds: string[]
-): Promise<Record<string, number>> {
+): Promise<Record<string, Record<string, number>>> {
   const { user } = await getUser();
   if (!user) return {};
 
@@ -269,11 +270,17 @@ async function fetchBudgets(
     return {};
   }
 
-  // Aggregate budgets by month
-  const budgetMap: Record<string, number> = {};
+  // Group budgets by report_id and month_key
+  const budgetMap: Record<string, Record<string, number>> = {};
   (data || []).forEach((b: any) => {
+    const reportId = b.report_id;
+    const monthKey = b.month_key;
     const amount = Number(b.budget_amount);
-    budgetMap[b.month_key] = (budgetMap[b.month_key] || 0) + amount;
+    
+    if (!budgetMap[reportId]) {
+      budgetMap[reportId] = {};
+    }
+    budgetMap[reportId][monthKey] = amount;
   });
   return budgetMap;
 }

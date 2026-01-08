@@ -169,7 +169,19 @@ export function AISummaryBudgetTable({
   const budgetData = useMemo(() => {
     return MONTHS.map((m, index) => {
       const monthKey = `${currentYear}-${m.key}`;
-      const budget = budgetsData[monthKey] || 0;
+      
+      // Get budget for this specific report or aggregate for overview
+      let budget = 0;
+      if (isOverview && allReportIds) {
+        // Aggregate budgets from all reports for overview
+        allReportIds.forEach(rid => {
+          budget += budgetsData[rid]?.[monthKey] || 0;
+        });
+      } else {
+        // Get budget for this specific report
+        budget = budgetsData[reportId]?.[monthKey] || 0;
+      }
+      
       const cost = processedMetrics[monthKey]?.cost || 0;
       const clicks = processedMetrics[monthKey]?.clicks || 0;
       const cpc = clicks > 0 ? cost / clicks : 0;
@@ -211,7 +223,7 @@ export function AISummaryBudgetTable({
         estRevenueShare,
       };
     });
-  }, [currentYear, budgetsData, processedMetrics, forecastRows]);
+  }, [currentYear, budgetsData, processedMetrics, forecastRows, isOverview, allReportIds, reportId]);
 
   const handleSetBudget = (monthKey: string, currentBudget: number) => {
     setEditingMonth(monthKey);
