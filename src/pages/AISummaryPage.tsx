@@ -1524,6 +1524,12 @@ const AISummaryPage = () => {
       </div>
 
       <div className="px-6 py-8 flex-1">
+        {/* ADDED: small guidance when on overview and a breakdown is likely configured */}
+        {selectedReportTab === "overview" && selectedCard && (selectedCard.report_configs as any)?.breakdown_configs ? (
+          <div className="mb-2 text-xs text-muted-foreground">
+            Breakdown tables are available on each report tab. Switch from "Overview" to a specific report to see the breakdown.
+          </div>
+        ) : null}
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

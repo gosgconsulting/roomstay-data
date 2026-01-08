@@ -1732,13 +1732,10 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            {getStepTitle()}
           </DialogTitle>
-          {mode === "api" && editingCard && (
-            <p className="text-sm text-muted-foreground">
-              API URL generated from your card configuration. Settings are synced from the card.
-            </p>
-          )}
+          <p className="mt-1 text-xs text-muted-foreground">
+            Tip: "Breakdown by" tables render on the specific report tab, not on Overview/Budget. After saving, select the report tab to view the breakdown.
+          </p>
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden">
@@ -1903,7 +1900,9 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
                                         key={value}
                                         className={cn(
                                           "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                                          reportConfigs[activeReportTab]?.selectedValues.includes(
+                                          reportConfigs[
+                                            activeReportTab
+                                          ]?.selectedValues.includes(
                                             value
                                           )
                                             ? "bg-primary/10"
