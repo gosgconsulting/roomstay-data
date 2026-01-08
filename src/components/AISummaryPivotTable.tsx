@@ -790,6 +790,11 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     return (configs as any)?.breakdown_configs || {};
   }, [reportConfigs]);
 
+  const customFilterConfigs = useMemo(() => {
+    const configs = reportConfigs || {};
+    return (configs as any)?.custom_filter_configs || {};
+  }, [reportConfigs]);
+
   // Fetch dimension names for filter dimensions and breakdown dimensions
   const [filterDimensionNames, setFilterDimensionNames] = useState<Record<string, string>>({});
   
@@ -811,6 +816,23 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       }
     });
     
+    // Add custom filter dimension IDs
+    Object.values(customFilterConfigs).forEach((config: any) => {
+      if (config?.filterDimensionIds) {
+        config.filterDimensionIds.forEach((id: string) => dimIds.add(id));
+      } else if (config?.filters) {
+        // Legacy format with filters array
+        config.filters.forEach((filter: any) => {
+          if (filter?.dimensionId) {
+            dimIds.add(filter.dimensionId);
+          }
+        });
+      } else if (config?.dimensionId) {
+        // Legacy format with single dimensionId
+        dimIds.add(config.dimensionId);
+      }
+    });
+    
     if (dimIds.size === 0) {
       setFilterDimensionNames({});
       return;
@@ -828,7 +850,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       }
       setFilterDimensionNames(names);
     })();
-  }, [filterConfigs, breakdownConfigs]);
+  }, [filterConfigs, breakdownConfigs, customFilterConfigs]);
   
   // Helper to get dimension filter for a specific report - MUST be before data useMemo
   const getDimensionFilterForReport = useCallback((reportId: string) => {
@@ -863,6 +885,54 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       values: filterValuesForDim,
     };
   }, [filterConfigs, filterValues, filterDimensionNames]);
+
+  // Helper to get all custom filters for a specific report
+  const getCustomFiltersForReport = useCallback((reportId: string) => {
+    if (reportId === "overview") return [];
+    const customFilterConfig = customFilterConfigs[reportId];
+    if (!customFilterConfig) return [];
+    
+    // Get dimension IDs - support both new and legacy formats
+    let dimensionIds: string[] = [];
+    if (customFilterConfig.filterDimensionIds) {
+      dimensionIds = customFilterConfig.filterDimensionIds;
+    } else if (customFilterConfig.filters) {
+      // Legacy format with filters array
+      dimensionIds = customFilterConfig.filters.map((f: any) => f.dimensionId).filter(Boolean);
+    } else if (customFilterConfig.dimensionId) {
+      // Legacy format with single dimensionId
+      dimensionIds = [customFilterConfig.dimensionId];
+    }
+    
+    return dimensionIds.map((dimensionId: string) => {
+      // Check if user has selected a specific custom filter value
+      const userSelectedValues = filterValues[dimensionId];
+      let filterValuesForDim: string[];
+      
+      if (userSelectedValues !== undefined) {
+        // User has interacted with the custom filter dropdown
+        if (userSelectedValues.length === 0) {
+          // "All" selected - return empty array to indicate no filter
+          return null;
+        } else {
+          // Specific value selected - use only that value
+          filterValuesForDim = userSelectedValues;
+        }
+      } else {
+        // No user selection yet - no filter applied (show all)
+        return null;
+      }
+      
+      if (filterValuesForDim.length === 0) return null;
+      
+      const dimName = filterDimensionNames[dimensionId] || dimensionId;
+      return {
+        dimensionId,
+        dimensionName: dimName,
+        values: filterValuesForDim,
+      };
+    }).filter((f): f is { dimensionId: string; dimensionName: string; values: string[] } => f !== null);
+  }, [customFilterConfigs, filterValues, filterDimensionNames]);
 
   // Stable filter key that only changes when filter VALUES change
   const filterValuesKey = useMemo(() => JSON.stringify(filterValues), [filterValues]);
@@ -1290,6 +1360,24 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     return filterConfigs[activeReportTab] || null;
   }, [filterConfigs, activeReportTab]);
 
+  const activeCustomFilterDimensionIds = useMemo(() => {
+    if (activeReportTab === "overview" || activeReportTab === "budget") return [];
+    const config = customFilterConfigs[activeReportTab];
+    if (!config) return [];
+    
+    // Support both new format (filterDimensionIds) and legacy format
+    if (config.filterDimensionIds) {
+      return config.filterDimensionIds;
+    } else if (config.filters) {
+      // Legacy format with filters array
+      return config.filters.map((f: any) => f.dimensionId).filter(Boolean);
+    } else if (config.dimensionId) {
+      // Legacy format with single dimensionId
+      return [config.dimensionId];
+    }
+    return [];
+  }, [customFilterConfigs, activeReportTab]);
+
   // Get available filter values - use selectedValues from config as the options
   const filterDimensionValues = useMemo(() => {
     if (!activeFilterConfig?.dimensionId || !activeFilterConfig?.selectedValues) return {};
@@ -1299,6 +1387,29 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       [activeFilterConfig.dimensionId]: activeFilterConfig.selectedValues || []
     };
   }, [activeFilterConfig]);
+
+  // Fetch dimension values for custom filters from raw data
+  const customFilterDimensionValues = useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (!activeReportTab || activeReportTab === "overview" || activeReportTab === "budget") return values;
+    
+    const reportData = rawSourceData[activeReportTab];
+    if (!reportData?.rows) return values;
+    
+    activeCustomFilterDimensionIds.forEach((dimensionId: string) => {
+      const uniqueValues = new Set<string>();
+      reportData.rows.forEach((row: any) => {
+        const rowData = row.dimension_values || row;
+        const dimValue = rowData[dimensionId];
+        if (dimValue !== undefined && dimValue !== null && dimValue !== '') {
+          uniqueValues.add(String(dimValue).trim());
+        }
+      });
+      values[dimensionId] = Array.from(uniqueValues).sort();
+    });
+    
+    return values;
+  }, [activeCustomFilterDimensionIds, activeReportTab, rawSourceData]);
 
   // Compute data for specific month tabs dynamically
   // Always compute dynamically to ensure filter is applied (don't use cached data that might not have filter)
@@ -1315,11 +1426,31 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       const reportData = rawSourceData[reportId];
       if (!reportData) continue;
       
-      // Get dimension filter for this report
+      // Get dimension filter and custom filters for this report
       const dimensionFilter = getDimensionFilterForReport(reportId);
+      const customFilters = getCustomFiltersForReport(reportId);
+      
+      // Apply all custom filters to rows
+      let rowsToAggregate = reportData.rows;
+      customFilters.forEach(customFilter => {
+        if (customFilter.values.length > 0) {
+          rowsToAggregate = rowsToAggregate.filter((row: any) => {
+            const rowData = row.dimension_values || row;
+            const dimValue = rowData[customFilter.dimensionId] || 
+                           (customFilter.dimensionName ? rowData[customFilter.dimensionName] : undefined);
+            
+            if (dimValue === undefined) return false;
+            
+            const normalizedRowValue = String(dimValue).trim();
+            const normalizedFilterValues = customFilter.values.map(v => String(v).trim());
+            
+            return normalizedFilterValues.includes(normalizedRowValue);
+          });
+        }
+      });
       
       const metrics = aggregateMetrics(
-        reportData.rows,
+        rowsToAggregate,
         selectedMetrics,
         dateRange,
         dimensionFilter, // apply dimension filter if configured
@@ -1408,6 +1539,26 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             
             if (!normalizedFilterValues.includes(normalizedRowValue)) {
               return false;
+            }
+          }
+          
+          // Custom filters
+          const customFilters = getCustomFiltersForReport(reportId);
+          for (const customFilter of customFilters) {
+            if (customFilter.values.length > 0) {
+              const dimValue = rowData[customFilter.dimensionId] || 
+                             (customFilter.dimensionName ? rowData[customFilter.dimensionName] : undefined);
+              
+              if (dimValue === undefined) {
+                return false;
+              }
+              
+              const normalizedRowValue = String(dimValue).trim();
+              const normalizedFilterValues = customFilter.values.map(v => String(v).trim());
+              
+              if (!normalizedFilterValues.includes(normalizedRowValue)) {
+                return false;
+              }
             }
           }
           
@@ -1960,6 +2111,36 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           </div>
           
           <div className="flex items-center gap-3">
+          {/* Custom Filter Value Dropdowns - show when custom filters are configured */}
+          {activeReportTab !== "overview" && activeReportTab !== "budget" && activeCustomFilterDimensionIds.length > 0 && activeCustomFilterDimensionIds.map((dimensionId: string) => {
+            if (!dimensionId) return null;
+            const dimName = filterDimensionNames[dimensionId] || dimensionId;
+            return (
+              <Select
+                key={dimensionId}
+                value={filterValues[dimensionId]?.length > 0 ? filterValues[dimensionId][0] : "all"}
+                onValueChange={(value) => {
+                  setFilterValues(prev => ({
+                    ...prev,
+                    [dimensionId]: value === "all" ? [] : [value],
+                  }));
+                }}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder={dimName || "Select value"} />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border z-50">
+                  <SelectItem value="all">All {dimName}</SelectItem>
+                  {(customFilterDimensionValues[dimensionId] || []).map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {value}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            );
+          })}
+
           {/* Filter Value Dropdown - show when dimension is configured in modal */}
           {activeFilterConfig?.dimensionId && activeReportTab !== "overview" && activeReportTab !== "budget" && (
             <Select
@@ -2564,6 +2745,26 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                           
                           if (!normalizedFilterValues.includes(normalizedRowValue)) {
                             return false;
+                          }
+                        }
+                        
+                        // Custom filters
+                        const customFilters = getCustomFiltersForReport(activeReportTab);
+                        for (const customFilter of customFilters) {
+                          if (customFilter.values.length > 0) {
+                            const dimValue = rowData[customFilter.dimensionId] || 
+                                           (customFilter.dimensionName ? rowData[customFilter.dimensionName] : undefined);
+                            
+                            if (dimValue === undefined) {
+                              return false;
+                            }
+                            
+                            const normalizedRowValue = String(dimValue).trim();
+                            const normalizedFilterValues = customFilter.values.map(v => String(v).trim());
+                            
+                            if (!normalizedFilterValues.includes(normalizedRowValue)) {
+                              return false;
+                            }
                           }
                         }
                         

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import {
   Dialog,
@@ -214,6 +214,11 @@ interface ReportFilterConfig {
   filterDimensionIds: string[]; // Array of dimension IDs to use as filters
 }
 
+interface CustomFilterConfig {
+  reportId: string;
+  filterDimensionIds: string[]; // Array of dimension IDs to use as custom filters
+}
+
 interface EditingCard {
   id: string;
   name: string;
@@ -235,7 +240,7 @@ interface AddAICardModalProps {
   accountId?: string; // Account ID - can be passed as prop or will use from URL params
 }
 
-type Step = "select-reports" | "filter-dimensions" | "breakdown-dimensions" | "select-metrics" | "select-period" | "preview-url";
+type Step = "select-reports" | "filter-dimensions" | "breakdown-dimensions" | "custom-filters" | "select-metrics" | "select-period" | "preview-url";
 
 // Standard KPI metrics available
 const AVAILABLE_METRICS = [
@@ -386,6 +391,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
   const [reportConfigs, setReportConfigs] = useState<Record<string, ReportDimensionConfig>>({});
   const [breakdownConfigs, setBreakdownConfigs] = useState<Record<string, ReportBreakdownConfig>>({});
   const [filterConfigs, setFilterConfigs] = useState<Record<string, ReportFilterConfig>>({});
+  const [customFilterConfigs, setCustomFilterConfigs] = useState<Record<string, CustomFilterConfig>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [customMetrics, setCustomMetrics] = useState<string[]>([]);
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([
@@ -431,9 +437,9 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
       setLoadingReports(new Set());
       
       setSelectedReportIds(editingCard.report_ids || []);
-      // Extract breakdown_configs from report_configs if stored together
+      // Extract breakdown_configs and custom_filter_configs from report_configs if stored together
       const storedConfigs = editingCard.report_configs || {};
-      const { breakdown_configs: storedBreakdown, ...filterConfigs } = storedConfigs as any;
+      const { breakdown_configs: storedBreakdown, custom_filter_configs: storedCustomFilters, ...filterConfigs } = storedConfigs as any;
       setReportConfigs(filterConfigs || {});
       
       // Convert legacy breakdownDimensionId to breakdownDimensionIds array
@@ -452,6 +458,24 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
         }
       });
       setBreakdownConfigs(convertedBreakdownConfigs);
+      
+      // Load custom filter configs - convert legacy format if needed
+      if (storedCustomFilters) {
+        const convertedCustomFilters: Record<string, CustomFilterConfig> = {};
+        Object.entries(storedCustomFilters).forEach(([reportId, config]: [string, any]) => {
+          if (config?.filters) {
+            // New format - use as-is
+            convertedCustomFilters[reportId] = config;
+          } else if (config?.dimensionId) {
+            // Legacy format - convert to new format
+            convertedCustomFilters[reportId] = {
+              reportId,
+              filterDimensionIds: [config.dimensionId],
+            };
+          }
+        });
+        setCustomFilterConfigs(convertedCustomFilters);
+      }
       
       setSelectedMetrics(editingCard.selected_metrics || ["Impressions", "Clicks", "Cost", "Revenue", "ROAS"]);
       setSinceDate(editingCard.since_date || getDefaultSinceDate());
@@ -824,6 +848,37 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
     });
   };
 
+  // Custom filter handlers
+  const handleCustomFilterDimensionToggle = (reportId: string, dimensionId: string) => {
+    if (!reportId || !dimensionId) return;
+    
+    setCustomFilterConfigs(prev => {
+      const config = prev[reportId] || { reportId, filterDimensionIds: [] };
+      const currentIds = config.filterDimensionIds || [];
+      const newIds = currentIds.includes(dimensionId)
+        ? currentIds.filter(id => id !== dimensionId)
+        : [...currentIds, dimensionId];
+      return {
+        ...prev,
+        [reportId]: {
+          reportId,
+          filterDimensionIds: newIds,
+        },
+      };
+    });
+  };
+
+  // Extract dimension values for a specific custom filter dimension
+  const getCustomFilterDimensionValues = useCallback((dimensionId: string) => {
+    if (!activeReportTab) return [];
+    const sourceData = sourceDataCache[activeReportTab];
+    if (!sourceData?.transformedRows) return [];
+
+    return extractUniqueDimensionValues(sourceData.transformedRows, {
+      dimensionId,
+    });
+  }, [activeReportTab, sourceDataCache]);
+
   const handleFilterToggle = (reportId: string, dimensionId: string) => {
     setFilterConfigs(prev => {
       const currentIds = prev[reportId]?.filterDimensionIds || [];
@@ -848,6 +903,9 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
       setStep("breakdown-dimensions");
       setActiveReportTab(selectedReportIds[0]);
     } else if (step === "breakdown-dimensions") {
+      setActiveReportTab(selectedReportIds[0]);
+      setStep("custom-filters");
+    } else if (step === "custom-filters") {
       setStep("select-metrics");
     } else if (step === "select-metrics") {
       if (mode === "api") {
@@ -870,6 +928,9 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
       setStep("filter-dimensions");
       setActiveReportTab(selectedReportIds[0]);
     } else if (step === "select-metrics") {
+      setActiveReportTab(selectedReportIds[0]);
+      setStep("custom-filters");
+    } else if (step === "custom-filters") {
       setStep("breakdown-dimensions");
     } else if (step === "select-period") {
       setStep("select-metrics");
@@ -1474,7 +1535,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
         const { error } = await (supabase.from("ai_summary_cards") as any)
           .update({
             report_ids: selectedReportIds,
-            report_configs: { ...reportConfigs, breakdown_configs: breakdownConfigs },
+            report_configs: { ...reportConfigs, breakdown_configs: breakdownConfigs, custom_filter_configs: customFilterConfigs },
             selected_metrics: selectedMetrics,
             since_date: sinceDate,
             ai_prompt: aiPrompt,
@@ -1582,6 +1643,7 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
     setDimensions({});
     setReportConfigs({});
     setBreakdownConfigs({});
+    setCustomFilterConfigs({});
     setSearchQuery("");
     setSelectedMetrics(["Impressions", "Clicks", "Cost", "Revenue", "ROAS"]);
     setSinceDate(getDefaultSinceDate());
@@ -1629,6 +1691,8 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
         return `${prefix}Filter Dimensions`;
       case "breakdown-dimensions":
         return `${prefix}Choose Dimensions`;
+      case "custom-filters":
+        return `${prefix}Custom Filters`;
       case "select-metrics":
         return `${prefix}Select Metrics`;
       case "select-period":
@@ -2004,7 +2068,113 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
             </div>
           )}
 
-          {/* Step 4: Select Metrics */}
+          {/* Step 4: Add Filter */}
+          {step === "custom-filters" && (
+            <div className="flex h-[400px] gap-4">
+              {/* Left: Report tabs */}
+              <div className="w-48 border-r pr-4">
+                <ScrollArea className="h-full">
+                  <div className="space-y-1">
+                    {selectedReports.map(report => {
+                      const customFilterCount = customFilterConfigs[report.id]?.filterDimensionIds?.length || 0;
+                      return (
+                        <button
+                          key={report.id}
+                          className={cn(
+                            "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
+                            activeReportTab === report.id
+                              ? "bg-primary text-primary-foreground"
+                              : "hover:bg-muted"
+                          )}
+                          onClick={() => {
+                            setActiveReportTab(report.id);
+                          }}
+                        >
+                          <span className="truncate">{report.name}</span>
+                          {customFilterCount > 0 && (
+                            <span className="text-xs opacity-70">{customFilterCount}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              {/* Right: Custom filter selector */}
+              <div className="flex-1 flex flex-col gap-4">
+                {activeReportTab && (
+                  <>
+                    {isActiveReportLoading ? (
+                      <div className="flex-1 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                          <Loader2 className="h-8 w-8 animate-spin" />
+                          <span>Loading dimensions...</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="bg-muted/30 rounded-lg p-4 mb-2">
+                          <p className="text-sm text-muted-foreground">
+                            Select dimensions and values to create custom filters for this report's data. Each selected dimension will create a separate filter dropdown.
+                          </p>
+                        </div>
+                        
+                        <div>
+                          <Label className="text-sm font-medium mb-2 block">
+                            Filter Dimensions
+                          </Label>
+                          <ScrollArea className="h-[200px] border rounded-md">
+                            <div className="p-2 space-y-1">
+                              {activeDimensions.length > 0 ? (
+                                activeDimensions.map(dim => {
+                                  const isSelected = customFilterConfigs[activeReportTab]?.filterDimensionIds?.includes(dim.id) || false;
+                                  return (
+                                    <div
+                                      key={dim.id}
+                                      className={cn(
+                                        "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
+                                        isSelected
+                                          ? "bg-primary/10"
+                                          : "hover:bg-muted/50"
+                                      )}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        if (activeReportTab) {
+                                          handleCustomFilterDimensionToggle(activeReportTab, dim.id);
+                                        }
+                                      }}
+                                    >
+                                      <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={(checked) => {
+                                          if (activeReportTab) {
+                                            handleCustomFilterDimensionToggle(activeReportTab, dim.id);
+                                          }
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                      <span className="text-sm">{dim.name}</span>
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                <p className="text-center text-muted-foreground py-4">
+                                  No dimensions available
+                                </p>
+                              )}
+                            </div>
+                          </ScrollArea>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: Select Metrics */}
           {step === "select-metrics" && (
             <ScrollArea className="h-[400px] pr-4">
               <div className="space-y-2">
