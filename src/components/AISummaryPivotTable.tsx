@@ -566,7 +566,16 @@ export const aggregateMetrics = (
       // Try to find the dimension value by ID first, then by name
       const dimValue = rowData[dimensionFilter.dimensionId] || 
                        (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
-      if (dimValue === undefined || !dimensionFilter.values.includes(String(dimValue))) {
+      
+      if (dimValue === undefined) {
+        return false;
+      }
+      
+      // Normalize both the row value and filter values for comparison (trim whitespace)
+      const normalizedRowValue = String(dimValue).trim();
+      const normalizedFilterValues = dimensionFilter.values.map(v => String(v).trim());
+      
+      if (!normalizedFilterValues.includes(normalizedRowValue)) {
         return false;
       }
     }
@@ -768,34 +777,94 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     placeholderData: (prev) => prev, // Show previous data instantly
   });
 
-  // Extract filter configs from reportConfigs - MUST be before data useMemo
+  // Extract filter configs and breakdown configs from reportConfigs
   const filterConfigs = useMemo(() => {
-    return reportConfigs?.filter_configs || {};
+    const configs = reportConfigs || {};
+    // Remove breakdown_configs if it exists at the top level
+    const { breakdown_configs, ...filterConfigsOnly } = configs as any;
+    return filterConfigsOnly;
   }, [reportConfigs]);
 
-  // Fetch dimension names for filter dimensions - state for getDimensionFilterForReport
+  const breakdownConfigs = useMemo(() => {
+    const configs = reportConfigs || {};
+    return (configs as any)?.breakdown_configs || {};
+  }, [reportConfigs]);
+
+  // Fetch dimension names for filter dimensions and breakdown dimensions
   const [filterDimensionNames, setFilterDimensionNames] = useState<Record<string, string>>({});
+  
+  useEffect(() => {
+    // Collect all dimension IDs (filter dimensions + breakdown dimensions)
+    const dimIds = new Set<string>();
+    
+    // Add filter dimension IDs
+    Object.values(filterConfigs).forEach((config: any) => {
+      if (config?.dimensionId) {
+        dimIds.add(config.dimensionId);
+      }
+    });
+    
+    // Add breakdown dimension IDs
+    Object.values(breakdownConfigs).forEach((config: any) => {
+      if (config?.breakdownDimensionIds) {
+        config.breakdownDimensionIds.forEach((id: string) => dimIds.add(id));
+      }
+    });
+    
+    if (dimIds.size === 0) {
+      setFilterDimensionNames({});
+      return;
+    }
+    
+    (async () => {
+      const names: Record<string, string> = {};
+      for (const dimId of dimIds) {
+        const { data } = await supabase
+          .from("dimensions")
+          .select("name")
+          .eq("id", dimId)
+          .single();
+        if (data) names[dimId] = data.name;
+      }
+      setFilterDimensionNames(names);
+    })();
+  }, [filterConfigs, breakdownConfigs]);
   
   // Helper to get dimension filter for a specific report - MUST be before data useMemo
   const getDimensionFilterForReport = useCallback((reportId: string) => {
     if (reportId === "overview") return undefined;
     const filterConfig = filterConfigs[reportId];
-    if (!filterConfig?.filterDimensionIds || filterConfig.filterDimensionIds.length === 0) return undefined;
+    if (!filterConfig?.dimensionId) return undefined;
     
-    // Apply filters for the first filter dimension (can be extended to support multiple)
-    const firstFilterDimId = filterConfig.filterDimensionIds[0];
-    const filterValuesForDim = filterValues[firstFilterDimId] || [];
+    // Check if user has selected a specific filter value
+    const userSelectedValues = filterValues[filterConfig.dimensionId];
+    let filterValuesForDim: string[];
+    
+    if (userSelectedValues !== undefined) {
+      // User has interacted with the filter dropdown
+      if (userSelectedValues.length === 0) {
+        // "All" selected - use all selectedValues from config
+        filterValuesForDim = filterConfig.selectedValues || [];
+      } else {
+        // Specific value selected - use only that value
+        filterValuesForDim = userSelectedValues;
+      }
+    } else {
+      // No user selection yet - use all selectedValues from config (default behavior)
+      filterValuesForDim = filterConfig.selectedValues || [];
+    }
+    
     if (filterValuesForDim.length === 0) return undefined;
     
-    const dimName = filterDimensionNames[firstFilterDimId] || firstFilterDimId;
+    const dimName = filterDimensionNames[filterConfig.dimensionId] || filterConfig.dimensionId;
     return {
-      dimensionId: firstFilterDimId,
+      dimensionId: filterConfig.dimensionId,
       dimensionName: dimName,
       values: filterValuesForDim,
     };
   }, [filterConfigs, filterValues, filterDimensionNames]);
 
-  // Stable filter key that only changes when filter VALUES change, not on every render
+  // Stable filter key that only changes when filter VALUES change
   const filterValuesKey = useMemo(() => JSON.stringify(filterValues), [filterValues]);
   
   // Cache computed pivot data with React Query for instant tab switching
@@ -848,13 +917,29 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         
         if (reportId !== "overview") {
           const filterConfig = filterConfigs[reportId];
-          if (filterConfig?.filterDimensionIds && filterConfig.filterDimensionIds.length > 0) {
-            const firstFilterDimId = filterConfig.filterDimensionIds[0];
-            const filterValuesForDim = parsedFilters[firstFilterDimId] || [];
+          if (filterConfig?.dimensionId) {
+            // Check if user has selected a specific filter value
+            const userSelectedValues = parsedFilters[filterConfig.dimensionId];
+            let filterValuesForDim: string[];
+            
+            if (userSelectedValues !== undefined) {
+              // User has interacted with the filter dropdown
+              if (userSelectedValues.length === 0) {
+                // "All" selected - use all selectedValues from config
+                filterValuesForDim = filterConfig.selectedValues || [];
+              } else {
+                // Specific value selected - use only that value
+                filterValuesForDim = userSelectedValues;
+              }
+            } else {
+              // No user selection yet - use all selectedValues from config (default behavior)
+              filterValuesForDim = filterConfig.selectedValues || [];
+            }
+            
             if (filterValuesForDim.length > 0) {
-              const dimName = filterDimensionNames[firstFilterDimId] || firstFilterDimId;
+              const dimName = filterDimensionNames[filterConfig.dimensionId] || filterConfig.dimensionId;
               dimensionFilter = {
-                dimensionId: firstFilterDimId,
+                dimensionId: filterConfig.dimensionId,
                 dimensionName: dimName,
                 values: filterValuesForDim,
               };
@@ -1199,62 +1284,26 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // which provides caching across tab switches and reconnections
   // mergedMetricMap is declared at the top (before data useMemo) for proper dependency ordering
 
-  // Get filter dimensions for active report tab
-  const activeFilterDimensions = useMemo(() => {
-    if (activeReportTab === "overview") return [];
-    const config = filterConfigs[activeReportTab];
-    if (!config?.filterDimensionIds || config.filterDimensionIds.length === 0) return [];
-    return config.filterDimensionIds;
+  // Get filter dimension and selected values for active report tab from reportConfigs
+  const activeFilterConfig = useMemo(() => {
+    if (activeReportTab === "overview" || activeReportTab === "budget") return null;
+    return filterConfigs[activeReportTab] || null;
   }, [filterConfigs, activeReportTab]);
 
-  // Fetch unique values for filter dimensions
+  // Get available filter values - use selectedValues from config as the options
   const filterDimensionValues = useMemo(() => {
-    if (activeFilterDimensions.length === 0) return {};
-    if (activeReportTab === "overview") return {};
+    if (!activeFilterConfig?.dimensionId || !activeFilterConfig?.selectedValues) return {};
     
-    const reportData = rawSourceData[activeReportTab];
-    if (!reportData?.rows || reportData.rows.length === 0) return {};
-    
-    return extractMultipleDimensionValues(reportData.rows, activeFilterDimensions);
-  }, [activeFilterDimensions, activeReportTab, rawSourceData]);
-
-  // Fetch dimension names for filter dimensions - updates the state declared earlier
-  useEffect(() => {
-    if (activeFilterDimensions.length === 0) {
-      setFilterDimensionNames({});
-      return;
-    }
-    
-    (async () => {
-      const names: Record<string, string> = {};
-      for (const dimId of activeFilterDimensions) {
-        const { data } = await supabase
-          .from("dimensions")
-          .select("name")
-          .eq("id", dimId)
-          .single();
-        if (data) names[dimId] = data.name;
-      }
-      setFilterDimensionNames(names);
-    })();
-  }, [activeFilterDimensions]);
+    // Return the selected values from the modal as the available options
+    return {
+      [activeFilterConfig.dimensionId]: activeFilterConfig.selectedValues || []
+    };
+  }, [activeFilterConfig]);
 
   // Compute data for specific month tabs dynamically
+  // Always compute dynamically to ensure filter is applied (don't use cached data that might not have filter)
   const computeDataForTab = (tab: DateTab): ReportMetrics[] => {
-    // If we have pre-computed data for this tab (mtd/ytd), use it
-    if (tab === 'mtd' && data.mtd?.length > 0) {
-      return data.mtd;
-    }
-    if (tab === 'ytd' && data.ytd?.length > 0) {
-      return data.ytd;
-    }
-    
-    // Check for cached monthly data (e.g., "2025-01", "2025-02", etc.)
-    if (tab.match(/^\d{4}-\d{2}$/) && data.monthly_data?.[tab]?.length > 0) {
-      return data.monthly_data[tab];
-    }
-    
-    // For specific month tabs or fallback, compute dynamically from raw data
+    // Always compute dynamically to ensure current filter is applied
     if (!reportsLoaded || Object.keys(rawSourceData).length === 0) {
       return [];
     }
@@ -1286,6 +1335,139 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     
     return results;
   };
+
+  // Compute breakdown data dynamically with current filter applied
+  // Memoize breakdown data per report/tab/filter combination
+  const breakdownDataCache = useMemo(() => {
+    const cache: Record<string, BreakdownRow[]> = {};
+    
+    if (!reportsLoaded) return cache;
+    
+    for (const reportId of reportIds) {
+      if (reportId === "overview") continue;
+      
+      const breakdownConfig = breakdownConfigs[reportId];
+      if (!breakdownConfig?.breakdownDimensionIds || breakdownConfig.breakdownDimensionIds.length === 0) {
+        continue;
+      }
+      
+      const reportData = rawSourceData[reportId];
+      if (!reportData?.rows || reportData.rows.length === 0) continue;
+      
+      // For each date tab (mtd, ytd, and monthly)
+      const tabsToCompute: DateTab[] = ['mtd', 'ytd'];
+      const now = new Date();
+      const isCurrentYear = selectedYear === now.getFullYear();
+      const maxMonth = isCurrentYear ? now.getMonth() : 11;
+      for (let m = 0; m <= maxMonth; m++) {
+        tabsToCompute.push(format(new Date(selectedYear, m, 1), "yyyy-MM") as DateTab);
+      }
+      
+      tabsToCompute.forEach((tab) => {
+        const dateRange = getDateRange(tab, selectedYear);
+        const dimensionFilter = getDimensionFilterForReport(reportId);
+        const breakdownDimId = breakdownConfig.breakdownDimensionIds[0];
+        const breakdownDimName = filterDimensionNames[breakdownDimId] || breakdownDimId;
+        const cacheKey = `${reportId}_${breakdownDimId}_${tab}_${filterValuesKey}`;
+        
+        // Filter rows by date and dimension filter
+        const filteredRows = reportData.rows.filter((row: any) => {
+          const rowData = row.dimension_values || row;
+          
+          // Date filter
+          let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
+          if (!dateValue) {
+            const dateDimId = mergedMetricMap['Date'] || mergedMetricMap['date'] || mergedMetricMap['Day'];
+            if (dateDimId) dateValue = rowData[dateDimId];
+          }
+          if (!dateValue) {
+            for (const [key, val] of Object.entries(rowData)) {
+              if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+                dateValue = val;
+                break;
+              }
+            }
+          }
+          
+          const rowDate = parseDate(dateValue);
+          if (!rowDate || !isWithinInterval(rowDate, { start: dateRange.start, end: dateRange.end })) {
+            return false;
+          }
+          
+          // Dimension filter
+          if (dimensionFilter && dimensionFilter.values.length > 0) {
+            const dimValue = rowData[dimensionFilter.dimensionId] || 
+                           (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
+            
+            if (dimValue === undefined) {
+              return false;
+            }
+            
+            const normalizedRowValue = String(dimValue).trim();
+            const normalizedFilterValues = dimensionFilter.values.map(v => String(v).trim());
+            
+            if (!normalizedFilterValues.includes(normalizedRowValue)) {
+              return false;
+            }
+          }
+          
+          return true;
+        });
+        
+        // Group rows by breakdown dimension value
+        const groupedRows: Record<string, any[]> = {};
+        filteredRows.forEach((row: any) => {
+          const rowData = row.dimension_values || row;
+          const breakdownValue = rowData[breakdownDimId] || 
+                                (breakdownDimName ? rowData[breakdownDimName] : undefined);
+          const groupKey = breakdownValue !== undefined && breakdownValue !== null && breakdownValue !== '' 
+            ? String(breakdownValue).trim() 
+            : 'Uncategorized';
+          
+          if (!groupedRows[groupKey]) {
+            groupedRows[groupKey] = [];
+          }
+          groupedRows[groupKey].push(row);
+        });
+        
+        // Compute metrics for each group
+        const breakdownRows: BreakdownRow[] = [];
+        Object.entries(groupedRows).forEach(([groupValue, groupRows]) => {
+          const metrics = aggregateMetrics(
+            groupRows,
+            selectedMetrics,
+            dateRange,
+            undefined, // Already filtered above
+            mergedMetricMap
+          );
+          
+          breakdownRows.push({
+            groupValue,
+            metrics,
+          });
+        });
+        
+        cache[cacheKey] = breakdownRows;
+      });
+    }
+    
+    return cache;
+  }, [reportsLoaded, reportIds, rawSourceData, breakdownConfigs, getDimensionFilterForReport, selectedYear, mergedMetricMap, filterDimensionNames, filterValuesKey, selectedMetrics]);
+
+  // Helper function to get breakdown data for a specific report and tab
+  const computeBreakdownData = useCallback((tab: DateTab, reportId: string): BreakdownRow[] => {
+    if (reportId === "overview" || !reportsLoaded) return [];
+    
+    const breakdownConfig = breakdownConfigs[reportId];
+    if (!breakdownConfig?.breakdownDimensionIds || breakdownConfig.breakdownDimensionIds.length === 0) {
+      return [];
+    }
+    
+    const breakdownDimId = breakdownConfig.breakdownDimensionIds[0];
+    const cacheKey = `${reportId}_${breakdownDimId}_${tab}_${filterValuesKey}`;
+    
+    return breakdownDataCache[cacheKey] || [];
+  }, [reportsLoaded, breakdownConfigs, filterValuesKey, breakdownDataCache]);
 
   const calculateTotals = (reportMetrics: ReportMetrics[]): Record<string, number> => {
     const totals: Record<string, number> = {};
@@ -1778,37 +1960,30 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           </div>
           
           <div className="flex items-center gap-3">
-          {/* Filter Dropdowns - before Date dropdown */}
-          {activeFilterDimensions.map((dimId) => {
-            const dimName = filterDimensionNames[dimId] || dimId;
-            const values = filterDimensionValues[dimId] || [];
-            const selectedValues = filterValues[dimId] || [];
-            
-            return (
-              <Select
-                key={dimId}
-                value={selectedValues.length > 0 ? selectedValues[0] : "all"}
-                onValueChange={(value) => {
-                  setFilterValues(prev => ({
-                    ...prev,
-                    [dimId]: value === "all" ? [] : [value],
-                  }));
-                }}
-              >
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder={dimName} />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-border z-50">
-                  <SelectItem value="all">All {dimName}</SelectItem>
-                  {values.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {value}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            );
-          })}
+          {/* Filter Value Dropdown - show when dimension is configured in modal */}
+          {activeFilterConfig?.dimensionId && activeReportTab !== "overview" && activeReportTab !== "budget" && (
+            <Select
+              value={filterValues[activeFilterConfig.dimensionId]?.length > 0 ? filterValues[activeFilterConfig.dimensionId][0] : "all"}
+              onValueChange={(value) => {
+                setFilterValues(prev => ({
+                  ...prev,
+                  [activeFilterConfig.dimensionId]: value === "all" ? [] : [value],
+                }));
+              }}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder={filterDimensionNames[activeFilterConfig.dimensionId] || "Select value"} />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border z-50">
+                <SelectItem value="all">All {filterDimensionNames[activeFilterConfig.dimensionId] || ""}</SelectItem>
+                {(filterDimensionValues[activeFilterConfig.dimensionId] || []).map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           
           {/* Year Selector */}
           {availableYears.length > 0 && (
@@ -2341,42 +2516,22 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
 
-        {/* BREAKDOWNS (per dimension) remain unchanged */}
-        {activeReportTab !== "overview" && data.breakdown_data && Object.keys(data.breakdown_data).length > 0 && (() => {
+        {/* BREAKDOWNS (per dimension) - computed dynamically with filter */}
+        {activeReportTab !== "overview" && breakdownConfigs[activeReportTab]?.breakdownDimensionIds?.length > 0 && (() => {
           const period = selectedDatePeriod || activeTab;
           
-          // Extract breakdown dimensions for the active report tab
-          const breakdownEntries = Object.entries(data.breakdown_data!)
-            .filter(([breakdownKey]) => {
-              const [reportId] = breakdownKey.split('_');
-              return reportId === activeReportTab;
-            });
+          // Compute breakdown data dynamically with current filter
+          const breakdownRows = computeBreakdownData(period as DateTab, activeReportTab);
           
-          if (breakdownEntries.length === 0) return null;
+          if (breakdownRows.length === 0) return null;
           
-          // Group breakdowns by dimension name and get unique dimensions
-          const breakdownDimensions = breakdownEntries
-            .map(([breakdownKey]) => {
-              const dimensionName = data.breakdown_dimension_names?.[breakdownKey] || 'Group';
-              return {
-                key: breakdownKey,
-                name: dimensionName,
-              };
-            })
-            // Remove duplicates by name (in case same dimension appears multiple times)
-            .filter((dim, index, self) => 
-              index === self.findIndex(d => d.name === dim.name)
-            );
-          
-          // Get current active breakdown tab for this report, default to first dimension
-          const currentBreakdownTab = activeBreakdownTab[activeReportTab] || breakdownDimensions[0]?.key || null;
+          // Get breakdown dimension name
+          const breakdownDimId = breakdownConfigs[activeReportTab].breakdownDimensionIds[0];
+          const dimensionName = filterDimensionNames[breakdownDimId] || breakdownDimId;
           
           // If only one breakdown dimension, show it directly without sub-tabs
-          if (breakdownDimensions.length === 1) {
-            const breakdownRows = data.breakdown_data![breakdownDimensions[0].key]?.[period as DateTab] || [];
-            if (breakdownRows.length === 0) return null;
-            
-            const dimensionName = breakdownDimensions[0].name;
+          if (breakdownConfigs[activeReportTab].breakdownDimensionIds.length === 1) {
+            const breakdownKey = `breakdown-${activeReportTab}-${breakdownDimId}`;
             
             return (
               <div className="mt-6">
@@ -2386,14 +2541,14 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                       <TableHeader className="sticky top-0 z-10 bg-muted/30">
                         <TableRow className="bg-muted/30">
                           <TableHead className="font-medium w-[200px]">{dimensionName}</TableHead>
-                          {safeMetrics.map((metric) => renderSortableHeader(`breakdown-${breakdownDimensions[0].key}`, metric))}
+                          {safeMetrics.map((metric) => renderSortableHeader(breakdownKey, metric))}
                         </TableRow>
                       </TableHeader>
                     </Table>
                     <div className={breakdownRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
                       <Table>
                         <TableBody>
-                          {sortRows(breakdownRows, `breakdown-${breakdownDimensions[0].key}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                          {sortRows(breakdownRows, breakdownKey, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
                             <TableRow
                               key={row.groupValue}
                               className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
@@ -2418,70 +2573,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           }
           
           // Multiple breakdown dimensions - show sub-tabs
-          return (
-            <div className="mt-6">
-              <Tabs
-                value={currentBreakdownTab || ""}
-                onValueChange={(value) => {
-                  setActiveBreakdownTab((prev) => ({
-                    ...prev,
-                    [activeReportTab]: value,
-                  }));
-                }}
-              >
-                <TabsList className="mb-4">
-                  {breakdownDimensions.map((dim) => (
-                    <TabsTrigger key={dim.key} value={dim.key}>
-                      {dim.name}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-                
-                {breakdownDimensions.map((dim) => {
-                  const breakdownRows = data.breakdown_data![dim.key]?.[period as DateTab] || [];
-                  if (breakdownRows.length === 0) return null;
-                  
-                  return (
-                    <TabsContent key={dim.key} value={dim.key}>
-                      <div className="border rounded-lg overflow-hidden">
-                        <div className="overflow-hidden">
-                          <Table>
-                            <TableHeader className="sticky top-0 z-10 bg-muted/30">
-                              <TableRow className="bg-muted/30">
-                                <TableHead className="font-medium w-[200px]">{dim.name}</TableHead>
-                                {safeMetrics.map((metric) => renderSortableHeader(`breakdown-${dim.key}`, metric))}
-                              </TableRow>
-                            </TableHeader>
-                          </Table>
-                          <div className={breakdownRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
-                            <Table>
-                              <TableBody>
-                                {sortRows(breakdownRows, `breakdown-${dim.key}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                                  <TableRow
-                                    key={row.groupValue}
-                                    className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                                  >
-                                    <TableCell className="font-medium text-sm w-[200px]">
-                                      {row.groupValue}
-                                    </TableCell>
-                                    {safeMetrics.map((metric) => (
-                                      <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                        {formatMetricValue(metric, row.metrics[metric] || 0)}
-                                      </TableCell>
-                                    ))}
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </div>
-                      </div>
-                    </TabsContent>
-                  );
-                })}
-              </Tabs>
-            </div>
-          );
+          // For now, we only support one breakdown dimension at a time
+          // This can be extended later to support multiple
+          return null;
         })()}
 
         {/* Executive Summary - TEMPORARILY HIDDEN
