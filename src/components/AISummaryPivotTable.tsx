@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useTransition } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -696,14 +696,34 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedYear]);
   
+  const queryClient = useQueryClient();
+  const dataCacheId = cardId || reportIds.join('-');
+
   // Use React Query for cached raw source data - persists across tab switches
   // Always fetch fresh data from sources (previous way of loading)
   const { data: rawSourceData = {}, isLoading: isLoadingRawData, isError, error, refetch } = useAISummaryRawData(
-    cardId || reportIds.join('-'), // Use cardId or fallback to joined reportIds
+    dataCacheId, // Use cardId or fallback to joined reportIds
     reportIds,
     accountId,
     { enabled: reportIds.length > 0 }
   );
+
+  // When switching to a past year, force a background refetch from the DB cache,
+  // then invalidate computed pivot data for that year so it recalculates.
+  useEffect(() => {
+    const currentYear = new Date().getFullYear();
+    if (selectedYear === currentYear) return;
+
+    (async () => {
+      await refetch();
+      queryClient.invalidateQueries({
+        predicate: (q) => {
+          const key = q.queryKey as unknown as any[];
+          return key?.[0] === 'computed-pivot-data' && key?.[1] === dataCacheId && key?.[2] === selectedYear;
+        },
+      });
+    })();
+  }, [selectedYear, refetch, queryClient, dataCacheId]);
   
   // Compute if data is ready
   const reportsLoaded = Object.keys(rawSourceData).length > 0;
