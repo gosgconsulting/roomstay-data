@@ -1397,19 +1397,43 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
     if (!reportData?.rows) return values;
     
     activeCustomFilterDimensionIds.forEach((dimensionId: string) => {
-      const uniqueValues = new Set<string>();
+      const dimName = filterDimensionNames[dimensionId] || dimensionId;
+      // Track normalized unique values to avoid duplicates (e.g. "Link" vs "link")
+      const uniqueMap = new Map<string, string>();
+      
       reportData.rows.forEach((row: any) => {
         const rowData = row.dimension_values || row;
-        const dimValue = rowData[dimensionId];
-        if (dimValue !== undefined && dimValue !== null && dimValue !== '') {
-          uniqueValues.add(String(dimValue).trim());
+        const dimVals = row.dimension_values || {};
+        
+        // Try multiple sources: by ID, by name, and inside dimension_values blob
+        const candidates = [
+          rowData[dimensionId],
+          rowData[dimName],
+          dimVals ? dimVals[dimensionId] : undefined,
+          dimVals ? dimVals[dimName] : undefined,
+        ];
+        
+        const firstDefined = candidates.find(
+          (v) => v !== undefined && v !== null && String(v).trim() !== ""
+        );
+        if (firstDefined !== undefined && firstDefined !== null) {
+          const raw = String(firstDefined).trim();
+          const key = raw.toLowerCase();
+          if (!uniqueMap.has(key)) {
+            uniqueMap.set(key, raw);
+          }
         }
       });
-      values[dimensionId] = Array.from(uniqueValues).sort();
+      
+      // Sort case-insensitively, but preserve original casing
+      const uniqueValues = Array.from(uniqueMap.values()).sort((a, b) =>
+        a.toLowerCase().localeCompare(b.toLowerCase())
+      );
+      values[dimensionId] = uniqueValues;
     });
     
     return values;
-  }, [activeCustomFilterDimensionIds, activeReportTab, rawSourceData]);
+  }, [activeCustomFilterDimensionIds, activeReportTab, rawSourceData, filterDimensionNames]);
 
   // Compute data for specific month tabs dynamically
   // Always compute dynamically to ensure filter is applied (don't use cached data that might not have filter)
