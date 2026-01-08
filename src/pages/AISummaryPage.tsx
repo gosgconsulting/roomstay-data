@@ -1194,8 +1194,25 @@ const AISummaryPage = () => {
           : c
       ));
 
-      // ADD: Invalidate budget metrics cache so Budget view refetches fresh data
+      // ADD: Invalidate caches so UI recomputes using fresh data
+      // Raw source data (weekly/breakdown compute)
+      queryClient.invalidateQueries({ queryKey: aiSummaryKeys.rawData(card.id) });
+      // Budget metrics fallback
       queryClient.invalidateQueries({ queryKey: aiSummaryKeys.budgetMetrics(card.id) });
+      // Budgets list for this card (partial match)
+      queryClient.invalidateQueries({
+        predicate: (q) => {
+          const k = q.queryKey as unknown as any[];
+          return Array.isArray(k) && k[0] === "ai-summary" && k[1] === "budgets" && k[2] === card.id;
+        },
+      });
+      // Computed pivot data cache
+      queryClient.invalidateQueries({
+        predicate: (q) => {
+          const k = q.queryKey as unknown as any[];
+          return Array.isArray(k) && k[0] === "computed-pivot-data";
+        },
+      });
 
       // Build summary of data ranges for each report
       const dataRangeSummaries = Object.values(actualDataRanges)

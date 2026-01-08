@@ -2576,7 +2576,16 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             });
           }
 
-          if (weekRows.length === 0) return null;
+          // Fallback to cached weekly breakdown if raw data produced no rows
+          const fallbackRows: DateBreakdownRow[] = (() => {
+            const cached = data.combined_date_breakdown?.[period as DateTab] || [];
+            return cached.map((r) => ({
+              dateGroup: r.dateGroup,
+              metrics: r.metrics,
+            }));
+          })();
+
+          const renderRows = weekRows.length > 0 ? weekRows : fallbackRows;
 
           return (
             <div className="space-y-4">
@@ -2593,27 +2602,35 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                       </TableRow>
                     </TableHeader>
                   </Table>
-                  <div className={weekRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                  <div className={renderRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
                     <Table>
                       <TableBody>
-                        {sortRows(weekRows, 'date-breakdown', (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                          <TableRow
-                            key={row.dateGroup}
-                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                          >
-                            <TableCell className="font-medium text-sm w-[200px]">
-                              {row.dateGroup}
+                        {renderRows.length === 0 ? (
+                          <TableRow>
+                            <TableCell className="text-sm text-muted-foreground" colSpan={safeMetrics.length + 1}>
+                              No weekly data for the selected period.
                             </TableCell>
-                            {safeMetrics.map((metric) => {
-                              const val = row.metrics[metric] || 0;
-                              return (
-                                <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                  {val !== 0 ? formatMetricValue(metric, val) : ""}
-                                </TableCell>
-                              );
-                            })}
                           </TableRow>
-                        ))}
+                        ) : (
+                          sortRows(renderRows, 'date-breakdown', (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                            <TableRow
+                              key={row.dateGroup}
+                              className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                            >
+                              <TableCell className="font-medium text-sm w-[200px]">
+                                {row.dateGroup}
+                              </TableCell>
+                              {safeMetrics.map((metric) => {
+                                const val = row.metrics[metric] || 0;
+                                return (
+                                  <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                    {val !== 0 ? formatMetricValue(metric, val) : ""}
+                                  </TableCell>
+                                );
+                              })}
+                            </TableRow>
+                          ))
+                        )}
                       </TableBody>
                     </Table>
                   </div>
@@ -2868,7 +2885,35 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         {activeReportTab !== "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
           const reportRawData = rawSourceData[activeReportTab];
-          if (!reportRawData || !reportRawData.rows?.length) return null;
+          if (!reportRawData || !reportRawData.rows?.length) {
+            // Always render an empty section so users see the table on this tab
+            return (
+              <div className="mt-6 space-y-4">
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-primary/5 px-4 py-2 border-b">
+                    <h4 className="font-semibold text-sm">Results By Week</h4>
+                  </div>
+                  <div className="overflow-hidden">
+                    <Table>
+                      <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                        <TableRow className="bg-muted/30">
+                          <TableHead className="font-medium w-[200px]">Week</TableHead>
+                          {safeMetrics.map((metric) => renderSortableHeader(`report-date-breakdown-${activeReportTab}`, metric))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell className="text-sm text-muted-foreground" colSpan={safeMetrics.length + 1}>
+                            No weekly data for the selected period.
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
+            );
+          }
 
           const dateRange = getDateRange(period as DateTab, selectedYear);
 
@@ -2906,8 +2951,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             });
           }
 
-          if (weekRows.length === 0) return null;
-
           return (
             <div className="mt-6 space-y-4">
               <div className="border rounded-lg overflow-hidden">
@@ -2926,24 +2969,32 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   <div className={weekRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
                     <Table>
                       <TableBody>
-                        {sortRows(weekRows, `report-date-breakdown-${activeReportTab}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                          <TableRow
-                            key={row.dateGroup}
-                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                          >
-                            <TableCell className="font-medium text-sm w-[200px]">
-                              {row.dateGroup}
+                        {weekRows.length === 0 ? (
+                          <TableRow>
+                            <TableCell className="text-sm text-muted-foreground" colSpan={safeMetrics.length + 1}>
+                              No weekly data for the selected period.
                             </TableCell>
-                            {safeMetrics.map((metric) => {
-                              const val = row.metrics[metric] || 0;
-                              return (
-                                <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                  {val !== 0 ? formatMetricValue(metric, val) : ""}
-                                </TableCell>
-                              );
-                            })}
                           </TableRow>
-                        ))}
+                        ) : (
+                          sortRows(weekRows, `report-date-breakdown-${activeReportTab}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                            <TableRow
+                              key={row.dateGroup}
+                              className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                            >
+                              <TableCell className="font-medium text-sm w-[200px]">
+                                {row.dateGroup}
+                              </TableCell>
+                              {safeMetrics.map((metric) => {
+                                const val = row.metrics[metric] || 0;
+                                return (
+                                  <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                    {val !== 0 ? formatMetricValue(metric, val) : ""}
+                                  </TableCell>
+                                );
+                              })}
+                            </TableRow>
+                          ))
+                        )}
                       </TableBody>
                     </Table>
                   </div>
