@@ -384,14 +384,19 @@ const AISummaryPage = () => {
 
       toast.info("Refreshing pivot data from sources...", { id: "refresh-pivot" });
 
-      // Generate month keys for the current year (from January to current month)
+      // Generate month keys based on since_date from card settings
       const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth(); // 0-indexed
+      const sinceDate = card.since_date ? new Date(card.since_date) : new Date(now.getFullYear(), 0, 1);
       const monthKeys: string[] = [];
-      for (let m = 0; m <= currentMonth; m++) {
-        monthKeys.push(format(new Date(currentYear, m, 1), "yyyy-MM"));
+      
+      // Generate all months from since_date to current month
+      let currentIterDate = new Date(sinceDate.getFullYear(), sinceDate.getMonth(), 1);
+      while (currentIterDate <= now) {
+        monthKeys.push(format(currentIterDate, "yyyy-MM"));
+        currentIterDate = new Date(currentIterDate.getFullYear(), currentIterDate.getMonth() + 1, 1);
       }
+      
+      console.log('[Refresh] Using since_date:', card.since_date, '- Loading months:', monthKeys);
 
       const pivotData: CachedPivotData = {
         mtd: [],
