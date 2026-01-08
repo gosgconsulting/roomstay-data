@@ -172,14 +172,20 @@ export function AISummaryBudgetTable({
       
       // Get budget for this specific report or aggregate for overview
       let budget = 0;
-      if (isOverview && allReportIds) {
+      if (isOverview && allReportIds && allReportIds.length > 0) {
         // Aggregate budgets from all reports for overview
         allReportIds.forEach(rid => {
-          budget += budgetsData[rid]?.[monthKey] || 0;
+          const reportBudgets = budgetsData[rid];
+          if (reportBudgets && typeof reportBudgets === 'object') {
+            budget += reportBudgets[monthKey] || 0;
+          }
         });
       } else {
         // Get budget for this specific report
-        budget = budgetsData[reportId]?.[monthKey] || 0;
+        const reportBudgets = budgetsData[reportId];
+        if (reportBudgets && typeof reportBudgets === 'object') {
+          budget = reportBudgets[monthKey] || 0;
+        }
       }
       
       const cost = processedMetrics[monthKey]?.cost || 0;
@@ -262,8 +268,8 @@ export function AISummaryBudgetTable({
         return;
       }
 
-      // Invalidate cache to refetch
-      queryClient.invalidateQueries({ queryKey: aiSummaryKeys.budgets(aiSummaryCardId) });
+      // Invalidate cache to refetch - use partial match to invalidate all budget queries for this card
+      queryClient.invalidateQueries({ queryKey: ["ai-summary", "budgets", aiSummaryCardId] });
 
       toast.success("Budget saved");
       setEditingMonth(null);
