@@ -2565,18 +2565,13 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               });
             });
 
-            const hasAny = Object.values(weekMetrics).some(v => v && v !== 0);
-            if (hasAny) {
-              const weekNum = getWeek(weekStart);
-              const year = getYear(weekStart);
-              weekRows.push({
-                dateGroup: `Week ${weekNum}, ${year}`,
-                metrics: weekMetrics,
-              });
-            }
+            const weekNum = getWeek(weekStart);
+            const year = getYear(weekStart);
+            weekRows.push({
+              dateGroup: `Week ${weekNum}, ${year}`,
+              metrics: weekMetrics,
+            });
           }
-
-          if (weekRows.length === 0) return null;
 
           return (
             <div className="space-y-4">
@@ -2596,21 +2591,29 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   <div className={weekRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
                     <Table>
                       <TableBody>
-                        {sortRows(weekRows, 'date-breakdown', (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                          <TableRow
-                            key={row.dateGroup}
-                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                          >
-                            <TableCell className="font-medium text-sm w-[200px]">
-                              {row.dateGroup}
+                        {weekRows.length === 0 ? (
+                          <TableRow>
+                            <TableCell className="text-sm text-muted-foreground" colSpan={safeMetrics.length + 1}>
+                              No weekly data for the selected period.
                             </TableCell>
-                            {safeMetrics.map((metric) => (
-                              <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                {formatMetricValue(metric, row.metrics[metric] || 0)}
-                              </TableCell>
-                            ))}
                           </TableRow>
-                        ))}
+                        ) : (
+                          sortRows(weekRows, 'date-breakdown', (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                            <TableRow
+                              key={row.dateGroup}
+                              className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                            >
+                              <TableCell className="font-medium text-sm w-[200px]">
+                                {row.dateGroup}
+                              </TableCell>
+                              {safeMetrics.map((metric) => (
+                                <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))
+                        )}
                       </TableBody>
                     </Table>
                   </div>
@@ -2892,18 +2895,13 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               mergedMetricMap
             );
 
-            const hasAny = Object.values(metrics).some(v => v && v !== 0);
-            if (hasAny) {
-              const weekNum = getWeek(weekStart);
-              const year = getYear(weekStart);
-              weekRows.push({
-                dateGroup: `Week ${weekNum}, ${year}`,
-                metrics,
-              });
-            }
+            const weekNum = getWeek(weekStart);
+            const year = getYear(weekStart);
+            weekRows.push({
+              dateGroup: `Week ${weekNum}, ${year}`,
+              metrics,
+            });
           }
-
-          if (weekRows.length === 0) return null;
 
           return (
             <div className="mt-6 space-y-4">
@@ -2923,21 +2921,29 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   <div className={weekRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
                     <Table>
                       <TableBody>
-                        {sortRows(weekRows, `report-date-breakdown-${activeReportTab}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                          <TableRow
-                            key={row.dateGroup}
-                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                          >
-                            <TableCell className="font-medium text-sm w-[200px]">
-                              {row.dateGroup}
+                        {weekRows.length === 0 ? (
+                          <TableRow>
+                            <TableCell className="text-sm text-muted-foreground" colSpan={safeMetrics.length + 1}>
+                              No weekly data for the selected period.
                             </TableCell>
-                            {safeMetrics.map((metric) => (
-                              <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                {formatMetricValue(metric, row.metrics[metric] || 0)}
-                              </TableCell>
-                            ))}
                           </TableRow>
-                        ))}
+                        ) : (
+                          sortRows(weekRows, `report-date-breakdown-${activeReportTab}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                            <TableRow
+                              key={row.dateGroup}
+                              className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                            >
+                              <TableCell className="font-medium text-sm w-[200px]">
+                                {row.dateGroup}
+                              </TableCell>
+                              {safeMetrics.map((metric) => (
+                                <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))
+                        )}
                       </TableBody>
                     </Table>
                   </div>
