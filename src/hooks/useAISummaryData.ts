@@ -47,6 +47,8 @@ export const aiSummaryKeys = {
   budgetData: (cardId: string, reportId: string) => [...aiSummaryKeys.all, "budget-data", cardId, reportId] as const,
   budgetMetrics: (cardId: string) => [...aiSummaryKeys.all, "budget-metrics", cardId] as const,
   budgets: (cardId: string, reportIds: string[]) => [...aiSummaryKeys.all, "budgets", cardId, ...reportIds.sort()] as const,
+  reportMonthlyMetrics: (reportIds: string[], year: number) =>
+    [...aiSummaryKeys.all, "report-monthly-metrics", year, ...reportIds.sort()] as const,
   forecasts: (cardId: string) => [...aiSummaryKeys.all, "forecasts", cardId] as const,
 };
 
@@ -276,13 +278,90 @@ async function fetchBudgets(
     const reportId = b.report_id;
     const monthKey = b.month_key;
     const amount = Number(b.budget_amount);
-    
+
     if (!budgetMap[reportId]) {
       budgetMap[reportId] = {};
     }
     budgetMap[reportId][monthKey] = amount;
   });
   return budgetMap;
+}
+
+/**
+ * Fetch monthly cost/revenue/clicks from report_daily_metrics for a set of reports + year.
+ * Returns: { [reportId]: { [YYYY-MM]: { cost, revenue, clicks } } }
+ */
+async function fetchReportMonthlyMetrics(
+  reportIds: string[],
+  year: number
+): Promise<CachedBudgetMetrics> {
+  const { user } = await getUser();
+  if (!user) return {};
+  if (!reportIds || reportIds.length === 0) return {};
+
+  const from = `${year}-01-01`;
+  const to = `${year}-12-31`;
+
+  const allRows: Array<{
+    report_id: string;
+    date: string;
+    cost: number | null;
+    revenue: number | null;
+    clicks: number | null;
+  }> = [];
+
+  const batchSize = 1000;
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from("report_daily_metrics")
+      .select("report_id, date, cost, revenue, clicks")
+      .in("report_id", reportIds)
+      .gte("date", from)
+      .lte("date", to)
+      .order("date", { ascending: true })
+      .range(offset, offset + batchSize - 1);
+
+    if (error) {
+      console.error("Error fetching report daily metrics:", error);
+      return {};
+    }
+
+    const rows = (data || []) as any[];
+    allRows.push(
+      ...rows.map((r) => ({
+        report_id: r.report_id,
+        date: r.date,
+        cost: r.cost,
+        revenue: r.revenue,
+        clicks: r.clicks,
+      }))
+    );
+
+    hasMore = rows.length === batchSize;
+    offset += batchSize;
+  }
+
+  const result: CachedBudgetMetrics = {};
+  for (const r of allRows) {
+    const reportId = r.report_id;
+    const monthKey = r.date?.slice(0, 7); // YYYY-MM
+    if (!reportId || !monthKey) continue;
+
+    if (!result[reportId]) result[reportId] = {};
+    if (!result[reportId][monthKey]) {
+      result[reportId][monthKey] = { cost: 0, revenue: 0, clicks: 0 };
+    }
+
+    result[reportId][monthKey].cost += Number(r.cost || 0);
+    result[reportId][monthKey].revenue += Number(r.revenue || 0);
+    result[reportId][monthKey].clicks =
+      (result[reportId][monthKey].clicks || 0) + Number(r.clicks || 0);
+  }
+
+  return result;
 }
 
 /**
@@ -347,6 +426,28 @@ export function useAISummaryBudgets(
     gcTime: 60 * 60 * 1000, // 1 hour
     refetchOnWindowFocus: false,
     refetchOnMount: true, // Refetch on mount to ensure fresh data
+    refetchOnReconnect: false,
+  });
+}
+
+/**
+ * Hook to fetch monthly cost/revenue/clicks from DB (report_daily_metrics)
+ */
+export function useReportMonthlyMetrics(
+  reportIds: string[],
+  year: number,
+  options: { enabled?: boolean } = {}
+) {
+  const { enabled = true } = options;
+
+  return useQuery({
+    queryKey: aiSummaryKeys.reportMonthlyMetrics(reportIds, year),
+    queryFn: () => fetchReportMonthlyMetrics(reportIds, year),
+    enabled: enabled && reportIds.length > 0 && !!year,
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    gcTime: 60 * 60 * 1000, // 1 hour
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
     refetchOnReconnect: false,
   });
 }

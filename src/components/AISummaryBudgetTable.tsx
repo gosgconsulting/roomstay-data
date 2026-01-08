@@ -21,13 +21,14 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Loader2, Edit2, Check, X } from "lucide-react";
+import { Loader2, Edit2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   useAISummaryBudgets,
   useAISummaryBudgetMetrics,
   useAISummaryForecasts,
+  useReportMonthlyMetrics,
   aiSummaryKeys,
 } from "@/hooks/useAISummaryData";
 
@@ -121,49 +122,61 @@ export function AISummaryBudgetTable({
 
   // Use React Query hooks for data fetching with caching
   const reportIdsToFetch = isOverview && allReportIds ? allReportIds : [reportId];
-  
+
   const { data: budgetsData = {}, isLoading: isLoadingBudgets } = useAISummaryBudgets(
     aiSummaryCardId,
     reportIdsToFetch,
     { enabled: !!aiSummaryCardId }
   );
-  
-  const { data: cachedMetrics, isLoading: isLoadingMetrics } = useAISummaryBudgetMetrics(
+
+  // Fetch cost/revenue/clicks from DB for the selected year
+  const { data: dbMonthlyMetrics = {}, isLoading: isLoadingDbMetrics } = useReportMonthlyMetrics(
+    reportIdsToFetch,
+    currentYear,
+    { enabled: reportIdsToFetch.length > 0 }
+  );
+
+  // Keep cached metrics as fallback (older cards)
+  const { data: cachedMetrics, isLoading: isLoadingCachedMetrics } = useAISummaryBudgetMetrics(
     aiSummaryCardId,
     { enabled: !!aiSummaryCardId }
   );
-  
+
   const { data: forecastRows = [], isLoading: isLoadingForecasts } = useAISummaryForecasts(
     aiSummaryCardId,
     { enabled: !!aiSummaryCardId }
   );
 
-  const isLoading = isLoadingBudgets || isLoadingMetrics || isLoadingForecasts;
+  const isLoading = isLoadingBudgets || isLoadingDbMetrics || isLoadingCachedMetrics || isLoadingForecasts;
 
-  // Process cached metrics for this view
+  // Process metrics for this view (prefer DB monthly metrics, fallback to cached)
   const processedMetrics = useMemo(() => {
-    if (!cachedMetrics) return {};
-    
+    const source =
+      Object.keys(dbMonthlyMetrics || {}).length > 0 ? dbMonthlyMetrics : (cachedMetrics || {});
+
+    if (!source || Object.keys(source).length === 0) return {};
+
     if (isOverview && allReportIds) {
       const aggregated: Record<string, { cost: number; revenue: number; clicks?: number }> = {};
       allReportIds.forEach((rid) => {
-        const reportData = cachedMetrics[rid];
+        const reportData = (source as any)[rid];
         if (reportData) {
-          Object.entries(reportData).forEach(([monthKey, metrics]) => {
+          Object.entries(reportData).forEach(([monthKey, metrics]: any) => {
             if (!aggregated[monthKey]) {
               aggregated[monthKey] = { cost: 0, revenue: 0, clicks: 0 };
             }
             aggregated[monthKey].cost += metrics.cost || 0;
             aggregated[monthKey].revenue += metrics.revenue || 0;
-            aggregated[monthKey].clicks = (aggregated[monthKey].clicks || 0) + (metrics.clicks || 0);
+            aggregated[monthKey].clicks =
+              (aggregated[monthKey].clicks || 0) + (metrics.clicks || 0);
           });
         }
       });
       return aggregated;
     }
-    
-    return cachedMetrics[reportId] || {};
-  }, [cachedMetrics, isOverview, allReportIds, reportId]);
+
+    return (source as any)[reportId] || {};
+  }, [dbMonthlyMetrics, cachedMetrics, isOverview, allReportIds, reportId]);
 
   // Build budget data using memoization instead of useEffect
   const budgetData = useMemo(() => {
