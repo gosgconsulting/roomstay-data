@@ -2141,31 +2141,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             );
           })}
 
-          {/* Filter Value Dropdown - show when dimension is configured in modal */}
-          {activeFilterConfig?.dimensionId && activeReportTab !== "overview" && activeReportTab !== "budget" && (
-            <Select
-              value={filterValues[activeFilterConfig.dimensionId]?.length > 0 ? filterValues[activeFilterConfig.dimensionId][0] : "all"}
-              onValueChange={(value) => {
-                setFilterValues(prev => ({
-                  ...prev,
-                  [activeFilterConfig.dimensionId]: value === "all" ? [] : [value],
-                }));
-              }}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder={filterDimensionNames[activeFilterConfig.dimensionId] || "Select value"} />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border z-50">
-                <SelectItem value="all">All {filterDimensionNames[activeFilterConfig.dimensionId] || ""}</SelectItem>
-                {(filterDimensionValues[activeFilterConfig.dimensionId] || []).map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {value}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          
           {/* Year Selector */}
           {availableYears.length > 0 && (
             <Select 
