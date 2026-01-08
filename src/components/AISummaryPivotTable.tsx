@@ -2430,6 +2430,227 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
         })()}
 
+        {/* BREAKDOWNS (per dimension) - computed dynamically with filter */}
+        {activeReportTab !== "overview" && breakdownConfigs[activeReportTab]?.breakdownDimensionIds?.length > 0 && (() => {
+          const period = selectedDatePeriod || activeTab;
+          
+          // Compute breakdown data dynamically with current filter
+          const breakdownRows = computeBreakdownData(period as DateTab, activeReportTab);
+          
+          if (breakdownRows.length === 0) return null;
+          
+          // Get breakdown dimension name
+          const breakdownDimId = breakdownConfigs[activeReportTab].breakdownDimensionIds[0];
+          const dimensionName = filterDimensionNames[breakdownDimId] || breakdownDimId;
+          
+          // If only one breakdown dimension, show it directly without sub-tabs
+          if (breakdownConfigs[activeReportTab].breakdownDimensionIds.length === 1) {
+            const breakdownKey = `breakdown-${activeReportTab}-${breakdownDimId}`;
+            
+            return (
+              <div className="mt-6">
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="overflow-hidden">
+                    <Table>
+                      <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                        <TableRow className="bg-muted/30">
+                          <TableHead className="font-medium w-[200px]">{dimensionName}</TableHead>
+                          {safeMetrics.map((metric) => renderSortableHeader(breakdownKey, metric))}
+                        </TableRow>
+                      </TableHeader>
+                    </Table>
+                    <div className={breakdownRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                      <Table>
+                        <TableBody>
+                          {sortRows(breakdownRows, breakdownKey, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                            <TableRow
+                              key={row.groupValue}
+                              className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                            >
+                              <TableCell className="font-medium text-sm w-[200px]">
+                                {row.groupValue}
+                              </TableCell>
+                              {safeMetrics.map((metric) => (
+                                <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          
+          // Multiple breakdown dimensions - show sub-tabs
+          const breakdownDimensionIds = breakdownConfigs[activeReportTab].breakdownDimensionIds;
+          const currentBreakdownTab = activeBreakdownTab[activeReportTab] || breakdownDimensionIds[0];
+          
+          return (
+            <div className="mt-6 space-y-4">
+              <Tabs value={currentBreakdownTab} onValueChange={(value) => {
+                setActiveBreakdownTab(prev => ({ ...prev, [activeReportTab]: value }));
+              }}>
+                <TabsList className="h-auto mb-4">
+                  {breakdownDimensionIds.map((dimId: string) => {
+                    const dimName = filterDimensionNames[dimId] || dimId;
+                    return (
+                      <TabsTrigger
+                        key={dimId}
+                        value={dimId}
+                      >
+                        {dimName}
+                      </TabsTrigger>
+                    );
+                  })}
+                </TabsList>
+                
+                {breakdownDimensionIds.map((dimId: string) => {
+                    const dimName = filterDimensionNames[dimId] || dimId;
+                    const breakdownKey = `breakdown-${activeReportTab}-${dimId}`;
+                    
+                    // Compute breakdown data for this specific dimension
+                    const dimBreakdownRows = (() => {
+                      if (!reportsLoaded) return [];
+                      
+                      const breakdownConfig = breakdownConfigs[activeReportTab];
+                      if (!breakdownConfig) return [];
+                      
+                      const reportData = rawSourceData[activeReportTab];
+                      if (!reportData?.rows || reportData.rows.length === 0) return [];
+                      
+                      const dateRange = getDateRange(period as DateTab, selectedYear);
+                      const dimensionFilter = getDimensionFilterForReport(activeReportTab);
+                      
+                      // Filter rows by date and dimension filter
+                      const filteredRows = reportData.rows.filter((row: any) => {
+                        const rowData = row.dimension_values || row;
+                        
+                        // Date filter
+                        let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
+                        if (!dateValue) {
+                          const dateDimId = mergedMetricMap['Date'] || mergedMetricMap['date'] || mergedMetricMap['Day'];
+                          if (dateDimId) dateValue = rowData[dateDimId];
+                        }
+                        if (!dateValue) {
+                          for (const [key, val] of Object.entries(rowData)) {
+                            if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+                              dateValue = val;
+                              break;
+                            }
+                          }
+                        }
+                        
+                        const rowDate = parseDate(dateValue);
+                        if (!rowDate || !isWithinInterval(rowDate, { start: dateRange.start, end: dateRange.end })) {
+                          return false;
+                        }
+                        
+                        // Dimension filter
+                        if (dimensionFilter && dimensionFilter.values.length > 0) {
+                          const dimValue = rowData[dimensionFilter.dimensionId] || 
+                                         (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
+                          
+                          if (dimValue === undefined) {
+                            return false;
+                          }
+                          
+                          const normalizedRowValue = String(dimValue).trim();
+                          const normalizedFilterValues = dimensionFilter.values.map(v => String(v).trim());
+                          
+                          if (!normalizedFilterValues.includes(normalizedRowValue)) {
+                            return false;
+                          }
+                        }
+                        
+                        return true;
+                      });
+                      
+                      // Group rows by this breakdown dimension value
+                      const groupedRows: Record<string, any[]> = {};
+                      filteredRows.forEach((row: any) => {
+                        const rowData = row.dimension_values || row;
+                        const breakdownValue = rowData[dimId] || 
+                                              (dimName ? rowData[dimName] : undefined);
+                        const groupKey = breakdownValue !== undefined && breakdownValue !== null && breakdownValue !== '' 
+                          ? String(breakdownValue).trim() 
+                          : 'Uncategorized';
+                        
+                        if (!groupedRows[groupKey]) {
+                          groupedRows[groupKey] = [];
+                        }
+                        groupedRows[groupKey].push(row);
+                      });
+                      
+                      // Compute metrics for each group
+                      const rows: BreakdownRow[] = [];
+                      Object.entries(groupedRows).forEach(([groupValue, groupRows]) => {
+                        const metrics = aggregateMetrics(
+                          groupRows,
+                          selectedMetrics,
+                          dateRange,
+                          undefined, // Already filtered above
+                          mergedMetricMap
+                        );
+                        
+                        rows.push({
+                          groupValue,
+                          metrics,
+                        });
+                      });
+                      
+                      return rows;
+                    })();
+                    
+                    if (dimBreakdownRows.length === 0) return null;
+                    
+                    return (
+                      <TabsContent key={dimId} value={dimId} className="mt-0">
+                        <div className="border rounded-lg overflow-hidden">
+                          <div className="overflow-hidden">
+                            <Table>
+                              <TableHeader className="sticky top-0 z-10 bg-muted/30">
+                                <TableRow className="bg-muted/30">
+                                  <TableHead className="font-medium w-[200px]">{dimName}</TableHead>
+                                  {safeMetrics.map((metric) => renderSortableHeader(breakdownKey, metric))}
+                                </TableRow>
+                              </TableHeader>
+                            </Table>
+                            <div className={dimBreakdownRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
+                              <Table>
+                                <TableBody>
+                                  {sortRows(dimBreakdownRows, breakdownKey, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                                    <TableRow
+                                      key={row.groupValue}
+                                      className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                                    >
+                                      <TableCell className="font-medium text-sm w-[200px]">
+                                        {row.groupValue}
+                                      </TableCell>
+                                      {safeMetrics.map((metric) => (
+                                        <TableCell key={metric} className="text-right tabular-nums text-sm">
+                                          {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                        </TableCell>
+                                      ))}
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </div>
+                        </div>
+                      </TabsContent>
+                    );
+                  })}
+              </Tabs>
+            </div>
+          );
+        })()}
+
         {/* INDIVIDUAL REPORT: Results by Week */}
         {activeReportTab !== "overview" && (() => {
           const period = selectedDatePeriod || activeTab;
@@ -2514,68 +2735,6 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               </div>
             </div>
           );
-        })()}
-
-        {/* BREAKDOWNS (per dimension) - computed dynamically with filter */}
-        {activeReportTab !== "overview" && breakdownConfigs[activeReportTab]?.breakdownDimensionIds?.length > 0 && (() => {
-          const period = selectedDatePeriod || activeTab;
-          
-          // Compute breakdown data dynamically with current filter
-          const breakdownRows = computeBreakdownData(period as DateTab, activeReportTab);
-          
-          if (breakdownRows.length === 0) return null;
-          
-          // Get breakdown dimension name
-          const breakdownDimId = breakdownConfigs[activeReportTab].breakdownDimensionIds[0];
-          const dimensionName = filterDimensionNames[breakdownDimId] || breakdownDimId;
-          
-          // If only one breakdown dimension, show it directly without sub-tabs
-          if (breakdownConfigs[activeReportTab].breakdownDimensionIds.length === 1) {
-            const breakdownKey = `breakdown-${activeReportTab}-${breakdownDimId}`;
-            
-            return (
-              <div className="mt-6">
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="overflow-hidden">
-                    <Table>
-                      <TableHeader className="sticky top-0 z-10 bg-muted/30">
-                        <TableRow className="bg-muted/30">
-                          <TableHead className="font-medium w-[200px]">{dimensionName}</TableHead>
-                          {safeMetrics.map((metric) => renderSortableHeader(breakdownKey, metric))}
-                        </TableRow>
-                      </TableHeader>
-                    </Table>
-                    <div className={breakdownRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
-                      <Table>
-                        <TableBody>
-                          {sortRows(breakdownRows, breakdownKey, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                            <TableRow
-                              key={row.groupValue}
-                              className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                            >
-                              <TableCell className="font-medium text-sm w-[200px]">
-                                {row.groupValue}
-                              </TableCell>
-                              {safeMetrics.map((metric) => (
-                                <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          }
-          
-          // Multiple breakdown dimensions - show sub-tabs
-          // For now, we only support one breakdown dimension at a time
-          // This can be extended later to support multiple
-          return null;
         })()}
 
         {/* Executive Summary - TEMPORARILY HIDDEN
