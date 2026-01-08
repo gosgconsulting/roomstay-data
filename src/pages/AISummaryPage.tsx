@@ -1437,7 +1437,7 @@ const AISummaryPage = () => {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-muted-foreground">Reports</span>
                 <Select 
-                  value={selectedCardId || (cards[0]?.id ?? "")} 
+                  value={selectedCardId || ""} 
                   onValueChange={handleReportSelect}
                 >
                   <SelectTrigger className="w-[200px] bg-background border-border">
@@ -1457,18 +1457,6 @@ const AISummaryPage = () => {
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                {/* Settings icon for All Reports - only show when All reports is selected */}
-                {!selectedCardId && (
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8"
-                    onClick={() => setIsMasterReportSetupOpen(true)}
-                    title="Set up Master Report"
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                )}
               </div>
 
             </div>
