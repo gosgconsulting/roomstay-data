@@ -5,8 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/lib/auth";
-import { useCachedSourceData } from "@/hooks/dataSources";
+import { useCachedSourceData, useSourceData } from "@/hooks/dataSources";
 import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
+import type { DataSource } from "@/lib/data-sources/types";
 
 interface KPIMetric {
   label: string;
@@ -31,6 +32,7 @@ interface KPIMetricsCardsProps {
   onLoadingComplete?: () => void;
   visibilityRefreshTrigger?: number;
   headerAction?: React.ReactNode;
+  useCachedData?: boolean; // When false, fetch directly from Google Sheets/CSV
 }
 
 export function KPIMetricsCards({ 
@@ -39,13 +41,15 @@ export function KPIMetricsCards({
   filters, 
   onLoadingComplete,
   visibilityRefreshTrigger,
-  headerAction
+  headerAction,
+  useCachedData = true, // Default to database cache for speed
 }: KPIMetricsCardsProps) {
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [metrics, setMetrics] = useState<KPIMetric[]>([]);
   const [visibleKPIs, setVisibleKPIs] = useState<string[] | null>(null);
   const [kpiOrder, setKpiOrder] = useState<string[] | null>(null);
+  const [dataSource, setDataSource] = useState<DataSource | null>(null);
 
   // Load dimensions using the same hook as PerformanceTable
   const { dimensions, isLoadingDimensions, loadDimensions } = usePerformanceTableDimensions({
@@ -59,6 +63,36 @@ export function KPIMetricsCards({
       loadDimensions();
     }
   }, [reportId, accountId, loadDimensions]);
+
+  // Fetch data source config for direct source loading
+  useEffect(() => {
+    const fetchDataSource = async () => {
+      if (!reportId || useCachedData) {
+        setDataSource(null);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('data_sources')
+          .select('*')
+          .eq('report_id', reportId)
+          .limit(1)
+          .maybeSingle();
+
+        if (!error && data) {
+          setDataSource({
+            ...data,
+            column_mappings: (data.column_mappings as any) || null,
+          } as DataSource);
+        }
+      } catch (error) {
+        console.error('[KPI-CARDS] Error fetching data source:', error);
+      }
+    };
+
+    fetchDataSource();
+  }, [reportId, useCachedData]);
 
   // Load KPI visibility settings
   useEffect(() => {
@@ -83,25 +117,44 @@ export function KPIMetricsCards({
   }, [user?.id, reportId, visibilityRefreshTrigger]);
 
   // Use cached source data hook - fetches from dimension_data table (instant loading)
-  // With placeholderData enabled, this will show previous data instantly while loading new
   const { 
     data: cachedData, 
-    isLoading: isLoadingSource, 
-    error: sourceError,
-    isFetching: isFetchingSource, // Shows if background refresh is happening
-    isPlaceholderData // True when showing previous data while loading new
+    isLoading: isLoadingCached, 
+    error: cachedError,
+    isFetching: isFetchingCached,
   } = useCachedSourceData(reportId, { 
-    enabled: !!reportId 
+    enabled: !!reportId && useCachedData 
   });
 
-  // Transform cached data to match sourceData format
+  // Use direct source data hook - fetches from Google Sheets/CSV (slower but always fresh)
+  const {
+    data: directData,
+    isLoading: isLoadingDirect,
+    error: directError,
+  } = useSourceData(dataSource, accountId, {
+    enabled: !!dataSource && !useCachedData,
+  });
+
+  // Determine which data source to use
+  const isLoadingSource = useCachedData ? isLoadingCached : isLoadingDirect;
+  const sourceError = useCachedData ? cachedError : directError;
+
+  // Transform data to match expected format
   const sourceData = useMemo(() => {
-    if (!cachedData) return null;
-    return {
-      transformedRows: cachedData.transformedRows,
-      rowCount: cachedData.rowCount
-    };
-  }, [cachedData]);
+    if (useCachedData) {
+      if (!cachedData) return null;
+      return {
+        transformedRows: cachedData.transformedRows,
+        rowCount: cachedData.rowCount
+      };
+    } else {
+      if (!directData) return null;
+      return {
+        transformedRows: directData.transformedRows,
+        rowCount: directData.transformedRows.length
+      };
+    }
+  }, [useCachedData, cachedData, directData]);
 
   // Create stable filters reference
   const stableFilters = useMemo(() => ({
