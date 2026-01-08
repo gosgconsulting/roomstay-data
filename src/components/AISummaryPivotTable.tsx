@@ -938,40 +938,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // Only show loading if we have no cached data and are actively loading
   const isLoading = isLoadingRawData && Object.keys(rawSourceData).length === 0 && !cachedPivotData;
 
-  // Show error state if query failed and we have no cached data
-  if (isError && Object.keys(rawSourceData).length === 0 && !cachedPivotData) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 px-4">
-        <AlertCircle className="h-8 w-8 text-destructive mb-4" />
-        <h3 className="text-lg font-semibold mb-2">Failed to Load Report Data</h3>
-        <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
-          {error?.message || 'An error occurred while loading data from the data sources. Please check that all data sources are properly configured.'}
-        </p>
-        <Button
-          onClick={() => refetch()}
-          variant="default"
-        >
-          Retry
-        </Button>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  // Allow rendering with empty data - show table structure even when no reports
-  // Only return null if metrics are not selected
-  if (!selectedMetrics || selectedMetrics.length === 0) {
-    return null;
-  }
-  
   // Report tab state - controlled from parent if props provided, otherwise internal
+  // MUST be before early returns to maintain hook order
   const [internalReportTab, setInternalReportTab] = useState<ReportTab>("overview");
   const activeReportTab = selectedReportTab || internalReportTab;
   const handleReportTabChange = (tab: ReportTab) => {
@@ -1086,6 +1054,39 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       return config.direction === 'desc' ? bVal - aVal : aVal - bVal;
     });
   }, [sortConfig]);
+
+  // Show error state if query failed and we have no cached data
+  if (isError && Object.keys(rawSourceData).length === 0 && !cachedPivotData) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 px-4">
+        <AlertCircle className="h-8 w-8 text-destructive mb-4" />
+        <h3 className="text-lg font-semibold mb-2">Failed to Load Report Data</h3>
+        <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
+          {error?.message || 'An error occurred while loading data from the data sources. Please check that all data sources are properly configured.'}
+        </p>
+        <Button
+          onClick={() => refetch()}
+          variant="default"
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Allow rendering with empty data - show table structure even when no reports
+  // Only return null if metrics are not selected
+  if (!selectedMetrics || selectedMetrics.length === 0) {
+    return null;
+  }
 
   // Render sortable header
   const renderSortableHeader = useCallback((tableId: string, metric: string) => {
