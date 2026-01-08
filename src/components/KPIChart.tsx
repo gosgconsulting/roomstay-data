@@ -587,9 +587,10 @@ export function KPIChart({
      }
    };
 
-  // Show skeleton only on initial load when no cached data is available
-  // When we have placeholder data, don't show skeleton
-  const showSkeleton = isLoadingSource && !cachedData && chartData.length === 0;
+  // Show skeleton only on initial load when no data is available
+  // Use same pattern as PerformanceTable - show data immediately if cached
+  const hasAnyData = chartData.length > 0 || (useCachedData && !!cachedData);
+  const showSkeleton = isLoadingSource && !hasAnyData;
   
   if (showSkeleton) {
     return (
