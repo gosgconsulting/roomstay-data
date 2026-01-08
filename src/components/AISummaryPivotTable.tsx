@@ -2529,7 +2529,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           const dateRange = getDateRange(period as DateTab, selectedYear);
           const reportRawData = rawSourceData;
 
-          // Compute week-by-week breakdown for the period
+          // Compute week-by-week breakdown for the period (clamped to the selected month)
           const weekRows: DateBreakdownRow[] = [];
           const weeks = eachWeekOfInterval(
             { start: dateRange.start, end: dateRange.end },
@@ -2537,21 +2537,20 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
 
           for (const weekStart of weeks) {
-            const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
-            // Ensure we don't go beyond the period end date
+            const rawWeekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+            // Clamp to selected month range
             const weekRange = {
-              start: weekStart,
-              end: weekEnd > dateRange.end ? dateRange.end : weekEnd,
+              start: weekStart < dateRange.start ? dateRange.start : weekStart,
+              end: rawWeekEnd > dateRange.end ? dateRange.end : rawWeekEnd,
             };
 
             // Aggregate metrics across all reports for this week
             const weekMetrics: Record<string, number> = {};
             safeMetrics.forEach((metric) => (weekMetrics[metric] = 0));
 
-            // Aggregate from all reports
             Object.entries(reportRawData).forEach(([reportId, reportData]) => {
               if (!reportData?.rows?.length) return;
-              
+
               const reportMetrics = aggregateMetrics(
                 reportData.rows,
                 selectedMetrics,
@@ -2565,6 +2564,10 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               });
             });
 
+            // Skip if all metrics are zero
+            const hasAny = Object.values(weekMetrics).some(v => v && v !== 0);
+            if (!hasAny) continue;
+
             const weekNum = getWeek(weekStart);
             const year = getYear(weekStart);
             weekRows.push({
@@ -2572,6 +2575,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               metrics: weekMetrics,
             });
           }
+
+          if (weekRows.length === 0) return null;
 
           return (
             <div className="space-y-4">
@@ -2591,29 +2596,24 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   <div className={weekRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
                     <Table>
                       <TableBody>
-                        {weekRows.length === 0 ? (
-                          <TableRow>
-                            <TableCell className="text-sm text-muted-foreground" colSpan={safeMetrics.length + 1}>
-                              No weekly data for the selected period.
+                        {sortRows(weekRows, 'date-breakdown', (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                          <TableRow
+                            key={row.dateGroup}
+                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                          >
+                            <TableCell className="font-medium text-sm w-[200px]">
+                              {row.dateGroup}
                             </TableCell>
-                          </TableRow>
-                        ) : (
-                          sortRows(weekRows, 'date-breakdown', (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                            <TableRow
-                              key={row.dateGroup}
-                              className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                            >
-                              <TableCell className="font-medium text-sm w-[200px]">
-                                {row.dateGroup}
-                              </TableCell>
-                              {safeMetrics.map((metric) => (
+                            {safeMetrics.map((metric) => {
+                              const val = row.metrics[metric] || 0;
+                              return (
                                 <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                  {val !== 0 ? formatMetricValue(metric, val) : ""}
                                 </TableCell>
-                              ))}
-                            </TableRow>
-                          ))
-                        )}
+                              );
+                            })}
+                          </TableRow>
+                        ))}
                       </TableBody>
                     </Table>
                   </div>
@@ -2872,7 +2872,7 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
 
           const dateRange = getDateRange(period as DateTab, selectedYear);
 
-          // Compute week-by-week breakdown for this report
+          // Compute week-by-week breakdown for this report (clamped to the selected month)
           const weekRows: DateBreakdownRow[] = [];
           const weeks = eachWeekOfInterval(
             { start: dateRange.start, end: dateRange.end },
@@ -2880,11 +2880,10 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           );
 
           for (const weekStart of weeks) {
-            const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
-            // Ensure we don't go beyond the period end date
+            const rawWeekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
             const weekRange = {
-              start: weekStart,
-              end: weekEnd > dateRange.end ? dateRange.end : weekEnd,
+              start: weekStart < dateRange.start ? dateRange.start : weekStart,
+              end: rawWeekEnd > dateRange.end ? dateRange.end : rawWeekEnd,
             };
 
             const metrics = aggregateMetrics(
@@ -2895,6 +2894,10 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               mergedMetricMap
             );
 
+            // Skip all-zero weeks
+            const hasAny = Object.values(metrics).some(v => v && v !== 0);
+            if (!hasAny) continue;
+
             const weekNum = getWeek(weekStart);
             const year = getYear(weekStart);
             weekRows.push({
@@ -2902,6 +2905,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
               metrics,
             });
           }
+
+          if (weekRows.length === 0) return null;
 
           return (
             <div className="mt-6 space-y-4">
@@ -2921,29 +2926,24 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                   <div className={weekRows.length > MAX_VISIBLE_ROWS ? "max-h-[400px] overflow-y-auto" : ""}>
                     <Table>
                       <TableBody>
-                        {weekRows.length === 0 ? (
-                          <TableRow>
-                            <TableCell className="text-sm text-muted-foreground" colSpan={safeMetrics.length + 1}>
-                              No weekly data for the selected period.
+                        {sortRows(weekRows, `report-date-breakdown-${activeReportTab}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
+                          <TableRow
+                            key={row.dateGroup}
+                            className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
+                          >
+                            <TableCell className="font-medium text-sm w-[200px]">
+                              {row.dateGroup}
                             </TableCell>
-                          </TableRow>
-                        ) : (
-                          sortRows(weekRows, `report-date-breakdown-${activeReportTab}`, (row, metric) => row.metrics[metric] || 0).map((row, idx) => (
-                            <TableRow
-                              key={row.dateGroup}
-                              className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                            >
-                              <TableCell className="font-medium text-sm w-[200px]">
-                                {row.dateGroup}
-                              </TableCell>
-                              {safeMetrics.map((metric) => (
+                            {safeMetrics.map((metric) => {
+                              const val = row.metrics[metric] || 0;
+                              return (
                                 <TableCell key={metric} className="text-right tabular-nums text-sm">
-                                  {formatMetricValue(metric, row.metrics[metric] || 0)}
+                                  {val !== 0 ? formatMetricValue(metric, val) : ""}
                                 </TableCell>
-                              ))}
-                            </TableRow>
-                          ))
-                        )}
+                              );
+                            })}
+                          </TableRow>
+                        ))}
                       </TableBody>
                     </Table>
                   </div>
