@@ -641,8 +641,9 @@ export default function ReportDashboard() {
                     filters={filters}
                     accountId={accountId}
                     visibilityRefreshTrigger={visibilityRefreshTrigger}
+                    useCachedData={useCachedData}
                     // Use reportId as key to avoid unnecessary remounts - components handle data updates internally
-                    key={`metrics-${reportId}`}
+                    key={`metrics-${reportId}-${useCachedData}`}
                     onLoadingComplete={() => markComponentLoaded('metrics')}
                     headerAction={
                       !isSharedView && isEditMode ? (
@@ -666,8 +667,9 @@ export default function ReportDashboard() {
                   accountId={accountId}
                   filters={filters}
                   visibilityRefreshTrigger={visibilityRefreshTrigger}
+                  useCachedData={useCachedData}
                   // Include chartMetrics in key since changing metrics should remount
-                  key={`charts-${reportId}-${chartMetrics.join(",")}`}
+                  key={`charts-${reportId}-${chartMetrics.join(",")}-${useCachedData}`}
                   onLoadingComplete={() => markComponentLoaded('chart')}
                   isEditMode={isEditMode}
                   metrics={chartMetrics}

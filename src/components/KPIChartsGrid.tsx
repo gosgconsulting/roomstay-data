@@ -19,6 +19,7 @@ interface KPIChartsGridProps {
   isEditMode?: boolean;
   metrics: string[]; // array of 4 metric names in order
   onMetricChange?: (index: number, metric: string) => void;
+  useCachedData?: boolean; // When false, fetch directly from Google Sheets/CSV
 }
 
 const KPIChartsGrid: React.FC<KPIChartsGridProps> = ({
@@ -30,6 +31,7 @@ const KPIChartsGrid: React.FC<KPIChartsGridProps> = ({
   isEditMode = false,
   metrics,
   onMetricChange,
+  useCachedData = true,
 }) => {
   const [loaded, setLoaded] = useState(0);
 
@@ -54,6 +56,7 @@ const KPIChartsGrid: React.FC<KPIChartsGridProps> = ({
           initialMetric={metric}
           isEditMode={isEditMode}
           onMetricChange={(m) => onMetricChange?.(index, m)}
+          useCachedData={useCachedData}
         />
       ))}
     </div>

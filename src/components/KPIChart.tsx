@@ -9,8 +9,9 @@ import { getCurrentMonthDateRange, Dimension } from "@/lib/data-loading-fix";
 import { format, parseISO } from "date-fns";
 import { useUser } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCachedSourceData } from "@/hooks/dataSources";
+import { useCachedSourceData, useSourceData } from "@/hooks/dataSources";
 import { loadAccountDimensions } from "@/lib/data-loading-fix";
+import type { DataSource } from "@/lib/data-sources/types";
 
 interface KPIChartProps {
   reportId: string | null;
@@ -28,6 +29,7 @@ interface KPIChartProps {
   initialMetric?: string;
   isEditMode?: boolean;
   onMetricChange?: (metric: string) => void;
+  useCachedData?: boolean; // When false, fetch directly from Google Sheets/CSV
 }
 
 export function KPIChart({
@@ -39,6 +41,7 @@ export function KPIChart({
   initialMetric,
   isEditMode = false,
   onMetricChange,
+  useCachedData = true,
 }: KPIChartProps) {
   const queryClient = useQueryClient();
   const { data: userData } = useUser();
@@ -49,8 +52,7 @@ export function KPIChart({
   const [availableMetrics, setAvailableMetrics] = useState<string[]>([]);
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [isPending, startTransition] = useTransition();
-
-  // console.log('[CHART-FIXED] Component render - reportId:', reportId, 'accountId:', accountId);
+  const [dataSource, setDataSource] = useState<DataSource | null>(null);
 
   // Load dimensions
   useEffect(() => {
@@ -68,25 +70,72 @@ export function KPIChart({
     loadDims();
   }, [accountId, user?.id, reportId]);
 
+  // Fetch data source config for direct source loading
+  useEffect(() => {
+    const fetchDataSource = async () => {
+      if (!reportId || useCachedData) {
+        setDataSource(null);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('data_sources')
+          .select('*')
+          .eq('report_id', reportId)
+          .limit(1)
+          .maybeSingle();
+
+        if (!error && data) {
+          setDataSource({
+            ...data,
+            column_mappings: (data.column_mappings as any) || null,
+          } as DataSource);
+        }
+      } catch (error) {
+        console.error('[CHART] Error fetching data source:', error);
+      }
+    };
+
+    fetchDataSource();
+  }, [reportId, useCachedData]);
+
   // Use cached source data hook - fetches from dimension_data table (instant loading)
-  // With placeholderData enabled, this will show previous data instantly while loading new
   const { 
     data: cachedData, 
-    isLoading: isLoadingSource,
-    isFetching: isFetchingSource,
-    isPlaceholderData
+    isLoading: isLoadingCached,
+    isFetching: isFetchingCached,
   } = useCachedSourceData(reportId, { 
-    enabled: !!reportId 
+    enabled: !!reportId && useCachedData 
   });
 
-  // Transform cached data to match sourceData format
+  // Use direct source data hook - fetches from Google Sheets/CSV (slower but always fresh)
+  const {
+    data: directData,
+    isLoading: isLoadingDirect,
+  } = useSourceData(dataSource, accountId, {
+    enabled: !!dataSource && !useCachedData,
+  });
+
+  // Determine which data source to use
+  const isLoadingSource = useCachedData ? isLoadingCached : isLoadingDirect;
+
+  // Transform data to match expected format
   const sourceData = useMemo(() => {
-    if (!cachedData) return null;
-    return {
-      transformedRows: cachedData.transformedRows,
-      rowCount: cachedData.rowCount
-    };
-  }, [cachedData]);
+    if (useCachedData) {
+      if (!cachedData) return null;
+      return {
+        transformedRows: cachedData.transformedRows,
+        rowCount: cachedData.rowCount
+      };
+    } else {
+      if (!directData) return null;
+      return {
+        transformedRows: directData.transformedRows,
+        rowCount: directData.transformedRows.length
+      };
+    }
+  }, [useCachedData, cachedData, directData]);
 
   // Create a stable reference for filters to prevent unnecessary re-renders
   const stableFilters = useMemo(() => {
