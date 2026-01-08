@@ -1568,7 +1568,7 @@ const AISummaryPage = () => {
               <div key={card.id} className="w-full">
                   {selectedReportTab === "budget" ? (
                     <div className="space-y-4">
-                      <div className="flex">
+                      <div className="flex items-center justify-between">
                         <Button
                           variant="link"
                           size="sm"
@@ -1580,52 +1580,56 @@ const AISummaryPage = () => {
                           Back to report
                         </Button>
                       </div>
-                      {/* ADD: Year selector (this year, last year) */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-muted-foreground">Year</span>
-                        <Select
-                          value={selectedBudgetYear.toString()}
-                          onValueChange={(v) => setSelectedBudgetYear(parseInt(v, 10))}
-                        >
-                          <SelectTrigger className="w-[120px] bg-background border-border">
-                            <SelectValue placeholder="Year" />
-                          </SelectTrigger>
-                          <SelectContent className="bg-popover border-border z-50">
-                            <SelectItem value={new Date().getFullYear().toString()}>
-                              {new Date().getFullYear()}
-                            </SelectItem>
-                            <SelectItem value={(new Date().getFullYear() - 1).toString()}>
-                              {new Date().getFullYear() - 1}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {/* Budget Report Tabs */}
-                      <div className="flex gap-2 border-b pb-3">
-                        <Button
-                          key="budget-overview"
-                          variant={selectedBudgetReportId === "overview" || !selectedBudgetReportId ? "default" : "ghost"}
-                          size="sm"
-                          className="px-4"
-                          onClick={() => setSelectedBudgetReportId("overview")}
-                        >
-                          Overview
-                        </Button>
-                        {card.report_ids.map((reportId) => {
-                          const report = reports.find(r => r.id === reportId);
-                          const isSelected = selectedBudgetReportId === reportId;
-                          return (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {/* Budget Report Tabs */}
+                          <div className="flex gap-2 border-b pb-3">
                             <Button
-                              key={reportId}
-                              variant={isSelected ? "default" : "ghost"}
+                              key="budget-overview"
+                              variant={selectedBudgetReportId === "overview" || !selectedBudgetReportId ? "default" : "ghost"}
                               size="sm"
                               className="px-4"
-                              onClick={() => setSelectedBudgetReportId(reportId)}
+                              onClick={() => setSelectedBudgetReportId("overview")}
                             >
-                              {report?.name || "Report"}
+                              Overview
                             </Button>
-                          );
-                        })}
+                            {card.report_ids.map((reportId) => {
+                              const report = reports.find(r => r.id === reportId);
+                              const isSelected = selectedBudgetReportId === reportId;
+                              return (
+                                <Button
+                                  key={reportId}
+                                  variant={isSelected ? "default" : "ghost"}
+                                  size="sm"
+                                  className="px-4"
+                                  onClick={() => setSelectedBudgetReportId(reportId)}
+                                >
+                                  {report?.name || "Report"}
+                                </Button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        {/* ADD: Year selector (this year, last year) */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-muted-foreground">Year</span>
+                          <Select
+                            value={selectedBudgetYear.toString()}
+                            onValueChange={(v) => setSelectedBudgetYear(parseInt(v, 10))}
+                          >
+                            <SelectTrigger className="w-[120px] bg-background border-border">
+                              <SelectValue placeholder="Year" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover border-border z-50">
+                              <SelectItem value={new Date().getFullYear().toString()}>
+                                {new Date().getFullYear()}
+                              </SelectItem>
+                              <SelectItem value={(new Date().getFullYear() - 1).toString()}>
+                                {new Date().getFullYear() - 1}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                       {/* Show the selected report's budget table or overview */}
                       {selectedBudgetReportId === "overview" || !selectedBudgetReportId ? (
