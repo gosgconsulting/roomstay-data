@@ -1414,11 +1414,26 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   // Compute data for specific month tabs dynamically
   // Always compute dynamically to ensure filter is applied (don't use cached data that might not have filter)
   const computeDataForTab = (tab: DateTab): ReportMetrics[] => {
-    // Always compute dynamically to ensure current filter is applied
+    // NEW: If raw data isn't ready, fall back to cached pivot data so tables/KPIs render immediately
     if (!reportsLoaded || Object.keys(rawSourceData).length === 0) {
-      return [];
+      const fallback: ReportMetrics[] = [];
+      if (tab === 'mtd' && data.mtd) {
+        const rows = activeReportTab === "overview" ? data.mtd : data.mtd.filter(r => r.reportId === activeReportTab);
+        return rows;
+      }
+      if (tab === 'ytd' && data.ytd) {
+        const rows = activeReportTab === "overview" ? data.ytd : data.ytd.filter(r => r.reportId === activeReportTab);
+        return rows;
+      }
+      if (tab.match(/^\d{4}-\d{2}$/) && data.monthly_data?.[tab]) {
+        const rows = activeReportTab === "overview" 
+          ? data.monthly_data[tab] 
+          : data.monthly_data[tab].filter(r => r.reportId === activeReportTab);
+        return rows;
+      }
+      return fallback;
     }
-    
+
     const dateRange = getDateRange(tab, selectedYear);
     const results: ReportMetrics[] = [];
     
@@ -1426,11 +1441,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       const reportData = rawSourceData[reportId];
       if (!reportData) continue;
       
-      // Get dimension filter and custom filters for this report
       const dimensionFilter = getDimensionFilterForReport(reportId);
       const customFilters = getCustomFiltersForReport(reportId);
       
-      // Apply all custom filters to rows
       let rowsToAggregate = reportData.rows;
       customFilters.forEach(customFilter => {
         if (customFilter.values.length > 0) {
@@ -1438,12 +1451,9 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             const rowData = row.dimension_values || row;
             const dimValue = rowData[customFilter.dimensionId] || 
                            (customFilter.dimensionName ? rowData[customFilter.dimensionName] : undefined);
-            
             if (dimValue === undefined) return false;
-            
             const normalizedRowValue = String(dimValue).trim();
             const normalizedFilterValues = customFilter.values.map(v => String(v).trim());
-            
             return normalizedFilterValues.includes(normalizedRowValue);
           });
         }
@@ -1453,8 +1463,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         rowsToAggregate,
         selectedMetrics,
         dateRange,
-        dimensionFilter, // apply dimension filter if configured
-        mergedMetricMap // pass mapping for ID-based lookup
+        dimensionFilter,
+        mergedMetricMap
       );
       
       results.push({

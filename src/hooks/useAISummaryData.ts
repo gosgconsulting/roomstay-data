@@ -115,11 +115,6 @@ async function fetchRawSourceData(
     return {};
   }
 
-  const { user } = await getUser();
-  if (!user) {
-    throw new Error("User not authenticated");
-  }
-
   console.log('[AI-SUMMARY] Loading data for', reportIds.length, 'reports using cached dimension_data');
   const startTime = performance.now();
 
@@ -131,7 +126,6 @@ async function fetchRawSourceData(
   const reportsList = reportsData || [];
   const rawData: RawSourceData = {};
 
-  // Fetch all reports in parallel for faster loading
   const fetchPromises = reportIds.map(async (reportId) => {
     const report = reportsList.find((r: Report) => r.id === reportId);
     if (!report) {
@@ -184,14 +178,13 @@ export function useAISummaryRawData(
     queryKey: aiSummaryKeys.rawData(cardId),
     queryFn: () => fetchRawSourceData(reportIds, accountId),
     enabled: enabled && !!cardId && reportIds.length > 0,
-    staleTime: 10 * 60 * 1000, // 10 minutes - data is fresh for 10 min
-    gcTime: 60 * 60 * 1000, // 1 hour - keep in cache
-    retry: 1, // Reduce retries from 2 to 1
-    refetchOnWindowFocus: false, // Don't refetch on focus
-    refetchOnMount: false, // Use cached data if available - INSTANT loading on tab switch
-    refetchOnReconnect: false, // Don't refetch on reconnect
-    refetchInterval: false, // No automatic polling
-    // Use cached data as placeholder while refetching for instant display
+    staleTime: 10 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    refetchOnMount: true, // CHANGED: refetch on mount so data reloads when returning to the page
+    refetchOnReconnect: false,
+    refetchInterval: false,
     placeholderData: (previousData) => previousData,
   });
 }
