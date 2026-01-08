@@ -649,7 +649,7 @@ export const EditDataSourceModal = ({
       onOpenChange(open);
       if (!open) resetForm();
     }}>
-      <DialogContent className="sm:max-w-[900px]">
+      <DialogContent className="sm:max-w-[900px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {(step === 2 || step === 3) && (
@@ -678,7 +678,7 @@ export const EditDataSourceModal = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className={`space-y-4 py-4 ${step === 3 ? 'overflow-y-auto max-h-[60vh] pr-2' : ''}`}>
           {step === 1 ? (
             <>
               <div className="space-y-2">
