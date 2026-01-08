@@ -1,5 +1,5 @@
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ColumnVisibilitySheet } from "./ColumnVisibilitySheet";
+import { DimensionSelectorGroup } from "./DimensionSelectorGroup";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import type { DragEndEvent } from '@dnd-kit/core';
 import { Button } from "@/components/ui/button";
@@ -33,9 +33,9 @@ interface TableHeaderProps {
 }
 
 /**
- * Table header with unified design:
- * Row 1: Report name + Day/Week toggle
- * Row 2: Dimension tabs (Date, Hotel, Device, etc.)
+ * Table header with:
+ * Row 1: Report name + Day/Week/Month/Year toggle + Settings
+ * Row 2: Group by / Breakdown by / Then by selectors
  */
 export function TableHeader({
   activeDateTab,
@@ -62,28 +62,14 @@ export function TableHeader({
   onOpenSettings,
   availableSelectorDimensions,
 }: TableHeaderProps) {
-  // Build selector options: use configured list if provided, else default to all text/date
-  const configured = (availableSelectorDimensions && availableSelectorDimensions.length > 0)
-    ? availableSelectorDimensions
-    : dimensions.filter(d => d.type === 'text' || d.type === 'date').map(d => d.id);
-
-  const dateId = dimensions.find(d => d.type === 'date')?.id;
-  const selectorOptions = dateId
-    ? Array.from(new Set([dateId, ...configured])) // Ensure Date is always included
-    : configured;
-
-  // Get dimension objects for the selector options
-  const dimensionTabs = selectorOptions
-    .map(id => dimensions.find(d => d.id === id))
-    .filter((d): d is Dimension => d !== undefined);
-
-  // Current active dimension (first in groupByDimensions)
-  const activeDimensionId = groupByDimensions[0] || dimensionTabs[0]?.id;
-  const activeDimension = dimensions.find(d => d.id === activeDimensionId);
+  // Build available dimension options for selectors (text/date types)
+  const selectorDimensions = dimensions
+    .filter(d => d.type === 'text' || d.type === 'date')
+    .map(d => d.id);
 
   return (
     <div className="px-4">
-      {/* Row 1: Report name + Day/Week toggle + Settings */}
+      {/* Row 1: Report name + Day/Week/Month/Year toggle + Settings */}
       <div className="flex items-center justify-between py-3">
         <h3 className="font-semibold text-foreground">
           {reportName || "Performance"}
@@ -92,7 +78,7 @@ export function TableHeader({
         <div className="flex items-center gap-2">
           {/* Day/Week/Month/Year toggle */}
           <div className="flex items-center bg-muted rounded-md p-0.5">
-            {(['day', 'week'] as const).map((tab) => (
+            {(['day', 'week', 'month', 'year'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => onDateTabChange(tab)}
@@ -103,7 +89,7 @@ export function TableHeader({
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                {tab}
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>
@@ -138,33 +124,43 @@ export function TableHeader({
         </div>
       </div>
       
-      {/* Row 2: Dimension Tabs */}
-      <div className="border-b -mx-4 px-4">
-        <div className="flex items-center gap-0 overflow-x-auto">
-          {dimensionTabs.map((dim) => {
-            const isActive = dim.id === activeDimensionId;
-            return (
-              <button
-                key={dim.id}
-                onClick={() => {
-                  if (!isSharedView || isEditMode) {
-                    onDimensionChange(dim.id, "group");
-                  }
-                }}
-                disabled={isSharedView && !isEditMode}
-                className={cn(
-                  "px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors relative border-b-2",
-                  isActive 
-                    ? "text-foreground border-primary" 
-                    : "text-muted-foreground hover:text-foreground border-transparent hover:border-muted-foreground/30",
-                  (isSharedView && !isEditMode) && "cursor-default"
-                )}
-              >
-                {dim.name}
-              </button>
-            );
-          })}
-        </div>
+      {/* Row 2: Dimension Selectors (Group by, Breakdown by, Then by) */}
+      <div className="flex items-center gap-6 py-2 border-b -mx-4 px-4 overflow-x-auto">
+        <DimensionSelectorGroup
+          label="Group by"
+          dimensions={groupByDimensions}
+          availableDimensions={selectorDimensions}
+          allDimensions={dimensions}
+          dimensionHasData={dimensionHasData}
+          reportId={reportId}
+          isSharedView={isSharedView}
+          isEditMode={isEditMode}
+          onValueChange={(value) => onDimensionChange(value, "group")}
+        />
+        
+        <DimensionSelectorGroup
+          label="Breakdown by"
+          dimensions={breakdownByDimensions}
+          availableDimensions={selectorDimensions}
+          allDimensions={dimensions}
+          dimensionHasData={dimensionHasData}
+          reportId={reportId}
+          isSharedView={isSharedView}
+          isEditMode={isEditMode}
+          onValueChange={(value) => onDimensionChange(value, "breakdown")}
+        />
+        
+        <DimensionSelectorGroup
+          label="Then by"
+          dimensions={thenByDimensions}
+          availableDimensions={selectorDimensions}
+          allDimensions={dimensions}
+          dimensionHasData={dimensionHasData}
+          reportId={reportId}
+          isSharedView={isSharedView}
+          isEditMode={isEditMode}
+          onValueChange={(value) => onDimensionChange(value, "then")}
+        />
       </div>
     </div>
   );
