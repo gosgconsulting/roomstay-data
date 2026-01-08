@@ -59,6 +59,8 @@ import {
   parseDate,
 } from "@/components/AISummaryPivotTable";
 import { AISummaryBudgetTable } from "@/components/AISummaryBudgetTable";
+import { useQueryClient } from "@tanstack/react-query";
+import { aiSummaryKeys } from "@/hooks/useAISummaryData";
 
 interface AISummaryCard {
   id: string;
@@ -97,8 +99,7 @@ interface DataSource {
 const AISummaryPage = () => {
   const { reportName, accountId: legacyAccountId, summaryId: legacySummaryId } = useParams();
   const navigate = useNavigate();
-  const [resolvedAccountId, setResolvedAccountId] = useState<string | undefined>(undefined);
-  const [resolvedSummaryId, setResolvedSummaryId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   
   // Get summaryId from query params if provided
   const searchParams = new URLSearchParams(window.location.search);
@@ -225,9 +226,9 @@ const AISummaryPage = () => {
           if (isUUID) {
             // Legacy UUID format - treat as accountId
             console.log('[AISummaryPage] Detected UUID in reportName, treating as accountId');
-            setResolvedAccountId(reportName);
+            setAccountId(reportName);
             if (querySummaryId) {
-              setResolvedSummaryId(querySummaryId);
+              setSummaryId(querySummaryId);
             }
             return;
           }
@@ -257,10 +258,10 @@ const AISummaryPage = () => {
           });
           
           if (report && report.account_id) {
-            setResolvedAccountId(report.account_id);
+            setAccountId(report.account_id);
             // Set summaryId from query param if provided
             if (querySummaryId) {
-              setResolvedSummaryId(querySummaryId);
+              setSummaryId(querySummaryId);
             }
           } else {
             console.error('[AISummaryPage] Report not found:', {
@@ -282,9 +283,9 @@ const AISummaryPage = () => {
         }
       } else if (legacyAccountId) {
         // Legacy route support
-        setResolvedAccountId(legacyAccountId);
+        setAccountId(legacyAccountId);
         if (legacySummaryId) {
-          setResolvedSummaryId(legacySummaryId);
+          setSummaryId(legacySummaryId);
         }
       }
     };
@@ -293,8 +294,8 @@ const AISummaryPage = () => {
   }, [reportName, legacyAccountId, legacySummaryId, querySummaryId, navigate]);
 
   // Use resolved accountId
-  const accountId = resolvedAccountId || legacyAccountId;
-  const summaryId = resolvedSummaryId || legacySummaryId || querySummaryId;
+  const [accountId, setAccountId] = useState<string | undefined>(legacyAccountId);
+  const [summaryId, setSummaryId] = useState<string | null>(legacySummaryId || null);
 
   const fetchReports = async () => {
     if (!accountId) return;
@@ -1192,6 +1193,9 @@ const AISummaryPage = () => {
           ? { ...c, cached_pivot_data: completePivotData, pivot_data_refreshed_at: new Date().toISOString() }
           : c
       ));
+
+      // ADD: Invalidate budget metrics cache so Budget view refetches fresh data
+      queryClient.invalidateQueries({ queryKey: aiSummaryKeys.budgetMetrics(card.id) });
 
       // Build summary of data ranges for each report
       const dataRangeSummaries = Object.values(actualDataRanges)
