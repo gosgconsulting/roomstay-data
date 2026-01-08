@@ -46,7 +46,7 @@ export const aiSummaryKeys = {
   pivotData: (cardId: string) => [...aiSummaryKeys.all, "pivot-data", cardId] as const,
   budgetData: (cardId: string, reportId: string) => [...aiSummaryKeys.all, "budget-data", cardId, reportId] as const,
   budgetMetrics: (cardId: string) => [...aiSummaryKeys.all, "budget-metrics", cardId] as const,
-  budgets: (cardId: string) => [...aiSummaryKeys.all, "budgets", cardId] as const,
+  budgets: (cardId: string, reportIds: string[]) => [...aiSummaryKeys.all, "budgets", cardId, ...reportIds.sort()] as const,
   forecasts: (cardId: string) => [...aiSummaryKeys.all, "forecasts", cardId] as const,
 };
 
@@ -340,13 +340,13 @@ export function useAISummaryBudgets(
   const { enabled = true } = options;
 
   return useQuery({
-    queryKey: aiSummaryKeys.budgets(cardId),
+    queryKey: aiSummaryKeys.budgets(cardId, reportIds),
     queryFn: () => fetchBudgets(cardId, reportIds),
     enabled: enabled && !!cardId && reportIds.length > 0,
     staleTime: 30 * 60 * 1000, // 30 minutes
     gcTime: 60 * 60 * 1000, // 1 hour
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    refetchOnMount: true, // Refetch on mount to ensure fresh data
     refetchOnReconnect: false,
   });
 }
@@ -406,8 +406,9 @@ export function useInvalidateAISummaryData() {
       });
     },
     invalidateBudgetData: (cardId: string) => {
+      // Use partial match to invalidate all budget queries for this card
       queryClient.invalidateQueries({
-        queryKey: aiSummaryKeys.budgets(cardId),
+        queryKey: ["ai-summary", "budgets", cardId],
       });
       queryClient.invalidateQueries({
         queryKey: aiSummaryKeys.budgetMetrics(cardId),
