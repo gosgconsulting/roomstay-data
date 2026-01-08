@@ -454,8 +454,10 @@ export function KPIMetricsCards({
     return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // Only show skeleton on initial load, not when placeholder data is available
-  const showSkeleton = (isLoadingSource || isLoadingDimensions) && !cachedData;
+  // Only show skeleton on initial load when there's truly no data available
+  // Use same pattern as PerformanceTable - show data immediately if cached
+  const hasAnyData = metrics.length > 0 || (useCachedData && !!cachedData);
+  const showSkeleton = (isLoadingSource || isLoadingDimensions) && !hasAnyData;
 
   if (showSkeleton) {
     return (
