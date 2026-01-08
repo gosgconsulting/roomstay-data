@@ -57,12 +57,13 @@ export function KPIMetricsCards({
     accountId: accountId || undefined,
   });
 
-  // Trigger dimension loading when reportId or accountId changes
+  // Trigger dimension loading when reportId, accountId, or user changes
+  // Important: user needs to be in deps because loadDimensions depends on it
   useEffect(() => {
-    if (reportId || accountId) {
+    if ((reportId || accountId) && user) {
       loadDimensions();
     }
-  }, [reportId, accountId, loadDimensions]);
+  }, [reportId, accountId, loadDimensions, user]);
 
   // Fetch data source config for direct source loading
   useEffect(() => {
