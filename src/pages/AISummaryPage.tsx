@@ -1203,9 +1203,15 @@ const AISummaryPage = () => {
         })
         .join("\n");
 
+      // Format the refresh range based on since_date
+      const refreshRangeLabel = `${format(sinceDate, "MMM yyyy")} - ${format(now, "MMM yyyy")}`;
+
       toast.success(
         <div className="space-y-1">
           <div className="font-medium">Data refreshed!</div>
+          <div className="text-xs text-muted-foreground">
+            Refreshed: {refreshRangeLabel}
+          </div>
           <div className="text-xs text-muted-foreground whitespace-pre-line">
             Latest data available:
             {"\n"}{dataRangeSummaries}
