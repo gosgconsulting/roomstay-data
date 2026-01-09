@@ -141,6 +141,35 @@ const SOCIAL_BY_CAMPAIGN = [
   { campaign: "Brady Group | Leads | Members", impressions: 10576, clicks: 127, cost: 313.50, revenue: 802.00, bookings: 1 },
 ];
 
+const SOCIAL_TOP_CAMPAIGNS_TOTAL = SOCIAL_BY_CAMPAIGN.reduce(
+  (acc, row) => ({
+    impressions: acc.impressions + row.impressions,
+    clicks: acc.clicks + row.clicks,
+    cost: acc.cost + row.cost,
+    revenue: acc.revenue + row.revenue,
+    bookings: acc.bookings + row.bookings,
+  }),
+  { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
+);
+
+const SOCIAL_OTHER_CAMPAIGNS = {
+  campaign: "Other campaigns",
+  impressions: Math.max(0, SOCIAL_DATA.impressions - SOCIAL_TOP_CAMPAIGNS_TOTAL.impressions),
+  clicks: Math.max(0, SOCIAL_DATA.clicks - SOCIAL_TOP_CAMPAIGNS_TOTAL.clicks),
+  cost: Math.max(0, Number((SOCIAL_DATA.cost - SOCIAL_TOP_CAMPAIGNS_TOTAL.cost).toFixed(2))),
+  revenue: Math.max(0, Number((SOCIAL_DATA.revenue - SOCIAL_TOP_CAMPAIGNS_TOTAL.revenue).toFixed(2))),
+  bookings: Math.max(0, Number((SOCIAL_DATA.bookings - SOCIAL_TOP_CAMPAIGNS_TOTAL.bookings).toFixed(2))),
+};
+
+const SOCIAL_BY_CAMPAIGN_WITH_OTHER =
+  SOCIAL_OTHER_CAMPAIGNS.impressions > 0 ||
+  SOCIAL_OTHER_CAMPAIGNS.clicks > 0 ||
+  SOCIAL_OTHER_CAMPAIGNS.cost > 0 ||
+  SOCIAL_OTHER_CAMPAIGNS.revenue > 0 ||
+  SOCIAL_OTHER_CAMPAIGNS.bookings > 0
+    ? [...SOCIAL_BY_CAMPAIGN, SOCIAL_OTHER_CAMPAIGNS]
+    : SOCIAL_BY_CAMPAIGN;
+
 // BUDGET DATA - Full year 2025 with actual spend data
 const MONTHLY_BUDGET_DATA = [
   { month: "Jan", metasearchBudget: 5000, semBudget: 6000, socialBudget: 3000, metasearchActual: 4850.25, semActual: 5720.30, socialActual: 2890.15 },
@@ -695,7 +724,7 @@ export default function SlideViewPage() {
               <Card>
                 <CardHeader><CardTitle className="text-base font-medium">Results by Campaign</CardTitle></CardHeader>
                 <CardContent>
-                  <BreakdownTable data={SOCIAL_BY_CAMPAIGN} labelKey="campaign" labelHeader="Campaign" />
+                  <BreakdownTable data={SOCIAL_BY_CAMPAIGN_WITH_OTHER} labelKey="campaign" labelHeader="Campaign" />
                 </CardContent>
               </Card>
             </TabsContent>
