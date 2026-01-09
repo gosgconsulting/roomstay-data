@@ -86,8 +86,19 @@ const METASEARCH_BY_LINK_TYPE = [
   { linkType: "Google Organic", impressions: 0, clicks: 1251, cost: 0, revenue: 14868.20, bookings: 40 },
 ];
 
-// SEM BREAKDOWN BY CAMPAIGN - No 2025 data available
-const SEM_BY_CAMPAIGN: { campaign: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number }[] = [];
+// SEM BREAKDOWN BY CAMPAIGN (December 2025)
+const SEM_BY_CAMPAIGN = [
+  { campaign: "Brady Hotels Central Melbourne | Search | Brand", impressions: 3248, clicks: 666, cost: 1050.91, revenue: 31932.30, bookings: 45 },
+  { campaign: "Brady Group | Search | Brand", impressions: 3155, clicks: 895, cost: 1059.14, revenue: 25988.77, bookings: 52 },
+  { campaign: "Brady Hotels Jones Lane | Search | Brand", impressions: 2655, clicks: 633, cost: 1047.45, revenue: 22245.90, bookings: 58 },
+  { campaign: "Brady Apartment Hotel Hardware Lane | Search | Brand", impressions: 2142, clicks: 574, cost: 1038.45, revenue: 14744.00, bookings: 25 },
+  { campaign: "Brady Apartment Hotel Flinders Street | Search | Brand", impressions: 2689, clicks: 604, cost: 1044.86, revenue: 14300.23, bookings: 29 },
+  { campaign: "Brady Apartment Hotel Flinders Street | Performance Max", impressions: 27627, clicks: 485, cost: 229.14, revenue: 13196.13, bookings: 11 },
+  { campaign: "Brady Apartment Hotel Hardware Lane | Performance Max", impressions: 65162, clicks: 935, cost: 276.58, revenue: 11338.89, bookings: 19 },
+  { campaign: "Brady Hotels Central Melbourne | Performance Max", impressions: 26301, clicks: 638, cost: 274.40, revenue: 4433.15, bookings: 14 },
+  { campaign: "Brady Group | Performance Max", impressions: 152199, clicks: 1992, cost: 270.84, revenue: 3548.18, bookings: 9 },
+  { campaign: "Brady Hotels Jones Lane | Performance Max", impressions: 46178, clicks: 701, cost: 231.27, revenue: 2342.81, bookings: 8 },
+];
 
 // SOCIAL BREAKDOWN BY CAMPAIGN (December 2025)
 const SOCIAL_BY_CAMPAIGN = [
@@ -181,20 +192,20 @@ const PREV_YEAR_COST = METASEARCH_PREV_YEAR.cost + SEM_DATA.cost + SOCIAL_PREV_Y
 const PREV_YEAR_REVENUE = METASEARCH_PREV_YEAR.revenue + SEM_DATA.revenue + SOCIAL_PREV_YEAR.revenue;
 const PREV_YEAR_BOOKINGS = METASEARCH_PREV_YEAR.bookings + SEM_DATA.bookings + SOCIAL_PREV_YEAR.bookings;
 
-// Monthly revenue data
+// Monthly revenue data - 2025 (Metasearch + Social + SEM for Brady Hotels)
 const MONTHLY_DATA = [
-  { month: "Jan", value: 0 },
-  { month: "Feb", value: 0 },
-  { month: "Mar", value: 0 },
-  { month: "Apr", value: 0 },
-  { month: "May", value: 0 },
-  { month: "Jun", value: 0 },
-  { month: "Jul", value: 127831.82 + 8761.54 },
-  { month: "Aug", value: 122044.32 + 51340.05 },
-  { month: "Sep", value: 130995.38 + 47241.16 },
-  { month: "Oct", value: 125581.24 + 59499.71 },
-  { month: "Nov", value: 125528.32 + 107535.63 },
-  { month: "Dec", value: 40890.64 + 20432.40 },
+  { month: "Jan", metasearch: 0, social: 0, sem: 614844.08 },
+  { month: "Feb", metasearch: 0, social: 0, sem: 455783.02 },
+  { month: "Mar", metasearch: 0, social: 0, sem: 417356.54 },
+  { month: "Apr", metasearch: 0, social: 0, sem: 424804.64 },
+  { month: "May", metasearch: 0, social: 0, sem: 438201.43 },
+  { month: "Jun", metasearch: 0, social: 0, sem: 0 },
+  { month: "Jul", metasearch: 127831.82, social: 8761.54, sem: 0 },
+  { month: "Aug", metasearch: 122044.32, social: 51340.05, sem: 84318.10 },
+  { month: "Sep", metasearch: 130995.38, social: 47241.16, sem: 292391.79 },
+  { month: "Oct", metasearch: 125581.24, social: 59499.71, sem: 203158.10 },
+  { month: "Nov", metasearch: 125528.32, social: 107535.63, sem: 278315.94 },
+  { month: "Dec", metasearch: 40890.64, social: 87867.77, sem: 155596.64 },
 ];
 
 // Helper functions
@@ -532,12 +543,12 @@ export default function SlideViewPage() {
               {/* Monthly Results Chart */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base font-medium">Monthly Results (2025) - Metasearch + Social Revenue</CardTitle>
+                  <CardTitle className="text-base font-medium">Monthly Results (2025) - Metasearch + Social + SEM Revenue</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={MONTHLY_DATA}>
+                      <BarChart data={MONTHLY_DATA.map(m => ({ month: m.month, total: m.metasearch + m.social + m.sem }))}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
@@ -545,7 +556,7 @@ export default function SlideViewPage() {
                           formatter={(value: number) => [`$${value.toLocaleString()}`, "Revenue"]}
                           contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                         />
-                        <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -896,7 +907,7 @@ export default function SlideViewPage() {
                 <CardContent>
                   <div className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={MONTHLY_DATA.map(m => ({ month: m.month, target: FORECAST_PROJECTIONS.monthlyRevenue, actual: m.value }))}>
+                      <ComposedChart data={MONTHLY_DATA.map(m => ({ month: m.month, target: FORECAST_PROJECTIONS.monthlyRevenue, actual: m.metasearch + m.social + m.sem }))}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
