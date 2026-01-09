@@ -254,6 +254,17 @@ const BreakdownTable = ({
     ...calculateDerivedMetrics(row),
   }));
 
+  // Calculate totals
+  const totals = data.reduce((acc, row) => ({
+    impressions: acc.impressions + row.impressions,
+    clicks: acc.clicks + row.clicks,
+    cost: acc.cost + row.cost,
+    revenue: acc.revenue + row.revenue,
+    bookings: acc.bookings + row.bookings,
+  }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
+
+  const totalMetrics = calculateDerivedMetrics(totals);
+
   return (
     <Table>
       <TableHeader>
@@ -287,6 +298,20 @@ const BreakdownTable = ({
             <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
           </TableRow>
         ))}
+        {/* Totals Row */}
+        <TableRow className="bg-muted/50 font-semibold border-t-2">
+          <TableCell className="font-bold">Total</TableCell>
+          <TableCell className="text-right">{formatNumber(totalMetrics.impressions)}</TableCell>
+          <TableCell className="text-right">{formatNumber(totalMetrics.clicks)}</TableCell>
+          <TableCell className="text-right">{totalMetrics.ctr.toFixed(2)}%</TableCell>
+          <TableCell className="text-right">{totalMetrics.bookings.toFixed(2)}</TableCell>
+          <TableCell className="text-right">{totalMetrics.conversionRate.toFixed(2)}%</TableCell>
+          <TableCell className="text-right">${totalMetrics.cpc.toFixed(2)}</TableCell>
+          <TableCell className="text-right">${formatNumber(totalMetrics.cost)}</TableCell>
+          <TableCell className="text-right">${formatNumber(totalMetrics.revenue)}</TableCell>
+          <TableCell className="text-right">{totalMetrics.roas.toFixed(1)}x</TableCell>
+          <TableCell className="text-right">{totalMetrics.costOfSale.toFixed(2)}%</TableCell>
+        </TableRow>
       </TableBody>
     </Table>
   );
