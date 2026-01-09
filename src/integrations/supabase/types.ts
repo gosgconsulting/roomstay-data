@@ -1290,6 +1290,70 @@ export type Database = {
           },
         ]
       }
+      slides: {
+        Row: {
+          account_id: string | null
+          cached_data: Json | null
+          components: Json
+          created_at: string
+          data_source_id: string | null
+          id: string
+          last_refreshed_at: string | null
+          name: string
+          report_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          cached_data?: Json | null
+          components?: Json
+          created_at?: string
+          data_source_id?: string | null
+          id?: string
+          last_refreshed_at?: string | null
+          name: string
+          report_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          cached_data?: Json | null
+          components?: Json
+          created_at?: string
+          data_source_id?: string | null
+          id?: string
+          last_refreshed_at?: string | null
+          name?: string
+          report_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slides_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "slides_data_source_id_fkey"
+            columns: ["data_source_id"]
+            isOneToOne: false
+            referencedRelation: "data_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "slides_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
