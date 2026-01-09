@@ -132,6 +132,17 @@ const AISummaryPage = () => {
   // ADD: Budget year selector state (this year / last year)
   const [selectedBudgetYear, setSelectedBudgetYear] = useState<number>(new Date().getFullYear());
 
+  // Generate year options for the year selector (current year and previous 10 years)
+  const yearOptions = React.useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const years: number[] = [];
+    // Generate years from current year going back 10 years
+    for (let i = 0; i <= 10; i++) {
+      years.push(currentYear - i);
+    }
+    return years;
+  }, []);
+
   // Generate date options based on selected year
   const dateOptions = React.useMemo(() => {
     const options: { value: string; label: string }[] = [];
@@ -1625,7 +1636,7 @@ const AISummaryPage = () => {
                             })}
                           </div>
                         </div>
-                        {/* ADD: Year selector (this year, last year) */}
+                        {/* ADD: Year selector (current year and previous 10 years) */}
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-muted-foreground">Year</span>
                           <Select
@@ -1636,12 +1647,11 @@ const AISummaryPage = () => {
                               <SelectValue placeholder="Year" />
                             </SelectTrigger>
                             <SelectContent className="bg-popover border-border z-50">
-                              <SelectItem value={new Date().getFullYear().toString()}>
-                                {new Date().getFullYear()}
-                              </SelectItem>
-                              <SelectItem value={(new Date().getFullYear() - 1).toString()}>
-                                {new Date().getFullYear() - 1}
-                              </SelectItem>
+                              {yearOptions.map((year) => (
+                                <SelectItem key={year} value={year.toString()}>
+                                  {year}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>

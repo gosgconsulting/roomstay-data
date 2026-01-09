@@ -1600,11 +1600,34 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
         });
         
         // Group rows by breakdown dimension value
+        // Try multiple lookup strategies: dimension ID, dimension name, and reverse metric map lookup
         const groupedRows: Record<string, any[]> = {};
         filteredRows.forEach((row: any) => {
           const rowData = row.dimension_values || row;
-          const breakdownValue = rowData[breakdownDimId] || 
-                                (breakdownDimName ? rowData[breakdownDimName] : undefined);
+          
+          // Try to find breakdown value using multiple strategies
+          let breakdownValue: any = undefined;
+          
+          // Strategy 1: Direct lookup by dimension ID (most common case)
+          if (rowData[breakdownDimId] !== undefined) {
+            breakdownValue = rowData[breakdownDimId];
+          }
+          // Strategy 2: Lookup by dimension name
+          else if (breakdownDimName && rowData[breakdownDimName] !== undefined) {
+            breakdownValue = rowData[breakdownDimName];
+          }
+          // Strategy 3: Try reverse lookup in mergedMetricMap (dimension name -> ID mapping)
+          else if (breakdownDimName) {
+            // Check if dimension name exists as a key in rowData (case-insensitive)
+            const dimNameLower = breakdownDimName.toLowerCase();
+            for (const [key, value] of Object.entries(rowData)) {
+              if (key.toLowerCase() === dimNameLower) {
+                breakdownValue = value;
+                break;
+              }
+            }
+          }
+          
           const groupKey = breakdownValue !== undefined && breakdownValue !== null && breakdownValue !== '' 
             ? String(breakdownValue).trim() 
             : 'Uncategorized';
@@ -2645,7 +2668,139 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           const period = selectedDatePeriod || activeTab;
           
           // Compute breakdown data dynamically with current filter
-          const breakdownRows = computeBreakdownData(period as DateTab, activeReportTab);
+          // First try cache, then fallback to dynamic computation if cache is empty
+          let breakdownRows = computeBreakdownData(period as DateTab, activeReportTab);
+          
+          // If cache is empty, compute dynamically (similar to multiple breakdown dimensions)
+          if (breakdownRows.length === 0 && reportsLoaded) {
+            const breakdownConfig = breakdownConfigs[activeReportTab];
+            const reportData = rawSourceData[activeReportTab];
+            
+            if (reportData?.rows && reportData.rows.length > 0 && breakdownConfig?.breakdownDimensionIds?.length > 0) {
+              const breakdownDimId = breakdownConfig.breakdownDimensionIds[0];
+              const breakdownDimName = filterDimensionNames[breakdownDimId] || breakdownDimId;
+              const dateRange = getDateRange(period as DateTab, selectedYear);
+              const dimensionFilter = getDimensionFilterForReport(activeReportTab);
+              
+              // Filter rows by date and dimension filter
+              const filteredRows = reportData.rows.filter((row: any) => {
+                const rowData = row.dimension_values || row;
+                
+                // Date filter
+                let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
+                if (!dateValue) {
+                  const dateDimId = mergedMetricMap['Date'] || mergedMetricMap['date'] || mergedMetricMap['Day'];
+                  if (dateDimId) dateValue = rowData[dateDimId];
+                }
+                if (!dateValue) {
+                  for (const [key, val] of Object.entries(rowData)) {
+                    if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+                      dateValue = val;
+                      break;
+                    }
+                  }
+                }
+                
+                const rowDate = parseDate(dateValue);
+                if (!rowDate || !isWithinInterval(rowDate, { start: dateRange.start, end: dateRange.end })) {
+                  return false;
+                }
+                
+                // Dimension filter
+                if (dimensionFilter && dimensionFilter.values.length > 0) {
+                  const dimValue = rowData[dimensionFilter.dimensionId] || 
+                                 (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
+                  
+                  if (dimValue === undefined) {
+                    return false;
+                  }
+                  
+                  const normalizedRowValue = String(dimValue).trim();
+                  const normalizedFilterValues = dimensionFilter.values.map(v => String(v).trim());
+                  
+                  if (!normalizedFilterValues.includes(normalizedRowValue)) {
+                    return false;
+                  }
+                }
+                
+                // Custom filters
+                const customFilters = getCustomFiltersForReport(activeReportTab);
+                for (const customFilter of customFilters) {
+                  if (customFilter.values.length > 0) {
+                    const dimValue = rowData[customFilter.dimensionId] || 
+                                   (customFilter.dimensionName ? rowData[customFilter.dimensionName] : undefined);
+                    
+                    if (dimValue === undefined) {
+                      return false;
+                    }
+                    
+                    const normalizedRowValue = String(dimValue).trim();
+                    const normalizedFilterValues = customFilter.values.map(v => String(v).trim());
+                    
+                    if (!normalizedFilterValues.includes(normalizedRowValue)) {
+                      return false;
+                    }
+                  }
+                }
+                
+                return true;
+              });
+              
+              // Group rows by breakdown dimension value
+              const groupedRows: Record<string, any[]> = {};
+              filteredRows.forEach((row: any) => {
+                const rowData = row.dimension_values || row;
+                
+                // Try to find breakdown value using multiple strategies
+                let breakdownValue: any = undefined;
+                
+                // Strategy 1: Direct lookup by dimension ID (most common case)
+                if (rowData[breakdownDimId] !== undefined) {
+                  breakdownValue = rowData[breakdownDimId];
+                }
+                // Strategy 2: Lookup by dimension name
+                else if (breakdownDimName && rowData[breakdownDimName] !== undefined) {
+                  breakdownValue = rowData[breakdownDimName];
+                }
+                // Strategy 3: Try case-insensitive lookup by dimension name
+                else if (breakdownDimName) {
+                  const dimNameLower = breakdownDimName.toLowerCase();
+                  for (const [key, value] of Object.entries(rowData)) {
+                    if (key.toLowerCase() === dimNameLower) {
+                      breakdownValue = value;
+                      break;
+                    }
+                  }
+                }
+                
+                const groupKey = breakdownValue !== undefined && breakdownValue !== null && breakdownValue !== '' 
+                  ? String(breakdownValue).trim() 
+                  : 'Uncategorized';
+                
+                if (!groupedRows[groupKey]) {
+                  groupedRows[groupKey] = [];
+                }
+                groupedRows[groupKey].push(row);
+              });
+              
+              // Compute metrics for each group
+              breakdownRows = [];
+              Object.entries(groupedRows).forEach(([groupValue, groupRows]) => {
+                const metrics = aggregateMetrics(
+                  groupRows,
+                  selectedMetrics,
+                  dateRange,
+                  undefined, // Already filtered above
+                  mergedMetricMap
+                );
+                
+                breakdownRows.push({
+                  groupValue,
+                  metrics,
+                });
+              });
+            }
+          }
           
           if (breakdownRows.length === 0) return null;
           
@@ -2801,11 +2956,33 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
                       });
                       
                       // Group rows by this breakdown dimension value
+                      // Try multiple lookup strategies: dimension ID, dimension name, and case-insensitive lookup
                       const groupedRows: Record<string, any[]> = {};
                       filteredRows.forEach((row: any) => {
                         const rowData = row.dimension_values || row;
-                        const breakdownValue = rowData[dimId] || 
-                                              (dimName ? rowData[dimName] : undefined);
+                        
+                        // Try to find breakdown value using multiple strategies
+                        let breakdownValue: any = undefined;
+                        
+                        // Strategy 1: Direct lookup by dimension ID (most common case)
+                        if (rowData[dimId] !== undefined) {
+                          breakdownValue = rowData[dimId];
+                        }
+                        // Strategy 2: Lookup by dimension name
+                        else if (dimName && rowData[dimName] !== undefined) {
+                          breakdownValue = rowData[dimName];
+                        }
+                        // Strategy 3: Try case-insensitive lookup by dimension name
+                        else if (dimName) {
+                          const dimNameLower = dimName.toLowerCase();
+                          for (const [key, value] of Object.entries(rowData)) {
+                            if (key.toLowerCase() === dimNameLower) {
+                              breakdownValue = value;
+                              break;
+                            }
+                          }
+                        }
+                        
                         const groupKey = breakdownValue !== undefined && breakdownValue !== null && breakdownValue !== '' 
                           ? String(breakdownValue).trim() 
                           : 'Uncategorized';
