@@ -178,7 +178,7 @@ const SOCIAL_BY_CAMPAIGN_WITH_OTHER =
     ? [...SOCIAL_BY_CAMPAIGN, SOCIAL_OTHER_CAMPAIGNS]
     : SOCIAL_BY_CAMPAIGN;
 
-// BUDGET DATA - Full year 2025 with actual spend data from database (Brady Hotels only)
+// BUDGET DATA - Full year 2025 with actual spend data from database (Brady Hotels ONLY - filtered)
 const MONTHLY_BUDGET_DATA = [
   { month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7921.79, socialActual: 0 },
   { month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7969.45, socialActual: 0 },
