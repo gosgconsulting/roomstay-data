@@ -766,6 +766,28 @@ export default function SlideViewPage() {
             {/* Metasearch Tab */}
             <TabsContent value="metasearch" className="space-y-6">
               {renderKPICards(getReportKPICards(METASEARCH_DATA), getChannelComparisonMetrics('metasearch'))}
+              
+              {/* Monthly Revenue Chart */}
+              <Card>
+                <CardHeader><CardTitle className="text-base font-medium">Monthly Results (2025)</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="h-[250px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={MONTHLY_METASEARCH_DATA}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
+                        <Tooltip 
+                          formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
+                          contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
+                        />
+                        <Bar dataKey="revenue" fill="#10b981" name="Metasearch Revenue" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardHeader><CardTitle className="text-base font-medium">Results by Hotel</CardTitle></CardHeader>
                 <CardContent>
@@ -783,6 +805,28 @@ export default function SlideViewPage() {
             {/* SEM Tab */}
             <TabsContent value="sem" className="space-y-6">
               {renderKPICards(getReportKPICards(SEM_DATA), getChannelComparisonMetrics('sem'))}
+              
+              {/* Monthly Revenue Chart */}
+              <Card>
+                <CardHeader><CardTitle className="text-base font-medium">Monthly Results (2025)</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="h-[250px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={MONTHLY_SEM_DATA}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
+                        <Tooltip 
+                          formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
+                          contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
+                        />
+                        <Bar dataKey="revenue" fill="#3b82f6" name="SEM Revenue" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardHeader><CardTitle className="text-base font-medium">Results by Campaign</CardTitle></CardHeader>
                 <CardContent>
@@ -794,6 +838,28 @@ export default function SlideViewPage() {
             {/* Social Tab */}
             <TabsContent value="social" className="space-y-6">
               {renderKPICards(getReportKPICards(SOCIAL_DATA), getChannelComparisonMetrics('social'))}
+              
+              {/* Monthly Revenue Chart */}
+              <Card>
+                <CardHeader><CardTitle className="text-base font-medium">Monthly Results (2025)</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="h-[250px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={MONTHLY_SOCIAL_DATA}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
+                        <Tooltip 
+                          formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
+                          contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
+                        />
+                        <Bar dataKey="revenue" fill="#8b5cf6" name="Social Revenue" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardHeader><CardTitle className="text-base font-medium">Results by Campaign</CardTitle></CardHeader>
                 <CardContent>
