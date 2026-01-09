@@ -69,15 +69,12 @@ const SOCIAL_PREV_YEAR = {
   bookings: 1000,
 };
 
-// METASEARCH BREAKDOWN BY HOTEL (December 2025)
+// METASEARCH BREAKDOWN BY HOTEL (December 2025) - ONLY 4 BRADY HOTELS
 const METASEARCH_BY_HOTEL = [
   { hotel: "Brady Hotels Central Melbourne", impressions: 11271, clicks: 735, cost: 1188.40, revenue: 13701.50, bookings: 27 },
   { hotel: "Brady Hotels Jones Lane", impressions: 6285, clicks: 496, cost: 672.99, revenue: 12588.50, bookings: 26 },
   { hotel: "Brady Apartment Hotel Flinders Street", impressions: 5158, clicks: 352, cost: 635.32, revenue: 8010.13, bookings: 13 },
   { hotel: "Brady Apartment Hotel Hardware Lane", impressions: 7295, clicks: 549, cost: 575.62, revenue: 6590.51, bookings: 15 },
-  { hotel: "Sojourn Apartment Hotel - Riddiford", impressions: 1744, clicks: 147, cost: 111.26, revenue: 4155.27, bookings: 12 },
-  { hotel: "Sojourn Apartment Hotel - Ghuznee", impressions: 1682, clicks: 148, cost: 75.18, revenue: 3874.86, bookings: 10 },
-  { hotel: "Daydream Island Resort and Living Reef", impressions: 11246, clicks: 134, cost: 212.82, revenue: 409.04, bookings: 2 },
 ];
 
 // METASEARCH BREAKDOWN BY LINK TYPE (December 2025)
@@ -86,7 +83,7 @@ const METASEARCH_BY_LINK_TYPE = [
   { linkType: "Google Organic", impressions: 0, clicks: 1251, cost: 0, revenue: 14868.20, bookings: 40 },
 ];
 
-// SEM BREAKDOWN BY CAMPAIGN (December 2025)
+// SEM BREAKDOWN BY CAMPAIGN (December 2025) - Brady Hotels Group
 const SEM_BY_CAMPAIGN = [
   { campaign: "Brady Hotels Central Melbourne | Search | Brand", impressions: 3248, clicks: 666, cost: 1050.91, revenue: 31932.30, bookings: 45 },
   { campaign: "Brady Group | Search | Brand", impressions: 3155, clicks: 895, cost: 1059.14, revenue: 25988.77, bookings: 52 },
@@ -100,18 +97,18 @@ const SEM_BY_CAMPAIGN = [
   { campaign: "Brady Hotels Jones Lane | Performance Max", impressions: 46178, clicks: 701, cost: 231.27, revenue: 2342.81, bookings: 8 },
 ];
 
-// SOCIAL BREAKDOWN BY CAMPAIGN (December 2025)
+// SOCIAL BREAKDOWN BY CAMPAIGN (December 2025) - Brady Hotels 2025 Account
 const SOCIAL_BY_CAMPAIGN = [
-  { campaign: "F4F | Testing/Specialty | Conversion | East Coast | BAU | Campaign | Daily", impressions: 15991, clicks: 68, cost: 426.42, revenue: 14949.03, bookings: 81 },
-  { campaign: "F4F | Advantage + | Conversion | East Coast + Perth | BAU | Campaign | Daily", impressions: 10966, clicks: 92, cost: 404.46, revenue: 10779.28, bookings: 70 },
-  { campaign: "Digital Concierge | SYD Airport | Diji | Sep '25-Dec '25", impressions: 45575, clicks: 806, cost: 336.03, revenue: 143.86, bookings: 1 },
+  { campaign: "Brady Hotels Jones Lane | Sales", impressions: 27562, clicks: 275, cost: 463.60, revenue: 17751.01, bookings: 40 },
+  { campaign: "Brady Apartment Hotel Flinders Street | Sales", impressions: 35164, clicks: 367, cost: 577.52, revenue: 17215.57, bookings: 33 },
+  { campaign: "Brady Apartment Hotel Hardware Lane | Sales", impressions: 26685, clicks: 246, cost: 464.15, revenue: 17051.53, bookings: 22 },
+  { campaign: "Brady Hotels Central Melbourne | Sales", impressions: 28129, clicks: 253, cost: 452.97, revenue: 13215.00, bookings: 23 },
   { campaign: "Brady Black Friday Sale Campaign | Daily", impressions: 10392, clicks: 58, cost: 286.40, revenue: 5973.10, bookings: 10 },
-  { campaign: "Philippines Airlines | SYD Airport | Diji | Nov '25", impressions: 21861, clicks: 1161, cost: 148.53, revenue: 0, bookings: 0 },
-  { campaign: "F4F | Retargeting | Conversion | East Coast | BAU | Campaign | Daily", impressions: 7993, clicks: 16, cost: 132.58, revenue: 2523.00, bookings: 16 },
-  { campaign: "Brady Hotels Central Melbourne | Sales", impressions: 2469, clicks: 18, cost: 54.15, revenue: 5054.45, bookings: 7 },
-  { campaign: "Brady Hotels Jones Lane | Sales", impressions: 2363, clicks: 30, cost: 54.00, revenue: 1183.15, bookings: 4 },
-  { campaign: "Brady Apartment Hotel Hardware Lane | Sales", impressions: 2150, clicks: 22, cost: 53.23, revenue: 8010.70, bookings: 4 },
-  { campaign: "Brady Group | Leads | Members", impressions: 1274, clicks: 15, cost: 42.14, revenue: 0, bookings: 0 },
+  { campaign: "Brady Hotels Central Melbourne | Boxing Day '25", impressions: 11380, clicks: 70, cost: 192.44, revenue: 5498.50, bookings: 5 },
+  { campaign: "Brady Hotels Hardware Lane | Boxing Day '25", impressions: 12672, clicks: 80, cost: 192.46, revenue: 4057.48, bookings: 8 },
+  { campaign: "Brady Hotels Jones Lane | Boxing Day '25", impressions: 11289, clicks: 88, cost: 194.30, revenue: 3125.43, bookings: 5 },
+  { campaign: "Brady Hotels Flinders Street | Boxing Day '25", impressions: 12046, clicks: 83, cost: 192.58, revenue: 2929.15, bookings: 6 },
+  { campaign: "Brady Group | Leads | Members", impressions: 10576, clicks: 127, cost: 313.50, revenue: 802.00, bookings: 1 },
 ];
 
 // BUDGET DATA - Full year 2025 with actual spend data
