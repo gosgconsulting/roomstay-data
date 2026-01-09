@@ -242,6 +242,22 @@ export default function SlidesPage() {
             </div>
           ) : slides.length > 0 ? (
             <div className="space-y-4">
+              {/* Hardcoded Brady Slide Card */}
+              <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" onClick={() => navigate(`/tools/slides/${accountId}/brady`)}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Presentation className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Brady - December 2025</h3>
+                      <p className="text-sm text-muted-foreground">Hardcoded demo slide • Pre-rendered</p>
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm">View Slide</Button>
+                </div>
+              </Card>
+              
               {slides.map((slide) => (
                 <SlideListItem
                   key={slide.id}
@@ -255,19 +271,37 @@ export default function SlidesPage() {
               ))}
             </div>
           ) : (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <Presentation className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-medium mb-2">No slides yet</h3>
-                <p className="text-muted-foreground mb-6">
-                  Create your first slide to display pre-rendered data snapshots.
-                </p>
-                <Button onClick={() => setCreateModalOpen(true)} className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Create Your First Slide
-                </Button>
-              </CardContent>
-            </Card>
+            <div className="space-y-4">
+              {/* Hardcoded Brady Slide Card - always shown */}
+              <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" onClick={() => navigate(`/tools/slides/${accountId}/brady`)}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Presentation className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Brady - December 2025</h3>
+                      <p className="text-sm text-muted-foreground">Hardcoded demo slide • Pre-rendered</p>
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm">View Slide</Button>
+                </div>
+              </Card>
+
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Presentation className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-medium mb-2">No custom slides yet</h3>
+                  <p className="text-muted-foreground mb-6">
+                    Create your first slide to display pre-rendered data snapshots.
+                  </p>
+                  <Button onClick={() => setCreateModalOpen(true)} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Create Your First Slide
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
           )}
         </div>
       </main>
