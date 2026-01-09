@@ -42,7 +42,7 @@ export const deleteExistingData = async (supabase: any, dataSourceId: string): P
   
   let totalDeleted = 0;
   let batchNumber = 0;
-  const batchSize = 10000; // Larger batch size for more efficient deletion
+  const batchSize = 200; // Smaller batch size to avoid URL length limits
   const totalBatches = Math.ceil(rowCount / batchSize);
   
   // Delete in batches without counting (faster)
