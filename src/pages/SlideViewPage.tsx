@@ -701,14 +701,8 @@ export default function SlideViewPage() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>Month</TableHead>
-                            <TableHead className="text-right">Metasearch Budget</TableHead>
-                            <TableHead className="text-right">Metasearch Actual</TableHead>
-                            <TableHead className="text-right">SEM Budget</TableHead>
-                            <TableHead className="text-right">SEM Actual</TableHead>
-                            <TableHead className="text-right">Social Budget</TableHead>
-                            <TableHead className="text-right">Social Actual</TableHead>
-                            <TableHead className="text-right">Total Budget</TableHead>
-                            <TableHead className="text-right">Total Actual</TableHead>
+                            <TableHead className="text-right">Budget</TableHead>
+                            <TableHead className="text-right">Actual</TableHead>
                             <TableHead className="text-right">Variance</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -720,14 +714,8 @@ export default function SlideViewPage() {
                             return (
                               <TableRow key={row.month}>
                                 <TableCell className="font-medium">{row.month}</TableCell>
-                                <TableCell className="text-right">${formatNumber(row.metasearchBudget)}</TableCell>
-                                <TableCell className="text-right">${formatNumber(row.metasearchActual)}</TableCell>
-                                <TableCell className="text-right">${formatNumber(row.semBudget)}</TableCell>
-                                <TableCell className="text-right">${formatNumber(row.semActual)}</TableCell>
-                                <TableCell className="text-right">${formatNumber(row.socialBudget)}</TableCell>
-                                <TableCell className="text-right">${formatNumber(row.socialActual)}</TableCell>
-                                <TableCell className="text-right font-medium">${formatNumber(totalBudgetRow)}</TableCell>
-                                <TableCell className="text-right font-medium">${formatNumber(totalActualRow)}</TableCell>
+                                <TableCell className="text-right">${formatNumber(totalBudgetRow)}</TableCell>
+                                <TableCell className="text-right">${formatNumber(totalActualRow)}</TableCell>
                                 <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                   {variance >= 0 ? '+' : ''}${formatNumber(variance)}
                                 </TableCell>
