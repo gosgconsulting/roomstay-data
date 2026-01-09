@@ -256,7 +256,7 @@ const PREV_YEAR_COST = METASEARCH_PREV_YEAR.cost + SEM_DATA.cost + SOCIAL_PREV_Y
 const PREV_YEAR_REVENUE = METASEARCH_PREV_YEAR.revenue + SEM_DATA.revenue + SOCIAL_PREV_YEAR.revenue;
 const PREV_YEAR_BOOKINGS = METASEARCH_PREV_YEAR.bookings + SEM_DATA.bookings + SOCIAL_PREV_YEAR.bookings;
 
-// Monthly revenue data - 2025 (Metasearch + Social + SEM for Brady Hotels)
+// Monthly revenue data - 2025 (Brady Hotels ONLY - filtered by account)
 const MONTHLY_DATA = [
   { month: "Jan", metasearch: 0, social: 0, sem: 614844.08 },
   { month: "Feb", metasearch: 0, social: 0, sem: 455783.02 },
@@ -264,13 +264,18 @@ const MONTHLY_DATA = [
   { month: "Apr", metasearch: 0, social: 0, sem: 424804.64 },
   { month: "May", metasearch: 0, social: 0, sem: 438201.43 },
   { month: "Jun", metasearch: 0, social: 0, sem: 0 },
-  { month: "Jul", metasearch: 127831.82, social: 8761.54, sem: 0 },
-  { month: "Aug", metasearch: 122044.32, social: 51340.05, sem: 84318.10 },
-  { month: "Sep", metasearch: 130995.38, social: 47241.16, sem: 292391.79 },
-  { month: "Oct", metasearch: 125581.24, social: 59499.71, sem: 203158.10 },
-  { month: "Nov", metasearch: 125528.32, social: 107535.63, sem: 278315.94 },
-  { month: "Dec", metasearch: 40890.64, social: 87867.77, sem: 155596.64 },
+  { month: "Jul", metasearch: 63915.91, social: 8761.54, sem: 0 },
+  { month: "Aug", metasearch: 61022.16, social: 51340.05, sem: 0 },
+  { month: "Sep", metasearch: 65497.69, social: 47241.16, sem: 292391.79 },
+  { month: "Oct", metasearch: 62790.62, social: 59499.71, sem: 203158.10 },
+  { month: "Nov", metasearch: 62764.16, social: 107535.63, sem: 278315.94 },
+  { month: "Dec", metasearch: 35093.16, social: 87867.77, sem: 155596.64 },
 ];
+
+// Monthly revenue data by channel for individual charts
+const MONTHLY_METASEARCH_DATA = MONTHLY_DATA.map(m => ({ month: m.month, revenue: m.metasearch }));
+const MONTHLY_SEM_DATA = MONTHLY_DATA.map(m => ({ month: m.month, revenue: m.sem }));
+const MONTHLY_SOCIAL_DATA = MONTHLY_DATA.map(m => ({ month: m.month, revenue: m.social }));
 
 // Helper functions
 const calculateDerivedMetrics = (data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => ({
@@ -820,6 +825,24 @@ export default function SlideViewPage() {
                     </TabsList>
                     
                     <TabsContent value="overview">
+                      {/* Overview Revenue Chart */}
+                      <div className="h-[250px] mb-6">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart data={MONTHLY_DATA}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
+                            <Tooltip 
+                              formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                              contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
+                            />
+                            <Legend />
+                            <Bar dataKey="metasearch" stackId="a" fill="#10b981" name="Metasearch" radius={[0, 0, 0, 0]} />
+                            <Bar dataKey="sem" stackId="a" fill="#3b82f6" name="SEM" radius={[0, 0, 0, 0]} />
+                            <Bar dataKey="social" stackId="a" fill="#8b5cf6" name="Social" radius={[4, 4, 0, 0]} />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      </div>
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -850,6 +873,21 @@ export default function SlideViewPage() {
                     </TabsContent>
                     
                     <TabsContent value="metasearch">
+                      {/* Metasearch Revenue Chart */}
+                      <div className="h-[250px] mb-6">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart data={MONTHLY_METASEARCH_DATA}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
+                            <Tooltip 
+                              formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
+                              contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
+                            />
+                            <Bar dataKey="revenue" fill="#10b981" name="Metasearch Revenue" radius={[4, 4, 0, 0]} />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      </div>
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -878,6 +916,21 @@ export default function SlideViewPage() {
                     </TabsContent>
                     
                     <TabsContent value="sem">
+                      {/* SEM Revenue Chart */}
+                      <div className="h-[250px] mb-6">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart data={MONTHLY_SEM_DATA}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
+                            <Tooltip 
+                              formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
+                              contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
+                            />
+                            <Bar dataKey="revenue" fill="#3b82f6" name="SEM Revenue" radius={[4, 4, 0, 0]} />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      </div>
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -906,6 +959,21 @@ export default function SlideViewPage() {
                     </TabsContent>
                     
                     <TabsContent value="social">
+                      {/* Social Revenue Chart */}
+                      <div className="h-[250px] mb-6">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart data={MONTHLY_SOCIAL_DATA}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
+                            <Tooltip 
+                              formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
+                              contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
+                            />
+                            <Bar dataKey="revenue" fill="#8b5cf6" name="Social Revenue" radius={[4, 4, 0, 0]} />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      </div>
                       <Table>
                         <TableHeader>
                           <TableRow>
