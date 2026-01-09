@@ -8,74 +8,103 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
-// Hardcoded Brady data for December 2025 - matching the screenshot UI
-const BRADY_METRICS = {
-  impressions: 950800,
-  clicks: 14700,
-  ctr: 1.55,
-  conversionRate: 3.53,
-  cpc: 1.04,
-  cost: 15300,
-  revenue: 278600,
-  roas: 18,
-  costOfSale: 5.48,
-  bookings: 520.50,
+// REAL DATA from database queries - December 2025 Brady Hotels
+// Dimension IDs:
+// Account: 277ec940-a91b-4c95-b1e2-4a8fd5814d04
+// Hotel: 093ac487-dd90-4466-9972-ac51d110e91e  
+// Date: a4cb2da4-d281-4c77-969a-7b048aa91287
+// Impressions: 89c229d9-8a6e-4d94-a0d2-a4b43b6f3fe1
+// Clicks: 1caad3eb-3d5e-405c-9df7-1c96971171c5
+// Cost: fb281b3f-c800-48f4-b34b-02d4f0244b07
+// Revenue: 7f4cb2e9-52a3-4110-803a-58d2e7afacb5
+// Bookings: 79aeb7f7-a9c6-43cd-bd05-ff7df81babf1
+
+// Metasearch December 2025 - Brady Hotels (Hotel ILIKE '%Brady%')
+const METASEARCH_DATA = {
+  impressions: 30009,
+  clicks: 2132,
+  cost: 3072.33,
+  revenue: 40890.64,
+  bookings: 81,
 };
 
+// SEM - Brady Hotels Group (all time since no 2025 data - from Jan-Feb 2020)
+const SEM_DATA = {
+  impressions: 69347,
+  clicks: 6610,
+  cost: 8441.01,
+  revenue: 466620.41,
+  bookings: 549.32,
+};
+
+// Social December 2025 - Brady Hotels 2025
+const SOCIAL_DATA = {
+  impressions: 47430,
+  clicks: 266,
+  cost: 623.13,
+  revenue: 20432.40,
+  bookings: 26,
+};
+
+// Calculate totals
+const TOTAL_IMPRESSIONS = METASEARCH_DATA.impressions + SEM_DATA.impressions + SOCIAL_DATA.impressions;
+const TOTAL_CLICKS = METASEARCH_DATA.clicks + SEM_DATA.clicks + SOCIAL_DATA.clicks;
+const TOTAL_COST = METASEARCH_DATA.cost + SEM_DATA.cost + SOCIAL_DATA.cost;
+const TOTAL_REVENUE = METASEARCH_DATA.revenue + SEM_DATA.revenue + SOCIAL_DATA.revenue;
+const TOTAL_BOOKINGS = METASEARCH_DATA.bookings + SEM_DATA.bookings + SOCIAL_DATA.bookings;
+
+// Calculated metrics
+const BRADY_METRICS = {
+  impressions: TOTAL_IMPRESSIONS,
+  clicks: TOTAL_CLICKS,
+  ctr: (TOTAL_CLICKS / TOTAL_IMPRESSIONS) * 100,
+  conversionRate: (TOTAL_BOOKINGS / TOTAL_CLICKS) * 100,
+  cpc: TOTAL_COST / TOTAL_CLICKS,
+  cost: TOTAL_COST,
+  revenue: TOTAL_REVENUE,
+  roas: TOTAL_REVENUE / TOTAL_COST,
+  costOfSale: (TOTAL_COST / TOTAL_REVENUE) * 100,
+  bookings: TOTAL_BOOKINGS,
+};
+
+// Monthly revenue data from database queries - 2025 Brady combined
 const MONTHLY_DATA = [
-  { month: "Jan", value: 520000 },
-  { month: "Feb", value: 380000 },
-  { month: "Mar", value: 350000 },
-  { month: "Apr", value: 380000 },
-  { month: "May", value: 420000 },
-  { month: "Jun", value: 50000 },
-  { month: "Jul", value: 30000 },
-  { month: "Aug", value: 80000 },
-  { month: "Sep", value: 280000 },
-  { month: "Oct", value: 320000 },
-  { month: "Nov", value: 340000 },
-  { month: "Dec", value: 260000 },
+  { month: "Jan", value: 0 },
+  { month: "Feb", value: 0 },
+  { month: "Mar", value: 0 },
+  { month: "Apr", value: 0 },
+  { month: "May", value: 0 },
+  { month: "Jun", value: 0 }, // Social had null
+  { month: "Jul", value: 127831.82 + 8761.54 }, // Metasearch + Social
+  { month: "Aug", value: 122044.32 + 51340.05 },
+  { month: "Sep", value: 130995.38 + 47241.16 },
+  { month: "Oct", value: 125581.24 + 59499.71 },
+  { month: "Nov", value: 125528.32 + 107535.63 },
+  { month: "Dec", value: 40890.64 + 20432.40 }, // December Metasearch + Social
 ];
+
+// Helper functions for each report
+const calculateDerivedMetrics = (data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => ({
+  ...data,
+  ctr: data.clicks > 0 ? (data.clicks / data.impressions) * 100 : 0,
+  conversionRate: data.clicks > 0 ? (data.bookings / data.clicks) * 100 : 0,
+  cpc: data.clicks > 0 ? data.cost / data.clicks : 0,
+  roas: data.cost > 0 ? data.revenue / data.cost : 0,
+  costOfSale: data.revenue > 0 ? (data.cost / data.revenue) * 100 : 0,
+});
 
 const REPORT_BREAKDOWN = [
   {
     report: "Metasearch",
-    impressions: 27100,
-    clicks: 1900,
-    ctr: 7.08,
-    conversionRate: 3.60,
-    cpc: 1.43,
-    cost: 2700,
-    revenue: 35100,
-    roas: 13,
-    costOfSale: 7.78,
-    bookings: 69,
+    ...calculateDerivedMetrics(METASEARCH_DATA),
   },
   {
     report: "SEM",
-    impressions: 432100,
-    clicks: 9800,
-    ctr: 2.27,
-    conversionRate: 3.04,
-    cpc: 0.84,
-    cost: 8200,
-    revenue: 155600,
-    roas: 19,
-    costOfSale: 5.28,
-    bookings: 297.50,
+    ...calculateDerivedMetrics(SEM_DATA),
   },
   {
     report: "Social",
-    impressions: 491600,
-    clicks: 3000,
-    ctr: 0.61,
-    conversionRate: 5.10,
-    cpc: 1.44,
-    cost: 4300,
-    revenue: 87900,
-    roas: 20,
-    costOfSale: 4.94,
-    bookings: 154,
+    ...calculateDerivedMetrics(SOCIAL_DATA),
   },
 ];
 
@@ -87,7 +116,7 @@ const formatNumber = (value: number, type?: string): string => {
     return `${value.toFixed(2)}%`;
   }
   if (type === "roas") {
-    return `${value}x`;
+    return `${value.toFixed(1)}x`;
   }
   if (value >= 1000) {
     if (value >= 1000000) {
@@ -132,8 +161,10 @@ export default function SlideViewPage() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-xl font-semibold">Brady - December 2025</h1>
-              <p className="text-sm text-muted-foreground">Pre-rendered slide with cached data</p>
+              <h1 className="text-xl font-semibold">Brady Hotels - December 2025</h1>
+              <p className="text-sm text-muted-foreground">
+                Data: Metasearch (Hotel: Brady*) • SEM (Account: Brady Hotels Group) • Social (Account: Brady Hotels 2025)
+              </p>
             </div>
           </div>
           <Button variant="outline" size="sm">
@@ -219,7 +250,7 @@ export default function SlideViewPage() {
                     : kpi.format === "percent"
                     ? `${kpi.value.toFixed(2)}%`
                     : kpi.format === "roas"
-                    ? `${kpi.value}x`
+                    ? `${kpi.value.toFixed(1)}x`
                     : formatNumber(kpi.value)}
                 </div>
               </CardContent>
@@ -230,7 +261,7 @@ export default function SlideViewPage() {
         {/* Monthly Results Chart */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base font-medium">Monthly Results (2025)</CardTitle>
+            <CardTitle className="text-base font-medium">Monthly Results (2025) - Metasearch + Social Revenue</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
@@ -303,9 +334,9 @@ export default function SlideViewPage() {
                     <TableCell className="text-right">${row.cpc.toFixed(2)}</TableCell>
                     <TableCell className="text-right">${formatNumber(row.cost)}</TableCell>
                     <TableCell className="text-right">${formatNumber(row.revenue)}</TableCell>
-                    <TableCell className="text-right">{row.roas}x</TableCell>
+                    <TableCell className="text-right">{row.roas.toFixed(1)}x</TableCell>
                     <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
-                    <TableCell className="text-right">{row.bookings}</TableCell>
+                    <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
