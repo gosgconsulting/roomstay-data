@@ -50,7 +50,7 @@ export function useSlide(slideId: string | null) {
 
       return {
         ...data,
-        components: (data.components || []) as SlideComponent[],
+        components: (Array.isArray(data.components) ? data.components : []) as unknown as SlideComponent[],
         cached_data: (data.cached_data || {}) as Record<string, any>,
       };
     },
@@ -202,51 +202,3 @@ export function useRefreshSlideData() {
   });
 }
 
-      // Fetch cached dimension data for this report
-      const { data: dimensionData, error: dataError } = await supabase
-        .from("dimension_data")
-        .select("dimension_values")
-        .eq("report_id", reportId)
-        .limit(1000);
-
-      if (dataError) throw dataError;
-
-      // Cache the data
-      const cachedData = {
-        rows: dimensionData.map((d: any) => d.dimension_values),
-        refreshedAt: new Date().toISOString(),
-        rowCount: dimensionData.length,
-      };
-
-      // Update the slide with cached data
-      const { data: updatedSlide, error: updateError } = await supabase
-        .from("slides")
-        .update({
-          cached_data: cachedData,
-          last_refreshed_at: new Date().toISOString(),
-        })
-        .eq("id", slideId)
-        .select()
-        .single();
-
-      if (updateError) throw updateError;
-      return updatedSlide;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: slideKeys.detail(data.id) });
-      queryClient.invalidateQueries({ queryKey: slideKeys.list(data.account_id) });
-      toast({
-        title: "Data refreshed",
-        description: "Slide data has been updated from the source.",
-      });
-    },
-    onError: (error) => {
-      console.error("Error refreshing slide data:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to refresh slide data.",
-        variant: "destructive",
-      });
-    },
-  });
-}
