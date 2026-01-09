@@ -482,15 +482,51 @@ export default function SlideViewPage() {
     ];
   };
 
-  const renderKPICards = (cards: typeof KPI_CARDS) => (
+  // Get channel-specific comparison data
+  const getChannelComparisonMetrics = (channel: 'metasearch' | 'sem' | 'social') => {
+    if (comparisonType === "previous_period") {
+      const prevData = channel === 'metasearch' ? METASEARCH_PREV_PERIOD 
+                     : channel === 'sem' ? SEM_PREV_PERIOD 
+                     : SOCIAL_PREV_PERIOD;
+      return {
+        ...calculateDerivedMetrics(prevData),
+        label: "vs Nov 2025",
+      };
+    } else if (comparisonType === "previous_year") {
+      // For SEM, we have 2024 data; for Metasearch and Social, use estimates
+      if (channel === 'sem') {
+        const prevData = { impressions: 1510246, clicks: 9796, cost: 8198.31, revenue: 354741.72, bookings: 675 };
+        return {
+          ...calculateDerivedMetrics(prevData),
+          label: "vs Dec 2024",
+        };
+      } else if (channel === 'metasearch') {
+        return {
+          ...calculateDerivedMetrics(METASEARCH_PREV_YEAR),
+          label: "vs Dec 2024*",
+        };
+      } else {
+        return {
+          ...calculateDerivedMetrics(SOCIAL_PREV_YEAR),
+          label: "vs Dec 2024*",
+        };
+      }
+    }
+    return null;
+  };
+
+  const renderKPICards = (cards: typeof KPI_CARDS, channelCompMetrics?: ReturnType<typeof getChannelComparisonMetrics>) => (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
       {cards.map((kpi) => {
-        const compValue = comparisonMetrics ? comparisonMetrics[kpi.key as keyof typeof comparisonMetrics] : null;
+        // Use channel-specific comparison if provided, otherwise fall back to global
+        const effectiveCompMetrics = channelCompMetrics !== undefined ? channelCompMetrics : comparisonMetrics;
+        const compValue = effectiveCompMetrics ? effectiveCompMetrics[kpi.key as keyof typeof effectiveCompMetrics] : null;
         const percentChange = compValue !== null ? calculatePercentChange(kpi.value, compValue as number) : null;
         const isPositive = percentChange !== null && percentChange >= 0;
         // For cost metrics, lower is better
         const isCostMetric = ['cpc', 'cost', 'costOfSale'].includes(kpi.key);
         const isGood = isCostMetric ? !isPositive : isPositive;
+        const compLabel = channelCompMetrics?.label || comparisonData?.label;
         
         return (
           <Card key={kpi.label} className="shadow-sm">
@@ -509,11 +545,11 @@ export default function SlideViewPage() {
                   ? `${kpi.value.toFixed(1)}x`
                   : formatNumber(kpi.value)}
               </div>
-              {percentChange !== null && comparisonData && (
+              {percentChange !== null && compLabel && (
                 <div className={`flex items-center gap-1 mt-1 text-xs ${isGood ? 'text-green-600' : 'text-red-600'}`}>
                   {isPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                   <span>{Math.abs(percentChange).toFixed(1)}%</span>
-                  <span className="text-muted-foreground">{comparisonData.label}</span>
+                  <span className="text-muted-foreground">{compLabel}</span>
                 </div>
               )}
             </CardContent>
@@ -729,7 +765,7 @@ export default function SlideViewPage() {
 
             {/* Metasearch Tab */}
             <TabsContent value="metasearch" className="space-y-6">
-              {renderKPICards(getReportKPICards(METASEARCH_DATA))}
+              {renderKPICards(getReportKPICards(METASEARCH_DATA), getChannelComparisonMetrics('metasearch'))}
               <Card>
                 <CardHeader><CardTitle className="text-base font-medium">Results by Hotel</CardTitle></CardHeader>
                 <CardContent>
@@ -746,7 +782,7 @@ export default function SlideViewPage() {
 
             {/* SEM Tab */}
             <TabsContent value="sem" className="space-y-6">
-              {renderKPICards(getReportKPICards(SEM_DATA))}
+              {renderKPICards(getReportKPICards(SEM_DATA), getChannelComparisonMetrics('sem'))}
               <Card>
                 <CardHeader><CardTitle className="text-base font-medium">Results by Campaign</CardTitle></CardHeader>
                 <CardContent>
@@ -757,7 +793,7 @@ export default function SlideViewPage() {
 
             {/* Social Tab */}
             <TabsContent value="social" className="space-y-6">
-              {renderKPICards(getReportKPICards(SOCIAL_DATA))}
+              {renderKPICards(getReportKPICards(SOCIAL_DATA), getChannelComparisonMetrics('social'))}
               <Card>
                 <CardHeader><CardTitle className="text-base font-medium">Results by Campaign</CardTitle></CardHeader>
                 <CardContent>
