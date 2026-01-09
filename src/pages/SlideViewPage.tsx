@@ -619,7 +619,7 @@ export default function SlideViewPage() {
                 <TabsTrigger value="sem">SEM</TabsTrigger>
                 <TabsTrigger value="social">Social</TabsTrigger>
                 <TabsTrigger value="budget">Budget</TabsTrigger>
-                <TabsTrigger value="forecast">Forecast</TabsTrigger>
+                
               </TabsList>
 
               <div className="flex items-center gap-2">
@@ -1107,106 +1107,6 @@ export default function SlideViewPage() {
               </Card>
             </TabsContent>
 
-            {/* Forecast Tab */}
-            <TabsContent value="forecast" className="space-y-6">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                <Card className="shadow-sm">
-                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-blue-600">ROOMS</CardTitle></CardHeader>
-                  <CardContent><div className="text-2xl font-bold">{FORECAST_SCENARIO.rooms}</div></CardContent>
-                </Card>
-                <Card className="shadow-sm">
-                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-green-600">OCCUPANCY</CardTitle></CardHeader>
-                  <CardContent><div className="text-2xl font-bold">{FORECAST_SCENARIO.occupancyRate}%</div></CardContent>
-                </Card>
-                <Card className="shadow-sm">
-                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-purple-600">ADR</CardTitle></CardHeader>
-                  <CardContent><div className="text-2xl font-bold">${FORECAST_SCENARIO.averageDailyRate}</div></CardContent>
-                </Card>
-                <Card className="shadow-sm">
-                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-cyan-600">CONV. RATE</CardTitle></CardHeader>
-                  <CardContent><div className="text-2xl font-bold">{FORECAST_SCENARIO.conversionRate}%</div></CardContent>
-                </Card>
-                <Card className="shadow-sm">
-                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-orange-600">DIRECT TARGET</CardTitle></CardHeader>
-                  <CardContent><div className="text-2xl font-bold">{FORECAST_SCENARIO.directBookingsTarget}%</div></CardContent>
-                </Card>
-                <Card className="shadow-sm">
-                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-pink-600">COST OF SELL</CardTitle></CardHeader>
-                  <CardContent><div className="text-2xl font-bold">{FORECAST_SCENARIO.costOfSell}%</div></CardContent>
-                </Card>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                <Card className="shadow-sm">
-                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-blue-600">ANNUAL ROOM NIGHTS</CardTitle></CardHeader>
-                  <CardContent><div className="text-2xl font-bold">{formatNumber(FORECAST_PROJECTIONS.annualRoomNights)}</div></CardContent>
-                </Card>
-                <Card className="shadow-sm">
-                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-green-600">ANNUAL REVENUE</CardTitle></CardHeader>
-                  <CardContent><div className="text-2xl font-bold">${formatNumber(FORECAST_PROJECTIONS.annualRevenue)}</div></CardContent>
-                </Card>
-                <Card className="shadow-sm">
-                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-purple-600">DIRECT BOOKINGS TARGET</CardTitle></CardHeader>
-                  <CardContent><div className="text-2xl font-bold">${formatNumber(FORECAST_PROJECTIONS.directBookingsRevenue)}</div></CardContent>
-                </Card>
-                <Card className="shadow-sm">
-                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-orange-600">REQUIRED CLICKS</CardTitle></CardHeader>
-                  <CardContent><div className="text-2xl font-bold">{formatNumber(FORECAST_PROJECTIONS.requiredClicks)}</div></CardContent>
-                </Card>
-              </div>
-
-              <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Services Configuration</CardTitle></CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Service</TableHead>
-                        <TableHead className="text-right">Weight</TableHead>
-                        <TableHead className="text-right">% Revenue</TableHead>
-                        <TableHead className="text-right">Recurrent Fee</TableHead>
-                        <TableHead className="text-right">Cost of Sell</TableHead>
-                        <TableHead className="text-right">Budget Payer</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {FORECAST_SCENARIO.services.map((service) => (
-                        <TableRow key={service.name}>
-                          <TableCell className="font-medium">{service.name}</TableCell>
-                          <TableCell className="text-right">{service.weight}%</TableCell>
-                          <TableCell className="text-right">{service.percentRevenue}%</TableCell>
-                          <TableCell className="text-right">${formatNumber(service.recurrentFee)}</TableCell>
-                          <TableCell className="text-right">{service.costOfSell}%</TableCell>
-                          <TableCell className="text-right capitalize">{service.budgetPayer}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Monthly Revenue Target vs Actual (2025)</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="h-[300px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={MONTHLY_DATA.map(m => ({ month: m.month, target: FORECAST_PROJECTIONS.monthlyRevenue, actual: m.metasearch + m.social + m.sem }))}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
-                        <Tooltip 
-                          formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name === 'target' ? 'Target' : 'Actual']}
-                          contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
-                        />
-                        <Legend />
-                        <Bar dataKey="actual" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Actual Revenue" />
-                        <Line type="monotone" dataKey="target" stroke="hsl(var(--destructive))" strokeWidth={2} strokeDasharray="5 5" name="Target Revenue" dot={false} />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
           </Tabs>
         </div>
       </div>
