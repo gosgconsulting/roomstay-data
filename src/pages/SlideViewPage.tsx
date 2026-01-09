@@ -8,30 +8,31 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
 
-// REAL DATA from database queries - December 2025 Roomstay Account
+// REAL DATA from database queries - December 2025 Brady Hotels Account
 const METASEARCH_DATA = {
-  impressions: 44681,
-  clicks: 2561,
-  cost: 3471.59,
-  revenue: 49329.81,
-  bookings: 105,
+  impressions: 30009,
+  clicks: 2132,
+  cost: 3072.33,
+  revenue: 40890.64,
+  bookings: 81,
 };
 
-// SEM data - Note: SEM report only has 2020 data, no 2025 data available
+// SEM data - December 2025 Brady Hotels
 const SEM_DATA = {
-  impressions: 0,
-  clicks: 0,
-  cost: 0,
-  revenue: 0,
-  bookings: 0,
+  impressions: 432114,
+  clicks: 9797,
+  cost: 8208.69,
+  revenue: 155596.64,
+  bookings: 298,
 };
 
+// Social data - December 2025 Brady Hotels
 const SOCIAL_DATA = {
-  impressions: 188981,
-  clicks: 3420,
-  cost: 2479.71,
-  revenue: 49389.89,
-  bookings: 198,
+  impressions: 491612,
+  clicks: 3021,
+  cost: 4337.01,
+  revenue: 87867.77,
+  bookings: 154,
 };
 
 // PREVIOUS PERIOD DATA - November 2025
