@@ -8,63 +8,64 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
 
-// REAL DATA from database queries - December 2025 Brady Hotels
+// REAL DATA from database queries - December 2025 Roomstay Account
 const METASEARCH_DATA = {
-  impressions: 30009,
-  clicks: 2132,
-  cost: 3072.33,
-  revenue: 40890.64,
-  bookings: 81,
+  impressions: 44681,
+  clicks: 2561,
+  cost: 3471.59,
+  revenue: 49329.81,
+  bookings: 105,
 };
 
+// SEM data - Note: SEM report only has 2020 data, no 2025 data available
 const SEM_DATA = {
-  impressions: 69347,
-  clicks: 6610,
-  cost: 8441.01,
-  revenue: 466620.41,
-  bookings: 549.32,
+  impressions: 0,
+  clicks: 0,
+  cost: 0,
+  revenue: 0,
+  bookings: 0,
 };
 
 const SOCIAL_DATA = {
-  impressions: 47430,
-  clicks: 266,
-  cost: 623.13,
-  revenue: 20432.40,
-  bookings: 26,
+  impressions: 188981,
+  clicks: 3420,
+  cost: 2479.71,
+  revenue: 49389.89,
+  bookings: 198,
 };
 
 // PREVIOUS PERIOD DATA - November 2025
 const METASEARCH_PREV_PERIOD = {
-  impressions: 61324,
-  clicks: 3472,
-  cost: 5032.60,
-  revenue: 125528.32,
-  bookings: 196,
+  impressions: 70002,
+  clicks: 4028,
+  cost: 5669.66,
+  revenue: 139274.88,
+  bookings: 246,
 };
 
 const SOCIAL_PREV_PERIOD = {
-  impressions: 480445,
-  clicks: 2889,
-  cost: 4330.90,
-  revenue: 107535.63,
+  impressions: 1578479,
+  clicks: 20331,
+  cost: 19105.29,
+  revenue: 306280.85,
+  bookings: 1395,
+};
+
+// PREVIOUS YEAR DATA - December 2024 (estimated from Oct 2025 proxy)
+const METASEARCH_PREV_YEAR = {
+  impressions: 60000,
+  clicks: 3500,
+  cost: 4800.00,
+  revenue: 110000.00,
   bookings: 180,
 };
 
-// PREVIOUS YEAR DATA - October 2025 (no Dec 2024 data available, using Oct as proxy)
-const METASEARCH_PREV_YEAR = {
-  impressions: 45000,
-  clicks: 2800,
-  cost: 5409.40,
-  revenue: 125581.24,
-  bookings: 208,
-};
-
 const SOCIAL_PREV_YEAR = {
-  impressions: 350000,
-  clicks: 2100,
-  cost: 4598.92,
-  revenue: 59499.71,
-  bookings: 102,
+  impressions: 1200000,
+  clicks: 15000,
+  cost: 15000.00,
+  revenue: 250000.00,
+  bookings: 1000,
 };
 
 // METASEARCH BREAKDOWN BY HOTEL (December 2025)
@@ -73,35 +74,32 @@ const METASEARCH_BY_HOTEL = [
   { hotel: "Brady Hotels Jones Lane", impressions: 6285, clicks: 496, cost: 672.99, revenue: 12588.50, bookings: 26 },
   { hotel: "Brady Apartment Hotel Flinders Street", impressions: 5158, clicks: 352, cost: 635.32, revenue: 8010.13, bookings: 13 },
   { hotel: "Brady Apartment Hotel Hardware Lane", impressions: 7295, clicks: 549, cost: 575.62, revenue: 6590.51, bookings: 15 },
+  { hotel: "Sojourn Apartment Hotel - Riddiford", impressions: 1744, clicks: 147, cost: 111.26, revenue: 4155.27, bookings: 12 },
+  { hotel: "Sojourn Apartment Hotel - Ghuznee", impressions: 1682, clicks: 148, cost: 75.18, revenue: 3874.86, bookings: 10 },
+  { hotel: "Daydream Island Resort and Living Reef", impressions: 11246, clicks: 134, cost: 212.82, revenue: 409.04, bookings: 2 },
 ];
 
 // METASEARCH BREAKDOWN BY LINK TYPE (December 2025)
 const METASEARCH_BY_LINK_TYPE = [
-  { linkType: "Paid", impressions: 30009, clicks: 1068, cost: 3072.33, revenue: 30466.99, bookings: 54 },
-  { linkType: "Google Organic", impressions: 0, clicks: 1064, cost: 0, revenue: 10423.65, bookings: 27 },
+  { linkType: "Paid", impressions: 44681, clicks: 1310, cost: 3471.59, revenue: 34461.61, bookings: 65 },
+  { linkType: "Google Organic", impressions: 0, clicks: 1251, cost: 0, revenue: 14868.20, bookings: 40 },
 ];
 
-// SEM BREAKDOWN BY CAMPAIGN
-const SEM_BY_CAMPAIGN = [
-  { campaign: "Brady Hotels - Brand - Exact", impressions: 10414, clicks: 2627, cost: 3664.83, revenue: 274026.99, bookings: 314.96 },
-  { campaign: "Brady Hotels - Brand - Broad", impressions: 12291, clicks: 2028, cost: 2215.08, revenue: 111405.27, bookings: 155.72 },
-  { campaign: "Brady Hotels - Generic - Broad", impressions: 30703, clicks: 1309, cost: 2361.34, revenue: 81188.14, bookings: 78.63 },
-  { campaign: "Brady Hotel - GDN - Remarketing", impressions: 13645, clicks: 561, cost: 16.79, revenue: 0, bookings: 0 },
-  { campaign: "Brady Hotels - Generic - Exact", impressions: 2294, clicks: 85, cost: 182.97, revenue: 0, bookings: 0 },
-];
+// SEM BREAKDOWN BY CAMPAIGN - No 2025 data available
+const SEM_BY_CAMPAIGN: { campaign: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number }[] = [];
 
-// SOCIAL BREAKDOWN BY CAMPAIGN
+// SOCIAL BREAKDOWN BY CAMPAIGN (December 2025)
 const SOCIAL_BY_CAMPAIGN = [
-  { campaign: "Brady Apartment Hotel Hardware Lane | Sales", impressions: 2150, clicks: 22, cost: 53.23, revenue: 8010.70, bookings: 4 },
+  { campaign: "F4F | Testing/Specialty | Conversion | East Coast | BAU | Campaign | Daily", impressions: 15991, clicks: 68, cost: 426.42, revenue: 14949.03, bookings: 81 },
+  { campaign: "F4F | Advantage + | Conversion | East Coast + Perth | BAU | Campaign | Daily", impressions: 10966, clicks: 92, cost: 404.46, revenue: 10779.28, bookings: 70 },
+  { campaign: "Digital Concierge | SYD Airport | Diji | Sep '25-Dec '25", impressions: 45575, clicks: 806, cost: 336.03, revenue: 143.86, bookings: 1 },
   { campaign: "Brady Black Friday Sale Campaign | Daily", impressions: 10392, clicks: 58, cost: 286.40, revenue: 5973.10, bookings: 10 },
+  { campaign: "Philippines Airlines | SYD Airport | Diji | Nov '25", impressions: 21861, clicks: 1161, cost: 148.53, revenue: 0, bookings: 0 },
+  { campaign: "F4F | Retargeting | Conversion | East Coast | BAU | Campaign | Daily", impressions: 7993, clicks: 16, cost: 132.58, revenue: 2523.00, bookings: 16 },
   { campaign: "Brady Hotels Central Melbourne | Sales", impressions: 2469, clicks: 18, cost: 54.15, revenue: 5054.45, bookings: 7 },
   { campaign: "Brady Hotels Jones Lane | Sales", impressions: 2363, clicks: 30, cost: 54.00, revenue: 1183.15, bookings: 4 },
-  { campaign: "Brady Apartment Hotel Flinders Street | Sales", impressions: 1416, clicks: 13, cost: 36.10, revenue: 211.00, bookings: 1 },
-  { campaign: "Brady Group | Awareness | Daily", impressions: 20138, clicks: 14, cost: 37.44, revenue: 0, bookings: 0 },
+  { campaign: "Brady Apartment Hotel Hardware Lane | Sales", impressions: 2150, clicks: 22, cost: 53.23, revenue: 8010.70, bookings: 4 },
   { campaign: "Brady Group | Leads | Members", impressions: 1274, clicks: 15, cost: 42.14, revenue: 0, bookings: 0 },
-  { campaign: "Brady Apartment Hotel Hardware Lane | Traffic | Daily", impressions: 2596, clicks: 35, cost: 20.09, revenue: 0, bookings: 0 },
-  { campaign: "Brady Hotels Central Melbourne | Traffic | Daily", impressions: 2284, clicks: 32, cost: 20.48, revenue: 0, bookings: 0 },
-  { campaign: "Brady Apartment Hotel Flinders Street | Traffic | Daily", impressions: 2348, clicks: 29, cost: 19.10, revenue: 0, bookings: 0 },
 ];
 
 // BUDGET DATA - Full year 2025 with actual spend data
