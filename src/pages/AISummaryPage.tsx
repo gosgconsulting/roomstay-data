@@ -17,7 +17,7 @@ import { MasterReportSetupModal, type MasterReportConfig } from "@/components/Ma
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
-import { format, subMonths, subYears, startOfYear } from "date-fns";
+import { format, subMonths, startOfYear } from "date-fns";
 import { toast } from "sonner";
 import { reportNameToSlug, findReportBySlug, getReportUrl, getReportUrlWithSummary } from "@/lib/report-url";
 import {
@@ -49,18 +49,24 @@ import GenerateAISummaryModal, { type ComparisonOption } from "@/components/Gene
 import { 
   AISummaryPivotTable, 
   type CachedPivotData,
-  type DateBreakdownRow,
   type DateTab,
   type ReportTab,
-  getDateRange,
-  getComparisonDateRange,
-  aggregateMetrics,
-  getDateGroupKey,
-  parseDate,
 } from "@/components/AISummaryPivotTable";
 import { AISummaryBudgetTable } from "@/components/AISummaryBudgetTable";
 import { useQueryClient } from "@tanstack/react-query";
 import { aiSummaryKeys } from "@/hooks/useAISummaryData";
+import {
+  fetchReportsAndDataSources,
+  generateMonthKeys,
+  buildDateRanges,
+  processReportPivotData,
+  processReportBudgetData,
+  aggregatePivotResults,
+  aggregateBudgetResults,
+  invalidateCaches,
+  fetchWithRetry,
+  type ReportResult,
+} from "@/lib/refreshPivotDataHelpers";
 
 interface AISummaryCard {
   id: string;
@@ -399,789 +405,124 @@ const AISummaryPage = () => {
       // Generate month keys based on since_date from card settings
       const now = new Date();
       const sinceDate = card.since_date ? new Date(card.since_date) : new Date(now.getFullYear(), 0, 1);
-      const monthKeys: string[] = [];
-      
-      // Generate all months from since_date to current month
-      let currentIterDate = new Date(sinceDate.getFullYear(), sinceDate.getMonth(), 1);
-      while (currentIterDate <= now) {
-        monthKeys.push(format(currentIterDate, "yyyy-MM"));
-        currentIterDate = new Date(currentIterDate.getFullYear(), currentIterDate.getMonth() + 1, 1);
-      }
+      const monthKeys = generateMonthKeys(sinceDate, now);
       
       console.log('[Refresh] Using since_date:', card.since_date, '- Loading months:', monthKeys);
 
-      const pivotData: CachedPivotData = {
-        mtd: [],
-        ytd: [],
-        monthly_data: {},
-      };
+      // Batch fetch all reports and data sources
+      const reportsAndSources = await fetchReportsAndDataSources(card.report_ids);
       
-      // Initialize monthly_data for each month
-      monthKeys.forEach(monthKey => {
-        pivotData.monthly_data![monthKey] = [];
-      });
-      
-      // Initialize breakdown data structures
-      const breakdownData: Record<string, Record<string, Array<{ groupValue: string; metrics: Record<string, number> }>>> = {};
-      const breakdownDimensionNames: Record<string, string> = {}; // Map of reportId -> dimension name
-      const combinedDateBreakdown: Record<string, DateBreakdownRow[]> = {
-        mtd: [], ytd: []
-      };
-      // Initialize combined date breakdown for each month
-      monthKeys.forEach(monthKey => {
-        combinedDateBreakdown[monthKey] = [];
-      });
-      
-      // Track actual data date ranges per report for display
-      const actualDataRanges: Record<string, { reportName: string; firstDate: Date | null; lastDate: Date | null }> = {};
-      
-      // To accumulate all rows for combined date breakdown
-      const allRowsForDateBreakdown: any[] = [];
-      const allMetricNameToIdMaps: Record<string, string>[] = [];
-      
-      // Initialize comparison data
-      const comparisonPreviousPeriod: {
-        mtd: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
-        ytd: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
-        monthly_data?: Record<string, Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>>;
-        breakdown_data?: Record<string, Record<string, Array<{ groupValue: string; metrics: Record<string, number> }>>>;
-      } = {
-        mtd: [], ytd: [], monthly_data: {}, breakdown_data: {}
-      };
-      const comparisonPreviousYear: {
-        mtd: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
-        ytd: Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>;
-        monthly_data?: Record<string, Array<{ reportId: string; reportName: string; metrics: Record<string, number> }>>;
-        breakdown_data?: Record<string, Record<string, Array<{ groupValue: string; metrics: Record<string, number> }>>>;
-      } = {
-        mtd: [], ytd: [], monthly_data: {}, breakdown_data: {}
-      };
-      
-      // Initialize comparison monthly data
-      monthKeys.forEach(monthKey => {
-        comparisonPreviousPeriod.monthly_data![monthKey] = [];
-        comparisonPreviousYear.monthly_data![monthKey] = [];
-      });
+      if (reportsAndSources.size === 0) {
+        toast.error("No reports or data sources found");
+        return;
+      }
 
-      // Build date ranges for all tabs (mtd, ytd, and each month)
+      // Build date ranges for all tabs
       const allDateTabs = ["mtd", "ytd", ...monthKeys];
-      const dateRanges: Record<string, { start: Date; end: Date }> = {};
-      allDateTabs.forEach(tab => {
-        dateRanges[tab] = getDateRange(tab);
-      });
-      
-      // Helper to get date from row (handles both flat and nested dimension_values)
-      const getRowDateHelper = (row: any): Date | null => {
-        const rowData = row.dimension_values || row;
-        let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
-        if (!dateValue) {
-          for (const [key, val] of Object.entries(rowData)) {
-            if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-              dateValue = val as string;
-              break;
-            }
-          }
-        }
-        return parseDate(dateValue);
-      };
-      
-      // Helper to calculate dynamic comparison range based on actual data dates
-      const getDynamicComparisonRange = (
-        rows: any[],
-        periodRange: { start: Date; end: Date },
-        comparisonType: "previous_period" | "previous_year"
-      ): { start: Date; end: Date } | null => {
-        // Find actual data dates within the period
-        const datesInPeriod = rows
-          .map((row: any) => getRowDateHelper(row))
-          .filter((d: Date | null): d is Date => d !== null && d >= periodRange.start && d <= periodRange.end)
-          .sort((a: Date, b: Date) => a.getTime() - b.getTime());
-        
-        if (datesInPeriod.length === 0) {
-          // Fallback to theoretical range
-          return getComparisonDateRange(
-            periodRange.start.toISOString().substring(0, 7) === format(new Date(), "yyyy-MM") ? "mtd" : periodRange.start.toISOString().substring(0, 7),
-            comparisonType
-          );
-        }
-        
-        const actualStart = datesInPeriod[0];
-        const actualEnd = datesInPeriod[datesInPeriod.length - 1];
-        
-        if (comparisonType === "previous_period") {
-          // Same-day matching for previous period (month before)
-          return {
-            start: subMonths(actualStart, 1),
-            end: subMonths(actualEnd, 1),
-          };
-        } else {
-          // Same-day matching for previous year
-          return {
-            start: subYears(actualStart, 1),
-            end: subYears(actualEnd, 1),
-          };
-        }
-      };
+      const dateRanges = buildDateRanges(allDateTabs);
 
       // Extract filter configs from report_configs
       const { breakdown_configs, ...filterConfigs } = card.report_configs as any;
 
-      for (const reportId of card.report_ids) {
-        // Fetch report info
-        const { data: reportData } = await supabase
-          .from("reports")
-          .select("id, name")
-          .eq("id", reportId)
-          .single();
-
-        if (!reportData) continue;
-
-        // Fetch data source
-        const { data: dsData } = await supabase
-          .from("data_sources")
-          .select("*")
-          .eq("report_id", reportId)
-          .limit(1)
-          .single();
-
-        if (!dsData) continue;
-
-        // Build metric name to dimension ID mapping from column_mappings
-        const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
-        const metricNameToIdMap: Record<string, string> = {};
-        columnMappings.forEach((m: any) => {
-          if (m.dimensionName && m.dimensionId && m.dimensionId !== 'none') {
-            metricNameToIdMap[m.dimensionName] = m.dimensionId;
-          }
-        });
-        
-        // Build dimension ID to column header mapping for lookups
-        const dimIdToColumnHeader: Record<string, string> = {};
-        columnMappings.forEach((m: any) => {
-          if (m.dimensionId && m.dimensionId !== 'none' && m.columnHeader) {
-            dimIdToColumnHeader[m.dimensionId] = m.columnHeader;
-          }
-        });
-        
-        // Helper to get breakdown value from row data
-        const getBreakdownValue = (rowData: any, dimId: string, dimName: string): string | undefined => {
-          // Try dimension ID first
-          if (rowData[dimId] !== undefined && rowData[dimId] !== null && rowData[dimId] !== '') {
-            return String(rowData[dimId]);
-          }
-          // Try dimension name
-          if (dimName && rowData[dimName] !== undefined && rowData[dimName] !== null && rowData[dimName] !== '') {
-            return String(rowData[dimName]);
-          }
-          // Try column header from mappings
-          const columnHeader = dimIdToColumnHeader[dimId];
-          if (columnHeader && rowData[columnHeader] !== undefined && rowData[columnHeader] !== null && rowData[columnHeader] !== '') {
-            return String(rowData[columnHeader]);
-          }
-          return undefined;
-        };
-
-        // Fetch source data
-        const sourceData = await fetchSourceData(dsData as DataSource, user.id, accountId);
-        
-        if (!sourceData?.transformedRows) continue;
-        
-        // Track actual date range for this report
-        const allDates = sourceData.transformedRows
-          .map((row: any) => {
-            const rowData = row.dimension_values || row;
-            // Try multiple date field names
-            let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
-            
-            // Also search for date patterns if not found by name
-            if (!dateValue) {
-              for (const [key, val] of Object.entries(rowData)) {
-                if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-                  dateValue = val as string;
-                  break;
-                }
-              }
-            }
-            
-            return parseDate(dateValue);
-          })
-          .filter((d: Date | null): d is Date => d !== null)
-          .sort((a: Date, b: Date) => a.getTime() - b.getTime());
-        
-        actualDataRanges[reportId] = {
-          reportName: reportData.name,
-          firstDate: allDates.length > 0 ? allDates[0] : null,
-          lastDate: allDates.length > 0 ? allDates[allDates.length - 1] : null,
-        };
-
-        // Get dimension filter for this report
-        const filterConfig = filterConfigs[reportId];
-        let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
-
-        if (filterConfig?.dimensionId && filterConfig.selectedValues?.length > 0) {
-          const { data: dimData } = await supabase
-            .from("dimensions")
-            .select("name")
-            .eq("id", filterConfig.dimensionId)
-            .single();
-
-          dimensionFilter = {
-            dimensionId: filterConfig.dimensionId,
-            dimensionName: dimData?.name,
-            values: filterConfig.selectedValues,
-          };
-        }
-
-        // Aggregate metrics for each date range (mtd, ytd, and each month)
-        allDateTabs.forEach((tab) => {
-          const metrics = aggregateMetrics(
-            sourceData.transformedRows,
-            card.selected_metrics,
-            dateRanges[tab],
-            dimensionFilter,
-            metricNameToIdMap
-          );
-
-          const reportEntry = {
-            reportId: reportData.id,
-            reportName: reportData.name,
-            metrics,
-          };
-
-          // Store in appropriate location
-          if (tab === "mtd") {
-            pivotData.mtd.push(reportEntry);
-          } else if (tab === "ytd") {
-            pivotData.ytd.push(reportEntry);
-          } else {
-            // Individual month
-            pivotData.monthly_data![tab].push(reportEntry);
-          }
-          
-          // Compute comparison data - Previous Period (using dynamic same-day matching)
-          const prevPeriodRange = getDynamicComparisonRange(
-            sourceData.transformedRows,
-            dateRanges[tab],
-            "previous_period"
-          );
-          if (prevPeriodRange) {
-            const prevPeriodMetrics = aggregateMetrics(
-              sourceData.transformedRows,
-              card.selected_metrics,
-              prevPeriodRange,
-              dimensionFilter,
-              metricNameToIdMap
+      // Process all reports in parallel with error isolation
+      const reportResults = await Promise.allSettled(
+        Array.from(reportsAndSources.entries()).map(async ([reportId, { report, dataSource }]): Promise<ReportResult> => {
+          try {
+            // Fetch source data once (reuse for both pivot and budget)
+            const sourceData = await fetchWithRetry(
+              () => fetchSourceData(dataSource, user.id, accountId),
+              3,
+              1000
             );
-            const compEntry = {
-              reportId: reportData.id,
-              reportName: reportData.name,
-              metrics: prevPeriodMetrics,
+            
+            if (!sourceData?.transformedRows) {
+              return { reportId, success: false, error: 'No data available' };
+            }
+
+            // Process pivot data
+            const pivotResult = await processReportPivotData(
+              reportId,
+              report,
+              dataSource,
+              sourceData,
+              card,
+              dateRanges,
+              allDateTabs,
+              monthKeys,
+              user,
+              accountId
+            );
+
+            // Process budget data (reuse sourceData)
+            // Process all years, not just current year
+            const budgetResult = await processReportBudgetData(
+              reportId,
+              dataSource,
+              sourceData,
+              filterConfigs[reportId]
+            );
+
+            return {
+              reportId,
+              success: true,
+              pivot: pivotResult,
+              budget: budgetResult,
+              actualDataRange: pivotResult.actualDataRange,
             };
-            if (tab === "mtd") {
-              comparisonPreviousPeriod.mtd.push(compEntry);
-            } else if (tab === "ytd") {
-              comparisonPreviousPeriod.ytd.push(compEntry);
-            } else {
-              comparisonPreviousPeriod.monthly_data![tab].push(compEntry);
-            }
-          }
-          
-          // Compute comparison data - Previous Year (using dynamic same-day matching)
-          const prevYearRange = getDynamicComparisonRange(
-            sourceData.transformedRows,
-            dateRanges[tab],
-            "previous_year"
-          );
-          if (prevYearRange) {
-            const prevYearMetrics = aggregateMetrics(
-              sourceData.transformedRows,
-              card.selected_metrics,
-              prevYearRange,
-              dimensionFilter,
-              metricNameToIdMap
-            );
-            const compEntry = {
-              reportId: reportData.id,
-              reportName: reportData.name,
-              metrics: prevYearMetrics,
+          } catch (error: any) {
+            console.error(`[Refresh] Error processing report ${reportId}:`, error);
+            return { 
+              reportId, 
+              success: false, 
+              error: error?.message || 'Unknown error' 
             };
-            if (tab === "mtd") {
-              comparisonPreviousYear.mtd.push(compEntry);
-            } else if (tab === "ytd") {
-              comparisonPreviousYear.ytd.push(compEntry);
-            } else {
-              comparisonPreviousYear.monthly_data![tab].push(compEntry);
-            }
           }
-        });
+        })
+      );
 
-        // Build breakdown data if configured - support multiple breakdown dimensions
-        const breakdownConfig = breakdown_configs?.[reportId];
-        const breakdownDimensionIds = breakdownConfig?.breakdownDimensionIds || 
-          (breakdownConfig?.breakdownDimensionId ? [breakdownConfig.breakdownDimensionId] : []); // Support legacy format
-        
-        for (const breakdownDimId of breakdownDimensionIds) {
-          const { data: breakdownDimData } = await supabase
-            .from("dimensions")
-            .select("name")
-            .eq("id", breakdownDimId)
-            .single();
-          
-          const breakdownDimName = breakdownDimData?.name || 'Group';
-          
-          // Use composite key: reportId_dimensionId
-          const breakdownKey = `${reportId}_${breakdownDimId}`;
-          
-          // Store the dimension name for this breakdown
-          breakdownDimensionNames[breakdownKey] = breakdownDimName;
-          
-          // DEBUG: Log column mappings and dimension info
-          console.log(`[Breakdown Debug] Dimension ID: ${breakdownDimId}, Name: ${breakdownDimName}`);
-          console.log(`[Breakdown Debug] dimIdToColumnHeader:`, dimIdToColumnHeader);
-          console.log(`[Breakdown Debug] Column header for this dim:`, dimIdToColumnHeader[breakdownDimId]);
-          
-          // First filter rows by dimension filter, then get unique breakdown values
-          const filteredByDimension = sourceData.transformedRows.filter((row: any) => {
-            if (!dimensionFilter || dimensionFilter.values.length === 0) return true;
-            const rowData = row.dimension_values || row;
-            const dimVal = rowData[dimensionFilter.dimensionId] || 
-                           (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
-            return dimVal !== undefined && dimensionFilter.values.includes(String(dimVal));
-          });
-          
-          // DEBUG: Log sample row data
-          if (filteredByDimension.length > 0) {
-            const sampleRow = filteredByDimension[0];
-            const sampleRowData = sampleRow.dimension_values || sampleRow;
-            console.log(`[Breakdown Debug] Sample row keys:`, Object.keys(sampleRowData));
-            console.log(`[Breakdown Debug] Sample row data (first 5 keys):`, 
-              Object.fromEntries(Object.entries(sampleRowData).slice(0, 10))
-            );
-          }
-          
-          // Get unique values for this breakdown dimension from filtered rows only
-          const uniqueValues = new Set<string>();
-          let hasUncategorized = false;
-          
-          filteredByDimension.forEach((row: any) => {
-            const rowData = row.dimension_values || row;
-            const val = getBreakdownValue(rowData, breakdownDimId, breakdownDimName);
-            if (val !== undefined) {
-              uniqueValues.add(val);
-            } else {
-              hasUncategorized = true;
-            }
-          });
-          
-          console.log(`[Breakdown Debug] Unique values found:`, Array.from(uniqueValues));
-          console.log(`[Breakdown Debug] Has uncategorized:`, hasUncategorized);
+      // Separate successful and failed reports
+      const successfulReports = reportResults
+        .filter((r): r is PromiseFulfilledResult<ReportResult> => 
+          r.status === 'fulfilled' && r.value.success
+        )
+        .map(r => r.value);
 
-          // Initialize breakdown data for all date tabs
-          breakdownData[breakdownKey] = {};
-          allDateTabs.forEach(tab => {
-            breakdownData[breakdownKey][tab] = [];
-          });
-          
-          // Initialize comparison breakdown data for this breakdown
-          if (!comparisonPreviousPeriod.breakdown_data) comparisonPreviousPeriod.breakdown_data = {};
-          if (!comparisonPreviousYear.breakdown_data) comparisonPreviousYear.breakdown_data = {};
-          comparisonPreviousPeriod.breakdown_data[breakdownKey] = {};
-          comparisonPreviousYear.breakdown_data[breakdownKey] = {};
-          allDateTabs.forEach(tab => {
-            comparisonPreviousPeriod.breakdown_data![breakdownKey][tab] = [];
-            comparisonPreviousYear.breakdown_data![breakdownKey][tab] = [];
-          });
-          
-          allDateTabs.forEach((tab) => {
-            // Process each named group
-            uniqueValues.forEach((groupValue) => {
-              // Filter rows for this specific group value
-              const groupRows = filteredByDimension.filter((row: any) => {
-                const rowData = row.dimension_values || row;
-                const groupVal = getBreakdownValue(rowData, breakdownDimId, breakdownDimName);
-                return groupVal === groupValue;
-              });
-              
-              // Main metrics
-              const metrics = aggregateMetrics(
-                groupRows,
-                card.selected_metrics,
-                dateRanges[tab],
-                undefined, // Already filtered
-                metricNameToIdMap
-              );
-
-              breakdownData[breakdownKey][tab].push({
-                groupValue,
-                metrics,
-              });
-              
-              // Comparison - Previous Period (using dynamic same-day matching)
-              const breakdownPrevPeriodRange = getDynamicComparisonRange(
-                groupRows,
-                dateRanges[tab],
-                "previous_period"
-              );
-              if (breakdownPrevPeriodRange) {
-                const prevPeriodMetrics = aggregateMetrics(
-                  groupRows,
-                  card.selected_metrics,
-                  breakdownPrevPeriodRange,
-                  undefined,
-                  metricNameToIdMap
-                );
-                comparisonPreviousPeriod.breakdown_data![breakdownKey][tab].push({
-                  groupValue,
-                  metrics: prevPeriodMetrics,
-                });
-              }
-              
-              // Comparison - Previous Year (using dynamic same-day matching)
-              const breakdownPrevYearRange = getDynamicComparisonRange(
-                groupRows,
-                dateRanges[tab],
-                "previous_year"
-              );
-              if (breakdownPrevYearRange) {
-                const prevYearMetrics = aggregateMetrics(
-                  groupRows,
-                  card.selected_metrics,
-                  breakdownPrevYearRange,
-                  undefined,
-                  metricNameToIdMap
-                );
-                comparisonPreviousYear.breakdown_data![breakdownKey][tab].push({
-                  groupValue,
-                  metrics: prevYearMetrics,
-                });
-              }
-            });
-            
-            // Add Uncategorized group for rows without breakdown value
-            if (hasUncategorized) {
-              const uncategorizedRows = filteredByDimension.filter((row: any) => {
-                const rowData = row.dimension_values || row;
-                const val = getBreakdownValue(rowData, breakdownDimId, breakdownDimName);
-                return val === undefined;
-              });
-              
-              const metrics = aggregateMetrics(
-                uncategorizedRows,
-                card.selected_metrics,
-                dateRanges[tab],
-                undefined,
-                metricNameToIdMap
-              );
-
-              breakdownData[breakdownKey][tab].push({
-                groupValue: 'Uncategorized',
-                metrics,
-              });
-              
-              // Comparison for Uncategorized - Previous Period
-              const uncatPrevPeriodRange = getDynamicComparisonRange(
-                uncategorizedRows,
-                dateRanges[tab],
-                "previous_period"
-              );
-              if (uncatPrevPeriodRange) {
-                const prevPeriodMetrics = aggregateMetrics(
-                  uncategorizedRows,
-                  card.selected_metrics,
-                  uncatPrevPeriodRange,
-                  undefined,
-                  metricNameToIdMap
-                );
-                comparisonPreviousPeriod.breakdown_data![breakdownKey][tab].push({
-                  groupValue: 'Uncategorized',
-                  metrics: prevPeriodMetrics,
-                });
-              }
-              
-              // Comparison for Uncategorized - Previous Year
-              const uncatPrevYearRange = getDynamicComparisonRange(
-                uncategorizedRows,
-                dateRanges[tab],
-                "previous_year"
-              );
-              if (uncatPrevYearRange) {
-                const prevYearMetrics = aggregateMetrics(
-                  uncategorizedRows,
-                  card.selected_metrics,
-                  uncatPrevYearRange,
-                  undefined,
-                  metricNameToIdMap
-                );
-                comparisonPreviousYear.breakdown_data![breakdownKey][tab].push({
-                  groupValue: 'Uncategorized',
-                  metrics: prevYearMetrics,
-                });
-              }
-            }
-          });
-        } // End of loop for each breakdown dimension
-        
-        // Collect rows for combined date breakdown (across all reports)
-        // Get rows filtered by dimension filter
-        const baseRows = sourceData.transformedRows.filter((row: any) => {
-          if (!dimensionFilter || dimensionFilter.values.length === 0) return true;
-          const rowData = row.dimension_values || row;
-          const dimVal = rowData[dimensionFilter.dimensionId] || 
-                         (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
-          return dimVal !== undefined && dimensionFilter.values.includes(String(dimVal));
-        });
-        
-        allRowsForDateBreakdown.push(...baseRows);
-        allMetricNameToIdMaps.push(metricNameToIdMap);
-      }
-      
-      // Build combined date breakdown after processing all reports
-      const mergedMetricMap: Record<string, string> = {};
-      allMetricNameToIdMaps.forEach(map => Object.assign(mergedMetricMap, map));
-      const dateDimId = mergedMetricMap['Date'] || mergedMetricMap['date'] || mergedMetricMap['Day'];
-      
-      allDateTabs.forEach((tab) => {
-        const dateRange = dateRanges[tab];
-        
-        // Group all rows by date group (week or month)
-        const dateGroups: Record<string, { rows: any[], minDate: Date | null, maxDate: Date | null }> = {};
-        
-        allRowsForDateBreakdown.forEach((row: any) => {
-          const rowData = row.dimension_values || row;
-          let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
-          if (!dateValue && dateDimId) {
-            dateValue = rowData[dateDimId];
-          }
-          if (!dateValue) {
-            for (const [key, val] of Object.entries(rowData)) {
-              if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-                dateValue = val;
-                break;
-              }
-            }
-          }
-          
-          const rowDate = parseDate(dateValue);
-          if (!rowDate) return;
-          
-          // Check if within date range
-          if (rowDate < dateRange.start || rowDate > dateRange.end) return;
-          
-          const groupKey = getDateGroupKey(rowDate, tab);
-          if (!dateGroups[groupKey]) {
-            dateGroups[groupKey] = { rows: [], minDate: null, maxDate: null };
-          }
-          dateGroups[groupKey].rows.push(row);
-          
-          // Track min/max dates for this group
-          if (!dateGroups[groupKey].minDate || rowDate < dateGroups[groupKey].minDate) {
-            dateGroups[groupKey].minDate = rowDate;
-          }
-          if (!dateGroups[groupKey].maxDate || rowDate > dateGroups[groupKey].maxDate) {
-            dateGroups[groupKey].maxDate = rowDate;
-          }
-        });
-        
-        // Aggregate metrics for each date group
-        Object.entries(dateGroups).forEach(([dateGroup, groupData]) => {
-          const metrics = aggregateMetrics(
-            groupData.rows,
-            card.selected_metrics,
-            dateRange,
-            undefined,
-            mergedMetricMap
-          );
-          
-          combinedDateBreakdown[tab].push({
-            dateGroup,
-            dateRangeStart: groupData.minDate?.toISOString(),
-            dateRangeEnd: groupData.maxDate?.toISOString(),
-            metrics,
-          });
-        });
-        
-        // Sort by date group
-        combinedDateBreakdown[tab].sort((a, b) => 
-          a.dateGroup.localeCompare(b.dateGroup)
+      const failedReports = reportResults
+        .filter((r): r is PromiseRejectedResult | PromiseFulfilledResult<ReportResult> => 
+          r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)
         );
-      });
+
+      // Show warnings for failed reports
+      if (failedReports.length > 0) {
+        const failedReportIds = failedReports
+          .map(r => r.status === 'fulfilled' ? r.value.reportId : 'unknown')
+          .join(', ');
+        toast.warning(
+          `${failedReports.length} report(s) failed to refresh: ${failedReportIds}. Other reports succeeded.`,
+          { duration: 5000 }
+        );
+      }
+
+      if (successfulReports.length === 0) {
+        toast.error("All reports failed to refresh");
+        return;
+      }
+
+      // Aggregate pivot results from successful reports
+      const pivotResults = successfulReports
+        .filter(r => r.pivot)
+        .map(r => r.pivot!);
+      
+      const completePivotData = aggregatePivotResults(pivotResults, monthKeys, card.selected_metrics);
+
+      // Aggregate budget results from successful reports
+      const budgetResults = successfulReports
+        .filter(r => r.budget)
+        .map(r => r.budget!);
+      
+      const cachedBudgetData = aggregateBudgetResults(budgetResults);
 
       toast.dismiss("refresh-pivot");
-
-      // Build complete pivot data with all breakdowns, comparisons, and actual data ranges
-      const completePivotData = { 
-        ...pivotData, 
-        breakdown_data: breakdownData, 
-        breakdown_dimension_names: breakdownDimensionNames,
-        combined_date_breakdown: combinedDateBreakdown,
-        comparison_previous_period: comparisonPreviousPeriod,
-        comparison_previous_year: comparisonPreviousYear,
-        actual_data_ranges: Object.fromEntries(
-          Object.entries(actualDataRanges).map(([reportId, info]) => [
-            reportId,
-            {
-              reportName: info.reportName,
-              firstDate: info.firstDate?.toISOString() || null,
-              lastDate: info.lastDate?.toISOString() || null,
-            }
-          ])
-        ),
-      };
-
-      // Build budget data for all reports (unified caching)
-      toast.info("Caching budget data...", { id: "refresh-budget" });
-      const cachedBudgetData: Record<string, Record<string, { cost: number; revenue: number }>> = {};
-      
-      for (const reportId of card.report_ids) {
-        // Initialize entry for this report (even if fetch fails, we track it)
-        const monthlyMetrics: Record<string, { cost: number; revenue: number }> = {};
-        const currentYear = new Date().getFullYear();
-        
-        try {
-          // Fetch data source for this report
-          const { data: dsData, error: dsError } = await supabase
-            .from("data_sources")
-            .select("*")
-            .eq("report_id", reportId)
-            .limit(1)
-            .single();
-
-          if (dsError || !dsData) {
-            console.warn(`No data source found for report ${reportId}:`, dsError);
-            cachedBudgetData[reportId] = monthlyMetrics;
-            continue;
-          }
-
-          // Build metric name to ID mapping
-          const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
-          const metricNameToIdMap: Record<string, string> = {};
-          const dimIdToColumnHeader: Record<string, string> = {};
-          columnMappings.forEach((m: any) => {
-            if (m.dimensionName && m.dimensionId && m.dimensionId !== "none") {
-              metricNameToIdMap[m.dimensionName] = m.dimensionId;
-            }
-            if (m.dimensionId && m.dimensionId !== "none" && m.columnHeader) {
-              dimIdToColumnHeader[m.dimensionId] = m.columnHeader;
-            }
-          });
-
-          // Get filter config for this report
-          const filterConfig = filterConfigs[reportId];
-          let dimensionFilter: { dimensionId: string; dimensionName?: string; values: string[] } | undefined;
-
-          if (filterConfig?.dimensionId && filterConfig.selectedValues?.length > 0) {
-            const { data: dimData } = await supabase
-              .from("dimensions")
-              .select("name")
-              .eq("id", filterConfig.dimensionId)
-              .single();
-
-            dimensionFilter = {
-              dimensionId: filterConfig.dimensionId,
-              dimensionName: dimData?.name,
-              values: filterConfig.selectedValues,
-            };
-          }
-
-          // Helper to get dimension value
-          const getDimensionValue = (rowData: any, dimId: string, dimName?: string): string | undefined => {
-            if (rowData[dimId] !== undefined && rowData[dimId] !== null && rowData[dimId] !== '') {
-              return String(rowData[dimId]);
-            }
-            if (dimName && rowData[dimName] !== undefined && rowData[dimName] !== null && rowData[dimName] !== '') {
-              return String(rowData[dimName]);
-            }
-            const columnHeader = dimIdToColumnHeader[dimId];
-            if (columnHeader && rowData[columnHeader] !== undefined && rowData[columnHeader] !== null && rowData[columnHeader] !== '') {
-              return String(rowData[columnHeader]);
-            }
-            return undefined;
-          };
-
-          // Re-fetch source data for budget calculation
-          const sourceData = await fetchSourceData(dsData as DataSource, user.id, accountId);
-          
-          if (!sourceData?.transformedRows || sourceData.transformedRows.length === 0) {
-            console.warn(`No transformed rows for report ${reportId}`);
-            cachedBudgetData[reportId] = monthlyMetrics;
-            continue;
-          }
-
-          console.log(`Processing ${sourceData.transformedRows.length} rows for budget report ${reportId}`);
-
-          sourceData.transformedRows.forEach((row: any) => {
-            const rowData = row.dimension_values || row;
-
-            // Apply dimension filter
-            if (dimensionFilter) {
-              const filterValue = getDimensionValue(rowData, dimensionFilter.dimensionId, dimensionFilter.dimensionName);
-              if (!filterValue || !dimensionFilter.values.includes(filterValue)) {
-                return;
-              }
-            }
-
-            // Find date value
-            let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
-            if (!dateValue) {
-              for (const [key, val] of Object.entries(rowData)) {
-                if (typeof val === "string" && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-                  dateValue = val as string;
-                  break;
-                }
-              }
-            }
-
-            if (!dateValue) return;
-
-            const date = new Date(dateValue);
-            if (isNaN(date.getTime())) return;
-            if (date.getFullYear() !== currentYear) return;
-
-            const monthKey = `${currentYear}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-
-            if (!monthlyMetrics[monthKey]) {
-              monthlyMetrics[monthKey] = { cost: 0, revenue: 0 };
-            }
-
-            // Get Cost - try multiple possible field names/IDs
-            const costId = metricNameToIdMap["Cost"];
-            const costValue = parseFloat(
-              rowData[costId] || 
-              rowData["Cost"] || 
-              rowData["cost"] || 
-              rowData["Spend"] || 
-              rowData["spend"] ||
-              rowData["Amount spent"] ||
-              rowData["Amount Spent"] ||
-              0
-            );
-            if (!isNaN(costValue)) {
-              monthlyMetrics[monthKey].cost += costValue;
-            }
-
-            // Get Revenue - try multiple possible field names/IDs
-            const revenueId = metricNameToIdMap["Revenue"];
-            const revenueValue = parseFloat(
-              rowData[revenueId] || 
-              rowData["Revenue"] || 
-              rowData["revenue"] ||
-              rowData["Conversion value"] ||
-              rowData["Purchase value"] ||
-              0
-            );
-            if (!isNaN(revenueValue)) {
-              monthlyMetrics[monthKey].revenue += revenueValue;
-            }
-          });
-        } catch (err) {
-          console.error(`Error processing budget data for report ${reportId}:`, err);
-        }
-
-        // Always save the metrics for this report (even if empty)
-        cachedBudgetData[reportId] = monthlyMetrics;
-      }
-
-      console.log("Final cached budget data:", Object.keys(cachedBudgetData));
       toast.dismiss("refresh-budget");
 
       // Save to database including breakdown data, date breakdown data, and budget data
@@ -1205,31 +546,16 @@ const AISummaryPage = () => {
           : c
       ));
 
-      // ADD: Invalidate caches so UI recomputes using fresh data
-      // Raw source data (weekly/breakdown compute)
-      queryClient.invalidateQueries({ queryKey: aiSummaryKeys.rawData(card.id) });
-      // Budget metrics fallback
-      queryClient.invalidateQueries({ queryKey: aiSummaryKeys.budgetMetrics(card.id) });
-      // Budgets list for this card (partial match)
-      queryClient.invalidateQueries({
-        predicate: (q) => {
-          const k = q.queryKey as unknown as any[];
-          return Array.isArray(k) && k[0] === "ai-summary" && k[1] === "budgets" && k[2] === card.id;
-        },
-      });
-      // Computed pivot data cache
-      queryClient.invalidateQueries({
-        predicate: (q) => {
-          const k = q.queryKey as unknown as any[];
-          return Array.isArray(k) && k[0] === "computed-pivot-data";
-        },
-      });
+      // Invalidate caches so UI recomputes using fresh data
+      invalidateCaches(card.id, queryClient);
 
       // Build summary of data ranges for each report
-      const dataRangeSummaries = Object.values(actualDataRanges)
-        .map(info => {
+      const dataRangeSummaries = Object.values(completePivotData.actual_data_ranges || {})
+        .map((info: any) => {
           if (info.firstDate && info.lastDate) {
-            return `${info.reportName}: ${format(info.firstDate, "MMM d")} - ${format(info.lastDate, "MMM d, yyyy")}`;
+            const firstDate = new Date(info.firstDate);
+            const lastDate = new Date(info.lastDate);
+            return `${info.reportName}: ${format(firstDate, "MMM d")} - ${format(lastDate, "MMM d, yyyy")}`;
           }
           return `${info.reportName}: No data`;
         })
@@ -1248,6 +574,11 @@ const AISummaryPage = () => {
             Latest data available:
             {"\n"}{dataRangeSummaries}
           </div>
+          {successfulReports.length < card.report_ids.length && (
+            <div className="text-xs text-amber-600">
+              {card.report_ids.length - successfulReports.length} report(s) failed to refresh
+            </div>
+          )}
         </div>,
         { duration: 6000 }
       );
