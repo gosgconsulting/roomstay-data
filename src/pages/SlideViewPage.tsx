@@ -517,6 +517,16 @@ export default function SlideViewPage() {
     { report: "Social", ...calculateDerivedMetrics(SOCIAL_DATA) },
   ];
 
+  // Calculate total for all reports
+  const TOTAL_DATA = {
+    impressions: METASEARCH_DATA.impressions + SEM_DATA.impressions + SOCIAL_DATA.impressions,
+    clicks: METASEARCH_DATA.clicks + SEM_DATA.clicks + SOCIAL_DATA.clicks,
+    cost: METASEARCH_DATA.cost + SEM_DATA.cost + SOCIAL_DATA.cost,
+    revenue: METASEARCH_DATA.revenue + SEM_DATA.revenue + SOCIAL_DATA.revenue,
+    bookings: METASEARCH_DATA.bookings + SEM_DATA.bookings + SOCIAL_DATA.bookings,
+  };
+  const REPORT_TOTAL = { report: "Total", ...calculateDerivedMetrics(TOTAL_DATA) };
+
   // Calculate budget totals
   const totalBudget = BUDGET_COMPARISON_DATA.reduce((sum, m) => sum + m.budget, 0);
   const totalActual = BUDGET_COMPARISON_DATA.reduce((sum, m) => sum + m.actual, 0);
@@ -684,6 +694,20 @@ export default function SlideViewPage() {
                           <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
                         </TableRow>
                       ))}
+                      {/* Total Row */}
+                      <TableRow className="bg-muted/50 font-semibold border-t-2">
+                        <TableCell className="font-bold">{REPORT_TOTAL.report}</TableCell>
+                        <TableCell className="text-right">{formatNumber(REPORT_TOTAL.impressions)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(REPORT_TOTAL.clicks)}</TableCell>
+                        <TableCell className="text-right">{REPORT_TOTAL.ctr.toFixed(2)}%</TableCell>
+                        <TableCell className="text-right">{REPORT_TOTAL.bookings.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">{REPORT_TOTAL.conversionRate.toFixed(2)}%</TableCell>
+                        <TableCell className="text-right">${REPORT_TOTAL.cpc.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">${formatNumber(REPORT_TOTAL.cost)}</TableCell>
+                        <TableCell className="text-right">${formatNumber(REPORT_TOTAL.revenue)}</TableCell>
+                        <TableCell className="text-right">{REPORT_TOTAL.roas.toFixed(1)}x</TableCell>
+                        <TableCell className="text-right">{REPORT_TOTAL.costOfSale.toFixed(2)}%</TableCell>
+                      </TableRow>
                     </TableBody>
                   </Table>
                 </CardContent>
