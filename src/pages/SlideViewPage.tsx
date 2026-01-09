@@ -84,6 +84,7 @@ const METASEARCH_BY_LINK_TYPE = [
 ];
 
 // SEM BREAKDOWN BY CAMPAIGN (December 2025) - Brady Hotels Group
+// Note: This table shows the top campaigns + an "Other campaigns" row so totals match SEM_DATA.
 const SEM_BY_CAMPAIGN = [
   { campaign: "Brady Hotels Central Melbourne | Search | Brand", impressions: 3248, clicks: 666, cost: 1050.91, revenue: 31932.30, bookings: 45 },
   { campaign: "Brady Group | Search | Brand", impressions: 3155, clicks: 895, cost: 1059.14, revenue: 25988.77, bookings: 52 },
@@ -96,6 +97,35 @@ const SEM_BY_CAMPAIGN = [
   { campaign: "Brady Group | Performance Max", impressions: 152199, clicks: 1992, cost: 270.84, revenue: 3548.18, bookings: 9 },
   { campaign: "Brady Hotels Jones Lane | Performance Max", impressions: 46178, clicks: 701, cost: 231.27, revenue: 2342.81, bookings: 8 },
 ];
+
+const SEM_TOP_CAMPAIGNS_TOTAL = SEM_BY_CAMPAIGN.reduce(
+  (acc, row) => ({
+    impressions: acc.impressions + row.impressions,
+    clicks: acc.clicks + row.clicks,
+    cost: acc.cost + row.cost,
+    revenue: acc.revenue + row.revenue,
+    bookings: acc.bookings + row.bookings,
+  }),
+  { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
+);
+
+const SEM_OTHER_CAMPAIGNS = {
+  campaign: "Other campaigns",
+  impressions: Math.max(0, SEM_DATA.impressions - SEM_TOP_CAMPAIGNS_TOTAL.impressions),
+  clicks: Math.max(0, SEM_DATA.clicks - SEM_TOP_CAMPAIGNS_TOTAL.clicks),
+  cost: Math.max(0, Number((SEM_DATA.cost - SEM_TOP_CAMPAIGNS_TOTAL.cost).toFixed(2))),
+  revenue: Math.max(0, Number((SEM_DATA.revenue - SEM_TOP_CAMPAIGNS_TOTAL.revenue).toFixed(2))),
+  bookings: Math.max(0, Number((SEM_DATA.bookings - SEM_TOP_CAMPAIGNS_TOTAL.bookings).toFixed(2))),
+};
+
+const SEM_BY_CAMPAIGN_WITH_OTHER =
+  SEM_OTHER_CAMPAIGNS.impressions > 0 ||
+  SEM_OTHER_CAMPAIGNS.clicks > 0 ||
+  SEM_OTHER_CAMPAIGNS.cost > 0 ||
+  SEM_OTHER_CAMPAIGNS.revenue > 0 ||
+  SEM_OTHER_CAMPAIGNS.bookings > 0
+    ? [...SEM_BY_CAMPAIGN, SEM_OTHER_CAMPAIGNS]
+    : SEM_BY_CAMPAIGN;
 
 // SOCIAL BREAKDOWN BY CAMPAIGN (December 2025) - Brady Hotels 2025 Account
 const SOCIAL_BY_CAMPAIGN = [
@@ -654,7 +684,7 @@ export default function SlideViewPage() {
               <Card>
                 <CardHeader><CardTitle className="text-base font-medium">Results by Campaign</CardTitle></CardHeader>
                 <CardContent>
-                  <BreakdownTable data={SEM_BY_CAMPAIGN} labelKey="campaign" labelHeader="Campaign" />
+                  <BreakdownTable data={SEM_BY_CAMPAIGN_WITH_OTHER} labelKey="campaign" labelHeader="Campaign" />
                 </CardContent>
               </Card>
             </TabsContent>
