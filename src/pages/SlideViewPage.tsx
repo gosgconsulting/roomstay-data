@@ -35,21 +35,29 @@ const SOCIAL_DATA = {
   bookings: 154,
 };
 
-// PREVIOUS PERIOD DATA - November 2025
+// PREVIOUS PERIOD DATA - November 2025 (verified from database)
 const METASEARCH_PREV_PERIOD = {
-  impressions: 70002,
-  clicks: 4028,
-  cost: 5669.66,
-  revenue: 139274.88,
-  bookings: 246,
+  impressions: 61324,
+  clicks: 3472,
+  cost: 5032.60,
+  revenue: 125528.32,
+  bookings: 196,
+};
+
+const SEM_PREV_PERIOD = {
+  impressions: 521421,
+  clicks: 11068,
+  cost: 8067.78,
+  revenue: 278315.94,
+  bookings: 444,
 };
 
 const SOCIAL_PREV_PERIOD = {
-  impressions: 1578479,
-  clicks: 20331,
-  cost: 19105.29,
-  revenue: 306280.85,
-  bookings: 1395,
+  impressions: 480445,
+  clicks: 2889,
+  cost: 4330.90,
+  revenue: 107535.63,
+  bookings: 180,
 };
 
 // PREVIOUS YEAR DATA - December 2024 (estimated from Oct 2025 proxy)
@@ -235,11 +243,11 @@ const TOTAL_REVENUE = METASEARCH_DATA.revenue + SEM_DATA.revenue + SOCIAL_DATA.r
 const TOTAL_BOOKINGS = METASEARCH_DATA.bookings + SEM_DATA.bookings + SOCIAL_DATA.bookings;
 
 // Calculate totals for previous period (Nov 2025)
-const PREV_PERIOD_IMPRESSIONS = METASEARCH_PREV_PERIOD.impressions + SEM_DATA.impressions + SOCIAL_PREV_PERIOD.impressions;
-const PREV_PERIOD_CLICKS = METASEARCH_PREV_PERIOD.clicks + SEM_DATA.clicks + SOCIAL_PREV_PERIOD.clicks;
-const PREV_PERIOD_COST = METASEARCH_PREV_PERIOD.cost + SEM_DATA.cost + SOCIAL_PREV_PERIOD.cost;
-const PREV_PERIOD_REVENUE = METASEARCH_PREV_PERIOD.revenue + SEM_DATA.revenue + SOCIAL_PREV_PERIOD.revenue;
-const PREV_PERIOD_BOOKINGS = METASEARCH_PREV_PERIOD.bookings + SEM_DATA.bookings + SOCIAL_PREV_PERIOD.bookings;
+const PREV_PERIOD_IMPRESSIONS = METASEARCH_PREV_PERIOD.impressions + SEM_PREV_PERIOD.impressions + SOCIAL_PREV_PERIOD.impressions;
+const PREV_PERIOD_CLICKS = METASEARCH_PREV_PERIOD.clicks + SEM_PREV_PERIOD.clicks + SOCIAL_PREV_PERIOD.clicks;
+const PREV_PERIOD_COST = METASEARCH_PREV_PERIOD.cost + SEM_PREV_PERIOD.cost + SOCIAL_PREV_PERIOD.cost;
+const PREV_PERIOD_REVENUE = METASEARCH_PREV_PERIOD.revenue + SEM_PREV_PERIOD.revenue + SOCIAL_PREV_PERIOD.revenue;
+const PREV_PERIOD_BOOKINGS = METASEARCH_PREV_PERIOD.bookings + SEM_PREV_PERIOD.bookings + SOCIAL_PREV_PERIOD.bookings;
 
 // Calculate totals for previous year (proxy data)
 const PREV_YEAR_IMPRESSIONS = METASEARCH_PREV_YEAR.impressions + SEM_DATA.impressions + SOCIAL_PREV_YEAR.impressions;
