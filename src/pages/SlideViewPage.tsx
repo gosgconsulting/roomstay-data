@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // REAL DATA from database queries - December 2025 Brady Hotels Account (after resync)
 const METASEARCH_DATA = {
@@ -396,6 +398,19 @@ export default function SlideViewPage() {
   const [selectedMonth, setSelectedMonth] = useState("December");
   const [selectedTab, setSelectedTab] = useState("overview");
   const [comparisonType, setComparisonType] = useState("none");
+  const [isEditSourceOpen, setIsEditSourceOpen] = useState(false);
+  const [selectedDimensions, setSelectedDimensions] = useState({
+    metasearch: true,
+    sem: true,
+    social: true,
+  });
+
+  const handleDimensionToggle = (dimension: 'metasearch' | 'sem' | 'social') => {
+    setSelectedDimensions(prev => ({
+      ...prev,
+      [dimension]: !prev[dimension],
+    }));
+  };
 
   // Get comparison data based on selection
   const getComparisonData = () => {
@@ -601,12 +616,85 @@ export default function SlideViewPage() {
               </p>
             </div>
           </div>
-          <Button variant="outline" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh Data
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setIsEditSourceOpen(true)}>
+              <Settings2 className="h-4 w-4 mr-2" />
+              Edit Source
+            </Button>
+            <Button variant="outline" size="sm">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh Data
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* Edit Source Modal */}
+      <Dialog open={isEditSourceOpen} onOpenChange={setIsEditSourceOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+            </div>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Tip: "Breakdown by" tables render on the specific report tab, not on Overview/Budget. After saving, select the report tab to view the breakdown.
+            </p>
+            <div className="space-y-3">
+              <div 
+                className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                  selectedDimensions.metasearch ? 'border-primary bg-primary/5' : 'border-border'
+                }`}
+                onClick={() => handleDimensionToggle('metasearch')}
+              >
+                <Checkbox 
+                  checked={selectedDimensions.metasearch}
+                  onCheckedChange={() => handleDimensionToggle('metasearch')}
+                  className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                />
+                <span className="font-medium">Metasearch</span>
+              </div>
+              <div 
+                className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                  selectedDimensions.sem ? 'border-primary bg-primary/5' : 'border-border'
+                }`}
+                onClick={() => handleDimensionToggle('sem')}
+              >
+                <Checkbox 
+                  checked={selectedDimensions.sem}
+                  onCheckedChange={() => handleDimensionToggle('sem')}
+                  className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                />
+                <span className="font-medium">SEM</span>
+              </div>
+              <div 
+                className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                  selectedDimensions.social ? 'border-primary bg-primary/5' : 'border-border'
+                }`}
+                onClick={() => handleDimensionToggle('social')}
+              >
+                <Checkbox 
+                  checked={selectedDimensions.social}
+                  onCheckedChange={() => handleDimensionToggle('social')}
+                  className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                />
+                <span className="font-medium">Social</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between pt-4">
+            <Button variant="outline" onClick={() => setIsEditSourceOpen(false)}>
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Cancel
+            </Button>
+            <Button onClick={() => setIsEditSourceOpen(false)}>
+              Next
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="p-6 space-y-6">
         {/* Tabs and Filters Row */}
