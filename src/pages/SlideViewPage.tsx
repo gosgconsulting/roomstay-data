@@ -77,10 +77,10 @@ const METASEARCH_BY_HOTEL = [
   { hotel: "Brady Apartment Hotel Hardware Lane", impressions: 7295, clicks: 549, cost: 575.62, revenue: 6590.51, bookings: 15 },
 ];
 
-// METASEARCH BREAKDOWN BY LINK TYPE (December 2025)
+// METASEARCH BREAKDOWN BY LINK TYPE (December 2025) - FILTERED FOR BRADY HOTELS ONLY
 const METASEARCH_BY_LINK_TYPE = [
-  { linkType: "Paid", impressions: 44681, clicks: 1310, cost: 3471.59, revenue: 34461.61, bookings: 65 },
-  { linkType: "Google Organic", impressions: 0, clicks: 1251, cost: 0, revenue: 14868.20, bookings: 40 },
+  { linkType: "Paid", impressions: 30009, clicks: 1068, cost: 3072.33, revenue: 30466.99, bookings: 54 },
+  { linkType: "Google Organic", impressions: 0, clicks: 1064, cost: 0, revenue: 10423.65, bookings: 27 },
 ];
 
 // SEM BREAKDOWN BY CAMPAIGN (December 2025) - Brady Hotels Group
