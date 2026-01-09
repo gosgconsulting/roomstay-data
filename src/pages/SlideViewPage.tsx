@@ -688,45 +688,140 @@ export default function SlideViewPage() {
               <Card>
                 <CardHeader><CardTitle className="text-base font-medium">Monthly Budget Breakdown (2025)</CardTitle></CardHeader>
                 <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Month</TableHead>
-                        <TableHead className="text-right">Metasearch Budget</TableHead>
-                        <TableHead className="text-right">Metasearch Actual</TableHead>
-                        <TableHead className="text-right">SEM Budget</TableHead>
-                        <TableHead className="text-right">SEM Actual</TableHead>
-                        <TableHead className="text-right">Social Budget</TableHead>
-                        <TableHead className="text-right">Social Actual</TableHead>
-                        <TableHead className="text-right">Total Budget</TableHead>
-                        <TableHead className="text-right">Total Actual</TableHead>
-                        <TableHead className="text-right">Variance</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {MONTHLY_BUDGET_DATA.map((row) => {
-                        const totalBudgetRow = row.metasearchBudget + row.semBudget + row.socialBudget;
-                        const totalActualRow = row.metasearchActual + row.semActual + row.socialActual;
-                        const variance = totalBudgetRow - totalActualRow;
-                        return (
-                          <TableRow key={row.month}>
-                            <TableCell className="font-medium">{row.month}</TableCell>
-                            <TableCell className="text-right">${formatNumber(row.metasearchBudget)}</TableCell>
-                            <TableCell className="text-right">${formatNumber(row.metasearchActual)}</TableCell>
-                            <TableCell className="text-right">${formatNumber(row.semBudget)}</TableCell>
-                            <TableCell className="text-right">${formatNumber(row.semActual)}</TableCell>
-                            <TableCell className="text-right">${formatNumber(row.socialBudget)}</TableCell>
-                            <TableCell className="text-right">${formatNumber(row.socialActual)}</TableCell>
-                            <TableCell className="text-right font-medium">${formatNumber(totalBudgetRow)}</TableCell>
-                            <TableCell className="text-right font-medium">${formatNumber(totalActualRow)}</TableCell>
-                            <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              {variance >= 0 ? '+' : ''}${formatNumber(variance)}
-                            </TableCell>
+                  <Tabs defaultValue="overview" className="w-full">
+                    <TabsList className="mb-4">
+                      <TabsTrigger value="overview">Overview</TabsTrigger>
+                      <TabsTrigger value="metasearch">Metasearch</TabsTrigger>
+                      <TabsTrigger value="sem">SEM</TabsTrigger>
+                      <TabsTrigger value="social">Social</TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="overview">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Month</TableHead>
+                            <TableHead className="text-right">Metasearch Budget</TableHead>
+                            <TableHead className="text-right">Metasearch Actual</TableHead>
+                            <TableHead className="text-right">SEM Budget</TableHead>
+                            <TableHead className="text-right">SEM Actual</TableHead>
+                            <TableHead className="text-right">Social Budget</TableHead>
+                            <TableHead className="text-right">Social Actual</TableHead>
+                            <TableHead className="text-right">Total Budget</TableHead>
+                            <TableHead className="text-right">Total Actual</TableHead>
+                            <TableHead className="text-right">Variance</TableHead>
                           </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {MONTHLY_BUDGET_DATA.map((row) => {
+                            const totalBudgetRow = row.metasearchBudget + row.semBudget + row.socialBudget;
+                            const totalActualRow = row.metasearchActual + row.semActual + row.socialActual;
+                            const variance = totalBudgetRow - totalActualRow;
+                            return (
+                              <TableRow key={row.month}>
+                                <TableCell className="font-medium">{row.month}</TableCell>
+                                <TableCell className="text-right">${formatNumber(row.metasearchBudget)}</TableCell>
+                                <TableCell className="text-right">${formatNumber(row.metasearchActual)}</TableCell>
+                                <TableCell className="text-right">${formatNumber(row.semBudget)}</TableCell>
+                                <TableCell className="text-right">${formatNumber(row.semActual)}</TableCell>
+                                <TableCell className="text-right">${formatNumber(row.socialBudget)}</TableCell>
+                                <TableCell className="text-right">${formatNumber(row.socialActual)}</TableCell>
+                                <TableCell className="text-right font-medium">${formatNumber(totalBudgetRow)}</TableCell>
+                                <TableCell className="text-right font-medium">${formatNumber(totalActualRow)}</TableCell>
+                                <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {variance >= 0 ? '+' : ''}${formatNumber(variance)}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </TabsContent>
+                    
+                    <TabsContent value="metasearch">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Month</TableHead>
+                            <TableHead className="text-right">Budget</TableHead>
+                            <TableHead className="text-right">Actual</TableHead>
+                            <TableHead className="text-right">Variance</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {MONTHLY_BUDGET_DATA.map((row) => {
+                            const variance = row.metasearchBudget - row.metasearchActual;
+                            return (
+                              <TableRow key={row.month}>
+                                <TableCell className="font-medium">{row.month}</TableCell>
+                                <TableCell className="text-right">${formatNumber(row.metasearchBudget)}</TableCell>
+                                <TableCell className="text-right">${formatNumber(row.metasearchActual)}</TableCell>
+                                <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {variance >= 0 ? '+' : ''}${formatNumber(variance)}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </TabsContent>
+                    
+                    <TabsContent value="sem">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Month</TableHead>
+                            <TableHead className="text-right">Budget</TableHead>
+                            <TableHead className="text-right">Actual</TableHead>
+                            <TableHead className="text-right">Variance</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {MONTHLY_BUDGET_DATA.map((row) => {
+                            const variance = row.semBudget - row.semActual;
+                            return (
+                              <TableRow key={row.month}>
+                                <TableCell className="font-medium">{row.month}</TableCell>
+                                <TableCell className="text-right">${formatNumber(row.semBudget)}</TableCell>
+                                <TableCell className="text-right">${formatNumber(row.semActual)}</TableCell>
+                                <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {variance >= 0 ? '+' : ''}${formatNumber(variance)}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </TabsContent>
+                    
+                    <TabsContent value="social">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Month</TableHead>
+                            <TableHead className="text-right">Budget</TableHead>
+                            <TableHead className="text-right">Actual</TableHead>
+                            <TableHead className="text-right">Variance</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {MONTHLY_BUDGET_DATA.map((row) => {
+                            const variance = row.socialBudget - row.socialActual;
+                            return (
+                              <TableRow key={row.month}>
+                                <TableCell className="font-medium">{row.month}</TableCell>
+                                <TableCell className="text-right">${formatNumber(row.socialBudget)}</TableCell>
+                                <TableCell className="text-right">${formatNumber(row.socialActual)}</TableCell>
+                                <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {variance >= 0 ? '+' : ''}${formatNumber(variance)}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </TabsContent>
+                  </Tabs>
                 </CardContent>
               </Card>
             </TabsContent>
