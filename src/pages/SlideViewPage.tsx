@@ -8,13 +8,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
 
-// REAL DATA from database queries - December 2025 Brady Hotels Account
+// REAL DATA from database queries - December 2025 Brady Hotels Account (after resync)
 const METASEARCH_DATA = {
-  impressions: 30009,
-  clicks: 2132,
-  cost: 3072.33,
-  revenue: 40890.64,
-  bookings: 81,
+  impressions: 27067,
+  clicks: 1915,
+  cost: 2729.84,
+  revenue: 35093.16,
+  bookings: 70,
 };
 
 // SEM data - December 2025 Brady Hotels
@@ -35,13 +35,13 @@ const SOCIAL_DATA = {
   bookings: 154,
 };
 
-// PREVIOUS PERIOD DATA - November 2025 (verified from database)
+// PREVIOUS PERIOD DATA - November 2025 (verified from database after resync)
 const METASEARCH_PREV_PERIOD = {
-  impressions: 61324,
-  clicks: 3472,
-  cost: 5032.60,
-  revenue: 125528.32,
-  bookings: 196,
+  impressions: 30662,
+  clicks: 1736,
+  cost: 2516.30,
+  revenue: 62764.16,
+  bookings: 98,
 };
 
 const SEM_PREV_PERIOD = {
@@ -186,12 +186,12 @@ const MONTHLY_BUDGET_DATA = [
   { month: "Apr", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7961.28, socialActual: 0 },
   { month: "May", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7965.97, socialActual: 0 },
   { month: "Jun", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 2741.81 },
-  { month: "Jul", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 14113.52, semActual: 0, socialActual: 4060.58 },
-  { month: "Aug", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 17588.26, semActual: 19.19, socialActual: 3476.38 },
-  { month: "Sep", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 14844.34, semActual: 8873.84, socialActual: 4500.10 },
-  { month: "Oct", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 5409.40, semActual: 8397.16, socialActual: 4598.92 },
-  { month: "Nov", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 5032.60, semActual: 8067.78, socialActual: 4330.90 },
-  { month: "Dec", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 3072.33, semActual: 8208.69, socialActual: 4337.01 },
+  { month: "Jul", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 7056.76, semActual: 0, socialActual: 4060.58 },
+  { month: "Aug", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 8794.13, semActual: 19.19, socialActual: 3476.38 },
+  { month: "Sep", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 7422.17, semActual: 8873.84, socialActual: 4500.10 },
+  { month: "Oct", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 2704.70, semActual: 8397.16, socialActual: 4598.92 },
+  { month: "Nov", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 2516.30, semActual: 8067.78, socialActual: 4330.90 },
+  { month: "Dec", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 2729.84, semActual: 8208.69, socialActual: 4337.01 },
 ];
 
 const BUDGET_COMPARISON_DATA = MONTHLY_BUDGET_DATA.map(m => ({
