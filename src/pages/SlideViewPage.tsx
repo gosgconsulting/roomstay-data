@@ -781,7 +781,7 @@ export default function SlideViewPage() {
                           formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
                           contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                         />
-                        <Bar dataKey="revenue" fill="#10b981" name="Metasearch Revenue" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="revenue" fill="#8b5cf6" name="Metasearch Revenue" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -820,7 +820,7 @@ export default function SlideViewPage() {
                           formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
                           contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                         />
-                        <Bar dataKey="revenue" fill="#3b82f6" name="SEM Revenue" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="revenue" fill="#8b5cf6" name="SEM Revenue" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
