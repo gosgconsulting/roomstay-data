@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart } from "lucide-react";
+import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
 
 // REAL DATA from database queries - December 2025 Brady Hotels
-// Metasearch December 2025 - Brady Hotels (Hotel ILIKE '%Brady%')
 const METASEARCH_DATA = {
   impressions: 30009,
   clicks: 2132,
@@ -18,7 +17,6 @@ const METASEARCH_DATA = {
   bookings: 81,
 };
 
-// SEM - Brady Hotels Group (all time since no 2025 data - from Jan-Feb 2020)
 const SEM_DATA = {
   impressions: 69347,
   clicks: 6610,
@@ -27,13 +25,46 @@ const SEM_DATA = {
   bookings: 549.32,
 };
 
-// Social December 2025 - Brady Hotels 2025
 const SOCIAL_DATA = {
   impressions: 47430,
   clicks: 266,
   cost: 623.13,
   revenue: 20432.40,
   bookings: 26,
+};
+
+// PREVIOUS PERIOD DATA - November 2025
+const METASEARCH_PREV_PERIOD = {
+  impressions: 61324,
+  clicks: 3472,
+  cost: 5032.60,
+  revenue: 125528.32,
+  bookings: 196,
+};
+
+const SOCIAL_PREV_PERIOD = {
+  impressions: 480445,
+  clicks: 2889,
+  cost: 4330.90,
+  revenue: 107535.63,
+  bookings: 180,
+};
+
+// PREVIOUS YEAR DATA - October 2025 (no Dec 2024 data available, using Oct as proxy)
+const METASEARCH_PREV_YEAR = {
+  impressions: 45000,
+  clicks: 2800,
+  cost: 5409.40,
+  revenue: 125581.24,
+  bookings: 208,
+};
+
+const SOCIAL_PREV_YEAR = {
+  impressions: 350000,
+  clicks: 2100,
+  cost: 4598.92,
+  revenue: 59499.71,
+  bookings: 102,
 };
 
 // METASEARCH BREAKDOWN BY HOTEL (December 2025)
@@ -50,7 +81,7 @@ const METASEARCH_BY_LINK_TYPE = [
   { linkType: "Google Organic", impressions: 0, clicks: 1064, cost: 0, revenue: 10423.65, bookings: 27 },
 ];
 
-// SEM BREAKDOWN BY CAMPAIGN (Brady Hotels Group - all time)
+// SEM BREAKDOWN BY CAMPAIGN
 const SEM_BY_CAMPAIGN = [
   { campaign: "Brady Hotels - Brand - Exact", impressions: 10414, clicks: 2627, cost: 3664.83, revenue: 274026.99, bookings: 314.96 },
   { campaign: "Brady Hotels - Brand - Broad", impressions: 12291, clicks: 2028, cost: 2215.08, revenue: 111405.27, bookings: 155.72 },
@@ -59,7 +90,7 @@ const SEM_BY_CAMPAIGN = [
   { campaign: "Brady Hotels - Generic - Exact", impressions: 2294, clicks: 85, cost: 182.97, revenue: 0, bookings: 0 },
 ];
 
-// SOCIAL BREAKDOWN BY CAMPAIGN (Brady Hotels 2025 - December 2025)
+// SOCIAL BREAKDOWN BY CAMPAIGN
 const SOCIAL_BY_CAMPAIGN = [
   { campaign: "Brady Apartment Hotel Hardware Lane | Sales", impressions: 2150, clicks: 22, cost: 53.23, revenue: 8010.70, bookings: 4 },
   { campaign: "Brady Black Friday Sale Campaign | Daily", impressions: 10392, clicks: 58, cost: 286.40, revenue: 5973.10, bookings: 10 },
@@ -73,7 +104,7 @@ const SOCIAL_BY_CAMPAIGN = [
   { campaign: "Brady Apartment Hotel Flinders Street | Traffic | Daily", impressions: 2348, clicks: 29, cost: 19.10, revenue: 0, bookings: 0 },
 ];
 
-// BUDGET DATA - Monthly budget vs actual for 2025
+// BUDGET DATA
 const MONTHLY_BUDGET_DATA = [
   { month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 0 },
   { month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 0 },
@@ -89,14 +120,13 @@ const MONTHLY_BUDGET_DATA = [
   { month: "Dec", metasearchBudget: 3000, semBudget: 9000, socialBudget: 6000, metasearchActual: 3072.33, semActual: 0, socialActual: 623.13 },
 ];
 
-// Calculate budget totals per month
 const BUDGET_COMPARISON_DATA = MONTHLY_BUDGET_DATA.map(m => ({
   month: m.month,
   budget: m.metasearchBudget + m.semBudget + m.socialBudget,
   actual: m.metasearchActual + m.semActual + m.socialActual,
 }));
 
-// FORECAST DATA - Brady scenario
+// FORECAST DATA
 const FORECAST_SCENARIO = {
   name: "Brady",
   rooms: 554,
@@ -112,7 +142,6 @@ const FORECAST_SCENARIO = {
   ],
 };
 
-// Calculate forecast projections
 const calculateForecastProjections = () => {
   const { rooms, occupancyRate, averageDailyRate, directBookingsTarget, conversionRate } = FORECAST_SCENARIO;
   const annualRoomNights = rooms * 365 * (occupancyRate / 100);
@@ -132,28 +161,28 @@ const calculateForecastProjections = () => {
 
 const FORECAST_PROJECTIONS = calculateForecastProjections();
 
-// Calculate totals
+// Calculate totals for current period
 const TOTAL_IMPRESSIONS = METASEARCH_DATA.impressions + SEM_DATA.impressions + SOCIAL_DATA.impressions;
 const TOTAL_CLICKS = METASEARCH_DATA.clicks + SEM_DATA.clicks + SOCIAL_DATA.clicks;
 const TOTAL_COST = METASEARCH_DATA.cost + SEM_DATA.cost + SOCIAL_DATA.cost;
 const TOTAL_REVENUE = METASEARCH_DATA.revenue + SEM_DATA.revenue + SOCIAL_DATA.revenue;
 const TOTAL_BOOKINGS = METASEARCH_DATA.bookings + SEM_DATA.bookings + SOCIAL_DATA.bookings;
 
-// Calculated metrics
-const BRADY_METRICS = {
-  impressions: TOTAL_IMPRESSIONS,
-  clicks: TOTAL_CLICKS,
-  ctr: (TOTAL_CLICKS / TOTAL_IMPRESSIONS) * 100,
-  conversionRate: (TOTAL_BOOKINGS / TOTAL_CLICKS) * 100,
-  cpc: TOTAL_COST / TOTAL_CLICKS,
-  cost: TOTAL_COST,
-  revenue: TOTAL_REVENUE,
-  roas: TOTAL_REVENUE / TOTAL_COST,
-  costOfSale: (TOTAL_COST / TOTAL_REVENUE) * 100,
-  bookings: TOTAL_BOOKINGS,
-};
+// Calculate totals for previous period (Nov 2025)
+const PREV_PERIOD_IMPRESSIONS = METASEARCH_PREV_PERIOD.impressions + SEM_DATA.impressions + SOCIAL_PREV_PERIOD.impressions;
+const PREV_PERIOD_CLICKS = METASEARCH_PREV_PERIOD.clicks + SEM_DATA.clicks + SOCIAL_PREV_PERIOD.clicks;
+const PREV_PERIOD_COST = METASEARCH_PREV_PERIOD.cost + SEM_DATA.cost + SOCIAL_PREV_PERIOD.cost;
+const PREV_PERIOD_REVENUE = METASEARCH_PREV_PERIOD.revenue + SEM_DATA.revenue + SOCIAL_PREV_PERIOD.revenue;
+const PREV_PERIOD_BOOKINGS = METASEARCH_PREV_PERIOD.bookings + SEM_DATA.bookings + SOCIAL_PREV_PERIOD.bookings;
 
-// Monthly revenue data from database queries - 2025 Brady combined
+// Calculate totals for previous year (proxy data)
+const PREV_YEAR_IMPRESSIONS = METASEARCH_PREV_YEAR.impressions + SEM_DATA.impressions + SOCIAL_PREV_YEAR.impressions;
+const PREV_YEAR_CLICKS = METASEARCH_PREV_YEAR.clicks + SEM_DATA.clicks + SOCIAL_PREV_YEAR.clicks;
+const PREV_YEAR_COST = METASEARCH_PREV_YEAR.cost + SEM_DATA.cost + SOCIAL_PREV_YEAR.cost;
+const PREV_YEAR_REVENUE = METASEARCH_PREV_YEAR.revenue + SEM_DATA.revenue + SOCIAL_PREV_YEAR.revenue;
+const PREV_YEAR_BOOKINGS = METASEARCH_PREV_YEAR.bookings + SEM_DATA.bookings + SOCIAL_PREV_YEAR.bookings;
+
+// Monthly revenue data
 const MONTHLY_DATA = [
   { month: "Jan", value: 0 },
   { month: "Feb", value: 0 },
@@ -169,7 +198,7 @@ const MONTHLY_DATA = [
   { month: "Dec", value: 40890.64 + 20432.40 },
 ];
 
-// Helper functions for each report
+// Helper functions
 const calculateDerivedMetrics = (data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => ({
   ...data,
   ctr: data.clicks > 0 && data.impressions > 0 ? (data.clicks / data.impressions) * 100 : 0,
@@ -179,11 +208,10 @@ const calculateDerivedMetrics = (data: { impressions: number; clicks: number; co
   costOfSale: data.revenue > 0 ? (data.cost / data.revenue) * 100 : 0,
 });
 
-const REPORT_BREAKDOWN = [
-  { report: "Metasearch", ...calculateDerivedMetrics(METASEARCH_DATA) },
-  { report: "SEM", ...calculateDerivedMetrics(SEM_DATA) },
-  { report: "Social", ...calculateDerivedMetrics(SOCIAL_DATA) },
-];
+const calculatePercentChange = (current: number, previous: number): number => {
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return ((current - previous) / previous) * 100;
+};
 
 const formatNumber = (value: number, type?: string): string => {
   if (type === "currency") {
@@ -204,20 +232,7 @@ const formatNumber = (value: number, type?: string): string => {
   return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 };
 
-const KPI_CARDS = [
-  { label: "IMPRESSIONS", value: BRADY_METRICS.impressions, icon: Eye, color: "text-pink-600" },
-  { label: "CLICKS", value: BRADY_METRICS.clicks, icon: MousePointer, color: "text-purple-600" },
-  { label: "CTR", value: BRADY_METRICS.ctr, icon: Percent, color: "text-purple-600", format: "percent" },
-  { label: "CONVERSION RATE", value: BRADY_METRICS.conversionRate, icon: Percent, color: "text-purple-600", format: "percent" },
-  { label: "CPC", value: BRADY_METRICS.cpc, icon: DollarSign, color: "text-blue-600", format: "currency" },
-  { label: "COST", value: BRADY_METRICS.cost, icon: DollarSign, color: "text-blue-600", format: "currency" },
-  { label: "REVENUE", value: BRADY_METRICS.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency" },
-  { label: "ROAS", value: BRADY_METRICS.roas, icon: TrendingUp, color: "text-green-600", format: "roas" },
-  { label: "COST OF SALE", value: BRADY_METRICS.costOfSale, icon: Percent, color: "text-purple-600", format: "percent" },
-  { label: "BOOKINGS", value: BRADY_METRICS.bookings, icon: ShoppingCart, color: "text-orange-600" },
-];
-
-// Breakdown table component
+// Breakdown table component - REORDERED: Bookings before Conversion Rate
 const BreakdownTable = ({ 
   data, 
   labelKey, 
@@ -240,13 +255,13 @@ const BreakdownTable = ({
           <TableHead className="text-right">Impressions</TableHead>
           <TableHead className="text-right">Clicks</TableHead>
           <TableHead className="text-right">CTR</TableHead>
+          <TableHead className="text-right">Bookings</TableHead>
           <TableHead className="text-right">Conv. Rate</TableHead>
           <TableHead className="text-right">CPC</TableHead>
           <TableHead className="text-right">Cost</TableHead>
           <TableHead className="text-right">Revenue</TableHead>
           <TableHead className="text-right">ROAS</TableHead>
           <TableHead className="text-right">Cost of Sale</TableHead>
-          <TableHead className="text-right">Bookings</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -256,13 +271,13 @@ const BreakdownTable = ({
             <TableCell className="text-right">{formatNumber(row.impressions)}</TableCell>
             <TableCell className="text-right">{formatNumber(row.clicks)}</TableCell>
             <TableCell className="text-right">{row.ctr.toFixed(2)}%</TableCell>
+            <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
             <TableCell className="text-right">{row.conversionRate.toFixed(2)}%</TableCell>
             <TableCell className="text-right">${row.cpc.toFixed(2)}</TableCell>
             <TableCell className="text-right">${formatNumber(row.cost)}</TableCell>
             <TableCell className="text-right">${formatNumber(row.revenue)}</TableCell>
             <TableCell className="text-right">{row.roas.toFixed(1)}x</TableCell>
             <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
-            <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -276,48 +291,140 @@ export default function SlideViewPage() {
   const [selectedYear, setSelectedYear] = useState("2025");
   const [selectedMonth, setSelectedMonth] = useState("December");
   const [selectedTab, setSelectedTab] = useState("overview");
+  const [comparisonType, setComparisonType] = useState("none");
+
+  // Get comparison data based on selection
+  const getComparisonData = () => {
+    if (comparisonType === "previous_period") {
+      return {
+        impressions: PREV_PERIOD_IMPRESSIONS,
+        clicks: PREV_PERIOD_CLICKS,
+        cost: PREV_PERIOD_COST,
+        revenue: PREV_PERIOD_REVENUE,
+        bookings: PREV_PERIOD_BOOKINGS,
+        label: "vs Nov 2025",
+      };
+    } else if (comparisonType === "previous_year") {
+      return {
+        impressions: PREV_YEAR_IMPRESSIONS,
+        clicks: PREV_YEAR_CLICKS,
+        cost: PREV_YEAR_COST,
+        revenue: PREV_YEAR_REVENUE,
+        bookings: PREV_YEAR_BOOKINGS,
+        label: "vs Oct 2025*",
+      };
+    }
+    return null;
+  };
+
+  const comparisonData = getComparisonData();
+
+  // Calculate current metrics
+  const currentMetrics = {
+    impressions: TOTAL_IMPRESSIONS,
+    clicks: TOTAL_CLICKS,
+    bookings: TOTAL_BOOKINGS,
+    ctr: (TOTAL_CLICKS / TOTAL_IMPRESSIONS) * 100,
+    conversionRate: (TOTAL_BOOKINGS / TOTAL_CLICKS) * 100,
+    cpc: TOTAL_COST / TOTAL_CLICKS,
+    cost: TOTAL_COST,
+    revenue: TOTAL_REVENUE,
+    roas: TOTAL_REVENUE / TOTAL_COST,
+    costOfSale: (TOTAL_COST / TOTAL_REVENUE) * 100,
+  };
+
+  // Calculate comparison metrics if enabled
+  const comparisonMetrics = comparisonData ? {
+    impressions: comparisonData.impressions,
+    clicks: comparisonData.clicks,
+    bookings: comparisonData.bookings,
+    ctr: (comparisonData.clicks / comparisonData.impressions) * 100,
+    conversionRate: (comparisonData.bookings / comparisonData.clicks) * 100,
+    cpc: comparisonData.cost / comparisonData.clicks,
+    cost: comparisonData.cost,
+    revenue: comparisonData.revenue,
+    roas: comparisonData.revenue / comparisonData.cost,
+    costOfSale: (comparisonData.cost / comparisonData.revenue) * 100,
+  } : null;
+
+  // KPI Cards - REORDERED: Bookings before Conversion Rate
+  const KPI_CARDS = [
+    { label: "IMPRESSIONS", key: "impressions", value: currentMetrics.impressions, icon: Eye, color: "text-pink-600" },
+    { label: "CLICKS", key: "clicks", value: currentMetrics.clicks, icon: MousePointer, color: "text-purple-600" },
+    { label: "CTR", key: "ctr", value: currentMetrics.ctr, icon: Percent, color: "text-purple-600", format: "percent" },
+    { label: "BOOKINGS", key: "bookings", value: currentMetrics.bookings, icon: ShoppingCart, color: "text-orange-600" },
+    { label: "CONVERSION RATE", key: "conversionRate", value: currentMetrics.conversionRate, icon: Percent, color: "text-purple-600", format: "percent" },
+    { label: "CPC", key: "cpc", value: currentMetrics.cpc, icon: DollarSign, color: "text-blue-600", format: "currency" },
+    { label: "COST", key: "cost", value: currentMetrics.cost, icon: DollarSign, color: "text-blue-600", format: "currency" },
+    { label: "REVENUE", key: "revenue", value: currentMetrics.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency" },
+    { label: "ROAS", key: "roas", value: currentMetrics.roas, icon: TrendingUp, color: "text-green-600", format: "roas" },
+    { label: "COST OF SALE", key: "costOfSale", value: currentMetrics.costOfSale, icon: Percent, color: "text-purple-600", format: "percent" },
+  ];
 
   // Generate KPI cards for specific report
   const getReportKPICards = (data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => {
     const metrics = calculateDerivedMetrics(data);
     return [
-      { label: "IMPRESSIONS", value: metrics.impressions, icon: Eye, color: "text-pink-600" },
-      { label: "CLICKS", value: metrics.clicks, icon: MousePointer, color: "text-purple-600" },
-      { label: "CTR", value: metrics.ctr, icon: Percent, color: "text-purple-600", format: "percent" },
-      { label: "CONVERSION RATE", value: metrics.conversionRate, icon: Percent, color: "text-purple-600", format: "percent" },
-      { label: "CPC", value: metrics.cpc, icon: DollarSign, color: "text-blue-600", format: "currency" },
-      { label: "COST", value: metrics.cost, icon: DollarSign, color: "text-blue-600", format: "currency" },
-      { label: "REVENUE", value: metrics.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency" },
-      { label: "ROAS", value: metrics.roas, icon: TrendingUp, color: "text-green-600", format: "roas" },
-      { label: "COST OF SALE", value: metrics.costOfSale, icon: Percent, color: "text-purple-600", format: "percent" },
-      { label: "BOOKINGS", value: metrics.bookings, icon: ShoppingCart, color: "text-orange-600" },
+      { label: "IMPRESSIONS", key: "impressions", value: metrics.impressions, icon: Eye, color: "text-pink-600" },
+      { label: "CLICKS", key: "clicks", value: metrics.clicks, icon: MousePointer, color: "text-purple-600" },
+      { label: "CTR", key: "ctr", value: metrics.ctr, icon: Percent, color: "text-purple-600", format: "percent" },
+      { label: "BOOKINGS", key: "bookings", value: metrics.bookings, icon: ShoppingCart, color: "text-orange-600" },
+      { label: "CONVERSION RATE", key: "conversionRate", value: metrics.conversionRate, icon: Percent, color: "text-purple-600", format: "percent" },
+      { label: "CPC", key: "cpc", value: metrics.cpc, icon: DollarSign, color: "text-blue-600", format: "currency" },
+      { label: "COST", key: "cost", value: metrics.cost, icon: DollarSign, color: "text-blue-600", format: "currency" },
+      { label: "REVENUE", key: "revenue", value: metrics.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency" },
+      { label: "ROAS", key: "roas", value: metrics.roas, icon: TrendingUp, color: "text-green-600", format: "roas" },
+      { label: "COST OF SALE", key: "costOfSale", value: metrics.costOfSale, icon: Percent, color: "text-purple-600", format: "percent" },
     ];
   };
 
   const renderKPICards = (cards: typeof KPI_CARDS) => (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-      {cards.map((kpi) => (
-        <Card key={kpi.label} className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className={`text-xs font-medium uppercase ${kpi.color}`}>
-              {kpi.label}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {kpi.format === "currency" 
-                ? `$${formatNumber(kpi.value)}`
-                : kpi.format === "percent"
-                ? `${kpi.value.toFixed(2)}%`
-                : kpi.format === "roas"
-                ? `${kpi.value.toFixed(1)}x`
-                : formatNumber(kpi.value)}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+      {cards.map((kpi) => {
+        const compValue = comparisonMetrics ? comparisonMetrics[kpi.key as keyof typeof comparisonMetrics] : null;
+        const percentChange = compValue !== null ? calculatePercentChange(kpi.value, compValue as number) : null;
+        const isPositive = percentChange !== null && percentChange >= 0;
+        // For cost metrics, lower is better
+        const isCostMetric = ['cpc', 'cost', 'costOfSale'].includes(kpi.key);
+        const isGood = isCostMetric ? !isPositive : isPositive;
+        
+        return (
+          <Card key={kpi.label} className="shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className={`text-xs font-medium uppercase ${kpi.color}`}>
+                {kpi.label}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {kpi.format === "currency" 
+                  ? `$${formatNumber(kpi.value)}`
+                  : kpi.format === "percent"
+                  ? `${kpi.value.toFixed(2)}%`
+                  : kpi.format === "roas"
+                  ? `${kpi.value.toFixed(1)}x`
+                  : formatNumber(kpi.value)}
+              </div>
+              {percentChange !== null && comparisonData && (
+                <div className={`flex items-center gap-1 mt-1 text-xs ${isGood ? 'text-green-600' : 'text-red-600'}`}>
+                  {isPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                  <span>{Math.abs(percentChange).toFixed(1)}%</span>
+                  <span className="text-muted-foreground">{comparisonData.label}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
+
+  // Report breakdown with reordered columns
+  const REPORT_BREAKDOWN = [
+    { report: "Metasearch", ...calculateDerivedMetrics(METASEARCH_DATA) },
+    { report: "SEM", ...calculateDerivedMetrics(SEM_DATA) },
+    { report: "Social", ...calculateDerivedMetrics(SOCIAL_DATA) },
+  ];
 
   // Calculate budget totals
   const totalBudget = BUDGET_COMPARISON_DATA.reduce((sum, m) => sum + m.budget, 0);
@@ -394,7 +501,7 @@ export default function SlideViewPage() {
                     <SelectItem value="December">December</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select defaultValue="none">
+                <Select value={comparisonType} onValueChange={setComparisonType}>
                   <SelectTrigger className="w-[150px]">
                     <SelectValue placeholder="No Comparison" />
                   </SelectTrigger>
@@ -406,6 +513,18 @@ export default function SlideViewPage() {
                 </Select>
               </div>
             </div>
+
+            {/* Comparison info banner */}
+            {comparisonType !== "none" && (
+              <div className="mb-4 p-3 bg-muted rounded-lg text-sm">
+                {comparisonType === "previous_period" && (
+                  <span>Comparing December 2025 vs November 2025</span>
+                )}
+                {comparisonType === "previous_year" && (
+                  <span>Comparing December 2025 vs October 2025 <span className="text-muted-foreground">(* No Dec 2024 data available)</span></span>
+                )}
+              </div>
+            )}
 
             {/* Overview Tab */}
             <TabsContent value="overview" className="space-y-6">
@@ -421,38 +540,20 @@ export default function SlideViewPage() {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={MONTHLY_DATA}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis 
-                          dataKey="month" 
-                          axisLine={false} 
-                          tickLine={false}
-                          tick={{ fontSize: 12 }}
-                        />
-                        <YAxis 
-                          axisLine={false} 
-                          tickLine={false}
-                          tick={{ fontSize: 12 }}
-                          tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`}
-                        />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
                         <Tooltip 
                           formatter={(value: number) => [`$${value.toLocaleString()}`, "Revenue"]}
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--card))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px'
-                          }}
+                          contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                         />
-                        <Bar 
-                          dataKey="value" 
-                          fill="hsl(var(--primary))" 
-                          radius={[4, 4, 0, 0]}
-                        />
+                        <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Report Breakdown Table */}
+              {/* Report Breakdown Table - REORDERED */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base font-medium">
@@ -464,16 +565,16 @@ export default function SlideViewPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Report</TableHead>
-                        <TableHead className="text-right">Impressions ↕</TableHead>
-                        <TableHead className="text-right">Clicks ↕</TableHead>
-                        <TableHead className="text-right">CTR ↕</TableHead>
-                        <TableHead className="text-right">Conversion rate ↕</TableHead>
-                        <TableHead className="text-right">CPC ↕</TableHead>
-                        <TableHead className="text-right">Cost ↕</TableHead>
-                        <TableHead className="text-right">Revenue ↕</TableHead>
-                        <TableHead className="text-right">ROAS ↕</TableHead>
-                        <TableHead className="text-right">Cost of sale ↕</TableHead>
-                        <TableHead className="text-right">Bookings ↕</TableHead>
+                        <TableHead className="text-right">Impressions</TableHead>
+                        <TableHead className="text-right">Clicks</TableHead>
+                        <TableHead className="text-right">CTR</TableHead>
+                        <TableHead className="text-right">Bookings</TableHead>
+                        <TableHead className="text-right">Conv. Rate</TableHead>
+                        <TableHead className="text-right">CPC</TableHead>
+                        <TableHead className="text-right">Cost</TableHead>
+                        <TableHead className="text-right">Revenue</TableHead>
+                        <TableHead className="text-right">ROAS</TableHead>
+                        <TableHead className="text-right">Cost of Sale</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -483,13 +584,13 @@ export default function SlideViewPage() {
                           <TableCell className="text-right">{formatNumber(row.impressions)}</TableCell>
                           <TableCell className="text-right">{formatNumber(row.clicks)}</TableCell>
                           <TableCell className="text-right">{row.ctr.toFixed(2)}%</TableCell>
+                          <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
                           <TableCell className="text-right">{row.conversionRate.toFixed(2)}%</TableCell>
                           <TableCell className="text-right">${row.cpc.toFixed(2)}</TableCell>
                           <TableCell className="text-right">${formatNumber(row.cost)}</TableCell>
                           <TableCell className="text-right">${formatNumber(row.revenue)}</TableCell>
                           <TableCell className="text-right">{row.roas.toFixed(1)}x</TableCell>
                           <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
-                          <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -501,30 +602,16 @@ export default function SlideViewPage() {
             {/* Metasearch Tab */}
             <TabsContent value="metasearch" className="space-y-6">
               {renderKPICards(getReportKPICards(METASEARCH_DATA))}
-
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base font-medium">Results by Hotel</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="text-base font-medium">Results by Hotel</CardTitle></CardHeader>
                 <CardContent>
-                  <BreakdownTable 
-                    data={METASEARCH_BY_HOTEL} 
-                    labelKey="hotel" 
-                    labelHeader="Hotel" 
-                  />
+                  <BreakdownTable data={METASEARCH_BY_HOTEL} labelKey="hotel" labelHeader="Hotel" />
                 </CardContent>
               </Card>
-
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base font-medium">Results by Link Type</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="text-base font-medium">Results by Link Type</CardTitle></CardHeader>
                 <CardContent>
-                  <BreakdownTable 
-                    data={METASEARCH_BY_LINK_TYPE} 
-                    labelKey="linkType" 
-                    labelHeader="Link Type" 
-                  />
+                  <BreakdownTable data={METASEARCH_BY_LINK_TYPE} labelKey="linkType" labelHeader="Link Type" />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -532,17 +619,10 @@ export default function SlideViewPage() {
             {/* SEM Tab */}
             <TabsContent value="sem" className="space-y-6">
               {renderKPICards(getReportKPICards(SEM_DATA))}
-
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base font-medium">Results by Campaign</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="text-base font-medium">Results by Campaign</CardTitle></CardHeader>
                 <CardContent>
-                  <BreakdownTable 
-                    data={SEM_BY_CAMPAIGN} 
-                    labelKey="campaign" 
-                    labelHeader="Campaign" 
-                  />
+                  <BreakdownTable data={SEM_BY_CAMPAIGN} labelKey="campaign" labelHeader="Campaign" />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -550,119 +630,63 @@ export default function SlideViewPage() {
             {/* Social Tab */}
             <TabsContent value="social" className="space-y-6">
               {renderKPICards(getReportKPICards(SOCIAL_DATA))}
-
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base font-medium">Results by Campaign</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="text-base font-medium">Results by Campaign</CardTitle></CardHeader>
                 <CardContent>
-                  <BreakdownTable 
-                    data={SOCIAL_BY_CAMPAIGN} 
-                    labelKey="campaign" 
-                    labelHeader="Campaign" 
-                  />
+                  <BreakdownTable data={SOCIAL_BY_CAMPAIGN} labelKey="campaign" labelHeader="Campaign" />
                 </CardContent>
               </Card>
             </TabsContent>
 
             {/* Budget Tab */}
             <TabsContent value="budget" className="space-y-6">
-              {/* Budget Summary Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase text-blue-600">TOTAL BUDGET</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">${formatNumber(totalBudget)}</div>
-                  </CardContent>
+                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-blue-600">TOTAL BUDGET</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold">${formatNumber(totalBudget)}</div></CardContent>
                 </Card>
                 <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase text-green-600">ACTUAL SPEND</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">${formatNumber(totalActual)}</div>
-                  </CardContent>
+                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-green-600">ACTUAL SPEND</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold">${formatNumber(totalActual)}</div></CardContent>
                 </Card>
                 <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase text-purple-600">VARIANCE</CardTitle>
-                  </CardHeader>
+                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-purple-600">VARIANCE</CardTitle></CardHeader>
                   <CardContent>
                     <div className={`text-2xl font-bold ${budgetVariance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {budgetVariance >= 0 ? '+' : ''}{formatNumber(budgetVariance)}
+                      {budgetVariance >= 0 ? '+' : ''}${formatNumber(budgetVariance)}
                     </div>
                   </CardContent>
                 </Card>
                 <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase text-orange-600">UTILIZATION</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{totalBudget > 0 ? ((totalActual / totalBudget) * 100).toFixed(1) : 0}%</div>
-                  </CardContent>
+                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-orange-600">UTILIZATION</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold">{totalBudget > 0 ? ((totalActual / totalBudget) * 100).toFixed(1) : 0}%</div></CardContent>
                 </Card>
               </div>
 
-              {/* Budget vs Actual Chart */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base font-medium">Budget vs Actual Spend (2025)</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="text-base font-medium">Budget vs Actual Spend (2025)</CardTitle></CardHeader>
                 <CardContent>
                   <div className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <ComposedChart data={BUDGET_COMPARISON_DATA}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis 
-                          dataKey="month" 
-                          axisLine={false} 
-                          tickLine={false}
-                          tick={{ fontSize: 12 }}
-                        />
-                        <YAxis 
-                          axisLine={false} 
-                          tickLine={false}
-                          tick={{ fontSize: 12 }}
-                          tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`}
-                        />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
                         <Tooltip 
-                          formatter={(value: number, name: string) => [
-                            `$${value.toLocaleString()}`, 
-                            name === 'budget' ? 'Budget' : 'Actual'
-                          ]}
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--card))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px'
-                          }}
+                          formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name === 'budget' ? 'Budget' : 'Actual']}
+                          contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                         />
                         <Legend />
-                        <Bar 
-                          dataKey="budget" 
-                          fill="hsl(var(--primary))" 
-                          opacity={0.3}
-                          radius={[4, 4, 0, 0]}
-                          name="Budget"
-                        />
-                        <Bar 
-                          dataKey="actual" 
-                          fill="hsl(var(--primary))" 
-                          radius={[4, 4, 0, 0]}
-                          name="Actual"
-                        />
+                        <Bar dataKey="budget" fill="hsl(var(--primary))" opacity={0.3} radius={[4, 4, 0, 0]} name="Budget" />
+                        <Bar dataKey="actual" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Actual" />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Monthly Budget Breakdown Table */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base font-medium">Monthly Budget Breakdown (2025)</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="text-base font-medium">Monthly Budget Breakdown (2025)</CardTitle></CardHeader>
                 <CardContent>
                   <Table>
                     <TableHeader>
@@ -709,99 +733,54 @@ export default function SlideViewPage() {
 
             {/* Forecast Tab */}
             <TabsContent value="forecast" className="space-y-6">
-              {/* Forecast Summary Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase text-blue-600">ROOMS</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{FORECAST_SCENARIO.rooms}</div>
-                  </CardContent>
+                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-blue-600">ROOMS</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold">{FORECAST_SCENARIO.rooms}</div></CardContent>
                 </Card>
                 <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase text-green-600">OCCUPANCY</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{FORECAST_SCENARIO.occupancyRate}%</div>
-                  </CardContent>
+                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-green-600">OCCUPANCY</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold">{FORECAST_SCENARIO.occupancyRate}%</div></CardContent>
                 </Card>
                 <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase text-purple-600">ADR</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">${FORECAST_SCENARIO.averageDailyRate}</div>
-                  </CardContent>
+                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-purple-600">ADR</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold">${FORECAST_SCENARIO.averageDailyRate}</div></CardContent>
                 </Card>
                 <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase text-cyan-600">CONV. RATE</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{FORECAST_SCENARIO.conversionRate}%</div>
-                  </CardContent>
+                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-cyan-600">CONV. RATE</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold">{FORECAST_SCENARIO.conversionRate}%</div></CardContent>
                 </Card>
                 <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase text-orange-600">DIRECT TARGET</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{FORECAST_SCENARIO.directBookingsTarget}%</div>
-                  </CardContent>
+                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-orange-600">DIRECT TARGET</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold">{FORECAST_SCENARIO.directBookingsTarget}%</div></CardContent>
                 </Card>
                 <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase text-pink-600">COST OF SELL</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{FORECAST_SCENARIO.costOfSell}%</div>
-                  </CardContent>
+                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-pink-600">COST OF SELL</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold">{FORECAST_SCENARIO.costOfSell}%</div></CardContent>
                 </Card>
               </div>
 
-              {/* Forecast Projections */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase text-blue-600">ANNUAL ROOM NIGHTS</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{formatNumber(FORECAST_PROJECTIONS.annualRoomNights)}</div>
-                  </CardContent>
+                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-blue-600">ANNUAL ROOM NIGHTS</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold">{formatNumber(FORECAST_PROJECTIONS.annualRoomNights)}</div></CardContent>
                 </Card>
                 <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase text-green-600">ANNUAL REVENUE</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">${formatNumber(FORECAST_PROJECTIONS.annualRevenue)}</div>
-                  </CardContent>
+                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-green-600">ANNUAL REVENUE</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold">${formatNumber(FORECAST_PROJECTIONS.annualRevenue)}</div></CardContent>
                 </Card>
                 <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase text-purple-600">DIRECT BOOKINGS TARGET</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">${formatNumber(FORECAST_PROJECTIONS.directBookingsRevenue)}</div>
-                  </CardContent>
+                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-purple-600">DIRECT BOOKINGS TARGET</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold">${formatNumber(FORECAST_PROJECTIONS.directBookingsRevenue)}</div></CardContent>
                 </Card>
                 <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase text-orange-600">REQUIRED CLICKS</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{formatNumber(FORECAST_PROJECTIONS.requiredClicks)}</div>
-                  </CardContent>
+                  <CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase text-orange-600">REQUIRED CLICKS</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold">{formatNumber(FORECAST_PROJECTIONS.requiredClicks)}</div></CardContent>
                 </Card>
               </div>
 
-              {/* Services Breakdown */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base font-medium">Services Configuration</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="text-base font-medium">Services Configuration</CardTitle></CardHeader>
                 <CardContent>
                   <Table>
                     <TableHeader>
@@ -830,59 +809,22 @@ export default function SlideViewPage() {
                 </CardContent>
               </Card>
 
-              {/* Monthly Projections Chart */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base font-medium">Monthly Revenue Target vs Actual (2025)</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="text-base font-medium">Monthly Revenue Target vs Actual (2025)</CardTitle></CardHeader>
                 <CardContent>
                   <div className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={MONTHLY_DATA.map(m => ({
-                        month: m.month,
-                        target: FORECAST_PROJECTIONS.monthlyRevenue,
-                        actual: m.value,
-                      }))}>
+                      <ComposedChart data={MONTHLY_DATA.map(m => ({ month: m.month, target: FORECAST_PROJECTIONS.monthlyRevenue, actual: m.value }))}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis 
-                          dataKey="month" 
-                          axisLine={false} 
-                          tickLine={false}
-                          tick={{ fontSize: 12 }}
-                        />
-                        <YAxis 
-                          axisLine={false} 
-                          tickLine={false}
-                          tick={{ fontSize: 12 }}
-                          tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`}
-                        />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
                         <Tooltip 
-                          formatter={(value: number, name: string) => [
-                            `$${value.toLocaleString()}`, 
-                            name === 'target' ? 'Target' : 'Actual'
-                          ]}
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--card))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px'
-                          }}
+                          formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name === 'target' ? 'Target' : 'Actual']}
+                          contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                         />
                         <Legend />
-                        <Bar 
-                          dataKey="actual" 
-                          fill="hsl(var(--primary))" 
-                          radius={[4, 4, 0, 0]}
-                          name="Actual Revenue"
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="target" 
-                          stroke="hsl(var(--destructive))" 
-                          strokeWidth={2}
-                          strokeDasharray="5 5"
-                          name="Target Revenue"
-                          dot={false}
-                        />
+                        <Bar dataKey="actual" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Actual Revenue" />
+                        <Line type="monotone" dataKey="target" stroke="hsl(var(--destructive))" strokeWidth={2} strokeDasharray="5 5" name="Target Revenue" dot={false} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
