@@ -19,7 +19,7 @@ import { toast } from "@/hooks/use-toast";
 import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange } from "@/types/slideReports";
 import { useUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
-import { SlideDataPivotTable } from "@/components/slides/SlideDataPivotTable";
+import { SlideDataBrowser } from "@/components/slides/SlideDataBrowser";
 
 // REAL DATA from database queries - December 2025 Brady Hotels Account (after resync)
 const METASEARCH_DATA = {
@@ -2952,14 +2952,10 @@ export default function SlideViewPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Data Pivot Table Modal */}
-      <SlideDataPivotTable
+      {/* Data Browser Modal */}
+      <SlideDataBrowser
         open={isDataModalOpen}
         onOpenChange={setIsDataModalOpen}
-        selectedValueDimensionIds={selectedValueDimensionIds}
-        availableDimensions={availableDimensions}
-        selectedChannels={selectedChannels}
-        slideReportId={slideReportId}
         pivotData={slideReport?.pivot_data as SlideReportPivotData | null}
         lastRefreshedAt={slideReport?.last_refreshed_at}
       />
