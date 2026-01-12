@@ -2421,7 +2421,7 @@ export default function SlideViewPage() {
       dateRange: slideReport.date_range,
     });
 
-    // Open modal and reset state
+    // Open modal and reset state - now with 4 clear steps
     setIsRefreshModalOpen(true);
     setRefreshStep(1);
     setRefreshError(null);
@@ -2430,15 +2430,13 @@ export default function SlideViewPage() {
       2: 'pending',
       3: 'pending',
       4: 'pending',
-      5: 'pending',
     });
 
     try {
-      // Step 1: Verify settings are saved
-      console.log('[testing] Step 1: Verifying Edit Source settings...');
+      // Step 1: Verify settings
+      console.log('[refresh] Step 1: Verifying settings...');
       setRefreshStepStatus(prev => ({ ...prev, 1: 'loading' }));
       
-      // Re-fetch slide report to ensure we have latest configuration
       const { data: latestReport, error: fetchError } = await supabase
         .from("slide_reports")
         .select("*")
@@ -2450,18 +2448,17 @@ export default function SlideViewPage() {
         throw new Error("Configuration or date range not found. Please save Edit Source settings first.");
       }
 
-      console.log('[testing] Step 1: Settings verified successfully');
+      console.log('[refresh] Step 1: Settings verified');
       setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'loading' }));
       setRefreshStep(2);
 
-      // Step 2: Compute pivot data using existing computation function
-      console.log('[testing] Step 2: Computing pivot data...');
+      // Step 2: Compute pivot data
+      console.log('[refresh] Step 2: Computing pivot data...');
       
       const config = latestReport.configuration as unknown as SlideReportConfiguration;
       const reportIdsMap = latestReport.report_ids as unknown as Record<string, string>;
       const dateRange = latestReport.date_range as unknown as SlideReportDateRange;
       
-      // Import and use the existing computation function
       const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
       
       const pivotData = await computeSlideReportPivotData(
@@ -2470,12 +2467,105 @@ export default function SlideViewPage() {
         dateRange
       );
       
-      console.log('[testing] Step 2: Pivot data computed successfully');
+      console.log('[refresh] Step 2: Pivot data computed');
       setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'loading' }));
       setRefreshStep(3);
 
-      // Step 3: Save pivot data and update timestamp
-      console.log('[testing] Step 3: Saving pivot data and updating timestamp...');
+      // Step 3: Store monthly data in Supabase (organized by year/month)
+      console.log('[refresh] Step 3: Storing monthly data to database...');
+      
+      // First, delete existing monthly data for this slide report
+      const { error: deleteError } = await supabase
+        .from("slide_report_monthly_data")
+        .delete()
+        .eq("slide_report_id", slideReportId);
+
+      if (deleteError) {
+        console.warn('[refresh] Error deleting old monthly data:', deleteError);
+      }
+
+      // Prepare monthly data records
+      const monthlyRecords: Array<{
+        slide_report_id: string;
+        account_id: string | null;
+        year: number;
+        month: number;
+        channel: string;
+        metrics: any;
+        breakdowns: any;
+        row_count: number;
+        computed_at: string;
+      }> = [];
+
+      // Store overview monthly data
+      if (pivotData.overview?.monthly) {
+        Object.entries(pivotData.overview.monthly).forEach(([monthKey, metrics]) => {
+          const [year, month] = monthKey.split('-').map(Number);
+          monthlyRecords.push({
+            slide_report_id: slideReportId,
+            account_id: accountId || null,
+            year,
+            month,
+            channel: 'overview',
+            metrics,
+            breakdowns: {},
+            row_count: 1,
+            computed_at: new Date().toISOString(),
+          });
+        });
+      }
+
+      // Store channel-specific monthly data with breakdowns
+      if (pivotData.channels) {
+        Object.entries(pivotData.channels).forEach(([channel, channelData]) => {
+          // Store monthly metrics for each channel
+          if (channelData.monthly) {
+            Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
+              const [year, month] = monthKey.split('-').map(Number);
+              
+              // Get monthly breakdowns for this month if available
+              const monthlyBreakdowns = channelData.monthlyBreakdowns?.[monthKey] || {};
+              
+              monthlyRecords.push({
+                slide_report_id: slideReportId,
+                account_id: accountId || null,
+                year,
+                month,
+                channel,
+                metrics,
+                breakdowns: monthlyBreakdowns,
+                row_count: Object.keys(monthlyBreakdowns).reduce((count, key) => 
+                  count + (monthlyBreakdowns[key]?.length || 0), 0),
+                computed_at: new Date().toISOString(),
+              });
+            });
+          }
+        });
+      }
+
+      // Insert all monthly records in batches
+      if (monthlyRecords.length > 0) {
+        const batchSize = 100;
+        for (let i = 0; i < monthlyRecords.length; i += batchSize) {
+          const batch = monthlyRecords.slice(i, i + batchSize);
+          const { error: insertError } = await supabase
+            .from("slide_report_monthly_data")
+            .insert(batch);
+
+          if (insertError) {
+            console.error('[refresh] Error inserting monthly data batch:', insertError);
+            // Continue with other batches even if one fails
+          }
+        }
+        console.log(`[refresh] Stored ${monthlyRecords.length} monthly data records`);
+      }
+
+      console.log('[refresh] Step 3: Monthly data stored');
+      setRefreshStepStatus(prev => ({ ...prev, 3: 'complete', 4: 'loading' }));
+      setRefreshStep(4);
+
+      // Step 4: Update slide report and refresh UI
+      console.log('[refresh] Step 4: Updating slide report and refreshing UI...');
       
       const { error: updateError } = await supabase
         .from("slide_reports")
@@ -2489,34 +2579,23 @@ export default function SlideViewPage() {
         throw new Error(`Failed to save pivot data: ${updateError.message}`);
       }
 
-      console.log('[testing] Step 3: Pivot data saved successfully');
-      
-      // Force refetch of slide report data to update UI
-      console.log('[testing] Forcing refetch of slide report data...');
+      // Invalidate and refetch queries
       if (slideReportId) {
-        // Invalidate and immediately refetch the slide report query
         await queryClient.invalidateQueries({ 
           queryKey: ['slide_reports', 'detail', slideReportId] 
         });
-        // Force a refetch to ensure UI updates with latest data
         await queryClient.refetchQueries({ 
           queryKey: ['slide_reports', 'detail', slideReportId],
-          type: 'active' // Only refetch active queries
+          type: 'active'
         });
-        // Also invalidate and refetch the list query
         if (accountId) {
           await queryClient.invalidateQueries({ 
             queryKey: ['slide_reports', 'list', accountId] 
           });
-          await queryClient.refetchQueries({ 
-            queryKey: ['slide_reports', 'list', accountId],
-            type: 'active'
-          });
         }
-        console.log('[testing] Slide report data refetched successfully');
       }
       
-      setRefreshStepStatus(prev => ({ ...prev, 3: 'complete' }));
+      setRefreshStepStatus(prev => ({ ...prev, 4: 'complete' }));
       
       // Wait a moment then close modal
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -2524,24 +2603,18 @@ export default function SlideViewPage() {
       
       const totalChannels = config.selectedChannels?.length || 0;
       
-      console.log('[testing] Refresh complete - Summary:', {
+      console.log('[refresh] Complete:', {
         totalChannels,
-        channels: config.selectedChannels || [],
-        configurationUsed: {
-          selectedChannels: config.selectedChannels,
-          hasChannelConfigs: Object.keys(config.channelConfigs || {}).length > 0,
-          hasBreakdownConfigs: Object.keys(config.breakdownConfigs || {}).length > 0,
-          hasFilterConfigs: Object.keys(config.filterConfigs || {}).length > 0,
-        },
+        monthlyRecordsStored: monthlyRecords.length,
       });
       
       toast({ 
         title: "Data refreshed", 
-        description: `Pivot data updated for ${totalChannels} channel(s). Data is now available in the Data Browser.` 
+        description: `Stored ${monthlyRecords.length} monthly records for ${totalChannels} channel(s). Browse data in the Data tab.` 
       });
       
     } catch (error) {
-      console.error("[testing] Error refreshing data:", error);
+      console.error("[refresh] Error:", error);
       const currentStep = refreshStep;
       setRefreshStepStatus(prev => ({ ...prev, [currentStep]: 'error' }));
       setRefreshError(error instanceof Error ? error.message : "Failed to refresh data");
@@ -3409,6 +3482,7 @@ export default function SlideViewPage() {
         lastRefreshedAt={slideReport?.last_refreshed_at}
         configuration={slideReport?.configuration as SlideReportConfiguration | null}
         reportIds={slideReport?.report_ids as Record<string, string> | null}
+        slideReportId={slideReportId}
       />
 
       <div className="p-6 space-y-6">
@@ -4259,12 +4333,12 @@ export default function SlideViewPage() {
               <DialogTitle>Refreshing Data</DialogTitle>
             </div>
             <DialogDescription>
-              Updating your slide report with the latest data...
+              Updating your report with the latest data...
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            {/* Step 1: Fetching from data sources */}
+            {/* Step 1: Verify settings */}
             <div className="flex items-center gap-3">
               <div className={cn(
                 "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
@@ -4293,11 +4367,11 @@ export default function SlideViewPage() {
                 )}>
                   Verifying settings
                 </p>
-                <p className="text-sm text-muted-foreground">Connecting to Google Sheets and CSV sources</p>
+                <p className="text-sm text-muted-foreground">Checking configuration and data sources</p>
               </div>
             </div>
 
-            {/* Step 2: Set up filters and configurations */}
+            {/* Step 2: Compute pivot data */}
             <div className="flex items-center gap-3">
               <div className={cn(
                 "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
@@ -4324,13 +4398,13 @@ export default function SlideViewPage() {
                   refreshStepStatus[2] === 'error' && "text-red-700",
                   refreshStepStatus[2] === 'pending' && "text-muted-foreground"
                 )}>
-                  Clearing old data & populating aggregated tables
+                  Computing pivot data
                 </p>
-                <p className="text-sm text-muted-foreground">Removing pivot_data and creating aggregated breakdown data</p>
+                <p className="text-sm text-muted-foreground">Aggregating metrics by year, month, and channel</p>
               </div>
             </div>
 
-            {/* Step 3: Update timestamp and refresh UI */}
+            {/* Step 3: Store monthly data */}
             <div className="flex items-center gap-3">
               <div className={cn(
                 "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
@@ -4357,42 +4431,42 @@ export default function SlideViewPage() {
                   refreshStepStatus[3] === 'error' && "text-red-700",
                   refreshStepStatus[3] === 'pending' && "text-muted-foreground"
                 )}>
-                  Refreshing UI
+                  Storing monthly data
                 </p>
-                <p className="text-sm text-muted-foreground">Updating timestamp and reloading data</p>
+                <p className="text-sm text-muted-foreground">Saving data organized by Year → Month → Channel</p>
               </div>
             </div>
 
-            {/* Step 5: Saving cache */}
+            {/* Step 4: Update UI */}
             <div className="flex items-center gap-3">
               <div className={cn(
                 "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
-                refreshStepStatus[5] === 'complete' && "bg-green-100 text-green-700",
-                refreshStepStatus[5] === 'loading' && "bg-primary/20 text-primary",
-                refreshStepStatus[5] === 'error' && "bg-red-100 text-red-700",
-                refreshStepStatus[5] === 'pending' && "bg-muted text-muted-foreground"
+                refreshStepStatus[4] === 'complete' && "bg-green-100 text-green-700",
+                refreshStepStatus[4] === 'loading' && "bg-primary/20 text-primary",
+                refreshStepStatus[4] === 'error' && "bg-red-100 text-red-700",
+                refreshStepStatus[4] === 'pending' && "bg-muted text-muted-foreground"
               )}>
-                {refreshStepStatus[5] === 'complete' ? (
+                {refreshStepStatus[4] === 'complete' ? (
                   <Check className="h-4 w-4" />
-                ) : refreshStepStatus[5] === 'loading' ? (
+                ) : refreshStepStatus[4] === 'loading' ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
-                ) : refreshStepStatus[5] === 'error' ? (
+                ) : refreshStepStatus[4] === 'error' ? (
                   <span>!</span>
                 ) : (
-                  "5"
+                  "4"
                 )}
               </div>
               <div className="flex-1">
                 <p className={cn(
                   "font-medium",
-                  refreshStepStatus[5] === 'complete' && "text-green-700",
-                  refreshStepStatus[5] === 'loading' && "text-foreground",
-                  refreshStepStatus[5] === 'error' && "text-red-700",
-                  refreshStepStatus[5] === 'pending' && "text-muted-foreground"
+                  refreshStepStatus[4] === 'complete' && "text-green-700",
+                  refreshStepStatus[4] === 'loading' && "text-foreground",
+                  refreshStepStatus[4] === 'error' && "text-red-700",
+                  refreshStepStatus[4] === 'pending' && "text-muted-foreground"
                 )}>
-                  Refreshing UI
+                  Updating interface
                 </p>
-                <p className="text-sm text-muted-foreground">Updating interface with latest data</p>
+                <p className="text-sm text-muted-foreground">Refreshing report with latest data</p>
               </div>
             </div>
 
@@ -4404,10 +4478,10 @@ export default function SlideViewPage() {
             )}
 
             {/* All complete message */}
-            {refreshStepStatus[3] === 'complete' && (
+            {refreshStepStatus[4] === 'complete' && (
               <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
                 <Check className="h-4 w-4 text-green-600" />
-                <p className="text-sm text-green-700 font-medium">Data refresh complete!</p>
+                <p className="text-sm text-green-700 font-medium">Data refresh complete! Browse data in the Data tab.</p>
               </div>
             )}
           </div>
@@ -4415,7 +4489,7 @@ export default function SlideViewPage() {
           <DialogFooter>
             {refreshError ? (
               <Button onClick={() => setIsRefreshModalOpen(false)}>Close</Button>
-            ) : refreshStepStatus[3] === 'complete' ? (
+            ) : refreshStepStatus[4] === 'complete' ? (
               <Button onClick={() => setIsRefreshModalOpen(false)} className="bg-green-600 hover:bg-green-700">
                 Done
               </Button>
