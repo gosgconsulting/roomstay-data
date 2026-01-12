@@ -236,7 +236,7 @@ const ALL_MONTHLY_BUDGET_DATA = [
 
 // Legacy MONTHLY_BUDGET_DATA for 2025 (for backward compatibility)
 // This will be overridden in the component based on slideType
-const DEFAULT_MONTHLY_BUDGET_DATA = ALL_MONTHLY_BUDGET_DATA
+const MONTHLY_BUDGET_DATA = ALL_MONTHLY_BUDGET_DATA
   .filter(d => d.year === 2025)
   .map(({ year, ...rest }) => rest);
 
@@ -348,7 +348,7 @@ const ALL_MONTHLY_DATA = [
 
 // Legacy MONTHLY_DATA for 2025 (for backward compatibility with existing charts)
 // This will be overridden in the component based on slideType
-const DEFAULT_MONTHLY_DATA = ALL_MONTHLY_DATA
+const MONTHLY_DATA = ALL_MONTHLY_DATA
   .filter(d => d.year === 2025)
   .map(({ year, ...rest }) => rest);
 
@@ -472,7 +472,7 @@ const UnifiedBreakdownTable = ({
   onRowClick: (rowValue: string | null) => void;
   onGroupByChange: (value: string) => void;
   onBreakdownByChange: (value: string) => void;
-  availableDimensions: Dimension[];
+  availableDimensions: { id: string; name: string; type: string }[];
 }) => {
   // Memoize combined data
   const allData = useMemo(() => combineBreakdownData(), []);
@@ -758,6 +758,7 @@ export default function SlideViewPage() {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [selectedYear, setSelectedYear] = useState("2025");
@@ -771,6 +772,10 @@ export default function SlideViewPage() {
     sem: true,
     social: true,
   });
+
+  // Determine slide type from URL
+  const slideType = location.pathname.includes('/master-report') ? 'master-report' : 
+                    location.pathname.includes('/brady') ? 'brady' : 'default';
 
   // Slide report state
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
@@ -843,8 +848,8 @@ export default function SlideViewPage() {
               date_range: {
                 year: 2024,
                 month: 'January',
-                startDate: '2024-01-01',
-                endDate: null, // null means latest available
+                from: '2024-01-01',
+                to: new Date().toISOString().split('T')[0], // Latest available
               },
             });
             setSlideReportId(newReport.id);
