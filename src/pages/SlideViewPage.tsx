@@ -1796,13 +1796,37 @@ export default function SlideViewPage() {
     setLoadingValues(prev => ({ ...prev, [channel]: true }));
     
     try {
-      // SECOND: Check if we have pre-computed filterUniqueValues in pivot_data
+      // SECOND: Check if we have raw data rows stored in pivot_data (most comprehensive - all dimension values)
       const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
       const channelData = pivotData?.channels?.[channel];
+      
+      // Try rawDataRows first - this contains ALL rows with ALL dimension values
+      if (channelData?.rawDataRows && channelData.rawDataRows.length > 0) {
+        console.log(`[loadValuesForDimension] Using rawDataRows (${channelData.rawDataRows.length} rows) for ${channel}/${dimensionId}`);
+        
+        const valueSet = new Set<string>();
+        cachedSelectedValues.forEach(v => valueSet.add(v));
+        
+        channelData.rawDataRows.forEach((row: any) => {
+          const val = row[dimensionId];
+          if (val !== undefined && val !== null && String(val).trim() !== '') {
+            valueSet.add(String(val).trim());
+          }
+        });
+        
+        const sortedValues = Array.from(valueSet).sort();
+        console.log(`[loadValuesForDimension] Extracted ${sortedValues.length} unique values from rawDataRows for ${channel}/${dimensionId}`);
+        
+        setDimensionValues(prev => ({ ...prev, [channel]: sortedValues }));
+        setLoadingValues(prev => ({ ...prev, [channel]: false }));
+        return;
+      }
+      
+      // THIRD: Check pre-computed filterUniqueValues in pivot_data
       const storedFilterValues = channelData?.filterUniqueValues?.[dimensionId];
       
       if (storedFilterValues?.values && storedFilterValues.values.length > 0) {
-        console.log(`[loadValuesForDimension] Using ${storedFilterValues.values.length} pre-computed values from pivot_data for ${channel}/${dimensionId}`);
+        console.log(`[loadValuesForDimension] Using ${storedFilterValues.values.length} pre-computed values from filterUniqueValues for ${channel}/${dimensionId}`);
         
         // Merge with cached selected values to ensure they're included
         const allValues = new Set([...storedFilterValues.values, ...cachedSelectedValues]);
@@ -1813,8 +1837,7 @@ export default function SlideViewPage() {
         return;
       }
       
-      // Also check in breakdownDimensions stored values (for Step 4 dimension selection, not just filters)
-      // The breakdown data in pivot_data contains unique dimension values
+      // FOURTH: Check breakdown dimension values
       const breakdowns = channelData?.breakdowns;
       if (breakdowns) {
         // Find the dimension name to look up in breakdowns
@@ -1848,7 +1871,7 @@ export default function SlideViewPage() {
         }
       }
       
-      console.log(`[loadValuesForDimension] No pre-computed values found, fetching from dimension_data for ${channel}/${dimensionId}`);
+      console.log(`[loadValuesForDimension] No stored values found, falling back to dimension_data query for ${channel}/${dimensionId}`);
       
       // FALLBACK: Fetch from dimension_data table
       const reportId = CHANNEL_REPORT_IDS[channel];

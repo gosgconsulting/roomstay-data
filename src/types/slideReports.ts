@@ -56,6 +56,11 @@ export interface MonthlyBudgetRow {
   socialActual: number;
 }
 
+// Raw data row from dimension_data - stores all dimension values per row
+export interface RawDataRow {
+  [dimensionId: string]: any; // e.g., { "dim-uuid-hotel": "Brady Hotels", "dim-uuid-date": "2026-01-01", ... }
+}
+
 export interface SlideReportPivotData {
   overview: {
     current: ChannelMetrics;
@@ -86,6 +91,11 @@ export interface SlideReportPivotData {
           values: string[]; // Sorted unique values
         };
       };
+      // ALL raw data rows for this channel - enables filtering without re-querying database
+      // Stored per month for efficient loading
+      rawDataRows?: RawDataRow[];
+      // Dimension ID to name mapping for interpreting rawDataRows
+      dimensionMap?: Record<string, string>; // dimensionId -> dimensionName
     };
   };
   budget: {
