@@ -1466,6 +1466,12 @@ export default function SlideViewPage() {
       setModalStep(1);
       setActiveChannelTab(null);
       setSearchQuery("");
+      // Reset dimension loading state to ensure clean reload
+      setLoadingDimensions({
+        metasearch: false,
+        sem: false,
+        social: false,
+      });
     }
   }, [isEditSourceOpen]);
 
@@ -1497,14 +1503,19 @@ export default function SlideViewPage() {
   };
 
   // Load dimensions for a channel from actual report data
+  // This is now synchronous since we use hardcoded dimensions
   const loadDimensionsForChannel = async (channel: 'metasearch' | 'sem' | 'social') => {
     setLoadingDimensions(prev => ({ ...prev, [channel]: true }));
     try {
-      // Use hardcoded dimensions from actual report data
+      // Use hardcoded dimensions from actual report data - set immediately
       const channelDims = CHANNEL_TEXT_DIMENSIONS[channel] || [];
       setDimensions(prev => ({ ...prev, [channel]: channelDims }));
       
-      // Auto-select first dimension (Hotel for metasearch, Account for others)
+      // Dimensions are now loaded - set loading to false immediately
+      // Value loading is handled separately with loadingValues state
+      setLoadingDimensions(prev => ({ ...prev, [channel]: false }));
+      
+      // Auto-select first dimension (Hotel for metasearch, Account for others) if not already set
       if (channelDims.length > 0 && !channelConfigs[channel]?.dimensionId) {
         const firstDimId = channelDims[0].id;
         setChannelConfigs(prev => ({
@@ -1514,13 +1525,15 @@ export default function SlideViewPage() {
             dimensionId: firstDimId,
           },
         }));
-        // Load values for the auto-selected dimension
-        await loadValuesForDimension(channel, firstDimId);
+        // Load values for the auto-selected dimension (async, separate loading state)
+        loadValuesForDimension(channel, firstDimId);
+      } else if (channelConfigs[channel]?.dimensionId) {
+        // If dimension is already set, load its values
+        loadValuesForDimension(channel, channelConfigs[channel].dimensionId);
       }
     } catch (err) {
       console.error(`Error loading dimensions for ${channel}:`, err);
       setDimensions(prev => ({ ...prev, [channel]: [] }));
-    } finally {
       setLoadingDimensions(prev => ({ ...prev, [channel]: false }));
     }
   };
@@ -1643,10 +1656,13 @@ export default function SlideViewPage() {
   };
 
   // Load dimensions when entering step 3, 4, 5, or 6 (after Date and Channels steps)
+  // For step 4 (Data Source), always force load dimensions to ensure they're available
   useEffect(() => {
     if ((modalStep === 3 || modalStep === 4 || modalStep === 5 || modalStep === 6) && isEditSourceOpen) {
       selectedChannels.forEach(channel => {
-        if (dimensions[channel].length === 0 && !loadingDimensions[channel]) {
+        // For step 4, always load dimensions regardless of current state
+        const shouldForceLoad = modalStep === 4;
+        if ((dimensions[channel].length === 0 || shouldForceLoad) && !loadingDimensions[channel]) {
           loadDimensionsForChannel(channel);
         }
       });
