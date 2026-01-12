@@ -1288,15 +1288,6 @@ export default function SlideViewPage() {
   const [modalStep, setModalStep] = useState<ModalStep>(1);
   const [activeChannelTab, setActiveChannelTab] = useState<'metasearch' | 'sem' | 'social' | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  
-  // Loading state between step 2 (channels) and step 3 - pre-fetch all channel data
-  const [isPreloadingChannelData, setIsPreloadingChannelData] = useState(false);
-  const [preloadProgress, setPreloadProgress] = useState<{
-    channel: string;
-    step: 'dimensions' | 'values';
-    completed: number;
-    total: number;
-  } | null>(null);
 
   // Date configuration for "Since" (Step 1)
   const [sinceMonth, setSinceMonth] = useState<string>("January");
@@ -2091,86 +2082,43 @@ export default function SlideViewPage() {
     setSelectedValueDimensionIds([]);
   };
 
-  // Preload all channel data (dimensions + values) before proceeding to step 3
-  const preloadAllChannelData = async () => {
-    setIsPreloadingChannelData(true);
-    const channelsToLoad = selectedChannels;
-    const total = channelsToLoad.length * 2; // dimensions + values for each channel
-    let completed = 0;
-
-    try {
-      // Load available dimensions first (for step 3)
-      await loadAvailableDimensions();
-      
-      // For each selected channel, load dimensions and values
-      for (const channel of channelsToLoad) {
-        // Step 1: Load dimensions
-        setPreloadProgress({ channel, step: 'dimensions', completed, total });
-        
-        // Use hardcoded dimensions
-        const channelDims = CHANNEL_TEXT_DIMENSIONS[channel] || [];
-        setDimensions(prev => ({ ...prev, [channel]: channelDims }));
-        
-        // Auto-select first dimension if not already set
-        let dimensionIdToLoad = channelConfigs[channel]?.dimensionId;
-        if (channelDims.length > 0 && !dimensionIdToLoad) {
-          const firstDimId = channelDims[0].id;
-          dimensionIdToLoad = firstDimId;
-          setChannelConfigs(prev => ({
-            ...prev,
-            [channel]: {
-              ...prev[channel],
-              dimensionId: firstDimId,
-            },
-          }));
-        }
-        
-        completed++;
-        setPreloadProgress({ channel, step: 'values', completed, total });
-        
-        // Step 2: Load values for the dimension
-        if (dimensionIdToLoad) {
-          console.log(`[preloadAllChannelData] Loading values for ${channel}/${dimensionIdToLoad}`);
-          await loadValuesForDimension(channel, dimensionIdToLoad);
-        }
-        
-        completed++;
-      }
-      
-      // Also preload breakdown dimensions
-      for (const channel of channelsToLoad) {
-        await loadBreakdownDimensionsForChannel(channel);
-      }
-      
-      setPreloadProgress(null);
-      return true;
-    } catch (error) {
-      console.error('[preloadAllChannelData] Error:', error);
-      setPreloadProgress(null);
-      return false;
-    } finally {
-      setIsPreloadingChannelData(false);
-    }
-  };
+  // (Removed) Preloading all channel values on Step 2 -> Step 3.
+  // We now load values lazily when the user selects a dimension in Step 4 (Data Source).
 
   // Navigation handlers
   const handleNext = async () => {
     if (modalStep === 1) {
       // Date step -> Channels step
       setModalStep(2);
-    } else if (modalStep === 2) {
+      return;
+    }
+
+    if (modalStep === 2) {
       if (selectedChannels.length > 0) {
-        // Show loading state and preload ALL channel data before proceeding
-        await preloadAllChannelData();
+        // Keep Step 2 fast: only load the dimension *list* needed for Step 3.
+        // Values are loaded later (Step 4) when a dimension is selected.
+        await loadAvailableDimensions();
         setModalStep(3);
       }
-    } else if (modalStep === 3) {
+      return;
+    }
+
+    if (modalStep === 3) {
       setModalStep(4);
-    } else if (modalStep === 4) {
+      return;
+    }
+
+    if (modalStep === 4) {
       setModalStep(5);
-    } else if (modalStep === 5) {
+      return;
+    }
+
+    if (modalStep === 5) {
       setModalStep(6);
-    } else if (modalStep === 6) {
+      return;
+    }
+
+    if (modalStep === 6) {
       // Save and close
       handleSave();
     }
@@ -3007,7 +2955,7 @@ export default function SlideViewPage() {
       </div>
 
       {/* Edit Source Modal - Step by Step */}
-      <Dialog open={isEditSourceOpen} onOpenChange={(open) => !isPreloadingChannelData && handleModalClose(open)}>
+      <Dialog open={isEditSourceOpen} onOpenChange={(open) => handleModalClose(open)}>
         <DialogContent className="max-w-4xl h-[85vh] max-h-[700px] flex flex-col overflow-hidden">
           <DialogHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
@@ -3015,7 +2963,7 @@ export default function SlideViewPage() {
               <Sparkles className="h-5 w-5 text-primary" />
                 <DialogTitle>
                   {modalStep === 1 && "Date Range"}
-                  {modalStep === 2 && (isPreloadingChannelData ? "Loading Channel Data..." : "Select Channels")}
+                  {modalStep === 2 && "Select Channels"}
                   {modalStep === 3 && "Value Dimensions"}
                   {modalStep === 4 && "Data Source"}
                   {modalStep === 5 && "Breakdown Dimensions"}
@@ -3027,7 +2975,6 @@ export default function SlideViewPage() {
                 size="icon"
                 onClick={() => handleModalClose(false)}
                 className="h-6 w-6"
-                disabled={isPreloadingChannelData}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -3096,77 +3043,47 @@ export default function SlideViewPage() {
 
             {/* Step 2: Channel Selection */}
             {modalStep === 2 && (
-              <div className="space-y-4 relative">
-                {/* Loading overlay when preloading channel data */}
-                {isPreloadingChannelData && (
-                  <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
-                    <div className="flex flex-col items-center gap-4 p-6 text-center">
-                      <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                      <div className="space-y-2">
-                        <p className="font-medium text-lg">Loading Channel Data</p>
-                        {preloadProgress && (
-                          <p className="text-sm text-muted-foreground">
-                            {preloadProgress.step === 'dimensions' 
-                              ? `Loading dimensions for ${preloadProgress.channel}...`
-                              : `Loading values for ${preloadProgress.channel}...`}
-                          </p>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          {preloadProgress 
-                            ? `Step ${preloadProgress.completed + 1} of ${preloadProgress.total}`
-                            : 'Preparing...'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
+              <div className="space-y-4">
                 <div className="space-y-3">
                   <div 
                     className={cn(
                       "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
-                      selectedDimensions.metasearch ? 'border-primary bg-primary/5' : 'border-border',
-                      isPreloadingChannelData && 'pointer-events-none opacity-50'
+                      selectedDimensions.metasearch ? 'border-primary bg-primary/5' : 'border-border'
                     )}
-                    onClick={() => !isPreloadingChannelData && handleDimensionToggle('metasearch')}
+                    onClick={() => handleDimensionToggle('metasearch')}
                   >
                     <Checkbox 
                       checked={selectedDimensions.metasearch}
-                      onCheckedChange={() => !isPreloadingChannelData && handleDimensionToggle('metasearch')}
+                      onCheckedChange={() => handleDimensionToggle('metasearch')}
                       className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                      disabled={isPreloadingChannelData}
                     />
                     <span className="font-medium">Metasearch</span>
                   </div>
                   <div 
                     className={cn(
                       "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
-                      selectedDimensions.sem ? 'border-primary bg-primary/5' : 'border-border',
-                      isPreloadingChannelData && 'pointer-events-none opacity-50'
+                      selectedDimensions.sem ? 'border-primary bg-primary/5' : 'border-border'
                     )}
-                    onClick={() => !isPreloadingChannelData && handleDimensionToggle('sem')}
+                    onClick={() => handleDimensionToggle('sem')}
                   >
                     <Checkbox 
                       checked={selectedDimensions.sem}
-                      onCheckedChange={() => !isPreloadingChannelData && handleDimensionToggle('sem')}
+                      onCheckedChange={() => handleDimensionToggle('sem')}
                       className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                      disabled={isPreloadingChannelData}
                     />
                     <span className="font-medium">SEM</span>
                   </div>
                   <div 
                     className={cn(
                       "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
-                      selectedDimensions.social ? 'border-primary bg-primary/5' : 'border-border',
-                      isPreloadingChannelData && 'pointer-events-none opacity-50'
+                      selectedDimensions.social ? 'border-primary bg-primary/5' : 'border-border'
                     )}
-                    onClick={() => !isPreloadingChannelData && handleDimensionToggle('social')}
+                    onClick={() => handleDimensionToggle('social')}
                   >
                     <Checkbox 
                       checked={selectedDimensions.social}
-                      onCheckedChange={() => !isPreloadingChannelData && handleDimensionToggle('social')}
+                      onCheckedChange={() => handleDimensionToggle('social')}
                       className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                      disabled={isPreloadingChannelData}
                     />
                     <span className="font-medium">Social</span>
                   </div>
@@ -3516,26 +3433,16 @@ export default function SlideViewPage() {
             <Button
               variant="outline"
               onClick={modalStep === 1 ? () => handleModalClose(false) : handleBack}
-              disabled={isPreloadingChannelData}
             >
               <ChevronLeft className="h-4 w-4 mr-1" />
               {modalStep === 1 ? "Cancel" : "Back"}
             </Button>
             <Button
               onClick={handleNext}
-              disabled={(modalStep === 2 && selectedChannels.length === 0) || isPreloadingChannelData}
+              disabled={modalStep === 2 && selectedChannels.length === 0}
             >
-              {isPreloadingChannelData ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Loading...
-                </>
-              ) : (
-                <>
-                  {modalStep === 6 ? "Save" : "Next"}
-                  {modalStep !== 6 && <ChevronRight className="h-4 w-4 ml-1" />}
-                </>
-              )}
+              {modalStep === 6 ? "Save" : "Next"}
+              {modalStep !== 6 && <ChevronRight className="h-4 w-4 ml-1" />}
             </Button>
           </div>
         </DialogContent>
