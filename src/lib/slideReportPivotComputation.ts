@@ -148,40 +148,21 @@ function aggregateMetricsForDateRange(
 }
 
 /**
- * Compute breakdown data for a dimension
+ * Compute breakdown data for a dimension - ALL TIME (no date filtering)
+ * This ensures all unique values from all years are included
  */
-function computeBreakdown(
+function computeBreakdownAllTime(
   rows: any[],
-  dateRange: { start: Date; end: Date },
   breakdownDimensionId: string,
   breakdownDimensionName: string,
   metricNameToIdMap: Record<string, string>,
   dimensionFilter?: { dimensionId: string; dimensionName?: string; values: string[] }
 ): BreakdownRow[] {
-  const dateDimId = metricNameToIdMap['Date'];
-  
+  // Filter by dimension filter only (no date filter for all-time breakdown)
   const filteredRows = rows.filter((row) => {
     const rowData = row.dimension_values || row;
     
-    // Date filter using the mapped Date dimension ID
-    let dateValue: any = dateDimId ? rowData[dateDimId] : null;
-    if (!dateValue) {
-      dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
-    }
-    if (!dateValue) {
-      for (const [key, val] of Object.entries(rowData)) {
-        if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-          dateValue = val;
-          break;
-        }
-      }
-    }
-    
-    const rowDate = parseDate(dateValue);
-    if (!rowDate) return false;
-    if (!isWithinInterval(rowDate, { start: dateRange.start, end: dateRange.end })) return false;
-    
-    // Dimension filter
+    // Dimension filter only
     if (dimensionFilter && dimensionFilter.values.length > 0) {
       const dimValue = rowData[dimensionFilter.dimensionId] || 
                      (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
@@ -202,23 +183,46 @@ function computeBreakdown(
                           (breakdownDimensionName ? rowData[breakdownDimensionName] : undefined);
     const groupKey = breakdownValue !== undefined && breakdownValue !== null && breakdownValue !== '' 
       ? String(breakdownValue).trim() 
-      : 'Uncategorized';
+      : null; // Skip null/empty values
     
-    if (!groupedRows[groupKey]) {
-      groupedRows[groupKey] = [];
+    if (groupKey) {
+      if (!groupedRows[groupKey]) {
+        groupedRows[groupKey] = [];
+      }
+      groupedRows[groupKey].push(row);
     }
-    groupedRows[groupKey].push(row);
   });
 
-  // Compute metrics for each group
+  // Compute metrics for each group (ALL time)
   const breakdownRows: BreakdownRow[] = [];
   Object.entries(groupedRows).forEach(([groupValue, groupRows]) => {
-    const metrics = aggregateMetricsForDateRange(groupRows, dateRange, metricNameToIdMap);
+    // Aggregate ALL rows for this group (no date filtering)
+    const metrics = {
+      impressions: 0,
+      clicks: 0,
+      cost: 0,
+      revenue: 0,
+      bookings: 0,
+    };
+    
+    groupRows.forEach(row => {
+      const rowData = row.dimension_values || row;
+      metrics.impressions += parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
+      metrics.clicks += parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
+      metrics.cost += parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
+      metrics.revenue += parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
+      metrics.bookings += parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
+    });
+    
     breakdownRows.push({
-      [breakdownDimensionName.toLowerCase()]: groupValue,
+      [breakdownDimensionName.toLowerCase().replace(/\s+/g, '_')]: groupValue,
+      name: groupValue, // Add a consistent 'name' field for easier access
       ...metrics,
     });
   });
+
+  // Sort by revenue descending
+  breakdownRows.sort((a, b) => b.revenue - a.revenue);
 
   return breakdownRows;
 }
@@ -411,15 +415,21 @@ export async function computeSlideReportPivotData(
     // Compute yearly totals
     const yearly = computeYearlyMetrics(rows, YEARS_TO_COMPUTE, metricNameToIdMap, dimensionFilter);
 
-    // Compute breakdowns for each breakdown dimension
+    // Compute breakdowns for each breakdown dimension - ALL TIME data
     const breakdowns: Record<string, BreakdownRow[]> = {};
     const breakdownConfig = configuration.breakdownConfigs[channel];
     if (breakdownConfig?.breakdownDimensionIds) {
       for (const breakdownDimId of breakdownConfig.breakdownDimensionIds) {
-        const breakdownDimName = breakdownDimId; // Using dimension ID as name for now
-        breakdowns[breakdownDimName] = computeBreakdown(
+        // Look up dimension name from dimensions table
+        const { data: dimInfo } = await supabase
+          .from('dimensions')
+          .select('name')
+          .eq('id', breakdownDimId)
+          .single();
+        
+        const breakdownDimName = dimInfo?.name || breakdownDimId;
+        breakdowns[breakdownDimName] = computeBreakdownAllTime(
           rows,
-          currentDateRange,
           breakdownDimId,
           breakdownDimName,
           metricNameToIdMap,

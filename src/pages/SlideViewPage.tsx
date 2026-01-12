@@ -458,6 +458,7 @@ const combineBreakdownData = () => {
 };
 
 // Unified breakdown table component with Group by / Breakdown by dropdowns
+// Uses data from pivot_data.channels[channel].breakdowns
 const UnifiedBreakdownTable = ({ 
   groupBy,
   breakdownBy,
@@ -466,6 +467,8 @@ const UnifiedBreakdownTable = ({
   onGroupByChange,
   onBreakdownByChange,
   availableDimensions,
+  pivotData,
+  selectedChannel,
 }: {
   groupBy: string;
   breakdownBy: string;
@@ -474,78 +477,53 @@ const UnifiedBreakdownTable = ({
   onGroupByChange: (value: string) => void;
   onBreakdownByChange: (value: string) => void;
   availableDimensions: { id: string; name: string; type: string }[];
+  pivotData?: any;
+  selectedChannel?: 'metasearch' | 'sem' | 'social' | 'overview';
 }) => {
-  // Memoize combined data
-  const allData = useMemo(() => combineBreakdownData(), []);
-  
-  // Group data by the selected groupBy dimension
+  // Get breakdown data from pivotData based on selected dimension
   const groupedData = useMemo(() => {
-    const groups: Record<string, typeof allData> = {};
+    if (!pivotData?.channels) return [];
     
-    allData.forEach(row => {
-      const groupValue = row[groupBy as keyof typeof row] as string | undefined;
-      if (groupValue && groupValue.trim() !== '') {
-        if (!groups[groupValue]) {
-          groups[groupValue] = [];
+    const groupByDim = availableDimensions.find(d => d.id === groupBy);
+    const groupByName = groupByDim?.name || groupBy;
+    
+    // Collect breakdown data from all channels (or specific channel if selected)
+    const allBreakdowns: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
+    
+    const channelsToCheck = selectedChannel && selectedChannel !== 'overview' 
+      ? [selectedChannel] 
+      : Object.keys(pivotData.channels);
+    
+    for (const channel of channelsToCheck) {
+      const channelData = pivotData.channels[channel];
+      if (!channelData?.breakdowns) continue;
+      
+      // Find the breakdown by dimension name
+      const breakdownData = channelData.breakdowns[groupByName] || [];
+      
+      breakdownData.forEach((row: any) => {
+        const groupValue = row.name || row[groupByName.toLowerCase().replace(/\s+/g, '_')] || 'Unknown';
+        if (!allBreakdowns[groupValue]) {
+          allBreakdowns[groupValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
         }
-        groups[groupValue].push(row);
-      }
-    });
-
-    // Aggregate each group
-    return Object.entries(groups)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([groupValue, rows]) => {
-        const aggregated = rows.reduce((acc, row) => ({
-          impressions: acc.impressions + row.impressions,
-          clicks: acc.clicks + row.clicks,
-          cost: acc.cost + row.cost,
-          revenue: acc.revenue + row.revenue,
-          bookings: acc.bookings + row.bookings,
-        }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
-
-        return {
-          groupValue,
-          metrics: calculateDerivedMetrics(aggregated),
-          rawData: rows,
-        };
+        allBreakdowns[groupValue].impressions += row.impressions || 0;
+        allBreakdowns[groupValue].clicks += row.clicks || 0;
+        allBreakdowns[groupValue].cost += row.cost || 0;
+        allBreakdowns[groupValue].revenue += row.revenue || 0;
+        allBreakdowns[groupValue].bookings += row.bookings || 0;
       });
-  }, [allData, groupBy]);
+    }
 
-  // Get breakdown data for expanded row
-  const breakdownData = useMemo(() => {
-    if (!expandedRow || !breakdownBy) return [];
-    
-    const rowData = groupedData.find(g => g.groupValue === expandedRow)?.rawData || [];
-    const breakdownGroups: Record<string, typeof allData> = {};
-    
-    rowData.forEach(row => {
-      const breakdownValue = row[breakdownBy as keyof typeof row] as string | undefined;
-      if (breakdownValue && breakdownValue.trim() !== '') {
-        if (!breakdownGroups[breakdownValue]) {
-          breakdownGroups[breakdownValue] = [];
-        }
-        breakdownGroups[breakdownValue].push(row);
-      }
-    });
-
-    return Object.entries(breakdownGroups)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([breakdownValue, rows]) => {
-        const aggregated = rows.reduce((acc, row) => ({
-          impressions: acc.impressions + row.impressions,
-          clicks: acc.clicks + row.clicks,
-          cost: acc.cost + row.cost,
-          revenue: acc.revenue + row.revenue,
-          bookings: acc.bookings + row.bookings,
-        }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
-
-        return {
-          breakdownValue,
-          metrics: calculateDerivedMetrics(aggregated),
-        };
-      });
-  }, [expandedRow, breakdownBy, groupedData]);
+    // Convert to array and calculate derived metrics
+    return Object.entries(allBreakdowns)
+      .filter(([groupValue]) => groupValue && groupValue !== 'Unknown')
+      .sort(([, a], [, b]) => b.revenue - a.revenue)
+      .map(([groupValue, data]) => ({
+        groupValue,
+        metrics: calculateDerivedMetrics(data),
+        rawData: data,
+      }));
+  }, [pivotData, groupBy, availableDimensions, selectedChannel]);
 
   // Calculate totals
   const totals = groupedData.reduce((acc, group) => ({
@@ -558,7 +536,34 @@ const UnifiedBreakdownTable = ({
   const totalMetrics = calculateDerivedMetrics(totals);
 
   const groupByDim = availableDimensions.find(d => d.id === groupBy);
-  const breakdownByDim = availableDimensions.find(d => d.id === breakdownBy);
+
+  // Show message if no data
+  if (groupedData.length === 0) {
+    return (
+      <div className="space-y-4">
+        {/* Dropdowns */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Label className="text-sm text-muted-foreground">Group by:</Label>
+            <Select value={groupBy} onValueChange={(value) => { onGroupByChange(value); onRowClick(null); }}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Select dimension" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableDimensions.map(dim => (
+                  <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="text-center py-8 text-muted-foreground">
+          <p>No breakdown data available.</p>
+          <p className="text-sm mt-2">Configure breakdown dimensions in the Data Source modal and click "Refresh Data" to compute breakdown tables.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -572,19 +577,6 @@ const UnifiedBreakdownTable = ({
             </SelectTrigger>
             <SelectContent>
               {availableDimensions.map(dim => (
-                <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <Label className="text-sm text-muted-foreground">Breakdown by:</Label>
-          <Select value={breakdownBy} onValueChange={onBreakdownByChange}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {availableDimensions.filter(d => d.id !== groupBy).map(dim => (
                 <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
               ))}
             </SelectContent>
@@ -611,51 +603,22 @@ const UnifiedBreakdownTable = ({
         </TableHeader>
         <TableBody>
           {groupedData.map((group) => (
-            <>
-              <TableRow 
-                key={group.groupValue}
-                className={cn("cursor-pointer hover:bg-muted/50", expandedRow === group.groupValue && "bg-muted")}
-                onClick={() => onRowClick(expandedRow === group.groupValue ? null : group.groupValue)}
-              >
-                <TableCell className="font-medium">
-                  <div className="flex items-center gap-2">
-                    <span>{expandedRow === group.groupValue ? '▼' : '▶'}</span>
-                    <span>{group.groupValue}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">{formatNumber(group.metrics.impressions)}</TableCell>
-                <TableCell className="text-right">{formatNumber(group.metrics.clicks)}</TableCell>
-                <TableCell className="text-right">{group.metrics.ctr.toFixed(2)}%</TableCell>
-                <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
-                <TableCell className="text-right">{group.metrics.conversionRate.toFixed(2)}%</TableCell>
-                <TableCell className="text-right">${group.metrics.cpc.toFixed(2)}</TableCell>
-                <TableCell className="text-right">${formatNumber(group.metrics.cost)}</TableCell>
-                <TableCell className="text-right">${formatNumber(group.metrics.revenue)}</TableCell>
-                <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
-                <TableCell className="text-right">{group.metrics.costOfSale.toFixed(2)}%</TableCell>
-              </TableRow>
-              {expandedRow === group.groupValue && breakdownData.length > 0 && (
-                <>
-                  {breakdownData.map((breakdown) => (
-                    <TableRow key={`${group.groupValue}-${breakdown.breakdownValue}`} className="bg-muted/30">
-                      <TableCell className="font-medium pl-8">
-                        <span className="text-muted-foreground">{breakdownByDim?.name}: {breakdown.breakdownValue}</span>
-                      </TableCell>
-                      <TableCell className="text-right">{formatNumber(breakdown.metrics.impressions)}</TableCell>
-                      <TableCell className="text-right">{formatNumber(breakdown.metrics.clicks)}</TableCell>
-                      <TableCell className="text-right">{breakdown.metrics.ctr.toFixed(2)}%</TableCell>
-                      <TableCell className="text-right">{breakdown.metrics.bookings.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{breakdown.metrics.conversionRate.toFixed(2)}%</TableCell>
-                      <TableCell className="text-right">${breakdown.metrics.cpc.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">${formatNumber(breakdown.metrics.cost)}</TableCell>
-                      <TableCell className="text-right">${formatNumber(breakdown.metrics.revenue)}</TableCell>
-                      <TableCell className="text-right">{breakdown.metrics.roas.toFixed(1)}x</TableCell>
-                      <TableCell className="text-right">{breakdown.metrics.costOfSale.toFixed(2)}%</TableCell>
-                    </TableRow>
-                  ))}
-                </>
-              )}
-            </>
+            <TableRow 
+              key={group.groupValue}
+              className="hover:bg-muted/50"
+            >
+              <TableCell className="font-medium">{group.groupValue}</TableCell>
+              <TableCell className="text-right">{formatNumber(group.metrics.impressions)}</TableCell>
+              <TableCell className="text-right">{formatNumber(group.metrics.clicks)}</TableCell>
+              <TableCell className="text-right">{group.metrics.ctr.toFixed(2)}%</TableCell>
+              <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
+              <TableCell className="text-right">{group.metrics.conversionRate.toFixed(2)}%</TableCell>
+              <TableCell className="text-right">${group.metrics.cpc.toFixed(2)}</TableCell>
+              <TableCell className="text-right">${formatNumber(group.metrics.cost)}</TableCell>
+              <TableCell className="text-right">${formatNumber(group.metrics.revenue)}</TableCell>
+              <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
+              <TableCell className="text-right">{group.metrics.costOfSale.toFixed(2)}%</TableCell>
+            </TableRow>
           ))}
           {/* Totals Row */}
           <TableRow className="bg-muted/50 font-semibold border-t-2">
@@ -3266,16 +3229,12 @@ export default function SlideViewPage() {
                     onRowClick={setExpandedRow}
                     onGroupByChange={setGroupByDimension}
                     onBreakdownByChange={setBreakdownByDimension}
+                    pivotData={slideReport?.pivot_data}
+                    selectedChannel="metasearch"
                     availableDimensions={[
                       ...new Map([
                         ...(breakdownDimensions.metasearch || []).filter(dim => 
                           breakdownConfigs.metasearch?.breakdownDimensionIds?.includes(dim.id)
-                        ),
-                        ...(breakdownDimensions.sem || []).filter(dim => 
-                          breakdownConfigs.sem?.breakdownDimensionIds?.includes(dim.id)
-                        ),
-                        ...(breakdownDimensions.social || []).filter(dim => 
-                          breakdownConfigs.social?.breakdownDimensionIds?.includes(dim.id)
                         ),
                       ].map(dim => [dim.id, dim])).values()
                     ]}
@@ -3320,16 +3279,12 @@ export default function SlideViewPage() {
                     onRowClick={setExpandedRow}
                     onGroupByChange={setGroupByDimension}
                     onBreakdownByChange={setBreakdownByDimension}
+                    pivotData={slideReport?.pivot_data}
+                    selectedChannel="sem"
                     availableDimensions={[
                       ...new Map([
-                        ...(breakdownDimensions.metasearch || []).filter(dim => 
-                          breakdownConfigs.metasearch?.breakdownDimensionIds?.includes(dim.id)
-                        ),
                         ...(breakdownDimensions.sem || []).filter(dim => 
                           breakdownConfigs.sem?.breakdownDimensionIds?.includes(dim.id)
-                        ),
-                        ...(breakdownDimensions.social || []).filter(dim => 
-                          breakdownConfigs.social?.breakdownDimensionIds?.includes(dim.id)
                         ),
                       ].map(dim => [dim.id, dim])).values()
                     ]}
@@ -3374,14 +3329,10 @@ export default function SlideViewPage() {
                     onRowClick={setExpandedRow}
                     onGroupByChange={setGroupByDimension}
                     onBreakdownByChange={setBreakdownByDimension}
+                    pivotData={slideReport?.pivot_data}
+                    selectedChannel="social"
                     availableDimensions={[
                       ...new Map([
-                        ...(breakdownDimensions.metasearch || []).filter(dim => 
-                          breakdownConfigs.metasearch?.breakdownDimensionIds?.includes(dim.id)
-                        ),
-                        ...(breakdownDimensions.sem || []).filter(dim => 
-                          breakdownConfigs.sem?.breakdownDimensionIds?.includes(dim.id)
-                        ),
                         ...(breakdownDimensions.social || []).filter(dim => 
                           breakdownConfigs.social?.breakdownDimensionIds?.includes(dim.id)
                         ),
