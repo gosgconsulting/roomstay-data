@@ -1181,22 +1181,26 @@ export default function SlideViewPage() {
     }
   }, [slideReport?.configuration]);
 
-  // Load filter dimension values when filterConfigs change (when page loads or config updates)
+  // Load filter dimension values and names when filterConfigs change (when page loads or config updates)
   useEffect(() => {
-    const loadFilterValues = async () => {
+    const loadFilterValuesAndNames = async () => {
       if (!slideReport?.configuration?.filterConfigs) return;
       
       const config = slideReport.configuration;
       const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {};
+      const updatedFilterDimensionNames: Record<string, Record<string, string>> = {};
       
       // Collect all load promises for parallel execution
       const loadPromises: Promise<void>[] = [];
+      const allFilterDimIds: string[] = [];
       
       for (const channel of config.selectedChannels || []) {
         const filterConfig = config.filterConfigs?.[channel];
         if (filterConfig?.filterDimensionIds && filterConfig.filterDimensionIds.length > 0) {
           updatedFilterDimensionValues[channel] = {};
+          updatedFilterDimensionNames[channel] = {};
           for (const filterDimId of filterConfig.filterDimensionIds) {
+            allFilterDimIds.push(filterDimId);
             // Load values in parallel
             loadPromises.push(
               loadFilterDimensionValues(channel, filterDimId).then(values => {
@@ -1208,6 +1212,30 @@ export default function SlideViewPage() {
         }
       }
       
+      // Also fetch dimension names in parallel
+      if (allFilterDimIds.length > 0) {
+        const uniqueIds = [...new Set(allFilterDimIds)];
+        const { data: dimensionInfo } = await supabase
+          .from('dimensions')
+          .select('id, name')
+          .in('id', uniqueIds);
+        
+        if (dimensionInfo) {
+          for (const dim of dimensionInfo) {
+            // Add to all channels that have this dimension
+            for (const channel of config.selectedChannels || []) {
+              const filterConfig = config.filterConfigs?.[channel];
+              if (filterConfig?.filterDimensionIds?.includes(dim.id)) {
+                if (!updatedFilterDimensionNames[channel]) {
+                  updatedFilterDimensionNames[channel] = {};
+                }
+                updatedFilterDimensionNames[channel][dim.id] = dim.name;
+              }
+            }
+          }
+        }
+      }
+      
       // Wait for all values to load
       await Promise.all(loadPromises);
       
@@ -1215,9 +1243,13 @@ export default function SlideViewPage() {
         setFilterDimensionValues(prev => ({ ...prev, ...updatedFilterDimensionValues }));
         console.log('[loadFilterValues] Filter dimension values loaded for page display');
       }
+      if (Object.keys(updatedFilterDimensionNames).length > 0) {
+        setFilterDimensionNames(prev => ({ ...prev, ...updatedFilterDimensionNames }));
+        console.log('[loadFilterValues] Filter dimension names loaded:', updatedFilterDimensionNames);
+      }
     };
 
-    loadFilterValues();
+    loadFilterValuesAndNames();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideReport?.configuration?.filterConfigs]);
 
@@ -1391,6 +1423,13 @@ export default function SlideViewPage() {
 
   // Filter dimension values state (for dropdowns) - channel -> dimensionId -> values[]
   const [filterDimensionValues, setFilterDimensionValues] = useState<Record<string, Record<string, string[]>>>({
+    metasearch: {},
+    sem: {},
+    social: {},
+  });
+  
+  // Filter dimension names lookup (for rendering) - channel -> dimensionId -> name
+  const [filterDimensionNames, setFilterDimensionNames] = useState<Record<string, Record<string, string>>>({
     metasearch: {},
     sem: {},
     social: {},
@@ -2484,15 +2523,38 @@ export default function SlideViewPage() {
       const reportIdsMap = latestReport.report_ids as unknown as Record<string, string>;
       const dateRange = latestReport.date_range as unknown as SlideReportDateRange;
       
-      const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
+      console.log('[refresh] Step 2: Config:', {
+        channels: config.selectedChannels,
+        reportIds: reportIdsMap,
+        dateRange,
+        hasBreakdownConfigs: Object.keys(config.breakdownConfigs || {}).length > 0,
+        hasFilterConfigs: Object.keys(config.filterConfigs || {}).length > 0,
+      });
       
-      const pivotData = await computeSlideReportPivotData(
-        reportIdsMap,
-        config,
-        dateRange
-      );
+      let pivotData: any;
+      try {
+        const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
+        
+        pivotData = await computeSlideReportPivotData(
+          reportIdsMap,
+          config,
+          dateRange
+        );
+      } catch (pivotError) {
+        console.error('[refresh] Step 2: Pivot computation error:', pivotError);
+        throw new Error(`Pivot data computation failed: ${pivotError instanceof Error ? pivotError.message : String(pivotError)}`);
+      }
       
-      console.log('[refresh] Step 2: Pivot data computed');
+      const typedPivotData = pivotData as SlideReportPivotData;
+      
+      if (!typedPivotData || !typedPivotData.channels) {
+        throw new Error('Pivot data computation returned invalid data');
+      }
+      
+      console.log('[refresh] Step 2: Pivot data computed successfully', {
+        channelsComputed: Object.keys(pivotData.channels),
+        overviewMonthsCount: Object.keys(pivotData.overview?.monthly || {}).length,
+      });
       setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'loading' }));
       setRefreshStep(3);
 
@@ -2523,8 +2585,8 @@ export default function SlideViewPage() {
       }> = [];
 
       // Store overview monthly data
-      if (pivotData.overview?.monthly) {
-        Object.entries(pivotData.overview.monthly).forEach(([monthKey, metrics]) => {
+      if (typedPivotData.overview?.monthly) {
+        Object.entries(typedPivotData.overview.monthly).forEach(([monthKey, metrics]) => {
           const [year, month] = monthKey.split('-').map(Number);
           monthlyRecords.push({
             slide_report_id: slideReportId,
@@ -2541,8 +2603,8 @@ export default function SlideViewPage() {
       }
 
       // Store channel-specific monthly data with breakdowns
-      if (pivotData.channels) {
-        Object.entries(pivotData.channels).forEach(([channel, channelData]) => {
+      if (typedPivotData.channels) {
+        Object.entries(typedPivotData.channels).forEach(([channel, channelData]) => {
           // Store monthly metrics for each channel
           if (channelData.monthly) {
             Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
@@ -2560,7 +2622,7 @@ export default function SlideViewPage() {
                 metrics,
                 breakdowns: monthlyBreakdowns,
                 row_count: Object.keys(monthlyBreakdowns).reduce((count, key) => 
-                  count + (monthlyBreakdowns[key]?.length || 0), 0),
+                  count + ((monthlyBreakdowns as any)[key]?.length || 0), 0),
                 computed_at: new Date().toISOString(),
               });
             });
@@ -2623,7 +2685,7 @@ export default function SlideViewPage() {
       const { error: updateError } = await supabase
         .from("slide_reports")
         .update({
-          pivot_data: pivotData as any,
+          pivot_data: typedPivotData as any,
           last_refreshed_at: new Date().toISOString(),
         })
         .eq("id", slideReportId);
@@ -3473,33 +3535,22 @@ export default function SlideViewPage() {
                     const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
                     const filterDimIds = savedFilterConfigs?.filterDimensionIds || filterConfigs[currentChannel]?.filterDimensionIds || [];
                     return filterDimIds.map(filterDimId => {
-                      const filterDim = dimensions[currentChannel]?.find(d => d.id === filterDimId);
+                      // Use filterDimensionNames state (loaded on page load) or fallback to dimensions state
+                      const filterDimName = filterDimensionNames[currentChannel]?.[filterDimId] 
+                                         || dimensions[currentChannel]?.find(d => d.id === filterDimId)?.name
+                                         || `Filter ${filterDimId.substring(0, 8)}`;
                       // Ensure we get values ONLY for this specific filterDimId, not mixed with other dimensions
                       const filterValuesList = filterDimensionValues[currentChannel]?.[filterDimId] || [];
                       
-                      // Verify we have the correct dimension
-                      if (!filterDim) {
-                        console.warn(`[testing] Filter dimension not found: ${filterDimId} for channel ${currentChannel}`);
-                        return null;
-                      }
-                      
-                      // Verify values are for this dimension only
+                      // If no values loaded yet, show a loading placeholder instead of hiding
                       if (filterValuesList.length === 0) {
-                        console.warn(`[VALIDATION] No filter values loaded for ${currentChannel}/${filterDimId} (${filterDim.name})`);
-                        return null;
+                        return (
+                          <Button key={`${currentChannel}-${filterDimId}`} variant="outline" className="w-[180px]" disabled>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Loading {filterDimName}...
+                          </Button>
+                        );
                       }
-                      
-                      // Validation: Log dimension ID and sample values to verify correct isolation
-                      console.log(`[VALIDATION] Filter dropdown for ${currentChannel}/${filterDim.name} (dimensionId: ${filterDimId}): ${filterValuesList.length} values`, {
-                        dimensionId: filterDimId,
-                        dimensionName: filterDim.name,
-                        sampleValues: filterValuesList.slice(0, 3),
-                        totalValues: filterValuesList.length,
-                      });
-                      
-                      // Additional validation: Check if values might be from wrong dimension
-                      // This is a heuristic check - if all values look like they're from a different dimension type, warn
-                      // (This is just a safety check, the main fix is ensuring correct loading)
                       
                       const selectedFilterValues = filterValues[currentChannel]?.[filterDimId] || [];
                       const isAllSelected = selectedFilterValues.length === 0 || selectedFilterValues.length === filterValuesList.length;
@@ -3513,18 +3564,18 @@ export default function SlideViewPage() {
                             >
                               <span className="truncate">
                                 {isAllSelected 
-                                  ? `All ${filterDim.name}` 
+                                  ? `All ${filterDimName}` 
                                   : selectedFilterValues.length === 1
                                     ? selectedFilterValues[0]
-                                    : `${selectedFilterValues.length} ${filterDim.name} selected`}
+                                    : `${selectedFilterValues.length} ${filterDimName} selected`}
                               </span>
                               <ChevronRight className="h-4 w-4 opacity-50 rotate-90" />
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent className="w-[250px] p-0" align="start">
+                          <PopoverContent className="w-[250px] p-0 bg-popover z-50" align="start">
                             <div className="p-2">
                               <div className="flex items-center justify-between mb-2">
-                                <Label className="text-sm font-medium">{filterDim.name}</Label>
+                                <Label className="text-sm font-medium">{filterDimName}</Label>
                                 <div className="flex gap-1">
                                   <Button
                                     variant="ghost"
