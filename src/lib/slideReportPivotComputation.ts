@@ -192,7 +192,7 @@ function calculateDerivedMetrics(data: {
  * This is crucial for aggregateMetrics to work with UUID-keyed dimension_data
  */
 async function buildMetricNameToIdMap(reportId: string): Promise<Record<string, string>> {
-  // Get a sample row to find the dimension IDs used
+  // Get a sample row to find the dimension IDs used in the data
   const { data: sampleRows } = await supabase
     .from('dimension_data')
     .select('dimension_values')
@@ -218,13 +218,13 @@ async function buildMetricNameToIdMap(reportId: string): Promise<Record<string, 
     return {};
   }
 
-  // Build name -> id mapping
+  // Build name -> id mapping (includes ALL dimension types: text, number, currency, date, etc.)
   const nameToIdMap: Record<string, string> = {};
   dimensions.forEach(dim => {
     nameToIdMap[dim.name] = dim.id;
   });
 
-  console.log(`Built metric map for report ${reportId}:`, Object.keys(nameToIdMap).join(', '));
+  console.log(`Built metric map for report ${reportId}: ${Object.keys(nameToIdMap).length} dimensions (${Object.keys(nameToIdMap).slice(0, 5).join(', ')}...)`);
   return nameToIdMap;
 }
 
@@ -356,6 +356,102 @@ function computeBreakdownAllTime(
     breakdownRows.push({
       [breakdownDimensionName.toLowerCase().replace(/\s+/g, '_')]: groupValue,
       name: groupValue, // Add a consistent 'name' field for easier access
+      ...metrics,
+    });
+  });
+
+  // Sort by revenue descending
+  breakdownRows.sort((a, b) => b.revenue - a.revenue);
+
+  return breakdownRows;
+}
+
+/**
+ * Compute breakdown data for a dimension for a specific month
+ */
+function computeBreakdownForMonth(
+  rows: any[],
+  breakdownDimensionId: string,
+  breakdownDimensionName: string,
+  metricNameToIdMap: Record<string, string>,
+  dateRange: { start: Date; end: Date },
+  dateDimensionId?: string,
+  dimensionFilter?: { dimensionId: string; dimensionName?: string; values: string[] }
+): BreakdownRow[] {
+  // Find date dimension ID if not provided
+  const dateDimId = dateDimensionId || Object.entries(metricNameToIdMap).find(([name]) => 
+    name.toLowerCase() === 'date'
+  )?.[1];
+
+  // Filter by date and dimension filter
+  const filteredRows = rows.filter((row) => {
+    const rowData = row.dimension_values || row;
+    
+    // Date filter
+    if (dateDimId) {
+      const dateValue = rowData[dateDimId];
+      if (dateValue) {
+        const rowDate = new Date(dateValue);
+        if (rowDate < dateRange.start || rowDate > dateRange.end) {
+          return false;
+        }
+      }
+    }
+    
+    // Dimension filter
+    if (dimensionFilter && dimensionFilter.values.length > 0) {
+      const dimValue = rowData[dimensionFilter.dimensionId] || 
+                     (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
+      if (dimValue === undefined) return false;
+      const normalizedRowValue = String(dimValue).trim();
+      const normalizedFilterValues = dimensionFilter.values.map(v => String(v).trim());
+      if (!normalizedFilterValues.includes(normalizedRowValue)) return false;
+    }
+    
+    return true;
+  });
+
+  // Group by breakdown dimension
+  const groupedRows: Record<string, any[]> = {};
+  filteredRows.forEach((row) => {
+    const rowData = row.dimension_values || row;
+    const breakdownValue = rowData[breakdownDimensionId] || 
+                          (breakdownDimensionName ? rowData[breakdownDimensionName] : undefined);
+    const groupKey = breakdownValue !== undefined && breakdownValue !== null && breakdownValue !== '' 
+      ? String(breakdownValue).trim() 
+      : null;
+    
+    if (groupKey) {
+      if (!groupedRows[groupKey]) {
+        groupedRows[groupKey] = [];
+      }
+      groupedRows[groupKey].push(row);
+    }
+  });
+
+  // Compute metrics for each group
+  const breakdownRows: BreakdownRow[] = [];
+  Object.entries(groupedRows).forEach(([groupValue, groupRows]) => {
+    const metrics = {
+      impressions: 0,
+      clicks: 0,
+      cost: 0,
+      revenue: 0,
+      bookings: 0,
+    };
+    
+    groupRows.forEach(row => {
+      const rowData = row.dimension_values || row;
+      metrics.impressions += parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
+      metrics.clicks += parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
+      metrics.cost += parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
+      metrics.revenue += parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
+      metrics.bookings += parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
+    });
+    
+    breakdownRows.push({
+      [breakdownDimensionName.toLowerCase().replace(/\s+/g, '_')]: groupValue,
+      name: groupValue,
       ...metrics,
     });
   });
@@ -556,9 +652,32 @@ export async function computeSlideReportPivotData(
 
     // Compute breakdowns for each breakdown dimension - ALL TIME data
     const breakdowns: Record<string, BreakdownRow[]> = {};
-    const breakdownConfig = configuration.breakdownConfigs[channel];
-    if (breakdownConfig?.breakdownDimensionIds) {
-      for (const breakdownDimId of breakdownConfig.breakdownDimensionIds) {
+    const breakdownConfig = configuration.breakdownConfigs?.[channel];
+    
+    // Get configured breakdown dimensions or use defaults
+    let breakdownDimensionIds = breakdownConfig?.breakdownDimensionIds || [];
+    
+    // If no breakdowns configured, auto-detect from data
+    if (breakdownDimensionIds.length === 0) {
+      // Look for common breakdown dimensions in the metricNameToIdMap
+      const hotelId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'hotel')?.[1];
+      const campaignId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'campaign')?.[1];
+      const accountId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'account')?.[1];
+      const linkTypeId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'link type')?.[1];
+      
+      // Add available text/category dimensions as breakdowns
+      if (hotelId) breakdownDimensionIds.push(hotelId);
+      if (campaignId) breakdownDimensionIds.push(campaignId);
+      if (accountId && !hotelId) breakdownDimensionIds.push(accountId); // Account if no Hotel
+      if (linkTypeId && channel === 'metasearch') breakdownDimensionIds.push(linkTypeId);
+      
+      console.log(`Auto-detected breakdown dimensions for ${channel}:`, breakdownDimensionIds);
+    }
+    
+    // Compute ALL-TIME breakdowns
+    const breakdownDimNameMap: Record<string, string> = {}; // dimId -> dimName
+    if (breakdownDimensionIds.length > 0) {
+      for (const breakdownDimId of breakdownDimensionIds) {
         // Look up dimension name from dimensions table
         const { data: dimInfo } = await supabase
           .from('dimensions')
@@ -567,11 +686,41 @@ export async function computeSlideReportPivotData(
           .single();
         
         const breakdownDimName = dimInfo?.name || breakdownDimId;
+        breakdownDimNameMap[breakdownDimId] = breakdownDimName;
+        
         breakdowns[breakdownDimName] = computeBreakdownAllTime(
           rows,
           breakdownDimId,
           breakdownDimName,
           metricNameToIdMap,
+          dimensionFilter
+        );
+        console.log(`Computed all-time breakdown for ${breakdownDimName}: ${breakdowns[breakdownDimName].length} rows`);
+      }
+    }
+    
+    // Compute MONTHLY breakdowns for each month in allMonthly
+    const monthlyBreakdowns: Record<string, Record<string, BreakdownRow[]>> = {};
+    const dateDimId = Object.entries(metricNameToIdMap).find(([name]) => 
+      name.toLowerCase() === 'date'
+    )?.[1];
+    
+    for (const monthKey of Object.keys(allMonthly)) {
+      const [year, month] = monthKey.split('-').map(Number);
+      const monthStart = new Date(year, month - 1, 1);
+      const monthEnd = new Date(year, month, 0, 23, 59, 59); // Last day of month
+      
+      monthlyBreakdowns[monthKey] = {};
+      
+      for (const breakdownDimId of breakdownDimensionIds) {
+        const breakdownDimName = breakdownDimNameMap[breakdownDimId] || breakdownDimId;
+        monthlyBreakdowns[monthKey][breakdownDimName] = computeBreakdownForMonth(
+          rows,
+          breakdownDimId,
+          breakdownDimName,
+          metricNameToIdMap,
+          { start: monthStart, end: monthEnd },
+          dateDimId,
           dimensionFilter
         );
       }
@@ -584,6 +733,7 @@ export async function computeSlideReportPivotData(
       monthly: allMonthly,
       yearly,
       breakdowns,
+      monthlyBreakdowns,
     };
 
     // Aggregate monthly data for overview

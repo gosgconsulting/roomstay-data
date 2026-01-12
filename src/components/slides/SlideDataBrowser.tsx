@@ -249,11 +249,25 @@ export function SlideDataBrowser({
     return Object.keys(pivotData.channels);
   }, [pivotData]);
 
-  // Get available breakdowns for selected channel
+  // Get available breakdowns for selected channel (considering monthly breakdowns)
   const availableBreakdowns = useMemo(() => {
-    if (!selectedChannel || !pivotData?.channels?.[selectedChannel]?.breakdowns) return [];
-    return Object.keys(pivotData.channels[selectedChannel].breakdowns);
-  }, [selectedChannel, pivotData]);
+    if (!selectedChannel || !pivotData?.channels?.[selectedChannel]) return [];
+    
+    // If a month is selected, check for monthly breakdowns first
+    if (selectedMonth && selectedYear) {
+      const monthKey = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
+      const monthlyBreakdowns = pivotData.channels[selectedChannel].monthlyBreakdowns?.[monthKey];
+      if (monthlyBreakdowns) {
+        return Object.keys(monthlyBreakdowns);
+      }
+    }
+    
+    // Fall back to all-time breakdowns
+    if (pivotData.channels[selectedChannel].breakdowns) {
+      return Object.keys(pivotData.channels[selectedChannel].breakdowns);
+    }
+    return [];
+  }, [selectedChannel, selectedMonth, selectedYear, pivotData]);
 
   // Get monthly metrics for selected year/month/channel
   const getMonthlyMetrics = (channel: string): ChannelMetrics | null => {
@@ -262,10 +276,21 @@ export function SlideDataBrowser({
     return pivotData.channels[channel].monthly[monthKey] || null;
   };
 
-  // Get breakdown data for selected channel/breakdown
+  // Get breakdown data for selected channel/breakdown (monthly or all-time)
   const getBreakdownData = (): BreakdownRow[] | null => {
-    if (!selectedChannel || !selectedBreakdown || !pivotData?.channels?.[selectedChannel]?.breakdowns) return null;
-    return pivotData.channels[selectedChannel].breakdowns[selectedBreakdown] || null;
+    if (!selectedChannel || !selectedBreakdown || !pivotData?.channels?.[selectedChannel]) return null;
+    
+    // Try monthly breakdowns first if month is selected
+    if (selectedMonth && selectedYear) {
+      const monthKey = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
+      const monthlyBreakdowns = pivotData.channels[selectedChannel].monthlyBreakdowns?.[monthKey];
+      if (monthlyBreakdowns?.[selectedBreakdown]) {
+        return monthlyBreakdowns[selectedBreakdown];
+      }
+    }
+    
+    // Fall back to all-time breakdowns
+    return pivotData.channels[selectedChannel].breakdowns?.[selectedBreakdown] || null;
   };
 
   // Navigation handlers
@@ -281,8 +306,20 @@ export function SlideDataBrowser({
 
   const handleChannelClick = (channel: string) => {
     setSelectedChannel(channel);
-    const channelBreakdowns = pivotData?.channels?.[channel]?.breakdowns;
-    if (channelBreakdowns && Object.keys(channelBreakdowns).length > 0) {
+    
+    // Check for breakdowns (monthly first, then all-time)
+    let hasBreakdowns = false;
+    if (selectedMonth && selectedYear) {
+      const monthKey = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
+      const monthlyBreakdowns = pivotData?.channels?.[channel]?.monthlyBreakdowns?.[monthKey];
+      hasBreakdowns = monthlyBreakdowns && Object.keys(monthlyBreakdowns).length > 0;
+    }
+    if (!hasBreakdowns) {
+      const channelBreakdowns = pivotData?.channels?.[channel]?.breakdowns;
+      hasBreakdowns = channelBreakdowns && Object.keys(channelBreakdowns).length > 0;
+    }
+    
+    if (hasBreakdowns) {
       setViewLevel('breakdowns');
     } else {
       setViewLevel('data');
