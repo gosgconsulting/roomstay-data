@@ -739,7 +739,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
   
   // Build merged metric map for dimension ID resolution - CACHED for instant loading
   // Cache key includes reportIds so switching tabs uses cached map
-  const metricMapCacheKey = useMemo(() => ['metric-map', ...reportIds.sort()], [reportIds]);
+  // IMPORTANT: Now also fetches account-level dimensions to ensure base metrics are always mapped
+  const metricMapCacheKey = useMemo(() => ['metric-map', accountId || 'no-account', ...reportIds.sort()], [accountId, reportIds]);
   
   const { data: mergedMetricMap = {} } = useQuery({
     queryKey: metricMapCacheKey,
@@ -747,7 +748,24 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
       if (reportIds.length === 0) return {};
       const map: Record<string, string> = {};
       
-      // Fetch all data sources in parallel for speed
+      // STEP 1: Fetch account-level dimensions first (these are global and should be prioritized)
+      // This ensures base metrics like Revenue, Bookings are always mapped correctly
+      if (accountId) {
+        const { data: accountDimensions } = await supabase
+          .from('dimensions')
+          .select('id, name, type')
+          .eq('account_id', accountId)
+          .is('report_id', null); // Account-level dimensions have no report_id
+        
+        if (accountDimensions) {
+          accountDimensions.forEach(dim => {
+            map[dim.name] = dim.id;
+          });
+          console.log(`[mergedMetricMap] Loaded ${accountDimensions.length} account-level dimensions`);
+        }
+      }
+      
+      // STEP 2: Fetch all data sources in parallel for speed
       const fetchPromises = reportIds.map(async (reportId) => {
         const { data: dsData } = await supabase
           .from("data_sources")
@@ -766,6 +784,8 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
           }
         });
       });
+      
+      console.log(`[mergedMetricMap] Final map has ${Object.keys(map).length} dimensions:`, Object.keys(map).slice(0, 10));
       return map;
     },
     enabled: reportIds.length > 0,
