@@ -22,6 +22,7 @@ import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange } 
 import { useUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { SlideDataBrowser } from "@/components/slides/SlideDataBrowser";
+import { RefreshStepIndicator, ChannelTabsList, DimensionValuesList } from "@/components/slides/EditSourceModal";
 
 // REAL DATA from database queries - December 2025 Brady Hotels Account (after resync)
 const METASEARCH_DATA = {
@@ -1422,7 +1423,7 @@ export default function SlideViewPage() {
     social: false,
   });
 
-  // Refresh Data Modal state
+  // Refresh Data Modal state - 5 steps now
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
   const [refreshStep, setRefreshStep] = useState(0); // 0 = not started, 1-5 = steps
   const [refreshStepStatus, setRefreshStepStatus] = useState<Record<number, 'pending' | 'loading' | 'complete' | 'error'>>({
@@ -2421,7 +2422,7 @@ export default function SlideViewPage() {
       dateRange: slideReport.date_range,
     });
 
-    // Open modal and reset state - now with 4 clear steps
+    // Open modal and reset state - now with 5 clear steps
     setIsRefreshModalOpen(true);
     setRefreshStep(1);
     setRefreshError(null);
@@ -2430,6 +2431,7 @@ export default function SlideViewPage() {
       2: 'pending',
       3: 'pending',
       4: 'pending',
+      5: 'pending',
     });
 
     try {
@@ -2564,8 +2566,36 @@ export default function SlideViewPage() {
       setRefreshStepStatus(prev => ({ ...prev, 3: 'complete', 4: 'loading' }));
       setRefreshStep(4);
 
-      // Step 4: Update slide report and refresh UI
-      console.log('[refresh] Step 4: Updating slide report and refreshing UI...');
+      // Step 4: Store breakdown and filter configurations
+      console.log('[refresh] Step 4: Storing breakdown and filter configurations...');
+      
+      const breakdownConfigs = config.breakdownConfigs || {};
+      const filterConfigs = config.filterConfigs || {};
+      
+      // Log breakdown and filter configurations being stored
+      const breakdownCount = Object.values(breakdownConfigs).reduce(
+        (sum, cfg) => sum + ((cfg as any)?.breakdownDimensionIds?.length || 0), 0
+      );
+      const filterCount = Object.values(filterConfigs).reduce(
+        (sum, cfg) => sum + ((cfg as any)?.filterDimensionIds?.length || 0), 0
+      );
+      
+      console.log('[refresh] Step 4: Breakdown/Filter config:', {
+        breakdownCount,
+        filterCount,
+        breakdownConfigs,
+        filterConfigs,
+      });
+      
+      // The breakdown and filter configs are already part of the configuration
+      // They will be saved in step 5 along with the pivot_data
+      // Here we ensure the pivot_data includes breakdown tables for each configured breakdown dimension
+      
+      setRefreshStepStatus(prev => ({ ...prev, 4: 'complete', 5: 'loading' }));
+      setRefreshStep(5);
+
+      // Step 5: Update slide report and refresh UI
+      console.log('[refresh] Step 5: Updating slide report and refreshing UI...');
       
       const { error: updateError } = await supabase
         .from("slide_reports")
@@ -2595,7 +2625,7 @@ export default function SlideViewPage() {
         }
       }
       
-      setRefreshStepStatus(prev => ({ ...prev, 4: 'complete' }));
+      setRefreshStepStatus(prev => ({ ...prev, 5: 'complete' }));
       
       // Wait a moment then close modal
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -2606,11 +2636,13 @@ export default function SlideViewPage() {
       console.log('[refresh] Complete:', {
         totalChannels,
         monthlyRecordsStored: monthlyRecords.length,
+        breakdownCount,
+        filterCount,
       });
       
       toast({ 
         title: "Data refreshed", 
-        description: `Stored ${monthlyRecords.length} monthly records for ${totalChannels} channel(s). Browse data in the Data tab.` 
+        description: `Stored ${monthlyRecords.length} monthly records with ${breakdownCount} breakdown(s) and ${filterCount} filter(s).` 
       });
       
     } catch (error) {
@@ -3123,40 +3155,15 @@ export default function SlideViewPage() {
             {modalStep === 4 && (
               <div className="flex gap-4 min-h-[350px] max-h-[400px] pb-4">
                 {/* Left: Channel tabs */}
-                <div className="w-48 border-r pr-4">
-                  <ScrollArea className="h-full">
-                    <div className="space-y-1">
-                      {selectedChannels.map(channel => {
-                        const config = channelConfigs[channel];
-                        const valueCount = config?.selectedValues.length || 0;
-                        return (
-                          <button
-                            key={channel}
-                            className={cn(
-                              "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
-                              activeChannelTab === channel
-                                ? "bg-primary text-primary-foreground"
-                                : "hover:bg-muted"
-                            )}
-                            onClick={() => {
-                              setActiveChannelTab(channel);
-                              setSearchQuery("");
-                            }}
-                          >
-                            <span className="truncate capitalize">
-                              {channel}
-                              {valueCount > 0 && (
-                                <span className="ml-1 text-xs opacity-70">
-                                  ({valueCount})
-                                </span>
-                              )}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </ScrollArea>
-                </div>
+                <ChannelTabsList
+                  selectedChannels={selectedChannels}
+                  activeChannelTab={activeChannelTab}
+                  setActiveChannelTab={(channel) => {
+                    setActiveChannelTab(channel);
+                    setSearchQuery("");
+                  }}
+                  getChannelBadgeCount={(channel) => channelConfigs[channel]?.selectedValues?.length || 0}
+                />
 
                 {/* Right: Dimension selector */}
                 <div className="flex-1 flex flex-col gap-4">
@@ -3198,75 +3205,14 @@ export default function SlideViewPage() {
                           </div>
 
                           {channelConfigs[activeChannelTab]?.dimensionId && (
-                            <>
-                              <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                  placeholder="Search values..."
-                                  value={searchQuery}
-                                  onChange={e => setSearchQuery(e.target.value)}
-                                  className="pl-9"
-                                />
-                              </div>
-
-                              {filteredValues.length > 0 && (
-                                <div className="flex gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleSelectAllValues(activeChannelTab)}
-                                    className="flex-1"
-                                  >
-                                    Select All
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleDeselectAllValues(activeChannelTab)}
-                                    className="flex-1"
-                                  >
-                                    Deselect All
-                                  </Button>
-                                </div>
-                              )}
-
-                              <ScrollArea className="flex-1 border rounded-md">
-                                <div className="p-2 space-y-1">
-                                  {/* Check loading state FIRST, before checking if values exist */}
-                                  {activeChannelTab && loadingValues[activeChannelTab] ? (
-                                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                                      <Loader2 className="h-6 w-6 animate-spin mb-2" />
-                                      <p className="text-sm">Loading dimension values...</p>
-                                    </div>
-                                  ) : filteredValues.length > 0 ? (
-                                    filteredValues.map(value => (
-                                      <div
-                                        key={value}
-                                        className={cn(
-                                          "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                                          channelConfigs[activeChannelTab]?.selectedValues.includes(value)
-                                            ? "bg-primary/10"
-                                            : "hover:bg-muted/50"
-                                        )}
-                                        onClick={() => handleValueToggle(activeChannelTab, value)}
-                                      >
-                                        <Checkbox
-                                          checked={channelConfigs[activeChannelTab]?.selectedValues.includes(value) || false}
-                                          onCheckedChange={() => handleValueToggle(activeChannelTab, value)}
-                                        />
-                                        <span className="text-sm">{value}</span>
-                                      </div>
-                                    ))
-                                  ) : (
-                                    <p className="text-center text-muted-foreground py-4">
-                                      No values found.
-                                    </p>
-                                  )}
-                                </div>
-                              </ScrollArea>
-                            </>
+                            <DimensionValuesList
+                              values={dimensionValues[activeChannelTab] || []}
+                              selectedValues={channelConfigs[activeChannelTab]?.selectedValues || []}
+                              loading={loadingValues[activeChannelTab] || false}
+                              onValueToggle={(value) => handleValueToggle(activeChannelTab, value)}
+                              onSelectAll={() => handleSelectAllValues(activeChannelTab)}
+                              onDeselectAll={() => handleDeselectAllValues(activeChannelTab)}
+                            />
                           )}
                         </>
                       )}
@@ -4322,7 +4268,7 @@ export default function SlideViewPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <div className="flex items-center gap-2">
-              <RefreshCw className={cn("h-5 w-5 text-primary", refreshStep > 0 && refreshStep < 5 && "animate-spin")} />
+              <RefreshCw className={cn("h-5 w-5 text-primary", refreshStep > 0 && refreshStep < 6 && "animate-spin")} />
               <DialogTitle>Refreshing Data</DialogTitle>
             </div>
             <DialogDescription>
@@ -4331,137 +4277,36 @@ export default function SlideViewPage() {
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            {/* Step 1: Verify settings */}
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
-                refreshStepStatus[1] === 'complete' && "bg-green-100 text-green-700",
-                refreshStepStatus[1] === 'loading' && "bg-primary/20 text-primary",
-                refreshStepStatus[1] === 'error' && "bg-red-100 text-red-700",
-                refreshStepStatus[1] === 'pending' && "bg-muted text-muted-foreground"
-              )}>
-                {refreshStepStatus[1] === 'complete' ? (
-                  <Check className="h-4 w-4" />
-                ) : refreshStepStatus[1] === 'loading' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : refreshStepStatus[1] === 'error' ? (
-                  <span>!</span>
-                ) : (
-                  "1"
-                )}
-              </div>
-              <div className="flex-1">
-                <p className={cn(
-                  "font-medium",
-                  refreshStepStatus[1] === 'complete' && "text-green-700",
-                  refreshStepStatus[1] === 'loading' && "text-foreground",
-                  refreshStepStatus[1] === 'error' && "text-red-700",
-                  refreshStepStatus[1] === 'pending' && "text-muted-foreground"
-                )}>
-                  Verifying settings
-                </p>
-                <p className="text-sm text-muted-foreground">Checking configuration and data sources</p>
-              </div>
-            </div>
-
-            {/* Step 2: Compute pivot data */}
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
-                refreshStepStatus[2] === 'complete' && "bg-green-100 text-green-700",
-                refreshStepStatus[2] === 'loading' && "bg-primary/20 text-primary",
-                refreshStepStatus[2] === 'error' && "bg-red-100 text-red-700",
-                refreshStepStatus[2] === 'pending' && "bg-muted text-muted-foreground"
-              )}>
-                {refreshStepStatus[2] === 'complete' ? (
-                  <Check className="h-4 w-4" />
-                ) : refreshStepStatus[2] === 'loading' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : refreshStepStatus[2] === 'error' ? (
-                  <span>!</span>
-                ) : (
-                  "2"
-                )}
-              </div>
-              <div className="flex-1">
-                <p className={cn(
-                  "font-medium",
-                  refreshStepStatus[2] === 'complete' && "text-green-700",
-                  refreshStepStatus[2] === 'loading' && "text-foreground",
-                  refreshStepStatus[2] === 'error' && "text-red-700",
-                  refreshStepStatus[2] === 'pending' && "text-muted-foreground"
-                )}>
-                  Computing pivot data
-                </p>
-                <p className="text-sm text-muted-foreground">Aggregating metrics by year, month, and channel</p>
-              </div>
-            </div>
-
-            {/* Step 3: Store monthly data */}
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
-                refreshStepStatus[3] === 'complete' && "bg-green-100 text-green-700",
-                refreshStepStatus[3] === 'loading' && "bg-primary/20 text-primary",
-                refreshStepStatus[3] === 'error' && "bg-red-100 text-red-700",
-                refreshStepStatus[3] === 'pending' && "bg-muted text-muted-foreground"
-              )}>
-                {refreshStepStatus[3] === 'complete' ? (
-                  <Check className="h-4 w-4" />
-                ) : refreshStepStatus[3] === 'loading' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : refreshStepStatus[3] === 'error' ? (
-                  <span>!</span>
-                ) : (
-                  "3"
-                )}
-              </div>
-              <div className="flex-1">
-                <p className={cn(
-                  "font-medium",
-                  refreshStepStatus[3] === 'complete' && "text-green-700",
-                  refreshStepStatus[3] === 'loading' && "text-foreground",
-                  refreshStepStatus[3] === 'error' && "text-red-700",
-                  refreshStepStatus[3] === 'pending' && "text-muted-foreground"
-                )}>
-                  Storing monthly data
-                </p>
-                <p className="text-sm text-muted-foreground">Saving data organized by Year → Month → Channel</p>
-              </div>
-            </div>
-
-            {/* Step 4: Update UI */}
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
-                refreshStepStatus[4] === 'complete' && "bg-green-100 text-green-700",
-                refreshStepStatus[4] === 'loading' && "bg-primary/20 text-primary",
-                refreshStepStatus[4] === 'error' && "bg-red-100 text-red-700",
-                refreshStepStatus[4] === 'pending' && "bg-muted text-muted-foreground"
-              )}>
-                {refreshStepStatus[4] === 'complete' ? (
-                  <Check className="h-4 w-4" />
-                ) : refreshStepStatus[4] === 'loading' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : refreshStepStatus[4] === 'error' ? (
-                  <span>!</span>
-                ) : (
-                  "4"
-                )}
-              </div>
-              <div className="flex-1">
-                <p className={cn(
-                  "font-medium",
-                  refreshStepStatus[4] === 'complete' && "text-green-700",
-                  refreshStepStatus[4] === 'loading' && "text-foreground",
-                  refreshStepStatus[4] === 'error' && "text-red-700",
-                  refreshStepStatus[4] === 'pending' && "text-muted-foreground"
-                )}>
-                  Updating interface
-                </p>
-                <p className="text-sm text-muted-foreground">Refreshing report with latest data</p>
-              </div>
-            </div>
+            <RefreshStepIndicator
+              stepNumber={1}
+              status={refreshStepStatus[1]}
+              title="Verifying settings"
+              description="Checking configuration and data sources"
+            />
+            <RefreshStepIndicator
+              stepNumber={2}
+              status={refreshStepStatus[2]}
+              title="Computing pivot data"
+              description="Aggregating metrics by year, month, and channel"
+            />
+            <RefreshStepIndicator
+              stepNumber={3}
+              status={refreshStepStatus[3]}
+              title="Storing monthly data"
+              description="Saving data organized by Year → Month → Channel"
+            />
+            <RefreshStepIndicator
+              stepNumber={4}
+              status={refreshStepStatus[4]}
+              title="Processing breakdowns & filters"
+              description="Storing breakdown tables and filter configurations"
+            />
+            <RefreshStepIndicator
+              stepNumber={5}
+              status={refreshStepStatus[5]}
+              title="Updating interface"
+              description="Refreshing report with latest data"
+            />
 
             {/* Error message */}
             {refreshError && (
@@ -4471,7 +4316,7 @@ export default function SlideViewPage() {
             )}
 
             {/* All complete message */}
-            {refreshStepStatus[4] === 'complete' && (
+            {refreshStepStatus[5] === 'complete' && (
               <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
                 <Check className="h-4 w-4 text-green-600" />
                 <p className="text-sm text-green-700 font-medium">Data refresh complete! Browse data in the Data tab.</p>
@@ -4482,7 +4327,7 @@ export default function SlideViewPage() {
           <DialogFooter>
             {refreshError ? (
               <Button onClick={() => setIsRefreshModalOpen(false)}>Close</Button>
-            ) : refreshStepStatus[4] === 'complete' ? (
+            ) : refreshStepStatus[5] === 'complete' ? (
               <Button onClick={() => setIsRefreshModalOpen(false)} className="bg-green-600 hover:bg-green-700">
                 Done
               </Button>
