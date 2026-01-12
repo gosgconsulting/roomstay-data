@@ -223,13 +223,13 @@ async function buildMetricNameToIdMap(reportId: string): Promise<Record<string, 
     }
   }
   
-  // STEP 3: Sample multiple rows to collect all possible dimension IDs used in the data
-  // (some rows may have different dimensions than others)
+  // STEP 3: Sample a few rows to collect dimension IDs used in the data
+  // Reduced sample size to avoid potential timeout on large datasets
   const { data: sampleRows } = await supabase
     .from('dimension_data')
     .select('dimension_values')
     .eq('report_id', reportId)
-    .limit(100); // Sample more rows to catch all dimensions
+    .limit(20); // Reduced from 100 to 20 for faster sampling
 
   if (!sampleRows || sampleRows.length === 0) {
     console.warn(`No data found for report ${reportId}`);
@@ -264,32 +264,51 @@ async function buildMetricNameToIdMap(reportId: string): Promise<Record<string, 
 
 /**
  * Fetch dimension data for a report - optimized for large datasets
+ * Uses smaller batch sizes and avoids ORDER BY to prevent statement timeouts
  */
 async function fetchDimensionDataForReport(reportId: string): Promise<any[]> {
   const allRows: any[] = [];
-  const batchSize = 1000;
+  const batchSize = 500; // Reduced batch size to avoid timeout
   let offset = 0;
   let hasMore = true;
+  let retryCount = 0;
+  const maxRetries = 3;
 
   while (hasMore) {
-    const { data, error } = await supabase
-      .from('dimension_data')
-      .select('dimension_values')
-      .eq('report_id', reportId)
-      .order('row_number', { ascending: true })
-      .range(offset, offset + batchSize - 1);
+    try {
+      // Remove ORDER BY to speed up query - order doesn't matter for aggregation
+      const { data, error } = await supabase
+        .from('dimension_data')
+        .select('dimension_values')
+        .eq('report_id', reportId)
+        .range(offset, offset + batchSize - 1);
 
-    if (error) throw error;
+      if (error) {
+        // Check for timeout error and retry with smaller batch
+        if (error.message?.includes('timeout') && retryCount < maxRetries) {
+          console.warn(`[pivot] Batch timeout at offset ${offset}, retrying with delay...`);
+          retryCount++;
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+          continue;
+        }
+        throw error;
+      }
 
-    if (data && data.length > 0) {
-      allRows.push(...data.map(row => row.dimension_values));
-      offset += batchSize;
-      hasMore = data.length === batchSize;
-    } else {
-      hasMore = false;
+      if (data && data.length > 0) {
+        allRows.push(...data.map(row => row.dimension_values));
+        offset += batchSize;
+        hasMore = data.length === batchSize;
+        retryCount = 0; // Reset retry count on success
+      } else {
+        hasMore = false;
+      }
+    } catch (err: any) {
+      console.error(`[pivot] Error fetching batch at offset ${offset}:`, err);
+      throw err;
     }
   }
 
+  console.log(`[pivot] Fetched ${allRows.length} rows for report ${reportId}`);
   return allRows;
 }
 
