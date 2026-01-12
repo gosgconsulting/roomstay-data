@@ -402,7 +402,8 @@ const BreakdownTable = ({
 export default function SlideViewPage() {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
-  const { user } = useUser();
+  const { data: userData } = useUser();
+  const user = userData?.user || null;
   const [selectedYear, setSelectedYear] = useState("2025");
   const [selectedMonth, setSelectedMonth] = useState("December");
   const [selectedTab, setSelectedTab] = useState("overview");
@@ -468,11 +469,37 @@ export default function SlideViewPage() {
     loadOrCreateSlideReport();
   }, [accountId, user, slideReports]);
 
-  // Step-by-step modal state
-  type ModalStep = 1 | 2 | 3 | 4;
+  // Step-by-step modal state (5 steps now)
+  type ModalStep = 1 | 2 | 3 | 4 | 5;
   const [modalStep, setModalStep] = useState<ModalStep>(1);
   const [activeChannelTab, setActiveChannelTab] = useState<'metasearch' | 'sem' | 'social' | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Channel to Report ID mapping for Brady Hotels (hardcoded)
+  const CHANNEL_REPORT_IDS: Record<string, string> = {
+    metasearch: '2eff17d0-38de-4d5d-a15b-69ad13788c92',
+    sem: '3b2a0e45-33be-4eec-911e-b955b951c84e',
+    social: '8c2f7db9-acbd-4c59-9593-74e8953e7787',
+  };
+
+  // Channel dimension mappings state (for step 2 - Dimensions)
+  interface ChannelDimensionMapping {
+    reportId: string;
+    selectedDimensionIds: string[];
+  }
+  const [channelDimensionMappings, setChannelDimensionMappings] = useState<Record<string, ChannelDimensionMapping>>({
+    metasearch: { reportId: CHANNEL_REPORT_IDS.metasearch, selectedDimensionIds: [] },
+    sem: { reportId: CHANNEL_REPORT_IDS.sem, selectedDimensionIds: [] },
+    social: { reportId: CHANNEL_REPORT_IDS.social, selectedDimensionIds: [] },
+  });
+
+  // Available dimensions per channel (fetched from database)
+  const [availableDimensions, setAvailableDimensions] = useState<Record<string, { id: string; name: string; type: string }[]>>({
+    metasearch: [],
+    sem: [],
+    social: [],
+  });
+  const [loadingAvailableDimensions, setLoadingAvailableDimensions] = useState(false);
 
   // Channel configuration state
   interface ChannelConfig {
@@ -774,10 +801,63 @@ export default function SlideViewPage() {
     );
   }, [activeChannelTab, dimensionValues, searchQuery]);
 
+  // Load available dimensions from database for all selected channels
+  const loadAvailableDimensions = async () => {
+    if (!accountId) return;
+    
+    setLoadingAvailableDimensions(true);
+    try {
+      // Fetch dimensions for the account (text type dimensions for filtering/breakdown)
+      const { data: dims, error } = await supabase
+        .from('dimensions')
+        .select('id, name, type')
+        .eq('account_id', accountId)
+        .in('type', ['text', 'date'])
+        .order('name');
+      
+      if (error) {
+        console.error('Error loading dimensions:', error);
+        return;
+      }
+
+      const dimensionList = dims || [];
+      
+      // Set same dimensions for all channels (account-scoped)
+      setAvailableDimensions({
+        metasearch: dimensionList,
+        sem: dimensionList,
+        social: dimensionList,
+      });
+    } catch (error) {
+      console.error('Error loading available dimensions:', error);
+    } finally {
+      setLoadingAvailableDimensions(false);
+    }
+  };
+
+  // Handle dimension selection toggle for channel
+  const handleChannelDimensionToggle = (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
+    setChannelDimensionMappings(prev => {
+      const current = prev[channel];
+      const isSelected = current.selectedDimensionIds.includes(dimensionId);
+      return {
+        ...prev,
+        [channel]: {
+          ...current,
+          selectedDimensionIds: isSelected
+            ? current.selectedDimensionIds.filter(id => id !== dimensionId)
+            : [...current.selectedDimensionIds, dimensionId],
+        },
+      };
+    });
+  };
+
   // Navigation handlers
-  const handleNext = () => {
+  const handleNext = async () => {
     if (modalStep === 1) {
       if (selectedChannels.length > 0) {
+        // Load dimensions when moving to step 2
+        await loadAvailableDimensions();
         setModalStep(2);
       }
     } else if (modalStep === 2) {
@@ -785,6 +865,8 @@ export default function SlideViewPage() {
     } else if (modalStep === 3) {
       setModalStep(4);
     } else if (modalStep === 4) {
+      setModalStep(5);
+    } else if (modalStep === 5) {
       // Save and close
       handleSave();
     }
@@ -797,6 +879,8 @@ export default function SlideViewPage() {
       setModalStep(2);
     } else if (modalStep === 4) {
       setModalStep(3);
+    } else if (modalStep === 5) {
+      setModalStep(4);
     }
   };
 
@@ -825,7 +909,7 @@ export default function SlideViewPage() {
         }
       }
 
-      // Build configuration object
+      // Build configuration object with dimension mappings
       const configuration: SlideReportConfiguration = {
         selectedChannels: selectedChannels,
         channelConfigs: channelConfigs,
@@ -833,11 +917,11 @@ export default function SlideViewPage() {
         filterConfigs: filterConfigs,
       };
 
-      // Map channel names to report IDs (TODO: fetch actual report IDs from database)
-      // For now, we'll need to fetch reports by name or create a mapping
+      // Use actual report IDs from our mapping
       const reportIds: Record<string, string> = {};
-      // TODO: Implement logic to map channels to actual report IDs
-      // This could be done by fetching reports with matching names or storing the mapping
+      for (const channel of selectedChannels) {
+        reportIds[channel] = CHANNEL_REPORT_IDS[channel];
+      }
 
       // Calculate date range
       const monthNumber = new Date(`${selectedMonth} 1, ${selectedYear}`).getMonth();
@@ -883,6 +967,11 @@ export default function SlideViewPage() {
     setModalStep(1);
     setActiveChannelTab(null);
     setSearchQuery("");
+    setChannelDimensionMappings({
+      metasearch: { reportId: CHANNEL_REPORT_IDS.metasearch, selectedDimensionIds: [] },
+      sem: { reportId: CHANNEL_REPORT_IDS.sem, selectedDimensionIds: [] },
+      social: { reportId: CHANNEL_REPORT_IDS.social, selectedDimensionIds: [] },
+    });
     setChannelConfigs({
       metasearch: { dimensionId: null, selectedValues: [] },
       sem: { dimensionId: null, selectedValues: [] },
@@ -1133,9 +1222,10 @@ export default function SlideViewPage() {
               <Sparkles className="h-5 w-5 text-primary" />
                 <DialogTitle>
                   {modalStep === 1 && "Select Channels"}
-                  {modalStep === 2 && "Select Dimension"}
-                  {modalStep === 3 && "Breakdown Dimensions"}
-                  {modalStep === 4 && "Filters"}
+                  {modalStep === 2 && "Dimensions"}
+                  {modalStep === 3 && "Select Dimension Values"}
+                  {modalStep === 4 && "Breakdown Dimensions"}
+                  {modalStep === 5 && "Filters"}
                 </DialogTitle>
             </div>
               <Button
@@ -1203,8 +1293,127 @@ export default function SlideViewPage() {
           </div>
             )}
 
-            {/* Step 2: Dimension & Value Selection */}
+            {/* Step 2: Dimensions - Select which dimensions to connect */}
             {modalStep === 2 && (
+              <div className="flex h-[400px] gap-4">
+                {/* Left: Channel tabs */}
+                <div className="w-48 border-r pr-4">
+                  <ScrollArea className="h-full">
+                    <div className="space-y-1">
+                      {selectedChannels.map(channel => {
+                        const mapping = channelDimensionMappings[channel];
+                        const dimCount = mapping?.selectedDimensionIds.length || 0;
+                        return (
+                          <button
+                            key={channel}
+                            className={cn(
+                              "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
+                              activeChannelTab === channel
+                                ? "bg-primary text-primary-foreground"
+                                : "hover:bg-muted"
+                            )}
+                            onClick={() => setActiveChannelTab(channel)}
+                          >
+                            <span className="truncate capitalize">{channel}</span>
+                            {dimCount > 0 && (
+                              <span className="text-xs opacity-70">{dimCount}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                </div>
+
+                {/* Right: Dimension selector */}
+                <div className="flex-1 flex flex-col gap-4">
+                  {loadingAvailableDimensions ? (
+                    <div className="flex-1 flex items-center justify-center">
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-8 w-8 animate-spin" />
+                        <span>Loading dimensions...</span>
+                      </div>
+                    </div>
+                  ) : activeChannelTab ? (
+                    <>
+                      <div className="bg-muted/30 rounded-lg p-4 mb-2">
+                        <p className="text-sm text-muted-foreground">
+                          Select which dimensions from the <span className="font-medium capitalize">{activeChannelTab}</span> report to include in this slide. These are the dimensions that will be available for filtering and breakdown.
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Report ID: <code className="bg-muted px-1 rounded">{CHANNEL_REPORT_IDS[activeChannelTab]}</code>
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <Label className="text-sm font-medium mb-2 block">
+                          Available Dimensions
+                        </Label>
+                        <ScrollArea className="h-[250px] border rounded-md">
+                          <div className="p-2 space-y-1">
+                            {availableDimensions[activeChannelTab]?.length > 0 ? (
+                              availableDimensions[activeChannelTab].map(dim => {
+                                const isSelected = channelDimensionMappings[activeChannelTab]?.selectedDimensionIds?.includes(dim.id) || false;
+                                return (
+                                  <div
+                                    key={dim.id}
+                                    className={cn(
+                                      "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
+                                      isSelected
+                                        ? "bg-primary/10"
+                                        : "hover:bg-muted/50"
+                                    )}
+                                    onClick={() => handleChannelDimensionToggle(activeChannelTab, dim.id)}
+                                  >
+                                    <Checkbox
+                                      checked={isSelected}
+                                      onCheckedChange={() => handleChannelDimensionToggle(activeChannelTab, dim.id)}
+                                    />
+                                    <div className="flex-1">
+                                      <span className="text-sm">{dim.name}</span>
+                                      <span className="ml-2 text-xs text-muted-foreground">({dim.type})</span>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <p className="text-center text-muted-foreground py-4">
+                                No dimensions available for this account
+                              </p>
+                            )}
+                          </div>
+                        </ScrollArea>
+                      </div>
+
+                      {(channelDimensionMappings[activeChannelTab]?.selectedDimensionIds?.length || 0) > 0 && (
+                        <div className="mt-2 p-4 bg-primary/5 rounded-lg border border-primary/20">
+                          <p className="text-sm font-medium mb-2">
+                            Selected ({channelDimensionMappings[activeChannelTab]?.selectedDimensionIds?.length || 0}):
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {channelDimensionMappings[activeChannelTab]?.selectedDimensionIds?.map(dimId => {
+                              const dim = availableDimensions[activeChannelTab]?.find(d => d.id === dimId);
+                              return dim ? (
+                                <span key={dimId} className="px-2 py-1 bg-primary/10 rounded text-xs">
+                                  {dim.name}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                      Select a channel to configure its dimensions
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Dimension & Value Selection */}
+            {modalStep === 3 && (
               <div className="flex h-[400px] gap-4">
                 {/* Left: Channel tabs */}
                 <div className="w-48 border-r pr-4">
@@ -1359,8 +1568,8 @@ export default function SlideViewPage() {
               </div>
             )}
 
-            {/* Step 3: Breakdown Dimensions */}
-            {modalStep === 3 && (
+            {/* Step 4: Breakdown Dimensions */}
+            {modalStep === 4 && (
               <div className="flex h-[400px] gap-4">
                 {/* Left: Channel tabs */}
                 <div className="w-48 border-r pr-4">
@@ -1463,8 +1672,8 @@ export default function SlideViewPage() {
               </div>
             )}
 
-            {/* Step 4: Filters */}
-            {modalStep === 4 && (
+            {/* Step 5: Filters */}
+            {modalStep === 5 && (
               <div className="flex h-[400px] gap-4">
                 {/* Left: Channel tabs */}
                 <div className="w-48 border-r pr-4">
@@ -1588,8 +1797,8 @@ export default function SlideViewPage() {
               onClick={handleNext}
               disabled={modalStep === 1 && selectedChannels.length === 0}
             >
-              {modalStep === 4 ? "Save" : "Next"}
-              {modalStep !== 4 && <ChevronRight className="h-4 w-4 ml-1" />}
+              {modalStep === 5 ? "Save" : "Next"}
+              {modalStep !== 5 && <ChevronRight className="h-4 w-4 ml-1" />}
             </Button>
           </div>
         </DialogContent>

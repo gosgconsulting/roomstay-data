@@ -458,6 +458,7 @@ export default function DataSourcesPage() {
             }}
             dataSource={editingDataSource}
             accountId={accountId}
+            onSuccess={loadDataSources}
           />
         </>
       )}
