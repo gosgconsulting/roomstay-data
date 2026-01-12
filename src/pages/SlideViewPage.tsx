@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles, Search, Loader2, Database } from "lucide-react";
+import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles, Search, Loader2, Database, Check } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1149,7 +1149,17 @@ export default function SlideViewPage() {
     social: false,
   });
 
-  // Breakdown dimensions per channel (loaded from data sources)
+  // Refresh Data Modal state
+  const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
+  const [refreshStep, setRefreshStep] = useState(0); // 0 = not started, 1-4 = steps
+  const [refreshStepStatus, setRefreshStepStatus] = useState<Record<number, 'pending' | 'loading' | 'complete' | 'error'>>({
+    1: 'pending',
+    2: 'pending',
+    3: 'pending',
+    4: 'pending',
+  });
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+
   const [breakdownDimensions, setBreakdownDimensions] = useState<Record<string, Dimension[]>>({
     metasearch: [],
     sem: [],
@@ -1887,6 +1897,90 @@ export default function SlideViewPage() {
     }
   };
 
+  // Handle Refresh Data with step-by-step modal
+  const handleRefreshDataWithModal = async () => {
+    if (!slideReportId) {
+      toast({
+        title: "No configuration",
+        description: "Please save your configuration in Edit Source first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Open modal and reset state
+    setIsRefreshModalOpen(true);
+    setRefreshStep(1);
+    setRefreshError(null);
+    setRefreshStepStatus({
+      1: 'loading',
+      2: 'pending',
+      3: 'pending',
+      4: 'pending',
+    });
+
+    try {
+      // Step 1: Fetching from data sources
+      await new Promise(resolve => setTimeout(resolve, 800)); // Simulate fetch
+      setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'loading' }));
+      setRefreshStep(2);
+
+      // Step 2: Set up filters and configurations
+      await new Promise(resolve => setTimeout(resolve, 600));
+      setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'loading' }));
+      setRefreshStep(3);
+
+      // Step 3: Create pivot tables - this is the actual data computation
+      const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
+      
+      if (!slideReport?.date_range) {
+        throw new Error("Date range not set for slide report");
+      }
+
+      const pivotData = await computeSlideReportPivotData(
+        slideReport.report_ids as unknown as Record<string, string>,
+        slideReport.configuration as unknown as SlideReportConfiguration,
+        slideReport.date_range as unknown as SlideReportDateRange
+      );
+      
+      setRefreshStepStatus(prev => ({ ...prev, 3: 'complete', 4: 'loading' }));
+      setRefreshStep(4);
+
+      // Step 4: Replace data - save to database
+      const { error: updateError } = await supabase
+        .from("slide_reports")
+        .update({
+          pivot_data: pivotData as any,
+          last_refreshed_at: new Date().toISOString(),
+        })
+        .eq("id", slideReportId);
+
+      if (updateError) throw updateError;
+      
+      setRefreshStepStatus(prev => ({ ...prev, 4: 'complete' }));
+      
+      // Success - wait a moment then close
+      await new Promise(resolve => setTimeout(resolve, 800));
+      setIsRefreshModalOpen(false);
+      
+      // Invalidate queries to refresh the data
+      refreshSlideReportData.reset();
+      toast({ 
+        title: "Data refreshed", 
+        description: "Slide report data has been updated successfully." 
+      });
+      
+      // Reload the page data
+      window.location.reload();
+      
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+      const currentStep = refreshStep;
+      setRefreshStepStatus(prev => ({ ...prev, [currentStep]: 'error' }));
+      setRefreshError(error instanceof Error ? error.message : "Failed to refresh data");
+    }
+  };
+
   // Get comparison data based on selection
   const getComparisonData = () => {
     if (comparisonType === "previous_period") {
@@ -2101,27 +2195,18 @@ export default function SlideViewPage() {
               Edit Source
             </Button>
             <Button 
-              variant="outline" 
+              variant="default" 
               size="sm" 
-              onClick={() => {
-                if (slideReportId) {
-                  refreshSlideReportData.mutate(slideReportId);
-                } else {
-                  toast({
-                    title: "No configuration",
-                    description: "Please save your configuration in Edit Source first.",
-                    variant: "destructive",
-                  });
-                }
-              }}
-              disabled={refreshSlideReportData.isPending}
+              onClick={handleRefreshDataWithModal}
+              disabled={isRefreshModalOpen}
+              className="bg-primary hover:bg-primary/90"
             >
-              {refreshSlideReportData.isPending ? (
+              {isRefreshModalOpen ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <RefreshCw className="h-4 w-4 mr-2" />
               )}
-              {refreshSlideReportData.isPending ? "Refreshing..." : "Refresh Data"}
+              Refresh Data
             </Button>
           </div>
         </div>
@@ -3387,6 +3472,180 @@ export default function SlideViewPage() {
           </Tabs>
         </div>
       </div>
+
+      {/* Refresh Data Modal */}
+      <Dialog open={isRefreshModalOpen} onOpenChange={(open) => !open && !refreshStep && setIsRefreshModalOpen(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <RefreshCw className={cn("h-5 w-5 text-primary", refreshStep > 0 && refreshStep < 5 && "animate-spin")} />
+              <DialogTitle>Refreshing Data</DialogTitle>
+            </div>
+            <DialogDescription>
+              Updating your slide report with the latest data...
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* Step 1: Fetching from data sources */}
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
+                refreshStepStatus[1] === 'complete' && "bg-green-100 text-green-700",
+                refreshStepStatus[1] === 'loading' && "bg-primary/20 text-primary",
+                refreshStepStatus[1] === 'error' && "bg-red-100 text-red-700",
+                refreshStepStatus[1] === 'pending' && "bg-muted text-muted-foreground"
+              )}>
+                {refreshStepStatus[1] === 'complete' ? (
+                  <Check className="h-4 w-4" />
+                ) : refreshStepStatus[1] === 'loading' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : refreshStepStatus[1] === 'error' ? (
+                  <span>!</span>
+                ) : (
+                  "1"
+                )}
+              </div>
+              <div className="flex-1">
+                <p className={cn(
+                  "font-medium",
+                  refreshStepStatus[1] === 'complete' && "text-green-700",
+                  refreshStepStatus[1] === 'loading' && "text-foreground",
+                  refreshStepStatus[1] === 'error' && "text-red-700",
+                  refreshStepStatus[1] === 'pending' && "text-muted-foreground"
+                )}>
+                  Fetching from data sources
+                </p>
+                <p className="text-sm text-muted-foreground">Connecting to Google Sheets and CSV sources</p>
+              </div>
+            </div>
+
+            {/* Step 2: Set up filters and configurations */}
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
+                refreshStepStatus[2] === 'complete' && "bg-green-100 text-green-700",
+                refreshStepStatus[2] === 'loading' && "bg-primary/20 text-primary",
+                refreshStepStatus[2] === 'error' && "bg-red-100 text-red-700",
+                refreshStepStatus[2] === 'pending' && "bg-muted text-muted-foreground"
+              )}>
+                {refreshStepStatus[2] === 'complete' ? (
+                  <Check className="h-4 w-4" />
+                ) : refreshStepStatus[2] === 'loading' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : refreshStepStatus[2] === 'error' ? (
+                  <span>!</span>
+                ) : (
+                  "2"
+                )}
+              </div>
+              <div className="flex-1">
+                <p className={cn(
+                  "font-medium",
+                  refreshStepStatus[2] === 'complete' && "text-green-700",
+                  refreshStepStatus[2] === 'loading' && "text-foreground",
+                  refreshStepStatus[2] === 'error' && "text-red-700",
+                  refreshStepStatus[2] === 'pending' && "text-muted-foreground"
+                )}>
+                  Applying filters & configuration
+                </p>
+                <p className="text-sm text-muted-foreground">Using your saved dimension and filter settings</p>
+              </div>
+            </div>
+
+            {/* Step 3: Create pivot tables */}
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
+                refreshStepStatus[3] === 'complete' && "bg-green-100 text-green-700",
+                refreshStepStatus[3] === 'loading' && "bg-primary/20 text-primary",
+                refreshStepStatus[3] === 'error' && "bg-red-100 text-red-700",
+                refreshStepStatus[3] === 'pending' && "bg-muted text-muted-foreground"
+              )}>
+                {refreshStepStatus[3] === 'complete' ? (
+                  <Check className="h-4 w-4" />
+                ) : refreshStepStatus[3] === 'loading' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : refreshStepStatus[3] === 'error' ? (
+                  <span>!</span>
+                ) : (
+                  "3"
+                )}
+              </div>
+              <div className="flex-1">
+                <p className={cn(
+                  "font-medium",
+                  refreshStepStatus[3] === 'complete' && "text-green-700",
+                  refreshStepStatus[3] === 'loading' && "text-foreground",
+                  refreshStepStatus[3] === 'error' && "text-red-700",
+                  refreshStepStatus[3] === 'pending' && "text-muted-foreground"
+                )}>
+                  Creating pivot tables
+                </p>
+                <p className="text-sm text-muted-foreground">Aggregating metrics by dimensions</p>
+              </div>
+            </div>
+
+            {/* Step 4: Replace data */}
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
+                refreshStepStatus[4] === 'complete' && "bg-green-100 text-green-700",
+                refreshStepStatus[4] === 'loading' && "bg-primary/20 text-primary",
+                refreshStepStatus[4] === 'error' && "bg-red-100 text-red-700",
+                refreshStepStatus[4] === 'pending' && "bg-muted text-muted-foreground"
+              )}>
+                {refreshStepStatus[4] === 'complete' ? (
+                  <Check className="h-4 w-4" />
+                ) : refreshStepStatus[4] === 'loading' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : refreshStepStatus[4] === 'error' ? (
+                  <span>!</span>
+                ) : (
+                  "4"
+                )}
+              </div>
+              <div className="flex-1">
+                <p className={cn(
+                  "font-medium",
+                  refreshStepStatus[4] === 'complete' && "text-green-700",
+                  refreshStepStatus[4] === 'loading' && "text-foreground",
+                  refreshStepStatus[4] === 'error' && "text-red-700",
+                  refreshStepStatus[4] === 'pending' && "text-muted-foreground"
+                )}>
+                  Replacing data
+                </p>
+                <p className="text-sm text-muted-foreground">Saving updated data without duplicates</p>
+              </div>
+            </div>
+
+            {/* Error message */}
+            {refreshError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700">{refreshError}</p>
+              </div>
+            )}
+
+            {/* All complete message */}
+            {refreshStepStatus[4] === 'complete' && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+                <Check className="h-4 w-4 text-green-600" />
+                <p className="text-sm text-green-700 font-medium">Data refresh complete!</p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            {refreshError ? (
+              <Button onClick={() => setIsRefreshModalOpen(false)}>Close</Button>
+            ) : refreshStepStatus[4] === 'complete' ? (
+              <Button onClick={() => setIsRefreshModalOpen(false)} className="bg-green-600 hover:bg-green-700">
+                Done
+              </Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
