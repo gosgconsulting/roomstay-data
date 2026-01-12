@@ -1000,13 +1000,22 @@ export default function SlideViewPage() {
                 setFilterConfigs(config.filterConfigs as any);
               }
             }
-            // Load date range
+            // Load date range - default to 2026 (latest year)
             if (masterReport.date_range) {
-              setSelectedYear(masterReport.date_range.year.toString());
-              setSelectedMonth(masterReport.date_range.month);
+              const storedYear = masterReport.date_range.year;
+              const latestYear = 2026;
+              const yearToUse = storedYear >= latestYear ? storedYear : latestYear;
+              setSelectedYear(yearToUse.toString());
+              setSelectedMonth(masterReport.date_range.month || 'January');
               // Also set sinceMonth/sinceYear for Edit Source modal
-              setSinceMonth(masterReport.date_range.month);
-              setSinceYear(masterReport.date_range.year);
+              setSinceMonth(masterReport.date_range.month || 'January');
+              setSinceYear(yearToUse);
+            } else {
+              // No date range stored, default to latest
+              setSelectedYear('2026');
+              setSelectedMonth('January');
+              setSinceMonth('January');
+              setSinceYear(2026);
             }
           } else {
             // Create new Master Report slide report
@@ -1080,13 +1089,22 @@ export default function SlideViewPage() {
               setFilterConfigs(config.filterConfigs);
             }
           }
-          // Load date range
+          // Load date range - default to 2026 (latest year)
           if (existingReport.date_range) {
-            setSelectedYear(existingReport.date_range.year.toString());
-            setSelectedMonth(existingReport.date_range.month);
+            const storedYear = existingReport.date_range.year;
+            const latestYear = 2026;
+            const yearToUse = storedYear >= latestYear ? storedYear : latestYear;
+            setSelectedYear(yearToUse.toString());
+            setSelectedMonth(existingReport.date_range.month || 'January');
             // Also set sinceMonth/sinceYear for Edit Source modal
-            setSinceMonth(existingReport.date_range.month);
-            setSinceYear(existingReport.date_range.year);
+            setSinceMonth(existingReport.date_range.month || 'January');
+            setSinceYear(yearToUse);
+          } else {
+            // No date range stored, default to latest
+            setSelectedYear('2026');
+            setSelectedMonth('January');
+            setSinceMonth('January');
+            setSinceYear(2026);
           }
         }
       } catch (error) {
