@@ -809,7 +809,7 @@ export default function SlideViewPage() {
   // Slide report state - moved before currentTotals so it's available
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
   const { data: slideReport } = useSlideReport(slideReportId);
-  const { data: slideReports } = useSlideReports(accountId || null);
+  const { data: slideReports, isLoading: isSlideReportsLoading } = useSlideReports(accountId || null);
   const queryClient = useQueryClient();
   const createSlideReport = useCreateSlideReport();
   const updateSlideReport = useUpdateSlideReport();
@@ -1013,6 +1013,12 @@ export default function SlideViewPage() {
   useEffect(() => {
     const loadOrCreateSlideReport = async () => {
       if (!accountId || !user) return;
+      
+      // Wait for slideReports to finish loading before deciding to create
+      if (isSlideReportsLoading) {
+        console.log('[loadOrCreateSlideReport] Waiting for slideReports to load...');
+        return;
+      }
 
       try {
         // Check if a specific reportId is passed via URL parameter
@@ -1064,9 +1070,14 @@ export default function SlideViewPage() {
           }
         }
 
-        // For master-report, look for or create a slide report with name "Master Report"
+        // For master-report, look for the FIRST (oldest) Master Report to avoid duplicates
         if (slideType === 'master-report') {
-          const masterReport = slideReports?.find(r => r.name === 'Master Report' && r.is_active);
+          // Find all Master Reports and use the oldest one (first created)
+          const masterReports = (slideReports || [])
+            .filter(r => r.name === 'Master Report' && r.is_active)
+            .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+          
+          const masterReport = masterReports[0]; // Use the oldest one
           
           if (masterReport) {
             setSlideReportId(masterReport.id);
@@ -1110,8 +1121,15 @@ export default function SlideViewPage() {
               setSinceMonth('January');
               setSinceYear(currentYear);
             }
+            
+            // Log if there are duplicates that should be cleaned up
+            if (masterReports.length > 1) {
+              console.warn(`[loadOrCreateSlideReport] Found ${masterReports.length} Master Reports for this account. Using oldest one: ${masterReport.id}`);
+            }
           } else {
             // Create new Master Report slide report with current year as default
+            // Only create if we've confirmed slideReports are loaded and none exist
+            console.log('[loadOrCreateSlideReport] No Master Report found, creating new one...');
             const currentYear = new Date().getFullYear();
             const newReport = await createSlideReport.mutateAsync({
               name: 'Master Report',
@@ -1208,7 +1226,7 @@ export default function SlideViewPage() {
 
     loadOrCreateSlideReport();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, user?.id, slideReports?.length, slideType]);
+  }, [accountId, user?.id, slideReports, slideType, isSlideReportsLoading]);
 
   // Keep local state in sync with slideReport.configuration
   useEffect(() => {
