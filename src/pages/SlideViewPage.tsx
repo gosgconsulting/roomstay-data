@@ -3194,6 +3194,130 @@ export default function SlideViewPage() {
               <TabsTrigger value="social">Social</TabsTrigger>
               <TabsTrigger value="budget">Budget</TabsTrigger>
             </TabsList>
+            
+            {/* Channel Filter Dropdowns in Header - Show when on channel tabs */}
+            {selectedTab !== "overview" && selectedTab !== "budget" && (() => {
+              const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
+              const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
+              const filterDimIds = savedFilterConfigs?.filterDimensionIds || filterConfigs[currentChannel]?.filterDimensionIds || [];
+              
+              if (filterDimIds.length === 0) return null;
+              
+              return (
+                <div className="flex items-center gap-2 ml-4 pl-4 border-l">
+                  {filterDimIds.map(filterDimId => {
+                    const filterDimName = filterDimensionNames[currentChannel]?.[filterDimId] 
+                                       || dimensions[currentChannel]?.find(d => d.id === filterDimId)?.name
+                                       || `Filter`;
+                    const filterValuesList = filterDimensionValues[currentChannel]?.[filterDimId] || [];
+                    
+                    if (filterValuesList.length === 0) {
+                      return (
+                        <Button key={`header-${currentChannel}-${filterDimId}`} variant="outline" size="sm" className="h-8" disabled>
+                          <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                          {filterDimName}
+                        </Button>
+                      );
+                    }
+                    
+                    const selectedFilterValues = filterValues[currentChannel]?.[filterDimId] || [];
+                    const isAllSelected = selectedFilterValues.length === 0 || selectedFilterValues.length === filterValuesList.length;
+                    
+                    return (
+                      <Popover key={`header-${currentChannel}-${filterDimId}`}>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-8 justify-between min-w-[140px]">
+                            <span className="truncate text-xs">
+                              {isAllSelected 
+                                ? `All ${filterDimName}` 
+                                : selectedFilterValues.length === 1
+                                  ? selectedFilterValues[0]
+                                  : `${selectedFilterValues.length} selected`}
+                            </span>
+                            <ChevronRight className="h-3 w-3 opacity-50 rotate-90 ml-1" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[250px] p-0 bg-popover z-50" align="start">
+                          <div className="p-2">
+                            <div className="flex items-center justify-between mb-2">
+                              <Label className="text-sm font-medium">{filterDimName}</Label>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs"
+                                  onClick={() => {
+                                    setFilterValues(prev => ({
+                                      ...prev,
+                                      [currentChannel]: {
+                                        ...prev[currentChannel],
+                                        [filterDimId]: [...filterValuesList],
+                                      },
+                                    }));
+                                  }}
+                                >
+                                  All
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs"
+                                  onClick={() => {
+                                    setFilterValues(prev => ({
+                                      ...prev,
+                                      [currentChannel]: {
+                                        ...prev[currentChannel],
+                                        [filterDimId]: [],
+                                      },
+                                    }));
+                                  }}
+                                >
+                                  Clear
+                                </Button>
+                              </div>
+                            </div>
+                            <ScrollArea className="h-[200px]">
+                              <div className="space-y-1 p-1">
+                                {filterValuesList.map(value => {
+                                  const isSelected = selectedFilterValues.includes(value);
+                                  return (
+                                    <div
+                                      key={value}
+                                      className={cn(
+                                        "flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent text-sm",
+                                        isSelected && "bg-accent"
+                                      )}
+                                      onClick={() => {
+                                        setFilterValues(prev => {
+                                          const current = prev[currentChannel]?.[filterDimId] || [];
+                                          const newValues = isSelected
+                                            ? current.filter(v => v !== value)
+                                            : [...current, value];
+                                          return {
+                                            ...prev,
+                                            [currentChannel]: {
+                                              ...prev[currentChannel],
+                                              [filterDimId]: newValues,
+                                            },
+                                          };
+                                        });
+                                      }}
+                                    >
+                                      <Checkbox checked={isSelected} />
+                                      <span className="truncate">{value}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </ScrollArea>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setIsDataModalOpen(true)}>
