@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,6 +50,7 @@ export default function SlidesPage() {
   const [reportToDelete, setReportToDelete] = useState<SlideReport | null>(null);
   const [deleteReportDialogOpen, setDeleteReportDialogOpen] = useState(false);
 
+  const queryClient = useQueryClient();
   const { data: slides = [], isLoading: slidesLoading } = useSlides(accountId || null);
   const { data: slideReports = [], isLoading: slideReportsLoading } = useSlideReports(accountId || null);
   const deleteSlide = useDeleteSlide();
@@ -65,38 +67,47 @@ export default function SlidesPage() {
     }
   }, [session, accountId]);
 
-  // Cleanup duplicate Master Reports - keep only the oldest one
+  // Cleanup duplicate Master Reports - keep only the oldest one (runs once)
+  const [cleanupDone, setCleanupDone] = useState(false);
   useEffect(() => {
     const cleanupDuplicateMasterReports = async () => {
-      if (!slideReports || slideReportsLoading || !session || !accountId) return;
+      if (!slideReports || slideReportsLoading || !session || !accountId || cleanupDone) return;
       
       const masterReports = slideReports
         .filter(r => r.name === 'Master Report')
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       
       if (masterReports.length > 1) {
+        setCleanupDone(true); // Prevent re-running
         console.log(`[cleanup] Found ${masterReports.length} duplicate Master Reports, removing extras...`);
         // Keep the oldest one, delete the rest
         const reportsToDelete = masterReports.slice(1);
         
+        // Use direct Supabase delete to avoid toast spam
         for (const report of reportsToDelete) {
           try {
-            await deleteSlideReport.mutateAsync({ id: report.id, account_id: accountId });
+            await supabase.from("slide_reports").delete().eq("id", report.id);
             console.log(`[cleanup] Deleted duplicate Master Report: ${report.id}`);
           } catch (error) {
             console.error(`[cleanup] Failed to delete duplicate: ${report.id}`, error);
           }
         }
         
+        // Single toast at the end
         toast({
           title: "Cleaned up duplicates",
           description: `Removed ${reportsToDelete.length} duplicate Master Report(s).`,
         });
+        
+        // Refresh once after cleanup
+        queryClient.invalidateQueries({ queryKey: ["slide-reports", accountId] });
+      } else {
+        setCleanupDone(true); // No duplicates, mark as done
       }
     };
     
     cleanupDuplicateMasterReports();
-  }, [slideReports, slideReportsLoading, session, accountId]);
+  }, [slideReports, slideReportsLoading, session, accountId, cleanupDone]);
 
   const checkAuth = async () => {
     try {
