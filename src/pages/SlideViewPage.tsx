@@ -3397,20 +3397,23 @@ export default function SlideViewPage() {
               <Settings2 className="h-4 w-4 mr-2" />
               Edit Source
             </Button>
-            <Button 
-              variant="default" 
-              size="sm" 
-              onClick={handleRefreshDataWithModal}
-              disabled={isRefreshModalOpen}
-              className="bg-primary hover:bg-primary/90"
-            >
-              {isRefreshModalOpen ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Refresh Data
-            </Button>
+            {/* Only show Refresh Data button for master reports (not child reports) */}
+            {!slideReport?.configuration?.isChildReport && (
+              <Button 
+                variant="default" 
+                size="sm" 
+                onClick={handleRefreshDataWithModal}
+                disabled={isRefreshModalOpen}
+                className="bg-primary hover:bg-primary/90"
+              >
+                {isRefreshModalOpen ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Refresh Data
+              </Button>
+            )}
           </div>
         </div>
       </div>

@@ -22,6 +22,14 @@ export interface SlideReportConfiguration {
       filterDimensionIds: string[];
     };
   };
+  // Child report properties
+  parentReportId?: string;
+  isChildReport?: boolean;
+  childFilterSelections?: {
+    metasearch: Record<string, string[]>;
+    sem: Record<string, string[]>;
+    social: Record<string, string[]>;
+  };
 }
 
 export interface ChannelMetrics {
