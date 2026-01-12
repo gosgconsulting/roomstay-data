@@ -1035,17 +1035,17 @@ export default function SlideViewPage() {
               },
               report_ids: CHANNEL_REPORT_IDS,
               date_range: {
-                year: 2024,
+                year: 2026,
                 month: 'January',
-                from: '2024-01-01',
+                from: '2026-01-01',
                 to: new Date().toISOString().split('T')[0], // Latest available
               },
             });
             setSlideReportId(newReport.id);
-            setSelectedYear('2024');
+            setSelectedYear('2026');
             setSelectedMonth('January');
             setSinceMonth('January');
-            setSinceYear(2024);
+            setSinceYear(2026);
           }
           return;
         }
