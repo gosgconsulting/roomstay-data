@@ -900,6 +900,9 @@ export default function SlideViewPage() {
             if (masterReport.date_range) {
               setSelectedYear(masterReport.date_range.year.toString());
               setSelectedMonth(masterReport.date_range.month);
+              // Also set sinceMonth/sinceYear for Edit Source modal
+              setSinceMonth(masterReport.date_range.month);
+              setSinceYear(masterReport.date_range.year);
             }
           } else {
             // Create new Master Report slide report
@@ -933,6 +936,8 @@ export default function SlideViewPage() {
             setSlideReportId(newReport.id);
             setSelectedYear('2024');
             setSelectedMonth('January');
+            setSinceMonth('January');
+            setSinceYear(2024);
           }
           return;
         }
@@ -971,6 +976,9 @@ export default function SlideViewPage() {
           if (existingReport.date_range) {
             setSelectedYear(existingReport.date_range.year.toString());
             setSelectedMonth(existingReport.date_range.month);
+            // Also set sinceMonth/sinceYear for Edit Source modal
+            setSinceMonth(existingReport.date_range.month);
+            setSinceYear(existingReport.date_range.year);
           }
         }
       } catch (error) {
@@ -990,11 +998,15 @@ export default function SlideViewPage() {
     }
   }, [searchParams, setSearchParams]);
 
-  // Step-by-step modal state (5 steps now)
-  type ModalStep = 1 | 2 | 3 | 4 | 5;
+  // Step-by-step modal state (6 steps now: Date, Channels, Value Dimensions, Data Source, Breakdown, Filters)
+  type ModalStep = 1 | 2 | 3 | 4 | 5 | 6;
   const [modalStep, setModalStep] = useState<ModalStep>(1);
   const [activeChannelTab, setActiveChannelTab] = useState<'metasearch' | 'sem' | 'social' | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Date configuration for "Since" (Step 1)
+  const [sinceMonth, setSinceMonth] = useState<string>("January");
+  const [sinceYear, setSinceYear] = useState<number>(2024);
 
   // Channel to Report ID mapping for Brady Hotels (hardcoded)
   const CHANNEL_REPORT_IDS: Record<string, string> = {
@@ -1230,9 +1242,9 @@ export default function SlideViewPage() {
     }
   }, [isEditSourceOpen]);
 
-  // Initialize active channel tab when entering step 3 or 4 (Step 2 no longer uses channel tabs)
+  // Initialize active channel tab when entering step 4, 5, or 6 (Data Source, Breakdown, Filters)
   useEffect(() => {
-    if ((modalStep === 3 || modalStep === 4) && selectedChannels.length > 0 && !activeChannelTab) {
+    if ((modalStep === 4 || modalStep === 5 || modalStep === 6) && selectedChannels.length > 0 && !activeChannelTab) {
       setActiveChannelTab(selectedChannels[0]);
     }
   }, [modalStep, selectedChannels, activeChannelTab]);
@@ -1365,9 +1377,9 @@ export default function SlideViewPage() {
     }
   };
 
-  // Load dimensions when entering step 2, 3, or 4
+  // Load dimensions when entering step 3, 4, 5, or 6 (after Date and Channels steps)
   useEffect(() => {
-    if ((modalStep === 2 || modalStep === 3 || modalStep === 4) && isEditSourceOpen) {
+    if ((modalStep === 3 || modalStep === 4 || modalStep === 5 || modalStep === 6) && isEditSourceOpen) {
       selectedChannels.forEach(channel => {
         if (dimensions[channel].length === 0 && !loadingDimensions[channel]) {
           loadDimensionsForChannel(channel);
@@ -1376,9 +1388,9 @@ export default function SlideViewPage() {
     }
   }, [modalStep, isEditSourceOpen, selectedChannels]);
 
-  // Load breakdown dimensions when entering step 4
+  // Load breakdown dimensions when entering step 5
   useEffect(() => {
-    if (modalStep === 4 && isEditSourceOpen) {
+    if (modalStep === 5 && isEditSourceOpen) {
       selectedChannels.forEach(channel => {
         if (breakdownDimensions[channel].length === 0 && !loadingBreakdownDimensions[channel]) {
           loadBreakdownDimensionsForChannel(channel);
@@ -1613,18 +1625,21 @@ export default function SlideViewPage() {
   // Navigation handlers
   const handleNext = async () => {
     if (modalStep === 1) {
-      if (selectedChannels.length > 0) {
-        // Load dimensions when moving to step 2
-        await loadAvailableDimensions();
-        setModalStep(2);
-      }
+      // Date step -> Channels step
+      setModalStep(2);
     } else if (modalStep === 2) {
-      setModalStep(3);
+      if (selectedChannels.length > 0) {
+        // Load dimensions when moving to step 3
+        await loadAvailableDimensions();
+        setModalStep(3);
+      }
     } else if (modalStep === 3) {
       setModalStep(4);
     } else if (modalStep === 4) {
       setModalStep(5);
     } else if (modalStep === 5) {
+      setModalStep(6);
+    } else if (modalStep === 6) {
       // Save and close
       handleSave();
     }
@@ -1639,6 +1654,8 @@ export default function SlideViewPage() {
       setModalStep(3);
     } else if (modalStep === 5) {
       setModalStep(4);
+    } else if (modalStep === 6) {
+      setModalStep(5);
     }
   };
 
@@ -1683,13 +1700,13 @@ export default function SlideViewPage() {
         reportIds[channel] = CHANNEL_REPORT_IDS[channel];
       }
 
-      // Calculate date range
-      const monthNumber = new Date(`${selectedMonth} 1, ${selectedYear}`).getMonth();
+      // Calculate date range using sinceMonth and sinceYear
+      const monthNumber = new Date(`${sinceMonth} 1, ${sinceYear}`).getMonth();
       const dateRange: SlideReportDateRange = {
-        year: parseInt(selectedYear),
-        month: selectedMonth,
-        from: new Date(parseInt(selectedYear), monthNumber, 1).toISOString().split('T')[0],
-        to: new Date(parseInt(selectedYear), monthNumber + 1, 0).toISOString().split('T')[0],
+        year: sinceYear,
+        month: sinceMonth,
+        from: new Date(sinceYear, monthNumber, 1).toISOString().split('T')[0],
+        to: new Date().toISOString().split('T')[0], // Current date
       };
 
       // Save or update slide report
@@ -1703,8 +1720,11 @@ export default function SlideViewPage() {
         });
       } else {
         // Create new slide report
+        const reportName = slideType === 'master-report' 
+          ? 'Master Report' 
+          : `Brady Hotels - Since ${sinceMonth} ${sinceYear}`;
         const newReport = await createSlideReport.mutateAsync({
-          name: `Brady Hotels - ${selectedMonth} ${selectedYear}`,
+          name: reportName,
           account_id: accountId,
           user_id: user.id,
           configuration,
@@ -1713,6 +1733,10 @@ export default function SlideViewPage() {
         });
         setSlideReportId(newReport.id);
       }
+
+      // Update the display state to match the saved configuration
+      setSelectedYear(sinceYear.toString());
+      setSelectedMonth(sinceMonth);
 
       setIsEditSourceOpen(false);
       resetModalState();
@@ -1981,11 +2005,12 @@ export default function SlideViewPage() {
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
                 <DialogTitle>
-                  {modalStep === 1 && "Select Channels"}
-                  {modalStep === 2 && "Value Dimensions"}
-                  {modalStep === 3 && "Data Source"}
-                  {modalStep === 4 && "Breakdown Dimensions"}
-                  {modalStep === 5 && "Filters"}
+                  {modalStep === 1 && "Date Range"}
+                  {modalStep === 2 && "Select Channels"}
+                  {modalStep === 3 && "Value Dimensions"}
+                  {modalStep === 4 && "Data Source"}
+                  {modalStep === 5 && "Breakdown Dimensions"}
+                  {modalStep === 6 && "Filters"}
                 </DialogTitle>
             </div>
               <Button
@@ -1998,13 +2023,69 @@ export default function SlideViewPage() {
               </Button>
             </div>
             <p className="text-sm text-muted-foreground mt-2">
-              Tip: "Breakdown by" tables render on the specific report tab, not on Overview/Budget. After saving, select the report tab to view the breakdown.
+              {modalStep === 1 && "Set the starting date for your report data. All data from this date onwards will be included."}
+              {modalStep !== 1 && "Tip: \"Breakdown by\" tables render on the specific report tab, not on Overview/Budget. After saving, select the report tab to view the breakdown."}
             </p>
           </DialogHeader>
 
           <div className="flex-1 min-h-0">
-            {/* Step 1: Channel Selection */}
+            {/* Step 1: Date Range */}
             {modalStep === 1 && (
+              <div className="space-y-6 py-4">
+                <div className="bg-muted/30 rounded-lg p-4">
+                  <p className="text-sm text-muted-foreground">
+                    Select the starting point for your report. Data will be fetched from this date to the present.
+                  </p>
+                </div>
+                
+                <div className="space-y-4">
+                  <Label className="text-sm font-medium">Since</Label>
+                  <div className="flex items-center gap-4">
+                    <Select value={sinceMonth} onValueChange={setSinceMonth}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Select month" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="January">January</SelectItem>
+                        <SelectItem value="February">February</SelectItem>
+                        <SelectItem value="March">March</SelectItem>
+                        <SelectItem value="April">April</SelectItem>
+                        <SelectItem value="May">May</SelectItem>
+                        <SelectItem value="June">June</SelectItem>
+                        <SelectItem value="July">July</SelectItem>
+                        <SelectItem value="August">August</SelectItem>
+                        <SelectItem value="September">September</SelectItem>
+                        <SelectItem value="October">October</SelectItem>
+                        <SelectItem value="November">November</SelectItem>
+                        <SelectItem value="December">December</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    
+                    <Select value={sinceYear.toString()} onValueChange={(v) => setSinceYear(parseInt(v))}>
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Select year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2023">2023</SelectItem>
+                        <SelectItem value="2024">2024</SelectItem>
+                        <SelectItem value="2025">2025</SelectItem>
+                        <SelectItem value="2026">2026</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="mt-4 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                    <p className="text-sm">
+                      <span className="font-medium">Data range: </span>
+                      {sinceMonth} {sinceYear} → Present
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Channel Selection */}
+            {modalStep === 2 && (
               <div className="space-y-4">
             <div className="space-y-3">
               <div 
@@ -2053,8 +2134,8 @@ export default function SlideViewPage() {
           </div>
             )}
 
-            {/* Step 2: Value Dimensions - Applies to all selected channels */}
-            {modalStep === 2 && (
+            {/* Step 3: Value Dimensions - Applies to all selected channels */}
+            {modalStep === 3 && (
               <div className="flex flex-col h-[400px] gap-4">
                 {loadingAvailableDimensions ? (
                   <div className="flex-1 flex items-center justify-center">
@@ -2136,8 +2217,8 @@ export default function SlideViewPage() {
               </div>
             )}
 
-            {/* Step 3: Dimension & Value Selection */}
-            {modalStep === 3 && (
+            {/* Step 4: Dimension & Value Selection (Data Source) */}
+            {modalStep === 4 && (
               <div className="flex h-[400px] gap-4">
                 {/* Left: Channel tabs */}
                 <div className="w-48 border-r pr-4">
@@ -2292,8 +2373,8 @@ export default function SlideViewPage() {
               </div>
             )}
 
-            {/* Step 4: Breakdown Dimensions */}
-            {modalStep === 4 && (
+            {/* Step 5: Breakdown Dimensions */}
+            {modalStep === 5 && (
               <div className="flex h-[400px] gap-4">
                 {/* Left: Channel tabs */}
                 <div className="w-48 border-r pr-4">
@@ -2383,8 +2464,8 @@ export default function SlideViewPage() {
               </div>
             )}
 
-            {/* Step 5: Filters */}
-            {modalStep === 5 && (
+            {/* Step 6: Filters */}
+            {modalStep === 6 && (
               <div className="flex h-[400px] gap-4">
                 {/* Left: Channel tabs */}
                 <div className="w-48 border-r pr-4">
@@ -2488,10 +2569,10 @@ export default function SlideViewPage() {
             </Button>
             <Button
               onClick={handleNext}
-              disabled={modalStep === 1 && selectedChannels.length === 0}
+              disabled={modalStep === 2 && selectedChannels.length === 0}
             >
-              {modalStep === 5 ? "Save" : "Next"}
-              {modalStep !== 5 && <ChevronRight className="h-4 w-4 ml-1" />}
+              {modalStep === 6 ? "Save" : "Next"}
+              {modalStep !== 6 && <ChevronRight className="h-4 w-4 ml-1" />}
             </Button>
           </div>
         </DialogContent>
@@ -2524,7 +2605,7 @@ export default function SlideViewPage() {
               {/* Filters - Only show on individual report tabs, not on Overview or Budget */}
               {selectedTab !== "overview" && selectedTab !== "budget" && (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground mr-2">Since January 2024</span>
+                  <span className="text-sm text-muted-foreground mr-2">Since {sinceMonth} {sinceYear}</span>
                   {/* Filter Dropdowns */}
                   {selectedChannels.flatMap(channel => {
                     // For master-report, don't apply filters
