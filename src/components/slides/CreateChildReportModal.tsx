@@ -12,11 +12,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
-import { ChevronLeft, ChevronRight, Sparkles, FileText, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles, FileText, Search, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { SlideReport, SlideReportConfiguration, SlideReportPivotData } from "@/types/slideReports";
+import { SlideReport, SlideReportConfiguration } from "@/types/slideReports";
 
 interface CreateChildReportModalProps {
   open: boolean;
@@ -29,10 +36,21 @@ interface CreateChildReportModalProps {
 
 type Step = "name" | "filters";
 
+interface Dimension {
+  id: string;
+  name: string;
+  report_id: string | null;
+}
+
+interface ChannelDimensionConfig {
+  selectedDimensionId: string;
+  selectedValues: string[];
+}
+
 interface ChannelFilterSelection {
-  metasearch: Record<string, string[]>;
-  sem: Record<string, string[]>;
-  social: Record<string, string[]>;
+  metasearch: ChannelDimensionConfig;
+  sem: ChannelDimensionConfig;
+  social: ChannelDimensionConfig;
 }
 
 export function CreateChildReportModal({
@@ -49,92 +67,168 @@ export function CreateChildReportModal({
   const [isCreating, setIsCreating] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<"metasearch" | "sem" | "social">("metasearch");
   const [filterSelections, setFilterSelections] = useState<ChannelFilterSelection>({
-    metasearch: {},
-    sem: {},
-    social: {},
+    metasearch: { selectedDimensionId: "", selectedValues: [] },
+    sem: { selectedDimensionId: "", selectedValues: [] },
+    social: { selectedDimensionId: "", selectedValues: [] },
   });
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Channel dimensions - loaded from reports
+  const [channelDimensions, setChannelDimensions] = useState<Record<string, Dimension[]>>({
+    metasearch: [],
+    sem: [],
+    social: [],
+  });
+  const [isLoadingDimensions, setIsLoadingDimensions] = useState(false);
+  
+  // Dimension values - loaded when dimension is selected
+  const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
+  const [isLoadingValues, setIsLoadingValues] = useState(false);
 
-  // Get available filter values from master report's pivot data
-  const availableFilters = useMemo(() => {
-    const result: Record<string, Record<string, string[]>> = {
-      metasearch: {},
-      sem: {},
-      social: {},
+  // Get report IDs per channel from master report configuration
+  const channelReportIds = useMemo(() => {
+    const result: Record<string, string | null> = {
+      metasearch: null,
+      sem: null,
+      social: null,
     };
     
-    if (!masterReport?.pivot_data) return result;
+    if (!masterReport?.report_ids) return result;
     
-    const pivotData = masterReport.pivot_data as SlideReportPivotData;
-    const channels = pivotData.channels;
+    const reportIds = masterReport.report_ids as Record<string, string>;
+    result.metasearch = reportIds.metasearch || null;
+    result.sem = reportIds.sem || null;
+    result.social = reportIds.social || null;
     
-    if (!channels) return result;
+    return result;
+  }, [masterReport?.report_ids]);
+
+  // Load dimensions for all channels when modal opens
+  useEffect(() => {
+    if (!open || !masterReport) return;
     
-    // Extract unique values from each channel's filter data
-    Object.entries(channels).forEach(([channelKey, channelData]) => {
-      const channel = channelKey as "metasearch" | "sem" | "social";
-      if (channelData?.filterUniqueValues) {
-        Object.entries(channelData.filterUniqueValues).forEach(([dimId, dimData]) => {
-          // Handle both possible structures: { name, values } or direct array
-          const values = Array.isArray(dimData) ? dimData : (dimData as any)?.values;
-          if (Array.isArray(values) && values.length > 0) {
-            result[channel][dimId] = values;
+    const loadDimensions = async () => {
+      setIsLoadingDimensions(true);
+      try {
+        const allReportIds = Object.values(channelReportIds).filter(Boolean) as string[];
+        if (allReportIds.length === 0) return;
+        
+        const { data: dimensions, error } = await supabase
+          .from("dimensions")
+          .select("id, name, report_id")
+          .in("report_id", allReportIds)
+          .order("name");
+        
+        if (error) throw error;
+        
+        // Group dimensions by channel
+        const grouped: Record<string, Dimension[]> = {
+          metasearch: [],
+          sem: [],
+          social: [],
+        };
+        
+        dimensions?.forEach((dim) => {
+          if (dim.report_id === channelReportIds.metasearch) {
+            grouped.metasearch.push(dim);
+          } else if (dim.report_id === channelReportIds.sem) {
+            grouped.sem.push(dim);
+          } else if (dim.report_id === channelReportIds.social) {
+            grouped.social.push(dim);
           }
         });
+        
+        setChannelDimensions(grouped);
+      } catch (error) {
+        console.error("Error loading dimensions:", error);
+      } finally {
+        setIsLoadingDimensions(false);
       }
-    });
+    };
     
-    return result;
-  }, [masterReport?.pivot_data]);
+    loadDimensions();
+  }, [open, masterReport, channelReportIds]);
 
-  // Get dimension names from master report configuration
-  const dimensionNames = useMemo(() => {
-    const result: Record<string, string> = {};
+  // Load dimension values when a dimension is selected
+  const loadDimensionValues = async (dimensionId: string, reportId: string) => {
+    if (!dimensionId || !reportId) return;
     
-    if (!masterReport?.configuration) return result;
+    // Check if already loaded
+    if (dimensionValues[dimensionId]) return;
     
-    const config = masterReport.configuration as SlideReportConfiguration;
-    
-    // Get names from filterConfigs
-    if (config.filterConfigs) {
-      Object.entries(config.filterConfigs).forEach(([channel, channelConfig]) => {
-        if (channelConfig?.filterDimensionIds) {
-          Object.entries(channelConfig.filterDimensionIds).forEach(([key, dimId]) => {
-            // Use the key as fallback name
-            result[dimId as string] = key;
-          });
+    setIsLoadingValues(true);
+    try {
+      // Get data sources for this report
+      const { data: dataSources, error: dsError } = await supabase
+        .from("data_sources")
+        .select("id")
+        .eq("report_id", reportId);
+      
+      if (dsError) throw dsError;
+      if (!dataSources?.length) return;
+      
+      const dataSourceIds = dataSources.map(ds => ds.id);
+      
+      // Get dimension data
+      const { data: dimData, error: dimError } = await supabase
+        .from("dimension_data")
+        .select("dimension_values")
+        .in("data_source_id", dataSourceIds)
+        .limit(5000);
+      
+      if (dimError) throw dimError;
+      
+      // Extract unique values for this dimension
+      const uniqueValues = new Set<string>();
+      dimData?.forEach((row) => {
+        const values = row.dimension_values as Record<string, any>;
+        if (values && values[dimensionId]) {
+          uniqueValues.add(String(values[dimensionId]));
         }
       });
+      
+      const sortedValues = Array.from(uniqueValues).sort();
+      setDimensionValues(prev => ({
+        ...prev,
+        [dimensionId]: sortedValues,
+      }));
+    } catch (error) {
+      console.error("Error loading dimension values:", error);
+    } finally {
+      setIsLoadingValues(false);
     }
+  };
+
+  // Handle dimension selection change
+  const handleDimensionChange = (channel: keyof ChannelFilterSelection, dimensionId: string) => {
+    setFilterSelections(prev => ({
+      ...prev,
+      [channel]: {
+        selectedDimensionId: dimensionId,
+        selectedValues: [], // Reset values when dimension changes
+      },
+    }));
     
-    return result;
-  }, [masterReport?.configuration]);
-
-  // Initialize filter selections with all values selected by default
-  useEffect(() => {
-    if (open && masterReport) {
-      const initialSelections: ChannelFilterSelection = {
-        metasearch: {},
-        sem: {},
-        social: {},
-      };
-      
-      Object.entries(availableFilters).forEach(([channel, dims]) => {
-        Object.entries(dims).forEach(([dimId, values]) => {
-          initialSelections[channel as keyof ChannelFilterSelection][dimId] = [...values];
-        });
-      });
-      
-      setFilterSelections(initialSelections);
+    // Load values for this dimension
+    const reportId = channelReportIds[channel];
+    if (reportId) {
+      loadDimensionValues(dimensionId, reportId);
     }
-  }, [open, masterReport, availableFilters]);
+  };
 
+  // Reset on modal open
   useEffect(() => {
     if (open) {
       setStep("name");
       setReportName("");
       setSelectedChannel("metasearch");
       setSearchQuery("");
+      setFilterSelections({
+        metasearch: { selectedDimensionId: "", selectedValues: [] },
+        sem: { selectedDimensionId: "", selectedValues: [] },
+        social: { selectedDimensionId: "", selectedValues: [] },
+      });
+      setDimensionValues({});
     }
   }, [open]);
 
@@ -159,7 +253,7 @@ export function CreateChildReportModal({
         ...(masterReport.configuration as SlideReportConfiguration),
         parentReportId: masterReport.id,
         isChildReport: true,
-        childFilterSelections: filterSelections,
+        childFilterSelections: filterSelections as any,
       };
 
       const { data, error } = await supabase
@@ -213,15 +307,15 @@ export function CreateChildReportModal({
     }
   };
 
-  const toggleValue = (channel: keyof ChannelFilterSelection, dimId: string, value: string) => {
+  const toggleValue = (value: string) => {
     setFilterSelections(prev => {
-      const current = prev[channel][dimId] || [];
+      const current = prev[selectedChannel].selectedValues;
       const isSelected = current.includes(value);
       return {
         ...prev,
-        [channel]: {
-          ...prev[channel],
-          [dimId]: isSelected
+        [selectedChannel]: {
+          ...prev[selectedChannel],
+          selectedValues: isSelected
             ? current.filter(v => v !== value)
             : [...current, value],
         },
@@ -229,48 +323,44 @@ export function CreateChildReportModal({
     });
   };
 
-  const selectAllForDimension = (channel: keyof ChannelFilterSelection, dimId: string) => {
-    const allValues = availableFilters[channel][dimId] || [];
+  const selectAll = () => {
+    const dimId = filterSelections[selectedChannel].selectedDimensionId;
+    const allValues = dimensionValues[dimId] || [];
     setFilterSelections(prev => ({
       ...prev,
-      [channel]: {
-        ...prev[channel],
-        [dimId]: [...allValues],
+      [selectedChannel]: {
+        ...prev[selectedChannel],
+        selectedValues: [...allValues],
       },
     }));
   };
 
-  const deselectAllForDimension = (channel: keyof ChannelFilterSelection, dimId: string) => {
+  const deselectAll = () => {
     setFilterSelections(prev => ({
       ...prev,
-      [channel]: {
-        ...prev[channel],
-        [dimId]: [],
+      [selectedChannel]: {
+        ...prev[selectedChannel],
+        selectedValues: [],
       },
     }));
   };
 
-  const currentDimensions = Object.entries(availableFilters[selectedChannel]);
-  const currentDimId = currentDimensions[0]?.[0] || "";
-  const currentValues = currentDimensions[0]?.[1] || [];
-  const selectedValues = filterSelections[selectedChannel][currentDimId] || [];
+  const currentDimensions = channelDimensions[selectedChannel] || [];
+  const selectedDimId = filterSelections[selectedChannel].selectedDimensionId;
+  const currentValues = dimensionValues[selectedDimId] || [];
+  const selectedValues = filterSelections[selectedChannel].selectedValues;
 
   const filteredValues = currentValues.filter(v =>
     v.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getChannelValueCount = (channel: keyof ChannelFilterSelection) => {
-    const dims = availableFilters[channel];
-    let total = 0;
-    Object.values(dims).forEach(values => {
-      total += (filterSelections[channel][Object.keys(dims)[0]] || []).length;
-    });
-    return total || Object.values(dims)[0]?.length || 0;
+    return filterSelections[channel].selectedValues.length;
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col">
+      <DialogContent className="sm:max-w-[650px] max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
@@ -278,7 +368,7 @@ export function CreateChildReportModal({
           </DialogTitle>
           <DialogDescription>
             {step === "name" && "Give your report a unique name."}
-            {step === "filters" && "Select which data to include from each channel."}
+            {step === "filters" && "Select a dimension and choose which values to include."}
           </DialogDescription>
         </DialogHeader>
 
@@ -325,7 +415,7 @@ export function CreateChildReportModal({
               {/* Channel Tabs */}
               <div className="w-32 flex flex-col gap-1">
                 {(["metasearch", "sem", "social"] as const).map((channel) => {
-                  const hasFilters = Object.keys(availableFilters[channel]).length > 0;
+                  const hasDimensions = channelDimensions[channel]?.length > 0;
                   const count = getChannelValueCount(channel);
                   return (
                     <Button
@@ -333,16 +423,16 @@ export function CreateChildReportModal({
                       variant={selectedChannel === channel ? "default" : "ghost"}
                       className={cn(
                         "justify-between h-10",
-                        !hasFilters && "opacity-50"
+                        !hasDimensions && "opacity-50"
                       )}
                       onClick={() => {
                         setSelectedChannel(channel);
                         setSearchQuery("");
                       }}
-                      disabled={!hasFilters}
+                      disabled={!hasDimensions}
                     >
                       <span className="capitalize">{channel}</span>
-                      {hasFilters && (
+                      {count > 0 && (
                         <span className="ml-2 px-1.5 py-0.5 text-xs rounded bg-primary-foreground/20">
                           {count}
                         </span>
@@ -352,68 +442,119 @@ export function CreateChildReportModal({
                 })}
               </div>
 
-              {/* Values List */}
+              {/* Dimension Selector + Values List */}
               <div className="flex-1 flex flex-col border rounded-lg">
-                {currentDimensions.length > 0 ? (
+                {isLoadingDimensions ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : currentDimensions.length > 0 ? (
                   <>
-                    <div className="p-3 border-b">
-                      <div className="relative">
-                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Search values..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="pl-8"
-                        />
-                      </div>
-                      <div className="flex gap-2 mt-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
-                          onClick={() => selectAllForDimension(selectedChannel, currentDimId)}
+                    {/* Dimension Selector */}
+                    <div className="p-3 border-b space-y-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Select Dimension</Label>
+                        <Select
+                          value={selectedDimId}
+                          onValueChange={(value) => handleDimensionChange(selectedChannel, value)}
                         >
-                          Select All
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
-                          onClick={() => deselectAllForDimension(selectedChannel, currentDimId)}
-                        >
-                          Deselect All
-                        </Button>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a dimension..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {currentDimensions.map((dim) => (
+                              <SelectItem key={dim.id} value={dim.id}>
+                                {dim.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
-                    </div>
-                    <ScrollArea className="flex-1">
-                      <div className="p-2 space-y-1">
-                        {filteredValues.map((value) => {
-                          const isSelected = selectedValues.includes(value);
-                          return (
-                            <div
-                              key={value}
-                              className={cn(
-                                "flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-muted/50",
-                                isSelected && "bg-primary/10"
-                              )}
-                              onClick={() => toggleValue(selectedChannel, currentDimId, value)}
+
+                      {selectedDimId && (
+                        <>
+                          <div className="relative">
+                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              placeholder="Search values..."
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              className="pl-8"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={selectAll}
+                              disabled={currentValues.length === 0}
                             >
-                              <Checkbox checked={isSelected} />
-                              <span className="text-sm">{value}</span>
-                            </div>
-                          );
-                        })}
-                        {filteredValues.length === 0 && (
-                          <p className="text-sm text-muted-foreground text-center py-4">
-                            No values found
+                              Select All
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={deselectAll}
+                              disabled={selectedValues.length === 0}
+                            >
+                              Deselect All
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Values List */}
+                    <ScrollArea className="flex-1">
+                      {!selectedDimId ? (
+                        <div className="flex items-center justify-center h-full p-4">
+                          <p className="text-sm text-muted-foreground text-center">
+                            Select a dimension to see available values
                           </p>
-                        )}
-                      </div>
+                        </div>
+                      ) : isLoadingValues ? (
+                        <div className="flex items-center justify-center p-8">
+                          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        </div>
+                      ) : filteredValues.length > 0 ? (
+                        <div className="p-2 space-y-1">
+                          {filteredValues.map((value) => {
+                            const isSelected = selectedValues.includes(value);
+                            return (
+                              <div
+                                key={value}
+                                className={cn(
+                                  "flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-muted/50",
+                                  isSelected && "bg-primary/10"
+                                )}
+                                onClick={() => toggleValue(value)}
+                              >
+                                <Checkbox checked={isSelected} />
+                                <span className="text-sm">{value}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : currentValues.length === 0 ? (
+                        <div className="flex items-center justify-center h-full p-4">
+                          <p className="text-sm text-muted-foreground text-center">
+                            No values found for this dimension
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-full p-4">
+                          <p className="text-sm text-muted-foreground text-center">
+                            No matching values
+                          </p>
+                        </div>
+                      )}
                     </ScrollArea>
                   </>
                 ) : (
                   <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                    <p className="text-sm">No filter dimensions available for this channel</p>
+                    <p className="text-sm">No dimensions available for this channel</p>
                   </div>
                 )}
               </div>
