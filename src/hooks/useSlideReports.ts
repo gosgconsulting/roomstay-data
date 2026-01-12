@@ -27,10 +27,10 @@ export function useSlideReports(accountId: string | null) {
 
       return (data || []).map((report: any) => ({
         ...report,
-        configuration: (report.configuration || {}) as SlideReportConfiguration,
-        report_ids: (report.report_ids || {}) as Record<string, string>,
-        pivot_data: (report.pivot_data || {}) as SlideReportPivotData,
-        date_range: (report.date_range || null) as SlideReportDateRange | null,
+        configuration: (report.configuration || {}) as unknown as SlideReportConfiguration,
+        report_ids: (report.report_ids || {}) as unknown as Record<string, string>,
+        pivot_data: (report.pivot_data || {}) as unknown as SlideReportPivotData,
+        date_range: (report.date_range || null) as unknown as SlideReportDateRange | null,
       }));
     },
     enabled: !!accountId,
@@ -53,10 +53,10 @@ export function useSlideReport(slideReportId: string | null) {
 
       return {
         ...data,
-        configuration: (data.configuration || {}) as SlideReportConfiguration,
-        report_ids: (data.report_ids || {}) as Record<string, string>,
-        pivot_data: (data.pivot_data || {}) as SlideReportPivotData,
-        date_range: (data.date_range || null) as SlideReportDateRange | null,
+        configuration: (data.configuration || {}) as unknown as SlideReportConfiguration,
+        report_ids: (data.report_ids || {}) as unknown as Record<string, string>,
+        pivot_data: (data.pivot_data || {}) as unknown as SlideReportPivotData,
+        date_range: (data.date_range || null) as unknown as SlideReportDateRange | null,
       };
     },
     enabled: !!slideReportId,
@@ -189,9 +189,9 @@ export function useRefreshSlideReportData() {
       }
 
       const pivotData = await computeSlideReportPivotData(
-        slideReport.report_ids as Record<string, string>,
-        slideReport.configuration as SlideReportConfiguration,
-        slideReport.date_range as SlideReportDateRange
+        slideReport.report_ids as unknown as Record<string, string>,
+        slideReport.configuration as unknown as SlideReportConfiguration,
+        slideReport.date_range as unknown as SlideReportDateRange
       );
 
       // Update the slide report with computed pivot data
