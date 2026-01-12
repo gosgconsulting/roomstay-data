@@ -1553,7 +1553,9 @@ export default function SlideViewPage() {
       const dimensionId = config?.dimensionId;
       
       // Always load values when switching to a channel on step 4, if dimension is selected
-      if (dimensionId && !loadingValues[activeChannelTab]) {
+      if (dimensionId) {
+        // Set loading to true IMMEDIATELY before async call to prevent race condition
+        setLoadingValues(prev => ({ ...prev, [activeChannelTab]: true }));
         console.log(`[activeChannelTab change] Loading values for ${activeChannelTab}/${dimensionId}`);
         loadValuesForDimension(activeChannelTab, dimensionId);
       }
@@ -1624,23 +1626,28 @@ export default function SlideViewPage() {
   // Load values for a dimension from dimension_data table (faster than fetching from source)
   // Also uses cached/saved selected values from channelConfigs for instant display
   const loadValuesForDimension = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
+    console.log(`[loadValuesForDimension] START - channel: ${channel}, dimensionId: ${dimensionId}`);
+    
     // FIRST: Immediately show cached selected values from saved config (instant display)
     const savedConfig = channelConfigs[channel];
     const cachedSelectedValues = savedConfig?.selectedValues || [];
     
     // If we have cached values and the dimension matches, show them immediately
     if (cachedSelectedValues.length > 0 && savedConfig?.dimensionId === dimensionId) {
-      console.log(`Using ${cachedSelectedValues.length} cached values for ${channel}/${dimensionId}`);
+      console.log(`[loadValuesForDimension] Using ${cachedSelectedValues.length} cached values for ${channel}/${dimensionId}`);
       setDimensionValues(prev => ({ ...prev, [channel]: cachedSelectedValues }));
     }
     
+    // Note: loading state is already set by the caller for immediate UI feedback
+    // But ensure it's true just in case
     setLoadingValues(prev => ({ ...prev, [channel]: true }));
+    
     try {
       const reportId = CHANNEL_REPORT_IDS[channel];
+      console.log(`[loadValuesForDimension] Report ID for ${channel}: ${reportId}`);
       
       if (!reportId) {
-        console.error(`No report ID for channel: ${channel}`);
-        // Fall back to cached values if available
+        console.error(`[loadValuesForDimension] No report ID for channel: ${channel}`);
         if (cachedSelectedValues.length === 0) {
           setDimensionValues(prev => ({ ...prev, [channel]: [] }));
         }
@@ -1648,13 +1655,13 @@ export default function SlideViewPage() {
       }
 
       // Fetch unique values from dimension_data table using pagination to get ALL rows
-      // This ensures no values are missing (e.g., Daydream hotel)
       const allDimData: any[] = [];
       const batchSize = 1000;
       let offset = 0;
       let hasMore = true;
 
       while (hasMore) {
+        console.log(`[loadValuesForDimension] Fetching batch at offset ${offset} for ${channel}`);
         const { data: batchData, error: dimError } = await supabase
           .from('dimension_data')
           .select('dimension_values')
@@ -1662,8 +1669,7 @@ export default function SlideViewPage() {
           .range(offset, offset + batchSize - 1);
 
         if (dimError) {
-          console.error(`Error fetching dimension_data batch for ${channel}:`, dimError);
-          // Keep cached values if fetch fails
+          console.error(`[loadValuesForDimension] Error fetching batch for ${channel}:`, dimError);
           if (cachedSelectedValues.length === 0) {
             setDimensionValues(prev => ({ ...prev, [channel]: [] }));
           }
@@ -1674,16 +1680,17 @@ export default function SlideViewPage() {
           allDimData.push(...batchData);
           offset += batchSize;
           hasMore = batchData.length === batchSize;
+          console.log(`[loadValuesForDimension] Got ${batchData.length} rows, total: ${allDimData.length}`);
         } else {
           hasMore = false;
         }
       }
 
       const dimData = allDimData;
+      console.log(`[loadValuesForDimension] Total rows fetched for ${channel}: ${dimData.length}`);
 
       if (!dimData || dimData.length === 0) {
-        console.error(`No dimension_data found for ${channel} (report: ${reportId})`);
-        // Keep cached values if no data found
+        console.error(`[loadValuesForDimension] No dimension_data found for ${channel} (report: ${reportId})`);
         if (cachedSelectedValues.length === 0) {
           setDimensionValues(prev => ({ ...prev, [channel]: [] }));
         }
@@ -1708,13 +1715,14 @@ export default function SlideViewPage() {
       });
 
       let values = Array.from(valueSet).sort();
+      console.log(`[loadValuesForDimension] Extracted ${values.length} unique values for dimension ${dimensionId}`);
       
       // For Metasearch Hotel dimension, filter to only Brady hotels (only for brady slide, not master-report)
       if (slideType === 'brady' && channel === 'metasearch' && dimensionId === '093ac487-dd90-4466-9972-ac51d110e91e') {
         values = values.filter(v => v.startsWith('Brady'));
       }
 
-      console.log(`Loaded ${values.length} values for ${channel}/${dimensionId}:`, values.slice(0, 5));
+      console.log(`[loadValuesForDimension] SUCCESS - ${values.length} values for ${channel}/${dimensionId}:`, values.slice(0, 5));
       setDimensionValues(prev => ({ ...prev, [channel]: values }));
       
       // Auto-select all Brady values for metasearch Hotel (only for brady slide, not master-report)
@@ -1723,17 +1731,17 @@ export default function SlideViewPage() {
           ...prev,
           [channel]: {
             ...prev[channel],
-            selectedValues: values, // Auto-select all 4 Brady hotels
+            selectedValues: values,
           },
         }));
       }
     } catch (err) {
-      console.error(`Error loading values for ${channel}/${dimensionId}:`, err);
-      // Keep cached values on error
+      console.error(`[loadValuesForDimension] CATCH Error for ${channel}/${dimensionId}:`, err);
       if (cachedSelectedValues.length === 0) {
         setDimensionValues(prev => ({ ...prev, [channel]: [] }));
       }
     } finally {
+      console.log(`[loadValuesForDimension] FINALLY - setting loading false for ${channel}`);
       setLoadingValues(prev => ({ ...prev, [channel]: false }));
     }
   };
@@ -1750,8 +1758,10 @@ export default function SlideViewPage() {
         }
         
         // Also force load values for step 4 if dimension is configured
-        if (modalStep === 4 && channelConfigs[channel]?.dimensionId && !loadingValues[channel]) {
+        if (modalStep === 4 && channelConfigs[channel]?.dimensionId) {
           const dimensionId = channelConfigs[channel].dimensionId;
+          // Set loading to true IMMEDIATELY before async call to prevent race condition
+          setLoadingValues(prev => ({ ...prev, [channel]: true }));
           console.log(`[Step 4 init] Force loading values for ${channel}/${dimensionId}`);
           loadValuesForDimension(channel, dimensionId);
         }
@@ -3146,7 +3156,13 @@ export default function SlideViewPage() {
 
                               <ScrollArea className="flex-1 border rounded-md">
                                 <div className="p-2 space-y-1">
-                                  {filteredValues.length > 0 ? (
+                                  {/* Check loading state FIRST, before checking if values exist */}
+                                  {activeChannelTab && loadingValues[activeChannelTab] ? (
+                                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                                      <Loader2 className="h-6 w-6 animate-spin mb-2" />
+                                      <p className="text-sm">Loading dimension values...</p>
+                                    </div>
+                                  ) : filteredValues.length > 0 ? (
                                     filteredValues.map(value => (
                                       <div
                                         key={value}
@@ -3165,11 +3181,6 @@ export default function SlideViewPage() {
                                         <span className="text-sm">{value}</span>
                                       </div>
                                     ))
-                                  ) : (activeChannelTab && loadingValues[activeChannelTab]) ? (
-                                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                                      <Loader2 className="h-6 w-6 animate-spin mb-2" />
-                                      <p className="text-sm">Loading dimension values...</p>
-                                    </div>
                                   ) : (
                                     <p className="text-center text-muted-foreground py-4">
                                       No values found.
