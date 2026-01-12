@@ -891,8 +891,13 @@ export default function SlideViewPage() {
   const location = useLocation();
   const { data: userData } = useUser();
   const user = userData?.user || null;
-  const [selectedYear, setSelectedYear] = useState("2026"); // Default to latest year
-  const [selectedMonth, setSelectedMonth] = useState("January"); // Default to January (latest month)
+  // Get current month name for default
+  const currentDate = new Date();
+  const currentMonthName = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][currentDate.getMonth()];
+  const currentYearStr = currentDate.getFullYear().toString();
+  
+  const [selectedYear, setSelectedYear] = useState(currentYearStr); // Default to current year
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthName); // Default to current month
   const [selectedTab, setSelectedTab] = useState("overview");
   const [comparisonType, setComparisonType] = useState("none");
   const [isEditSourceOpen, setIsEditSourceOpen] = useState(false);
