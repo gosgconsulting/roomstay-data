@@ -761,8 +761,8 @@ export default function SlideViewPage() {
   const location = useLocation();
   const { data: userData } = useUser();
   const user = userData?.user || null;
-  const [selectedYear, setSelectedYear] = useState("2025");
-  const [selectedMonth, setSelectedMonth] = useState("December");
+  const [selectedYear, setSelectedYear] = useState("all"); // "all" or specific year
+  const [selectedMonth, setSelectedMonth] = useState("all"); // "all" or specific month
   const [selectedTab, setSelectedTab] = useState("overview");
   const [comparisonType, setComparisonType] = useState("none");
   const [isEditSourceOpen, setIsEditSourceOpen] = useState(false);
@@ -776,6 +776,84 @@ export default function SlideViewPage() {
   // Determine slide type from URL
   const slideType = location.pathname.includes('/master-report') ? 'master-report' : 
                     location.pathname.includes('/brady') ? 'brady' : 'default';
+
+  // Dynamic data state (fetched from database)
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [dynamicMonthlyData, setDynamicMonthlyData] = useState<any[]>([]);
+  const [dynamicChannelTotals, setDynamicChannelTotals] = useState<Record<string, any>>({});
+  const [dynamicYearlyTotals, setDynamicYearlyTotals] = useState<Record<number, Record<string, any>>>({});
+
+  // Fetch real data from edge function for master-report
+  const fetchSlideReportData = async () => {
+    if (slideType !== 'master-report') return;
+    
+    setIsLoadingData(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('get-slide-report-data', {
+        body: {
+          accountId,
+          years: [2024, 2025, 2026],
+          hotelFilter: true, // Only Brady hotels for metasearch
+        },
+      });
+
+      if (error) {
+        console.error('Error fetching slide report data:', error);
+        return;
+      }
+
+      console.log('Fetched slide report data:', data);
+      setDynamicMonthlyData(data.monthlyRevenue || []);
+      setDynamicChannelTotals(data.channelTotals || {});
+      setDynamicYearlyTotals(data.yearlyTotals || {});
+    } catch (err) {
+      console.error('Error calling edge function:', err);
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  // Fetch data on mount for master-report
+  useEffect(() => {
+    if (slideType === 'master-report' && accountId) {
+      fetchSlideReportData();
+    }
+  }, [slideType, accountId]);
+
+  // Filter monthly data based on selected year
+  const filteredMonthlyData = useMemo(() => {
+    const sourceData = slideType === 'master-report' && dynamicMonthlyData.length > 0 
+      ? dynamicMonthlyData 
+      : MONTHLY_DATA.map(m => ({ ...m, year: 2025 }));
+    
+    if (selectedYear === 'all') {
+      return sourceData;
+    }
+    return sourceData.filter(m => m.year === parseInt(selectedYear));
+  }, [slideType, dynamicMonthlyData, selectedYear]);
+
+  // Get current totals based on selected year/month
+  const currentTotals = useMemo(() => {
+    if (slideType === 'master-report' && Object.keys(dynamicChannelTotals).length > 0) {
+      // If specific year selected, use yearly totals
+      if (selectedYear !== 'all') {
+        const yearNum = parseInt(selectedYear);
+        const yearTotals = dynamicYearlyTotals[yearNum] || {};
+        return {
+          metasearch: yearTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
+          sem: yearTotals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
+          social: yearTotals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
+        };
+      }
+      return dynamicChannelTotals;
+    }
+    // Fallback to hardcoded data
+    return {
+      metasearch: METASEARCH_DATA,
+      sem: SEM_DATA,
+      social: SOCIAL_DATA,
+    };
+  }, [slideType, dynamicChannelTotals, dynamicYearlyTotals, selectedYear]);
 
   // Slide report state
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
@@ -901,7 +979,8 @@ export default function SlideViewPage() {
     };
 
     loadOrCreateSlideReport();
-  }, [accountId, user, slideReports, slideType, createSlideReport]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, user?.id, slideReports?.length, slideType]);
 
   // Open modal if ?edit=true in URL
   useEffect(() => {
@@ -2487,10 +2566,11 @@ export default function SlideViewPage() {
                   })}
                   
                   <Select value={selectedYear} onValueChange={setSelectedYear}>
-                    <SelectTrigger className="w-[100px]">
+                    <SelectTrigger className="w-[120px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all">All Years</SelectItem>
                       <SelectItem value="2024">2024</SelectItem>
                       <SelectItem value="2025">2025</SelectItem>
                       <SelectItem value="2026">2026</SelectItem>
@@ -2501,6 +2581,7 @@ export default function SlideViewPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all">All Months</SelectItem>
                       <SelectItem value="January">January</SelectItem>
                       <SelectItem value="February">February</SelectItem>
                       <SelectItem value="March">March</SelectItem>
@@ -2543,19 +2624,59 @@ export default function SlideViewPage() {
 
             {/* Overview Tab */}
             <TabsContent value="overview" className="space-y-6">
-              {renderKPICards(KPI_CARDS)}
+              {/* Loading indicator */}
+              {isLoadingData && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
+                  <span className="text-muted-foreground">Loading data from data sources...</span>
+                </div>
+              )}
+
+              {!isLoadingData && renderKPICards(
+                slideType === 'master-report' && Object.keys(currentTotals).length > 0
+                  ? (() => {
+                      const totals = {
+                        impressions: (currentTotals.metasearch?.impressions || 0) + (currentTotals.sem?.impressions || 0) + (currentTotals.social?.impressions || 0),
+                        clicks: (currentTotals.metasearch?.clicks || 0) + (currentTotals.sem?.clicks || 0) + (currentTotals.social?.clicks || 0),
+                        cost: (currentTotals.metasearch?.cost || 0) + (currentTotals.sem?.cost || 0) + (currentTotals.social?.cost || 0),
+                        revenue: (currentTotals.metasearch?.revenue || 0) + (currentTotals.sem?.revenue || 0) + (currentTotals.social?.revenue || 0),
+                        bookings: (currentTotals.metasearch?.bookings || 0) + (currentTotals.sem?.bookings || 0) + (currentTotals.social?.bookings || 0),
+                      };
+                      const derived = calculateDerivedMetrics(totals);
+                      return [
+                        { label: "IMPRESSIONS", key: "impressions", value: derived.impressions, icon: Eye, color: "text-pink-600" },
+                        { label: "CLICKS", key: "clicks", value: derived.clicks, icon: MousePointer, color: "text-purple-600" },
+                        { label: "CTR", key: "ctr", value: derived.ctr, icon: Percent, color: "text-purple-600", format: "percent" },
+                        { label: "BOOKINGS", key: "bookings", value: derived.bookings, icon: ShoppingCart, color: "text-orange-600" },
+                        { label: "CONVERSION RATE", key: "conversionRate", value: derived.conversionRate, icon: Percent, color: "text-purple-600", format: "percent" },
+                        { label: "CPC", key: "cpc", value: derived.cpc, icon: DollarSign, color: "text-blue-600", format: "currency" },
+                        { label: "COST", key: "cost", value: derived.cost, icon: DollarSign, color: "text-blue-600", format: "currency" },
+                        { label: "REVENUE", key: "revenue", value: derived.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency" },
+                        { label: "ROAS", key: "roas", value: derived.roas, icon: TrendingUp, color: "text-green-600", format: "roas" },
+                        { label: "COST OF SALE", key: "costOfSale", value: derived.costOfSale, icon: Percent, color: "text-purple-600", format: "percent" },
+                      ];
+                    })()
+                  : KPI_CARDS
+              )}
 
               {/* Monthly Results Chart */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base font-medium">Monthly Results (2025) - Metasearch + Social + SEM Revenue</CardTitle>
+                  <CardTitle className="text-base font-medium">
+                    Monthly Results ({selectedYear === 'all' ? '2024-2026' : selectedYear}) - Metasearch + Social + SEM Revenue
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={MONTHLY_DATA.map(m => ({ month: m.month, total: m.metasearch + m.social + m.sem }))}>
+                      <BarChart data={filteredMonthlyData.map(m => ({ 
+                        label: selectedYear === 'all' ? `${m.month} ${m.year}` : m.month,
+                        month: m.month,
+                        year: m.year,
+                        total: m.metasearch + m.social + m.sem 
+                      }))}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                        <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} interval={selectedYear === 'all' ? 2 : 0} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
                         <Tooltip 
                           formatter={(value: number) => [`$${value.toLocaleString()}`, "Revenue"]}
@@ -2568,11 +2689,12 @@ export default function SlideViewPage() {
                 </CardContent>
               </Card>
 
-              {/* Report Breakdown Table - REORDERED */}
+              {/* Report Breakdown Table */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base font-medium">
-                    <span className="font-semibold">Period:</span> December (Dec 1 - Dec 31, 2025)
+                    <span className="font-semibold">Period:</span> {selectedYear === 'all' ? 'All Years (2024-2026)' : selectedYear}
+                    {selectedMonth !== 'all' ? ` - ${selectedMonth}` : ''}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -2593,35 +2715,60 @@ export default function SlideViewPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {REPORT_BREAKDOWN.map((row) => (
-                        <TableRow key={row.report}>
-                          <TableCell className="font-medium">{row.report}</TableCell>
-                          <TableCell className="text-right">{formatNumber(row.impressions)}</TableCell>
-                          <TableCell className="text-right">{formatNumber(row.clicks)}</TableCell>
-                          <TableCell className="text-right">{row.ctr.toFixed(2)}%</TableCell>
-                          <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
-                          <TableCell className="text-right">{row.conversionRate.toFixed(2)}%</TableCell>
-                          <TableCell className="text-right">${row.cpc.toFixed(2)}</TableCell>
-                          <TableCell className="text-right">${formatNumber(row.cost)}</TableCell>
-                          <TableCell className="text-right">${formatNumber(row.revenue)}</TableCell>
-                          <TableCell className="text-right">{row.roas.toFixed(1)}x</TableCell>
-                          <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
-                        </TableRow>
-                      ))}
-                      {/* Total Row */}
-                      <TableRow className="bg-muted/50 font-semibold border-t-2">
-                        <TableCell className="font-bold">{REPORT_TOTAL.report}</TableCell>
-                        <TableCell className="text-right">{formatNumber(REPORT_TOTAL.impressions)}</TableCell>
-                        <TableCell className="text-right">{formatNumber(REPORT_TOTAL.clicks)}</TableCell>
-                        <TableCell className="text-right">{REPORT_TOTAL.ctr.toFixed(2)}%</TableCell>
-                        <TableCell className="text-right">{REPORT_TOTAL.bookings.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">{REPORT_TOTAL.conversionRate.toFixed(2)}%</TableCell>
-                        <TableCell className="text-right">${REPORT_TOTAL.cpc.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">${formatNumber(REPORT_TOTAL.cost)}</TableCell>
-                        <TableCell className="text-right">${formatNumber(REPORT_TOTAL.revenue)}</TableCell>
-                        <TableCell className="text-right">{REPORT_TOTAL.roas.toFixed(1)}x</TableCell>
-                        <TableCell className="text-right">{REPORT_TOTAL.costOfSale.toFixed(2)}%</TableCell>
-                      </TableRow>
+                      {(() => {
+                        // Use dynamic data for master-report, otherwise hardcoded
+                        const channels = ['metasearch', 'sem', 'social'];
+                        const rows = channels.map(channel => {
+                          const data = currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                          const derived = calculateDerivedMetrics(data);
+                          return {
+                            report: channel.charAt(0).toUpperCase() + channel.slice(1),
+                            ...derived,
+                          };
+                        });
+                        const totals = rows.reduce((acc, row) => ({
+                          impressions: acc.impressions + row.impressions,
+                          clicks: acc.clicks + row.clicks,
+                          cost: acc.cost + row.cost,
+                          revenue: acc.revenue + row.revenue,
+                          bookings: acc.bookings + row.bookings,
+                        }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
+                        const totalDerived = calculateDerivedMetrics(totals);
+
+                        return (
+                          <>
+                            {rows.map((row) => (
+                              <TableRow key={row.report}>
+                                <TableCell className="font-medium">{row.report}</TableCell>
+                                <TableCell className="text-right">{formatNumber(row.impressions)}</TableCell>
+                                <TableCell className="text-right">{formatNumber(row.clicks)}</TableCell>
+                                <TableCell className="text-right">{row.ctr.toFixed(2)}%</TableCell>
+                                <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
+                                <TableCell className="text-right">{row.conversionRate.toFixed(2)}%</TableCell>
+                                <TableCell className="text-right">${row.cpc.toFixed(2)}</TableCell>
+                                <TableCell className="text-right">${formatNumber(row.cost)}</TableCell>
+                                <TableCell className="text-right">${formatNumber(row.revenue)}</TableCell>
+                                <TableCell className="text-right">{row.roas.toFixed(1)}x</TableCell>
+                                <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
+                              </TableRow>
+                            ))}
+                            {/* Total Row */}
+                            <TableRow className="bg-muted/50 font-semibold border-t-2">
+                              <TableCell className="font-bold">Total</TableCell>
+                              <TableCell className="text-right">{formatNumber(totalDerived.impressions)}</TableCell>
+                              <TableCell className="text-right">{formatNumber(totalDerived.clicks)}</TableCell>
+                              <TableCell className="text-right">{totalDerived.ctr.toFixed(2)}%</TableCell>
+                              <TableCell className="text-right">{totalDerived.bookings.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">{totalDerived.conversionRate.toFixed(2)}%</TableCell>
+                              <TableCell className="text-right">${totalDerived.cpc.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">${formatNumber(totalDerived.cost)}</TableCell>
+                              <TableCell className="text-right">${formatNumber(totalDerived.revenue)}</TableCell>
+                              <TableCell className="text-right">{totalDerived.roas.toFixed(1)}x</TableCell>
+                              <TableCell className="text-right">{totalDerived.costOfSale.toFixed(2)}%</TableCell>
+                            </TableRow>
+                          </>
+                        );
+                      })()}
                     </TableBody>
                   </Table>
                 </CardContent>
