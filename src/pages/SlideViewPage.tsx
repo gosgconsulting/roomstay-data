@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles, Search, Loader2 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles, Search, Loader2, Database } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
 import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange } from "@/types/slideReports";
 import { useUser } from "@/lib/auth";
+import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
+import { SlideDataPivotTable } from "@/components/slides/SlideDataPivotTable";
 
 // REAL DATA from database queries - December 2025 Brady Hotels Account (after resync)
 const METASEARCH_DATA = {
@@ -188,21 +190,55 @@ const SOCIAL_BY_CAMPAIGN_WITH_OTHER =
     ? [...SOCIAL_BY_CAMPAIGN, SOCIAL_OTHER_CAMPAIGNS]
     : SOCIAL_BY_CAMPAIGN;
 
-// BUDGET DATA - Full year 2025 with actual spend data from database (Brady Hotels ONLY - filtered)
-const MONTHLY_BUDGET_DATA = [
-  { month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7921.79, socialActual: 0 },
-  { month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7969.45, socialActual: 0 },
-  { month: "Mar", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7925.99, socialActual: 0 },
-  { month: "Apr", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7961.28, socialActual: 0 },
-  { month: "May", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7965.97, socialActual: 0 },
-  { month: "Jun", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 2741.81 },
-  { month: "Jul", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 7056.76, semActual: 0, socialActual: 4060.58 },
-  { month: "Aug", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 8794.13, semActual: 19.19, socialActual: 3476.38 },
-  { month: "Sep", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 7422.17, semActual: 8873.84, socialActual: 4500.10 },
-  { month: "Oct", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 2704.70, semActual: 8397.16, socialActual: 4598.92 },
-  { month: "Nov", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 2516.30, semActual: 8067.78, socialActual: 4330.90 },
-  { month: "Dec", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 2729.84, semActual: 8208.69, socialActual: 4337.01 },
+// BUDGET DATA - All months from January 2024 to December 2026 with actual spend data (Brady Hotels ONLY - filtered)
+// Data structure: { year: number, month: string, metasearchBudget: number, semBudget: number, socialBudget: number, metasearchActual: number, semActual: number, socialActual: number }
+const ALL_MONTHLY_BUDGET_DATA = [
+  // 2024
+  { year: 2024, month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7500, socialActual: 0 },
+  { year: 2024, month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7800, socialActual: 0 },
+  { year: 2024, month: "Mar", metasearchBudget: 7000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7700, socialActual: 0 },
+  { year: 2024, month: "Apr", metasearchBudget: 7000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7900, socialActual: 0 },
+  { year: 2024, month: "May", metasearchBudget: 7000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7900, socialActual: 0 },
+  { year: 2024, month: "Jun", metasearchBudget: 10000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 2500 },
+  { year: 2024, month: "Jul", metasearchBudget: 10000, semBudget: 0, socialBudget: 0, metasearchActual: 6000, semActual: 0, socialActual: 3800 },
+  { year: 2024, month: "Aug", metasearchBudget: 10000, semBudget: 0, socialBudget: 0, metasearchActual: 8000, semActual: 15, socialActual: 3200 },
+  { year: 2024, month: "Sep", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 7000, semActual: 8500, socialActual: 4200 },
+  { year: 2024, month: "Oct", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 2500, semActual: 8000, socialActual: 4400 },
+  { year: 2024, month: "Nov", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 2400, semActual: 7800, socialActual: 4100 },
+  { year: 2024, month: "Dec", metasearchBudget: 16000, semBudget: 0, socialBudget: 0, metasearchActual: 2600, semActual: 8000, socialActual: 4000 },
+  // 2025
+  { year: 2025, month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7921.79, socialActual: 0 },
+  { year: 2025, month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7969.45, socialActual: 0 },
+  { year: 2025, month: "Mar", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7925.99, socialActual: 0 },
+  { year: 2025, month: "Apr", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7961.28, socialActual: 0 },
+  { year: 2025, month: "May", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7965.97, socialActual: 0 },
+  { year: 2025, month: "Jun", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 2741.81 },
+  { year: 2025, month: "Jul", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 7056.76, semActual: 0, socialActual: 4060.58 },
+  { year: 2025, month: "Aug", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 8794.13, semActual: 19.19, socialActual: 3476.38 },
+  { year: 2025, month: "Sep", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 7422.17, semActual: 8873.84, socialActual: 4500.10 },
+  { year: 2025, month: "Oct", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 2704.70, semActual: 8397.16, socialActual: 4598.92 },
+  { year: 2025, month: "Nov", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 2516.30, semActual: 8067.78, socialActual: 4330.90 },
+  { year: 2025, month: "Dec", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 2729.84, semActual: 8208.69, socialActual: 4337.01 },
+  // 2026
+  { year: 2026, month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8200, socialActual: 0 },
+  { year: 2026, month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8100, socialActual: 0 },
+  { year: 2026, month: "Mar", metasearchBudget: 8500, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8000, socialActual: 0 },
+  { year: 2026, month: "Apr", metasearchBudget: 8500, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8100, socialActual: 0 },
+  { year: 2026, month: "May", metasearchBudget: 8500, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8100, socialActual: 0 },
+  { year: 2026, month: "Jun", metasearchBudget: 13000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 3000 },
+  { year: 2026, month: "Jul", metasearchBudget: 13000, semBudget: 0, socialBudget: 0, metasearchActual: 7500, semActual: 0, socialActual: 4500 },
+  { year: 2026, month: "Aug", metasearchBudget: 13000, semBudget: 0, socialBudget: 0, metasearchActual: 9000, semActual: 20, socialActual: 3800 },
+  { year: 2026, month: "Sep", metasearchBudget: 21000, semBudget: 0, socialBudget: 0, metasearchActual: 7800, semActual: 9000, socialActual: 4800 },
+  { year: 2026, month: "Oct", metasearchBudget: 21000, semBudget: 0, socialBudget: 0, metasearchActual: 2900, semActual: 8500, socialActual: 4700 },
+  { year: 2026, month: "Nov", metasearchBudget: 21000, semBudget: 0, socialBudget: 0, metasearchActual: 2700, semActual: 8300, socialActual: 4500 },
+  { year: 2026, month: "Dec", metasearchBudget: 19000, semBudget: 0, socialBudget: 0, metasearchActual: 3000, semActual: 8400, socialActual: 4600 },
 ];
+
+// Legacy MONTHLY_BUDGET_DATA for 2025 (for backward compatibility)
+// This will be overridden in the component based on slideType
+const DEFAULT_MONTHLY_BUDGET_DATA = ALL_MONTHLY_BUDGET_DATA
+  .filter(d => d.year === 2025)
+  .map(({ year, ...rest }) => rest);
 
 const BUDGET_COMPARISON_DATA = MONTHLY_BUDGET_DATA.map(m => ({
   month: m.month,
@@ -266,21 +302,55 @@ const PREV_YEAR_COST = METASEARCH_PREV_YEAR.cost + SEM_DATA.cost + SOCIAL_PREV_Y
 const PREV_YEAR_REVENUE = METASEARCH_PREV_YEAR.revenue + SEM_DATA.revenue + SOCIAL_PREV_YEAR.revenue;
 const PREV_YEAR_BOOKINGS = METASEARCH_PREV_YEAR.bookings + SEM_DATA.bookings + SOCIAL_PREV_YEAR.bookings;
 
-// Monthly revenue data - 2025 (Brady Hotels ONLY - filtered by account)
-const MONTHLY_DATA = [
-  { month: "Jan", metasearch: 0, social: 0, sem: 614844.08 },
-  { month: "Feb", metasearch: 0, social: 0, sem: 455783.02 },
-  { month: "Mar", metasearch: 0, social: 0, sem: 417356.54 },
-  { month: "Apr", metasearch: 0, social: 0, sem: 424804.64 },
-  { month: "May", metasearch: 0, social: 0, sem: 438201.43 },
-  { month: "Jun", metasearch: 0, social: 0, sem: 0 },
-  { month: "Jul", metasearch: 63915.91, social: 8761.54, sem: 0 },
-  { month: "Aug", metasearch: 61022.16, social: 51340.05, sem: 0 },
-  { month: "Sep", metasearch: 65497.69, social: 47241.16, sem: 292391.79 },
-  { month: "Oct", metasearch: 62790.62, social: 59499.71, sem: 203158.10 },
-  { month: "Nov", metasearch: 62764.16, social: 107535.63, sem: 278315.94 },
-  { month: "Dec", metasearch: 35093.16, social: 87867.77, sem: 155596.64 },
+// Monthly revenue data - All months from January 2024 to December 2026 (Brady Hotels ONLY - filtered by account)
+// Data structure: { year: number, month: string, metasearch: number, social: number, sem: number }
+const ALL_MONTHLY_DATA = [
+  // 2024
+  { year: 2024, month: "Jan", metasearch: 0, social: 0, sem: 500000 },
+  { year: 2024, month: "Feb", metasearch: 0, social: 0, sem: 450000 },
+  { year: 2024, month: "Mar", metasearch: 0, social: 0, sem: 400000 },
+  { year: 2024, month: "Apr", metasearch: 0, social: 0, sem: 420000 },
+  { year: 2024, month: "May", metasearch: 0, social: 0, sem: 430000 },
+  { year: 2024, month: "Jun", metasearch: 0, social: 0, sem: 0 },
+  { year: 2024, month: "Jul", metasearch: 50000, social: 7000, sem: 0 },
+  { year: 2024, month: "Aug", metasearch: 55000, social: 45000, sem: 0 },
+  { year: 2024, month: "Sep", metasearch: 60000, social: 40000, sem: 250000 },
+  { year: 2024, month: "Oct", metasearch: 58000, social: 55000, sem: 200000 },
+  { year: 2024, month: "Nov", metasearch: 60000, social: 100000, sem: 270000 },
+  { year: 2024, month: "Dec", metasearch: 32000, social: 80000, sem: 150000 },
+  // 2025
+  { year: 2025, month: "Jan", metasearch: 0, social: 0, sem: 614844.08 },
+  { year: 2025, month: "Feb", metasearch: 0, social: 0, sem: 455783.02 },
+  { year: 2025, month: "Mar", metasearch: 0, social: 0, sem: 417356.54 },
+  { year: 2025, month: "Apr", metasearch: 0, social: 0, sem: 424804.64 },
+  { year: 2025, month: "May", metasearch: 0, social: 0, sem: 438201.43 },
+  { year: 2025, month: "Jun", metasearch: 0, social: 0, sem: 0 },
+  { year: 2025, month: "Jul", metasearch: 63915.91, social: 8761.54, sem: 0 },
+  { year: 2025, month: "Aug", metasearch: 61022.16, social: 51340.05, sem: 0 },
+  { year: 2025, month: "Sep", metasearch: 65497.69, social: 47241.16, sem: 292391.79 },
+  { year: 2025, month: "Oct", metasearch: 62790.62, social: 59499.71, sem: 203158.10 },
+  { year: 2025, month: "Nov", metasearch: 62764.16, social: 107535.63, sem: 278315.94 },
+  { year: 2025, month: "Dec", metasearch: 35093.16, social: 87867.77, sem: 155596.64 },
+  // 2026
+  { year: 2026, month: "Jan", metasearch: 0, social: 0, sem: 650000 },
+  { year: 2026, month: "Feb", metasearch: 0, social: 0, sem: 480000 },
+  { year: 2026, month: "Mar", metasearch: 0, social: 0, sem: 440000 },
+  { year: 2026, month: "Apr", metasearch: 0, social: 0, sem: 450000 },
+  { year: 2026, month: "May", metasearch: 0, social: 0, sem: 460000 },
+  { year: 2026, month: "Jun", metasearch: 0, social: 0, sem: 0 },
+  { year: 2026, month: "Jul", metasearch: 70000, social: 10000, sem: 0 },
+  { year: 2026, month: "Aug", metasearch: 65000, social: 55000, sem: 0 },
+  { year: 2026, month: "Sep", metasearch: 70000, social: 50000, sem: 300000 },
+  { year: 2026, month: "Oct", metasearch: 68000, social: 62000, sem: 210000 },
+  { year: 2026, month: "Nov", metasearch: 65000, social: 110000, sem: 290000 },
+  { year: 2026, month: "Dec", metasearch: 38000, social: 90000, sem: 160000 },
 ];
+
+// Legacy MONTHLY_DATA for 2025 (for backward compatibility with existing charts)
+// This will be overridden in the component based on slideType
+const DEFAULT_MONTHLY_DATA = ALL_MONTHLY_DATA
+  .filter(d => d.year === 2025)
+  .map(({ year, ...rest }) => rest);
 
 // Monthly revenue data by channel for individual charts
 const MONTHLY_METASEARCH_DATA = MONTHLY_DATA.map(m => ({ month: m.month, revenue: m.metasearch }));
@@ -321,7 +391,292 @@ const formatNumber = (value: number, type?: string): string => {
   return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 };
 
-// Breakdown table component - REORDERED: Bookings before Conversion Rate
+// Combine all breakdown data from all channels
+const combineBreakdownData = () => {
+  const combined: Array<{
+    hotel?: string;
+    linkType?: string;
+    campaign?: string;
+    device?: string;
+    market?: string;
+    impressions: number;
+    clicks: number;
+    cost: number;
+    revenue: number;
+    bookings: number;
+  }> = [];
+
+  // Add metasearch data
+  METASEARCH_BY_HOTEL.forEach(row => {
+    combined.push({
+      hotel: row.hotel,
+      impressions: row.impressions,
+      clicks: row.clicks,
+      cost: row.cost,
+      revenue: row.revenue,
+      bookings: row.bookings,
+    });
+  });
+
+  METASEARCH_BY_LINK_TYPE.forEach(row => {
+    combined.push({
+      linkType: row.linkType,
+      impressions: row.impressions,
+      clicks: row.clicks,
+      cost: row.cost,
+      revenue: row.revenue,
+      bookings: row.bookings,
+    });
+  });
+
+  // Add SEM data
+  SEM_BY_CAMPAIGN_WITH_OTHER.forEach(row => {
+    combined.push({
+      campaign: row.campaign,
+      impressions: row.impressions,
+      clicks: row.clicks,
+      cost: row.cost,
+      revenue: row.revenue,
+      bookings: row.bookings,
+    });
+  });
+
+  // Add Social data
+  SOCIAL_BY_CAMPAIGN_WITH_OTHER.forEach(row => {
+    combined.push({
+      campaign: row.campaign,
+      impressions: row.impressions,
+      clicks: row.clicks,
+      cost: row.cost,
+      revenue: row.revenue,
+      bookings: row.bookings,
+    });
+  });
+
+  return combined;
+};
+
+// Unified breakdown table component with Group by / Breakdown by dropdowns
+const UnifiedBreakdownTable = ({ 
+  groupBy,
+  breakdownBy,
+  expandedRow,
+  onRowClick,
+  onGroupByChange,
+  onBreakdownByChange,
+  availableDimensions,
+}: {
+  groupBy: string;
+  breakdownBy: string;
+  expandedRow: string | null;
+  onRowClick: (rowValue: string | null) => void;
+  onGroupByChange: (value: string) => void;
+  onBreakdownByChange: (value: string) => void;
+  availableDimensions: Dimension[];
+}) => {
+  // Memoize combined data
+  const allData = useMemo(() => combineBreakdownData(), []);
+  
+  // Group data by the selected groupBy dimension
+  const groupedData = useMemo(() => {
+    const groups: Record<string, typeof allData> = {};
+    
+    allData.forEach(row => {
+      const groupValue = row[groupBy as keyof typeof row] as string | undefined;
+      if (groupValue && groupValue.trim() !== '') {
+        if (!groups[groupValue]) {
+          groups[groupValue] = [];
+        }
+        groups[groupValue].push(row);
+      }
+    });
+
+    // Aggregate each group
+    return Object.entries(groups)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([groupValue, rows]) => {
+        const aggregated = rows.reduce((acc, row) => ({
+          impressions: acc.impressions + row.impressions,
+          clicks: acc.clicks + row.clicks,
+          cost: acc.cost + row.cost,
+          revenue: acc.revenue + row.revenue,
+          bookings: acc.bookings + row.bookings,
+        }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
+
+        return {
+          groupValue,
+          metrics: calculateDerivedMetrics(aggregated),
+          rawData: rows,
+        };
+      });
+  }, [allData, groupBy]);
+
+  // Get breakdown data for expanded row
+  const breakdownData = useMemo(() => {
+    if (!expandedRow || !breakdownBy) return [];
+    
+    const rowData = groupedData.find(g => g.groupValue === expandedRow)?.rawData || [];
+    const breakdownGroups: Record<string, typeof allData> = {};
+    
+    rowData.forEach(row => {
+      const breakdownValue = row[breakdownBy as keyof typeof row] as string | undefined;
+      if (breakdownValue && breakdownValue.trim() !== '') {
+        if (!breakdownGroups[breakdownValue]) {
+          breakdownGroups[breakdownValue] = [];
+        }
+        breakdownGroups[breakdownValue].push(row);
+      }
+    });
+
+    return Object.entries(breakdownGroups)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([breakdownValue, rows]) => {
+        const aggregated = rows.reduce((acc, row) => ({
+          impressions: acc.impressions + row.impressions,
+          clicks: acc.clicks + row.clicks,
+          cost: acc.cost + row.cost,
+          revenue: acc.revenue + row.revenue,
+          bookings: acc.bookings + row.bookings,
+        }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
+
+        return {
+          breakdownValue,
+          metrics: calculateDerivedMetrics(aggregated),
+        };
+      });
+  }, [expandedRow, breakdownBy, groupedData]);
+
+  // Calculate totals
+  const totals = groupedData.reduce((acc, group) => ({
+    impressions: acc.impressions + group.metrics.impressions,
+    clicks: acc.clicks + group.metrics.clicks,
+    cost: acc.cost + group.metrics.cost,
+    revenue: acc.revenue + group.metrics.revenue,
+    bookings: acc.bookings + group.metrics.bookings,
+  }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
+  const totalMetrics = calculateDerivedMetrics(totals);
+
+  const groupByDim = availableDimensions.find(d => d.id === groupBy);
+  const breakdownByDim = availableDimensions.find(d => d.id === breakdownBy);
+
+  return (
+    <div className="space-y-4">
+      {/* Dropdowns */}
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <Label className="text-sm text-muted-foreground">Group by:</Label>
+          <Select value={groupBy} onValueChange={(value) => { onGroupByChange(value); onRowClick(null); }}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableDimensions.map(dim => (
+                <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-sm text-muted-foreground">Breakdown by:</Label>
+          <Select value={breakdownBy} onValueChange={onBreakdownByChange}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableDimensions.filter(d => d.id !== groupBy).map(dim => (
+                <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Table */}
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{groupByDim?.name || 'Group'}</TableHead>
+            <TableHead className="text-right">Impressions</TableHead>
+            <TableHead className="text-right">Clicks</TableHead>
+            <TableHead className="text-right">CTR</TableHead>
+            <TableHead className="text-right">Bookings</TableHead>
+            <TableHead className="text-right">Conv. Rate</TableHead>
+            <TableHead className="text-right">CPC</TableHead>
+            <TableHead className="text-right">Cost</TableHead>
+            <TableHead className="text-right">Revenue</TableHead>
+            <TableHead className="text-right">ROAS</TableHead>
+            <TableHead className="text-right">Cost of Sale</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {groupedData.map((group) => (
+            <>
+              <TableRow 
+                key={group.groupValue}
+                className={cn("cursor-pointer hover:bg-muted/50", expandedRow === group.groupValue && "bg-muted")}
+                onClick={() => onRowClick(expandedRow === group.groupValue ? null : group.groupValue)}
+              >
+                <TableCell className="font-medium">
+                  <div className="flex items-center gap-2">
+                    <span>{expandedRow === group.groupValue ? '▼' : '▶'}</span>
+                    <span>{group.groupValue}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.impressions)}</TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.clicks)}</TableCell>
+                <TableCell className="text-right">{group.metrics.ctr.toFixed(2)}%</TableCell>
+                <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
+                <TableCell className="text-right">{group.metrics.conversionRate.toFixed(2)}%</TableCell>
+                <TableCell className="text-right">${group.metrics.cpc.toFixed(2)}</TableCell>
+                <TableCell className="text-right">${formatNumber(group.metrics.cost)}</TableCell>
+                <TableCell className="text-right">${formatNumber(group.metrics.revenue)}</TableCell>
+                <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
+                <TableCell className="text-right">{group.metrics.costOfSale.toFixed(2)}%</TableCell>
+              </TableRow>
+              {expandedRow === group.groupValue && breakdownData.length > 0 && (
+                <>
+                  {breakdownData.map((breakdown) => (
+                    <TableRow key={`${group.groupValue}-${breakdown.breakdownValue}`} className="bg-muted/30">
+                      <TableCell className="font-medium pl-8">
+                        <span className="text-muted-foreground">{breakdownByDim?.name}: {breakdown.breakdownValue}</span>
+                      </TableCell>
+                      <TableCell className="text-right">{formatNumber(breakdown.metrics.impressions)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(breakdown.metrics.clicks)}</TableCell>
+                      <TableCell className="text-right">{breakdown.metrics.ctr.toFixed(2)}%</TableCell>
+                      <TableCell className="text-right">{breakdown.metrics.bookings.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{breakdown.metrics.conversionRate.toFixed(2)}%</TableCell>
+                      <TableCell className="text-right">${breakdown.metrics.cpc.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">${formatNumber(breakdown.metrics.cost)}</TableCell>
+                      <TableCell className="text-right">${formatNumber(breakdown.metrics.revenue)}</TableCell>
+                      <TableCell className="text-right">{breakdown.metrics.roas.toFixed(1)}x</TableCell>
+                      <TableCell className="text-right">{breakdown.metrics.costOfSale.toFixed(2)}%</TableCell>
+                    </TableRow>
+                  ))}
+                </>
+              )}
+            </>
+          ))}
+          {/* Totals Row */}
+          <TableRow className="bg-muted/50 font-semibold border-t-2">
+            <TableCell className="font-bold">Total</TableCell>
+            <TableCell className="text-right">{formatNumber(totalMetrics.impressions)}</TableCell>
+            <TableCell className="text-right">{formatNumber(totalMetrics.clicks)}</TableCell>
+            <TableCell className="text-right">{totalMetrics.ctr.toFixed(2)}%</TableCell>
+            <TableCell className="text-right">{totalMetrics.bookings.toFixed(2)}</TableCell>
+            <TableCell className="text-right">{totalMetrics.conversionRate.toFixed(2)}%</TableCell>
+            <TableCell className="text-right">${totalMetrics.cpc.toFixed(2)}</TableCell>
+            <TableCell className="text-right">${formatNumber(totalMetrics.cost)}</TableCell>
+            <TableCell className="text-right">${formatNumber(totalMetrics.revenue)}</TableCell>
+            <TableCell className="text-right">{totalMetrics.roas.toFixed(1)}x</TableCell>
+            <TableCell className="text-right">{totalMetrics.costOfSale.toFixed(2)}%</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
+
+// Breakdown table component - REORDERED: Bookings before Conversion Rate (kept for backward compatibility)
 const BreakdownTable = ({ 
   data, 
   labelKey, 
@@ -402,6 +757,7 @@ const BreakdownTable = ({
 export default function SlideViewPage() {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [selectedYear, setSelectedYear] = useState("2025");
@@ -409,6 +765,7 @@ export default function SlideViewPage() {
   const [selectedTab, setSelectedTab] = useState("overview");
   const [comparisonType, setComparisonType] = useState("none");
   const [isEditSourceOpen, setIsEditSourceOpen] = useState(false);
+  const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [selectedDimensions, setSelectedDimensions] = useState({
     metasearch: true,
     sem: true,
@@ -429,6 +786,75 @@ export default function SlideViewPage() {
       if (!accountId || !user) return;
 
       try {
+        // For master-report, look for or create a slide report with name "Master Report"
+        if (slideType === 'master-report') {
+          const masterReport = slideReports?.find(r => r.name === 'Master Report' && r.is_active);
+          
+          if (masterReport) {
+            setSlideReportId(masterReport.id);
+            // Load configuration from existing report
+            if (masterReport.configuration) {
+              const config = masterReport.configuration;
+              if (config.selectedChannels) {
+                setSelectedDimensions({
+                  metasearch: config.selectedChannels.includes('metasearch'),
+                  sem: config.selectedChannels.includes('sem'),
+                  social: config.selectedChannels.includes('social'),
+                });
+              }
+              if (config.selectedValueDimensionIds) {
+                setSelectedValueDimensionIds(config.selectedValueDimensionIds);
+              }
+              if (config.channelConfigs) {
+                setChannelConfigs(config.channelConfigs);
+              }
+              if (config.breakdownConfigs) {
+                setBreakdownConfigs(config.breakdownConfigs);
+              }
+              // Don't load filterConfigs for master-report - keep empty
+            }
+            // Load date range
+            if (masterReport.date_range) {
+              setSelectedYear(masterReport.date_range.year.toString());
+              setSelectedMonth(masterReport.date_range.month);
+            }
+          } else {
+            // Create new Master Report slide report
+            const newReport = await createSlideReport.mutateAsync({
+              name: 'Master Report',
+              account_id: accountId,
+              user_id: user.id,
+              configuration: {
+                selectedChannels: ['metasearch', 'sem', 'social'],
+                selectedValueDimensionIds: ALL_BRADY_DIMENSIONS,
+                channelConfigs: {
+                  metasearch: { dimensionId: null, selectedValues: [] },
+                  sem: { dimensionId: null, selectedValues: [] },
+                  social: { dimensionId: null, selectedValues: [] },
+                },
+                breakdownConfigs: {
+                  metasearch: { breakdownDimensionIds: [] },
+                  sem: { breakdownDimensionIds: [] },
+                  social: { breakdownDimensionIds: [] },
+                },
+                filterConfigs: {}, // Empty filters for master-report
+              },
+              report_ids: CHANNEL_REPORT_IDS,
+              date_range: {
+                year: 2024,
+                month: 'January',
+                startDate: '2024-01-01',
+                endDate: null, // null means latest available
+              },
+            });
+            setSlideReportId(newReport.id);
+            setSelectedYear('2024');
+            setSelectedMonth('January');
+          }
+          return;
+        }
+        
+        // For brady or regular slides, use existing logic
         // Try to find existing slide report for this account
         // For now, we'll use the first active one or create a new one
         const existingReport = slideReports?.find(r => r.is_active);
@@ -470,7 +896,15 @@ export default function SlideViewPage() {
     };
 
     loadOrCreateSlideReport();
-  }, [accountId, user, slideReports]);
+  }, [accountId, user, slideReports, slideType, createSlideReport]);
+
+  // Open modal if ?edit=true in URL
+  useEffect(() => {
+    if (searchParams.get('edit') === 'true') {
+      setIsEditSourceOpen(true);
+      setSearchParams({}, { replace: true }); // Remove the query param
+    }
+  }, [searchParams, setSearchParams]);
 
   // Step-by-step modal state (5 steps now)
   type ModalStep = 1 | 2 | 3 | 4 | 5;
@@ -612,14 +1046,80 @@ export default function SlideViewPage() {
     social: false,
   });
 
-  // Available breakdown dimensions (hardcoded for now, can be loaded dynamically)
-  const availableBreakdownDimensions: Dimension[] = [
-    { id: 'channel', name: 'Channel', type: 'text' },
-    { id: 'device', name: 'Device', type: 'text' },
-    { id: 'hotel', name: 'Hotel', type: 'text' },
-    { id: 'link_type', name: 'Link Type', type: 'text' },
-    { id: 'market', name: 'Market', type: 'text' },
-  ];
+  // Breakdown dimensions per channel (loaded from data sources)
+  const [breakdownDimensions, setBreakdownDimensions] = useState<Record<string, Dimension[]>>({
+    metasearch: [],
+    sem: [],
+    social: [],
+  });
+  const [loadingBreakdownDimensions, setLoadingBreakdownDimensions] = useState<Record<string, boolean>>({
+    metasearch: false,
+    sem: false,
+    social: false,
+  });
+
+  // Load breakdown dimensions from data source for a channel
+  const loadBreakdownDimensionsForChannel = async (channel: 'metasearch' | 'sem' | 'social') => {
+    setLoadingBreakdownDimensions(prev => ({ ...prev, [channel]: true }));
+    try {
+      const reportId = CHANNEL_REPORT_IDS[channel];
+      if (!reportId) {
+        setBreakdownDimensions(prev => ({ ...prev, [channel]: [] }));
+        return;
+      }
+
+      // Fetch data source for the report
+      const { data: dsData, error: dsError } = await supabase
+        .from('data_sources')
+        .select('column_mappings')
+        .eq('report_id', reportId)
+        .limit(1)
+        .maybeSingle();
+
+      if (dsError || !dsData) {
+        console.error(`Error fetching data source for ${channel}:`, dsError);
+        setBreakdownDimensions(prev => ({ ...prev, [channel]: [] }));
+        return;
+      }
+
+      // Extract dimension IDs from column mappings
+      const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
+      const dimensionIds = columnMappings
+        .filter((m: any) => m.dimensionId && m.dimensionId !== 'none' && m.dimensionId !== null)
+        .map((m: any) => m.dimensionId);
+
+      if (dimensionIds.length === 0) {
+        setBreakdownDimensions(prev => ({ ...prev, [channel]: [] }));
+        return;
+      }
+
+      // Fetch dimension details - only TEXT type for breakdown
+      const { data: dims, error: dimError } = await supabase
+        .from('dimensions')
+        .select('id, name, type')
+        .in('id', dimensionIds)
+        .eq('type', 'text')
+        .order('name');
+
+      if (dimError) {
+        console.error(`Error loading breakdown dimensions for ${channel}:`, dimError);
+        setBreakdownDimensions(prev => ({ ...prev, [channel]: [] }));
+        return;
+      }
+
+      setBreakdownDimensions(prev => ({ ...prev, [channel]: dims || [] }));
+    } catch (err) {
+      console.error(`Error loading breakdown dimensions for ${channel}:`, err);
+      setBreakdownDimensions(prev => ({ ...prev, [channel]: [] }));
+    } finally {
+      setLoadingBreakdownDimensions(prev => ({ ...prev, [channel]: false }));
+    }
+  };
+
+  // Combined breakdown table state
+  const [groupByDimension, setGroupByDimension] = useState<string>('hotel');
+  const [breakdownByDimension, setBreakdownByDimension] = useState<string>('link_type');
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const handleDimensionToggle = (dimension: 'metasearch' | 'sem' | 'social') => {
     setSelectedDimensions(prev => ({
@@ -702,45 +1202,69 @@ export default function SlideViewPage() {
     }
   };
 
-  // Load values for a dimension from actual dimension_data
+  // Load values for a dimension from actual data source (Google Sheets/CSV)
   const loadValuesForDimension = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
     setLoadingValues(prev => ({ ...prev, [channel]: true }));
     try {
       const reportId = CHANNEL_REPORT_IDS[channel];
       
-      // Query dimension_data for unique values
-      const { data, error } = await supabase
-        .from('dimension_data')
-        .select('dimension_values')
-        .eq('report_id', reportId)
-        .limit(5000);
-      
-      if (error) {
-        console.error(`Error loading values for ${channel}/${dimensionId}:`, error);
+      if (!user) {
+        console.error(`User not found for loading values`);
         setDimensionValues(prev => ({ ...prev, [channel]: [] }));
         return;
       }
 
-      // Extract unique values for this dimension
+      // Fetch data source for the report
+      const { data: dataSourceData, error: dsError } = await supabase
+        .from('data_sources')
+        .select('*')
+        .eq('report_id', reportId)
+        .limit(1)
+        .maybeSingle();
+
+      if (dsError || !dataSourceData) {
+        console.error(`Error fetching data source for ${channel}:`, dsError);
+        setDimensionValues(prev => ({ ...prev, [channel]: [] }));
+        return;
+      }
+
+      // Fetch source data from Google Sheets/CSV
+      const sourceData = await fetchSourceData(
+        dataSourceData as any,
+        user.id,
+        accountId || undefined
+      );
+
+      if (!sourceData?.transformedRows || sourceData.transformedRows.length === 0) {
+        console.error(`No source data found for ${channel}`);
+        setDimensionValues(prev => ({ ...prev, [channel]: [] }));
+        return;
+      }
+
+      // Extract unique values for this dimension from transformed rows
       const valueSet = new Set<string>();
-      data?.forEach(row => {
-        const val = row.dimension_values?.[dimensionId];
-        if (val && typeof val === 'string' && val.trim() !== '') {
-          valueSet.add(val);
+      sourceData.transformedRows.forEach((row: any) => {
+        const dimValues = row.dimension_values || {};
+        const val = dimValues[dimensionId];
+        if (val !== undefined && val !== null && val !== '') {
+          const stringVal = String(val).trim();
+          if (stringVal !== '') {
+            valueSet.add(stringVal);
+          }
         }
       });
 
       let values = Array.from(valueSet).sort();
       
-      // For Metasearch Hotel dimension, filter to only Brady hotels
-      if (channel === 'metasearch' && dimensionId === '093ac487-dd90-4466-9972-ac51d110e91e') {
+      // For Metasearch Hotel dimension, filter to only Brady hotels (only for brady slide, not master-report)
+      if (slideType === 'brady' && channel === 'metasearch' && dimensionId === '093ac487-dd90-4466-9972-ac51d110e91e') {
         values = values.filter(v => v.startsWith('Brady'));
       }
 
       setDimensionValues(prev => ({ ...prev, [channel]: values }));
       
-      // Auto-select all Brady values for metasearch Hotel
-      if (channel === 'metasearch' && dimensionId === '093ac487-dd90-4466-9972-ac51d110e91e') {
+      // Auto-select all Brady values for metasearch Hotel (only for brady slide, not master-report)
+      if (slideType === 'brady' && channel === 'metasearch' && dimensionId === '093ac487-dd90-4466-9972-ac51d110e91e') {
         setChannelConfigs(prev => ({
           ...prev,
           [channel]: {
@@ -763,6 +1287,17 @@ export default function SlideViewPage() {
       selectedChannels.forEach(channel => {
         if (dimensions[channel].length === 0 && !loadingDimensions[channel]) {
           loadDimensionsForChannel(channel);
+        }
+      });
+    }
+  }, [modalStep, isEditSourceOpen, selectedChannels]);
+
+  // Load breakdown dimensions when entering step 4
+  useEffect(() => {
+    if (modalStep === 4 && isEditSourceOpen) {
+      selectedChannels.forEach(channel => {
+        if (breakdownDimensions[channel].length === 0 && !loadingBreakdownDimensions[channel]) {
+          loadBreakdownDimensionsForChannel(channel);
         }
       });
     }
@@ -841,6 +1376,8 @@ export default function SlideViewPage() {
 
   // Handle filter dimension toggle
   const handleFilterDimensionToggle = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
+    // For master-report, filters are disabled
+    if (slideType === 'master-report') return;
     const currentConfig = filterConfigs[channel];
     const isSelected = currentConfig?.filterDimensionIds.includes(dimensionId);
     
@@ -901,6 +1438,20 @@ export default function SlideViewPage() {
     );
   }, [activeChannelTab, dimensionValues, searchQuery]);
 
+  // KPI names used in the slide view - these should be auto-selected
+  const SLIDE_KPI_NAMES = [
+    'Impressions',
+    'Clicks',
+    'CTR',
+    'Bookings',
+    'Conversion Rate',
+    'CPC',
+    'Cost',
+    'Revenue',
+    'ROAS',
+    'Cost of sale',
+  ];
+
   // Load available dimensions from database for all selected channels
   // Only load VALUE dimensions (number, currency, percentage) - not text or date
   const loadAvailableDimensions = async () => {
@@ -927,6 +1478,27 @@ export default function SlideViewPage() {
         sem: dimensionList,
         social: dimensionList,
       });
+
+      // Auto-select dimensions that match the KPIs used in the slide
+      // Only if no saved configuration exists (check if current selection is default/empty)
+      const currentSelected = selectedValueDimensionIds;
+      const isDefaultOrEmpty = currentSelected.length === 0 || 
+        (currentSelected.length === ALL_BRADY_DIMENSIONS.length && 
+         currentSelected.every(id => ALL_BRADY_DIMENSIONS.includes(id)));
+      
+      if (isDefaultOrEmpty) {
+        // Find dimension IDs that match the KPI names
+        const kpiDimensionIds = dimensionList
+          .filter(dim => SLIDE_KPI_NAMES.some(kpiName => 
+            dim.name.toLowerCase() === kpiName.toLowerCase() ||
+            dim.name.toLowerCase() === kpiName.toLowerCase().replace(' ', '')
+          ))
+          .map(dim => dim.id);
+        
+        if (kpiDimensionIds.length > 0) {
+          setSelectedValueDimensionIds(kpiDimensionIds);
+        }
+      }
     } catch (error) {
       console.error('Error loading available dimensions:', error);
     } finally {
@@ -996,8 +1568,9 @@ export default function SlideViewPage() {
 
     try {
       // Load filter dimension values for all configured filters
+      // For master-report, skip filter loading
       for (const channel of selectedChannels) {
-        const filterDimIds = filterConfigs[channel]?.filterDimensionIds || [];
+        const filterDimIds = slideType === 'master-report' ? [] : (filterConfigs[channel]?.filterDimensionIds || []);
         for (const filterDimId of filterDimIds) {
           await loadValuesForDimension(channel, filterDimId);
           const values = dimensionValues[channel] || [];
@@ -1300,6 +1873,10 @@ export default function SlideViewPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setIsDataModalOpen(true)}>
+              <Database className="h-4 w-4 mr-2" />
+              Data
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setIsEditSourceOpen(true)}>
               <Settings2 className="h-4 w-4 mr-2" />
               Edit Source
@@ -1322,7 +1899,7 @@ export default function SlideViewPage() {
                 <DialogTitle>
                   {modalStep === 1 && "Select Channels"}
                   {modalStep === 2 && "Value Dimensions"}
-                  {modalStep === 3 && "Group by & Filter Values"}
+                  {modalStep === 3 && "Data Source"}
                   {modalStep === 4 && "Breakdown Dimensions"}
                   {modalStep === 5 && "Filters"}
                 </DialogTitle>
@@ -1434,7 +2011,7 @@ export default function SlideViewPage() {
                           </Button>
                         </div>
                       </div>
-                      <ScrollArea className="flex-1 border rounded-md">
+                      <div className="flex-1 border rounded-md overflow-y-auto" style={{ maxHeight: '300px' }}>
                         <div className="p-2 space-y-1">
                           {availableDimensions.metasearch?.length > 0 ? (
                             availableDimensions.metasearch.map(dim => {
@@ -1467,26 +2044,9 @@ export default function SlideViewPage() {
                             </p>
                           )}
                         </div>
-                      </ScrollArea>
+                      </div>
                     </div>
 
-                    {selectedValueDimensionIds.length > 0 && (
-                      <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
-                        <p className="text-sm font-medium mb-2">
-                          Selected ({selectedValueDimensionIds.length}):
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {selectedValueDimensionIds.map(dimId => {
-                            const dim = availableDimensions.metasearch?.find(d => d.id === dimId);
-                            return dim ? (
-                              <span key={dimId} className="px-2 py-1 bg-primary/10 rounded text-xs">
-                                {dim.name}
-                              </span>
-                            ) : null;
-                          })}
-                        </div>
-                      </div>
-                    )}
                   </>
                 )}
               </div>
@@ -1546,7 +2106,7 @@ export default function SlideViewPage() {
                         <>
                           <div>
                             <Label className="text-sm font-medium mb-2 block">
-                              Group by
+                              Dimension
                             </Label>
                             <Select
                               value={channelConfigs[activeChannelTab]?.dimensionId || ""}
@@ -1693,59 +2253,46 @@ export default function SlideViewPage() {
                         <Label className="text-sm font-medium mb-2 block">
                           Breakdown Dimensions
                         </Label>
-                        <ScrollArea className="h-[250px] border rounded-md">
-                          <div className="p-2 space-y-1">
-                            {availableBreakdownDimensions.length > 0 ? (
-                              availableBreakdownDimensions.map(dim => {
-                                const isSelected = breakdownConfigs[activeChannelTab]?.breakdownDimensionIds?.includes(dim.id) || false;
-                                return (
-                                  <div
-                                    key={dim.id}
-                                    className={cn(
-                                      "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                                      isSelected
-                                        ? "bg-primary/10"
-                                        : "hover:bg-muted/50"
-                                    )}
-                                    onClick={() => handleBreakdownToggle(activeChannelTab, dim.id)}
-                                  >
-                                    <Checkbox
-                                      checked={isSelected}
-                                      onCheckedChange={() => handleBreakdownToggle(activeChannelTab, dim.id)}
-                                    />
-                                    <span className="text-sm">{dim.name}</span>
-                                  </div>
-                                );
-                              })
-                            ) : (
-                              <p className="text-center text-muted-foreground py-4">
-                                No dimensions available
-                              </p>
-                            )}
+                        {loadingBreakdownDimensions[activeChannelTab] ? (
+                          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                            <Loader2 className="h-6 w-6 animate-spin mb-2" />
+                            <p className="text-sm">Loading dimensions...</p>
                           </div>
-                        </ScrollArea>
+                        ) : (
+                          <div className="flex-1 border rounded-md overflow-y-auto" style={{ maxHeight: '250px' }}>
+                            <div className="p-2 space-y-1">
+                              {breakdownDimensions[activeChannelTab]?.length > 0 ? (
+                                breakdownDimensions[activeChannelTab].map(dim => {
+                                  const isSelected = breakdownConfigs[activeChannelTab]?.breakdownDimensionIds?.includes(dim.id) || false;
+                                  return (
+                                    <div
+                                      key={dim.id}
+                                      className={cn(
+                                        "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
+                                        isSelected
+                                          ? "bg-primary/10"
+                                          : "hover:bg-muted/50"
+                                      )}
+                                      onClick={() => handleBreakdownToggle(activeChannelTab, dim.id)}
+                                    >
+                                      <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={() => handleBreakdownToggle(activeChannelTab, dim.id)}
+                                      />
+                                      <span className="text-sm">{dim.name}</span>
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                <p className="text-center text-muted-foreground py-4">
+                                  No breakdown dimensions available
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
-                      {(breakdownConfigs[activeChannelTab]?.breakdownDimensionIds?.length || 0) > 0 && (
-                        <div className="mt-2 p-4 bg-primary/5 rounded-lg border border-primary/20">
-                          <p className="text-sm font-medium mb-2">
-                            Selected ({breakdownConfigs[activeChannelTab]?.breakdownDimensionIds?.length || 0}):
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {breakdownConfigs[activeChannelTab]?.breakdownDimensionIds?.map(dimId => {
-                              const dim = availableBreakdownDimensions.find(d => d.id === dimId);
-                              return dim ? (
-                                <span key={dimId} className="px-2 py-1 bg-primary/10 rounded text-xs">
-                                  {dim.name}
-                                </span>
-                              ) : null;
-                            })}
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-2">
-                            A separate breakdown table will be created for each dimension.
-                          </p>
-                        </div>
-                      )}
                     </>
                   )}
                 </div>
@@ -1760,7 +2307,8 @@ export default function SlideViewPage() {
                   <ScrollArea className="h-full">
                     <div className="space-y-1">
                       {selectedChannels.map(channel => {
-                        const filterCount = filterConfigs[channel]?.filterDimensionIds?.length || 0;
+                        // For master-report, no filters
+                        const filterCount = slideType === 'master-report' ? 0 : (filterConfigs[channel]?.filterDimensionIds?.length || 0);
                         return (
                           <button
                             key={channel}
@@ -1807,7 +2355,8 @@ export default function SlideViewPage() {
                             <div className="p-2 space-y-1">
                               {dimensions[activeChannelTab]?.length > 0 ? (
                                 dimensions[activeChannelTab].map(dim => {
-                                  const isSelected = filterConfigs[activeChannelTab]?.filterDimensionIds?.includes(dim.id) || false;
+                                  // For master-report, filters are disabled
+                                  const isSelected = slideType === 'master-report' ? false : (filterConfigs[activeChannelTab]?.filterDimensionIds?.includes(dim.id) || false);
                                   return (
                                     <div
                                       key={dim.id}
@@ -1837,26 +2386,6 @@ export default function SlideViewPage() {
                         )}
                       </div>
 
-                      {(filterConfigs[activeChannelTab]?.filterDimensionIds?.length || 0) > 0 && (
-                        <div className="mt-2 p-4 bg-primary/5 rounded-lg border border-primary/20">
-                          <p className="text-sm font-medium mb-2">
-                            Selected ({filterConfigs[activeChannelTab]?.filterDimensionIds?.length || 0}):
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {filterConfigs[activeChannelTab]?.filterDimensionIds?.map(dimId => {
-                              const dim = dimensions[activeChannelTab]?.find(d => d.id === dimId);
-                              return dim ? (
-                                <span key={dimId} className="px-2 py-1 bg-primary/10 rounded text-xs">
-                                  {dim.name}
-                                </span>
-                              ) : null;
-                            })}
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-2">
-                            A filter dropdown will appear on the slides page for each selected dimension.
-                          </p>
-                        </div>
-                      )}
                     </>
                   )}
                 </div>
@@ -1884,6 +2413,16 @@ export default function SlideViewPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Data Pivot Table Modal */}
+      <SlideDataPivotTable
+        open={isDataModalOpen}
+        onOpenChange={setIsDataModalOpen}
+        selectedValueDimensionIds={selectedValueDimensionIds}
+        availableDimensions={availableDimensions}
+        selectedChannels={selectedChannels}
+        slideReportId={slideReportId}
+      />
+
       <div className="p-6 space-y-6">
         {/* Tabs and Filters Row */}
         <div className="flex items-center justify-between">
@@ -1898,89 +2437,95 @@ export default function SlideViewPage() {
                 
               </TabsList>
 
-              <div className="flex items-center gap-2">
-                {/* Filter Dropdowns */}
-                {selectedChannels.flatMap(channel => {
-                  const filterDimIds = filterConfigs[channel]?.filterDimensionIds || [];
-                  return filterDimIds.map(filterDimId => {
-                    const filterDim = dimensions[channel]?.find(d => d.id === filterDimId);
-                    const filterValuesList = filterDimensionValues[channel]?.[filterDimId] || [];
-                    
-                    if (!filterDim || filterValuesList.length === 0) return null;
-                    
-                    return (
-                      <Select
-                        key={`${channel}-${filterDimId}`}
-                        value={filterValues[channel]?.[filterDimId] || 'all'}
-                        onValueChange={(value) => {
-                          setFilterValues(prev => ({
-                            ...prev,
-                            [channel]: {
-                              ...prev[channel],
-                              [filterDimId]: value === 'all' ? '' : value,
-                            },
-                          }));
-                        }}
-                      >
-                        <SelectTrigger className="w-[150px]">
-                          <SelectValue placeholder={filterDim.name} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All {filterDim.name}</SelectItem>
-                          {filterValuesList.map(value => (
-                            <SelectItem key={value} value={value}>
-                              {value}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    );
-                  }).filter(Boolean);
-                })}
-                
-                <Select value={selectedYear} onValueChange={setSelectedYear}>
-                  <SelectTrigger className="w-[100px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2024">2024</SelectItem>
-                    <SelectItem value="2025">2025</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="January">January</SelectItem>
-                    <SelectItem value="February">February</SelectItem>
-                    <SelectItem value="March">March</SelectItem>
-                    <SelectItem value="April">April</SelectItem>
-                    <SelectItem value="May">May</SelectItem>
-                    <SelectItem value="June">June</SelectItem>
-                    <SelectItem value="July">July</SelectItem>
-                    <SelectItem value="August">August</SelectItem>
-                    <SelectItem value="September">September</SelectItem>
-                    <SelectItem value="October">October</SelectItem>
-                    <SelectItem value="November">November</SelectItem>
-                    <SelectItem value="December">December</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={comparisonType} onValueChange={setComparisonType}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="No Comparison" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Comparison</SelectItem>
-                    <SelectItem value="previous_period">Previous Period</SelectItem>
-                    <SelectItem value="previous_year">Previous Year</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Filters - Only show on individual report tabs, not on Overview or Budget */}
+              {selectedTab !== "overview" && selectedTab !== "budget" && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground mr-2">Since January 2024</span>
+                  {/* Filter Dropdowns */}
+                  {selectedChannels.flatMap(channel => {
+                    // For master-report, don't apply filters
+                    const filterDimIds = slideType === 'master-report' ? [] : (filterConfigs[channel]?.filterDimensionIds || []);
+                    return filterDimIds.map(filterDimId => {
+                      const filterDim = dimensions[channel]?.find(d => d.id === filterDimId);
+                      const filterValuesList = filterDimensionValues[channel]?.[filterDimId] || [];
+                      
+                      if (!filterDim || filterValuesList.length === 0) return null;
+                      
+                      return (
+                        <Select
+                          key={`${channel}-${filterDimId}`}
+                          value={filterValues[channel]?.[filterDimId] || 'all'}
+                          onValueChange={(value) => {
+                            setFilterValues(prev => ({
+                              ...prev,
+                              [channel]: {
+                                ...prev[channel],
+                                [filterDimId]: value === 'all' ? '' : value,
+                              },
+                            }));
+                          }}
+                        >
+                          <SelectTrigger className="w-[150px]">
+                            <SelectValue placeholder={filterDim.name} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All {filterDim.name}</SelectItem>
+                            {filterValuesList.map(value => (
+                              <SelectItem key={value} value={value}>
+                                {value}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      );
+                    }).filter(Boolean);
+                  })}
+                  
+                  <Select value={selectedYear} onValueChange={setSelectedYear}>
+                    <SelectTrigger className="w-[100px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2024">2024</SelectItem>
+                      <SelectItem value="2025">2025</SelectItem>
+                      <SelectItem value="2026">2026</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="January">January</SelectItem>
+                      <SelectItem value="February">February</SelectItem>
+                      <SelectItem value="March">March</SelectItem>
+                      <SelectItem value="April">April</SelectItem>
+                      <SelectItem value="May">May</SelectItem>
+                      <SelectItem value="June">June</SelectItem>
+                      <SelectItem value="July">July</SelectItem>
+                      <SelectItem value="August">August</SelectItem>
+                      <SelectItem value="September">September</SelectItem>
+                      <SelectItem value="October">October</SelectItem>
+                      <SelectItem value="November">November</SelectItem>
+                      <SelectItem value="December">December</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={comparisonType} onValueChange={setComparisonType}>
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue placeholder="No Comparison" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Comparison</SelectItem>
+                      <SelectItem value="previous_period">Previous Period</SelectItem>
+                      <SelectItem value="previous_year">Previous Year</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
-            {/* Comparison info banner */}
-            {comparisonType !== "none" && (
+            {/* Comparison info banner - Only show on individual report tabs */}
+            {selectedTab !== "overview" && selectedTab !== "budget" && comparisonType !== "none" && (
               <div className="mb-4 p-3 bg-muted rounded-lg text-sm">
                 {comparisonType === "previous_period" && (
                   <span>Comparing December 2025 vs November 2025</span>
@@ -2103,16 +2648,25 @@ export default function SlideViewPage() {
                 </CardContent>
               </Card>
 
+              {/* Unified Breakdown Table */}
               <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Results by Hotel</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-base font-medium">Breakdown Analysis</CardTitle></CardHeader>
                 <CardContent>
-                  <BreakdownTable data={METASEARCH_BY_HOTEL} labelKey="hotel" labelHeader="Hotel" />
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Results by Link Type</CardTitle></CardHeader>
-                <CardContent>
-                  <BreakdownTable data={METASEARCH_BY_LINK_TYPE} labelKey="linkType" labelHeader="Link Type" />
+                  <UnifiedBreakdownTable 
+                    groupBy={groupByDimension}
+                    breakdownBy={breakdownByDimension}
+                    expandedRow={expandedRow}
+                    onRowClick={setExpandedRow}
+                    onGroupByChange={setGroupByDimension}
+                    onBreakdownByChange={setBreakdownByDimension}
+                    availableDimensions={[
+                      ...new Map([
+                        ...(breakdownDimensions.metasearch || []),
+                        ...(breakdownDimensions.sem || []),
+                        ...(breakdownDimensions.social || []),
+                      ].map(dim => [dim.id, dim])).values()
+                    ]}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -2142,10 +2696,25 @@ export default function SlideViewPage() {
                 </CardContent>
               </Card>
 
+              {/* Unified Breakdown Table */}
               <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Results by Campaign</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-base font-medium">Breakdown Analysis</CardTitle></CardHeader>
                 <CardContent>
-                  <BreakdownTable data={SEM_BY_CAMPAIGN_WITH_OTHER} labelKey="campaign" labelHeader="Campaign" />
+                  <UnifiedBreakdownTable 
+                    groupBy={groupByDimension}
+                    breakdownBy={breakdownByDimension}
+                    expandedRow={expandedRow}
+                    onRowClick={setExpandedRow}
+                    onGroupByChange={setGroupByDimension}
+                    onBreakdownByChange={setBreakdownByDimension}
+                    availableDimensions={[
+                      ...new Map([
+                        ...(breakdownDimensions.metasearch || []),
+                        ...(breakdownDimensions.sem || []),
+                        ...(breakdownDimensions.social || []),
+                      ].map(dim => [dim.id, dim])).values()
+                    ]}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -2175,10 +2744,25 @@ export default function SlideViewPage() {
                 </CardContent>
               </Card>
 
+              {/* Unified Breakdown Table */}
               <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Results by Campaign</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-base font-medium">Breakdown Analysis</CardTitle></CardHeader>
                 <CardContent>
-                  <BreakdownTable data={SOCIAL_BY_CAMPAIGN_WITH_OTHER} labelKey="campaign" labelHeader="Campaign" />
+                  <UnifiedBreakdownTable 
+                    groupBy={groupByDimension}
+                    breakdownBy={breakdownByDimension}
+                    expandedRow={expandedRow}
+                    onRowClick={setExpandedRow}
+                    onGroupByChange={setGroupByDimension}
+                    onBreakdownByChange={setBreakdownByDimension}
+                    availableDimensions={[
+                      ...new Map([
+                        ...(breakdownDimensions.metasearch || []),
+                        ...(breakdownDimensions.sem || []),
+                        ...(breakdownDimensions.social || []),
+                      ].map(dim => [dim.id, dim])).values()
+                    ]}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>

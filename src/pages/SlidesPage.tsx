@@ -228,7 +228,7 @@ export default function SlidesPage() {
                 {slides.length} slide{slides.length !== 1 ? "s" : ""}
               </p>
             </div>
-            <Button onClick={() => setCreateModalOpen(true)} className="gap-2">
+            <Button onClick={() => navigate(`/tools/slides/${accountId}/brady?edit=true`)} className="gap-2">
               <Plus className="h-4 w-4" />
               Create Slide
             </Button>
@@ -252,6 +252,22 @@ export default function SlidesPage() {
                     <div>
                       <h3 className="font-semibold">Brady - December 2025</h3>
                       <p className="text-sm text-muted-foreground">Hardcoded demo slide • Pre-rendered</p>
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm">View Slide</Button>
+                </div>
+              </Card>
+
+              {/* Hardcoded Master Report Slide Card */}
+              <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" onClick={() => navigate(`/tools/slides/${accountId}/master-report`)}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Presentation className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Master Report</h3>
+                      <p className="text-sm text-muted-foreground">All accounts/hotels • January 2024 to present</p>
                     </div>
                   </div>
                   <Button variant="outline" size="sm">View Slide</Button>
@@ -282,6 +298,22 @@ export default function SlidesPage() {
                     <div>
                       <h3 className="font-semibold">Brady - December 2025</h3>
                       <p className="text-sm text-muted-foreground">Hardcoded demo slide • Pre-rendered</p>
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm">View Slide</Button>
+                </div>
+              </Card>
+
+              {/* Hardcoded Master Report Slide Card - always shown */}
+              <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" onClick={() => navigate(`/tools/slides/${accountId}/master-report`)}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Presentation className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Master Report</h3>
+                      <p className="text-sm text-muted-foreground">All accounts/hotels • January 2024 to present</p>
                     </div>
                   </div>
                   <Button variant="outline" size="sm">View Slide</Button>

@@ -2167,92 +2167,95 @@ export const AISummaryPivotTable: React.FC<AISummaryPivotTableProps> = ({
             </Button>
           </div>
           
-          <div className="flex items-center gap-3">
-          {/* Custom Filter Value Dropdowns - show when custom filters are configured */}
-          {activeReportTab !== "overview" && activeReportTab !== "budget" && activeCustomFilterDimensionIds.length > 0 && activeCustomFilterDimensionIds.map((dimensionId: string) => {
-            if (!dimensionId) return null;
-            const dimName = filterDimensionNames[dimensionId] || dimensionId;
-            return (
-              <Select
-                key={dimensionId}
-                value={filterValues[dimensionId]?.length > 0 ? filterValues[dimensionId][0] : "all"}
-                onValueChange={(value) => {
-                  setFilterValues(prev => ({
-                    ...prev,
-                    [dimensionId]: value === "all" ? [] : [value],
-                  }));
-                }}
-              >
+          {/* Filters - Only show on individual report tabs, not on Overview or Budget */}
+          {activeReportTab !== "overview" && activeReportTab !== "budget" && (
+            <div className="flex items-center gap-3">
+              {/* Custom Filter Value Dropdowns - show when custom filters are configured */}
+              {activeCustomFilterDimensionIds.length > 0 && activeCustomFilterDimensionIds.map((dimensionId: string) => {
+                if (!dimensionId) return null;
+                const dimName = filterDimensionNames[dimensionId] || dimensionId;
+                return (
+                  <Select
+                    key={dimensionId}
+                    value={filterValues[dimensionId]?.length > 0 ? filterValues[dimensionId][0] : "all"}
+                    onValueChange={(value) => {
+                      setFilterValues(prev => ({
+                        ...prev,
+                        [dimensionId]: value === "all" ? [] : [value],
+                      }));
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder={dimName || "Select value"} />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border z-50">
+                      <SelectItem value="all">All {dimName}</SelectItem>
+                      {(customFilterDimensionValues[dimensionId] || []).map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                );
+              })}
+
+              {/* Year Selector */}
+              {availableYears.length > 0 && (
+                <Select 
+                  value={selectedYear.toString()} 
+                  onValueChange={(v) => startTransition(() => handleYearChange(parseInt(v, 10)))}
+                >
+                  <SelectTrigger className="w-[100px]">
+                    <SelectValue placeholder="Year" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border z-50">
+                    {availableYears.map((year) => (
+                      <SelectItem key={year} value={year.toString()}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              
+              {/* Single Date Period Select - uses dynamically generated options based on selected year */}
+              {effectiveDateOptions.length > 0 && (
+                <Select 
+                  value={selectedDatePeriod || activeTab} 
+                  onValueChange={(v) => {
+                    if (onDatePeriodChange) {
+                      onDatePeriodChange(v);
+                    }
+                    handleTabChange(v as DateTab);
+                  }}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select date" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border z-50">
+                    {effectiveDateOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              
+              {/* Comparison Filter */}
+              <Select value={comparisonType} onValueChange={(v) => startTransition(() => setComparisonType(v as ComparisonType))}>
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder={dimName || "Select value"} />
+                  <SelectValue placeholder="Comparison" />
                 </SelectTrigger>
                 <SelectContent className="bg-popover border-border z-50">
-                  <SelectItem value="all">All {dimName}</SelectItem>
-                  {(customFilterDimensionValues[dimensionId] || []).map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {value}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="none">No Comparison</SelectItem>
+                  <SelectItem value="previous_period">vs Previous Period</SelectItem>
+                  <SelectItem value="previous_year">vs Previous Year</SelectItem>
                 </SelectContent>
               </Select>
-            );
-          })}
-
-          {/* Year Selector */}
-          {availableYears.length > 0 && (
-            <Select 
-              value={selectedYear.toString()} 
-              onValueChange={(v) => startTransition(() => handleYearChange(parseInt(v, 10)))}
-            >
-              <SelectTrigger className="w-[100px]">
-                <SelectValue placeholder="Year" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border z-50">
-                {availableYears.map((year) => (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            </div>
           )}
-          
-          {/* Single Date Period Select - uses dynamically generated options based on selected year */}
-          {effectiveDateOptions.length > 0 && (
-            <Select 
-              value={selectedDatePeriod || activeTab} 
-              onValueChange={(v) => {
-                if (onDatePeriodChange) {
-                  onDatePeriodChange(v);
-                }
-                handleTabChange(v as DateTab);
-              }}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Select date" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border z-50">
-                {effectiveDateOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          
-          {/* Comparison Filter */}
-          <Select value={comparisonType} onValueChange={(v) => startTransition(() => setComparisonType(v as ComparisonType))}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Comparison" />
-            </SelectTrigger>
-            <SelectContent className="bg-popover border-border z-50">
-              <SelectItem value="none">No Comparison</SelectItem>
-              <SelectItem value="previous_period">vs Previous Period</SelectItem>
-              <SelectItem value="previous_year">vs Previous Year</SelectItem>
-            </SelectContent>
-          </Select>
-          </div>
         </div>
 
         {/* KPI Cards Grid */}
