@@ -8,9 +8,10 @@ import { Session } from "@supabase/supabase-js";
 import { ArrowLeft, Plus, Presentation, LogOut, ChevronDown, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SlideListItem } from "@/components/slides/SlideListItem";
-import { CreateSlideModal } from "@/components/slides/CreateSlideModal";
+import { CreateChildReportModal } from "@/components/slides/CreateChildReportModal";
 import { useSlides, useDeleteSlide, useRefreshSlideData } from "@/hooks/useSlides";
 import { useSlideReports, useDeleteSlideReport } from "@/hooks/useSlideReports";
+import { SlideReport } from "@/types/slideReports";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,7 +28,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { SlideWithDetails } from "@/types/slides";
-import { SlideReport } from "@/types/slideReports";
 import { cn } from "@/lib/utils";
 
 interface Account {
@@ -213,17 +213,31 @@ export default function SlidesPage() {
     }
   };
 
-  const handleSlideCreated = (slide: any) => {
+  const handleReportCreated = (report: any) => {
     toast({
-      title: "Slide created",
-      description: "Your slide has been created. Fetching data...",
+      title: "Report created",
+      description: "Your child report has been created successfully.",
     });
-    // Refresh data for the new slide
-    refreshSlideData.mutate(slide.id);
   };
 
+  // Get master report for child report creation
+  const masterReport = slideReports?.find(r => r.name === 'Master Report') || null;
+
   const handleViewSlideReport = (report: SlideReport) => {
-    navigate(`/tools/reports/${accountId}/master-report?reportId=${report.id}`);
+    // Generate slug from report name
+    const slug = report.name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .substring(0, 50);
+    
+    // For master report, use master-report slug
+    if (report.name === 'Master Report') {
+      navigate(`/tools/reports/${accountId}/master-report`);
+    } else {
+      navigate(`/tools/reports/${accountId}/${slug}?reportId=${report.id}`);
+    }
   };
 
   const handleDeleteSlideReport = (report: SlideReport) => {
@@ -424,14 +438,15 @@ export default function SlidesPage() {
         </div>
       </main>
 
-      {/* Create Modal */}
-      {session && accountId && (
-        <CreateSlideModal
+      {/* Create Child Report Modal */}
+      {session && accountId && masterReport && (
+        <CreateChildReportModal
           open={createModalOpen}
           onOpenChange={setCreateModalOpen}
           accountId={accountId}
           userId={session.user.id}
-          onSlideCreated={handleSlideCreated}
+          masterReport={masterReport}
+          onReportCreated={handleReportCreated}
         />
       )}
 
