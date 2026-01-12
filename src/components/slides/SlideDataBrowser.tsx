@@ -46,18 +46,34 @@ export function SlideDataBrowser({
     onOpenChange(isOpen);
   };
 
-  // Extract available years from pivot data
+  // Extract available years from pivot data - check monthly keys like "2024-01"
   const availableYears = useMemo(() => {
     const years = new Set<string>();
     
+    // Check overview.yearly
     if (pivotData?.overview?.yearly) {
       Object.keys(pivotData.overview.yearly).forEach(y => years.add(y));
     }
     
+    // Check overview.monthly (keys like "2024-01")
+    if (pivotData?.overview?.monthly) {
+      Object.keys(pivotData.overview.monthly).forEach(key => {
+        const year = key.split('-')[0];
+        if (year) years.add(year);
+      });
+    }
+    
+    // Check channels.*.yearly and channels.*.monthly
     if (pivotData?.channels) {
-      Object.values(pivotData.channels).forEach(channelData => {
-        if (channelData.yearly) {
+      Object.values(pivotData.channels).forEach((channelData: any) => {
+        if (channelData?.yearly) {
           Object.keys(channelData.yearly).forEach(y => years.add(y));
+        }
+        if (channelData?.monthly) {
+          Object.keys(channelData.monthly).forEach(key => {
+            const year = key.split('-')[0];
+            if (year) years.add(year);
+          });
         }
       });
     }
@@ -74,18 +90,18 @@ export function SlideDataBrowser({
     if (pivotData?.overview?.monthly) {
       Object.keys(pivotData.overview.monthly).forEach(key => {
         const [year, month] = key.split('-');
-        if (year === selectedYear) {
+        if (year === selectedYear && month) {
           months.add(parseInt(month));
         }
       });
     }
     
     if (pivotData?.channels) {
-      Object.values(pivotData.channels).forEach(channelData => {
-        if (channelData.monthly) {
+      Object.values(pivotData.channels).forEach((channelData: any) => {
+        if (channelData?.monthly) {
           Object.keys(channelData.monthly).forEach(key => {
             const [year, month] = key.split('-');
-            if (year === selectedYear) {
+            if (year === selectedYear && month) {
               months.add(parseInt(month));
             }
           });
