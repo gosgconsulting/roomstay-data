@@ -1230,54 +1230,71 @@ export default function SlideViewPage() {
     }
   }, [slideReport?.configuration]);
 
-  // Load filter dimension values and names when filterConfigs change (when page loads or config updates)
+  // Load filter dimension values and names from pivot_data (pre-computed) instead of loading from database
   useEffect(() => {
-    const loadFilterValuesAndNames = async () => {
-      if (!slideReport?.configuration?.filterConfigs) return;
+    const loadFilterValuesFromPivotData = async () => {
+      const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+      const config = slideReport?.configuration as SlideReportConfiguration | null;
       
-      const config = slideReport.configuration;
-      const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {};
-      const updatedFilterDimensionNames: Record<string, Record<string, string>> = {};
-      
-      // Collect all load promises for parallel execution
-      const loadPromises: Promise<void>[] = [];
-      const allFilterDimIds: string[] = [];
-      
-      for (const channel of config.selectedChannels || []) {
-        const filterConfig = config.filterConfigs?.[channel];
-        if (filterConfig?.filterDimensionIds && filterConfig.filterDimensionIds.length > 0) {
-          updatedFilterDimensionValues[channel] = {};
-          updatedFilterDimensionNames[channel] = {};
-          for (const filterDimId of filterConfig.filterDimensionIds) {
-            allFilterDimIds.push(filterDimId);
-            // Load values in parallel
-            loadPromises.push(
-              loadFilterDimensionValues(channel, filterDimId).then(values => {
-                updatedFilterDimensionValues[channel][filterDimId] = values;
-                console.log(`[loadFilterValues] Loaded ${values.length} values for ${channel}/${filterDimId}`);
-              })
-            );
-          }
-        }
+      if (!pivotData?.channels || !config?.filterConfigs) {
+        console.log('[loadFilterValues] No pivot data or filter config available');
+        return;
       }
       
-      // Also fetch dimension names in parallel
-      if (allFilterDimIds.length > 0) {
-        const uniqueIds = [...new Set(allFilterDimIds)];
-        const { data: dimensionInfo } = await supabase
-          .from('dimensions')
-          .select('id, name')
-          .in('id', uniqueIds);
+      const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {
+        metasearch: {},
+        sem: {},
+        social: {},
+      };
+      const updatedFilterDimensionNames: Record<string, Record<string, string>> = {
+        metasearch: {},
+        sem: {},
+        social: {},
+      };
+      
+      let hasValues = false;
+      
+      for (const channel of config.selectedChannels || []) {
+        const channelData = pivotData.channels[channel];
+        const filterConfig = config.filterConfigs?.[channel];
         
-        if (dimensionInfo) {
-          for (const dim of dimensionInfo) {
-            // Add to all channels that have this dimension
-            for (const channel of config.selectedChannels || []) {
-              const filterConfig = config.filterConfigs?.[channel];
-              if (filterConfig?.filterDimensionIds?.includes(dim.id)) {
-                if (!updatedFilterDimensionNames[channel]) {
-                  updatedFilterDimensionNames[channel] = {};
-                }
+        if (!channelData || !filterConfig?.filterDimensionIds?.length) continue;
+        
+        // Check if we have pre-computed filter values in pivot_data
+        const filterUniqueValues = (channelData as any).filterUniqueValues as Record<string, { name: string; values: string[] }> | undefined;
+        
+        if (filterUniqueValues) {
+          // Use pre-computed values from pivot_data (fast path - no DB query needed)
+          for (const filterDimId of filterConfig.filterDimensionIds) {
+            const filterData = filterUniqueValues[filterDimId];
+            if (filterData) {
+              updatedFilterDimensionValues[channel][filterDimId] = filterData.values;
+              updatedFilterDimensionNames[channel][filterDimId] = filterData.name;
+              hasValues = true;
+              console.log(`[loadFilterValues] Using ${filterData.values.length} pre-computed values for ${channel}/${filterData.name}`);
+            }
+          }
+        } else {
+          // Fallback: Load from database (for old reports without pre-computed values)
+          console.log(`[loadFilterValues] No pre-computed filter values for ${channel}, loading from database...`);
+          for (const filterDimId of filterConfig.filterDimensionIds) {
+            const values = await loadFilterDimensionValues(channel, filterDimId);
+            if (values.length > 0) {
+              updatedFilterDimensionValues[channel][filterDimId] = values;
+              hasValues = true;
+            }
+          }
+          
+          // Fetch dimension names for fallback path
+          const uniqueIds = [...new Set(filterConfig.filterDimensionIds)];
+          if (uniqueIds.length > 0) {
+            const { data: dimensionInfo } = await supabase
+              .from('dimensions')
+              .select('id, name')
+              .in('id', uniqueIds);
+            
+            if (dimensionInfo) {
+              for (const dim of dimensionInfo) {
                 updatedFilterDimensionNames[channel][dim.id] = dim.name;
               }
             }
@@ -1285,22 +1302,19 @@ export default function SlideViewPage() {
         }
       }
       
-      // Wait for all values to load
-      await Promise.all(loadPromises);
-      
-      if (Object.keys(updatedFilterDimensionValues).length > 0) {
+      if (hasValues) {
         setFilterDimensionValues(prev => ({ ...prev, ...updatedFilterDimensionValues }));
-        console.log('[loadFilterValues] Filter dimension values loaded for page display');
+        console.log('[loadFilterValues] Filter dimension values loaded from pivot_data');
       }
-      if (Object.keys(updatedFilterDimensionNames).length > 0) {
+      if (Object.values(updatedFilterDimensionNames).some(ch => Object.keys(ch).length > 0)) {
         setFilterDimensionNames(prev => ({ ...prev, ...updatedFilterDimensionNames }));
         console.log('[loadFilterValues] Filter dimension names loaded:', updatedFilterDimensionNames);
       }
     };
 
-    loadFilterValuesAndNames();
+    loadFilterValuesFromPivotData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slideReport?.configuration?.filterConfigs]);
+  }, [slideReport?.pivot_data, slideReport?.configuration?.filterConfigs]);
 
   // Load filter dimension values when switching to a channel tab that has filters
   useEffect(() => {
@@ -1323,24 +1337,45 @@ export default function SlideViewPage() {
         return;
       }
       
-      console.log(`[selectedTab] Loading filter values for ${currentChannel}...`);
+      // First, try to get values from pivot_data (pre-computed)
+      const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+      const channelData = pivotData?.channels?.[currentChannel];
+      const filterUniqueValues = (channelData as any)?.filterUniqueValues as Record<string, { name: string; values: string[] }> | undefined;
       
-      // Load missing values in parallel
-      const loadPromises: Promise<void>[] = [];
       const newValues: Record<string, string[]> = {};
+      const newNames: Record<string, string> = {};
+      const missingDimIds: string[] = [];
       
       for (const filterDimId of filterDimIds) {
-        if (!filterDimensionValues[currentChannel]?.[filterDimId]?.length) {
+        if (filterDimensionValues[currentChannel]?.[filterDimId]?.length > 0) continue;
+        
+        // Check pivot_data first
+        if (filterUniqueValues?.[filterDimId]) {
+          newValues[filterDimId] = filterUniqueValues[filterDimId].values;
+          newNames[filterDimId] = filterUniqueValues[filterDimId].name;
+          console.log(`[selectedTab] Using ${filterUniqueValues[filterDimId].values.length} pre-computed values for ${filterUniqueValues[filterDimId].name}`);
+        } else {
+          missingDimIds.push(filterDimId);
+        }
+      }
+      
+      // Fallback: Load missing values from database
+      if (missingDimIds.length > 0) {
+        console.log(`[selectedTab] Loading ${missingDimIds.length} missing filter values from database for ${currentChannel}...`);
+        const loadPromises: Promise<void>[] = [];
+        
+        for (const filterDimId of missingDimIds) {
           loadPromises.push(
             loadFilterDimensionValues(currentChannel, filterDimId).then(values => {
               newValues[filterDimId] = values;
             })
           );
         }
+        
+        await Promise.all(loadPromises);
       }
       
-      if (loadPromises.length > 0) {
-        await Promise.all(loadPromises);
+      if (Object.keys(newValues).length > 0) {
         setFilterDimensionValues(prev => ({
           ...prev,
           [currentChannel]: {
@@ -1348,13 +1383,22 @@ export default function SlideViewPage() {
             ...newValues,
           },
         }));
-        console.log(`[selectedTab] Loaded filter values for ${currentChannel}:`, Object.keys(newValues));
       }
+      if (Object.keys(newNames).length > 0) {
+        setFilterDimensionNames(prev => ({
+          ...prev,
+          [currentChannel]: {
+            ...prev[currentChannel],
+            ...newNames,
+          },
+        }));
+      }
+      console.log(`[selectedTab] Loaded filter values for ${currentChannel}:`, Object.keys(newValues));
     };
 
     loadValuesForCurrentTab();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTab]);
+  }, [selectedTab, slideReport?.pivot_data]);
 
   // Open modal if ?edit=true in URL
   useEffect(() => {

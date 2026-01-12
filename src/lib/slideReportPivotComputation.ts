@@ -726,6 +726,47 @@ export async function computeSlideReportPivotData(
       }
     }
 
+    // Compute unique filter values for each filter dimension (stored for instant filter dropdowns)
+    const filterUniqueValues: Record<string, { name: string; values: string[] }> = {};
+    const filterConfig = configuration.filterConfigs?.[channel];
+    const filterDimensionIds = filterConfig?.filterDimensionIds || [];
+    
+    if (filterDimensionIds.length > 0) {
+      // Fetch dimension names for filter dimensions
+      const { data: filterDimInfo } = await supabase
+        .from('dimensions')
+        .select('id, name')
+        .in('id', filterDimensionIds);
+      
+      const filterDimNameMap: Record<string, string> = {};
+      if (filterDimInfo) {
+        for (const dim of filterDimInfo) {
+          filterDimNameMap[dim.id] = dim.name;
+        }
+      }
+      
+      // Extract unique values for each filter dimension from the rows
+      for (const filterDimId of filterDimensionIds) {
+        const uniqueValues = new Set<string>();
+        
+        for (const row of rows) {
+          const rowData = row.dimension_values || row;
+          const value = rowData[filterDimId];
+          if (value !== undefined && value !== null && String(value).trim() !== '') {
+            uniqueValues.add(String(value).trim());
+          }
+        }
+        
+        const sortedValues = Array.from(uniqueValues).sort();
+        filterUniqueValues[filterDimId] = {
+          name: filterDimNameMap[filterDimId] || filterDimId,
+          values: sortedValues,
+        };
+        
+        console.log(`Computed ${sortedValues.length} unique filter values for ${filterDimNameMap[filterDimId] || filterDimId}`);
+      }
+    }
+
     pivotData.channels[channel] = {
       current: currentChannelMetrics,
       previous_period: prevPeriodChannelMetrics,
@@ -734,6 +775,7 @@ export async function computeSlideReportPivotData(
       yearly,
       breakdowns,
       monthlyBreakdowns,
+      filterUniqueValues,
     };
 
     // Aggregate monthly data for overview
