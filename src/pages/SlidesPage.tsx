@@ -124,11 +124,11 @@ export default function SlidesPage() {
   };
 
   const handleViewSlide = (slide: SlideWithDetails) => {
-    navigate(`/tools/slides/${accountId}/view/${slide.id}`);
+    navigate(`/tools/reports/${accountId}/view/${slide.id}`);
   };
 
   const handleEditSlide = (slide: SlideWithDetails) => {
-    navigate(`/tools/slides/${accountId}/edit/${slide.id}`);
+    navigate(`/tools/reports/${accountId}/edit/${slide.id}`);
   };
 
   const handleDeleteSlide = (slide: SlideWithDetails) => {
@@ -193,7 +193,7 @@ export default function SlidesPage() {
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">
                 <Presentation className="h-6 w-6" />
-                Slides
+                Reports
               </h1>
               <p className="text-sm text-muted-foreground">
                 {account?.name} • Pre-rendered data snapshots
@@ -223,14 +223,14 @@ export default function SlidesPage() {
           {/* Section Header */}
           <div className="mb-6 flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-semibold">Your Slides</h2>
+              <h2 className="text-xl font-semibold">Your Reports</h2>
               <p className="text-sm text-muted-foreground">
-                {slides.length} slide{slides.length !== 1 ? "s" : ""}
+                {slides.length} report{slides.length !== 1 ? "s" : ""}
               </p>
             </div>
-            <Button onClick={() => navigate(`/tools/slides/${accountId}/brady?edit=true`)} className="gap-2">
+            <Button onClick={() => navigate(`/tools/reports/${accountId}/brady?edit=true`)} className="gap-2">
               <Plus className="h-4 w-4" />
-              Create Slide
+              Create Report
             </Button>
           </div>
 
@@ -238,12 +238,12 @@ export default function SlidesPage() {
           {slidesLoading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mx-auto"></div>
-              <p className="text-sm text-muted-foreground mt-2">Loading slides...</p>
+              <p className="text-sm text-muted-foreground mt-2">Loading reports...</p>
             </div>
           ) : slides.length > 0 ? (
             <div className="space-y-4">
-              {/* Hardcoded Brady Slide Card */}
-              <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" onClick={() => navigate(`/tools/slides/${accountId}/brady`)}>
+              {/* Hardcoded Brady Report Card */}
+              <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" onClick={() => navigate(`/tools/reports/${accountId}/brady`)}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -251,15 +251,15 @@ export default function SlidesPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold">Brady - December 2025</h3>
-                      <p className="text-sm text-muted-foreground">Hardcoded demo slide • Pre-rendered</p>
+                      <p className="text-sm text-muted-foreground">Hardcoded demo report • Pre-rendered</p>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm">View Slide</Button>
+                  <Button variant="outline" size="sm">View Report</Button>
                 </div>
               </Card>
 
-              {/* Hardcoded Master Report Slide Card */}
-              <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" onClick={() => navigate(`/tools/slides/${accountId}/master-report`)}>
+              {/* Hardcoded Master Report Card */}
+              <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" onClick={() => navigate(`/tools/reports/${accountId}/master-report`)}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -270,7 +270,7 @@ export default function SlidesPage() {
                       <p className="text-sm text-muted-foreground">All accounts/hotels • January 2024 to present</p>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm">View Slide</Button>
+                  <Button variant="outline" size="sm">View Report</Button>
                 </div>
               </Card>
               
@@ -288,8 +288,8 @@ export default function SlidesPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Hardcoded Brady Slide Card - always shown */}
-              <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" onClick={() => navigate(`/tools/slides/${accountId}/brady`)}>
+              {/* Hardcoded Brady Report Card - always shown */}
+              <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" onClick={() => navigate(`/tools/reports/${accountId}/brady`)}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -297,15 +297,15 @@ export default function SlidesPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold">Brady - December 2025</h3>
-                      <p className="text-sm text-muted-foreground">Hardcoded demo slide • Pre-rendered</p>
+                      <p className="text-sm text-muted-foreground">Hardcoded demo report • Pre-rendered</p>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm">View Slide</Button>
+                  <Button variant="outline" size="sm">View Report</Button>
                 </div>
               </Card>
 
-              {/* Hardcoded Master Report Slide Card - always shown */}
-              <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" onClick={() => navigate(`/tools/slides/${accountId}/master-report`)}>
+              {/* Hardcoded Master Report Card - always shown */}
+              <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" onClick={() => navigate(`/tools/reports/${accountId}/master-report`)}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -316,20 +316,20 @@ export default function SlidesPage() {
                       <p className="text-sm text-muted-foreground">All accounts/hotels • January 2024 to present</p>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm">View Slide</Button>
+                  <Button variant="outline" size="sm">View Report</Button>
                 </div>
               </Card>
 
               <Card>
                 <CardContent className="py-12 text-center">
                   <Presentation className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">No custom slides yet</h3>
+                  <h3 className="text-lg font-medium mb-2">No custom reports yet</h3>
                   <p className="text-muted-foreground mb-6">
-                    Create your first slide to display pre-rendered data snapshots.
+                    Create your first report to display pre-rendered data snapshots.
                   </p>
                   <Button onClick={() => setCreateModalOpen(true)} className="gap-2">
                     <Plus className="h-4 w-4" />
-                    Create Your First Slide
+                    Create Your First Report
                   </Button>
                 </CardContent>
               </Card>
@@ -353,7 +353,7 @@ export default function SlidesPage() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Slide</AlertDialogTitle>
+            <AlertDialogTitle>Delete Report</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{slideToDelete?.name}"? This action cannot
               be undone.

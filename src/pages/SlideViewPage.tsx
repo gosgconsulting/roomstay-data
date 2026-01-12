@@ -2702,7 +2702,7 @@ export default function SlideViewPage() {
             <Button 
               variant="ghost" 
               size="icon" 
-              onClick={() => navigate(`/tools/slides/${accountId}`)}
+              onClick={() => navigate(`/tools/reports/${accountId}`)}
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
