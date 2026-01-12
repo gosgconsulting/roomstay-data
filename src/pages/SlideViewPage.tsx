@@ -3213,18 +3213,9 @@ export default function SlideViewPage() {
                                        || dimensions[currentChannel]?.find(d => d.id === filterDimId)?.name
                                        || `Filter`;
                     const filterValuesList = filterDimensionValues[currentChannel]?.[filterDimId] || [];
-                    
-                    if (filterValuesList.length === 0) {
-                      return (
-                        <Button key={`header-${currentChannel}-${filterDimId}`} variant="outline" size="sm" className="h-8" disabled>
-                          <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                          {filterDimName}
-                        </Button>
-                      );
-                    }
-                    
                     const selectedFilterValues = filterValues[currentChannel]?.[filterDimId] || [];
                     const isAllSelected = selectedFilterValues.length === 0 || selectedFilterValues.length === filterValuesList.length;
+                    const hasValues = filterValuesList.length > 0;
                     
                     return (
                       <Popover key={`header-${currentChannel}-${filterDimId}`}>
@@ -3281,7 +3272,7 @@ export default function SlideViewPage() {
                             </div>
                             <ScrollArea className="h-[200px]">
                               <div className="space-y-1 p-1">
-                                {filterValuesList.map(value => {
+                                {hasValues ? filterValuesList.map(value => {
                                   const isSelected = selectedFilterValues.includes(value);
                                   return (
                                     <div
@@ -3310,7 +3301,11 @@ export default function SlideViewPage() {
                                       <span className="truncate">{value}</span>
                                     </div>
                                   );
-                                })}
+                                }) : (
+                                  <div className="text-center py-4 text-muted-foreground text-sm">
+                                    Click "Refresh Data" to load filter values
+                                  </div>
+                                )}
                               </div>
                             </ScrollArea>
                           </div>
@@ -3858,152 +3853,9 @@ export default function SlideViewPage() {
         {/* Filters Row */}
         <div className="flex items-center justify-end">
 
-              {/* Filters - Show date filters on all tabs except Budget, dimension filters only on channel tabs */}
+              {/* Date Filters - Show on all tabs except Budget */}
               {selectedTab !== "budget" && (
                 <div className="flex items-center gap-2">
-                  {/* Channel-specific Filter Dropdowns - Only show on individual report tabs */}
-                  {selectedTab !== "overview" && (() => {
-                    const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
-                    // Use saved configuration from slideReport, fallback to local state
-                    const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
-                    const localFilterConfig = filterConfigs?.[currentChannel];
-                    const filterDimIds = savedFilterConfigs?.filterDimensionIds || localFilterConfig?.filterDimensionIds || [];
-                    return filterDimIds.map(filterDimId => {
-                      // Use filterDimensionNames state (loaded on page load) or fallback to dimensions state
-                      const filterDimName = filterDimensionNames[currentChannel]?.[filterDimId] 
-                                         || dimensions[currentChannel]?.find(d => d.id === filterDimId)?.name
-                                         || `Filter ${filterDimId.substring(0, 8)}`;
-                      // Ensure we get values ONLY for this specific filterDimId, not mixed with other dimensions
-                      const filterValuesList = filterDimensionValues[currentChannel]?.[filterDimId] || [];
-                      
-                      // If no values loaded yet, show a loading placeholder instead of hiding
-                      if (filterValuesList.length === 0) {
-                        return (
-                          <Button key={`${currentChannel}-${filterDimId}`} variant="outline" className="w-[180px]" disabled>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Loading {filterDimName}...
-                          </Button>
-                        );
-                      }
-                      
-                      const selectedFilterValues = filterValues[currentChannel]?.[filterDimId] || [];
-                      const isAllSelected = selectedFilterValues.length === 0 || selectedFilterValues.length === filterValuesList.length;
-                      
-                      return (
-                        <Popover key={`${currentChannel}-${filterDimId}`}>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="w-[180px] justify-between"
-                            >
-                              <span className="truncate">
-                                {isAllSelected 
-                                  ? `All ${filterDimName}` 
-                                  : selectedFilterValues.length === 1
-                                    ? selectedFilterValues[0]
-                                    : `${selectedFilterValues.length} ${filterDimName} selected`}
-                              </span>
-                              <ChevronRight className="h-4 w-4 opacity-50 rotate-90" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[250px] p-0 bg-popover z-50" align="start">
-                            <div className="p-2">
-                              <div className="flex items-center justify-between mb-2">
-                                <Label className="text-sm font-medium">{filterDimName}</Label>
-                                <div className="flex gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 px-2 text-xs"
-                                    onClick={() => {
-                                      setFilterValues(prev => ({
-                                        ...prev,
-                                        [currentChannel]: {
-                                          ...prev[currentChannel],
-                                          [filterDimId]: [...filterValuesList],
-                                        },
-                                      }));
-                                    }}
-                                  >
-                                    Select All
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 px-2 text-xs"
-                                    onClick={() => {
-                                      setFilterValues(prev => ({
-                                        ...prev,
-                                        [currentChannel]: {
-                                          ...prev[currentChannel],
-                                          [filterDimId]: [],
-                                        },
-                                      }));
-                                    }}
-                                  >
-                                    Clear
-                                  </Button>
-                                </div>
-                              </div>
-                              <ScrollArea className="h-[200px]">
-                                <div className="space-y-1 p-1">
-                                  {filterValuesList.map(value => {
-                                    const isSelected = selectedFilterValues.includes(value);
-                                    return (
-                                      <div
-                                        key={value}
-                                        className={cn(
-                                          "flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent",
-                                          isSelected && "bg-accent"
-                                        )}
-                                        onClick={() => {
-                                          setFilterValues(prev => {
-                                            const current = prev[currentChannel]?.[filterDimId] || [];
-                                            const newValues = isSelected
-                                              ? current.filter(v => v !== value)
-                                              : [...current, value];
-                                            return {
-                                              ...prev,
-                                              [currentChannel]: {
-                                                ...prev[currentChannel],
-                                                [filterDimId]: newValues,
-                                              },
-                                            };
-                                          });
-                                        }}
-                                      >
-                                        <Checkbox
-                                          checked={isSelected}
-                                          onCheckedChange={() => {
-                                            setFilterValues(prev => {
-                                              const current = prev[currentChannel]?.[filterDimId] || [];
-                                              const newValues = isSelected
-                                                ? current.filter(v => v !== value)
-                                                : [...current, value];
-                                              return {
-                                                ...prev,
-                                                [currentChannel]: {
-                                                  ...prev[currentChannel],
-                                                  [filterDimId]: newValues,
-                                                },
-                                              };
-                                            });
-                                          }}
-                                        />
-                                        <span className="text-sm flex-1">{value}</span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </ScrollArea>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      );
-                    }).filter(Boolean);
-                  })()}
-                  
-                  {/* Date Filters - Show on all tabs including Overview */}
                   <Select value={selectedYear} onValueChange={setSelectedYear}>
                     <SelectTrigger className="w-[120px]">
                       <SelectValue />
