@@ -1030,7 +1030,8 @@ export default function SlideViewPage() {
                 setChannelConfigs(config.channelConfigs);
               }
               if (config.breakdownConfigs) {
-                setBreakdownConfigs(config.breakdownConfigs);
+                const autoPopulated = getAutoPopulatedBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>, config.selectedChannels);
+                setBreakdownConfigs(autoPopulated);
               }
               if (config.filterConfigs) {
                 setFilterConfigs(config.filterConfigs as any);
@@ -1068,9 +1069,9 @@ export default function SlideViewPage() {
                   social: { dimensionId: null, selectedValues: [] },
                 },
                 breakdownConfigs: {
-                  metasearch: { breakdownDimensionIds: [] },
-                  sem: { breakdownDimensionIds: [] },
-                  social: { breakdownDimensionIds: [] },
+                  metasearch: { breakdownDimensionIds: ['2df32c8d-b5a7-4c96-9913-1ec2ef07e4c7', '722602a7-590c-4bb1-b6db-ce3ecf123832'] },
+                  sem: { breakdownDimensionIds: ['2df32c8d-b5a7-4c96-9913-1ec2ef07e4c7', '722602a7-590c-4bb1-b6db-ce3ecf123832'] },
+                  social: { breakdownDimensionIds: ['2df32c8d-b5a7-4c96-9913-1ec2ef07e4c7', '722602a7-590c-4bb1-b6db-ce3ecf123832'] },
                 },
                 filterConfigs: {
                   metasearch: { filterDimensionIds: [] },
@@ -1119,7 +1120,8 @@ export default function SlideViewPage() {
               setChannelConfigs(config.channelConfigs);
             }
             if (config.breakdownConfigs) {
-              setBreakdownConfigs(config.breakdownConfigs);
+              const autoPopulated = getAutoPopulatedBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>, config.selectedChannels);
+              setBreakdownConfigs(autoPopulated);
             }
             if (config.filterConfigs) {
               setFilterConfigs(config.filterConfigs);
@@ -1160,9 +1162,13 @@ export default function SlideViewPage() {
       if (config.filterConfigs) {
         setFilterConfigs(config.filterConfigs as any);
       }
-      // Sync breakdownConfigs
+      // Sync breakdownConfigs - auto-populate with defaults if empty
       if (config.breakdownConfigs) {
-        setBreakdownConfigs(config.breakdownConfigs as any);
+        const autoPopulated = getAutoPopulatedBreakdownConfigs(
+          config.breakdownConfigs as Record<string, BreakdownConfig>, 
+          config.selectedChannels || ['metasearch', 'sem', 'social']
+        );
+        setBreakdownConfigs(autoPopulated);
       }
       // Sync channelConfigs
       if (config.channelConfigs) {
@@ -1294,14 +1300,40 @@ export default function SlideViewPage() {
     social: { dimensionId: null, selectedValues: [] },
   });
 
+  // Default breakdown dimensions that should be auto-selected
+  const DEFAULT_BREAKDOWN_DIMENSION_IDS = {
+    hotel: '2df32c8d-b5a7-4c96-9913-1ec2ef07e4c7',
+    campaign: '722602a7-590c-4bb1-b6db-ce3ecf123832',
+  };
+
   // Breakdown configuration state
   interface BreakdownConfig {
     breakdownDimensionIds: string[];
   }
+  
+  // Helper to auto-populate breakdown configs with defaults if empty
+  const getAutoPopulatedBreakdownConfigs = (
+    configs: Record<string, BreakdownConfig>,
+    channels: string[] = ['metasearch', 'sem', 'social']
+  ): Record<string, BreakdownConfig> => {
+    const result = { ...configs };
+    for (const channel of channels) {
+      if (!result[channel]?.breakdownDimensionIds?.length) {
+        result[channel] = {
+          breakdownDimensionIds: [
+            DEFAULT_BREAKDOWN_DIMENSION_IDS.hotel,
+            DEFAULT_BREAKDOWN_DIMENSION_IDS.campaign,
+          ],
+        };
+      }
+    }
+    return result;
+  };
+
   const [breakdownConfigs, setBreakdownConfigs] = useState<Record<string, BreakdownConfig>>({
-    metasearch: { breakdownDimensionIds: [] },
-    sem: { breakdownDimensionIds: [] },
-    social: { breakdownDimensionIds: [] },
+    metasearch: { breakdownDimensionIds: [DEFAULT_BREAKDOWN_DIMENSION_IDS.hotel, DEFAULT_BREAKDOWN_DIMENSION_IDS.campaign] },
+    sem: { breakdownDimensionIds: [DEFAULT_BREAKDOWN_DIMENSION_IDS.hotel, DEFAULT_BREAKDOWN_DIMENSION_IDS.campaign] },
+    social: { breakdownDimensionIds: [DEFAULT_BREAKDOWN_DIMENSION_IDS.hotel, DEFAULT_BREAKDOWN_DIMENSION_IDS.campaign] },
   });
 
   // Filter configuration state
@@ -2022,12 +2054,18 @@ export default function SlideViewPage() {
         }
       }
 
+      // Auto-populate breakdown dimensions if empty for each channel
+      const autoPopulatedBreakdownConfigs = getAutoPopulatedBreakdownConfigs(breakdownConfigs, selectedChannels);
+      
+      // Update local state to reflect auto-populated values
+      setBreakdownConfigs(autoPopulatedBreakdownConfigs);
+
       // Build configuration object with dimension mappings
       const configuration: SlideReportConfiguration = {
         selectedChannels: selectedChannels,
         selectedValueDimensionIds: selectedValueDimensionIds,
         channelConfigs: channelConfigs,
-        breakdownConfigs: breakdownConfigs,
+        breakdownConfigs: autoPopulatedBreakdownConfigs,
         filterConfigs: filterConfigs,
       };
 
@@ -2171,7 +2209,12 @@ export default function SlideViewPage() {
       setChannelConfigs(config.channelConfigs as any);
     }
     if (config.breakdownConfigs) {
-      setBreakdownConfigs(config.breakdownConfigs as any);
+      // Auto-populate breakdown dimensions if empty using the helper
+      const autoPopulated = getAutoPopulatedBreakdownConfigs(
+        config.breakdownConfigs as Record<string, BreakdownConfig>, 
+        config.selectedChannels || []
+      );
+      setBreakdownConfigs(autoPopulated);
     }
     if (config.filterConfigs) {
       setFilterConfigs(config.filterConfigs as any);
@@ -2237,7 +2280,8 @@ export default function SlideViewPage() {
         setChannelConfigs(config.channelConfigs as any);
       }
       if (config.breakdownConfigs) {
-        setBreakdownConfigs(config.breakdownConfigs as any);
+        const autoPopulated = getAutoPopulatedBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>, config.selectedChannels);
+        setBreakdownConfigs(autoPopulated);
       }
       if (config.filterConfigs) {
         setFilterConfigs(config.filterConfigs as any);
@@ -2256,9 +2300,9 @@ export default function SlideViewPage() {
         social: { dimensionId: null, selectedValues: [] },
       });
       setBreakdownConfigs({
-        metasearch: { breakdownDimensionIds: [] },
-        sem: { breakdownDimensionIds: [] },
-        social: { breakdownDimensionIds: [] },
+        metasearch: { breakdownDimensionIds: [DEFAULT_BREAKDOWN_DIMENSION_IDS.hotel, DEFAULT_BREAKDOWN_DIMENSION_IDS.campaign] },
+        sem: { breakdownDimensionIds: [DEFAULT_BREAKDOWN_DIMENSION_IDS.hotel, DEFAULT_BREAKDOWN_DIMENSION_IDS.campaign] },
+        social: { breakdownDimensionIds: [DEFAULT_BREAKDOWN_DIMENSION_IDS.hotel, DEFAULT_BREAKDOWN_DIMENSION_IDS.campaign] },
       });
       setFilterConfigs({
         metasearch: { filterDimensionIds: [] },
