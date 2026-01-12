@@ -1030,32 +1030,32 @@ export default function SlideViewPage() {
                 setChannelConfigs(config.channelConfigs);
               }
               if (config.breakdownConfigs) {
-                const autoPopulated = getAutoPopulatedBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>, config.selectedChannels);
-                setBreakdownConfigs(autoPopulated);
+                setBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>);
               }
               if (config.filterConfigs) {
                 setFilterConfigs(config.filterConfigs as any);
               }
             }
-            // Load date range - default to 2026 (latest year)
+            // Load date range from saved settings
             if (masterReport.date_range) {
               const storedYear = masterReport.date_range.year;
-              const latestYear = 2026;
-              const yearToUse = storedYear >= latestYear ? storedYear : latestYear;
-              setSelectedYear(yearToUse.toString());
-              setSelectedMonth(masterReport.date_range.month || 'January');
+              const storedMonth = masterReport.date_range.month || 'January';
+              setSelectedYear(storedYear.toString());
+              setSelectedMonth(storedMonth);
               // Also set sinceMonth/sinceYear for Edit Source modal
-              setSinceMonth(masterReport.date_range.month || 'January');
-              setSinceYear(yearToUse);
+              setSinceMonth(storedMonth);
+              setSinceYear(storedYear);
             } else {
-              // No date range stored, default to latest
-              setSelectedYear('2026');
+              // No date range stored, default to current year
+              const currentYear = new Date().getFullYear();
+              setSelectedYear(currentYear.toString());
               setSelectedMonth('January');
               setSinceMonth('January');
-              setSinceYear(2026);
+              setSinceYear(currentYear);
             }
           } else {
-            // Create new Master Report slide report
+            // Create new Master Report slide report with current year as default
+            const currentYear = new Date().getFullYear();
             const newReport = await createSlideReport.mutateAsync({
               name: 'Master Report',
               account_id: accountId,
@@ -1069,9 +1069,9 @@ export default function SlideViewPage() {
                   social: { dimensionId: null, selectedValues: [] },
                 },
                 breakdownConfigs: {
-                  metasearch: { breakdownDimensionIds: ['2df32c8d-b5a7-4c96-9913-1ec2ef07e4c7', '722602a7-590c-4bb1-b6db-ce3ecf123832'] },
-                  sem: { breakdownDimensionIds: ['2df32c8d-b5a7-4c96-9913-1ec2ef07e4c7', '722602a7-590c-4bb1-b6db-ce3ecf123832'] },
-                  social: { breakdownDimensionIds: ['2df32c8d-b5a7-4c96-9913-1ec2ef07e4c7', '722602a7-590c-4bb1-b6db-ce3ecf123832'] },
+                  metasearch: { breakdownDimensionIds: [] },
+                  sem: { breakdownDimensionIds: [] },
+                  social: { breakdownDimensionIds: [] },
                 },
                 filterConfigs: {
                   metasearch: { filterDimensionIds: [] },
@@ -1081,17 +1081,17 @@ export default function SlideViewPage() {
               },
               report_ids: CHANNEL_REPORT_IDS,
               date_range: {
-                year: 2026,
+                year: currentYear,
                 month: 'January',
-                from: '2026-01-01',
-                to: new Date().toISOString().split('T')[0], // Latest available
+                from: `${currentYear}-01-01`,
+                to: new Date().toISOString().split('T')[0],
               },
             });
             setSlideReportId(newReport.id);
-            setSelectedYear('2026');
+            setSelectedYear(currentYear.toString());
             setSelectedMonth('January');
             setSinceMonth('January');
-            setSinceYear(2026);
+            setSinceYear(currentYear);
           }
           return;
         }
@@ -1120,29 +1120,28 @@ export default function SlideViewPage() {
               setChannelConfigs(config.channelConfigs);
             }
             if (config.breakdownConfigs) {
-              const autoPopulated = getAutoPopulatedBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>, config.selectedChannels);
-              setBreakdownConfigs(autoPopulated);
+              setBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>);
             }
             if (config.filterConfigs) {
               setFilterConfigs(config.filterConfigs);
             }
           }
-          // Load date range - default to 2026 (latest year)
+          // Load date range from saved settings
           if (existingReport.date_range) {
             const storedYear = existingReport.date_range.year;
-            const latestYear = 2026;
-            const yearToUse = storedYear >= latestYear ? storedYear : latestYear;
-            setSelectedYear(yearToUse.toString());
-            setSelectedMonth(existingReport.date_range.month || 'January');
+            const storedMonth = existingReport.date_range.month || 'January';
+            setSelectedYear(storedYear.toString());
+            setSelectedMonth(storedMonth);
             // Also set sinceMonth/sinceYear for Edit Source modal
-            setSinceMonth(existingReport.date_range.month || 'January');
-            setSinceYear(yearToUse);
+            setSinceMonth(storedMonth);
+            setSinceYear(storedYear);
           } else {
-            // No date range stored, default to latest
-            setSelectedYear('2026');
+            // No date range stored, default to current year
+            const currentYear = new Date().getFullYear();
+            setSelectedYear(currentYear.toString());
             setSelectedMonth('January');
             setSinceMonth('January');
-            setSinceYear(2026);
+            setSinceYear(currentYear);
           }
         }
       } catch (error) {
@@ -1162,13 +1161,9 @@ export default function SlideViewPage() {
       if (config.filterConfigs) {
         setFilterConfigs(config.filterConfigs as any);
       }
-      // Sync breakdownConfigs - auto-populate with defaults if empty
+      // Sync breakdownConfigs from saved settings
       if (config.breakdownConfigs) {
-        const autoPopulated = getAutoPopulatedBreakdownConfigs(
-          config.breakdownConfigs as Record<string, BreakdownConfig>, 
-          config.selectedChannels || ['metasearch', 'sem', 'social']
-        );
-        setBreakdownConfigs(autoPopulated);
+        setBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>);
       }
       // Sync channelConfigs
       if (config.channelConfigs) {
@@ -1300,40 +1295,15 @@ export default function SlideViewPage() {
     social: { dimensionId: null, selectedValues: [] },
   });
 
-  // Default breakdown dimensions that should be auto-selected
-  const DEFAULT_BREAKDOWN_DIMENSION_IDS = {
-    hotel: '2df32c8d-b5a7-4c96-9913-1ec2ef07e4c7',
-    campaign: '722602a7-590c-4bb1-b6db-ce3ecf123832',
-  };
-
   // Breakdown configuration state
   interface BreakdownConfig {
     breakdownDimensionIds: string[];
   }
-  
-  // Helper to auto-populate breakdown configs with defaults if empty
-  const getAutoPopulatedBreakdownConfigs = (
-    configs: Record<string, BreakdownConfig>,
-    channels: string[] = ['metasearch', 'sem', 'social']
-  ): Record<string, BreakdownConfig> => {
-    const result = { ...configs };
-    for (const channel of channels) {
-      if (!result[channel]?.breakdownDimensionIds?.length) {
-        result[channel] = {
-          breakdownDimensionIds: [
-            DEFAULT_BREAKDOWN_DIMENSION_IDS.hotel,
-            DEFAULT_BREAKDOWN_DIMENSION_IDS.campaign,
-          ],
-        };
-      }
-    }
-    return result;
-  };
 
   const [breakdownConfigs, setBreakdownConfigs] = useState<Record<string, BreakdownConfig>>({
-    metasearch: { breakdownDimensionIds: [DEFAULT_BREAKDOWN_DIMENSION_IDS.hotel, DEFAULT_BREAKDOWN_DIMENSION_IDS.campaign] },
-    sem: { breakdownDimensionIds: [DEFAULT_BREAKDOWN_DIMENSION_IDS.hotel, DEFAULT_BREAKDOWN_DIMENSION_IDS.campaign] },
-    social: { breakdownDimensionIds: [DEFAULT_BREAKDOWN_DIMENSION_IDS.hotel, DEFAULT_BREAKDOWN_DIMENSION_IDS.campaign] },
+    metasearch: { breakdownDimensionIds: [] },
+    sem: { breakdownDimensionIds: [] },
+    social: { breakdownDimensionIds: [] },
   });
 
   // Filter configuration state
@@ -2054,18 +2024,12 @@ export default function SlideViewPage() {
         }
       }
 
-      // Auto-populate breakdown dimensions if empty for each channel
-      const autoPopulatedBreakdownConfigs = getAutoPopulatedBreakdownConfigs(breakdownConfigs, selectedChannels);
-      
-      // Update local state to reflect auto-populated values
-      setBreakdownConfigs(autoPopulatedBreakdownConfigs);
-
       // Build configuration object with dimension mappings
       const configuration: SlideReportConfiguration = {
         selectedChannels: selectedChannels,
         selectedValueDimensionIds: selectedValueDimensionIds,
         channelConfigs: channelConfigs,
-        breakdownConfigs: autoPopulatedBreakdownConfigs,
+        breakdownConfigs: breakdownConfigs,
         filterConfigs: filterConfigs,
       };
 
@@ -2209,12 +2173,7 @@ export default function SlideViewPage() {
       setChannelConfigs(config.channelConfigs as any);
     }
     if (config.breakdownConfigs) {
-      // Auto-populate breakdown dimensions if empty using the helper
-      const autoPopulated = getAutoPopulatedBreakdownConfigs(
-        config.breakdownConfigs as Record<string, BreakdownConfig>, 
-        config.selectedChannels || []
-      );
-      setBreakdownConfigs(autoPopulated);
+      setBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>);
     }
     if (config.filterConfigs) {
       setFilterConfigs(config.filterConfigs as any);
@@ -2280,8 +2239,7 @@ export default function SlideViewPage() {
         setChannelConfigs(config.channelConfigs as any);
       }
       if (config.breakdownConfigs) {
-        const autoPopulated = getAutoPopulatedBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>, config.selectedChannels);
-        setBreakdownConfigs(autoPopulated);
+        setBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>);
       }
       if (config.filterConfigs) {
         setFilterConfigs(config.filterConfigs as any);
@@ -2300,9 +2258,9 @@ export default function SlideViewPage() {
         social: { dimensionId: null, selectedValues: [] },
       });
       setBreakdownConfigs({
-        metasearch: { breakdownDimensionIds: [DEFAULT_BREAKDOWN_DIMENSION_IDS.hotel, DEFAULT_BREAKDOWN_DIMENSION_IDS.campaign] },
-        sem: { breakdownDimensionIds: [DEFAULT_BREAKDOWN_DIMENSION_IDS.hotel, DEFAULT_BREAKDOWN_DIMENSION_IDS.campaign] },
-        social: { breakdownDimensionIds: [DEFAULT_BREAKDOWN_DIMENSION_IDS.hotel, DEFAULT_BREAKDOWN_DIMENSION_IDS.campaign] },
+        metasearch: { breakdownDimensionIds: [] },
+        sem: { breakdownDimensionIds: [] },
+        social: { breakdownDimensionIds: [] },
       });
       setFilterConfigs({
         metasearch: { filterDimensionIds: [] },
