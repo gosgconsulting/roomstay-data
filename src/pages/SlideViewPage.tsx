@@ -796,8 +796,41 @@ export default function SlideViewPage() {
     return sourceData.filter(m => m.year === parseInt(selectedYear));
   }, [slideType, dynamicMonthlyData, selectedYear]);
 
-  // Get current totals based on selected year/month
+  // Slide report state - moved before currentTotals so it's available
+  const [slideReportId, setSlideReportId] = useState<string | null>(null);
+  const { data: slideReport } = useSlideReport(slideReportId);
+  const { data: slideReports } = useSlideReports(accountId || null);
+  const createSlideReport = useCreateSlideReport();
+  const updateSlideReport = useUpdateSlideReport();
+  const refreshSlideReportData = useRefreshSlideReportData();
+
+  // Get current totals based on selected year/month from pivot_data
   const currentTotals = useMemo(() => {
+    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+    
+    // If we have pivot_data and a specific month is selected, use monthly data
+    if (pivotData?.channels && selectedMonth && selectedMonth !== 'all') {
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const monthNum = monthNames.indexOf(selectedMonth) + 1;
+      const monthKey = selectedYear !== 'all' 
+        ? `${selectedYear}-${monthNum.toString().padStart(2, '0')}`
+        : null;
+      
+      if (monthKey) {
+        const channelTotals: Record<string, any> = {};
+        for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+          const monthlyData = (channelData as any).monthly?.[monthKey];
+          if (monthlyData) {
+            channelTotals[channel] = monthlyData;
+          } else {
+            channelTotals[channel] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+          }
+        }
+        return channelTotals;
+      }
+    }
+    
+    // If "All Months" is selected, use yearly totals or all data
     if (slideType === 'master-report' && Object.keys(dynamicChannelTotals).length > 0) {
       // If specific year selected, use yearly totals
       if (selectedYear !== 'all') {
@@ -817,15 +850,7 @@ export default function SlideViewPage() {
       sem: SEM_DATA,
       social: SOCIAL_DATA,
     };
-  }, [slideType, dynamicChannelTotals, dynamicYearlyTotals, selectedYear]);
-
-  // Slide report state
-  const [slideReportId, setSlideReportId] = useState<string | null>(null);
-  const { data: slideReport } = useSlideReport(slideReportId);
-  const { data: slideReports } = useSlideReports(accountId || null);
-  const createSlideReport = useCreateSlideReport();
-  const updateSlideReport = useUpdateSlideReport();
-  const refreshSlideReportData = useRefreshSlideReportData();
+  }, [slideType, slideReport?.pivot_data, dynamicChannelTotals, dynamicYearlyTotals, selectedYear, selectedMonth]);
 
   // Load data from stored pivot_data when slideReport changes
   useEffect(() => {
