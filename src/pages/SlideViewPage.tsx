@@ -14,6 +14,9 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
+import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange } from "@/types/slideReports";
+import { useUser } from "@/lib/auth";
 
 // REAL DATA from database queries - December 2025 Brady Hotels Account (after resync)
 const METASEARCH_DATA = {
@@ -399,6 +402,7 @@ const BreakdownTable = ({
 export default function SlideViewPage() {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
+  const { user } = useUser();
   const [selectedYear, setSelectedYear] = useState("2025");
   const [selectedMonth, setSelectedMonth] = useState("December");
   const [selectedTab, setSelectedTab] = useState("overview");
@@ -409,6 +413,60 @@ export default function SlideViewPage() {
     sem: true,
     social: true,
   });
+
+  // Slide report state
+  const [slideReportId, setSlideReportId] = useState<string | null>(null);
+  const { data: slideReport } = useSlideReport(slideReportId);
+  const { data: slideReports } = useSlideReports(accountId || null);
+  const createSlideReport = useCreateSlideReport();
+  const updateSlideReport = useUpdateSlideReport();
+  const refreshSlideReportData = useRefreshSlideReportData();
+
+  // Load or create slide report on mount
+  useEffect(() => {
+    const loadOrCreateSlideReport = async () => {
+      if (!accountId || !user) return;
+
+      try {
+        // Try to find existing slide report for this account
+        // For now, we'll use the first active one or create a new one
+        const existingReport = slideReports?.find(r => r.is_active);
+        
+        if (existingReport) {
+          setSlideReportId(existingReport.id);
+          // Load configuration from existing report
+          if (existingReport.configuration) {
+            const config = existingReport.configuration;
+            if (config.selectedChannels) {
+              setSelectedDimensions({
+                metasearch: config.selectedChannels.includes('metasearch'),
+                sem: config.selectedChannels.includes('sem'),
+                social: config.selectedChannels.includes('social'),
+              });
+            }
+            if (config.channelConfigs) {
+              setChannelConfigs(config.channelConfigs);
+            }
+            if (config.breakdownConfigs) {
+              setBreakdownConfigs(config.breakdownConfigs);
+            }
+            if (config.filterConfigs) {
+              setFilterConfigs(config.filterConfigs);
+            }
+          }
+          // Load date range
+          if (existingReport.date_range) {
+            setSelectedYear(existingReport.date_range.year.toString());
+            setSelectedMonth(existingReport.date_range.month);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading slide report:', error);
+      }
+    };
+
+    loadOrCreateSlideReport();
+  }, [accountId, user, slideReports]);
 
   // Step-by-step modal state
   type ModalStep = 1 | 2 | 3 | 4;
@@ -743,25 +801,82 @@ export default function SlideViewPage() {
   };
 
   const handleSave = async () => {
-    // TODO: Save configurations to database or state
-    console.log('Saving configurations:', { channelConfigs, breakdownConfigs, filterConfigs });
-    // Load filter dimension values for all configured filters
-    for (const channel of selectedChannels) {
-      const filterDimIds = filterConfigs[channel]?.filterDimensionIds || [];
-      for (const filterDimId of filterDimIds) {
-        await loadValuesForDimension(channel, filterDimId);
-        const values = dimensionValues[channel] || [];
-        setFilterDimensionValues(prev => ({
-          ...prev,
-          [channel]: {
-            ...prev[channel],
-            [filterDimId]: values,
-          },
-        }));
-      }
+    if (!accountId || !user) {
+      console.error('Cannot save: missing accountId or user');
+      setIsEditSourceOpen(false);
+      resetModalState();
+      return;
     }
-    setIsEditSourceOpen(false);
-    resetModalState();
+
+    try {
+      // Load filter dimension values for all configured filters
+      for (const channel of selectedChannels) {
+        const filterDimIds = filterConfigs[channel]?.filterDimensionIds || [];
+        for (const filterDimId of filterDimIds) {
+          await loadValuesForDimension(channel, filterDimId);
+          const values = dimensionValues[channel] || [];
+          setFilterDimensionValues(prev => ({
+            ...prev,
+            [channel]: {
+              ...prev[channel],
+              [filterDimId]: values,
+            },
+          }));
+        }
+      }
+
+      // Build configuration object
+      const configuration: SlideReportConfiguration = {
+        selectedChannels: selectedChannels,
+        channelConfigs: channelConfigs,
+        breakdownConfigs: breakdownConfigs,
+        filterConfigs: filterConfigs,
+      };
+
+      // Map channel names to report IDs (TODO: fetch actual report IDs from database)
+      // For now, we'll need to fetch reports by name or create a mapping
+      const reportIds: Record<string, string> = {};
+      // TODO: Implement logic to map channels to actual report IDs
+      // This could be done by fetching reports with matching names or storing the mapping
+
+      // Calculate date range
+      const monthNumber = new Date(`${selectedMonth} 1, ${selectedYear}`).getMonth();
+      const dateRange: SlideReportDateRange = {
+        year: parseInt(selectedYear),
+        month: selectedMonth,
+        from: new Date(parseInt(selectedYear), monthNumber, 1).toISOString().split('T')[0],
+        to: new Date(parseInt(selectedYear), monthNumber + 1, 0).toISOString().split('T')[0],
+      };
+
+      // Save or update slide report
+      if (slideReportId) {
+        // Update existing slide report
+        await updateSlideReport.mutateAsync({
+          id: slideReportId,
+          configuration,
+          report_ids: reportIds,
+          date_range: dateRange,
+        });
+      } else {
+        // Create new slide report
+        const newReport = await createSlideReport.mutateAsync({
+          name: `Brady Hotels - ${selectedMonth} ${selectedYear}`,
+          account_id: accountId,
+          user_id: user.id,
+          configuration,
+          report_ids: reportIds,
+          date_range: dateRange,
+        });
+        setSlideReportId(newReport.id);
+      }
+
+      setIsEditSourceOpen(false);
+      resetModalState();
+    } catch (error) {
+      console.error('Error saving slide report configuration:', error);
+      setIsEditSourceOpen(false);
+      resetModalState();
+    }
   };
 
   const resetModalState = () => {
