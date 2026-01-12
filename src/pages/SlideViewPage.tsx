@@ -1015,6 +1015,55 @@ export default function SlideViewPage() {
       if (!accountId || !user) return;
 
       try {
+        // Check if a specific reportId is passed via URL parameter
+        const urlReportId = searchParams.get('reportId');
+        if (urlReportId) {
+          // Load the specific report from URL
+          const targetReport = slideReports?.find(r => r.id === urlReportId && r.is_active);
+          if (targetReport) {
+            setSlideReportId(targetReport.id);
+            // Load configuration from the target report
+            if (targetReport.configuration) {
+              const config = targetReport.configuration;
+              if (config.selectedChannels) {
+                setSelectedDimensions({
+                  metasearch: config.selectedChannels.includes('metasearch'),
+                  sem: config.selectedChannels.includes('sem'),
+                  social: config.selectedChannels.includes('social'),
+                });
+              }
+              if (config.selectedValueDimensionIds) {
+                setSelectedValueDimensionIds(config.selectedValueDimensionIds);
+              }
+              if (config.channelConfigs) {
+                setChannelConfigs(config.channelConfigs);
+              }
+              if (config.breakdownConfigs) {
+                setBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>);
+              }
+              if (config.filterConfigs) {
+                setFilterConfigs(config.filterConfigs as any);
+              }
+            }
+            // Load date range from saved settings
+            if (targetReport.date_range) {
+              const storedYear = targetReport.date_range.year;
+              const storedMonth = targetReport.date_range.month || 'January';
+              setSelectedYear(storedYear.toString());
+              setSelectedMonth(storedMonth);
+              setSinceMonth(storedMonth);
+              setSinceYear(storedYear);
+            } else {
+              const currentYear = new Date().getFullYear();
+              setSelectedYear(currentYear.toString());
+              setSelectedMonth('January');
+              setSinceMonth('January');
+              setSinceYear(currentYear);
+            }
+            return;
+          }
+        }
+
         // For master-report, look for or create a slide report with name "Master Report"
         if (slideType === 'master-report') {
           const masterReport = slideReports?.find(r => r.name === 'Master Report' && r.is_active);
@@ -2981,6 +3030,9 @@ export default function SlideViewPage() {
   const totalActual = BUDGET_COMPARISON_DATA.reduce((sum, m) => sum + m.actual, 0);
   const budgetVariance = totalBudget - totalActual;
 
+  // Get the current report name
+  const currentReportName = slideReport?.name || 'Master Report';
+
   return (
     <Tabs value={selectedTab} onValueChange={setSelectedTab} className="min-h-screen bg-background">
       {/* Header */}
@@ -2994,6 +3046,14 @@ export default function SlideViewPage() {
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
+            <div className="mr-4">
+              <h1 className="text-lg font-semibold">{currentReportName}</h1>
+              <p className="text-xs text-muted-foreground">
+                {slideReport?.date_range 
+                  ? `Since ${slideReport.date_range.month} ${slideReport.date_range.year}`
+                  : 'All Data'}
+              </p>
+            </div>
             {/* Tabs in header */}
             <TabsList>
               <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Overview</TabsTrigger>
