@@ -869,29 +869,67 @@ export default function SlideViewPage() {
     if (slideReport?.pivot_data && slideType === 'master-report') {
       const pivotData = slideReport.pivot_data;
       
-      // Load overview monthly data
+      // Build monthly data with per-channel breakdown
+      const monthlyDataMap: Record<string, any> = {};
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      
+      // First, load overview monthly data as base
       if (pivotData.overview?.monthly) {
-        const monthlyRevenue = Object.entries(pivotData.overview.monthly).map(([key, metrics]: [string, any]) => {
+        Object.entries(pivotData.overview.monthly).forEach(([key, metrics]: [string, any]) => {
           const [year, monthNum] = key.split('-');
-          const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-          return {
-            month: monthNames[parseInt(monthNum) - 1],
+          const monthName = monthNames[parseInt(monthNum) - 1];
+          monthlyDataMap[key] = {
+            month: monthName,
             year: parseInt(year),
             revenue: metrics.revenue || 0,
             cost: metrics.cost || 0,
             impressions: metrics.impressions || 0,
             clicks: metrics.clicks || 0,
             bookings: metrics.bookings || 0,
+            metasearch: 0,
+            sem: 0,
+            social: 0,
           };
-        }).sort((a, b) => {
-          if (a.year !== b.year) return a.year - b.year;
-          const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-          return monthNames.indexOf(a.month) - monthNames.indexOf(b.month);
         });
-        
-        if (monthlyRevenue.length > 0) {
-          setDynamicMonthlyData(monthlyRevenue);
+      }
+      
+      // Then, load channel-specific monthly data from channels[channel].monthly
+      if (pivotData.channels) {
+        for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+          const channelMonthly = (channelData as any).monthly;
+          if (channelMonthly) {
+            Object.entries(channelMonthly).forEach(([key, metrics]: [string, any]) => {
+              if (!monthlyDataMap[key]) {
+                const [year, monthNum] = key.split('-');
+                const monthName = monthNames[parseInt(monthNum) - 1];
+                monthlyDataMap[key] = {
+                  month: monthName,
+                  year: parseInt(year),
+                  revenue: 0,
+                  cost: 0,
+                  impressions: 0,
+                  clicks: 0,
+                  bookings: 0,
+                  metasearch: 0,
+                  sem: 0,
+                  social: 0,
+                };
+              }
+              // Store channel-specific revenue
+              monthlyDataMap[key][channel] = (metrics as any).revenue || 0;
+            });
+          }
         }
+      }
+      
+      // Convert to array and sort
+      const monthlyRevenue = Object.values(monthlyDataMap).sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return monthNames.indexOf(a.month) - monthNames.indexOf(b.month);
+      });
+      
+      if (monthlyRevenue.length > 0) {
+        setDynamicMonthlyData(monthlyRevenue);
       }
       
       // Load channel totals from current metrics
@@ -3175,15 +3213,15 @@ export default function SlideViewPage() {
 
             {/* Metasearch Tab */}
             <TabsContent value="metasearch" className="space-y-6">
-              {renderKPICards(getReportKPICards(METASEARCH_DATA), getChannelComparisonMetrics('metasearch'))}
+              {renderKPICards(getReportKPICards(currentTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('metasearch'))}
               
               {/* Monthly Revenue Chart */}
               <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Monthly Results (2025)</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-base font-medium">Monthly Results ({selectedYear === 'all' ? 'All Years' : selectedYear})</CardTitle></CardHeader>
                 <CardContent>
                   <div className="h-[250px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={MONTHLY_METASEARCH_DATA}>
+                      <BarChart data={filteredMonthlyData.map(m => ({ month: m.month, revenue: m.metasearch || 0 }))}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
@@ -3229,15 +3267,15 @@ export default function SlideViewPage() {
 
             {/* SEM Tab */}
             <TabsContent value="sem" className="space-y-6">
-              {renderKPICards(getReportKPICards(SEM_DATA), getChannelComparisonMetrics('sem'))}
+              {renderKPICards(getReportKPICards(currentTotals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('sem'))}
               
               {/* Monthly Revenue Chart */}
               <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Monthly Results (2025)</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-base font-medium">Monthly Results ({selectedYear === 'all' ? 'All Years' : selectedYear})</CardTitle></CardHeader>
                 <CardContent>
                   <div className="h-[250px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={MONTHLY_SEM_DATA}>
+                      <BarChart data={filteredMonthlyData.map(m => ({ month: m.month, revenue: m.sem || 0 }))}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
@@ -3283,15 +3321,15 @@ export default function SlideViewPage() {
 
             {/* Social Tab */}
             <TabsContent value="social" className="space-y-6">
-              {renderKPICards(getReportKPICards(SOCIAL_DATA), getChannelComparisonMetrics('social'))}
+              {renderKPICards(getReportKPICards(currentTotals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('social'))}
               
               {/* Monthly Revenue Chart */}
               <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Monthly Results (2025)</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-base font-medium">Monthly Results ({selectedYear === 'all' ? 'All Years' : selectedYear})</CardTitle></CardHeader>
                 <CardContent>
                   <div className="h-[250px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={MONTHLY_SOCIAL_DATA}>
+                      <BarChart data={filteredMonthlyData.map(m => ({ month: m.month, revenue: m.social || 0 }))}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
