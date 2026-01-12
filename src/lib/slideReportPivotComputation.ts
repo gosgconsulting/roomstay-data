@@ -194,13 +194,56 @@ function computeMonthlyMetrics(
 }
 
 /**
+ * Compute monthly metrics for multiple years
+ */
+function computeAllMonthlyMetrics(
+  rows: any[],
+  years: number[],
+  dimensionFilter?: { dimensionId: string; dimensionName?: string; values: string[] }
+): Record<string, ChannelMetrics> {
+  const allMonthlyData: Record<string, ChannelMetrics> = {};
+  
+  for (const year of years) {
+    const yearlyMonthly = computeMonthlyMetrics(rows, year, dimensionFilter);
+    Object.assign(allMonthlyData, yearlyMonthly);
+  }
+
+  return allMonthlyData;
+}
+
+/**
+ * Compute yearly totals
+ */
+function computeYearlyMetrics(
+  rows: any[],
+  years: number[],
+  dimensionFilter?: { dimensionId: string; dimensionName?: string; values: string[] }
+): Record<string, ChannelMetrics> {
+  const yearlyData: Record<string, ChannelMetrics> = {};
+  
+  for (const year of years) {
+    const yearStart = new Date(year, 0, 1);
+    const yearEnd = new Date(year, 11, 31);
+    
+    const metrics = aggregateMetricsForDateRange(rows, { start: yearStart, end: yearEnd }, dimensionFilter);
+    yearlyData[String(year)] = calculateDerivedMetrics(metrics);
+  }
+
+  return yearlyData;
+}
+
+/**
  * Compute pivot data for a slide report
+ * Computes data for all years (2024, 2025, 2026) and stores it for fast filtering
  */
 export async function computeSlideReportPivotData(
   reportIds: Record<string, string>, // channel -> report_id
   configuration: SlideReportConfiguration,
   dateRange: { year: number; month: string; from: string; to: string }
 ): Promise<SlideReportPivotData> {
+  // Years to compute data for
+  const YEARS_TO_COMPUTE = [2024, 2025, 2026];
+  
   const pivotData: SlideReportPivotData = {
     overview: {
       current: {
@@ -215,6 +258,8 @@ export async function computeSlideReportPivotData(
         roas: 0,
         costOfSale: 0,
       },
+      monthly: {},
+      yearly: {},
     },
     channels: {},
     budget: {
@@ -225,12 +270,17 @@ export async function computeSlideReportPivotData(
         variance: 0,
       },
     },
+    computedAt: new Date().toISOString(),
   };
 
   const currentDateRange = {
     start: new Date(dateRange.from),
     end: new Date(dateRange.to),
   };
+
+  // Initialize overview aggregation structures
+  const overviewMonthly: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
+  const overviewYearly: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
 
   // Compute data for each channel
   for (const channel of configuration.selectedChannels) {
@@ -247,6 +297,7 @@ export async function computeSlideReportPivotData(
 
     // Fetch dimension data
     const rows = await fetchDimensionDataForReport(reportId);
+    console.log(`Fetched ${rows.length} rows for ${channel}`);
 
     // Compute current period metrics
     const currentMetrics = aggregateMetricsForDateRange(rows, currentDateRange, dimensionFilter);
@@ -279,17 +330,18 @@ export async function computeSlideReportPivotData(
     );
     const prevYearChannelMetrics = calculateDerivedMetrics(prevYearMetrics);
 
-    // Compute monthly metrics
-    const monthly = computeMonthlyMetrics(rows, dateRange.year, dimensionFilter);
+    // Compute monthly metrics for ALL years
+    const allMonthly = computeAllMonthlyMetrics(rows, YEARS_TO_COMPUTE, dimensionFilter);
+    
+    // Compute yearly totals
+    const yearly = computeYearlyMetrics(rows, YEARS_TO_COMPUTE, dimensionFilter);
 
-    // Compute breakdowns
+    // Compute breakdowns for each breakdown dimension
     const breakdowns: Record<string, BreakdownRow[]> = {};
     const breakdownConfig = configuration.breakdownConfigs[channel];
     if (breakdownConfig?.breakdownDimensionIds) {
-      // TODO: Fetch dimension names from database
-      // For now, use dimension IDs as names
       for (const breakdownDimId of breakdownConfig.breakdownDimensionIds) {
-        const breakdownDimName = breakdownDimId; // Should fetch actual name
+        const breakdownDimName = breakdownDimId; // Using dimension ID as name for now
         breakdowns[breakdownDimName] = computeBreakdown(
           rows,
           currentDateRange,
@@ -304,11 +356,36 @@ export async function computeSlideReportPivotData(
       current: currentChannelMetrics,
       previous_period: prevPeriodChannelMetrics,
       previous_year: prevYearChannelMetrics,
-      monthly,
+      monthly: allMonthly,
+      yearly,
       breakdowns,
     };
 
-    // Add to overview totals
+    // Aggregate monthly data for overview
+    for (const [monthKey, metrics] of Object.entries(allMonthly)) {
+      if (!overviewMonthly[monthKey]) {
+        overviewMonthly[monthKey] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+      }
+      overviewMonthly[monthKey].impressions += metrics.impressions;
+      overviewMonthly[monthKey].clicks += metrics.clicks;
+      overviewMonthly[monthKey].cost += metrics.cost;
+      overviewMonthly[monthKey].revenue += metrics.revenue;
+      overviewMonthly[monthKey].bookings += metrics.bookings;
+    }
+
+    // Aggregate yearly data for overview
+    for (const [yearKey, metrics] of Object.entries(yearly)) {
+      if (!overviewYearly[yearKey]) {
+        overviewYearly[yearKey] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+      }
+      overviewYearly[yearKey].impressions += metrics.impressions;
+      overviewYearly[yearKey].clicks += metrics.clicks;
+      overviewYearly[yearKey].cost += metrics.cost;
+      overviewYearly[yearKey].revenue += metrics.revenue;
+      overviewYearly[yearKey].bookings += metrics.bookings;
+    }
+
+    // Add to overview current totals
     pivotData.overview.current.impressions += currentChannelMetrics.impressions;
     pivotData.overview.current.clicks += currentChannelMetrics.clicks;
     pivotData.overview.current.cost += currentChannelMetrics.cost;
@@ -316,7 +393,19 @@ export async function computeSlideReportPivotData(
     pivotData.overview.current.bookings += currentChannelMetrics.bookings;
   }
 
-  // Recalculate overview derived metrics
+  // Finalize overview monthly data (calculate derived metrics)
+  pivotData.overview.monthly = {};
+  for (const [monthKey, baseMetrics] of Object.entries(overviewMonthly)) {
+    pivotData.overview.monthly[monthKey] = calculateDerivedMetrics(baseMetrics);
+  }
+
+  // Finalize overview yearly data (calculate derived metrics)
+  pivotData.overview.yearly = {};
+  for (const [yearKey, baseMetrics] of Object.entries(overviewYearly)) {
+    pivotData.overview.yearly[yearKey] = calculateDerivedMetrics(baseMetrics);
+  }
+
+  // Recalculate overview current derived metrics
   pivotData.overview.current = calculateDerivedMetrics({
     impressions: pivotData.overview.current.impressions,
     clicks: pivotData.overview.current.clicks,
@@ -325,33 +414,9 @@ export async function computeSlideReportPivotData(
     bookings: pivotData.overview.current.bookings,
   });
 
-  // Compute previous period and previous year for overview
-  // (aggregate from all channels)
-  const overviewPrevPeriod: ChannelMetrics = {
-    impressions: 0,
-    clicks: 0,
-    cost: 0,
-    revenue: 0,
-    bookings: 0,
-    ctr: 0,
-    conversionRate: 0,
-    cpc: 0,
-    roas: 0,
-    costOfSale: 0,
-  };
-
-  const overviewPrevYear: ChannelMetrics = {
-    impressions: 0,
-    clicks: 0,
-    cost: 0,
-    revenue: 0,
-    bookings: 0,
-    ctr: 0,
-    conversionRate: 0,
-    cpc: 0,
-    roas: 0,
-    costOfSale: 0,
-  };
+  // Compute previous period and previous year for overview (aggregate from all channels)
+  const overviewPrevPeriod = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+  const overviewPrevYear = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
 
   for (const channel of configuration.selectedChannels) {
     const channelData = pivotData.channels[channel];
@@ -371,24 +436,10 @@ export async function computeSlideReportPivotData(
     }
   }
 
-  pivotData.overview.previous_period = calculateDerivedMetrics({
-    impressions: overviewPrevPeriod.impressions,
-    clicks: overviewPrevPeriod.clicks,
-    cost: overviewPrevPeriod.cost,
-    revenue: overviewPrevPeriod.revenue,
-    bookings: overviewPrevPeriod.bookings,
-  });
+  pivotData.overview.previous_period = calculateDerivedMetrics(overviewPrevPeriod);
+  pivotData.overview.previous_year = calculateDerivedMetrics(overviewPrevYear);
 
-  pivotData.overview.previous_year = calculateDerivedMetrics({
-    impressions: overviewPrevYear.impressions,
-    clicks: overviewPrevYear.clicks,
-    cost: overviewPrevYear.cost,
-    revenue: overviewPrevYear.revenue,
-    bookings: overviewPrevYear.bookings,
-  });
-
-  // TODO: Compute budget data
-  // For now, return empty budget structure
+  // TODO: Compute budget data from budget tables
   pivotData.budget = {
     monthly: [],
     totals: {
@@ -397,6 +448,12 @@ export async function computeSlideReportPivotData(
       variance: 0,
     },
   };
+
+  console.log('Computed pivot data:', {
+    channels: Object.keys(pivotData.channels),
+    overviewMonthlyKeys: Object.keys(pivotData.overview.monthly || {}),
+    overviewYearlyKeys: Object.keys(pivotData.overview.yearly || {}),
+  });
 
   return pivotData;
 }

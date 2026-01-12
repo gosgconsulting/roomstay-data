@@ -864,7 +864,70 @@ export default function SlideViewPage() {
   const updateSlideReport = useUpdateSlideReport();
   const refreshSlideReportData = useRefreshSlideReportData();
 
-  // Load or create slide report on mount
+  // Load data from stored pivot_data when slideReport changes
+  useEffect(() => {
+    if (slideReport?.pivot_data && slideType === 'master-report') {
+      const pivotData = slideReport.pivot_data;
+      
+      // Load overview monthly data
+      if (pivotData.overview?.monthly) {
+        const monthlyRevenue = Object.entries(pivotData.overview.monthly).map(([key, metrics]: [string, any]) => {
+          const [year, monthNum] = key.split('-');
+          const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+          return {
+            month: monthNames[parseInt(monthNum) - 1],
+            year: parseInt(year),
+            revenue: metrics.revenue || 0,
+            cost: metrics.cost || 0,
+            impressions: metrics.impressions || 0,
+            clicks: metrics.clicks || 0,
+            bookings: metrics.bookings || 0,
+          };
+        }).sort((a, b) => {
+          if (a.year !== b.year) return a.year - b.year;
+          const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+          return monthNames.indexOf(a.month) - monthNames.indexOf(b.month);
+        });
+        
+        if (monthlyRevenue.length > 0) {
+          setDynamicMonthlyData(monthlyRevenue);
+        }
+      }
+      
+      // Load channel totals from current metrics
+      if (pivotData.channels) {
+        const channelTotals: Record<string, any> = {};
+        for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+          channelTotals[channel] = (channelData as any).current;
+        }
+        if (Object.keys(channelTotals).length > 0) {
+          setDynamicChannelTotals(channelTotals);
+        }
+        
+        // Load yearly totals
+        const yearlyTotals: Record<number, Record<string, any>> = {};
+        for (const year of [2024, 2025, 2026]) {
+          yearlyTotals[year] = {};
+          for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+            const yearly = (channelData as any).yearly;
+            if (yearly?.[String(year)]) {
+              yearlyTotals[year][channel] = yearly[String(year)];
+            }
+          }
+        }
+        if (Object.values(yearlyTotals).some(y => Object.keys(y).length > 0)) {
+          setDynamicYearlyTotals(yearlyTotals);
+        }
+      }
+      
+      console.log('Loaded pivot data from slideReport:', {
+        monthlyCount: Object.keys(pivotData.overview?.monthly || {}).length,
+        channels: Object.keys(pivotData.channels || {}),
+        computedAt: (pivotData as any).computedAt,
+      });
+    }
+  }, [slideReport?.pivot_data, slideType]);
+
   useEffect(() => {
     const loadOrCreateSlideReport = async () => {
       if (!accountId || !user) return;
@@ -1959,19 +2022,56 @@ export default function SlideViewPage() {
       
       setRefreshStepStatus(prev => ({ ...prev, 4: 'complete' }));
       
-      // Success - wait a moment then close
+      // Success - update local state with computed data
+      // Transform pivot data to the format expected by the UI
+      if (pivotData.overview.monthly) {
+        const monthlyRevenue = Object.entries(pivotData.overview.monthly).map(([key, metrics]) => {
+          const [year, monthNum] = key.split('-');
+          const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+          return {
+            month: monthNames[parseInt(monthNum) - 1],
+            year: parseInt(year),
+            revenue: metrics.revenue,
+            cost: metrics.cost,
+            impressions: metrics.impressions,
+            clicks: metrics.clicks,
+            bookings: metrics.bookings,
+          };
+        }).sort((a, b) => {
+          if (a.year !== b.year) return a.year - b.year;
+          const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+          return monthNames.indexOf(a.month) - monthNames.indexOf(b.month);
+        });
+        setDynamicMonthlyData(monthlyRevenue);
+      }
+      
+      // Update channel totals
+      const channelTotals: Record<string, any> = {};
+      for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+        channelTotals[channel] = channelData.current;
+      }
+      setDynamicChannelTotals(channelTotals);
+      
+      // Update yearly totals
+      const yearlyTotals: Record<number, Record<string, any>> = {};
+      for (const year of [2024, 2025, 2026]) {
+        yearlyTotals[year] = {};
+        for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+          if (channelData.yearly?.[String(year)]) {
+            yearlyTotals[year][channel] = channelData.yearly[String(year)];
+          }
+        }
+      }
+      setDynamicYearlyTotals(yearlyTotals);
+      
+      // Wait a moment then close modal
       await new Promise(resolve => setTimeout(resolve, 800));
       setIsRefreshModalOpen(false);
       
-      // Invalidate queries to refresh the data
-      refreshSlideReportData.reset();
       toast({ 
         title: "Data refreshed", 
-        description: "Slide report data has been updated successfully." 
+        description: `Pivot tables updated with ${Object.keys(pivotData.overview.monthly || {}).length} months of data.` 
       });
-      
-      // Reload the page data
-      window.location.reload();
       
     } catch (error) {
       console.error("Error refreshing data:", error);
