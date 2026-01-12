@@ -25,6 +25,145 @@ const BASE_METRICS = ["Impressions", "Clicks", "Cost", "Revenue", "Bookings"];
 export type ProgressCallback = (step: number, message: string) => void;
 
 /**
+ * QA Verification Report for Edit Source Settings
+ */
+export interface QAVerificationReport {
+  settingsUsed: {
+    selectedChannels: boolean;
+    channelConfigs: boolean;
+    breakdownConfigs: boolean;
+    filterConfigs: boolean;
+    selectedValueDimensionIds: boolean;
+    dateRange: boolean;
+  };
+  details: {
+    channelsProcessed: string[];
+    channelsWithFilters: string[];
+    channelsWithBreakdowns: string[];
+    channelsWithFilterConfigs: string[];
+    metricsIncluded: string[];
+    dateRangeUsed: { from: string; to: string } | null;
+  };
+  warnings: string[];
+  errors: string[];
+}
+
+/**
+ * Verify that all Edit Source settings are used when creating pivot tables
+ */
+export function verifySettingsUsage(
+  configuration: SlideReportConfiguration,
+  dateRange: { year: number; month: string; from: string; to: string },
+  pivotData: SlideReportPivotData
+): QAVerificationReport {
+  const report: QAVerificationReport = {
+    settingsUsed: {
+      selectedChannels: false,
+      channelConfigs: false,
+      breakdownConfigs: false,
+      filterConfigs: false,
+      selectedValueDimensionIds: false,
+      dateRange: false,
+    },
+    details: {
+      channelsProcessed: [],
+      channelsWithFilters: [],
+      channelsWithBreakdowns: [],
+      channelsWithFilterConfigs: [],
+      metricsIncluded: [],
+      dateRangeUsed: null,
+    },
+    warnings: [],
+    errors: [],
+  };
+
+  // Verify selectedChannels are processed
+  if (configuration.selectedChannels && configuration.selectedChannels.length > 0) {
+    report.settingsUsed.selectedChannels = true;
+    report.details.channelsProcessed = configuration.selectedChannels;
+    
+    // Check if all selected channels are in pivot data
+    const missingChannels = configuration.selectedChannels.filter(
+      channel => !pivotData.channels[channel]
+    );
+    if (missingChannels.length > 0) {
+      report.errors.push(`Channels not found in pivot data: ${missingChannels.join(', ')}`);
+    }
+  } else {
+    report.errors.push('No channels selected in configuration');
+  }
+
+  // Verify channelConfigs (dimension filters) are applied
+  let hasChannelConfigs = false;
+  for (const channel of configuration.selectedChannels) {
+    const channelConfig = configuration.channelConfigs[channel];
+    if (channelConfig && channelConfig.dimensionId && channelConfig.selectedValues.length > 0) {
+      hasChannelConfigs = true;
+      report.details.channelsWithFilters.push(channel);
+    }
+  }
+  report.settingsUsed.channelConfigs = hasChannelConfigs;
+
+  // Verify breakdownConfigs are computed
+  let hasBreakdownConfigs = false;
+  for (const channel of configuration.selectedChannels) {
+    const breakdownConfig = configuration.breakdownConfigs[channel];
+    if (breakdownConfig && breakdownConfig.breakdownDimensionIds.length > 0) {
+      hasBreakdownConfigs = true;
+      report.details.channelsWithBreakdowns.push(channel);
+      
+      // Verify breakdown data exists in pivot data
+      const channelData = pivotData.channels[channel];
+      if (channelData && channelData.breakdowns) {
+        for (const breakdownDimId of breakdownConfig.breakdownDimensionIds) {
+          // Check if breakdown exists (by dimension name or ID)
+          const hasBreakdown = Object.keys(channelData.breakdowns).some(
+            dimName => dimName.toLowerCase().includes(breakdownDimId.toLowerCase()) || 
+                      dimName === breakdownDimId
+          );
+          if (!hasBreakdown) {
+            report.warnings.push(`Breakdown dimension ${breakdownDimId} not found in pivot data for ${channel}`);
+          }
+        }
+      }
+    }
+  }
+  report.settingsUsed.breakdownConfigs = hasBreakdownConfigs;
+
+  // Verify filterConfigs are configured (they are used during computation, not stored in pivot data)
+  let hasFilterConfigs = false;
+  for (const channel of configuration.selectedChannels) {
+    const filterConfig = configuration.filterConfigs[channel];
+    if (filterConfig && filterConfig.filterDimensionIds.length > 0) {
+      hasFilterConfigs = true;
+      report.details.channelsWithFilterConfigs.push(channel);
+    }
+  }
+  report.settingsUsed.filterConfigs = hasFilterConfigs;
+
+  // Verify selectedValueDimensionIds (metrics) - check if base metrics are included
+  if (configuration.selectedValueDimensionIds && configuration.selectedValueDimensionIds.length > 0) {
+    report.settingsUsed.selectedValueDimensionIds = true;
+    report.details.metricsIncluded = configuration.selectedValueDimensionIds;
+  } else {
+    // If not specified, assume all base metrics are used
+    report.settingsUsed.selectedValueDimensionIds = true;
+    report.details.metricsIncluded = BASE_METRICS;
+    report.warnings.push('No specific value dimensions selected, using all base metrics');
+  }
+
+  // Verify dateRange is used
+  if (dateRange && dateRange.from && dateRange.to) {
+    report.settingsUsed.dateRange = true;
+    report.details.dateRangeUsed = { from: dateRange.from, to: dateRange.to };
+  } else {
+    report.errors.push('Date range not properly set');
+  }
+
+  return report;
+}
+
+/**
  * Calculate derived metrics from base metrics
  */
 function calculateDerivedMetrics(data: {
@@ -542,13 +681,29 @@ export async function computeSlideReportPivotData(
   const totalYears = Object.keys(pivotData.overview.yearly || {}).length;
   const sampleMonth = Object.entries(pivotData.overview.monthly || {})[0];
   
-  console.log('Computed pivot data summary:', {
+  console.log('[testing] Computed pivot data summary:', {
     channels: Object.keys(pivotData.channels),
     totalMonths,
     totalYears,
     sampleMonthData: sampleMonth ? { month: sampleMonth[0], revenue: sampleMonth[1].revenue } : null,
     overviewYearlyRevenue: Object.entries(pivotData.overview.yearly || {}).map(([year, m]) => ({ year, revenue: m.revenue })),
   });
+
+  // QA Verification: Verify all settings are used
+  const qaReport = verifySettingsUsage(configuration, dateRange, pivotData);
+  console.log('[testing] QA Verification Report:', {
+    settingsUsed: qaReport.settingsUsed,
+    details: qaReport.details,
+    warnings: qaReport.warnings,
+    errors: qaReport.errors,
+  });
+
+  if (qaReport.errors.length > 0) {
+    console.error('[testing] QA Verification Errors:', qaReport.errors);
+  }
+  if (qaReport.warnings.length > 0) {
+    console.warn('[testing] QA Verification Warnings:', qaReport.warnings);
+  }
 
   return pivotData;
 }

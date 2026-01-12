@@ -15,6 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange } from "@/types/slideReports";
 import { useUser } from "@/lib/auth";
@@ -800,6 +801,7 @@ export default function SlideViewPage() {
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
   const { data: slideReport } = useSlideReport(slideReportId);
   const { data: slideReports } = useSlideReports(accountId || null);
+  const queryClient = useQueryClient();
   const createSlideReport = useCreateSlideReport();
   const updateSlideReport = useUpdateSlideReport();
   const refreshSlideReportData = useRefreshSlideReportData();
@@ -807,6 +809,17 @@ export default function SlideViewPage() {
   // Get current totals based on selected year/month from pivot_data
   const currentTotals = useMemo(() => {
     const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+    
+    // Data flow verification: Log when Overview/Report tabs read from pivot_data
+    if (pivotData && slideType === 'master-report') {
+      console.log('[testing] Data Flow: Reading from pivot_data for currentTotals', {
+        hasOverview: !!pivotData.overview,
+        hasChannels: Object.keys(pivotData.channels || {}).length,
+        selectedYear,
+        selectedMonth,
+        overviewMonthlyMonths: Object.keys(pivotData.overview?.monthly || {}).length,
+      });
+    }
     
     // If we have pivot_data and a specific month is selected, use monthly data
     if (pivotData?.channels && selectedMonth && selectedMonth !== 'all') {
@@ -830,27 +843,60 @@ export default function SlideViewPage() {
       }
     }
     
-    // If "All Months" is selected, use yearly totals or all data
-    if (slideType === 'master-report' && Object.keys(dynamicChannelTotals).length > 0) {
+    // If "All Months" is selected, use yearly totals or current data
+    if (pivotData?.channels) {
       // If specific year selected, use yearly totals
       if (selectedYear !== 'all') {
         const yearNum = parseInt(selectedYear);
-        const yearTotals = dynamicYearlyTotals[yearNum] || {};
-        return {
-          metasearch: yearTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
-          sem: yearTotals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
-          social: yearTotals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
-        };
+        const channelTotals: Record<string, any> = {};
+        for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+          const yearlyData = (channelData as any).yearly?.[String(yearNum)];
+          if (yearlyData) {
+            channelTotals[channel] = yearlyData;
+          } else {
+            channelTotals[channel] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+          }
+        }
+        return channelTotals;
       }
+      // Use current totals for all years
+      const channelTotals: Record<string, any> = {};
+      for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+        channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+      }
+      return channelTotals;
+    }
+    
+    // Fallback to dynamic data or hardcoded
+    if (slideType === 'master-report' && Object.keys(dynamicChannelTotals).length > 0) {
       return dynamicChannelTotals;
     }
-    // Fallback to hardcoded data
     return {
       metasearch: METASEARCH_DATA,
       sem: SEM_DATA,
       social: SOCIAL_DATA,
     };
   }, [slideType, slideReport?.pivot_data, dynamicChannelTotals, dynamicYearlyTotals, selectedYear, selectedMonth]);
+
+  // Get comparison totals based on comparison type and selected year/month
+  const comparisonTotals = useMemo(() => {
+    if (comparisonType === 'none') return null;
+    
+    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+    if (!pivotData?.channels) return null;
+    
+    const channelTotals: Record<string, any> = {};
+    for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+      if (comparisonType === 'previous_period' && (channelData as any).previous_period) {
+        channelTotals[channel] = (channelData as any).previous_period;
+      } else if (comparisonType === 'previous_year' && (channelData as any).previous_year) {
+        channelTotals[channel] = (channelData as any).previous_year;
+      } else {
+        channelTotals[channel] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+      }
+    }
+    return channelTotals;
+  }, [comparisonType, slideReport?.pivot_data]);
 
   // Load data from stored pivot_data when slideReport changes
   useEffect(() => {
@@ -1927,6 +1973,19 @@ export default function SlideViewPage() {
       }
       setFilterDimensionValues(updatedFilterDimensionValues);
 
+      console.log('[testing] Edit Source: Configuration saved successfully', {
+        slideReportId: slideReportId || 'new',
+        configuration: {
+          selectedChannels: configuration.selectedChannels,
+          hasChannelConfigs: Object.keys(configuration.channelConfigs || {}).length > 0,
+          hasBreakdownConfigs: Object.keys(configuration.breakdownConfigs || {}).length > 0,
+          hasFilterConfigs: Object.keys(configuration.filterConfigs || {}).length > 0,
+          selectedValueDimensionIds: configuration.selectedValueDimensionIds?.length || 0,
+        },
+        dateRange,
+        reportIds,
+      });
+
       toast({
         title: "Configuration saved",
         description: "Your report settings have been saved. Click 'Refresh Data' to fetch updated data.",
@@ -2007,6 +2066,7 @@ export default function SlideViewPage() {
 
   // Handle Refresh Data with step-by-step modal
   const handleRefreshDataWithModal = async () => {
+    // Step 1: Verify Edit Source settings are saved before proceeding
     if (!slideReportId) {
       toast({
         title: "No configuration",
@@ -2015,6 +2075,33 @@ export default function SlideViewPage() {
       });
       return;
     }
+
+    // Verify configuration exists and is valid
+    if (!slideReport?.configuration) {
+      toast({
+        title: "Configuration missing",
+        description: "Please save your configuration in Edit Source first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!slideReport?.date_range) {
+      toast({
+        title: "Date range missing",
+        description: "Please set a date range in Edit Source first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    console.log('[testing] Refresh Data: Starting with configuration:', {
+      channels: slideReport.configuration.selectedChannels,
+      hasChannelConfigs: Object.keys(slideReport.configuration.channelConfigs || {}).length > 0,
+      hasBreakdownConfigs: Object.keys(slideReport.configuration.breakdownConfigs || {}).length > 0,
+      hasFilterConfigs: Object.keys(slideReport.configuration.filterConfigs || {}).length > 0,
+      dateRange: slideReport.date_range,
+    });
 
     // Open modal and reset state
     setIsRefreshModalOpen(true);
@@ -2029,33 +2116,45 @@ export default function SlideViewPage() {
     });
 
     try {
-      // Step 1: Fetching from data sources
-      await new Promise(resolve => setTimeout(resolve, 800)); // Simulate fetch
+      // Step 1: Verify settings are saved
+      console.log('[testing] Step 1: Verifying Edit Source settings...');
+      setRefreshStepStatus(prev => ({ ...prev, 1: 'loading' }));
+      
+      // Re-fetch slide report to ensure we have latest configuration
+      const { data: latestReport, error: fetchError } = await supabase
+        .from("slide_reports")
+        .select("*")
+        .eq("id", slideReportId)
+        .single();
+
+      if (fetchError) throw fetchError;
+      if (!latestReport?.configuration || !latestReport?.date_range) {
+        throw new Error("Configuration or date range not found. Please save Edit Source settings first.");
+      }
+
+      console.log('[testing] Step 1: Settings verified successfully');
       setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'loading' }));
       setRefreshStep(2);
 
-      // Step 2: Set up filters and configurations
-      await new Promise(resolve => setTimeout(resolve, 600));
+      // Step 2: Use Edit Source settings to compute pivot table
+      console.log('[testing] Step 2: Computing pivot table with Edit Source settings...');
+      const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
+      
+      const pivotData = await computeSlideReportPivotData(
+        latestReport.report_ids as unknown as Record<string, string>,
+        latestReport.configuration as unknown as SlideReportConfiguration,
+        latestReport.date_range as unknown as SlideReportDateRange,
+        (step, message) => {
+          console.log(`[testing] Progress step ${step}: ${message}`);
+        }
+      );
+      
+      console.log('[testing] Step 2: Pivot table computed successfully');
       setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'loading' }));
       setRefreshStep(3);
 
-      // Step 3: Create pivot tables - this is the actual data computation
-      const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
-      
-      if (!slideReport?.date_range) {
-        throw new Error("Date range not set for slide report");
-      }
-
-      const pivotData = await computeSlideReportPivotData(
-        slideReport.report_ids as unknown as Record<string, string>,
-        slideReport.configuration as unknown as SlideReportConfiguration,
-        slideReport.date_range as unknown as SlideReportDateRange
-      );
-      
-      setRefreshStepStatus(prev => ({ ...prev, 3: 'complete', 4: 'loading' }));
-      setRefreshStep(4);
-
-      // Step 4: Replace data - save to database
+      // Step 3: Save pivot table/JSON data to database
+      console.log('[testing] Step 3: Saving pivot data to database...');
       const { error: updateError } = await supabase
         .from("slide_reports")
         .update({
@@ -2066,67 +2165,113 @@ export default function SlideViewPage() {
 
       if (updateError) throw updateError;
       
+      console.log('[testing] Step 3: Pivot data saved successfully');
+      setRefreshStepStatus(prev => ({ ...prev, 3: 'complete', 4: 'loading' }));
+      setRefreshStep(4);
+
+      // Step 4: Refresh UI with new data
+      console.log('[testing] Step 4: Refreshing UI with new data...');
+      
+      // Reload slide report data from database
+      const { data: refreshedReport, error: reloadError } = await supabase
+        .from("slide_reports")
+        .select("*")
+        .eq("id", slideReportId)
+        .single();
+
+      if (reloadError) throw reloadError;
+
+      // Update local state with new pivot data
+      if (refreshedReport?.pivot_data) {
+        const refreshedPivotData = refreshedReport.pivot_data as SlideReportPivotData;
+        
+        // Transform pivot data to the format expected by the UI
+        if (refreshedPivotData.overview.monthly) {
+          const monthlyRevenue = Object.entries(refreshedPivotData.overview.monthly).map(([key, metrics]) => {
+            const [year, monthNum] = key.split('-');
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            return {
+              month: monthNames[parseInt(monthNum) - 1],
+              year: parseInt(year),
+              revenue: metrics.revenue,
+              cost: metrics.cost,
+              impressions: metrics.impressions,
+              clicks: metrics.clicks,
+              bookings: metrics.bookings,
+            };
+          }).sort((a, b) => {
+            if (a.year !== b.year) return a.year - b.year;
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            return monthNames.indexOf(a.month) - monthNames.indexOf(b.month);
+          });
+          setDynamicMonthlyData(monthlyRevenue);
+        }
+        
+        // Update channel totals
+        const channelTotals: Record<string, any> = {};
+        for (const [channel, channelData] of Object.entries(refreshedPivotData.channels)) {
+          channelTotals[channel] = channelData.current;
+        }
+        setDynamicChannelTotals(channelTotals);
+        
+        // Update yearly totals
+        const yearlyTotals: Record<number, Record<string, any>> = {};
+        for (const year of [2024, 2025, 2026]) {
+          yearlyTotals[year] = {};
+          for (const [channel, channelData] of Object.entries(refreshedPivotData.channels)) {
+            if (channelData.yearly?.[String(year)]) {
+              yearlyTotals[year][channel] = channelData.yearly[String(year)];
+            }
+          }
+        }
+        setDynamicYearlyTotals(yearlyTotals);
+      }
+
+      console.log('[testing] Step 4: UI refreshed successfully');
       setRefreshStepStatus(prev => ({ ...prev, 4: 'complete', 5: 'loading' }));
       setRefreshStep(5);
 
-      // Step 5: Saving cache - update local state for instant loading
-      // Transform pivot data to the format expected by the UI
-      if (pivotData.overview.monthly) {
-        const monthlyRevenue = Object.entries(pivotData.overview.monthly).map(([key, metrics]) => {
-          const [year, monthNum] = key.split('-');
-          const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-          return {
-            month: monthNames[parseInt(monthNum) - 1],
-            year: parseInt(year),
-            revenue: metrics.revenue,
-            cost: metrics.cost,
-            impressions: metrics.impressions,
-            clicks: metrics.clicks,
-            bookings: metrics.bookings,
-          };
-        }).sort((a, b) => {
-          if (a.year !== b.year) return a.year - b.year;
-          const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-          return monthNames.indexOf(a.month) - monthNames.indexOf(b.month);
-        });
-        setDynamicMonthlyData(monthlyRevenue);
-      }
-      
-      // Update channel totals
-      const channelTotals: Record<string, any> = {};
-      for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-        channelTotals[channel] = channelData.current;
-      }
-      setDynamicChannelTotals(channelTotals);
-      
-      // Update yearly totals
-      const yearlyTotals: Record<number, Record<string, any>> = {};
-      for (const year of [2024, 2025, 2026]) {
-        yearlyTotals[year] = {};
-        for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-          if (channelData.yearly?.[String(year)]) {
-            yearlyTotals[year][channel] = channelData.yearly[String(year)];
-          }
-        }
-      }
-      setDynamicYearlyTotals(yearlyTotals);
-      
+      // Step 5: Complete - trigger re-render
+      console.log('[testing] Step 5: Refresh complete');
       setRefreshStepStatus(prev => ({ ...prev, 5: 'complete' }));
       
       // Wait a moment then close modal
       await new Promise(resolve => setTimeout(resolve, 800));
       setIsRefreshModalOpen(false);
       
+      // Invalidate queries to trigger re-render - refetch slide report data
+      if (slideReportId) {
+        console.log('[testing] Invalidating slide report query to trigger refetch...');
+        // Invalidate the slide report query to trigger a refetch
+        queryClient.invalidateQueries({ 
+          queryKey: ['slide_reports', 'detail', slideReportId] 
+        });
+        // Also invalidate the list query
+        if (accountId) {
+          queryClient.invalidateQueries({ 
+            queryKey: ['slide_reports', 'list', accountId] 
+          });
+        }
+      }
+      
+      const totalMonths = Object.keys(pivotData.overview.monthly || {}).length;
+      const totalChannels = Object.keys(pivotData.channels || {}).length;
       toast({ 
         title: "Data refreshed", 
-        description: `Pivot tables updated with ${Object.keys(pivotData.overview.monthly || {}).length} months of data for 3 years.` 
+        description: `Pivot tables updated with ${totalMonths} months of data for ${totalChannels} channel(s).` 
       });
       
     } catch (error) {
-      console.error("Error refreshing data:", error);
+      console.error("[testing] Error refreshing data:", error);
       const currentStep = refreshStep;
       setRefreshStepStatus(prev => ({ ...prev, [currentStep]: 'error' }));
       setRefreshError(error instanceof Error ? error.message : "Failed to refresh data");
+      
+      toast({
+        title: "Refresh failed",
+        description: error instanceof Error ? error.message : "Failed to refresh data. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -2217,6 +2362,24 @@ export default function SlideViewPage() {
 
   // Get channel-specific comparison data
   const getChannelComparisonMetrics = (channel: 'metasearch' | 'sem' | 'social') => {
+    // Use pivot_data if available
+    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+    if (pivotData?.channels?.[channel]) {
+      const channelData = pivotData.channels[channel];
+      if (comparisonType === "previous_period" && channelData.previous_period) {
+        return {
+          ...channelData.previous_period,
+          label: "vs Previous Period",
+        };
+      } else if (comparisonType === "previous_year" && channelData.previous_year) {
+        return {
+          ...channelData.previous_year,
+          label: "vs Previous Year",
+        };
+      }
+    }
+    
+    // Fallback to hardcoded data
     if (comparisonType === "previous_period") {
       const prevData = channel === 'metasearch' ? METASEARCH_PREV_PERIOD 
                      : channel === 'sem' ? SEM_PREV_PERIOD 
@@ -2242,6 +2405,27 @@ export default function SlideViewPage() {
         return {
           ...calculateDerivedMetrics(SOCIAL_PREV_YEAR),
           label: "vs Dec 2024*",
+        };
+      }
+    }
+    return null;
+  };
+
+  // Get overview comparison metrics from pivot_data
+  const getOverviewComparisonMetrics = () => {
+    if (comparisonType === 'none') return null;
+    
+    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+    if (pivotData?.overview) {
+      if (comparisonType === "previous_period" && pivotData.overview.previous_period) {
+        return {
+          ...pivotData.overview.previous_period,
+          label: "vs Previous Period",
+        };
+      } else if (comparisonType === "previous_year" && pivotData.overview.previous_year) {
+        return {
+          ...pivotData.overview.previous_year,
+          label: "vs Previous Year",
         };
       }
     }
@@ -3057,10 +3241,16 @@ export default function SlideViewPage() {
             {selectedTab !== "budget" && comparisonType !== "none" && (
               <div className="mb-4 p-3 bg-muted rounded-lg text-sm">
                 {comparisonType === "previous_period" && (
-                  <span>Comparing December 2025 vs November 2025</span>
+                  <span>
+                    Comparing {selectedYear !== 'all' ? selectedYear : 'Current Period'} 
+                    {selectedMonth !== 'all' ? ` ${selectedMonth}` : ''} vs Previous Period
+                  </span>
                 )}
                 {comparisonType === "previous_year" && (
-                  <span>Comparing December 2025 vs October 2025 <span className="text-muted-foreground">(* No Dec 2024 data available)</span></span>
+                  <span>
+                    Comparing {selectedYear !== 'all' ? selectedYear : 'Current Year'} 
+                    {selectedMonth !== 'all' ? ` ${selectedMonth}` : ''} vs Previous Year
+                  </span>
                 )}
               </div>
             )}
@@ -3086,20 +3276,25 @@ export default function SlideViewPage() {
                         bookings: (currentTotals.metasearch?.bookings || 0) + (currentTotals.sem?.bookings || 0) + (currentTotals.social?.bookings || 0),
                       };
                       const derived = calculateDerivedMetrics(totals);
+                      
+                      // Get comparison metrics from pivot_data overview
+                      const overviewCompMetrics = getOverviewComparisonMetrics();
+                      
                       return [
-                        { label: "IMPRESSIONS", key: "impressions", value: derived.impressions, icon: Eye, color: "text-pink-600" },
-                        { label: "CLICKS", key: "clicks", value: derived.clicks, icon: MousePointer, color: "text-purple-600" },
-                        { label: "CTR", key: "ctr", value: derived.ctr, icon: Percent, color: "text-purple-600", format: "percent" },
-                        { label: "BOOKINGS", key: "bookings", value: derived.bookings, icon: ShoppingCart, color: "text-orange-600" },
-                        { label: "CONVERSION RATE", key: "conversionRate", value: derived.conversionRate, icon: Percent, color: "text-purple-600", format: "percent" },
-                        { label: "CPC", key: "cpc", value: derived.cpc, icon: DollarSign, color: "text-blue-600", format: "currency" },
-                        { label: "COST", key: "cost", value: derived.cost, icon: DollarSign, color: "text-blue-600", format: "currency" },
-                        { label: "REVENUE", key: "revenue", value: derived.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency" },
-                        { label: "ROAS", key: "roas", value: derived.roas, icon: TrendingUp, color: "text-green-600", format: "roas" },
-                        { label: "COST OF SALE", key: "costOfSale", value: derived.costOfSale, icon: Percent, color: "text-purple-600", format: "percent" },
+                        { label: "IMPRESSIONS", key: "impressions", value: derived.impressions, icon: Eye, color: "text-pink-600", comparison: overviewCompMetrics?.impressions },
+                        { label: "CLICKS", key: "clicks", value: derived.clicks, icon: MousePointer, color: "text-purple-600", comparison: overviewCompMetrics?.clicks },
+                        { label: "CTR", key: "ctr", value: derived.ctr, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.ctr },
+                        { label: "BOOKINGS", key: "bookings", value: derived.bookings, icon: ShoppingCart, color: "text-orange-600", comparison: overviewCompMetrics?.bookings },
+                        { label: "CONVERSION RATE", key: "conversionRate", value: derived.conversionRate, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.conversionRate },
+                        { label: "CPC", key: "cpc", value: derived.cpc, icon: DollarSign, color: "text-blue-600", format: "currency", comparison: overviewCompMetrics?.cpc },
+                        { label: "COST", key: "cost", value: derived.cost, icon: DollarSign, color: "text-blue-600", format: "currency", comparison: overviewCompMetrics?.cost },
+                        { label: "REVENUE", key: "revenue", value: derived.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency", comparison: overviewCompMetrics?.revenue },
+                        { label: "ROAS", key: "roas", value: derived.roas, icon: TrendingUp, color: "text-green-600", format: "roas", comparison: overviewCompMetrics?.roas },
+                        { label: "COST OF SALE", key: "costOfSale", value: derived.costOfSale, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.costOfSale },
                       ];
                     })()
-                  : KPI_CARDS
+                  : KPI_CARDS,
+                getOverviewComparisonMetrics()
               )}
 
               {/* Monthly Results Chart */}
@@ -3220,6 +3415,19 @@ export default function SlideViewPage() {
 
             {/* Metasearch Tab */}
             <TabsContent value="metasearch" className="space-y-6">
+              {(() => {
+                // Log filter usage for debugging
+                const channel = 'metasearch';
+                const activeFilters = filterValues[channel] || {};
+                const filterConfigsForChannel = filterConfigs[channel]?.filterDimensionIds || [];
+                console.log('[testing] Metasearch Tab - Filters:', {
+                  filterConfigs: filterConfigsForChannel,
+                  activeFilterValues: activeFilters,
+                  hasPivotData: !!slideReport?.pivot_data?.channels?.[channel],
+                  breakdownConfigs: breakdownConfigs[channel]?.breakdownDimensionIds || [],
+                });
+                return null;
+              })()}
               {renderKPICards(getReportKPICards(currentTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('metasearch'))}
               
               {/* Monthly Revenue Chart */}
@@ -3247,23 +3455,52 @@ export default function SlideViewPage() {
               <Card>
                 <CardHeader><CardTitle className="text-base font-medium">Breakdown Analysis</CardTitle></CardHeader>
                 <CardContent>
-                  <UnifiedBreakdownTable 
-                    groupBy={groupByDimension}
-                    breakdownBy={breakdownByDimension}
-                    expandedRow={expandedRow}
-                    onRowClick={setExpandedRow}
-                    onGroupByChange={setGroupByDimension}
-                    onBreakdownByChange={setBreakdownByDimension}
-                    pivotData={slideReport?.pivot_data}
-                    selectedChannel="metasearch"
-                    availableDimensions={[
-                      ...new Map([
-                        ...(breakdownDimensions.metasearch || []).filter(dim => 
-                          breakdownConfigs.metasearch?.breakdownDimensionIds?.includes(dim.id)
-                        ),
-                      ].map(dim => [dim.id, dim])).values()
-                    ]}
-                  />
+                  {(() => {
+                    // Verify breakdown data exists
+                    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+                    const channelData = pivotData?.channels?.metasearch;
+                    const breakdownData = channelData?.breakdowns || {};
+                    const configuredBreakdowns = breakdownConfigs.metasearch?.breakdownDimensionIds || [];
+                    
+                    console.log('[testing] Metasearch Breakdown Table:', {
+                      hasPivotData: !!pivotData,
+                      hasChannelData: !!channelData,
+                      breakdownDimensions: Object.keys(breakdownData),
+                      configuredBreakdowns,
+                      availableDimensions: (breakdownDimensions.metasearch || []).filter(dim => 
+                        breakdownConfigs.metasearch?.breakdownDimensionIds?.includes(dim.id)
+                      ).map(d => d.name),
+                    });
+                    
+                    if (configuredBreakdowns.length === 0) {
+                      return (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <p>No breakdown dimensions configured.</p>
+                          <p className="text-sm mt-2">Configure breakdown dimensions in Edit Source → Breakdown Dimensions step.</p>
+                        </div>
+                      );
+                    }
+                    
+                    return (
+                      <UnifiedBreakdownTable 
+                        groupBy={groupByDimension}
+                        breakdownBy={breakdownByDimension}
+                        expandedRow={expandedRow}
+                        onRowClick={setExpandedRow}
+                        onGroupByChange={setGroupByDimension}
+                        onBreakdownByChange={setBreakdownByDimension}
+                        pivotData={slideReport?.pivot_data}
+                        selectedChannel="metasearch"
+                        availableDimensions={[
+                          ...new Map([
+                            ...(breakdownDimensions.metasearch || []).filter(dim => 
+                              breakdownConfigs.metasearch?.breakdownDimensionIds?.includes(dim.id)
+                            ),
+                          ].map(dim => [dim.id, dim])).values()
+                        ]}
+                      />
+                    );
+                  })()}
                 </CardContent>
               </Card>
             </TabsContent>
