@@ -2781,10 +2781,7 @@ export default function SlideViewPage() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-xl font-semibold">Brady Hotels - December 2025</h1>
-              <p className="text-sm text-muted-foreground">
-                Data: Metasearch (Hotel: Brady*) • SEM (Account: Brady Hotels Group) • Social (Account: Brady Hotels 2025)
-              </p>
+              {/* Title section - kept empty */}
             </div>
           </div>
           <div className="flex items-center gap-2">
