@@ -2534,15 +2534,29 @@ export default function SlideViewPage() {
       let pivotData: any;
       try {
         const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
-        
-        pivotData = await computeSlideReportPivotData(
-          reportIdsMap,
-          config,
-          dateRange
-        );
-      } catch (pivotError) {
-        console.error('[refresh] Step 2: Pivot computation error:', pivotError);
-        throw new Error(`Pivot data computation failed: ${pivotError instanceof Error ? pivotError.message : String(pivotError)}`);
+
+        pivotData = await computeSlideReportPivotData(reportIdsMap, config, dateRange);
+      } catch (pivotError: any) {
+        // Supabase/Postgrest errors often come through as plain objects (not Error instances)
+        // and would display as "[object Object]" without normalization.
+        const details =
+          pivotError?.message ||
+          pivotError?.error_description ||
+          pivotError?.details ||
+          (typeof pivotError === "string" ? pivotError : "");
+
+        const safeJson = (() => {
+          try {
+            return JSON.stringify(pivotError);
+          } catch {
+            return "";
+          }
+        })();
+
+        console.error("[refresh] Step 2: Pivot computation error:", pivotError);
+
+        const friendly = (details || safeJson || "Unknown error").toString();
+        throw new Error(`Pivot data computation failed: ${friendly}`);
       }
       
       const typedPivotData = pivotData as SlideReportPivotData;
