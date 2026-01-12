@@ -1285,46 +1285,25 @@ export default function SlideViewPage() {
               console.warn(`[loadOrCreateSlideReport] Found ${masterReports.length} Master Reports for this account. Using oldest one: ${masterReport.id}`);
             }
           } else {
-            // Create new Master Report slide report with current year as default
-            // Only create if we've confirmed slideReports are loaded and none exist
-            console.log('[loadOrCreateSlideReport] No Master Report found, creating new one...');
+            // No Master Report exists - instead of creating automatically,
+            // open the Edit Source wizard so user can configure first
+            console.log('[loadOrCreateSlideReport] No Master Report found, opening Edit Source wizard...');
             const currentYear = new Date().getFullYear();
-            const newReport = await createSlideReport.mutateAsync({
-              name: 'Master Report',
-              account_id: accountId,
-              user_id: user.id,
-              configuration: {
-                selectedChannels: ['metasearch', 'sem', 'social'],
-                selectedValueDimensionIds: ALL_BRADY_DIMENSIONS,
-                channelConfigs: {
-                  metasearch: { dimensionId: null, selectedValues: [] },
-                  sem: { dimensionId: null, selectedValues: [] },
-                  social: { dimensionId: null, selectedValues: [] },
-                },
-                breakdownConfigs: {
-                  metasearch: { breakdownDimensionIds: [] },
-                  sem: { breakdownDimensionIds: [] },
-                  social: { breakdownDimensionIds: [] },
-                },
-                filterConfigs: {
-                  metasearch: { filterDimensionIds: [] },
-                  sem: { filterDimensionIds: [] },
-                  social: { filterDimensionIds: [] },
-                },
-              },
-              report_ids: CHANNEL_REPORT_IDS,
-              date_range: {
-                year: currentYear,
-                month: 'January',
-                from: `${currentYear}-01-01`,
-                to: new Date().toISOString().split('T')[0],
-              },
-            });
-            setSlideReportId(newReport.id);
             setSelectedYear(currentYear.toString());
             setSelectedMonth('January');
             setSinceMonth('January');
             setSinceYear(currentYear);
+            
+            // Set default configuration state
+            setSelectedDimensions({
+              metasearch: true,
+              sem: true,
+              social: true,
+            });
+            
+            // Open the Edit Source modal for initial configuration
+            // The report will be created when user saves the configuration
+            setIsEditSourceOpen(true);
           }
           return;
         }
@@ -4161,15 +4140,32 @@ export default function SlideViewPage() {
 
             {/* Overview Tab */}
             <TabsContent value="overview" className="space-y-6">
+              {/* Show setup prompt when no report exists yet */}
+              {!slideReportId && !isSlideReportsLoading && (
+                <div className="flex flex-col items-center justify-center py-16 space-y-4">
+                  <div className="bg-primary/10 rounded-full p-4">
+                    <Settings2 className="h-8 w-8 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-semibold">Configure Your Report</h3>
+                  <p className="text-muted-foreground text-center max-w-md">
+                    Set up your report by selecting channels, dimensions, and date range in the Edit Source wizard.
+                  </p>
+                  <Button onClick={() => setIsEditSourceOpen(true)} className="mt-2">
+                    <Settings2 className="h-4 w-4 mr-2" />
+                    Configure Report
+                  </Button>
+                </div>
+              )}
+
               {/* Loading indicator */}
-              {isLoadingData && (
+              {slideReportId && isLoadingData && (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
                   <span className="text-muted-foreground">Loading data from data sources...</span>
                 </div>
               )}
 
-              {!isLoadingData && renderKPICards(
+              {slideReportId && !isLoadingData && renderKPICards(
                 slideType === 'master-report' && Object.keys(currentTotals).length > 0
                   ? (() => {
                       const totals = {
