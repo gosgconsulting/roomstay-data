@@ -15,6 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
+import { toast } from "@/hooks/use-toast";
 import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange } from "@/types/slideReports";
 import { useUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
@@ -1738,10 +1739,20 @@ export default function SlideViewPage() {
       setSelectedYear(sinceYear.toString());
       setSelectedMonth(sinceMonth);
 
+      toast({
+        title: "Configuration saved",
+        description: "Your report settings have been saved. Click 'Refresh Data' to fetch updated data.",
+      });
+
       setIsEditSourceOpen(false);
       resetModalState();
     } catch (error) {
       console.error('Error saving slide report configuration:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save configuration. Please try again.",
+        variant: "destructive",
+      });
       setIsEditSourceOpen(false);
       resetModalState();
     }
@@ -1751,22 +1762,53 @@ export default function SlideViewPage() {
     setModalStep(1);
     setActiveChannelTab(null);
     setSearchQuery("");
-    setSelectedValueDimensionIds(ALL_BRADY_DIMENSIONS);
-    setChannelConfigs({
-      metasearch: { dimensionId: null, selectedValues: [] },
-      sem: { dimensionId: null, selectedValues: [] },
-      social: { dimensionId: null, selectedValues: [] },
-    });
-    setBreakdownConfigs({
-      metasearch: { breakdownDimensionIds: [] },
-      sem: { breakdownDimensionIds: [] },
-      social: { breakdownDimensionIds: [] },
-    });
-    setFilterConfigs({
-      metasearch: { filterDimensionIds: [] },
-      sem: { filterDimensionIds: [] },
-      social: { filterDimensionIds: [] },
-    });
+    
+    // Reload from saved slideReport configuration instead of resetting to defaults
+    if (slideReport?.configuration) {
+      const config = slideReport.configuration;
+      if (config.selectedChannels) {
+        setSelectedDimensions({
+          metasearch: config.selectedChannels.includes('metasearch'),
+          sem: config.selectedChannels.includes('sem'),
+          social: config.selectedChannels.includes('social'),
+        });
+      }
+      if (config.selectedValueDimensionIds) {
+        setSelectedValueDimensionIds(config.selectedValueDimensionIds);
+      }
+      if (config.channelConfigs) {
+        setChannelConfigs(config.channelConfigs as any);
+      }
+      if (config.breakdownConfigs) {
+        setBreakdownConfigs(config.breakdownConfigs as any);
+      }
+      if (config.filterConfigs) {
+        setFilterConfigs(config.filterConfigs as any);
+      }
+      // Reload date range
+      if (slideReport.date_range) {
+        setSinceMonth(slideReport.date_range.month);
+        setSinceYear(slideReport.date_range.year);
+      }
+    } else {
+      // No saved config, reset to defaults
+      setSelectedValueDimensionIds(ALL_BRADY_DIMENSIONS);
+      setChannelConfigs({
+        metasearch: { dimensionId: null, selectedValues: [] },
+        sem: { dimensionId: null, selectedValues: [] },
+        social: { dimensionId: null, selectedValues: [] },
+      });
+      setBreakdownConfigs({
+        metasearch: { breakdownDimensionIds: [] },
+        sem: { breakdownDimensionIds: [] },
+        social: { breakdownDimensionIds: [] },
+      });
+      setFilterConfigs({
+        metasearch: { filterDimensionIds: [] },
+        sem: { filterDimensionIds: [] },
+        social: { filterDimensionIds: [] },
+      });
+    }
   };
 
   const handleModalClose = (open: boolean) => {
@@ -1989,9 +2031,28 @@ export default function SlideViewPage() {
               <Settings2 className="h-4 w-4 mr-2" />
               Edit Source
             </Button>
-            <Button variant="outline" size="sm">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh Data
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => {
+                if (slideReportId) {
+                  refreshSlideReportData.mutate(slideReportId);
+                } else {
+                  toast({
+                    title: "No configuration",
+                    description: "Please save your configuration in Edit Source first.",
+                    variant: "destructive",
+                  });
+                }
+              }}
+              disabled={refreshSlideReportData.isPending}
+            >
+              {refreshSlideReportData.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              {refreshSlideReportData.isPending ? "Refreshing..." : "Refresh Data"}
             </Button>
           </div>
         </div>
