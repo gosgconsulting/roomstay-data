@@ -2899,6 +2899,8 @@ export default function SlideViewPage() {
         availableDimensions={availableDimensions}
         selectedChannels={selectedChannels}
         slideReportId={slideReportId}
+        pivotData={slideReport?.pivot_data as SlideReportPivotData | null}
+        lastRefreshedAt={slideReport?.last_refreshed_at}
       />
 
       <div className="p-6 space-y-6">
