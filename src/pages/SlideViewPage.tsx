@@ -720,6 +720,13 @@ const BreakdownTable = ({
   );
 };
 
+// Channel to Report ID mapping for Brady Hotels (moved outside component to avoid hoisting issues)
+const CHANNEL_REPORT_IDS: Record<string, string> = {
+  metasearch: '2eff17d0-38de-4d5d-a15b-69ad13788c92',
+  sem: '3b2a0e45-33be-4eec-911e-b955b951c84e',
+  social: '8c2f7db9-acbd-4c59-9593-74e8953e7787',
+};
+
 export default function SlideViewPage() {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
@@ -1181,18 +1188,27 @@ export default function SlideViewPage() {
       const config = slideReport.configuration;
       const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {};
       
+      // Collect all load promises for parallel execution
+      const loadPromises: Promise<void>[] = [];
+      
       for (const channel of config.selectedChannels || []) {
         const filterConfig = config.filterConfigs?.[channel];
         if (filterConfig?.filterDimensionIds && filterConfig.filterDimensionIds.length > 0) {
           updatedFilterDimensionValues[channel] = {};
           for (const filterDimId of filterConfig.filterDimensionIds) {
-            // Load values for this filter dimension using the helper function
-            const values = await loadFilterDimensionValues(channel, filterDimId);
-            updatedFilterDimensionValues[channel][filterDimId] = values;
-            console.log(`[loadFilterValues] Loaded ${values.length} values for ${channel}/${filterDimId}`);
+            // Load values in parallel
+            loadPromises.push(
+              loadFilterDimensionValues(channel, filterDimId).then(values => {
+                updatedFilterDimensionValues[channel][filterDimId] = values;
+                console.log(`[loadFilterValues] Loaded ${values.length} values for ${channel}/${filterDimId}`);
+              })
+            );
           }
         }
       }
+      
+      // Wait for all values to load
+      await Promise.all(loadPromises);
       
       if (Object.keys(updatedFilterDimensionValues).length > 0) {
         setFilterDimensionValues(prev => ({ ...prev, ...updatedFilterDimensionValues }));
@@ -1203,6 +1219,60 @@ export default function SlideViewPage() {
     loadFilterValues();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideReport?.configuration?.filterConfigs]);
+
+  // Load filter dimension values when switching to a channel tab that has filters
+  useEffect(() => {
+    const loadValuesForCurrentTab = async () => {
+      if (selectedTab === 'overview' || selectedTab === 'budget') return;
+      
+      const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
+      const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
+      const filterDimIds = savedFilterConfigs?.filterDimensionIds || filterConfigs[currentChannel]?.filterDimensionIds || [];
+      
+      if (filterDimIds.length === 0) return;
+      
+      // Check if values are already loaded
+      const hasAllValues = filterDimIds.every(id => 
+        filterDimensionValues[currentChannel]?.[id]?.length > 0
+      );
+      
+      if (hasAllValues) {
+        console.log(`[selectedTab] Filter values already loaded for ${currentChannel}`);
+        return;
+      }
+      
+      console.log(`[selectedTab] Loading filter values for ${currentChannel}...`);
+      
+      // Load missing values in parallel
+      const loadPromises: Promise<void>[] = [];
+      const newValues: Record<string, string[]> = {};
+      
+      for (const filterDimId of filterDimIds) {
+        if (!filterDimensionValues[currentChannel]?.[filterDimId]?.length) {
+          loadPromises.push(
+            loadFilterDimensionValues(currentChannel, filterDimId).then(values => {
+              newValues[filterDimId] = values;
+            })
+          );
+        }
+      }
+      
+      if (loadPromises.length > 0) {
+        await Promise.all(loadPromises);
+        setFilterDimensionValues(prev => ({
+          ...prev,
+          [currentChannel]: {
+            ...prev[currentChannel],
+            ...newValues,
+          },
+        }));
+        console.log(`[selectedTab] Loaded filter values for ${currentChannel}:`, Object.keys(newValues));
+      }
+    };
+
+    loadValuesForCurrentTab();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTab]);
 
   // Open modal if ?edit=true in URL
   useEffect(() => {
@@ -1222,13 +1292,7 @@ export default function SlideViewPage() {
   const [sinceMonth, setSinceMonth] = useState<string>("January");
   const [sinceYear, setSinceYear] = useState<number>(2024);
 
-  // Channel to Report ID mapping for Brady Hotels (hardcoded)
-  const CHANNEL_REPORT_IDS: Record<string, string> = {
-    metasearch: '2eff17d0-38de-4d5d-a15b-69ad13788c92',
-    sem: '3b2a0e45-33be-4eec-911e-b955b951c84e',
-    social: '8c2f7db9-acbd-4c59-9593-74e8953e7787',
-  };
-
+  // CHANNEL_REPORT_IDS is defined outside the component (line 724)
   // Value dimension IDs state (for step 2 - applies to all channels)
   // Pre-selected value dimensions for Brady Hotels based on actual report data
   // Metasearch: Impressions, Clicks, Cost, Revenue, Bookings, CPC, Cost of sale, Impression Share
@@ -2048,24 +2112,10 @@ export default function SlideViewPage() {
       return;
     }
 
-    try {
-      // Load filter dimension values for all configured filters
-      // Use the correct helper function that loads values for each specific filterDimId
-      for (const channel of selectedChannels) {
-        const filterDimIds = filterConfigs[channel]?.filterDimensionIds || [];
-        for (const filterDimId of filterDimIds) {
-          // Load values directly for this specific filter dimension
-          const values = await loadFilterDimensionValues(channel, filterDimId);
-          setFilterDimensionValues(prev => ({
-            ...prev,
-            [channel]: {
-              ...prev[channel],
-              [filterDimId]: values, // Store values for this specific filterDimId
-            },
-          }));
-        }
-      }
+    // Close modal immediately for better UX - save happens in background
+    setIsEditSourceOpen(false);
 
+    try {
       // Build configuration object with dimension mappings
       const configuration: SlideReportConfiguration = {
         selectedChannels: selectedChannels,
@@ -2119,41 +2169,6 @@ export default function SlideViewPage() {
       setSelectedYear(sinceYear.toString());
       setSelectedMonth(sinceMonth);
 
-      // Immediately load filter dimension values for display in the tab bar
-      const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {};
-      for (const channel of selectedChannels) {
-        const filterDimIds = filterConfigs[channel]?.filterDimensionIds || [];
-        updatedFilterDimensionValues[channel] = {};
-        for (const filterDimId of filterDimIds) {
-          const values = dimensionValues[channel] || [];
-          if (values.length > 0) {
-            updatedFilterDimensionValues[channel][filterDimId] = values;
-          } else {
-            // Try to load values if not already loaded
-            const reportId = CHANNEL_REPORT_IDS[channel];
-            if (reportId) {
-              const { data: dimData } = await supabase
-                .from('dimension_data')
-                .select('dimension_values')
-                .eq('report_id', reportId)
-                .limit(1000);
-              
-              if (dimData && dimData.length > 0) {
-                const uniqueValues = new Set<string>();
-                for (const row of dimData) {
-                  const rowValues = row.dimension_values as Record<string, any>;
-                  if (rowValues && rowValues[filterDimId]) {
-                    uniqueValues.add(String(rowValues[filterDimId]));
-                  }
-                }
-                updatedFilterDimensionValues[channel][filterDimId] = Array.from(uniqueValues).sort();
-              }
-            }
-          }
-        }
-      }
-      setFilterDimensionValues(updatedFilterDimensionValues);
-
       console.log('[testing] Edit Source: Configuration saved successfully', {
         slideReportId: slideReportId || 'new',
         configuration: {
@@ -2172,8 +2187,9 @@ export default function SlideViewPage() {
         description: "Your report settings have been saved. Click 'Refresh Data' to fetch updated data.",
       });
 
-      setIsEditSourceOpen(false);
-      // Don't reset modal state - keep the current filter configs active for display
+      // Load filter dimension values in background after save (don't block)
+      loadFilterDimensionValuesAfterSave(selectedChannels, filterConfigs);
+
     } catch (error) {
       console.error('Error saving slide report configuration:', error);
       toast({
@@ -2181,7 +2197,39 @@ export default function SlideViewPage() {
         description: "Failed to save configuration. Please try again.",
         variant: "destructive",
       });
-      setIsEditSourceOpen(false);
+    }
+  };
+
+  // Background loader for filter dimension values after save
+  const loadFilterDimensionValuesAfterSave = async (
+    channels: ('metasearch' | 'sem' | 'social')[],
+    configs: Record<string, FilterConfig>
+  ) => {
+    const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {};
+    
+    // Load all values in parallel for faster loading
+    const loadPromises: Promise<void>[] = [];
+    
+    for (const channel of channels) {
+      const filterDimIds = configs[channel]?.filterDimensionIds || [];
+      if (filterDimIds.length === 0) continue;
+      
+      updatedFilterDimensionValues[channel] = {};
+      
+      for (const filterDimId of filterDimIds) {
+        loadPromises.push(
+          loadFilterDimensionValues(channel, filterDimId).then(values => {
+            updatedFilterDimensionValues[channel][filterDimId] = values;
+          })
+        );
+      }
+    }
+    
+    await Promise.all(loadPromises);
+    
+    if (Object.keys(updatedFilterDimensionValues).length > 0) {
+      setFilterDimensionValues(prev => ({ ...prev, ...updatedFilterDimensionValues }));
+      console.log('[handleSave] Filter dimension values loaded in background');
     }
   };
 
