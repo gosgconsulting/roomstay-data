@@ -1406,6 +1406,18 @@ export default function SlideViewPage() {
     }
   }, [modalStep, isEditSourceOpen, selectedChannels]);
 
+  // Load breakdown dimensions on page load for display in the table dropdowns
+  useEffect(() => {
+    if (slideReportId && selectedChannels.length > 0) {
+      selectedChannels.forEach(channel => {
+        if (breakdownDimensions[channel].length === 0 && !loadingBreakdownDimensions[channel]) {
+          loadBreakdownDimensionsForChannel(channel);
+        }
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slideReportId, selectedChannels]);
+
   // Handle dimension change
   const handleDimensionChange = (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
     setChannelConfigs(prev => ({
@@ -2988,9 +3000,15 @@ export default function SlideViewPage() {
                     onBreakdownByChange={setBreakdownByDimension}
                     availableDimensions={[
                       ...new Map([
-                        ...(breakdownDimensions.metasearch || []),
-                        ...(breakdownDimensions.sem || []),
-                        ...(breakdownDimensions.social || []),
+                        ...(breakdownDimensions.metasearch || []).filter(dim => 
+                          breakdownConfigs.metasearch?.breakdownDimensionIds?.includes(dim.id)
+                        ),
+                        ...(breakdownDimensions.sem || []).filter(dim => 
+                          breakdownConfigs.sem?.breakdownDimensionIds?.includes(dim.id)
+                        ),
+                        ...(breakdownDimensions.social || []).filter(dim => 
+                          breakdownConfigs.social?.breakdownDimensionIds?.includes(dim.id)
+                        ),
                       ].map(dim => [dim.id, dim])).values()
                     ]}
                   />
@@ -3036,9 +3054,15 @@ export default function SlideViewPage() {
                     onBreakdownByChange={setBreakdownByDimension}
                     availableDimensions={[
                       ...new Map([
-                        ...(breakdownDimensions.metasearch || []),
-                        ...(breakdownDimensions.sem || []),
-                        ...(breakdownDimensions.social || []),
+                        ...(breakdownDimensions.metasearch || []).filter(dim => 
+                          breakdownConfigs.metasearch?.breakdownDimensionIds?.includes(dim.id)
+                        ),
+                        ...(breakdownDimensions.sem || []).filter(dim => 
+                          breakdownConfigs.sem?.breakdownDimensionIds?.includes(dim.id)
+                        ),
+                        ...(breakdownDimensions.social || []).filter(dim => 
+                          breakdownConfigs.social?.breakdownDimensionIds?.includes(dim.id)
+                        ),
                       ].map(dim => [dim.id, dim])).values()
                     ]}
                   />
@@ -3084,9 +3108,15 @@ export default function SlideViewPage() {
                     onBreakdownByChange={setBreakdownByDimension}
                     availableDimensions={[
                       ...new Map([
-                        ...(breakdownDimensions.metasearch || []),
-                        ...(breakdownDimensions.sem || []),
-                        ...(breakdownDimensions.social || []),
+                        ...(breakdownDimensions.metasearch || []).filter(dim => 
+                          breakdownConfigs.metasearch?.breakdownDimensionIds?.includes(dim.id)
+                        ),
+                        ...(breakdownDimensions.sem || []).filter(dim => 
+                          breakdownConfigs.sem?.breakdownDimensionIds?.includes(dim.id)
+                        ),
+                        ...(breakdownDimensions.social || []).filter(dim => 
+                          breakdownConfigs.social?.breakdownDimensionIds?.includes(dim.id)
+                        ),
                       ].map(dim => [dim.id, dim])).values()
                     ]}
                   />
