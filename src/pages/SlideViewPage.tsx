@@ -1742,13 +1742,48 @@ export default function SlideViewPage() {
       setSelectedYear(sinceYear.toString());
       setSelectedMonth(sinceMonth);
 
+      // Immediately load filter dimension values for display in the tab bar
+      const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {};
+      for (const channel of selectedChannels) {
+        const filterDimIds = filterConfigs[channel]?.filterDimensionIds || [];
+        updatedFilterDimensionValues[channel] = {};
+        for (const filterDimId of filterDimIds) {
+          const values = dimensionValues[channel] || [];
+          if (values.length > 0) {
+            updatedFilterDimensionValues[channel][filterDimId] = values;
+          } else {
+            // Try to load values if not already loaded
+            const reportId = CHANNEL_REPORT_IDS[channel];
+            if (reportId) {
+              const { data: dimData } = await supabase
+                .from('dimension_data')
+                .select('dimension_values')
+                .eq('report_id', reportId)
+                .limit(1000);
+              
+              if (dimData && dimData.length > 0) {
+                const uniqueValues = new Set<string>();
+                for (const row of dimData) {
+                  const rowValues = row.dimension_values as Record<string, any>;
+                  if (rowValues && rowValues[filterDimId]) {
+                    uniqueValues.add(String(rowValues[filterDimId]));
+                  }
+                }
+                updatedFilterDimensionValues[channel][filterDimId] = Array.from(uniqueValues).sort();
+              }
+            }
+          }
+        }
+      }
+      setFilterDimensionValues(updatedFilterDimensionValues);
+
       toast({
         title: "Configuration saved",
         description: "Your report settings have been saved. Click 'Refresh Data' to fetch updated data.",
       });
 
       setIsEditSourceOpen(false);
-      resetModalState();
+      // Don't reset modal state - keep the current filter configs active for display
     } catch (error) {
       console.error('Error saving slide report configuration:', error);
       toast({
@@ -1757,7 +1792,6 @@ export default function SlideViewPage() {
         variant: "destructive",
       });
       setIsEditSourceOpen(false);
-      resetModalState();
     }
   };
 
@@ -2667,7 +2701,6 @@ export default function SlideViewPage() {
               {/* Filters - Only show on individual report tabs, not on Overview or Budget */}
               {selectedTab !== "overview" && selectedTab !== "budget" && (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground mr-2">Since {sinceMonth} {sinceYear}</span>
                   {/* Filter Dropdowns */}
                   {selectedChannels.flatMap(channel => {
                     const filterDimIds = filterConfigs[channel]?.filterDimensionIds || [];
