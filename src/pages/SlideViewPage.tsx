@@ -649,19 +649,47 @@ export default function SlideViewPage() {
     }
   }, [modalStep, selectedChannels, activeChannelTab]);
 
-  // Load dimensions for a channel (placeholder - can be connected to real data)
+  // Hardcoded TEXT dimension mappings per channel (from actual report data)
+  const CHANNEL_TEXT_DIMENSIONS: Record<string, Dimension[]> = {
+    metasearch: [
+      { id: '093ac487-dd90-4466-9972-ac51d110e91e', name: 'Hotel', type: 'text' },
+      { id: '970c0d99-7ec4-48db-893c-15957122b9cc', name: 'Channel', type: 'text' },
+      { id: '6955d48a-0425-48f6-b77a-31aa11dc8eb3', name: 'Device', type: 'text' },
+      { id: '6c553ea6-e3bb-4946-bb56-069d39a3c5c0', name: 'Link Type', type: 'text' },
+      { id: 'febc1239-37e9-47db-bccc-77763d95c598', name: 'Market', type: 'text' },
+    ],
+    sem: [
+      { id: '277ec940-a91b-4c95-b1e2-4a8fd5814d04', name: 'Account', type: 'text' },
+      { id: '745b7d51-76be-4042-bc88-790fc53de865', name: 'Campaign', type: 'text' },
+    ],
+    social: [
+      { id: '277ec940-a91b-4c95-b1e2-4a8fd5814d04', name: 'Account', type: 'text' },
+      { id: 'b864ad95-3b65-4610-a8ef-cba9cebabf5b', name: 'Ad Group', type: 'text' },
+      { id: '745b7d51-76be-4042-bc88-790fc53de865', name: 'Campaign', type: 'text' },
+    ],
+  };
+
+  // Load dimensions for a channel from actual report data
   const loadDimensionsForChannel = async (channel: 'metasearch' | 'sem' | 'social') => {
     setLoadingDimensions(prev => ({ ...prev, [channel]: true }));
     try {
-      // TODO: Connect to real data source
-      // For now, return placeholder dimensions
-      const placeholderDimensions: Dimension[] = [
-        { id: 'hotel', name: 'Hotel', type: 'text' },
-        { id: 'campaign', name: 'Campaign', type: 'text' },
-        { id: 'device', name: 'Device', type: 'text' },
-        { id: 'market', name: 'Market', type: 'text' },
-      ];
-      setDimensions(prev => ({ ...prev, [channel]: placeholderDimensions }));
+      // Use hardcoded dimensions from actual report data
+      const channelDims = CHANNEL_TEXT_DIMENSIONS[channel] || [];
+      setDimensions(prev => ({ ...prev, [channel]: channelDims }));
+      
+      // Auto-select first dimension (Hotel for metasearch, Account for others)
+      if (channelDims.length > 0 && !channelConfigs[channel]?.dimensionId) {
+        const firstDimId = channelDims[0].id;
+        setChannelConfigs(prev => ({
+          ...prev,
+          [channel]: {
+            ...prev[channel],
+            dimensionId: firstDimId,
+          },
+        }));
+        // Load values for the auto-selected dimension
+        await loadValuesForDimension(channel, firstDimId);
+      }
     } catch (err) {
       console.error(`Error loading dimensions for ${channel}:`, err);
       setDimensions(prev => ({ ...prev, [channel]: [] }));
@@ -670,20 +698,53 @@ export default function SlideViewPage() {
     }
   };
 
-  // Load values for a dimension
+  // Load values for a dimension from actual dimension_data
   const loadValuesForDimension = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
     setLoadingValues(prev => ({ ...prev, [channel]: true }));
     try {
-      // TODO: Connect to real data source using supabase function
-      // For now, return placeholder values
-      const placeholderValues = [
-        'Brady Hotels Central Melbourne',
-        'Brady Hotels Jones Lane',
-        'Brady Apartment Hotel Flinders Street',
-        'Brady Apartment Hotel Hardware Lane',
-        'Sojourn Apartment Hotel - Ghuznee',
-      ];
-      setDimensionValues(prev => ({ ...prev, [channel]: placeholderValues }));
+      const reportId = CHANNEL_REPORT_IDS[channel];
+      
+      // Query dimension_data for unique values
+      const { data, error } = await supabase
+        .from('dimension_data')
+        .select('dimension_values')
+        .eq('report_id', reportId)
+        .limit(5000);
+      
+      if (error) {
+        console.error(`Error loading values for ${channel}/${dimensionId}:`, error);
+        setDimensionValues(prev => ({ ...prev, [channel]: [] }));
+        return;
+      }
+
+      // Extract unique values for this dimension
+      const valueSet = new Set<string>();
+      data?.forEach(row => {
+        const val = row.dimension_values?.[dimensionId];
+        if (val && typeof val === 'string' && val.trim() !== '') {
+          valueSet.add(val);
+        }
+      });
+
+      let values = Array.from(valueSet).sort();
+      
+      // For Metasearch Hotel dimension, filter to only Brady hotels
+      if (channel === 'metasearch' && dimensionId === '093ac487-dd90-4466-9972-ac51d110e91e') {
+        values = values.filter(v => v.startsWith('Brady'));
+      }
+
+      setDimensionValues(prev => ({ ...prev, [channel]: values }));
+      
+      // Auto-select all Brady values for metasearch Hotel
+      if (channel === 'metasearch' && dimensionId === '093ac487-dd90-4466-9972-ac51d110e91e') {
+        setChannelConfigs(prev => ({
+          ...prev,
+          [channel]: {
+            ...prev[channel],
+            selectedValues: values, // Auto-select all 4 Brady hotels
+          },
+        }));
+      }
     } catch (err) {
       console.error(`Error loading values for ${channel}/${dimensionId}:`, err);
       setDimensionValues(prev => ({ ...prev, [channel]: [] }));
@@ -692,9 +753,9 @@ export default function SlideViewPage() {
     }
   };
 
-  // Load dimensions when entering step 2 or step 4
+  // Load dimensions when entering step 2, 3, or 4
   useEffect(() => {
-    if ((modalStep === 2 || modalStep === 4) && isEditSourceOpen) {
+    if ((modalStep === 2 || modalStep === 3 || modalStep === 4) && isEditSourceOpen) {
       selectedChannels.forEach(channel => {
         if (dimensions[channel].length === 0 && !loadingDimensions[channel]) {
           loadDimensionsForChannel(channel);
@@ -1256,8 +1317,8 @@ export default function SlideViewPage() {
               <Sparkles className="h-5 w-5 text-primary" />
                 <DialogTitle>
                   {modalStep === 1 && "Select Channels"}
-                  {modalStep === 2 && "Dimensions"}
-                  {modalStep === 3 && "Select Dimension Values"}
+                  {modalStep === 2 && "Value Dimensions"}
+                  {modalStep === 3 && "Group by & Filter Values"}
                   {modalStep === 4 && "Breakdown Dimensions"}
                   {modalStep === 5 && "Filters"}
                 </DialogTitle>
@@ -1500,7 +1561,7 @@ export default function SlideViewPage() {
                         <>
                           <div>
                             <Label className="text-sm font-medium mb-2 block">
-                              Select Dimension
+                              Group by
                             </Label>
                             <Select
                               value={channelConfigs[activeChannelTab]?.dimensionId || ""}
