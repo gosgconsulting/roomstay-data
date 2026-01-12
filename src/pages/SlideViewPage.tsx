@@ -1270,12 +1270,13 @@ export default function SlideViewPage() {
 
   // Refresh Data Modal state
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
-  const [refreshStep, setRefreshStep] = useState(0); // 0 = not started, 1-4 = steps
+  const [refreshStep, setRefreshStep] = useState(0); // 0 = not started, 1-5 = steps
   const [refreshStepStatus, setRefreshStepStatus] = useState<Record<number, 'pending' | 'loading' | 'complete' | 'error'>>({
     1: 'pending',
     2: 'pending',
     3: 'pending',
     4: 'pending',
+    5: 'pending',
   });
   const [refreshError, setRefreshError] = useState<string | null>(null);
 
@@ -2036,6 +2037,7 @@ export default function SlideViewPage() {
       2: 'pending',
       3: 'pending',
       4: 'pending',
+      5: 'pending',
     });
 
     try {
@@ -2076,9 +2078,10 @@ export default function SlideViewPage() {
 
       if (updateError) throw updateError;
       
-      setRefreshStepStatus(prev => ({ ...prev, 4: 'complete' }));
-      
-      // Success - update local state with computed data
+      setRefreshStepStatus(prev => ({ ...prev, 4: 'complete', 5: 'loading' }));
+      setRefreshStep(5);
+
+      // Step 5: Saving cache - update local state for instant loading
       // Transform pivot data to the format expected by the UI
       if (pivotData.overview.monthly) {
         const monthlyRevenue = Object.entries(pivotData.overview.monthly).map(([key, metrics]) => {
@@ -2120,13 +2123,15 @@ export default function SlideViewPage() {
       }
       setDynamicYearlyTotals(yearlyTotals);
       
+      setRefreshStepStatus(prev => ({ ...prev, 5: 'complete' }));
+      
       // Wait a moment then close modal
       await new Promise(resolve => setTimeout(resolve, 800));
       setIsRefreshModalOpen(false);
       
       toast({ 
         title: "Data refreshed", 
-        description: `Pivot tables updated with ${Object.keys(pivotData.overview.monthly || {}).length} months of data.` 
+        description: `Pivot tables updated with ${Object.keys(pivotData.overview.monthly || {}).length} months of data for 3 years.` 
       });
       
     } catch (error) {
@@ -3780,6 +3785,39 @@ export default function SlideViewPage() {
               </div>
             </div>
 
+            {/* Step 5: Saving cache */}
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
+                refreshStepStatus[5] === 'complete' && "bg-green-100 text-green-700",
+                refreshStepStatus[5] === 'loading' && "bg-primary/20 text-primary",
+                refreshStepStatus[5] === 'error' && "bg-red-100 text-red-700",
+                refreshStepStatus[5] === 'pending' && "bg-muted text-muted-foreground"
+              )}>
+                {refreshStepStatus[5] === 'complete' ? (
+                  <Check className="h-4 w-4" />
+                ) : refreshStepStatus[5] === 'loading' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : refreshStepStatus[5] === 'error' ? (
+                  <span>!</span>
+                ) : (
+                  "5"
+                )}
+              </div>
+              <div className="flex-1">
+                <p className={cn(
+                  "font-medium",
+                  refreshStepStatus[5] === 'complete' && "text-green-700",
+                  refreshStepStatus[5] === 'loading' && "text-foreground",
+                  refreshStepStatus[5] === 'error' && "text-red-700",
+                  refreshStepStatus[5] === 'pending' && "text-muted-foreground"
+                )}>
+                  Saving cache
+                </p>
+                <p className="text-sm text-muted-foreground">Enabling instant loading on next visit</p>
+              </div>
+            </div>
+
             {/* Error message */}
             {refreshError && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -3788,7 +3826,7 @@ export default function SlideViewPage() {
             )}
 
             {/* All complete message */}
-            {refreshStepStatus[4] === 'complete' && (
+            {refreshStepStatus[5] === 'complete' && (
               <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
                 <Check className="h-4 w-4 text-green-600" />
                 <p className="text-sm text-green-700 font-medium">Data refresh complete!</p>
@@ -3799,7 +3837,7 @@ export default function SlideViewPage() {
           <DialogFooter>
             {refreshError ? (
               <Button onClick={() => setIsRefreshModalOpen(false)}>Close</Button>
-            ) : refreshStepStatus[4] === 'complete' ? (
+            ) : refreshStepStatus[5] === 'complete' ? (
               <Button onClick={() => setIsRefreshModalOpen(false)} className="bg-green-600 hover:bg-green-700">
                 Done
               </Button>
