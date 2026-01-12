@@ -2991,25 +2991,23 @@ export default function SlideViewPage() {
                     </SelectContent>
                   </Select>
                   
-                  {/* Comparison dropdown - Only show on channel tabs, not Overview */}
-                  {selectedTab !== "overview" && (
-                    <Select value={comparisonType} onValueChange={setComparisonType}>
-                      <SelectTrigger className="w-[150px]">
-                        <SelectValue placeholder="No Comparison" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No Comparison</SelectItem>
-                        <SelectItem value="previous_period">Previous Period</SelectItem>
-                        <SelectItem value="previous_year">Previous Year</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
+                  {/* Comparison dropdown - Show on all tabs except Budget */}
+                  <Select value={comparisonType} onValueChange={setComparisonType}>
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue placeholder="No Comparison" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Comparison</SelectItem>
+                      <SelectItem value="previous_period">Previous Period</SelectItem>
+                      <SelectItem value="previous_year">Previous Year</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
             </div>
 
-            {/* Comparison info banner - Only show on individual report tabs */}
-            {selectedTab !== "overview" && selectedTab !== "budget" && comparisonType !== "none" && (
+            {/* Comparison info banner - Show on all tabs except Budget */}
+            {selectedTab !== "budget" && comparisonType !== "none" && (
               <div className="mb-4 p-3 bg-muted rounded-lg text-sm">
                 {comparisonType === "previous_period" && (
                   <span>Comparing December 2025 vs November 2025</span>
