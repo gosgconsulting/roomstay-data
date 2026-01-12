@@ -483,17 +483,52 @@ export default function SlideViewPage() {
   };
 
   // Channel dimension mappings state (for step 2 - Dimensions)
+  // Pre-selected value dimensions for Brady Hotels based on actual report data
+  // Metasearch: Impressions, Clicks, Cost, Revenue, Bookings, CPC, Cost of sale, Impression Share
+  // SEM: Impressions, Clicks, Cost, Revenue, Bookings
+  // Social: Impressions, Clicks, Cost, Revenue, Bookings, Leads, CTR
   interface ChannelDimensionMapping {
     reportId: string;
     selectedDimensionIds: string[];
   }
+  
+  // Hardcoded value dimension IDs that exist in each Brady Hotels report
+  const BRADY_METASEARCH_DIMENSIONS = [
+    '89c229d9-8a6e-4d94-a0d2-a4b43b6f3fe1', // Impressions
+    '1caad3eb-3d5e-405c-9df7-1c96971171c5', // Clicks
+    'fb281b3f-c800-48f4-b34b-02d4f0244b07', // Cost
+    '7f4cb2e9-52a3-4110-803a-58d2e7afacb5', // Revenue
+    '79aeb7f7-a9c6-43cd-bd05-ff7df81babf1', // Bookings
+    '8962dff5-bb0f-4ab1-ace7-e5dc5eb4fdcc', // CPC
+    '3486d423-f75c-402e-8fb2-285b6e7e22ec', // Cost of sale
+    'bfde7232-89ab-46ba-80ed-015a4d73bae5', // Impression Share
+  ];
+  
+  const BRADY_SEM_DIMENSIONS = [
+    '89c229d9-8a6e-4d94-a0d2-a4b43b6f3fe1', // Impressions
+    '1caad3eb-3d5e-405c-9df7-1c96971171c5', // Clicks
+    'fb281b3f-c800-48f4-b34b-02d4f0244b07', // Cost
+    '7f4cb2e9-52a3-4110-803a-58d2e7afacb5', // Revenue
+    '79aeb7f7-a9c6-43cd-bd05-ff7df81babf1', // Bookings
+  ];
+  
+  const BRADY_SOCIAL_DIMENSIONS = [
+    '89c229d9-8a6e-4d94-a0d2-a4b43b6f3fe1', // Impressions
+    '1caad3eb-3d5e-405c-9df7-1c96971171c5', // Clicks
+    'fb281b3f-c800-48f4-b34b-02d4f0244b07', // Cost
+    '7f4cb2e9-52a3-4110-803a-58d2e7afacb5', // Revenue
+    '79aeb7f7-a9c6-43cd-bd05-ff7df81babf1', // Bookings
+    'bbe9b05b-7485-4eb3-a3cc-d04f05823f63', // Leads
+    'ff046f06-10ee-4420-a02f-d4089e5f75a6', // CTR
+  ];
+  
   const [channelDimensionMappings, setChannelDimensionMappings] = useState<Record<string, ChannelDimensionMapping>>({
-    metasearch: { reportId: CHANNEL_REPORT_IDS.metasearch, selectedDimensionIds: [] },
-    sem: { reportId: CHANNEL_REPORT_IDS.sem, selectedDimensionIds: [] },
-    social: { reportId: CHANNEL_REPORT_IDS.social, selectedDimensionIds: [] },
+    metasearch: { reportId: CHANNEL_REPORT_IDS.metasearch, selectedDimensionIds: BRADY_METASEARCH_DIMENSIONS },
+    sem: { reportId: CHANNEL_REPORT_IDS.sem, selectedDimensionIds: BRADY_SEM_DIMENSIONS },
+    social: { reportId: CHANNEL_REPORT_IDS.social, selectedDimensionIds: BRADY_SOCIAL_DIMENSIONS },
   });
 
-  // Available dimensions per channel (fetched from database)
+  // Available dimensions per channel (fetched from database) - VALUE types only
   const [availableDimensions, setAvailableDimensions] = useState<Record<string, { id: string; name: string; type: string }[]>>({
     metasearch: [],
     sem: [],
@@ -802,17 +837,16 @@ export default function SlideViewPage() {
   }, [activeChannelTab, dimensionValues, searchQuery]);
 
   // Load available dimensions from database for all selected channels
+  // Only load VALUE dimensions (number, currency, percentage) - not text or date
   const loadAvailableDimensions = async () => {
-    if (!accountId) return;
-    
     setLoadingAvailableDimensions(true);
     try {
-      // Fetch dimensions for the account (text type dimensions for filtering/breakdown)
+      // Fetch global VALUE dimensions (number, currency, percentage) - these are the metrics
       const { data: dims, error } = await supabase
         .from('dimensions')
         .select('id, name, type')
-        .eq('account_id', accountId)
-        .in('type', ['text', 'date'])
+        .eq('scope', 'global')
+        .in('type', ['number', 'currency', 'percentage'])
         .order('name');
       
       if (error) {
@@ -822,7 +856,7 @@ export default function SlideViewPage() {
 
       const dimensionList = dims || [];
       
-      // Set same dimensions for all channels (account-scoped)
+      // Set same dimensions for all channels (global value dimensions)
       setAvailableDimensions({
         metasearch: dimensionList,
         sem: dimensionList,
@@ -1338,7 +1372,7 @@ export default function SlideViewPage() {
                     <>
                       <div className="bg-muted/30 rounded-lg p-4 mb-2">
                         <p className="text-sm text-muted-foreground">
-                          Select which dimensions from the <span className="font-medium capitalize">{activeChannelTab}</span> report to include in this slide. These are the dimensions that will be available for filtering and breakdown.
+                          Select which <span className="font-medium">value dimensions</span> (metrics) from the <span className="font-medium capitalize">{activeChannelTab}</span> report to include in this slide. These are the numeric metrics used for calculations and aggregations.
                         </p>
                         <p className="text-xs text-muted-foreground mt-2">
                           Report ID: <code className="bg-muted px-1 rounded">{CHANNEL_REPORT_IDS[activeChannelTab]}</code>
@@ -1347,7 +1381,7 @@ export default function SlideViewPage() {
                       
                       <div>
                         <Label className="text-sm font-medium mb-2 block">
-                          Available Dimensions
+                          Available Value Dimensions (Metrics)
                         </Label>
                         <ScrollArea className="h-[250px] border rounded-md">
                           <div className="p-2 space-y-1">
@@ -1378,7 +1412,7 @@ export default function SlideViewPage() {
                               })
                             ) : (
                               <p className="text-center text-muted-foreground py-4">
-                                No dimensions available for this account
+                                No value dimensions available
                               </p>
                             )}
                           </div>
