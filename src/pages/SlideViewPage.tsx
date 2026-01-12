@@ -1583,15 +1583,6 @@ export default function SlideViewPage() {
 
       const dimData = allDimData;
 
-      if (dimError) {
-        console.error(`Error fetching dimension_data for ${channel}:`, dimError);
-        // Keep cached values if fetch fails
-        if (cachedSelectedValues.length === 0) {
-          setDimensionValues(prev => ({ ...prev, [channel]: [] }));
-        }
-        return;
-      }
-
       if (!dimData || dimData.length === 0) {
         console.error(`No dimension_data found for ${channel} (report: ${reportId})`);
         // Keep cached values if no data found
@@ -2361,55 +2352,42 @@ export default function SlideViewPage() {
       setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'loading' }));
       setRefreshStep(2);
 
-      // Step 2: Clear old pivot_data and populate aggregated breakdown data
-      console.log('[testing] Step 2: Clearing old pivot_data and populating aggregated breakdown data...');
+      // Step 2: Compute pivot data using existing computation function
+      console.log('[testing] Step 2: Computing pivot data...');
       
-      // Clear pivot_data column (set to empty object)
-      const { error: clearError } = await supabase
-        .from("slide_reports")
-        .update({
-          pivot_data: {} as any, // Clear pivot_data
-        })
-        .eq("id", slideReportId);
-
-      if (clearError) {
-        console.warn('[testing] Warning: Could not clear pivot_data:', clearError);
-        // Continue anyway
-      } else {
-        console.log('[testing] Step 2: Old pivot_data cleared');
-      }
-
-      // Populate aggregated breakdown data using the new system
-      const { populateAggregatedBreakdownData } = await import("@/lib/populateAggregatedBreakdownData");
+      const config = latestReport.configuration as unknown as SlideReportConfiguration;
+      const reportIdsMap = latestReport.report_ids as unknown as Record<string, string>;
+      const dateRange = latestReport.date_range as unknown as SlideReportDateRange;
       
-      await populateAggregatedBreakdownData(
-        latestReport.report_ids as unknown as Record<string, string>,
-        latestReport.configuration as unknown as SlideReportConfiguration,
-        (progress, message) => {
-          console.log(`[testing] Aggregation progress: ${(progress * 100).toFixed(0)}% - ${message}`);
-        }
+      // Import and use the existing computation function
+      const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
+      
+      const pivotData = await computeSlideReportPivotData(
+        reportIdsMap,
+        config,
+        dateRange
       );
       
-      console.log('[testing] Step 2: Aggregated breakdown data populated successfully');
+      console.log('[testing] Step 2: Pivot data computed successfully');
       setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'loading' }));
       setRefreshStep(3);
 
-      // Step 3: Update last_refreshed_at and refresh UI with new data
-      console.log('[testing] Step 3: Updating refresh timestamp and refreshing UI...');
+      // Step 3: Save pivot data and update timestamp
+      console.log('[testing] Step 3: Saving pivot data and updating timestamp...');
       
-      // Update last_refreshed_at timestamp
-      const { error: timestampError } = await supabase
+      const { error: updateError } = await supabase
         .from("slide_reports")
         .update({
+          pivot_data: pivotData as any,
           last_refreshed_at: new Date().toISOString(),
         })
         .eq("id", slideReportId);
 
-      if (timestampError) {
-        console.warn('[testing] Warning: Could not update timestamp:', timestampError);
+      if (updateError) {
+        throw new Error(`Failed to save pivot data: ${updateError.message}`);
       }
 
-      console.log('[testing] Step 3: Refresh timestamp updated successfully');
+      console.log('[testing] Step 3: Pivot data saved successfully');
       
       // Force refetch of slide report data to update UI
       console.log('[testing] Forcing refetch of slide report data...');
@@ -2442,22 +2420,22 @@ export default function SlideViewPage() {
       await new Promise(resolve => setTimeout(resolve, 500));
       setIsRefreshModalOpen(false);
       
-      const totalChannels = latestReport.configuration.selectedChannels?.length || 0;
+      const totalChannels = config.selectedChannels?.length || 0;
       
       console.log('[testing] Refresh complete - Summary:', {
         totalChannels,
-        channels: latestReport.configuration.selectedChannels || [],
+        channels: config.selectedChannels || [],
         configurationUsed: {
-          selectedChannels: latestReport.configuration.selectedChannels,
-          hasChannelConfigs: Object.keys(latestReport.configuration.channelConfigs || {}).length > 0,
-          hasBreakdownConfigs: Object.keys(latestReport.configuration.breakdownConfigs || {}).length > 0,
-          hasFilterConfigs: Object.keys(latestReport.configuration.filterConfigs || {}).length > 0,
+          selectedChannels: config.selectedChannels,
+          hasChannelConfigs: Object.keys(config.channelConfigs || {}).length > 0,
+          hasBreakdownConfigs: Object.keys(config.breakdownConfigs || {}).length > 0,
+          hasFilterConfigs: Object.keys(config.filterConfigs || {}).length > 0,
         },
       });
       
       toast({ 
         title: "Data refreshed", 
-        description: `Aggregated breakdown data updated for ${totalChannels} channel(s). Data is now available in the Data Browser.` 
+        description: `Pivot data updated for ${totalChannels} channel(s). Data is now available in the Data Browser.` 
       });
       
     } catch (error) {
