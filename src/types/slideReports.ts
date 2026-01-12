@@ -79,6 +79,13 @@ export interface SlideReportPivotData {
           [dimensionName: string]: BreakdownRow[];
         };
       };
+      // Pre-computed unique values for filter dimensions (so we don't have to load from data source)
+      filterUniqueValues?: {
+        [dimensionId: string]: {
+          name: string; // Dimension name for display
+          values: string[]; // Sorted unique values
+        };
+      };
     };
   };
   budget: {
