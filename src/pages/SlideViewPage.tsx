@@ -1341,7 +1341,8 @@ export default function SlideViewPage() {
       
       const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
       const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
-      const filterDimIds = savedFilterConfigs?.filterDimensionIds || filterConfigs[currentChannel]?.filterDimensionIds || [];
+      const localFilterConfig = filterConfigs?.[currentChannel];
+      const filterDimIds = savedFilterConfigs?.filterDimensionIds || localFilterConfig?.filterDimensionIds || [];
       
       if (filterDimIds.length === 0) return;
       
@@ -2098,14 +2099,15 @@ export default function SlideViewPage() {
 
   // Handle filter dimension toggle
   const handleFilterDimensionToggle = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
-    const currentConfig = filterConfigs[channel];
-    const isSelected = currentConfig?.filterDimensionIds.includes(dimensionId);
+    const currentConfig = filterConfigs?.[channel];
+    const isSelected = currentConfig?.filterDimensionIds?.includes(dimensionId) || false;
     
     setFilterConfigs(prev => {
-      const current = prev[channel];
+      const current = prev?.[channel] || { filterDimensionIds: [] };
+      const currentIds = current.filterDimensionIds || [];
       const newFilterDimensionIds = isSelected
-        ? current.filterDimensionIds.filter(id => id !== dimensionId)
-        : [...current.filterDimensionIds, dimensionId];
+        ? currentIds.filter(id => id !== dimensionId)
+        : [...currentIds, dimensionId];
       
       return {
         ...prev,
