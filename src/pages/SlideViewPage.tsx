@@ -3186,14 +3186,6 @@ export default function SlideViewPage() {
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div className="mr-4">
-              <h1 className="text-lg font-semibold">{currentReportName}</h1>
-              <p className="text-xs text-muted-foreground">
-                {slideReport?.date_range 
-                  ? `Since ${slideReport.date_range.month} ${slideReport.date_range.year}`
-                  : 'All Data'}
-              </p>
-            </div>
             {/* Tabs in header */}
             <TabsList>
               <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Overview</TabsTrigger>
