@@ -461,7 +461,7 @@ const combineBreakdownData = () => {
 };
 
 // Unified breakdown table component with Group by / Breakdown by dropdowns
-// Uses data from pivot_data.channels[channel].breakdowns
+// Uses data from pivot_data.channels[channel].monthlyBreakdowns for month-specific data
 const UnifiedBreakdownTable = ({ 
   groupBy,
   breakdownBy,
@@ -472,6 +472,8 @@ const UnifiedBreakdownTable = ({
   availableDimensions,
   pivotData,
   selectedChannel,
+  selectedYear,
+  selectedMonth,
 }: {
   groupBy: string;
   breakdownBy: string;
@@ -482,6 +484,8 @@ const UnifiedBreakdownTable = ({
   availableDimensions: { id: string; name: string; type: string }[];
   pivotData?: any;
   selectedChannel?: 'metasearch' | 'sem' | 'social' | 'overview';
+  selectedYear?: string;
+  selectedMonth?: string;
 }) => {
   // Auto-select defaults when dimensions are available
   useEffect(() => {
@@ -500,7 +504,17 @@ const UnifiedBreakdownTable = ({
     }
   }, [availableDimensions, groupBy, breakdownBy, onGroupByChange, onBreakdownByChange]);
 
-  // Get breakdown data from pivotData based on selected dimension
+  // Build monthKey for filtering by selected year/month
+  const monthKey = useMemo(() => {
+    if (!selectedYear || selectedYear === 'all' || !selectedMonth || selectedMonth === 'all') {
+      return null; // Use aggregated data
+    }
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const monthNum = monthNames.indexOf(selectedMonth) + 1;
+    return `${selectedYear}-${monthNum.toString().padStart(2, '0')}`;
+  }, [selectedYear, selectedMonth]);
+
+  // Get breakdown data from pivotData based on selected dimension and month
   const groupedData = useMemo(() => {
     if (!pivotData?.channels) return [];
     
@@ -516,10 +530,20 @@ const UnifiedBreakdownTable = ({
     
     for (const channel of channelsToCheck) {
       const channelData = pivotData.channels[channel];
-      if (!channelData?.breakdowns) continue;
+      if (!channelData) continue;
       
-      // Find the breakdown by dimension name
-      const breakdownData = channelData.breakdowns[groupByName] || [];
+      // Use monthlyBreakdowns if a specific month is selected, otherwise use aggregated breakdowns
+      let breakdownData: any[] = [];
+      
+      if (monthKey && channelData.monthlyBreakdowns?.[monthKey]) {
+        // Use month-specific breakdown data
+        breakdownData = channelData.monthlyBreakdowns[monthKey][groupByName] || [];
+        console.log(`[UnifiedBreakdownTable] Using monthlyBreakdowns for ${channel}/${monthKey}/${groupByName}:`, breakdownData.length, 'rows');
+      } else if (channelData.breakdowns) {
+        // Fall back to aggregated breakdowns
+        breakdownData = channelData.breakdowns[groupByName] || [];
+        console.log(`[UnifiedBreakdownTable] Using aggregated breakdowns for ${channel}/${groupByName}:`, breakdownData.length, 'rows');
+      }
       
       breakdownData.forEach((row: any) => {
         const groupValue = row.name || row[groupByName.toLowerCase().replace(/\s+/g, '_')] || 'Unknown';
@@ -543,9 +567,9 @@ const UnifiedBreakdownTable = ({
         metrics: calculateDerivedMetrics(data),
         rawData: data,
       }));
-  }, [pivotData, groupBy, availableDimensions, selectedChannel]);
+  }, [pivotData, groupBy, availableDimensions, selectedChannel, monthKey]);
 
-  // Get breakdown data for expanded row
+  // Get breakdown data for expanded row (also uses month-specific data)
   const getExpandedBreakdownData = useMemo(() => {
     if (!expandedRow || !pivotData?.channels || !breakdownBy) return [];
     
@@ -562,9 +586,16 @@ const UnifiedBreakdownTable = ({
     
     for (const channel of channelsToCheck) {
       const channelData = pivotData.channels[channel];
-      if (!channelData?.breakdowns) continue;
+      if (!channelData) continue;
       
-      const breakdownData = channelData.breakdowns[breakdownByName] || [];
+      // Use monthlyBreakdowns if a specific month is selected, otherwise use aggregated breakdowns
+      let breakdownData: any[] = [];
+      
+      if (monthKey && channelData.monthlyBreakdowns?.[monthKey]) {
+        breakdownData = channelData.monthlyBreakdowns[monthKey][breakdownByName] || [];
+      } else if (channelData.breakdowns) {
+        breakdownData = channelData.breakdowns[breakdownByName] || [];
+      }
       
       breakdownData.forEach((row: any) => {
         const value = row.name || row[breakdownByName.toLowerCase().replace(/\s+/g, '_')] || 'Unknown';
@@ -586,7 +617,7 @@ const UnifiedBreakdownTable = ({
         value,
         metrics: calculateDerivedMetrics(data),
       }));
-  }, [expandedRow, pivotData, breakdownBy, availableDimensions, selectedChannel]);
+  }, [expandedRow, pivotData, breakdownBy, availableDimensions, selectedChannel, monthKey]);
 
   // Calculate totals
   const totals = groupedData.reduce((acc, group) => ({
@@ -4289,6 +4320,8 @@ export default function SlideViewPage() {
                         onBreakdownByChange={setBreakdownByDimension}
                         pivotData={slideReport?.pivot_data}
                         selectedChannel="metasearch"
+                        selectedYear={selectedYear}
+                        selectedMonth={selectedMonth}
                         availableDimensions={[
                           ...new Map([
                             ...(breakdownDimensions.metasearch || []).filter(dim => 
@@ -4341,6 +4374,8 @@ export default function SlideViewPage() {
                     onBreakdownByChange={setBreakdownByDimension}
                     pivotData={slideReport?.pivot_data}
                     selectedChannel="sem"
+                    selectedYear={selectedYear}
+                    selectedMonth={selectedMonth}
                     availableDimensions={[
                       ...new Map([
                         ...(breakdownDimensions.sem || []).filter(dim => {
@@ -4393,6 +4428,8 @@ export default function SlideViewPage() {
                     onBreakdownByChange={setBreakdownByDimension}
                     pivotData={slideReport?.pivot_data}
                     selectedChannel="social"
+                    selectedYear={selectedYear}
+                    selectedMonth={selectedMonth}
                     availableDimensions={[
                       ...new Map([
                         ...(breakdownDimensions.social || []).filter(dim => {
