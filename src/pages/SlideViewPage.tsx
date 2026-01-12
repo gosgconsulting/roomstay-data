@@ -3199,7 +3199,8 @@ export default function SlideViewPage() {
             {selectedTab !== "overview" && selectedTab !== "budget" && (() => {
               const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
               const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
-              const filterDimIds = savedFilterConfigs?.filterDimensionIds || filterConfigs[currentChannel]?.filterDimensionIds || [];
+              const localFilterConfig = filterConfigs?.[currentChannel];
+              const filterDimIds = savedFilterConfigs?.filterDimensionIds || localFilterConfig?.filterDimensionIds || [];
               
               if (filterDimIds.length === 0) return null;
               
@@ -3863,7 +3864,8 @@ export default function SlideViewPage() {
                     const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
                     // Use saved configuration from slideReport, fallback to local state
                     const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
-                    const filterDimIds = savedFilterConfigs?.filterDimensionIds || filterConfigs[currentChannel]?.filterDimensionIds || [];
+                    const localFilterConfig = filterConfigs?.[currentChannel];
+                    const filterDimIds = savedFilterConfigs?.filterDimensionIds || localFilterConfig?.filterDimensionIds || [];
                     return filterDimIds.map(filterDimId => {
                       // Use filterDimensionNames state (loaded on page load) or fallback to dimensions state
                       const filterDimName = filterDimensionNames[currentChannel]?.[filterDimId] 
