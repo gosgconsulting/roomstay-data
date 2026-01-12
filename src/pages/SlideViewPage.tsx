@@ -3322,125 +3322,6 @@ export default function SlideViewPage() {
               <TabsTrigger value="budget">Budget</TabsTrigger>
             </TabsList>
             
-            {/* Channel Filter Dropdowns in Header - Show when on channel tabs */}
-            {selectedTab !== "overview" && selectedTab !== "budget" && (() => {
-              const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
-              const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
-              const localFilterConfig = filterConfigs?.[currentChannel];
-              const filterDimIds = savedFilterConfigs?.filterDimensionIds || localFilterConfig?.filterDimensionIds || [];
-              
-              if (filterDimIds.length === 0) return null;
-              
-              return (
-                <div className="flex items-center gap-2 ml-4 pl-4 border-l">
-                  {filterDimIds.map(filterDimId => {
-                    const filterDimName = filterDimensionNames[currentChannel]?.[filterDimId] 
-                                       || dimensions[currentChannel]?.find(d => d.id === filterDimId)?.name
-                                       || `Filter`;
-                    const filterValuesList = filterDimensionValues[currentChannel]?.[filterDimId] || [];
-                    const selectedFilterValues = filterValues[currentChannel]?.[filterDimId] || [];
-                    const isAllSelected = selectedFilterValues.length === 0 || selectedFilterValues.length === filterValuesList.length;
-                    const hasValues = filterValuesList.length > 0;
-                    
-                    return (
-                      <Popover key={`header-${currentChannel}-${filterDimId}`}>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-8 justify-between min-w-[140px]">
-                            <span className="truncate text-xs">
-                              {isAllSelected 
-                                ? `All ${filterDimName}` 
-                                : selectedFilterValues.length === 1
-                                  ? selectedFilterValues[0]
-                                  : `${selectedFilterValues.length} selected`}
-                            </span>
-                            <ChevronRight className="h-3 w-3 opacity-50 rotate-90 ml-1" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[250px] p-0 bg-popover z-50" align="start">
-                          <div className="p-2">
-                            <div className="flex items-center justify-between mb-2">
-                              <Label className="text-sm font-medium">{filterDimName}</Label>
-                              <div className="flex gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-2 text-xs"
-                                  onClick={() => {
-                                    setFilterValues(prev => ({
-                                      ...prev,
-                                      [currentChannel]: {
-                                        ...prev[currentChannel],
-                                        [filterDimId]: [...filterValuesList],
-                                      },
-                                    }));
-                                  }}
-                                >
-                                  All
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-2 text-xs"
-                                  onClick={() => {
-                                    setFilterValues(prev => ({
-                                      ...prev,
-                                      [currentChannel]: {
-                                        ...prev[currentChannel],
-                                        [filterDimId]: [],
-                                      },
-                                    }));
-                                  }}
-                                >
-                                  Clear
-                                </Button>
-                              </div>
-                            </div>
-                            <ScrollArea className="h-[200px]">
-                              <div className="space-y-1 p-1">
-                                {hasValues ? filterValuesList.map(value => {
-                                  const isSelected = selectedFilterValues.includes(value);
-                                  return (
-                                    <div
-                                      key={value}
-                                      className={cn(
-                                        "flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent text-sm",
-                                        isSelected && "bg-accent"
-                                      )}
-                                      onClick={() => {
-                                        setFilterValues(prev => {
-                                          const current = prev[currentChannel]?.[filterDimId] || [];
-                                          const newValues = isSelected
-                                            ? current.filter(v => v !== value)
-                                            : [...current, value];
-                                          return {
-                                            ...prev,
-                                            [currentChannel]: {
-                                              ...prev[currentChannel],
-                                              [filterDimId]: newValues,
-                                            },
-                                          };
-                                        });
-                                      }}
-                                    >
-                                      <Checkbox checked={isSelected} />
-                                      <span className="truncate">{value}</span>
-                                    </div>
-                                  );
-                                }) : (
-                                  <div className="text-center py-4 text-muted-foreground text-sm">
-                                    Click "Refresh Data" to load filter values
-                                  </div>
-                                )}
-                              </div>
-                            </ScrollArea>
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                    );
-                  })}
-                </div>
-              );
-            })()}
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setIsDataModalOpen(true)}>
@@ -3976,56 +3857,175 @@ export default function SlideViewPage() {
 
       <div className="p-6 space-y-6">
         {/* Filters Row */}
-        <div className="flex items-center justify-end">
-
-              {/* Date Filters - Show on all tabs except Budget */}
-              {selectedTab !== "budget" && (
-                <div className="flex items-center gap-2">
-                  <Select value={selectedYear} onValueChange={setSelectedYear}>
-                    <SelectTrigger className="w-[120px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Years</SelectItem>
-                      <SelectItem value="2024">2024</SelectItem>
-                      <SelectItem value="2025">2025</SelectItem>
-                      <SelectItem value="2026">2026</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                    <SelectTrigger className="w-[120px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Months</SelectItem>
-                      <SelectItem value="January">January</SelectItem>
-                      <SelectItem value="February">February</SelectItem>
-                      <SelectItem value="March">March</SelectItem>
-                      <SelectItem value="April">April</SelectItem>
-                      <SelectItem value="May">May</SelectItem>
-                      <SelectItem value="June">June</SelectItem>
-                      <SelectItem value="July">July</SelectItem>
-                      <SelectItem value="August">August</SelectItem>
-                      <SelectItem value="September">September</SelectItem>
-                      <SelectItem value="October">October</SelectItem>
-                      <SelectItem value="November">November</SelectItem>
-                      <SelectItem value="December">December</SelectItem>
-                    </SelectContent>
-                  </Select>
+        <div className="flex items-center justify-end gap-2">
+          {/* Channel Filter Dropdowns - Show when on channel tabs */}
+          {selectedTab !== "overview" && selectedTab !== "budget" && (() => {
+            const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
+            const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
+            const localFilterConfig = filterConfigs?.[currentChannel];
+            const filterDimIds = savedFilterConfigs?.filterDimensionIds || localFilterConfig?.filterDimensionIds || [];
+            
+            if (filterDimIds.length === 0) return null;
+            
+            return (
+              <>
+                {filterDimIds.map(filterDimId => {
+                  const filterDimName = filterDimensionNames[currentChannel]?.[filterDimId] 
+                                     || dimensions[currentChannel]?.find(d => d.id === filterDimId)?.name
+                                     || `Filter`;
+                  const filterValuesList = filterDimensionValues[currentChannel]?.[filterDimId] || [];
+                  const selectedFilterValues = filterValues[currentChannel]?.[filterDimId] || [];
+                  const isAllSelected = selectedFilterValues.length === 0 || selectedFilterValues.length === filterValuesList.length;
+                  const hasValues = filterValuesList.length > 0;
                   
-                  {/* Comparison dropdown - Show on all tabs except Budget */}
-                  <Select value={comparisonType} onValueChange={setComparisonType}>
-                    <SelectTrigger className="w-[150px]">
-                      <SelectValue placeholder="No Comparison" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No Comparison</SelectItem>
-                      <SelectItem value="previous_period">Previous Period</SelectItem>
-                      <SelectItem value="previous_year">Previous Year</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+                  return (
+                    <Popover key={`filter-${currentChannel}-${filterDimId}`}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="h-9 justify-between min-w-[140px]">
+                          <span className="truncate">
+                            {isAllSelected 
+                              ? `All ${filterDimName}` 
+                              : selectedFilterValues.length === 1
+                                ? selectedFilterValues[0]
+                                : `${selectedFilterValues.length} selected`}
+                          </span>
+                          <ChevronRight className="h-4 w-4 opacity-50 rotate-90 ml-2" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[250px] p-0 bg-popover z-50" align="start">
+                        <div className="p-2">
+                          <div className="flex items-center justify-between mb-2">
+                            <Label className="text-sm font-medium">{filterDimName}</Label>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => {
+                                  setFilterValues(prev => ({
+                                    ...prev,
+                                    [currentChannel]: {
+                                      ...prev[currentChannel],
+                                      [filterDimId]: [...filterValuesList],
+                                    },
+                                  }));
+                                }}
+                              >
+                                All
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => {
+                                  setFilterValues(prev => ({
+                                    ...prev,
+                                    [currentChannel]: {
+                                      ...prev[currentChannel],
+                                      [filterDimId]: [],
+                                    },
+                                  }));
+                                }}
+                              >
+                                Clear
+                              </Button>
+                            </div>
+                          </div>
+                          <ScrollArea className="h-[200px]">
+                            <div className="space-y-1 p-1">
+                              {hasValues ? filterValuesList.map(value => {
+                                const isSelected = selectedFilterValues.includes(value);
+                                return (
+                                  <div
+                                    key={value}
+                                    className={cn(
+                                      "flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent text-sm",
+                                      isSelected && "bg-accent"
+                                    )}
+                                    onClick={() => {
+                                      setFilterValues(prev => {
+                                        const current = prev[currentChannel]?.[filterDimId] || [];
+                                        const newValues = isSelected
+                                          ? current.filter(v => v !== value)
+                                          : [...current, value];
+                                        return {
+                                          ...prev,
+                                          [currentChannel]: {
+                                            ...prev[currentChannel],
+                                            [filterDimId]: newValues,
+                                          },
+                                        };
+                                      });
+                                    }}
+                                  >
+                                    <Checkbox checked={isSelected} />
+                                    <span className="truncate">{value}</span>
+                                  </div>
+                                );
+                              }) : (
+                                <div className="text-center py-4 text-muted-foreground text-sm">
+                                  Click "Refresh Data" to load filter values
+                                </div>
+                              )}
+                            </div>
+                          </ScrollArea>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  );
+                })}
+              </>
+            );
+          })()}
+
+          {/* Date Filters - Show on all tabs except Budget */}
+          {selectedTab !== "budget" && (
+            <div className="flex items-center gap-2">
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Years</SelectItem>
+                  <SelectItem value="2024">2024</SelectItem>
+                  <SelectItem value="2025">2025</SelectItem>
+                  <SelectItem value="2026">2026</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Months</SelectItem>
+                  <SelectItem value="January">January</SelectItem>
+                  <SelectItem value="February">February</SelectItem>
+                  <SelectItem value="March">March</SelectItem>
+                  <SelectItem value="April">April</SelectItem>
+                  <SelectItem value="May">May</SelectItem>
+                  <SelectItem value="June">June</SelectItem>
+                  <SelectItem value="July">July</SelectItem>
+                  <SelectItem value="August">August</SelectItem>
+                  <SelectItem value="September">September</SelectItem>
+                  <SelectItem value="October">October</SelectItem>
+                  <SelectItem value="November">November</SelectItem>
+                  <SelectItem value="December">December</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {/* Comparison dropdown - Show on all tabs except Budget */}
+              <Select value={comparisonType} onValueChange={setComparisonType}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="No Comparison" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Comparison</SelectItem>
+                  <SelectItem value="previous_period">Previous Period</SelectItem>
+                  <SelectItem value="previous_year">Previous Year</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         {/* Comparison info banner - Show on all tabs except Budget */}
