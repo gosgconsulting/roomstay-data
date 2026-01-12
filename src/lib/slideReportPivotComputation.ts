@@ -784,6 +784,8 @@ export async function computeSlideReportPivotData(
     const filterConfig = configuration.filterConfigs?.[channel];
     const filterDimensionIds = filterConfig?.filterDimensionIds || [];
     
+    console.log(`[pivot] Computing filter values for ${channel}: filterDimensionIds =`, filterDimensionIds);
+    
     if (filterDimensionIds.length > 0) {
       // Fetch dimension names for filter dimensions
       const { data: filterDimInfo } = await supabase
@@ -798,13 +800,26 @@ export async function computeSlideReportPivotData(
         }
       }
       
+      console.log(`[pivot] Filter dimension name map:`, filterDimNameMap);
+      
       // Extract unique values for each filter dimension from the rows
       for (const filterDimId of filterDimensionIds) {
         const uniqueValues = new Set<string>();
         
+        // Sample first row to verify data structure
+        if (rows.length > 0) {
+          const sampleRow = rows[0];
+          const sampleValue = sampleRow[filterDimId];
+          console.log(`[pivot] Sample row for ${filterDimId}:`, {
+            hasKey: filterDimId in sampleRow,
+            sampleValue,
+            rowKeys: Object.keys(sampleRow).slice(0, 5),
+          });
+        }
+        
         for (const row of rows) {
-          const rowData = row.dimension_values || row;
-          const value = rowData[filterDimId];
+          // rows are already dimension_values directly (not wrapped)
+          const value = row[filterDimId];
           if (value !== undefined && value !== null && String(value).trim() !== '') {
             uniqueValues.add(String(value).trim());
           }
@@ -816,8 +831,10 @@ export async function computeSlideReportPivotData(
           values: sortedValues,
         };
         
-        console.log(`Computed ${sortedValues.length} unique filter values for ${filterDimNameMap[filterDimId] || filterDimId}`);
+        console.log(`[pivot] Computed ${sortedValues.length} unique filter values for ${filterDimNameMap[filterDimId] || filterDimId}:`, sortedValues.slice(0, 5));
       }
+    } else {
+      console.log(`[pivot] No filter dimension IDs configured for ${channel}`);
     }
 
     // Build dimension map (dimensionId -> dimensionName) for interpreting raw rows
