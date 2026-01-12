@@ -1999,8 +1999,8 @@ export default function SlideViewPage() {
 
       {/* Edit Source Modal - Step by Step */}
       <Dialog open={isEditSourceOpen} onOpenChange={handleModalClose}>
-        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-4xl h-[85vh] max-h-[700px] flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
@@ -2028,7 +2028,7 @@ export default function SlideViewPage() {
             </p>
           </DialogHeader>
 
-          <div className="flex-1 min-h-0">
+          <ScrollArea className="flex-1 min-h-0">
             {/* Step 1: Date Range */}
             {modalStep === 1 && (
               <div className="space-y-6 py-4">
@@ -2136,7 +2136,7 @@ export default function SlideViewPage() {
 
             {/* Step 3: Value Dimensions - Applies to all selected channels */}
             {modalStep === 3 && (
-              <div className="flex flex-col h-[400px] gap-4">
+              <div className="flex flex-col gap-4 pb-4">
                 {loadingAvailableDimensions ? (
                   <div className="flex-1 flex items-center justify-center">
                     <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -2176,7 +2176,7 @@ export default function SlideViewPage() {
                           </Button>
                         </div>
                       </div>
-                      <div className="flex-1 border rounded-md overflow-y-auto" style={{ maxHeight: '300px' }}>
+                      <div className="border rounded-md overflow-y-auto max-h-[280px]">
                         <div className="p-2 space-y-1">
                           {availableDimensions.metasearch?.length > 0 ? (
                             availableDimensions.metasearch.map(dim => {
@@ -2219,7 +2219,7 @@ export default function SlideViewPage() {
 
             {/* Step 4: Dimension & Value Selection (Data Source) */}
             {modalStep === 4 && (
-              <div className="flex h-[400px] gap-4">
+              <div className="flex gap-4 min-h-[350px] max-h-[400px] pb-4">
                 {/* Left: Channel tabs */}
                 <div className="w-48 border-r pr-4">
                   <ScrollArea className="h-full">
@@ -2375,7 +2375,7 @@ export default function SlideViewPage() {
 
             {/* Step 5: Breakdown Dimensions */}
             {modalStep === 5 && (
-              <div className="flex h-[400px] gap-4">
+              <div className="flex gap-4 min-h-[350px] max-h-[400px] pb-4">
                 {/* Left: Channel tabs */}
                 <div className="w-48 border-r pr-4">
                   <ScrollArea className="h-full">
@@ -2466,7 +2466,7 @@ export default function SlideViewPage() {
 
             {/* Step 6: Filters */}
             {modalStep === 6 && (
-              <div className="flex h-[400px] gap-4">
+              <div className="flex gap-4 min-h-[350px] max-h-[400px] pb-4">
                 {/* Left: Channel tabs */}
                 <div className="w-48 border-r pr-4">
                   <ScrollArea className="h-full">
@@ -2556,10 +2556,10 @@ export default function SlideViewPage() {
                 </div>
               </div>
             )}
-          </div>
+          </ScrollArea>
 
           {/* Footer Navigation */}
-          <div className="flex items-center justify-between pt-4 border-t">
+          <div className="flex-shrink-0 flex items-center justify-between pt-4 border-t">
             <Button
               variant="outline"
               onClick={modalStep === 1 ? () => handleModalClose(false) : handleBack}
