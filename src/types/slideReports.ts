@@ -61,6 +61,8 @@ export interface SlideReportPivotData {
     current: ChannelMetrics;
     previous_period?: ChannelMetrics;
     previous_year?: ChannelMetrics;
+    monthly?: Record<string, ChannelMetrics>; // "2025-01", "2025-02", etc. - aggregated across all channels
+    yearly?: Record<string, ChannelMetrics>; // "2024", "2025", "2026" - aggregated for each year
   };
   channels: {
     [channel: string]: {
@@ -68,6 +70,7 @@ export interface SlideReportPivotData {
       previous_period?: ChannelMetrics;
       previous_year?: ChannelMetrics;
       monthly: Record<string, ChannelMetrics>; // "2025-01", "2025-02", etc.
+      yearly?: Record<string, ChannelMetrics>; // "2024", "2025", "2026" - totals per year
       breakdowns: {
         [dimensionName: string]: BreakdownRow[]; // e.g., "hotel", "link_type"
       };
@@ -81,6 +84,8 @@ export interface SlideReportPivotData {
       variance: number;
     };
   };
+  // Timestamp when data was last computed
+  computedAt?: string;
 }
 
 export interface SlideReportDateRange {
