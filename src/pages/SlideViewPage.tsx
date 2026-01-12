@@ -2851,7 +2851,7 @@ export default function SlideViewPage() {
   const budgetVariance = totalBudget - totalActual;
 
   return (
-    <div className="min-h-screen bg-background">
+    <Tabs value={selectedTab} onValueChange={setSelectedTab} className="min-h-screen bg-background">
       {/* Header */}
       <div className="border-b bg-card px-6 py-4">
         <div className="flex items-center justify-between">
@@ -2863,9 +2863,14 @@ export default function SlideViewPage() {
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div>
-              {/* Title section - kept empty */}
-            </div>
+            {/* Tabs in header */}
+            <TabsList>
+              <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Overview</TabsTrigger>
+              <TabsTrigger value="metasearch">Metasearch</TabsTrigger>
+              <TabsTrigger value="sem">SEM</TabsTrigger>
+              <TabsTrigger value="social">Social</TabsTrigger>
+              <TabsTrigger value="budget">Budget</TabsTrigger>
+            </TabsList>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setIsDataModalOpen(true)}>
@@ -3486,18 +3491,8 @@ export default function SlideViewPage() {
       />
 
       <div className="p-6 space-y-6">
-        {/* Tabs and Filters Row */}
-        <div className="flex items-center justify-between">
-          <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
-            <div className="flex items-center justify-between mb-6">
-              <TabsList>
-                <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Overview</TabsTrigger>
-                <TabsTrigger value="metasearch">Metasearch</TabsTrigger>
-                <TabsTrigger value="sem">SEM</TabsTrigger>
-                <TabsTrigger value="social">Social</TabsTrigger>
-                <TabsTrigger value="budget">Budget</TabsTrigger>
-                
-              </TabsList>
+        {/* Filters Row */}
+        <div className="flex items-center justify-end">
 
               {/* Filters - Show date filters on all tabs except Budget, dimension filters only on channel tabs */}
               {selectedTab !== "budget" && (
@@ -3700,25 +3695,25 @@ export default function SlideViewPage() {
                   </Select>
                 </div>
               )}
-            </div>
+        </div>
 
-            {/* Comparison info banner - Show on all tabs except Budget */}
-            {selectedTab !== "budget" && comparisonType !== "none" && (
-              <div className="mb-4 p-3 bg-muted rounded-lg text-sm">
-                {comparisonType === "previous_period" && (
-                  <span>
-                    Comparing {selectedYear !== 'all' ? selectedYear : 'Current Period'} 
-                    {selectedMonth !== 'all' ? ` ${selectedMonth}` : ''} vs Previous Period
-                  </span>
-                )}
-                {comparisonType === "previous_year" && (
-                  <span>
-                    Comparing {selectedYear !== 'all' ? selectedYear : 'Current Year'} 
-                    {selectedMonth !== 'all' ? ` ${selectedMonth}` : ''} vs Previous Year
-                  </span>
-                )}
-              </div>
+        {/* Comparison info banner - Show on all tabs except Budget */}
+        {selectedTab !== "budget" && comparisonType !== "none" && (
+          <div className="mb-4 p-3 bg-muted rounded-lg text-sm">
+            {comparisonType === "previous_period" && (
+              <span>
+                Comparing {selectedYear !== 'all' ? selectedYear : 'Current Period'} 
+                {selectedMonth !== 'all' ? ` ${selectedMonth}` : ''} vs Previous Period
+              </span>
             )}
+            {comparisonType === "previous_year" && (
+              <span>
+                Comparing {selectedYear !== 'all' ? selectedYear : 'Current Year'} 
+                {selectedMonth !== 'all' ? ` ${selectedMonth}` : ''} vs Previous Year
+              </span>
+            )}
+          </div>
+        )}
 
             {/* Overview Tab */}
             <TabsContent value="overview" className="space-y-6">
@@ -4320,9 +4315,7 @@ export default function SlideViewPage() {
               </Card>
             </TabsContent>
 
-          </Tabs>
         </div>
-      </div>
 
       {/* Refresh Data Modal */}
       <Dialog open={isRefreshModalOpen} onOpenChange={(open) => !open && !refreshStep && setIsRefreshModalOpen(false)}>
@@ -4497,6 +4490,6 @@ export default function SlideViewPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </Tabs>
   );
 }
