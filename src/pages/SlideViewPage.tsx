@@ -3083,6 +3083,49 @@ export default function SlideViewPage() {
         }
       }
       
+      // Force reload filter dimension values from the updated pivot data
+      console.log('[refresh] Reloading filter dimension values from refreshed pivot data...');
+      const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {
+        metasearch: {},
+        sem: {},
+        social: {},
+      };
+      const updatedFilterDimensionNames: Record<string, Record<string, string>> = {
+        metasearch: {},
+        sem: {},
+        social: {},
+      };
+      
+      for (const channel of config.selectedChannels || []) {
+        const channelData = typedPivotData.channels?.[channel];
+        const channelFilterConfig = config.filterConfigs?.[channel];
+        
+        if (!channelData || !channelFilterConfig?.filterDimensionIds?.length) continue;
+        
+        const filterUniqueValues = (channelData as any).filterUniqueValues as Record<string, { name: string; values: string[] }> | undefined;
+        
+        if (filterUniqueValues) {
+          for (const filterDimId of channelFilterConfig.filterDimensionIds) {
+            const filterData = filterUniqueValues[filterDimId];
+            if (filterData) {
+              updatedFilterDimensionValues[channel][filterDimId] = filterData.values;
+              updatedFilterDimensionNames[channel][filterDimId] = filterData.name;
+              console.log(`[refresh] Loaded ${filterData.values.length} filter values for ${channel}/${filterData.name}`);
+            }
+          }
+        }
+      }
+      
+      // Update filter dimension values state
+      setFilterDimensionValues(prev => ({
+        ...prev,
+        ...updatedFilterDimensionValues,
+      }));
+      setFilterDimensionNames(prev => ({
+        ...prev,
+        ...updatedFilterDimensionNames,
+      }));
+      
       setRefreshStepStatus(prev => ({ ...prev, 5: 'complete' }));
       
       // Wait a moment then close modal
