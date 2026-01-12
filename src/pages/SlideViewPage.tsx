@@ -1212,18 +1212,18 @@ export default function SlideViewPage() {
                 setFilterConfigs(config.filterConfigs as any);
               }
             }
-            // Load date range from saved settings
+            // Load date range - always default to current year/month for the UI filter
+            // The stored date_range is used for Edit Source modal, not for the active filter
+            const currentYear = new Date().getFullYear();
+            const currentMonth = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][new Date().getMonth()];
+            setSelectedYear(currentYear.toString());
+            setSelectedMonth(currentMonth);
+            
+            // Load sinceMonth/sinceYear for Edit Source modal from stored settings
             if (targetReport.date_range) {
-              const storedYear = targetReport.date_range.year;
-              const storedMonth = targetReport.date_range.month || 'January';
-              setSelectedYear(storedYear.toString());
-              setSelectedMonth(storedMonth);
-              setSinceMonth(storedMonth);
-              setSinceYear(storedYear);
+              setSinceMonth(targetReport.date_range.month || 'January');
+              setSinceYear(targetReport.date_range.year);
             } else {
-              const currentYear = new Date().getFullYear();
-              setSelectedYear(currentYear.toString());
-              setSelectedMonth('January');
               setSinceMonth('January');
               setSinceYear(currentYear);
             }
@@ -1265,20 +1265,17 @@ export default function SlideViewPage() {
                 setFilterConfigs(config.filterConfigs as any);
               }
             }
-            // Load date range from saved settings
+            // Load date range - always default to current year/month for the UI filter
+            const currentYear = new Date().getFullYear();
+            const currentMonth = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][new Date().getMonth()];
+            setSelectedYear(currentYear.toString());
+            setSelectedMonth(currentMonth);
+            
+            // Load sinceMonth/sinceYear for Edit Source modal from stored settings
             if (masterReport.date_range) {
-              const storedYear = masterReport.date_range.year;
-              const storedMonth = masterReport.date_range.month || 'January';
-              setSelectedYear(storedYear.toString());
-              setSelectedMonth(storedMonth);
-              // Also set sinceMonth/sinceYear for Edit Source modal
-              setSinceMonth(storedMonth);
-              setSinceYear(storedYear);
+              setSinceMonth(masterReport.date_range.month || 'January');
+              setSinceYear(masterReport.date_range.year);
             } else {
-              // No date range stored, default to current year
-              const currentYear = new Date().getFullYear();
-              setSelectedYear(currentYear.toString());
-              setSelectedMonth('January');
               setSinceMonth('January');
               setSinceYear(currentYear);
             }
@@ -1362,20 +1359,17 @@ export default function SlideViewPage() {
               setFilterConfigs(config.filterConfigs);
             }
           }
-          // Load date range from saved settings
+          // Load date range - always default to current year/month for the UI filter
+          const currentYear = new Date().getFullYear();
+          const currentMonth = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][new Date().getMonth()];
+          setSelectedYear(currentYear.toString());
+          setSelectedMonth(currentMonth);
+          
+          // Load sinceMonth/sinceYear for Edit Source modal from stored settings
           if (existingReport.date_range) {
-            const storedYear = existingReport.date_range.year;
-            const storedMonth = existingReport.date_range.month || 'January';
-            setSelectedYear(storedYear.toString());
-            setSelectedMonth(storedMonth);
-            // Also set sinceMonth/sinceYear for Edit Source modal
-            setSinceMonth(storedMonth);
-            setSinceYear(storedYear);
+            setSinceMonth(existingReport.date_range.month || 'January');
+            setSinceYear(existingReport.date_range.year);
           } else {
-            // No date range stored, default to current year
-            const currentYear = new Date().getFullYear();
-            setSelectedYear(currentYear.toString());
-            setSelectedMonth('January');
             setSinceMonth('January');
             setSinceYear(currentYear);
           }
