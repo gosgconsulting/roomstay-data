@@ -2436,35 +2436,28 @@ export default function SlideViewPage() {
         console.log('[testing] Slide report data refetched successfully');
       }
       
-      setRefreshStepStatus(prev => ({ ...prev, 6: 'complete' }));
+      setRefreshStepStatus(prev => ({ ...prev, 3: 'complete' }));
       
       // Wait a moment then close modal
       await new Promise(resolve => setTimeout(resolve, 500));
       setIsRefreshModalOpen(false);
       
-      const totalMonths = Object.keys(pivotData.overview.monthly || {}).length;
-      const totalChannels = Object.keys(pivotData.channels || {}).length;
+      const totalChannels = latestReport.configuration.selectedChannels?.length || 0;
       
       console.log('[testing] Refresh complete - Summary:', {
-        totalMonths,
         totalChannels,
-        channels: Object.keys(pivotData.channels || {}),
+        channels: latestReport.configuration.selectedChannels || [],
         configurationUsed: {
           selectedChannels: latestReport.configuration.selectedChannels,
           hasChannelConfigs: Object.keys(latestReport.configuration.channelConfigs || {}).length > 0,
           hasBreakdownConfigs: Object.keys(latestReport.configuration.breakdownConfigs || {}).length > 0,
           hasFilterConfigs: Object.keys(latestReport.configuration.filterConfigs || {}).length > 0,
         },
-        pivotDataStructure: {
-          hasOverview: !!pivotData.overview,
-          hasChannels: Object.keys(pivotData.channels || {}).length > 0,
-          overviewMonthlyMonths: Object.keys(pivotData.overview?.monthly || {}).length,
-        },
       });
       
       toast({ 
         title: "Data refreshed", 
-        description: `Pivot tables updated with ${totalMonths} months of data for ${totalChannels} channel(s).` 
+        description: `Aggregated breakdown data updated for ${totalChannels} channel(s). Data is now available in the Data Browser.` 
       });
       
     } catch (error) {
@@ -4220,7 +4213,7 @@ export default function SlideViewPage() {
                   refreshStepStatus[1] === 'error' && "text-red-700",
                   refreshStepStatus[1] === 'pending' && "text-muted-foreground"
                 )}>
-                  Fetching from data sources
+                  Verifying settings
                 </p>
                 <p className="text-sm text-muted-foreground">Connecting to Google Sheets and CSV sources</p>
               </div>
@@ -4253,13 +4246,13 @@ export default function SlideViewPage() {
                   refreshStepStatus[2] === 'error' && "text-red-700",
                   refreshStepStatus[2] === 'pending' && "text-muted-foreground"
                 )}>
-                  Applying filters & configuration
+                  Clearing old data & populating aggregated tables
                 </p>
-                <p className="text-sm text-muted-foreground">Using your saved dimension and filter settings</p>
+                <p className="text-sm text-muted-foreground">Removing pivot_data and creating aggregated breakdown data</p>
               </div>
             </div>
 
-            {/* Step 3: Create pivot tables */}
+            {/* Step 3: Update timestamp and refresh UI */}
             <div className="flex items-center gap-3">
               <div className={cn(
                 "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
@@ -4286,42 +4279,9 @@ export default function SlideViewPage() {
                   refreshStepStatus[3] === 'error' && "text-red-700",
                   refreshStepStatus[3] === 'pending' && "text-muted-foreground"
                 )}>
-                  Creating pivot tables
+                  Refreshing UI
                 </p>
-                <p className="text-sm text-muted-foreground">Aggregating metrics by dimensions</p>
-              </div>
-            </div>
-
-            {/* Step 4: Replace data */}
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium",
-                refreshStepStatus[4] === 'complete' && "bg-green-100 text-green-700",
-                refreshStepStatus[4] === 'loading' && "bg-primary/20 text-primary",
-                refreshStepStatus[4] === 'error' && "bg-red-100 text-red-700",
-                refreshStepStatus[4] === 'pending' && "bg-muted text-muted-foreground"
-              )}>
-                {refreshStepStatus[4] === 'complete' ? (
-                  <Check className="h-4 w-4" />
-                ) : refreshStepStatus[4] === 'loading' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : refreshStepStatus[4] === 'error' ? (
-                  <span>!</span>
-                ) : (
-                  "4"
-                )}
-              </div>
-              <div className="flex-1">
-                <p className={cn(
-                  "font-medium",
-                  refreshStepStatus[4] === 'complete' && "text-green-700",
-                  refreshStepStatus[4] === 'loading' && "text-foreground",
-                  refreshStepStatus[4] === 'error' && "text-red-700",
-                  refreshStepStatus[4] === 'pending' && "text-muted-foreground"
-                )}>
-                  Populating aggregated data
-                </p>
-                <p className="text-sm text-muted-foreground">Creating pre-computed breakdown tables for fast loading</p>
+                <p className="text-sm text-muted-foreground">Updating timestamp and reloading data</p>
               </div>
             </div>
 
@@ -4366,7 +4326,7 @@ export default function SlideViewPage() {
             )}
 
             {/* All complete message */}
-            {refreshStepStatus[6] === 'complete' && (
+            {refreshStepStatus[3] === 'complete' && (
               <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
                 <Check className="h-4 w-4 text-green-600" />
                 <p className="text-sm text-green-700 font-medium">Data refresh complete!</p>
@@ -4377,7 +4337,7 @@ export default function SlideViewPage() {
           <DialogFooter>
             {refreshError ? (
               <Button onClick={() => setIsRefreshModalOpen(false)}>Close</Button>
-            ) : refreshStepStatus[6] === 'complete' ? (
+            ) : refreshStepStatus[3] === 'complete' ? (
               <Button onClick={() => setIsRefreshModalOpen(false)} className="bg-green-600 hover:bg-green-700">
                 Done
               </Button>
