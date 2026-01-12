@@ -1305,48 +1305,40 @@ export default function SlideViewPage() {
     }
   };
 
-  // Load values for a dimension from actual data source (Google Sheets/CSV)
+  // Load values for a dimension from dimension_data table (faster than fetching from source)
   const loadValuesForDimension = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
     setLoadingValues(prev => ({ ...prev, [channel]: true }));
     try {
       const reportId = CHANNEL_REPORT_IDS[channel];
       
-      if (!user) {
-        console.error(`User not found for loading values`);
+      if (!reportId) {
+        console.error(`No report ID for channel: ${channel}`);
         setDimensionValues(prev => ({ ...prev, [channel]: [] }));
         return;
       }
 
-      // Fetch data source for the report
-      const { data: dataSourceData, error: dsError } = await supabase
-        .from('data_sources')
-        .select('*')
+      // Fetch unique values from dimension_data table (much faster than fetching from source)
+      const { data: dimData, error: dimError } = await supabase
+        .from('dimension_data')
+        .select('dimension_values')
         .eq('report_id', reportId)
-        .limit(1)
-        .maybeSingle();
+        .limit(5000);
 
-      if (dsError || !dataSourceData) {
-        console.error(`Error fetching data source for ${channel}:`, dsError);
+      if (dimError) {
+        console.error(`Error fetching dimension_data for ${channel}:`, dimError);
         setDimensionValues(prev => ({ ...prev, [channel]: [] }));
         return;
       }
 
-      // Fetch source data from Google Sheets/CSV
-      const sourceData = await fetchSourceData(
-        dataSourceData as any,
-        user.id,
-        accountId || undefined
-      );
-
-      if (!sourceData?.transformedRows || sourceData.transformedRows.length === 0) {
-        console.error(`No source data found for ${channel}`);
+      if (!dimData || dimData.length === 0) {
+        console.error(`No dimension_data found for ${channel} (report: ${reportId})`);
         setDimensionValues(prev => ({ ...prev, [channel]: [] }));
         return;
       }
 
-      // Extract unique values for this dimension from transformed rows
+      // Extract unique values for this dimension
       const valueSet = new Set<string>();
-      sourceData.transformedRows.forEach((row: any) => {
+      dimData.forEach((row: any) => {
         const dimValues = row.dimension_values || {};
         const val = dimValues[dimensionId];
         if (val !== undefined && val !== null && val !== '') {
@@ -1364,6 +1356,7 @@ export default function SlideViewPage() {
         values = values.filter(v => v.startsWith('Brady'));
       }
 
+      console.log(`Loaded ${values.length} values for ${channel}/${dimensionId}:`, values.slice(0, 5));
       setDimensionValues(prev => ({ ...prev, [channel]: values }));
       
       // Auto-select all Brady values for metasearch Hotel (only for brady slide, not master-report)
