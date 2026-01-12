@@ -1482,6 +1482,20 @@ export default function SlideViewPage() {
     }
   }, [modalStep, selectedChannels, activeChannelTab]);
 
+  // Load dimension values when activeChannelTab changes on step 4 (Data Source)
+  useEffect(() => {
+    if (modalStep === 4 && activeChannelTab && isEditSourceOpen) {
+      const config = channelConfigs[activeChannelTab];
+      const dimensionId = config?.dimensionId;
+      
+      // Always load values when switching to a channel on step 4, if dimension is selected
+      if (dimensionId && !loadingValues[activeChannelTab]) {
+        console.log(`[activeChannelTab change] Loading values for ${activeChannelTab}/${dimensionId}`);
+        loadValuesForDimension(activeChannelTab, dimensionId);
+      }
+    }
+  }, [activeChannelTab, modalStep, isEditSourceOpen]);
+
   // Hardcoded TEXT dimension mappings per channel (from actual report data)
   const CHANNEL_TEXT_DIMENSIONS: Record<string, Dimension[]> = {
     metasearch: [
@@ -1515,9 +1529,13 @@ export default function SlideViewPage() {
       // Value loading is handled separately with loadingValues state
       setLoadingDimensions(prev => ({ ...prev, [channel]: false }));
       
+      // Get the dimension ID to use
+      let dimensionIdToLoad = channelConfigs[channel]?.dimensionId;
+      
       // Auto-select first dimension (Hotel for metasearch, Account for others) if not already set
-      if (channelDims.length > 0 && !channelConfigs[channel]?.dimensionId) {
+      if (channelDims.length > 0 && !dimensionIdToLoad) {
         const firstDimId = channelDims[0].id;
+        dimensionIdToLoad = firstDimId;
         setChannelConfigs(prev => ({
           ...prev,
           [channel]: {
@@ -1525,11 +1543,12 @@ export default function SlideViewPage() {
             dimensionId: firstDimId,
           },
         }));
-        // Load values for the auto-selected dimension (async, separate loading state)
-        loadValuesForDimension(channel, firstDimId);
-      } else if (channelConfigs[channel]?.dimensionId) {
-        // If dimension is already set, load its values
-        loadValuesForDimension(channel, channelConfigs[channel].dimensionId);
+      }
+      
+      // Load values for the dimension (use the determined ID directly, not from state)
+      if (dimensionIdToLoad) {
+        console.log(`[loadDimensionsForChannel] Loading values for ${channel}/${dimensionIdToLoad}`);
+        await loadValuesForDimension(channel, dimensionIdToLoad);
       }
     } catch (err) {
       console.error(`Error loading dimensions for ${channel}:`, err);
@@ -1664,6 +1683,13 @@ export default function SlideViewPage() {
         const shouldForceLoad = modalStep === 4;
         if ((dimensions[channel].length === 0 || shouldForceLoad) && !loadingDimensions[channel]) {
           loadDimensionsForChannel(channel);
+        }
+        
+        // Also force load values for step 4 if dimension is configured
+        if (modalStep === 4 && channelConfigs[channel]?.dimensionId && !loadingValues[channel]) {
+          const dimensionId = channelConfigs[channel].dimensionId;
+          console.log(`[Step 4 init] Force loading values for ${channel}/${dimensionId}`);
+          loadValuesForDimension(channel, dimensionId);
         }
       });
     }
@@ -3094,7 +3120,7 @@ export default function SlideViewPage() {
                                         <span className="text-sm">{value}</span>
                                       </div>
                                     ))
-                                  ) : loadingValues[activeChannelTab] ? (
+                                  ) : (activeChannelTab && loadingValues[activeChannelTab]) ? (
                                     <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                                       <Loader2 className="h-6 w-6 animate-spin mb-2" />
                                       <p className="text-sm">Loading dimension values...</p>
