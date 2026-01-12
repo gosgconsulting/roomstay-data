@@ -148,16 +148,16 @@ const formatValue = (value: number, dimensionName: string, dimensionType: string
 const getDataField = (dimensionName: string): string | null => {
   const normalized = dimensionName.toLowerCase().replace(/\s+/g, '');
   
-  if (normalizedName.includes('impression')) return 'impressions';
-  if (normalizedName.includes('click')) return 'clicks';
-  if (normalizedName.includes('cost') && !normalizedName.includes('costofsale')) return 'cost';
-  if (normalizedName.includes('revenue')) return 'revenue';
-  if (normalizedName.includes('booking')) return 'bookings';
-  if (normalizedName.includes('ctr')) return 'ctr';
-  if (normalizedName.includes('conversion')) return 'conversionRate';
-  if (normalizedName.includes('cpc')) return 'cpc';
-  if (normalizedName.includes('roas')) return 'roas';
-  if (normalizedName.includes('costofsale')) return 'costOfSale';
+  if (normalized.includes('impression')) return 'impressions';
+  if (normalized.includes('click')) return 'clicks';
+  if (normalized.includes('cost') && !normalized.includes('costofsale')) return 'cost';
+  if (normalized.includes('revenue')) return 'revenue';
+  if (normalized.includes('booking')) return 'bookings';
+  if (normalized.includes('ctr')) return 'ctr';
+  if (normalized.includes('conversion')) return 'conversionRate';
+  if (normalized.includes('cpc')) return 'cpc';
+  if (normalized.includes('roas')) return 'roas';
+  if (normalized.includes('costofsale')) return 'costOfSale';
   
   return null;
 };
