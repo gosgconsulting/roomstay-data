@@ -190,41 +190,75 @@ function calculateDerivedMetrics(data: {
 /**
  * Build metric name to dimension ID mapping for a report
  * This is crucial for aggregateMetrics to work with UUID-keyed dimension_data
+ * 
+ * IMPORTANT: Uses account-level dimensions to ensure all base metrics are included
+ * even if some rows don't have all dimension values populated
  */
 async function buildMetricNameToIdMap(reportId: string): Promise<Record<string, string>> {
-  // Get a sample row to find the dimension IDs used in the data
+  const nameToIdMap: Record<string, string> = {};
+  
+  // STEP 1: Get the account_id for this report
+  const { data: reportData } = await supabase
+    .from('reports')
+    .select('account_id')
+    .eq('id', reportId)
+    .single();
+  
+  const accountId = reportData?.account_id;
+  
+  // STEP 2: Fetch account-level dimensions first (these are global and should be prioritized)
+  // This ensures base metrics like Revenue, Bookings are always mapped correctly
+  if (accountId) {
+    const { data: accountDimensions } = await supabase
+      .from('dimensions')
+      .select('id, name, type')
+      .eq('account_id', accountId)
+      .is('report_id', null); // Account-level dimensions have no report_id
+    
+    if (accountDimensions) {
+      accountDimensions.forEach(dim => {
+        nameToIdMap[dim.name] = dim.id;
+      });
+      console.log(`Loaded ${accountDimensions.length} account-level dimensions for report ${reportId}`);
+    }
+  }
+  
+  // STEP 3: Sample multiple rows to collect all possible dimension IDs used in the data
+  // (some rows may have different dimensions than others)
   const { data: sampleRows } = await supabase
     .from('dimension_data')
     .select('dimension_values')
     .eq('report_id', reportId)
-    .limit(1);
+    .limit(100); // Sample more rows to catch all dimensions
 
   if (!sampleRows || sampleRows.length === 0) {
     console.warn(`No data found for report ${reportId}`);
-    return {};
+    return nameToIdMap; // Return account dimensions if we have them
   }
 
-  const sampleRow = sampleRows[0].dimension_values as Record<string, any>;
-  const dimensionIds = Object.keys(sampleRow);
+  // Collect ALL unique dimension IDs from sampled rows
+  const allDimensionIds = new Set<string>();
+  sampleRows.forEach(row => {
+    const rowData = row.dimension_values as Record<string, any>;
+    Object.keys(rowData).forEach(id => allDimensionIds.add(id));
+  });
+  
+  const dimensionIds = Array.from(allDimensionIds);
 
-  // Fetch dimension names for these IDs
+  // STEP 4: Fetch dimension info for all IDs found in the data
   const { data: dimensions } = await supabase
     .from('dimensions')
     .select('id, name, type')
     .in('id', dimensionIds);
 
-  if (!dimensions) {
-    console.warn(`No dimensions found for report ${reportId}`);
-    return {};
+  if (dimensions) {
+    // Add dimensions from data (these override account dimensions if there's a name conflict)
+    dimensions.forEach(dim => {
+      nameToIdMap[dim.name] = dim.id;
+    });
   }
 
-  // Build name -> id mapping (includes ALL dimension types: text, number, currency, date, etc.)
-  const nameToIdMap: Record<string, string> = {};
-  dimensions.forEach(dim => {
-    nameToIdMap[dim.name] = dim.id;
-  });
-
-  console.log(`Built metric map for report ${reportId}: ${Object.keys(nameToIdMap).length} dimensions (${Object.keys(nameToIdMap).slice(0, 5).join(', ')}...)`);
+  console.log(`Built metric map for report ${reportId}: ${Object.keys(nameToIdMap).length} dimensions (${Object.keys(nameToIdMap).slice(0, 8).join(', ')}...)`);
   return nameToIdMap;
 }
 

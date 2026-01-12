@@ -1124,9 +1124,26 @@ export const AddAICardModal = ({ open, onOpenChange, onCardCreated, editingCard,
       return;
     }
 
-    // Build metric name to dimension ID mapping from column_mappings
-    const columnMappings = Array.isArray(dsData?.column_mappings) ? dsData.column_mappings : [];
+    // Build metric name to dimension ID mapping
+    // STEP 1: Start with account-level dimensions (global base metrics like Revenue, Bookings)
     const metricNameToIdMap: Record<string, string> = {};
+    
+    if (accountId) {
+      const { data: accountDimensions } = await supabase
+        .from('dimensions')
+        .select('id, name, type')
+        .eq('account_id', accountId)
+        .is('report_id', null); // Account-level dimensions have no report_id
+      
+      if (accountDimensions) {
+        accountDimensions.forEach(dim => {
+          metricNameToIdMap[dim.name] = dim.id;
+        });
+      }
+    }
+    
+    // STEP 2: Add mappings from column_mappings (these may override account-level)
+    const columnMappings = Array.isArray(dsData?.column_mappings) ? dsData.column_mappings : [];
     columnMappings.forEach((m: any) => {
       if (m.dimensionName && m.dimensionId && m.dimensionId !== 'none') {
         metricNameToIdMap[m.dimensionName] = m.dimensionId;
