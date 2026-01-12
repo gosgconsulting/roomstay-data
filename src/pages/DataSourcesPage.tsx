@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Plus, ArrowLeft, FileSpreadsheet, RefreshCw, Trash2, Eye, Settings } from "lucide-react";
+import { Plus, ArrowLeft, FileSpreadsheet, RefreshCw, Trash2, Eye, Settings, Pencil, Check, X } from "lucide-react";
 import { DataSourceSelectionModal } from "@/components/DataSourceSelectionModal";
 import { UnifiedDataSourceModal } from "@/components/UnifiedDataSourceModal";
 import { ViewDataModal } from "@/components/ViewDataModal";
@@ -66,6 +66,8 @@ export default function DataSourcesPage() {
   const [showEditDataSourceModal, setShowEditDataSourceModal] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingDataSource, setDeletingDataSource] = useState<DataSource | null>(null);
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
+  const [editingNameValue, setEditingNameValue] = useState<string>("");
 
   useEffect(() => {
     if (accountId) {
@@ -269,6 +271,42 @@ export default function DataSourcesPage() {
     return dataSource.google_sheets_url || '';
   };
 
+  const handleSaveName = async (dataSourceId: string) => {
+    if (!editingNameValue.trim()) {
+      toast({
+        title: "Error",
+        description: "Name cannot be empty",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('data_sources')
+        .update({ name: editingNameValue.trim() })
+        .eq('id', dataSourceId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Data source name updated successfully",
+      });
+
+      setEditingNameId(null);
+      setEditingNameValue("");
+      await loadDataSources();
+    } catch (error) {
+      console.error("Error updating data source name:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update data source name",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
       <div className="container mx-auto px-6 py-8">
@@ -339,15 +377,82 @@ export default function DataSourcesPage() {
                       const sourceUrl = getSourceUrl(dataSource);
                       return (
                         <TableRow key={dataSource.id}>
-                          <TableCell className="font-medium">{dataSource.name}</TableCell>
+                          <TableCell className="font-medium">
+                            {editingNameId === dataSource.id ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={editingNameValue}
+                                  onChange={(e) => setEditingNameValue(e.target.value)}
+                                  className="flex-1 px-2 py-1 border rounded-md text-sm"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleSaveName(dataSource.id);
+                                    } else if (e.key === 'Escape') {
+                                      setEditingNameId(null);
+                                      setEditingNameValue("");
+                                    }
+                                  }}
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => handleSaveName(dataSource.id)}
+                                >
+                                  <Check className="h-4 w-4 text-green-600" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => {
+                                    setEditingNameId(null);
+                                    setEditingNameValue("");
+                                  }}
+                                >
+                                  <X className="h-4 w-4 text-red-600" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 group">
+                                <span>{dataSource.name}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => {
+                                    setEditingNameId(dataSource.id);
+                                    setEditingNameValue(dataSource.name);
+                                  }}
+                                  title="Rename"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
                           <TableCell>{dataSource.report_name || 'Unknown'}</TableCell>
                           <TableCell>
                             <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium">
                               {dataSource.source_type === 'csv_url' ? 'CSV URL' : 'Google Sheets'}
                             </span>
                           </TableCell>
-                          <TableCell className="max-w-xs truncate" title={sourceUrl}>
-                            {sourceUrl || 'N/A'}
+                          <TableCell className="max-w-xs">
+                            {sourceUrl ? (
+                              <a
+                                href={sourceUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline truncate block"
+                                title={sourceUrl}
+                              >
+                                {sourceUrl}
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">N/A</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             {dataSource.last_synced_at
