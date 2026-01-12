@@ -767,6 +767,22 @@ export async function computeSlideReportPivotData(
       }
     }
 
+    // Build dimension map (dimensionId -> dimensionName) for interpreting raw rows
+    const dimensionMap: Record<string, string> = {};
+    Object.entries(metricNameToIdMap).forEach(([name, id]) => {
+      dimensionMap[id] = name;
+    });
+    
+    // Store ALL raw data rows for this channel (enables filter dropdowns without re-querying)
+    // Each row preserves all dimension values as-is from the source
+    const rawDataRows = rows.map(row => {
+      const rowData = row.dimension_values || row;
+      // Return the row as-is - it contains all dimension values by their IDs
+      return { ...rowData };
+    });
+    
+    console.log(`Storing ${rawDataRows.length} raw data rows for ${channel} with ${Object.keys(dimensionMap).length} dimensions`);
+
     pivotData.channels[channel] = {
       current: currentChannelMetrics,
       previous_period: prevPeriodChannelMetrics,
@@ -776,6 +792,8 @@ export async function computeSlideReportPivotData(
       breakdowns,
       monthlyBreakdowns,
       filterUniqueValues,
+      rawDataRows, // All raw rows for filtering
+      dimensionMap, // ID -> Name mapping for interpreting rows
     };
 
     // Aggregate monthly data for overview

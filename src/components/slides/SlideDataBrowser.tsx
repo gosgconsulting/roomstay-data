@@ -505,6 +505,7 @@ export function SlideDataBrowser({
           const metrics = getMonthlyMetrics(channel);
           const hasBreakdowns = pivotData?.channels?.[channel]?.breakdowns && 
             Object.keys(pivotData.channels[channel].breakdowns).length > 0;
+          const rawRowCount = pivotData?.channels?.[channel]?.rawDataRows?.length || 0;
           
           return (
             <button
@@ -526,11 +527,18 @@ export function SlideDataBrowser({
                 </div>
                 <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
               </div>
-              {hasBreakdowns && (
-                <Badge variant="secondary" className="w-fit text-xs">
-                  {Object.keys(pivotData!.channels![channel].breakdowns).length} breakdowns
-                </Badge>
-              )}
+              <div className="flex gap-2 flex-wrap">
+                {rawRowCount > 0 && (
+                  <Badge variant="outline" className="text-xs">
+                    {rawRowCount.toLocaleString()} rows
+                  </Badge>
+                )}
+                {hasBreakdowns && (
+                  <Badge variant="secondary" className="text-xs">
+                    {Object.keys(pivotData!.channels![channel].breakdowns).length} breakdowns
+                  </Badge>
+                )}
+              </div>
             </button>
           );
         })}
