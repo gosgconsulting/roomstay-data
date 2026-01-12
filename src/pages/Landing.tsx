@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
-import { LogOut, BarChart3, TrendingUp, Plus, ChevronRight, Trash2, Pencil, Sparkles, Presentation } from "lucide-react";
+import { LogOut, BarChart3, TrendingUp, Plus, ChevronRight, Trash2, Pencil, Sparkles, Presentation, Database, Layers } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { CreateAccountModal } from "@/components/CreateAccountModal";
@@ -210,6 +210,22 @@ export default function Landing() {
   };
 
   const tools: Tool[] = [
+    {
+      id: "data-sources",
+      name: "Data Sources",
+      description: "Manage database sources and add new ones",
+      icon: <Database className="h-6 w-6" />,
+      getPath: (accountId: string) => `/tools/data-sources/${accountId}`,
+      available: true,
+    },
+    {
+      id: "dimensions",
+      name: "Dimensions",
+      description: "View and manage text and value dimensions",
+      icon: <Layers className="h-6 w-6" />,
+      getPath: (accountId: string) => `/tools/dimensions/${accountId}`,
+      available: true,
+    },
     {
       id: "data-studio",
       name: "Data Studio",

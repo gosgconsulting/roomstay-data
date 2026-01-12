@@ -15,6 +15,8 @@ import NotFound from "./pages/NotFound";
 import AISummaryPage from "./pages/AISummaryPage";
 import SlidesPage from "./pages/SlidesPage";
 import SlideViewPage from "./pages/SlideViewPage";
+import DataSourcesPage from "./pages/DataSourcesPage";
+import DimensionsPage from "./pages/DimensionsPage";
 
 import ForecastScenarioPage from "./pages/ForecastScenarioPage";
 import { ReportsSidebarDemo } from "./components/ReportsSidebarDemo";
@@ -32,6 +34,8 @@ const App = () => (
           <Route path="/" element={<Landing />} />
           <Route path="/landing" element={<Landing />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/tools/data-sources/:accountId" element={<DataSourcesPage />} />
+          <Route path="/tools/dimensions/:accountId" element={<DimensionsPage />} />
           <Route path="/tools/data" element={<ReportTool />} />
           <Route path="/tools/data/:accountId" element={<ReportDashboard />} />
           <Route path="/tools/slides/:accountId" element={<SlidesPage />} />

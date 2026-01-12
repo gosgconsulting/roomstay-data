@@ -1,14 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles } from "lucide-react";
+import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles, Search, Loader2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 // REAL DATA from database queries - December 2025 Brady Hotels Account (after resync)
 const METASEARCH_DATA = {
@@ -405,11 +410,386 @@ export default function SlideViewPage() {
     social: true,
   });
 
+  // Step-by-step modal state
+  type ModalStep = 1 | 2 | 3 | 4;
+  const [modalStep, setModalStep] = useState<ModalStep>(1);
+  const [activeChannelTab, setActiveChannelTab] = useState<'metasearch' | 'sem' | 'social' | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Channel configuration state
+  interface ChannelConfig {
+    dimensionId: string | null;
+    selectedValues: string[];
+  }
+  const [channelConfigs, setChannelConfigs] = useState<Record<string, ChannelConfig>>({
+    metasearch: { dimensionId: null, selectedValues: [] },
+    sem: { dimensionId: null, selectedValues: [] },
+    social: { dimensionId: null, selectedValues: [] },
+  });
+
+  // Breakdown configuration state
+  interface BreakdownConfig {
+    breakdownDimensionIds: string[];
+  }
+  const [breakdownConfigs, setBreakdownConfigs] = useState<Record<string, BreakdownConfig>>({
+    metasearch: { breakdownDimensionIds: [] },
+    sem: { breakdownDimensionIds: [] },
+    social: { breakdownDimensionIds: [] },
+  });
+
+  // Filter configuration state
+  interface FilterConfig {
+    filterDimensionIds: string[];
+  }
+  const [filterConfigs, setFilterConfigs] = useState<Record<string, FilterConfig>>({
+    metasearch: { filterDimensionIds: [] },
+    sem: { filterDimensionIds: [] },
+    social: { filterDimensionIds: [] },
+  });
+
+  // Filter values state for slides page (channel -> dimensionId -> selected value)
+  const [filterValues, setFilterValues] = useState<Record<string, Record<string, string>>>({
+    metasearch: {},
+    sem: {},
+    social: {},
+  });
+
+  // Filter dimension values state (for dropdowns) - channel -> dimensionId -> values[]
+  const [filterDimensionValues, setFilterDimensionValues] = useState<Record<string, Record<string, string[]>>>({
+    metasearch: {},
+    sem: {},
+    social: {},
+  });
+
+  // Dimension and value loading state
+  interface Dimension {
+    id: string;
+    name: string;
+    type: string;
+  }
+  const [dimensions, setDimensions] = useState<Record<string, Dimension[]>>({
+    metasearch: [],
+    sem: [],
+    social: [],
+  });
+  const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({
+    metasearch: [],
+    sem: [],
+    social: [],
+  });
+  const [loadingDimensions, setLoadingDimensions] = useState<Record<string, boolean>>({
+    metasearch: false,
+    sem: false,
+    social: false,
+  });
+  const [loadingValues, setLoadingValues] = useState<Record<string, boolean>>({
+    metasearch: false,
+    sem: false,
+    social: false,
+  });
+
+  // Available breakdown dimensions (hardcoded for now, can be loaded dynamically)
+  const availableBreakdownDimensions: Dimension[] = [
+    { id: 'channel', name: 'Channel', type: 'text' },
+    { id: 'device', name: 'Device', type: 'text' },
+    { id: 'hotel', name: 'Hotel', type: 'text' },
+    { id: 'link_type', name: 'Link Type', type: 'text' },
+    { id: 'market', name: 'Market', type: 'text' },
+  ];
+
   const handleDimensionToggle = (dimension: 'metasearch' | 'sem' | 'social') => {
     setSelectedDimensions(prev => ({
       ...prev,
       [dimension]: !prev[dimension],
     }));
+  };
+
+  // Get selected channels
+  const selectedChannels = useMemo(() => {
+    const channels: ('metasearch' | 'sem' | 'social')[] = [];
+    if (selectedDimensions.metasearch) channels.push('metasearch');
+    if (selectedDimensions.sem) channels.push('sem');
+    if (selectedDimensions.social) channels.push('social');
+    return channels;
+  }, [selectedDimensions]);
+
+  // Reset modal to step 1 when opened
+  useEffect(() => {
+    if (isEditSourceOpen) {
+      setModalStep(1);
+      setActiveChannelTab(null);
+      setSearchQuery("");
+    }
+  }, [isEditSourceOpen]);
+
+  // Initialize active channel tab when entering step 2, 3, or 4
+  useEffect(() => {
+    if ((modalStep === 2 || modalStep === 3 || modalStep === 4) && selectedChannels.length > 0 && !activeChannelTab) {
+      setActiveChannelTab(selectedChannels[0]);
+    }
+  }, [modalStep, selectedChannels, activeChannelTab]);
+
+  // Load dimensions for a channel (placeholder - can be connected to real data)
+  const loadDimensionsForChannel = async (channel: 'metasearch' | 'sem' | 'social') => {
+    setLoadingDimensions(prev => ({ ...prev, [channel]: true }));
+    try {
+      // TODO: Connect to real data source
+      // For now, return placeholder dimensions
+      const placeholderDimensions: Dimension[] = [
+        { id: 'hotel', name: 'Hotel', type: 'text' },
+        { id: 'campaign', name: 'Campaign', type: 'text' },
+        { id: 'device', name: 'Device', type: 'text' },
+        { id: 'market', name: 'Market', type: 'text' },
+      ];
+      setDimensions(prev => ({ ...prev, [channel]: placeholderDimensions }));
+    } catch (err) {
+      console.error(`Error loading dimensions for ${channel}:`, err);
+      setDimensions(prev => ({ ...prev, [channel]: [] }));
+    } finally {
+      setLoadingDimensions(prev => ({ ...prev, [channel]: false }));
+    }
+  };
+
+  // Load values for a dimension
+  const loadValuesForDimension = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
+    setLoadingValues(prev => ({ ...prev, [channel]: true }));
+    try {
+      // TODO: Connect to real data source using supabase function
+      // For now, return placeholder values
+      const placeholderValues = [
+        'Brady Hotels Central Melbourne',
+        'Brady Hotels Jones Lane',
+        'Brady Apartment Hotel Flinders Street',
+        'Brady Apartment Hotel Hardware Lane',
+        'Sojourn Apartment Hotel - Ghuznee',
+      ];
+      setDimensionValues(prev => ({ ...prev, [channel]: placeholderValues }));
+    } catch (err) {
+      console.error(`Error loading values for ${channel}/${dimensionId}:`, err);
+      setDimensionValues(prev => ({ ...prev, [channel]: [] }));
+    } finally {
+      setLoadingValues(prev => ({ ...prev, [channel]: false }));
+    }
+  };
+
+  // Load dimensions when entering step 2 or step 4
+  useEffect(() => {
+    if ((modalStep === 2 || modalStep === 4) && isEditSourceOpen) {
+      selectedChannels.forEach(channel => {
+        if (dimensions[channel].length === 0 && !loadingDimensions[channel]) {
+          loadDimensionsForChannel(channel);
+        }
+      });
+    }
+  }, [modalStep, isEditSourceOpen, selectedChannels]);
+
+  // Handle dimension change
+  const handleDimensionChange = (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
+    setChannelConfigs(prev => ({
+      ...prev,
+      [channel]: {
+        dimensionId: dimensionId === "none" ? null : dimensionId,
+        selectedValues: [],
+      },
+    }));
+    setDimensionValues(prev => ({ ...prev, [channel]: [] }));
+    if (dimensionId && dimensionId !== "none") {
+      loadValuesForDimension(channel, dimensionId);
+    }
+  };
+
+  // Handle value toggle
+  const handleValueToggle = (channel: 'metasearch' | 'sem' | 'social', value: string) => {
+    setChannelConfigs(prev => {
+      const current = prev[channel];
+      const isSelected = current.selectedValues.includes(value);
+      return {
+        ...prev,
+        [channel]: {
+          ...current,
+          selectedValues: isSelected
+            ? current.selectedValues.filter(v => v !== value)
+            : [...current.selectedValues, value],
+        },
+      };
+    });
+  };
+
+  // Handle select all values
+  const handleSelectAllValues = (channel: 'metasearch' | 'sem' | 'social') => {
+    const allValues = dimensionValues[channel] || [];
+    setChannelConfigs(prev => ({
+      ...prev,
+      [channel]: {
+        ...prev[channel],
+        selectedValues: [...allValues],
+      },
+    }));
+  };
+
+  // Handle deselect all values
+  const handleDeselectAllValues = (channel: 'metasearch' | 'sem' | 'social') => {
+    setChannelConfigs(prev => ({
+      ...prev,
+      [channel]: {
+        ...prev[channel],
+        selectedValues: [],
+      },
+    }));
+  };
+
+  // Handle breakdown dimension toggle
+  const handleBreakdownToggle = (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
+    setBreakdownConfigs(prev => {
+      const current = prev[channel];
+      const isSelected = current.breakdownDimensionIds.includes(dimensionId);
+      return {
+        ...prev,
+        [channel]: {
+          breakdownDimensionIds: isSelected
+            ? current.breakdownDimensionIds.filter(id => id !== dimensionId)
+            : [...current.breakdownDimensionIds, dimensionId],
+        },
+      };
+    });
+  };
+
+  // Handle filter dimension toggle
+  const handleFilterDimensionToggle = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
+    const currentConfig = filterConfigs[channel];
+    const isSelected = currentConfig?.filterDimensionIds.includes(dimensionId);
+    
+    setFilterConfigs(prev => {
+      const current = prev[channel];
+      const newFilterDimensionIds = isSelected
+        ? current.filterDimensionIds.filter(id => id !== dimensionId)
+        : [...current.filterDimensionIds, dimensionId];
+      
+      return {
+        ...prev,
+        [channel]: {
+          filterDimensionIds: newFilterDimensionIds,
+        },
+      };
+    });
+    
+    if (!isSelected) {
+      // Dimension was just added, load its values
+      await loadValuesForDimension(channel, dimensionId);
+      const values = dimensionValues[channel] || [];
+      // Store values for this specific dimension
+      setFilterDimensionValues(prev => ({
+        ...prev,
+        [channel]: {
+          ...prev[channel],
+          [dimensionId]: values,
+        },
+      }));
+    } else {
+      // Dimension was removed, clear its values and selected filter
+      setFilterDimensionValues(prev => {
+        const updated = { ...prev[channel] };
+        delete updated[dimensionId];
+        return {
+          ...prev,
+          [channel]: updated,
+        };
+      });
+      setFilterValues(prev => {
+        const updated = { ...prev[channel] };
+        delete updated[dimensionId];
+        return {
+          ...prev,
+          [channel]: updated,
+        };
+      });
+    }
+  };
+
+  // Filtered values based on search query
+  const filteredValues = useMemo(() => {
+    if (!activeChannelTab) return [];
+    const values = dimensionValues[activeChannelTab] || [];
+    if (!searchQuery) return values;
+    return values.filter(value =>
+      value.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [activeChannelTab, dimensionValues, searchQuery]);
+
+  // Navigation handlers
+  const handleNext = () => {
+    if (modalStep === 1) {
+      if (selectedChannels.length > 0) {
+        setModalStep(2);
+      }
+    } else if (modalStep === 2) {
+      setModalStep(3);
+    } else if (modalStep === 3) {
+      setModalStep(4);
+    } else if (modalStep === 4) {
+      // Save and close
+      handleSave();
+    }
+  };
+
+  const handleBack = () => {
+    if (modalStep === 2) {
+      setModalStep(1);
+    } else if (modalStep === 3) {
+      setModalStep(2);
+    } else if (modalStep === 4) {
+      setModalStep(3);
+    }
+  };
+
+  const handleSave = async () => {
+    // TODO: Save configurations to database or state
+    console.log('Saving configurations:', { channelConfigs, breakdownConfigs, filterConfigs });
+    // Load filter dimension values for all configured filters
+    for (const channel of selectedChannels) {
+      const filterDimIds = filterConfigs[channel]?.filterDimensionIds || [];
+      for (const filterDimId of filterDimIds) {
+        await loadValuesForDimension(channel, filterDimId);
+        const values = dimensionValues[channel] || [];
+        setFilterDimensionValues(prev => ({
+          ...prev,
+          [channel]: {
+            ...prev[channel],
+            [filterDimId]: values,
+          },
+        }));
+      }
+    }
+    setIsEditSourceOpen(false);
+    resetModalState();
+  };
+
+  const resetModalState = () => {
+    setModalStep(1);
+    setActiveChannelTab(null);
+    setSearchQuery("");
+    setChannelConfigs({
+      metasearch: { dimensionId: null, selectedValues: [] },
+      sem: { dimensionId: null, selectedValues: [] },
+      social: { dimensionId: null, selectedValues: [] },
+    });
+    setBreakdownConfigs({
+      metasearch: { breakdownDimensionIds: [] },
+      sem: { breakdownDimensionIds: [] },
+      social: { breakdownDimensionIds: [] },
+    });
+    setFilterConfigs({
+      metasearch: { filterDimensionIds: [] },
+      sem: { filterDimensionIds: [] },
+      social: { filterDimensionIds: [] },
+    });
+  };
+
+  const handleModalClose = (open: boolean) => {
+    setIsEditSourceOpen(open);
+    if (!open) {
+      resetModalState();
+    }
   };
 
   // Get comparison data based on selection
@@ -629,23 +1009,44 @@ export default function SlideViewPage() {
         </div>
       </div>
 
-      {/* Edit Source Modal */}
-      <Dialog open={isEditSourceOpen} onOpenChange={setIsEditSourceOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+      {/* Edit Source Modal - Step by Step */}
+      <Dialog open={isEditSourceOpen} onOpenChange={handleModalClose}>
+        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
           <DialogHeader>
+            <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
+                <DialogTitle>
+                  {modalStep === 1 && "Select Channels"}
+                  {modalStep === 2 && "Select Dimension"}
+                  {modalStep === 3 && "Breakdown Dimensions"}
+                  {modalStep === 4 && "Filters"}
+                </DialogTitle>
             </div>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleModalClose(false)}
+                className="h-6 w-6"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground mt-2">
               Tip: "Breakdown by" tables render on the specific report tab, not on Overview/Budget. After saving, select the report tab to view the breakdown.
             </p>
+          </DialogHeader>
+
+          <div className="flex-1 min-h-0">
+            {/* Step 1: Channel Selection */}
+            {modalStep === 1 && (
+              <div className="space-y-4">
             <div className="space-y-3">
               <div 
-                className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                    className={cn(
+                      "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
                   selectedDimensions.metasearch ? 'border-primary bg-primary/5' : 'border-border'
-                }`}
+                    )}
                 onClick={() => handleDimensionToggle('metasearch')}
               >
                 <Checkbox 
@@ -656,9 +1057,10 @@ export default function SlideViewPage() {
                 <span className="font-medium">Metasearch</span>
               </div>
               <div 
-                className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                    className={cn(
+                      "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
                   selectedDimensions.sem ? 'border-primary bg-primary/5' : 'border-border'
-                }`}
+                    )}
                 onClick={() => handleDimensionToggle('sem')}
               >
                 <Checkbox 
@@ -669,9 +1071,10 @@ export default function SlideViewPage() {
                 <span className="font-medium">SEM</span>
               </div>
               <div 
-                className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                    className={cn(
+                      "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
                   selectedDimensions.social ? 'border-primary bg-primary/5' : 'border-border'
-                }`}
+                    )}
                 onClick={() => handleDimensionToggle('social')}
               >
                 <Checkbox 
@@ -683,14 +1086,395 @@ export default function SlideViewPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-between pt-4">
-            <Button variant="outline" onClick={() => setIsEditSourceOpen(false)}>
+            )}
+
+            {/* Step 2: Dimension & Value Selection */}
+            {modalStep === 2 && (
+              <div className="flex h-[400px] gap-4">
+                {/* Left: Channel tabs */}
+                <div className="w-48 border-r pr-4">
+                  <ScrollArea className="h-full">
+                    <div className="space-y-1">
+                      {selectedChannels.map(channel => {
+                        const config = channelConfigs[channel];
+                        const valueCount = config?.selectedValues.length || 0;
+                        return (
+                          <button
+                            key={channel}
+                            className={cn(
+                              "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
+                              activeChannelTab === channel
+                                ? "bg-primary text-primary-foreground"
+                                : "hover:bg-muted"
+                            )}
+                            onClick={() => {
+                              setActiveChannelTab(channel);
+                              setSearchQuery("");
+                            }}
+                          >
+                            <span className="truncate capitalize">
+                              {channel}
+                              {valueCount > 0 && (
+                                <span className="ml-1 text-xs opacity-70">
+                                  ({valueCount})
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                </div>
+
+                {/* Right: Dimension selector */}
+                <div className="flex-1 flex flex-col gap-4">
+                  {activeChannelTab && (
+                    <>
+                      {loadingDimensions[activeChannelTab] ? (
+                        <div className="flex-1 flex items-center justify-center">
+                          <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                            <Loader2 className="h-8 w-8 animate-spin" />
+                            <span>Loading dimensions...</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <Label className="text-sm font-medium mb-2 block">
+                              Select Dimension
+                            </Label>
+                            <Select
+                              value={channelConfigs[activeChannelTab]?.dimensionId || ""}
+                              onValueChange={value => handleDimensionChange(activeChannelTab, value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Choose a dimension..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {dimensions[activeChannelTab]?.map(dim => (
+                                  <SelectItem key={dim.id} value={dim.id}>
+                                    {dim.name}
+                                  </SelectItem>
+                                ))}
+                                {(!dimensions[activeChannelTab] || dimensions[activeChannelTab].length === 0) && (
+                                  <div className="px-2 py-4 text-sm text-muted-foreground text-center">
+                                    No dimensions available
+                                  </div>
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {channelConfigs[activeChannelTab]?.dimensionId && (
+                            <>
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                  placeholder="Search values..."
+                                  value={searchQuery}
+                                  onChange={e => setSearchQuery(e.target.value)}
+                                  className="pl-9"
+                                />
+                              </div>
+
+                              {filteredValues.length > 0 && (
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleSelectAllValues(activeChannelTab)}
+                                    className="flex-1"
+                                  >
+                                    Select All
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDeselectAllValues(activeChannelTab)}
+                                    className="flex-1"
+                                  >
+                                    Deselect All
+                                  </Button>
+                                </div>
+                              )}
+
+                              <ScrollArea className="flex-1 border rounded-md">
+                                <div className="p-2 space-y-1">
+                                  {filteredValues.length > 0 ? (
+                                    filteredValues.map(value => (
+                                      <div
+                                        key={value}
+                                        className={cn(
+                                          "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
+                                          channelConfigs[activeChannelTab]?.selectedValues.includes(value)
+                                            ? "bg-primary/10"
+                                            : "hover:bg-muted/50"
+                                        )}
+                                        onClick={() => handleValueToggle(activeChannelTab, value)}
+                                      >
+                                        <Checkbox
+                                          checked={channelConfigs[activeChannelTab]?.selectedValues.includes(value) || false}
+                                          onCheckedChange={() => handleValueToggle(activeChannelTab, value)}
+                                        />
+                                        <span className="text-sm">{value}</span>
+                                      </div>
+                                    ))
+                                  ) : loadingValues[activeChannelTab] ? (
+                                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                                      <Loader2 className="h-6 w-6 animate-spin mb-2" />
+                                      <p className="text-sm">Loading dimension values...</p>
+                                    </div>
+                                  ) : (
+                                    <p className="text-center text-muted-foreground py-4">
+                                      No values found.
+                                    </p>
+                                  )}
+                                </div>
+                              </ScrollArea>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Breakdown Dimensions */}
+            {modalStep === 3 && (
+              <div className="flex h-[400px] gap-4">
+                {/* Left: Channel tabs */}
+                <div className="w-48 border-r pr-4">
+                  <ScrollArea className="h-full">
+                    <div className="space-y-1">
+                      {selectedChannels.map(channel => {
+                        const breakdownCount = breakdownConfigs[channel]?.breakdownDimensionIds?.length || 0;
+                        return (
+                          <button
+                            key={channel}
+                            className={cn(
+                              "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
+                              activeChannelTab === channel
+                                ? "bg-primary text-primary-foreground"
+                                : "hover:bg-muted"
+                            )}
+                            onClick={() => setActiveChannelTab(channel)}
+                          >
+                            <span className="truncate capitalize">{channel}</span>
+                            {breakdownCount > 0 && (
+                              <span className="text-xs opacity-70">{breakdownCount}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                </div>
+
+                {/* Right: Breakdown dimension selector */}
+                <div className="flex-1 flex flex-col gap-4">
+                  {activeChannelTab && (
+                    <>
+                      <div className="bg-muted/30 rounded-lg p-4 mb-2">
+                        <p className="text-sm text-muted-foreground">
+                          Select dimensions to break down this report's data. Each selected dimension will create a separate breakdown table.
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <Label className="text-sm font-medium mb-2 block">
+                          Breakdown Dimensions
+                        </Label>
+                        <ScrollArea className="h-[250px] border rounded-md">
+                          <div className="p-2 space-y-1">
+                            {availableBreakdownDimensions.length > 0 ? (
+                              availableBreakdownDimensions.map(dim => {
+                                const isSelected = breakdownConfigs[activeChannelTab]?.breakdownDimensionIds?.includes(dim.id) || false;
+                                return (
+                                  <div
+                                    key={dim.id}
+                                    className={cn(
+                                      "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
+                                      isSelected
+                                        ? "bg-primary/10"
+                                        : "hover:bg-muted/50"
+                                    )}
+                                    onClick={() => handleBreakdownToggle(activeChannelTab, dim.id)}
+                                  >
+                                    <Checkbox
+                                      checked={isSelected}
+                                      onCheckedChange={() => handleBreakdownToggle(activeChannelTab, dim.id)}
+                                    />
+                                    <span className="text-sm">{dim.name}</span>
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <p className="text-center text-muted-foreground py-4">
+                                No dimensions available
+                              </p>
+                            )}
+                          </div>
+                        </ScrollArea>
+                      </div>
+
+                      {(breakdownConfigs[activeChannelTab]?.breakdownDimensionIds?.length || 0) > 0 && (
+                        <div className="mt-2 p-4 bg-primary/5 rounded-lg border border-primary/20">
+                          <p className="text-sm font-medium mb-2">
+                            Selected ({breakdownConfigs[activeChannelTab]?.breakdownDimensionIds?.length || 0}):
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {breakdownConfigs[activeChannelTab]?.breakdownDimensionIds?.map(dimId => {
+                              const dim = availableBreakdownDimensions.find(d => d.id === dimId);
+                              return dim ? (
+                                <span key={dimId} className="px-2 py-1 bg-primary/10 rounded text-xs">
+                                  {dim.name}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            A separate breakdown table will be created for each dimension.
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Step 4: Filters */}
+            {modalStep === 4 && (
+              <div className="flex h-[400px] gap-4">
+                {/* Left: Channel tabs */}
+                <div className="w-48 border-r pr-4">
+                  <ScrollArea className="h-full">
+                    <div className="space-y-1">
+                      {selectedChannels.map(channel => {
+                        const filterCount = filterConfigs[channel]?.filterDimensionIds?.length || 0;
+                        return (
+                          <button
+                            key={channel}
+                            className={cn(
+                              "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
+                              activeChannelTab === channel
+                                ? "bg-primary text-primary-foreground"
+                                : "hover:bg-muted"
+                            )}
+                            onClick={() => setActiveChannelTab(channel)}
+                          >
+                            <span className="truncate capitalize">{channel}</span>
+                            {filterCount > 0 && (
+                              <span className="text-xs opacity-70">{filterCount}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                </div>
+
+                {/* Right: Filter dimension selector */}
+                <div className="flex-1 flex flex-col gap-4">
+                  {activeChannelTab && (
+                    <>
+                      <div className="bg-muted/30 rounded-lg p-4 mb-2">
+                        <p className="text-sm text-muted-foreground">
+                          Select dimensions to use as filters for this report. Each selected dimension will create a filter dropdown that appears before the date dropdowns on the slides page.
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <Label className="text-sm font-medium mb-2 block">
+                          Filter Dimensions
+                        </Label>
+                        {loadingDimensions[activeChannelTab] ? (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Loading dimensions...
+                          </div>
+                        ) : (
+                          <ScrollArea className="h-[250px] border rounded-md">
+                            <div className="p-2 space-y-1">
+                              {dimensions[activeChannelTab]?.length > 0 ? (
+                                dimensions[activeChannelTab].map(dim => {
+                                  const isSelected = filterConfigs[activeChannelTab]?.filterDimensionIds?.includes(dim.id) || false;
+                                  return (
+                                    <div
+                                      key={dim.id}
+                                      className={cn(
+                                        "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
+                                        isSelected
+                                          ? "bg-primary/10"
+                                          : "hover:bg-muted/50"
+                                      )}
+                                      onClick={() => handleFilterDimensionToggle(activeChannelTab, dim.id)}
+                                    >
+                                      <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={() => handleFilterDimensionToggle(activeChannelTab, dim.id)}
+                                      />
+                                      <span className="text-sm">{dim.name}</span>
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                <p className="text-center text-muted-foreground py-4">
+                                  No dimensions available
+                                </p>
+                              )}
+                            </div>
+                          </ScrollArea>
+                        )}
+                      </div>
+
+                      {(filterConfigs[activeChannelTab]?.filterDimensionIds?.length || 0) > 0 && (
+                        <div className="mt-2 p-4 bg-primary/5 rounded-lg border border-primary/20">
+                          <p className="text-sm font-medium mb-2">
+                            Selected ({filterConfigs[activeChannelTab]?.filterDimensionIds?.length || 0}):
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {filterConfigs[activeChannelTab]?.filterDimensionIds?.map(dimId => {
+                              const dim = dimensions[activeChannelTab]?.find(d => d.id === dimId);
+                              return dim ? (
+                                <span key={dimId} className="px-2 py-1 bg-primary/10 rounded text-xs">
+                                  {dim.name}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            A filter dropdown will appear on the slides page for each selected dimension.
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer Navigation */}
+          <div className="flex items-center justify-between pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={modalStep === 1 ? () => handleModalClose(false) : handleBack}
+            >
               <ChevronLeft className="h-4 w-4 mr-1" />
-              Cancel
+              {modalStep === 1 ? "Cancel" : "Back"}
             </Button>
-            <Button onClick={() => setIsEditSourceOpen(false)}>
-              Next
-              <ChevronRight className="h-4 w-4 ml-1" />
+            <Button
+              onClick={handleNext}
+              disabled={modalStep === 1 && selectedChannels.length === 0}
+            >
+              {modalStep === 4 ? "Save" : "Next"}
+              {modalStep !== 4 && <ChevronRight className="h-4 w-4 ml-1" />}
             </Button>
           </div>
         </DialogContent>
@@ -711,6 +1495,45 @@ export default function SlideViewPage() {
               </TabsList>
 
               <div className="flex items-center gap-2">
+                {/* Filter Dropdowns */}
+                {selectedChannels.flatMap(channel => {
+                  const filterDimIds = filterConfigs[channel]?.filterDimensionIds || [];
+                  return filterDimIds.map(filterDimId => {
+                    const filterDim = dimensions[channel]?.find(d => d.id === filterDimId);
+                    const filterValuesList = filterDimensionValues[channel]?.[filterDimId] || [];
+                    
+                    if (!filterDim || filterValuesList.length === 0) return null;
+                    
+                    return (
+                      <Select
+                        key={`${channel}-${filterDimId}`}
+                        value={filterValues[channel]?.[filterDimId] || 'all'}
+                        onValueChange={(value) => {
+                          setFilterValues(prev => ({
+                            ...prev,
+                            [channel]: {
+                              ...prev[channel],
+                              [filterDimId]: value === 'all' ? '' : value,
+                            },
+                          }));
+                        }}
+                      >
+                        <SelectTrigger className="w-[150px]">
+                          <SelectValue placeholder={filterDim.name} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All {filterDim.name}</SelectItem>
+                          {filterValuesList.map(value => (
+                            <SelectItem key={value} value={value}>
+                              {value}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    );
+                  }).filter(Boolean);
+                })}
+                
                 <Select value={selectedYear} onValueChange={setSelectedYear}>
                   <SelectTrigger className="w-[100px]">
                     <SelectValue />
