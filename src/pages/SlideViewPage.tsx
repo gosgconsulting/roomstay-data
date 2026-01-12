@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -483,6 +483,23 @@ const UnifiedBreakdownTable = ({
   pivotData?: any;
   selectedChannel?: 'metasearch' | 'sem' | 'social' | 'overview';
 }) => {
+  // Auto-select defaults when dimensions are available
+  useEffect(() => {
+    if (availableDimensions.length > 0) {
+      // If current groupBy is not in available dimensions, select the first
+      if (!availableDimensions.find(d => d.id === groupBy)) {
+        onGroupByChange(availableDimensions[0].id);
+      }
+      // If current breakdownBy is not in available dimensions or same as groupBy, select a different one
+      if (!availableDimensions.find(d => d.id === breakdownBy) || breakdownBy === groupBy) {
+        const differentDim = availableDimensions.find(d => d.id !== groupBy);
+        if (differentDim) {
+          onBreakdownByChange(differentDim.id);
+        }
+      }
+    }
+  }, [availableDimensions, groupBy, breakdownBy, onGroupByChange, onBreakdownByChange]);
+
   // Get breakdown data from pivotData based on selected dimension
   const groupedData = useMemo(() => {
     if (!pivotData?.channels) return [];
@@ -528,6 +545,49 @@ const UnifiedBreakdownTable = ({
       }));
   }, [pivotData, groupBy, availableDimensions, selectedChannel]);
 
+  // Get breakdown data for expanded row
+  const getExpandedBreakdownData = useMemo(() => {
+    if (!expandedRow || !pivotData?.channels || !breakdownBy) return [];
+    
+    const breakdownByDim = availableDimensions.find(d => d.id === breakdownBy);
+    const breakdownByName = breakdownByDim?.name || breakdownBy;
+    
+    const channelsToCheck = selectedChannel && selectedChannel !== 'overview' 
+      ? [selectedChannel] 
+      : Object.keys(pivotData.channels);
+    
+    // For now, show the breakdown data filtered by the expanded row
+    // This would ideally be cross-breakdown data, but we'll show the breakdownBy dimension data
+    const allBreakdowns: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
+    
+    for (const channel of channelsToCheck) {
+      const channelData = pivotData.channels[channel];
+      if (!channelData?.breakdowns) continue;
+      
+      const breakdownData = channelData.breakdowns[breakdownByName] || [];
+      
+      breakdownData.forEach((row: any) => {
+        const value = row.name || row[breakdownByName.toLowerCase().replace(/\s+/g, '_')] || 'Unknown';
+        if (!allBreakdowns[value]) {
+          allBreakdowns[value] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+        }
+        allBreakdowns[value].impressions += row.impressions || 0;
+        allBreakdowns[value].clicks += row.clicks || 0;
+        allBreakdowns[value].cost += row.cost || 0;
+        allBreakdowns[value].revenue += row.revenue || 0;
+        allBreakdowns[value].bookings += row.bookings || 0;
+      });
+    }
+    
+    return Object.entries(allBreakdowns)
+      .filter(([value]) => value && value !== 'Unknown')
+      .sort(([, a], [, b]) => b.revenue - a.revenue)
+      .map(([value, data]) => ({
+        value,
+        metrics: calculateDerivedMetrics(data),
+      }));
+  }, [expandedRow, pivotData, breakdownBy, availableDimensions, selectedChannel]);
+
   // Calculate totals
   const totals = groupedData.reduce((acc, group) => ({
     impressions: acc.impressions + group.metrics.impressions,
@@ -539,21 +599,39 @@ const UnifiedBreakdownTable = ({
   const totalMetrics = calculateDerivedMetrics(totals);
 
   const groupByDim = availableDimensions.find(d => d.id === groupBy);
+  const breakdownByDim = availableDimensions.find(d => d.id === breakdownBy);
+
+  // Filter available dimensions to exclude currently selected for each dropdown
+  const groupByOptions = availableDimensions;
+  const breakdownByOptions = availableDimensions.filter(d => d.id !== groupBy);
 
   // Show message if no data
   if (groupedData.length === 0) {
     return (
       <div className="space-y-4">
         {/* Dropdowns */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             <Label className="text-sm text-muted-foreground">Group by:</Label>
             <Select value={groupBy} onValueChange={(value) => { onGroupByChange(value); onRowClick(null); }}>
+              <SelectTrigger className="w-40 bg-primary text-primary-foreground">
+                <SelectValue placeholder="Select dimension" />
+              </SelectTrigger>
+              <SelectContent>
+                {groupByOptions.map(dim => (
+                  <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label className="text-sm text-muted-foreground">Breakdown by:</Label>
+            <Select value={breakdownBy} onValueChange={onBreakdownByChange}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Select dimension" />
               </SelectTrigger>
               <SelectContent>
-                {availableDimensions.map(dim => (
+                {breakdownByOptions.map(dim => (
                   <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
                 ))}
               </SelectContent>
@@ -571,15 +649,28 @@ const UnifiedBreakdownTable = ({
   return (
     <div className="space-y-4">
       {/* Dropdowns */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-6">
         <div className="flex items-center gap-2">
           <Label className="text-sm text-muted-foreground">Group by:</Label>
           <Select value={groupBy} onValueChange={(value) => { onGroupByChange(value); onRowClick(null); }}>
+            <SelectTrigger className="w-40 bg-primary text-primary-foreground">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {groupByOptions.map(dim => (
+                <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-sm text-muted-foreground">Breakdown by:</Label>
+          <Select value={breakdownBy} onValueChange={onBreakdownByChange}>
             <SelectTrigger className="w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {availableDimensions.map(dim => (
+              {breakdownByOptions.map(dim => (
                 <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
               ))}
             </SelectContent>
@@ -591,6 +682,7 @@ const UnifiedBreakdownTable = ({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-8"></TableHead>
             <TableHead>{groupByDim?.name || 'Group'}</TableHead>
             <TableHead className="text-right">Impressions</TableHead>
             <TableHead className="text-right">Clicks</TableHead>
@@ -606,25 +698,58 @@ const UnifiedBreakdownTable = ({
         </TableHeader>
         <TableBody>
           {groupedData.map((group) => (
-            <TableRow 
-              key={group.groupValue}
-              className="hover:bg-muted/50"
-            >
-              <TableCell className="font-medium">{group.groupValue}</TableCell>
-              <TableCell className="text-right">{formatNumber(group.metrics.impressions)}</TableCell>
-              <TableCell className="text-right">{formatNumber(group.metrics.clicks)}</TableCell>
-              <TableCell className="text-right">{group.metrics.ctr.toFixed(2)}%</TableCell>
-              <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
-              <TableCell className="text-right">{group.metrics.conversionRate.toFixed(2)}%</TableCell>
-              <TableCell className="text-right">${group.metrics.cpc.toFixed(2)}</TableCell>
-              <TableCell className="text-right">${formatNumber(group.metrics.cost)}</TableCell>
-              <TableCell className="text-right">${formatNumber(group.metrics.revenue)}</TableCell>
-              <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
-              <TableCell className="text-right">{group.metrics.costOfSale.toFixed(2)}%</TableCell>
-            </TableRow>
+            <React.Fragment key={group.groupValue}>
+              <TableRow 
+                className="hover:bg-muted/50 cursor-pointer"
+                onClick={() => onRowClick(expandedRow === group.groupValue ? null : group.groupValue)}
+              >
+                <TableCell className="w-8">
+                  <ChevronRight className={cn(
+                    "h-4 w-4 transition-transform",
+                    expandedRow === group.groupValue && "rotate-90"
+                  )} />
+                </TableCell>
+                <TableCell className="font-medium">{group.groupValue}</TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.impressions)}</TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.clicks)}</TableCell>
+                <TableCell className="text-right">{group.metrics.ctr.toFixed(2)}%</TableCell>
+                <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
+                <TableCell className="text-right">{group.metrics.conversionRate.toFixed(2)}%</TableCell>
+                <TableCell className="text-right">${group.metrics.cpc.toFixed(2)}</TableCell>
+                <TableCell className="text-right">${formatNumber(group.metrics.cost)}</TableCell>
+                <TableCell className="text-right">${formatNumber(group.metrics.revenue)}</TableCell>
+                <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
+                <TableCell className="text-right">{group.metrics.costOfSale.toFixed(2)}%</TableCell>
+              </TableRow>
+              {/* Expanded breakdown rows */}
+              {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
+                <>
+                  {getExpandedBreakdownData.map((item) => (
+                    <TableRow key={`${group.groupValue}-${item.value}`} className="bg-muted/30">
+                      <TableCell></TableCell>
+                      <TableCell className="pl-8 text-muted-foreground">
+                        <span className="text-xs uppercase mr-2">{breakdownByDim?.name}:</span>
+                        {item.value}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.impressions)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.clicks)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{item.metrics.ctr.toFixed(2)}%</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{item.metrics.bookings.toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{item.metrics.conversionRate.toFixed(2)}%</TableCell>
+                      <TableCell className="text-right text-muted-foreground">${item.metrics.cpc.toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">${formatNumber(item.metrics.cost)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">${formatNumber(item.metrics.revenue)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{item.metrics.roas.toFixed(1)}x</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{item.metrics.costOfSale.toFixed(2)}%</TableCell>
+                    </TableRow>
+                  ))}
+                </>
+              )}
+            </React.Fragment>
           ))}
           {/* Totals Row */}
           <TableRow className="bg-muted/50 font-semibold border-t-2">
+            <TableCell></TableCell>
             <TableCell className="font-bold">Total</TableCell>
             <TableCell className="text-right">{formatNumber(totalMetrics.impressions)}</TableCell>
             <TableCell className="text-right">{formatNumber(totalMetrics.clicks)}</TableCell>
