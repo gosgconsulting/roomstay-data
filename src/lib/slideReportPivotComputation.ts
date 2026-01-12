@@ -1,6 +1,11 @@
 /**
  * Service for computing pivot tables for slide reports
  * Aggregates data from dimension_data to create fast-loading pivot tables
+ * 
+ * OPTIMIZED STRUCTURE:
+ * - Data for 3 years (2024, 2025, 2026) is pre-computed and stored as JSON
+ * - Monthly and yearly aggregations allow instant filtering without re-computation
+ * - Channel-specific breakdowns enable fast tab switching
  */
 
 import { supabase } from "@/integrations/supabase/client";
@@ -12,9 +17,12 @@ import {
   SlideReportConfiguration 
 } from "@/types/slideReports";
 import { aggregateMetrics, parseDate } from "@/components/AISummaryPivotTable";
-import { format, startOfMonth, endOfMonth, eachMonthOfInterval, startOfYear } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachMonthOfInterval, startOfYear, isWithinInterval } from "date-fns";
 
 const BASE_METRICS = ["Impressions", "Clicks", "Cost", "Revenue", "Bookings"];
+
+// Progress callback type for UI updates
+export type ProgressCallback = (step: number, message: string) => void;
 
 /**
  * Calculate derived metrics from base metrics
@@ -41,7 +49,48 @@ function calculateDerivedMetrics(data: {
 }
 
 /**
- * Fetch dimension data for a report
+ * Build metric name to dimension ID mapping for a report
+ * This is crucial for aggregateMetrics to work with UUID-keyed dimension_data
+ */
+async function buildMetricNameToIdMap(reportId: string): Promise<Record<string, string>> {
+  // Get a sample row to find the dimension IDs used
+  const { data: sampleRows } = await supabase
+    .from('dimension_data')
+    .select('dimension_values')
+    .eq('report_id', reportId)
+    .limit(1);
+
+  if (!sampleRows || sampleRows.length === 0) {
+    console.warn(`No data found for report ${reportId}`);
+    return {};
+  }
+
+  const sampleRow = sampleRows[0].dimension_values as Record<string, any>;
+  const dimensionIds = Object.keys(sampleRow);
+
+  // Fetch dimension names for these IDs
+  const { data: dimensions } = await supabase
+    .from('dimensions')
+    .select('id, name, type')
+    .in('id', dimensionIds);
+
+  if (!dimensions) {
+    console.warn(`No dimensions found for report ${reportId}`);
+    return {};
+  }
+
+  // Build name -> id mapping
+  const nameToIdMap: Record<string, string> = {};
+  dimensions.forEach(dim => {
+    nameToIdMap[dim.name] = dim.id;
+  });
+
+  console.log(`Built metric map for report ${reportId}:`, Object.keys(nameToIdMap).join(', '));
+  return nameToIdMap;
+}
+
+/**
+ * Fetch dimension data for a report - optimized for large datasets
  */
 async function fetchDimensionDataForReport(reportId: string): Promise<any[]> {
   const allRows: any[] = [];
@@ -72,19 +121,21 @@ async function fetchDimensionDataForReport(reportId: string): Promise<any[]> {
 }
 
 /**
- * Aggregate metrics from rows for a date range
+ * Aggregate metrics from rows for a date range using the proper name-to-ID mapping
  */
 function aggregateMetricsForDateRange(
   rows: any[],
   dateRange: { start: Date; end: Date },
+  metricNameToIdMap: Record<string, string>,
   dimensionFilter?: { dimensionId: string; dimensionName?: string; values: string[] }
 ): { impressions: number; clicks: number; cost: number; revenue: number; bookings: number } {
-  // Use the aggregateMetrics function from AISummaryPivotTable
+  // Use the aggregateMetrics function with the proper mapping
   const metrics = aggregateMetrics(
     rows,
     BASE_METRICS,
     dateRange,
-    dimensionFilter
+    dimensionFilter,
+    metricNameToIdMap
   );
 
   return {
@@ -104,13 +155,19 @@ function computeBreakdown(
   dateRange: { start: Date; end: Date },
   breakdownDimensionId: string,
   breakdownDimensionName: string,
+  metricNameToIdMap: Record<string, string>,
   dimensionFilter?: { dimensionId: string; dimensionName?: string; values: string[] }
 ): BreakdownRow[] {
+  const dateDimId = metricNameToIdMap['Date'];
+  
   const filteredRows = rows.filter((row) => {
     const rowData = row.dimension_values || row;
     
-    // Date filter
-    let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
+    // Date filter using the mapped Date dimension ID
+    let dateValue: any = dateDimId ? rowData[dateDimId] : null;
+    if (!dateValue) {
+      dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
+    }
     if (!dateValue) {
       for (const [key, val] of Object.entries(rowData)) {
         if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
@@ -122,7 +179,7 @@ function computeBreakdown(
     
     const rowDate = parseDate(dateValue);
     if (!rowDate) return false;
-    if (rowDate < dateRange.start || rowDate > dateRange.end) return false;
+    if (!isWithinInterval(rowDate, { start: dateRange.start, end: dateRange.end })) return false;
     
     // Dimension filter
     if (dimensionFilter && dimensionFilter.values.length > 0) {
@@ -156,7 +213,7 @@ function computeBreakdown(
   // Compute metrics for each group
   const breakdownRows: BreakdownRow[] = [];
   Object.entries(groupedRows).forEach(([groupValue, groupRows]) => {
-    const metrics = aggregateMetricsForDateRange(groupRows, dateRange);
+    const metrics = aggregateMetricsForDateRange(groupRows, dateRange, metricNameToIdMap);
     breakdownRows.push({
       [breakdownDimensionName.toLowerCase()]: groupValue,
       ...metrics,
@@ -172,6 +229,7 @@ function computeBreakdown(
 function computeMonthlyMetrics(
   rows: any[],
   year: number,
+  metricNameToIdMap: Record<string, string>,
   dimensionFilter?: { dimensionId: string; dimensionName?: string; values: string[] }
 ): Record<string, ChannelMetrics> {
   const monthlyData: Record<string, ChannelMetrics> = {};
@@ -186,7 +244,7 @@ function computeMonthlyMetrics(
     const monthEnd = endOfMonth(month);
     const monthKey = format(month, "yyyy-MM");
     
-    const metrics = aggregateMetricsForDateRange(rows, { start: monthStart, end: monthEnd }, dimensionFilter);
+    const metrics = aggregateMetricsForDateRange(rows, { start: monthStart, end: monthEnd }, metricNameToIdMap, dimensionFilter);
     monthlyData[monthKey] = calculateDerivedMetrics(metrics);
   });
 
@@ -199,12 +257,13 @@ function computeMonthlyMetrics(
 function computeAllMonthlyMetrics(
   rows: any[],
   years: number[],
+  metricNameToIdMap: Record<string, string>,
   dimensionFilter?: { dimensionId: string; dimensionName?: string; values: string[] }
 ): Record<string, ChannelMetrics> {
   const allMonthlyData: Record<string, ChannelMetrics> = {};
   
   for (const year of years) {
-    const yearlyMonthly = computeMonthlyMetrics(rows, year, dimensionFilter);
+    const yearlyMonthly = computeMonthlyMetrics(rows, year, metricNameToIdMap, dimensionFilter);
     Object.assign(allMonthlyData, yearlyMonthly);
   }
 
@@ -217,6 +276,7 @@ function computeAllMonthlyMetrics(
 function computeYearlyMetrics(
   rows: any[],
   years: number[],
+  metricNameToIdMap: Record<string, string>,
   dimensionFilter?: { dimensionId: string; dimensionName?: string; values: string[] }
 ): Record<string, ChannelMetrics> {
   const yearlyData: Record<string, ChannelMetrics> = {};
@@ -225,7 +285,7 @@ function computeYearlyMetrics(
     const yearStart = new Date(year, 0, 1);
     const yearEnd = new Date(year, 11, 31);
     
-    const metrics = aggregateMetricsForDateRange(rows, { start: yearStart, end: yearEnd }, dimensionFilter);
+    const metrics = aggregateMetricsForDateRange(rows, { start: yearStart, end: yearEnd }, metricNameToIdMap, dimensionFilter);
     yearlyData[String(year)] = calculateDerivedMetrics(metrics);
   }
 
@@ -235,13 +295,20 @@ function computeYearlyMetrics(
 /**
  * Compute pivot data for a slide report
  * Computes data for all years (2024, 2025, 2026) and stores it for fast filtering
+ * 
+ * OPTIMIZATION NOTES:
+ * - All 3 years of data are pre-computed once and stored as JSON
+ * - Monthly data allows instant filtering by year/month without DB queries
+ * - Yearly totals provide fast year-over-year comparisons
+ * - Total JSON size is typically 10-50KB, loads instantly vs querying 60K+ rows
  */
 export async function computeSlideReportPivotData(
   reportIds: Record<string, string>, // channel -> report_id
   configuration: SlideReportConfiguration,
-  dateRange: { year: number; month: string; from: string; to: string }
+  dateRange: { year: number; month: string; from: string; to: string },
+  onProgress?: ProgressCallback
 ): Promise<SlideReportPivotData> {
-  // Years to compute data for
+  // Years to compute data for - covers past 3 years for historical comparison
   const YEARS_TO_COMPUTE = [2024, 2025, 2026];
   
   const pivotData: SlideReportPivotData = {
@@ -283,9 +350,12 @@ export async function computeSlideReportPivotData(
   const overviewYearly: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
 
   // Compute data for each channel
+  let channelIndex = 0;
   for (const channel of configuration.selectedChannels) {
     const reportId = reportIds[channel];
     if (!reportId) continue;
+
+    onProgress?.(3, `Processing ${channel} data...`);
 
     const channelConfig = configuration.channelConfigs[channel];
     const dimensionFilter = channelConfig?.dimensionId && channelConfig.selectedValues.length > 0
@@ -295,12 +365,15 @@ export async function computeSlideReportPivotData(
         }
       : undefined;
 
+    // Build metric name to ID mapping for this report
+    const metricNameToIdMap = await buildMetricNameToIdMap(reportId);
+    
     // Fetch dimension data
     const rows = await fetchDimensionDataForReport(reportId);
-    console.log(`Fetched ${rows.length} rows for ${channel}`);
+    console.log(`Fetched ${rows.length} rows for ${channel}, metric map keys: ${Object.keys(metricNameToIdMap).join(', ')}`);
 
     // Compute current period metrics
-    const currentMetrics = aggregateMetricsForDateRange(rows, currentDateRange, dimensionFilter);
+    const currentMetrics = aggregateMetricsForDateRange(rows, currentDateRange, metricNameToIdMap, dimensionFilter);
     const currentChannelMetrics = calculateDerivedMetrics(currentMetrics);
 
     // Compute previous period (previous month)
@@ -312,7 +385,8 @@ export async function computeSlideReportPivotData(
     
     const prevPeriodMetrics = aggregateMetricsForDateRange(
       rows, 
-      { start: prevMonthStart, end: prevMonthEnd }, 
+      { start: prevMonthStart, end: prevMonthEnd },
+      metricNameToIdMap,
       dimensionFilter
     );
     const prevPeriodChannelMetrics = calculateDerivedMetrics(prevPeriodMetrics);
@@ -325,16 +399,17 @@ export async function computeSlideReportPivotData(
     
     const prevYearMetrics = aggregateMetricsForDateRange(
       rows, 
-      { start: prevYearStart, end: prevYearEnd }, 
+      { start: prevYearStart, end: prevYearEnd },
+      metricNameToIdMap,
       dimensionFilter
     );
     const prevYearChannelMetrics = calculateDerivedMetrics(prevYearMetrics);
 
     // Compute monthly metrics for ALL years
-    const allMonthly = computeAllMonthlyMetrics(rows, YEARS_TO_COMPUTE, dimensionFilter);
+    const allMonthly = computeAllMonthlyMetrics(rows, YEARS_TO_COMPUTE, metricNameToIdMap, dimensionFilter);
     
     // Compute yearly totals
-    const yearly = computeYearlyMetrics(rows, YEARS_TO_COMPUTE, dimensionFilter);
+    const yearly = computeYearlyMetrics(rows, YEARS_TO_COMPUTE, metricNameToIdMap, dimensionFilter);
 
     // Compute breakdowns for each breakdown dimension
     const breakdowns: Record<string, BreakdownRow[]> = {};
@@ -347,6 +422,7 @@ export async function computeSlideReportPivotData(
           currentDateRange,
           breakdownDimId,
           breakdownDimName,
+          metricNameToIdMap,
           dimensionFilter
         );
       }
@@ -391,6 +467,8 @@ export async function computeSlideReportPivotData(
     pivotData.overview.current.cost += currentChannelMetrics.cost;
     pivotData.overview.current.revenue += currentChannelMetrics.revenue;
     pivotData.overview.current.bookings += currentChannelMetrics.bookings;
+    
+    channelIndex++;
   }
 
   // Finalize overview monthly data (calculate derived metrics)
@@ -449,10 +527,17 @@ export async function computeSlideReportPivotData(
     },
   };
 
-  console.log('Computed pivot data:', {
+  // Log summary of computed data
+  const totalMonths = Object.keys(pivotData.overview.monthly || {}).length;
+  const totalYears = Object.keys(pivotData.overview.yearly || {}).length;
+  const sampleMonth = Object.entries(pivotData.overview.monthly || {})[0];
+  
+  console.log('Computed pivot data summary:', {
     channels: Object.keys(pivotData.channels),
-    overviewMonthlyKeys: Object.keys(pivotData.overview.monthly || {}),
-    overviewYearlyKeys: Object.keys(pivotData.overview.yearly || {}),
+    totalMonths,
+    totalYears,
+    sampleMonthData: sampleMonth ? { month: sampleMonth[0], revenue: sampleMonth[1].revenue } : null,
+    overviewYearlyRevenue: Object.entries(pivotData.overview.yearly || {}).map(([year, m]) => ({ year, revenue: m.revenue })),
   });
 
   return pivotData;
