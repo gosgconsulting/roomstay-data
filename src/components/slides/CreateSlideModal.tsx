@@ -10,17 +10,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { ChevronLeft, ChevronRight, Database, Sparkles, Check } from "lucide-react";
-
-interface DataSource {
-  id: string;
-  name: string;
-  report_id: string;
-  last_synced_at: string | null;
-}
+import { ChevronLeft, ChevronRight, Sparkles, FileText } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface CreateSlideModalProps {
   open: boolean;
@@ -30,7 +22,7 @@ interface CreateSlideModalProps {
   onSlideCreated: (slide: any) => void;
 }
 
-type Step = "select-source" | "configure" | "name";
+type Step = "name";
 
 export function CreateSlideModal({
   open,
@@ -39,73 +31,41 @@ export function CreateSlideModal({
   userId,
   onSlideCreated,
 }: CreateSlideModalProps) {
-  const [step, setStep] = useState<Step>("select-source");
-  const [dataSources, setDataSources] = useState<DataSource[]>([]);
-  const [isLoadingDataSources, setIsLoadingDataSources] = useState(false);
-  const [selectedDataSourceId, setSelectedDataSourceId] = useState<string | null>(null);
-  const [slideName, setSlideName] = useState("");
+  const navigate = useNavigate();
+  const [step, setStep] = useState<Step>("name");
+  const [reportName, setReportName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     if (open) {
-      loadDataSources();
-      // Reset state
-      setStep("select-source");
-      setSelectedDataSourceId(null);
-      setSlideName("");
+      // Reset state when modal opens
+      setStep("name");
+      setReportName("");
     }
-  }, [open, accountId]);
-
-  const loadDataSources = async () => {
-    setIsLoadingDataSources(true);
-    try {
-      // First get reports for this account
-      const { data: reports, error: reportsError } = await supabase
-        .from("reports")
-        .select("id")
-        .eq("account_id", accountId);
-
-      if (reportsError) throw reportsError;
-
-      if (!reports || reports.length === 0) {
-        setDataSources([]);
-        return;
-      }
-
-      // Then get data sources for these reports
-      const reportIds = reports.map((r) => r.id);
-      const { data, error } = await supabase
-        .from("data_sources")
-        .select("id, name, report_id, last_synced_at")
-        .in("report_id", reportIds)
-        .order("name");
-
-      if (error) throw error;
-      setDataSources(data || []);
-    } catch (error) {
-      console.error("Error loading data sources:", error);
-    } finally {
-      setIsLoadingDataSources(false);
-    }
-  };
+  }, [open]);
 
   const handleCreate = async () => {
-    if (!selectedDataSourceId || !slideName.trim()) return;
+    if (!reportName.trim()) return;
 
     setIsCreating(true);
     try {
-      // Get the report_id from the selected data source
-      const selectedSource = dataSources.find((ds) => ds.id === selectedDataSourceId);
-      
+      // Create a new slide_report record
       const { data, error } = await supabase
-        .from("slides")
+        .from("slide_reports")
         .insert({
-          name: slideName.trim(),
+          name: reportName.trim(),
           account_id: accountId,
-          data_source_id: selectedDataSourceId,
-          report_id: selectedSource?.report_id || null,
-          components: [],
           user_id: userId,
+          configuration: {
+            selectedChannels: [],
+            channelConfigs: {},
+            breakdownConfigs: {},
+            filterConfigs: {},
+          },
+          report_ids: {},
+          pivot_data: {},
+          date_range: null,
+          is_active: true,
         })
         .select()
         .single();
@@ -114,8 +74,11 @@ export function CreateSlideModal({
 
       onSlideCreated(data);
       onOpenChange(false);
+      
+      // Navigate to the Edit Source page for the new report
+      navigate(`/tools/reports/${accountId}/master-report?reportId=${data.id}&edit=true`);
     } catch (error) {
-      console.error("Error creating slide:", error);
+      console.error("Error creating slide report:", error);
     } finally {
       setIsCreating(false);
     }
@@ -123,12 +86,8 @@ export function CreateSlideModal({
 
   const canProceed = () => {
     switch (step) {
-      case "select-source":
-        return !!selectedDataSourceId;
-      case "configure":
-        return true;
       case "name":
-        return slideName.trim().length > 0;
+        return reportName.trim().length > 0;
       default:
         return false;
     }
@@ -136,19 +95,8 @@ export function CreateSlideModal({
 
   const goNext = () => {
     switch (step) {
-      case "select-source":
-        setStep("name");
-        break;
       case "name":
         handleCreate();
-        break;
-    }
-  };
-
-  const goBack = () => {
-    switch (step) {
-      case "name":
-        setStep("select-source");
         break;
     }
   };
@@ -159,107 +107,57 @@ export function CreateSlideModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            Create New Slide
+            Create New Report
           </DialogTitle>
           <DialogDescription>
-            {step === "select-source" && (
-              "Select a data source to use for your slide."
-            )}
             {step === "name" && (
-              "Give your slide a name."
+              "Give your report a name to get started."
             )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="py-4">
-          {step === "select-source" && (
-            <div className="space-y-3">
-              {isLoadingDataSources ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mx-auto"></div>
-                  <p className="text-sm text-muted-foreground mt-2">Loading data sources...</p>
-                </div>
-              ) : dataSources.length === 0 ? (
-                <div className="text-center py-8">
-                  <Database className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-muted-foreground">No data sources found.</p>
-                  <p className="text-sm text-muted-foreground">
-                    Create a data source in Data Studio first.
-                  </p>
-                </div>
-              ) : (
-                <RadioGroup
-                  value={selectedDataSourceId || ""}
-                  onValueChange={setSelectedDataSourceId}
-                >
-                  {dataSources.map((source) => (
-                    <Card
-                      key={source.id}
-                      className={`p-4 cursor-pointer transition-all ${
-                        selectedDataSourceId === source.id
-                          ? "border-primary bg-primary/5"
-                          : "hover:border-primary/50"
-                      }`}
-                      onClick={() => setSelectedDataSourceId(source.id)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value={source.id} id={source.id} />
-                        <div className="flex-1">
-                          <Label htmlFor={source.id} className="font-medium cursor-pointer">
-                            {source.name}
-                          </Label>
-                          {source.last_synced_at && (
-                            <p className="text-xs text-muted-foreground">
-                              Last synced: {new Date(source.last_synced_at).toLocaleDateString()}
-                            </p>
-                          )}
-                        </div>
-                        {selectedDataSourceId === source.id && (
-                          <Check className="h-4 w-4 text-primary" />
-                        )}
-                      </div>
-                    </Card>
-                  ))}
-                </RadioGroup>
-              )}
-            </div>
-          )}
-
           {step === "name" && (
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="slide-name">Slide Name</Label>
+                <Label htmlFor="report-name">Report Name</Label>
                 <Input
-                  id="slide-name"
-                  placeholder="e.g., Monthly Performance Overview"
-                  value={slideName}
-                  onChange={(e) => setSlideName(e.target.value)}
+                  id="report-name"
+                  placeholder="e.g., Q1 2026 Performance Report"
+                  value={reportName}
+                  onChange={(e) => setReportName(e.target.value)}
                   autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && canProceed()) {
+                      goNext();
+                    }
+                  }}
                 />
+                <p className="text-xs text-muted-foreground">
+                  You can configure channels, date ranges, and filters in the next step.
+                </p>
               </div>
-              {selectedDataSourceId && (
-                <div className="p-3 bg-muted rounded-lg">
-                  <p className="text-sm text-muted-foreground">
-                    Data source:{" "}
-                    <span className="font-medium text-foreground">
-                      {dataSources.find((ds) => ds.id === selectedDataSourceId)?.name}
-                    </span>
-                  </p>
+              
+              <div className="p-4 bg-muted/50 rounded-lg border border-dashed">
+                <div className="flex items-start gap-3">
+                  <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">What happens next?</p>
+                    <ul className="text-xs text-muted-foreground mt-1 space-y-1">
+                      <li>• Select your date range (Since when)</li>
+                      <li>• Choose channels (Metasearch, SEM, Social)</li>
+                      <li>• Configure value dimensions and filters</li>
+                      <li>• Refresh data to compute your report</li>
+                    </ul>
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>
 
         <DialogFooter className="flex justify-between">
-          <div>
-            {step !== "select-source" && (
-              <Button variant="ghost" onClick={goBack} className="gap-2">
-                <ChevronLeft className="h-4 w-4" />
-                Back
-              </Button>
-            )}
-          </div>
+          <div />
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
@@ -269,11 +167,9 @@ export function CreateSlideModal({
               disabled={!canProceed() || isCreating}
               className="gap-2"
             >
-              {step === "name" ? (
-                isCreating ? "Creating..." : "Create Slide"
-              ) : (
+              {isCreating ? "Creating..." : (
                 <>
-                  Next
+                  Create & Configure
                   <ChevronRight className="h-4 w-4" />
                 </>
               )}
