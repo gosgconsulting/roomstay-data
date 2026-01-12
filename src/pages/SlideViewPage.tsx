@@ -1689,6 +1689,13 @@ export default function SlideViewPage() {
     social: {},
   });
 
+  // Pending filter values (before Apply is clicked)
+  const [pendingFilterValues, setPendingFilterValues] = useState<Record<string, Record<string, string[]>>>({
+    metasearch: {},
+    sem: {},
+    social: {},
+  });
+
   // Filter dimension values state (for dropdowns) - channel -> dimensionId -> values[]
   const [filterDimensionValues, setFilterDimensionValues] = useState<Record<string, Record<string, string[]>>>({
     metasearch: {},
@@ -3906,11 +3913,26 @@ export default function SlideViewPage() {
                                      || `Filter`;
                   const filterValuesList = filterDimensionValues[currentChannel]?.[filterDimId] || [];
                   const selectedFilterValues = filterValues[currentChannel]?.[filterDimId] || [];
+                  const pendingValues = pendingFilterValues[currentChannel]?.[filterDimId] ?? selectedFilterValues;
                   const isAllSelected = selectedFilterValues.length === 0 || selectedFilterValues.length === filterValuesList.length;
                   const hasValues = filterValuesList.length > 0;
                   
                   return (
-                    <Popover key={`filter-${currentChannel}-${filterDimId}`}>
+                    <Popover 
+                      key={`filter-${currentChannel}-${filterDimId}`}
+                      onOpenChange={(open) => {
+                        if (open) {
+                          // Initialize pending values with current selection when opening
+                          setPendingFilterValues(prev => ({
+                            ...prev,
+                            [currentChannel]: {
+                              ...prev[currentChannel],
+                              [filterDimId]: selectedFilterValues,
+                            },
+                          }));
+                        }
+                      }}
+                    >
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="h-9 justify-between min-w-[140px]">
                           <span className="truncate">
@@ -3926,14 +3948,14 @@ export default function SlideViewPage() {
                       <PopoverContent className="w-[250px] p-0 bg-popover z-50" align="start">
                         <div className="p-2">
                           <div className="flex items-center justify-between mb-2">
-                            <Label className="text-sm font-medium">{filterDimName}</Label>
+                            <Label className="text-sm font-medium">Filter</Label>
                             <div className="flex gap-1">
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 className="h-6 px-2 text-xs"
                                 onClick={() => {
-                                  setFilterValues(prev => ({
+                                  setPendingFilterValues(prev => ({
                                     ...prev,
                                     [currentChannel]: {
                                       ...prev[currentChannel],
@@ -3949,7 +3971,7 @@ export default function SlideViewPage() {
                                 size="sm"
                                 className="h-6 px-2 text-xs"
                                 onClick={() => {
-                                  setFilterValues(prev => ({
+                                  setPendingFilterValues(prev => ({
                                     ...prev,
                                     [currentChannel]: {
                                       ...prev[currentChannel],
@@ -3965,16 +3987,16 @@ export default function SlideViewPage() {
                           <ScrollArea className="h-[200px]">
                             <div className="space-y-1 p-1">
                               {hasValues ? filterValuesList.map(value => {
-                                const isSelected = selectedFilterValues.includes(value);
+                                const isSelected = pendingValues.includes(value);
                                 return (
                                   <div
                                     key={value}
                                     className={cn(
                                       "flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent text-sm",
-                                      isSelected && "bg-accent"
+                                      isSelected && "bg-primary text-primary-foreground"
                                     )}
                                     onClick={() => {
-                                      setFilterValues(prev => {
+                                      setPendingFilterValues(prev => {
                                         const current = prev[currentChannel]?.[filterDimId] || [];
                                         const newValues = isSelected
                                           ? current.filter(v => v !== value)
@@ -3989,7 +4011,7 @@ export default function SlideViewPage() {
                                       });
                                     }}
                                   >
-                                    <Checkbox checked={isSelected} />
+                                    <Checkbox checked={isSelected} className={isSelected ? "border-primary-foreground data-[state=checked]:bg-primary-foreground data-[state=checked]:text-primary" : ""} />
                                     <span className="truncate">{value}</span>
                                   </div>
                                 );
@@ -4000,6 +4022,24 @@ export default function SlideViewPage() {
                               )}
                             </div>
                           </ScrollArea>
+                          <div className="border-t p-2">
+                            <Button
+                              size="sm"
+                              className="w-full"
+                              onClick={() => {
+                                // Apply the pending filter values
+                                setFilterValues(prev => ({
+                                  ...prev,
+                                  [currentChannel]: {
+                                    ...prev[currentChannel],
+                                    [filterDimId]: pendingValues,
+                                  },
+                                }));
+                              }}
+                            >
+                              Apply
+                            </Button>
+                          </div>
                         </div>
                       </PopoverContent>
                     </Popover>
