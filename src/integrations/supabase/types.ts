@@ -1290,6 +1290,66 @@ export type Database = {
           },
         ]
       }
+      slide_report_monthly_data: {
+        Row: {
+          account_id: string | null
+          breakdowns: Json
+          channel: string
+          computed_at: string
+          created_at: string
+          id: string
+          metrics: Json
+          month: number
+          row_count: number | null
+          slide_report_id: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          account_id?: string | null
+          breakdowns?: Json
+          channel: string
+          computed_at?: string
+          created_at?: string
+          id?: string
+          metrics?: Json
+          month: number
+          row_count?: number | null
+          slide_report_id: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          account_id?: string | null
+          breakdowns?: Json
+          channel?: string
+          computed_at?: string
+          created_at?: string
+          id?: string
+          metrics?: Json
+          month?: number
+          row_count?: number | null
+          slide_report_id?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slide_report_monthly_data_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "slide_report_monthly_data_slide_report_id_fkey"
+            columns: ["slide_report_id"]
+            isOneToOne: false
+            referencedRelation: "slide_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       slide_reports: {
         Row: {
           account_id: string | null

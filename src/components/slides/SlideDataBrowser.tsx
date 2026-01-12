@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -11,10 +11,13 @@ import {
   ChevronLeft,
   BarChart3,
   TrendingUp,
-  Table2
+  Table2,
+  Loader2,
+  Database
 } from "lucide-react";
 import { SlideReportPivotData, SlideReportConfiguration, BreakdownRow, ChannelMetrics } from "@/types/slideReports";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { supabase } from "@/integrations/supabase/client";
 
 interface SlideDataBrowserProps {
   open: boolean;
@@ -23,6 +26,20 @@ interface SlideDataBrowserProps {
   lastRefreshedAt?: string | null;
   configuration?: SlideReportConfiguration | null;
   reportIds?: Record<string, string> | null;
+  slideReportId?: string | null; // New prop to fetch from monthly_data table
+}
+
+// Type for monthly data from database
+interface MonthlyDataRecord {
+  id: string;
+  slide_report_id: string;
+  year: number;
+  month: number;
+  channel: string;
+  metrics: ChannelMetrics;
+  breakdowns: Record<string, BreakdownRow[]>;
+  row_count: number;
+  computed_at: string;
 }
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -177,12 +194,43 @@ export function SlideDataBrowser({
   lastRefreshedAt,
   configuration,
   reportIds,
+  slideReportId,
 }: SlideDataBrowserProps) {
   const [viewLevel, setViewLevel] = useState<ViewLevel>('years');
   const [selectedYear, setSelectedYear] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
   const [selectedBreakdown, setSelectedBreakdown] = useState<string | null>(null);
+  const [monthlyDataRecords, setMonthlyDataRecords] = useState<MonthlyDataRecord[]>([]);
+  const [isLoadingMonthlyData, setIsLoadingMonthlyData] = useState(false);
+
+  // Fetch monthly data from database when modal opens
+  useEffect(() => {
+    if (open && slideReportId) {
+      const fetchMonthlyData = async () => {
+        setIsLoadingMonthlyData(true);
+        try {
+          const { data, error } = await supabase
+            .from('slide_report_monthly_data')
+            .select('*')
+            .eq('slide_report_id', slideReportId)
+            .order('year', { ascending: false })
+            .order('month', { ascending: true });
+
+          if (error) {
+            console.error('Error fetching monthly data:', error);
+          } else {
+            setMonthlyDataRecords((data as unknown as MonthlyDataRecord[]) || []);
+          }
+        } catch (err) {
+          console.error('Error:', err);
+        } finally {
+          setIsLoadingMonthlyData(false);
+        }
+      };
+      fetchMonthlyData();
+    }
+  }, [open, slideReportId]);
 
   // Extract available years from pivot_data
   const availableYears = useMemo(() => {
