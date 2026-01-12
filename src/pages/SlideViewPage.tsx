@@ -1776,7 +1776,7 @@ export default function SlideViewPage() {
     }
   };
 
-  // Load values for a dimension from dimension_data table (faster than fetching from source)
+  // Load values for a dimension from stored pivot_data first, fallback to dimension_data table
   // Also uses cached/saved selected values from channelConfigs for instant display
   const loadValuesForDimension = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
     console.log(`[loadValuesForDimension] START - channel: ${channel}, dimensionId: ${dimensionId}`);
@@ -1787,7 +1787,7 @@ export default function SlideViewPage() {
     
     // If we have cached values and the dimension matches, show them immediately
     if (cachedSelectedValues.length > 0 && savedConfig?.dimensionId === dimensionId) {
-      console.log(`[loadValuesForDimension] Using ${cachedSelectedValues.length} cached values for ${channel}/${dimensionId}`);
+      console.log(`[loadValuesForDimension] Using ${cachedSelectedValues.length} cached selected values for ${channel}/${dimensionId}`);
       setDimensionValues(prev => ({ ...prev, [channel]: cachedSelectedValues }));
     }
     
@@ -1796,6 +1796,61 @@ export default function SlideViewPage() {
     setLoadingValues(prev => ({ ...prev, [channel]: true }));
     
     try {
+      // SECOND: Check if we have pre-computed filterUniqueValues in pivot_data
+      const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+      const channelData = pivotData?.channels?.[channel];
+      const storedFilterValues = channelData?.filterUniqueValues?.[dimensionId];
+      
+      if (storedFilterValues?.values && storedFilterValues.values.length > 0) {
+        console.log(`[loadValuesForDimension] Using ${storedFilterValues.values.length} pre-computed values from pivot_data for ${channel}/${dimensionId}`);
+        
+        // Merge with cached selected values to ensure they're included
+        const allValues = new Set([...storedFilterValues.values, ...cachedSelectedValues]);
+        const sortedValues = Array.from(allValues).sort();
+        
+        setDimensionValues(prev => ({ ...prev, [channel]: sortedValues }));
+        setLoadingValues(prev => ({ ...prev, [channel]: false }));
+        return;
+      }
+      
+      // Also check in breakdownDimensions stored values (for Step 4 dimension selection, not just filters)
+      // The breakdown data in pivot_data contains unique dimension values
+      const breakdowns = channelData?.breakdowns;
+      if (breakdowns) {
+        // Find the dimension name to look up in breakdowns
+        const dimInfo = dimensions[channel]?.find(d => d.id === dimensionId);
+        if (dimInfo && breakdowns[dimInfo.name]) {
+          const breakdownRows = breakdowns[dimInfo.name] as Array<Record<string, any>>;
+          if (breakdownRows && breakdownRows.length > 0) {
+            // Extract dimension values from breakdown rows - the dimension value is stored as the first non-metric key
+            const breakdownValues = breakdownRows
+              .map(row => {
+                // Look for the dimension value - it's the key that matches the dimension name (case-insensitive)
+                const dimKey = Object.keys(row).find(k => 
+                  k.toLowerCase() === dimInfo.name.toLowerCase() || 
+                  k === 'name' ||
+                  !['impressions', 'clicks', 'cost', 'revenue', 'bookings', 'ctr', 'conversionRate', 'cpc', 'roas', 'costOfSale'].includes(k)
+                );
+                return dimKey ? String(row[dimKey]) : null;
+              })
+              .filter((v): v is string => v !== null && v !== '');
+            
+            console.log(`[loadValuesForDimension] Using ${breakdownValues.length} values from breakdowns for ${channel}/${dimensionId}`);
+            
+            // Merge with cached selected values
+            const allValues = new Set([...breakdownValues, ...cachedSelectedValues]);
+            const sortedValues = Array.from(allValues).sort();
+            
+            setDimensionValues(prev => ({ ...prev, [channel]: sortedValues }));
+            setLoadingValues(prev => ({ ...prev, [channel]: false }));
+            return;
+          }
+        }
+      }
+      
+      console.log(`[loadValuesForDimension] No pre-computed values found, fetching from dimension_data for ${channel}/${dimensionId}`);
+      
+      // FALLBACK: Fetch from dimension_data table
       const reportId = CHANNEL_REPORT_IDS[channel];
       console.log(`[loadValuesForDimension] Report ID for ${channel}: ${reportId}`);
       
