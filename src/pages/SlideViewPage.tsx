@@ -2713,24 +2713,25 @@ export default function SlideViewPage() {
               {/* Filters - Only show on individual report tabs, not on Overview or Budget */}
               {selectedTab !== "overview" && selectedTab !== "budget" && (
                 <div className="flex items-center gap-2">
-                  {/* Filter Dropdowns */}
-                  {selectedChannels.flatMap(channel => {
-                    const filterDimIds = filterConfigs[channel]?.filterDimensionIds || [];
+                  {/* Filter Dropdowns - Only show filters for the current tab */}
+                  {(() => {
+                    const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
+                    const filterDimIds = filterConfigs[currentChannel]?.filterDimensionIds || [];
                     return filterDimIds.map(filterDimId => {
-                      const filterDim = dimensions[channel]?.find(d => d.id === filterDimId);
-                      const filterValuesList = filterDimensionValues[channel]?.[filterDimId] || [];
+                      const filterDim = dimensions[currentChannel]?.find(d => d.id === filterDimId);
+                      const filterValuesList = filterDimensionValues[currentChannel]?.[filterDimId] || [];
                       
                       if (!filterDim || filterValuesList.length === 0) return null;
                       
                       return (
                         <Select
-                          key={`${channel}-${filterDimId}`}
-                          value={filterValues[channel]?.[filterDimId] || 'all'}
+                          key={`${currentChannel}-${filterDimId}`}
+                          value={filterValues[currentChannel]?.[filterDimId] || 'all'}
                           onValueChange={(value) => {
                             setFilterValues(prev => ({
                               ...prev,
-                              [channel]: {
-                                ...prev[channel],
+                              [currentChannel]: {
+                                ...prev[currentChannel],
                                 [filterDimId]: value === 'all' ? '' : value,
                               },
                             }));
@@ -2750,7 +2751,7 @@ export default function SlideViewPage() {
                         </Select>
                       );
                     }).filter(Boolean);
-                  })}
+                  })()}
                   
                   <Select value={selectedYear} onValueChange={setSelectedYear}>
                     <SelectTrigger className="w-[120px]">
