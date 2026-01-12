@@ -72,7 +72,12 @@ export interface SlideReportPivotData {
       monthly: Record<string, ChannelMetrics>; // "2025-01", "2025-02", etc.
       yearly?: Record<string, ChannelMetrics>; // "2024", "2025", "2026" - totals per year
       breakdowns: {
-        [dimensionName: string]: BreakdownRow[]; // e.g., "hotel", "link_type"
+        [dimensionName: string]: BreakdownRow[]; // All-time breakdown data
+      };
+      monthlyBreakdowns?: {
+        [monthKey: string]: { // "2024-01", "2024-02", etc.
+          [dimensionName: string]: BreakdownRow[];
+        };
       };
     };
   };
