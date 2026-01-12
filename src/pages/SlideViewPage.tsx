@@ -1306,14 +1306,28 @@ export default function SlideViewPage() {
   };
 
   // Load values for a dimension from dimension_data table (faster than fetching from source)
+  // Also uses cached/saved selected values from channelConfigs for instant display
   const loadValuesForDimension = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
+    // FIRST: Immediately show cached selected values from saved config (instant display)
+    const savedConfig = channelConfigs[channel];
+    const cachedSelectedValues = savedConfig?.selectedValues || [];
+    
+    // If we have cached values and the dimension matches, show them immediately
+    if (cachedSelectedValues.length > 0 && savedConfig?.dimensionId === dimensionId) {
+      console.log(`Using ${cachedSelectedValues.length} cached values for ${channel}/${dimensionId}`);
+      setDimensionValues(prev => ({ ...prev, [channel]: cachedSelectedValues }));
+    }
+    
     setLoadingValues(prev => ({ ...prev, [channel]: true }));
     try {
       const reportId = CHANNEL_REPORT_IDS[channel];
       
       if (!reportId) {
         console.error(`No report ID for channel: ${channel}`);
-        setDimensionValues(prev => ({ ...prev, [channel]: [] }));
+        // Fall back to cached values if available
+        if (cachedSelectedValues.length === 0) {
+          setDimensionValues(prev => ({ ...prev, [channel]: [] }));
+        }
         return;
       }
 
@@ -1326,18 +1340,28 @@ export default function SlideViewPage() {
 
       if (dimError) {
         console.error(`Error fetching dimension_data for ${channel}:`, dimError);
-        setDimensionValues(prev => ({ ...prev, [channel]: [] }));
+        // Keep cached values if fetch fails
+        if (cachedSelectedValues.length === 0) {
+          setDimensionValues(prev => ({ ...prev, [channel]: [] }));
+        }
         return;
       }
 
       if (!dimData || dimData.length === 0) {
         console.error(`No dimension_data found for ${channel} (report: ${reportId})`);
-        setDimensionValues(prev => ({ ...prev, [channel]: [] }));
+        // Keep cached values if no data found
+        if (cachedSelectedValues.length === 0) {
+          setDimensionValues(prev => ({ ...prev, [channel]: [] }));
+        }
         return;
       }
 
       // Extract unique values for this dimension
       const valueSet = new Set<string>();
+      
+      // Start with cached selected values to ensure they're always included
+      cachedSelectedValues.forEach(v => valueSet.add(v));
+      
       dimData.forEach((row: any) => {
         const dimValues = row.dimension_values || {};
         const val = dimValues[dimensionId];
@@ -1371,7 +1395,10 @@ export default function SlideViewPage() {
       }
     } catch (err) {
       console.error(`Error loading values for ${channel}/${dimensionId}:`, err);
-      setDimensionValues(prev => ({ ...prev, [channel]: [] }));
+      // Keep cached values on error
+      if (cachedSelectedValues.length === 0) {
+        setDimensionValues(prev => ({ ...prev, [channel]: [] }));
+      }
     } finally {
       setLoadingValues(prev => ({ ...prev, [channel]: false }));
     }
