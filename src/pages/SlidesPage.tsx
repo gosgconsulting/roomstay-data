@@ -65,6 +65,39 @@ export default function SlidesPage() {
     }
   }, [session, accountId]);
 
+  // Cleanup duplicate Master Reports - keep only the oldest one
+  useEffect(() => {
+    const cleanupDuplicateMasterReports = async () => {
+      if (!slideReports || slideReportsLoading || !session || !accountId) return;
+      
+      const masterReports = slideReports
+        .filter(r => r.name === 'Master Report')
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      
+      if (masterReports.length > 1) {
+        console.log(`[cleanup] Found ${masterReports.length} duplicate Master Reports, removing extras...`);
+        // Keep the oldest one, delete the rest
+        const reportsToDelete = masterReports.slice(1);
+        
+        for (const report of reportsToDelete) {
+          try {
+            await deleteSlideReport.mutateAsync({ id: report.id, account_id: accountId });
+            console.log(`[cleanup] Deleted duplicate Master Report: ${report.id}`);
+          } catch (error) {
+            console.error(`[cleanup] Failed to delete duplicate: ${report.id}`, error);
+          }
+        }
+        
+        toast({
+          title: "Cleaned up duplicates",
+          description: `Removed ${reportsToDelete.length} duplicate Master Report(s).`,
+        });
+      }
+    };
+    
+    cleanupDuplicateMasterReports();
+  }, [slideReports, slideReportsLoading, session, accountId]);
+
   const checkAuth = async () => {
     try {
       const {
@@ -294,65 +327,74 @@ export default function SlidesPage() {
               </div>
             </Card>
 
-            {/* Other Reports Dropdown */}
-            {slideReportsLoading ? (
-              <div className="text-center py-4">
-                <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary mx-auto"></div>
-                <p className="text-sm text-muted-foreground mt-2">Loading reports...</p>
-              </div>
-            ) : slideReports.length > 0 ? (
-              <Collapsible open={isOtherReportsOpen} onOpenChange={setIsOtherReportsOpen}>
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" className="w-full justify-between px-4 py-3 h-auto border rounded-lg hover:bg-muted/50">
-                    <span className="text-sm font-medium">
-                      Other Reports ({slideReports.length})
-                    </span>
-                    <ChevronDown className={cn(
-                      "h-4 w-4 transition-transform",
-                      isOtherReportsOpen && "rotate-180"
-                    )} />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="mt-2 space-y-2">
-                  {slideReports.map((report) => (
-                    <Card 
-                      key={report.id}
-                      className="p-3 hover:shadow-sm transition-shadow cursor-pointer border-muted"
-                      onClick={() => handleViewSlideReport(report)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
-                            <Presentation className="h-5 w-5 text-muted-foreground" />
+            {/* Other Reports Dropdown - Filter out Master Report */}
+            {(() => {
+              const otherReports = slideReports.filter(r => r.name !== 'Master Report');
+              if (slideReportsLoading) {
+                return (
+                  <div className="text-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary mx-auto"></div>
+                    <p className="text-sm text-muted-foreground mt-2">Loading reports...</p>
+                  </div>
+                );
+              }
+              if (otherReports.length > 0) {
+                return (
+                  <Collapsible open={isOtherReportsOpen} onOpenChange={setIsOtherReportsOpen}>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" className="w-full justify-between px-4 py-3 h-auto border rounded-lg hover:bg-muted/50">
+                        <span className="text-sm font-medium">
+                          Other Reports ({otherReports.length})
+                        </span>
+                        <ChevronDown className={cn(
+                          "h-4 w-4 transition-transform",
+                          isOtherReportsOpen && "rotate-180"
+                        )} />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-2 space-y-2">
+                      {otherReports.map((report) => (
+                        <Card 
+                          key={report.id}
+                          className="p-3 hover:shadow-sm transition-shadow cursor-pointer border-muted"
+                          onClick={() => handleViewSlideReport(report)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
+                                <Presentation className="h-5 w-5 text-muted-foreground" />
+                              </div>
+                              <div>
+                                <h4 className="font-medium text-sm">{report.name}</h4>
+                                <p className="text-xs text-muted-foreground">{formatDateRange(report)}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteSlideReport(report);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                              </Button>
+                              <Button variant="outline" size="sm">View</Button>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="font-medium text-sm">{report.name}</h4>
-                            <p className="text-xs text-muted-foreground">{formatDateRange(report)}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteSlideReport(report);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                          </Button>
-                          <Button variant="outline" size="sm">View</Button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </CollapsibleContent>
-              </Collapsible>
-            ) : null}
+                        </Card>
+                      ))}
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              }
+              return null;
+            })()}
 
             {/* Create First Report CTA - Only show if no custom reports */}
-            {slideReports.length === 0 && (
+            {slideReports.filter(r => r.name !== 'Master Report').length === 0 && (
               <Card>
                 <CardContent className="py-12 text-center">
                   <Presentation className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
