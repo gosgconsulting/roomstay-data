@@ -762,8 +762,8 @@ export default function SlideViewPage() {
   const location = useLocation();
   const { data: userData } = useUser();
   const user = userData?.user || null;
-  const [selectedYear, setSelectedYear] = useState("all"); // "all" or specific year
-  const [selectedMonth, setSelectedMonth] = useState("all"); // "all" or specific month
+  const [selectedYear, setSelectedYear] = useState("2026"); // Default to latest year
+  const [selectedMonth, setSelectedMonth] = useState("January"); // Default to January (latest month)
   const [selectedTab, setSelectedTab] = useState("overview");
   const [comparisonType, setComparisonType] = useState("none");
   const [isEditSourceOpen, setIsEditSourceOpen] = useState(false);
@@ -2815,11 +2815,11 @@ export default function SlideViewPage() {
                 
               </TabsList>
 
-              {/* Filters - Only show on individual report tabs, not on Overview or Budget */}
-              {selectedTab !== "overview" && selectedTab !== "budget" && (
+              {/* Filters - Show date filters on all tabs except Budget, dimension filters only on channel tabs */}
+              {selectedTab !== "budget" && (
                 <div className="flex items-center gap-2">
-                  {/* Filter Dropdowns - Only show filters for the current tab */}
-                  {(() => {
+                  {/* Channel-specific Filter Dropdowns - Only show on individual report tabs */}
+                  {selectedTab !== "overview" && (() => {
                     const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
                     const filterDimIds = filterConfigs[currentChannel]?.filterDimensionIds || [];
                     return filterDimIds.map(filterDimId => {
@@ -2858,6 +2858,7 @@ export default function SlideViewPage() {
                     }).filter(Boolean);
                   })()}
                   
+                  {/* Date Filters - Show on all tabs including Overview */}
                   <Select value={selectedYear} onValueChange={setSelectedYear}>
                     <SelectTrigger className="w-[120px]">
                       <SelectValue />
@@ -2889,16 +2890,20 @@ export default function SlideViewPage() {
                       <SelectItem value="December">December</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Select value={comparisonType} onValueChange={setComparisonType}>
-                    <SelectTrigger className="w-[150px]">
-                      <SelectValue placeholder="No Comparison" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No Comparison</SelectItem>
-                      <SelectItem value="previous_period">Previous Period</SelectItem>
-                      <SelectItem value="previous_year">Previous Year</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  
+                  {/* Comparison dropdown - Only show on channel tabs, not Overview */}
+                  {selectedTab !== "overview" && (
+                    <Select value={comparisonType} onValueChange={setComparisonType}>
+                      <SelectTrigger className="w-[150px]">
+                        <SelectValue placeholder="No Comparison" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Comparison</SelectItem>
+                        <SelectItem value="previous_period">Previous Period</SelectItem>
+                        <SelectItem value="previous_year">Previous Year</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               )}
             </div>
