@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles, Search, Loader2, Database, Check } from "lucide-react";
+import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles, Search, Loader2, Database, Check, Share2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,6 +23,7 @@ import { useUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { SlideDataBrowser } from "@/components/slides/SlideDataBrowser";
 import { RefreshStepIndicator, ChannelTabsList, DimensionValuesList } from "@/components/slides/EditSourceModal";
+import { ShareModal } from "@/components/ShareModal";
 
 // REAL DATA from database queries - December 2025 Brady Hotels Account (after resync)
 const METASEARCH_DATA = {
@@ -902,6 +903,7 @@ export default function SlideViewPage() {
   const [comparisonType, setComparisonType] = useState("none");
   const [isEditSourceOpen, setIsEditSourceOpen] = useState(false);
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedDimensions, setSelectedDimensions] = useState({
     metasearch: true,
     sem: true,
@@ -3383,6 +3385,10 @@ export default function SlideViewPage() {
             
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setIsShareModalOpen(true)}>
+              <Share2 className="h-4 w-4 mr-2" />
+              Share
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setIsDataModalOpen(true)}>
               <Database className="h-4 w-4 mr-2" />
               Data
@@ -3912,6 +3918,15 @@ export default function SlideViewPage() {
         configuration={slideReport?.configuration as SlideReportConfiguration | null}
         reportIds={slideReport?.report_ids as Record<string, string> | null}
         slideReportId={slideReportId}
+      />
+
+      {/* Share Modal */}
+      <ShareModal
+        reportId={slideReportId || ""}
+        reportName="Master Report"
+        open={isShareModalOpen}
+        onOpenChange={setIsShareModalOpen}
+        accountId={accountId}
       />
 
       <div className="p-6 space-y-6">
