@@ -445,6 +445,9 @@ export default function SlideViewPage() {
                 social: config.selectedChannels.includes('social'),
               });
             }
+            if (config.selectedValueDimensionIds) {
+              setSelectedValueDimensionIds(config.selectedValueDimensionIds);
+            }
             if (config.channelConfigs) {
               setChannelConfigs(config.channelConfigs);
             }
@@ -482,15 +485,11 @@ export default function SlideViewPage() {
     social: '8c2f7db9-acbd-4c59-9593-74e8953e7787',
   };
 
-  // Channel dimension mappings state (for step 2 - Dimensions)
+  // Value dimension IDs state (for step 2 - applies to all channels)
   // Pre-selected value dimensions for Brady Hotels based on actual report data
   // Metasearch: Impressions, Clicks, Cost, Revenue, Bookings, CPC, Cost of sale, Impression Share
   // SEM: Impressions, Clicks, Cost, Revenue, Bookings
   // Social: Impressions, Clicks, Cost, Revenue, Bookings, Leads, CTR
-  interface ChannelDimensionMapping {
-    reportId: string;
-    selectedDimensionIds: string[];
-  }
   
   // Hardcoded value dimension IDs that exist in each Brady Hotels report
   const BRADY_METASEARCH_DIMENSIONS = [
@@ -522,11 +521,16 @@ export default function SlideViewPage() {
     'ff046f06-10ee-4420-a02f-d4089e5f75a6', // CTR
   ];
   
-  const [channelDimensionMappings, setChannelDimensionMappings] = useState<Record<string, ChannelDimensionMapping>>({
-    metasearch: { reportId: CHANNEL_REPORT_IDS.metasearch, selectedDimensionIds: BRADY_METASEARCH_DIMENSIONS },
-    sem: { reportId: CHANNEL_REPORT_IDS.sem, selectedDimensionIds: BRADY_SEM_DIMENSIONS },
-    social: { reportId: CHANNEL_REPORT_IDS.social, selectedDimensionIds: BRADY_SOCIAL_DIMENSIONS },
-  });
+  // Union of all hardcoded dimensions (unique IDs) - applies to all channels
+  const ALL_BRADY_DIMENSIONS = [
+    ...new Set([
+      ...BRADY_METASEARCH_DIMENSIONS,
+      ...BRADY_SEM_DIMENSIONS,
+      ...BRADY_SOCIAL_DIMENSIONS,
+    ])
+  ];
+  
+  const [selectedValueDimensionIds, setSelectedValueDimensionIds] = useState<string[]>(ALL_BRADY_DIMENSIONS);
 
   // Available dimensions per channel (fetched from database) - VALUE types only
   const [availableDimensions, setAvailableDimensions] = useState<Record<string, { id: string; name: string; type: string }[]>>({
@@ -642,9 +646,9 @@ export default function SlideViewPage() {
     }
   }, [isEditSourceOpen]);
 
-  // Initialize active channel tab when entering step 2, 3, or 4
+  // Initialize active channel tab when entering step 3 or 4 (Step 2 no longer uses channel tabs)
   useEffect(() => {
-    if ((modalStep === 2 || modalStep === 3 || modalStep === 4) && selectedChannels.length > 0 && !activeChannelTab) {
+    if ((modalStep === 3 || modalStep === 4) && selectedChannels.length > 0 && !activeChannelTab) {
       setActiveChannelTab(selectedChannels[0]);
     }
   }, [modalStep, selectedChannels, activeChannelTab]);
@@ -930,21 +934,24 @@ export default function SlideViewPage() {
     }
   };
 
-  // Handle dimension selection toggle for channel
-  const handleChannelDimensionToggle = (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
-    setChannelDimensionMappings(prev => {
-      const current = prev[channel];
-      const isSelected = current.selectedDimensionIds.includes(dimensionId);
-      return {
-        ...prev,
-        [channel]: {
-          ...current,
-          selectedDimensionIds: isSelected
-            ? current.selectedDimensionIds.filter(id => id !== dimensionId)
-            : [...current.selectedDimensionIds, dimensionId],
-        },
-      };
-    });
+  // Handle dimension selection toggle (applies to all channels)
+  const handleValueDimensionToggle = (dimensionId: string) => {
+    setSelectedValueDimensionIds(prev => 
+      prev.includes(dimensionId)
+        ? prev.filter(id => id !== dimensionId)
+        : [...prev, dimensionId]
+    );
+  };
+
+  // Select all available dimensions
+  const handleSelectAllDimensions = () => {
+    const allDimIds = availableDimensions.metasearch?.map(d => d.id) || [];
+    setSelectedValueDimensionIds(allDimIds);
+  };
+
+  // Deselect all dimensions
+  const handleDeselectAllDimensions = () => {
+    setSelectedValueDimensionIds([]);
   };
 
   // Navigation handlers
@@ -1007,6 +1014,7 @@ export default function SlideViewPage() {
       // Build configuration object with dimension mappings
       const configuration: SlideReportConfiguration = {
         selectedChannels: selectedChannels,
+        selectedValueDimensionIds: selectedValueDimensionIds,
         channelConfigs: channelConfigs,
         breakdownConfigs: breakdownConfigs,
         filterConfigs: filterConfigs,
@@ -1062,11 +1070,7 @@ export default function SlideViewPage() {
     setModalStep(1);
     setActiveChannelTab(null);
     setSearchQuery("");
-    setChannelDimensionMappings({
-      metasearch: { reportId: CHANNEL_REPORT_IDS.metasearch, selectedDimensionIds: [] },
-      sem: { reportId: CHANNEL_REPORT_IDS.sem, selectedDimensionIds: [] },
-      social: { reportId: CHANNEL_REPORT_IDS.social, selectedDimensionIds: [] },
-    });
+    setSelectedValueDimensionIds(ALL_BRADY_DIMENSIONS);
     setChannelConfigs({
       metasearch: { dimensionId: null, selectedValues: [] },
       sem: { dimensionId: null, selectedValues: [] },
@@ -1388,122 +1392,103 @@ export default function SlideViewPage() {
           </div>
             )}
 
-            {/* Step 2: Dimensions - Select which dimensions to connect */}
+            {/* Step 2: Value Dimensions - Applies to all selected channels */}
             {modalStep === 2 && (
-              <div className="flex h-[400px] gap-4">
-                {/* Left: Channel tabs */}
-                <div className="w-48 border-r pr-4">
-                  <ScrollArea className="h-full">
-                    <div className="space-y-1">
-                      {selectedChannels.map(channel => {
-                        const mapping = channelDimensionMappings[channel];
-                        const dimCount = mapping?.selectedDimensionIds.length || 0;
-                        return (
-                          <button
-                            key={channel}
-                            className={cn(
-                              "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
-                              activeChannelTab === channel
-                                ? "bg-primary text-primary-foreground"
-                                : "hover:bg-muted"
-                            )}
-                            onClick={() => setActiveChannelTab(channel)}
-                          >
-                            <span className="truncate capitalize">{channel}</span>
-                            {dimCount > 0 && (
-                              <span className="text-xs opacity-70">{dimCount}</span>
-                            )}
-                          </button>
-                        );
-                      })}
+              <div className="flex flex-col h-[400px] gap-4">
+                {loadingAvailableDimensions ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                      <span>Loading dimensions...</span>
                     </div>
-                  </ScrollArea>
-                </div>
-
-                {/* Right: Dimension selector */}
-                <div className="flex-1 flex flex-col gap-4">
-                  {loadingAvailableDimensions ? (
-                    <div className="flex-1 flex items-center justify-center">
-                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                        <Loader2 className="h-8 w-8 animate-spin" />
-                        <span>Loading dimensions...</span>
-                      </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-muted/30 rounded-lg p-4">
+                      <p className="text-sm text-muted-foreground">
+                        Select which <span className="font-medium">value dimensions</span> (metrics) to include in this slide for <span className="font-medium">all selected channels</span>. These are the numeric metrics used for calculations and aggregations.
+                      </p>
                     </div>
-                  ) : activeChannelTab ? (
-                    <>
-                      <div className="bg-muted/30 rounded-lg p-4 mb-2">
-                        <p className="text-sm text-muted-foreground">
-                          Select which <span className="font-medium">value dimensions</span> (metrics) from the <span className="font-medium capitalize">{activeChannelTab}</span> report to include in this slide. These are the numeric metrics used for calculations and aggregations.
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Report ID: <code className="bg-muted px-1 rounded">{CHANNEL_REPORT_IDS[activeChannelTab]}</code>
-                        </p>
-                      </div>
-                      
-                      <div>
-                        <Label className="text-sm font-medium mb-2 block">
+                    
+                    <div className="flex-1 flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">
                           Available Value Dimensions (Metrics)
                         </Label>
-                        <ScrollArea className="h-[250px] border rounded-md">
-                          <div className="p-2 space-y-1">
-                            {availableDimensions[activeChannelTab]?.length > 0 ? (
-                              availableDimensions[activeChannelTab].map(dim => {
-                                const isSelected = channelDimensionMappings[activeChannelTab]?.selectedDimensionIds?.includes(dim.id) || false;
-                                return (
-                                  <div
-                                    key={dim.id}
-                                    className={cn(
-                                      "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                                      isSelected
-                                        ? "bg-primary/10"
-                                        : "hover:bg-muted/50"
-                                    )}
-                                    onClick={() => handleChannelDimensionToggle(activeChannelTab, dim.id)}
-                                  >
-                                    <Checkbox
-                                      checked={isSelected}
-                                      onCheckedChange={() => handleChannelDimensionToggle(activeChannelTab, dim.id)}
-                                    />
-                                    <div className="flex-1">
-                                      <span className="text-sm">{dim.name}</span>
-                                      <span className="ml-2 text-xs text-muted-foreground">({dim.type})</span>
-                                    </div>
-                                  </div>
-                                );
-                              })
-                            ) : (
-                              <p className="text-center text-muted-foreground py-4">
-                                No value dimensions available
-                              </p>
-                            )}
-                          </div>
-                        </ScrollArea>
-                      </div>
-
-                      {(channelDimensionMappings[activeChannelTab]?.selectedDimensionIds?.length || 0) > 0 && (
-                        <div className="mt-2 p-4 bg-primary/5 rounded-lg border border-primary/20">
-                          <p className="text-sm font-medium mb-2">
-                            Selected ({channelDimensionMappings[activeChannelTab]?.selectedDimensionIds?.length || 0}):
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {channelDimensionMappings[activeChannelTab]?.selectedDimensionIds?.map(dimId => {
-                              const dim = availableDimensions[activeChannelTab]?.find(d => d.id === dimId);
-                              return dim ? (
-                                <span key={dimId} className="px-2 py-1 bg-primary/10 rounded text-xs">
-                                  {dim.name}
-                                </span>
-                              ) : null;
-                            })}
-                          </div>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleSelectAllDimensions}
+                          >
+                            Select All
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleDeselectAllDimensions}
+                          >
+                            Deselect All
+                          </Button>
                         </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                      Select a channel to configure its dimensions
+                      </div>
+                      <ScrollArea className="flex-1 border rounded-md">
+                        <div className="p-2 space-y-1">
+                          {availableDimensions.metasearch?.length > 0 ? (
+                            availableDimensions.metasearch.map(dim => {
+                              const isSelected = selectedValueDimensionIds.includes(dim.id);
+                              return (
+                                <div
+                                  key={dim.id}
+                                  className={cn(
+                                    "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
+                                    isSelected
+                                      ? "bg-primary/10"
+                                      : "hover:bg-muted/50"
+                                  )}
+                                  onClick={() => handleValueDimensionToggle(dim.id)}
+                                >
+                                  <Checkbox
+                                    checked={isSelected}
+                                    onCheckedChange={() => handleValueDimensionToggle(dim.id)}
+                                  />
+                                  <div className="flex-1">
+                                    <span className="text-sm">{dim.name}</span>
+                                    <span className="ml-2 text-xs text-muted-foreground">({dim.type})</span>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <p className="text-center text-muted-foreground py-4">
+                              No value dimensions available
+                            </p>
+                          )}
+                        </div>
+                      </ScrollArea>
                     </div>
-                  )}
-                </div>
+
+                    {selectedValueDimensionIds.length > 0 && (
+                      <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
+                        <p className="text-sm font-medium mb-2">
+                          Selected ({selectedValueDimensionIds.length}):
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedValueDimensionIds.map(dimId => {
+                            const dim = availableDimensions.metasearch?.find(d => d.id === dimId);
+                            return dim ? (
+                              <span key={dimId} className="px-2 py-1 bg-primary/10 rounded text-xs">
+                                {dim.name}
+                              </span>
+                            ) : null;
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 

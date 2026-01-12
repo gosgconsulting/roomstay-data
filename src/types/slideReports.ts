@@ -5,6 +5,7 @@
 
 export interface SlideReportConfiguration {
   selectedChannels: ('metasearch' | 'sem' | 'social')[];
+  selectedValueDimensionIds?: string[]; // Value dimensions (metrics) that apply to all channels
   channelConfigs: {
     [channel: string]: {
       dimensionId: string | null;
