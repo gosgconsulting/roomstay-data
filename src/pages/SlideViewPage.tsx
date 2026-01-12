@@ -895,7 +895,9 @@ export default function SlideViewPage() {
               if (config.breakdownConfigs) {
                 setBreakdownConfigs(config.breakdownConfigs);
               }
-              // Don't load filterConfigs for master-report - keep empty
+              if (config.filterConfigs) {
+                setFilterConfigs(config.filterConfigs as any);
+              }
             }
             // Load date range
             if (masterReport.date_range) {
@@ -924,7 +926,11 @@ export default function SlideViewPage() {
                   sem: { breakdownDimensionIds: [] },
                   social: { breakdownDimensionIds: [] },
                 },
-                filterConfigs: {}, // Empty filters for master-report
+                filterConfigs: {
+                  metasearch: { filterDimensionIds: [] },
+                  sem: { filterDimensionIds: [] },
+                  social: { filterDimensionIds: [] },
+                },
               },
               report_ids: CHANNEL_REPORT_IDS,
               date_range: {
@@ -1473,8 +1479,6 @@ export default function SlideViewPage() {
 
   // Handle filter dimension toggle
   const handleFilterDimensionToggle = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
-    // For master-report, filters are disabled
-    if (slideType === 'master-report') return;
     const currentConfig = filterConfigs[channel];
     const isSelected = currentConfig?.filterDimensionIds.includes(dimensionId);
     
@@ -1670,9 +1674,8 @@ export default function SlideViewPage() {
 
     try {
       // Load filter dimension values for all configured filters
-      // For master-report, skip filter loading
       for (const channel of selectedChannels) {
-        const filterDimIds = slideType === 'master-report' ? [] : (filterConfigs[channel]?.filterDimensionIds || []);
+        const filterDimIds = filterConfigs[channel]?.filterDimensionIds || [];
         for (const filterDimId of filterDimIds) {
           await loadValuesForDimension(channel, filterDimId);
           const values = dimensionValues[channel] || [];
@@ -2533,8 +2536,7 @@ export default function SlideViewPage() {
                   <ScrollArea className="h-full">
                     <div className="space-y-1">
                       {selectedChannels.map(channel => {
-                        // For master-report, no filters
-                        const filterCount = slideType === 'master-report' ? 0 : (filterConfigs[channel]?.filterDimensionIds?.length || 0);
+                        const filterCount = filterConfigs[channel]?.filterDimensionIds?.length || 0;
                         return (
                           <button
                             key={channel}
@@ -2581,8 +2583,7 @@ export default function SlideViewPage() {
                             <div className="p-2 space-y-1">
                               {dimensions[activeChannelTab]?.length > 0 ? (
                                 dimensions[activeChannelTab].map(dim => {
-                                  // For master-report, filters are disabled
-                                  const isSelected = slideType === 'master-report' ? false : (filterConfigs[activeChannelTab]?.filterDimensionIds?.includes(dim.id) || false);
+                                  const isSelected = filterConfigs[activeChannelTab]?.filterDimensionIds?.includes(dim.id) || false;
                                   return (
                                     <div
                                       key={dim.id}
@@ -2669,8 +2670,7 @@ export default function SlideViewPage() {
                   <span className="text-sm text-muted-foreground mr-2">Since {sinceMonth} {sinceYear}</span>
                   {/* Filter Dropdowns */}
                   {selectedChannels.flatMap(channel => {
-                    // For master-report, don't apply filters
-                    const filterDimIds = slideType === 'master-report' ? [] : (filterConfigs[channel]?.filterDimensionIds || []);
+                    const filterDimIds = filterConfigs[channel]?.filterDimensionIds || [];
                     return filterDimIds.map(filterDimId => {
                       const filterDim = dimensions[channel]?.find(d => d.id === filterDimId);
                       const filterValuesList = filterDimensionValues[channel]?.[filterDimId] || [];
