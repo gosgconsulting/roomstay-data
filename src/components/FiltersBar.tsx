@@ -865,12 +865,12 @@ export const FiltersBar = ({
             {(isLoading || isInitialLoad) ? (
               <>
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground">Account</span>
-                  <div className="h-10 w-[180px] bg-muted animate-pulse rounded-md border" />
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Account:</span>
+                  <div className="h-10 w-[160px] bg-muted animate-pulse rounded-md border" />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground">Filter</span>
-                  <div className="h-10 w-[180px] bg-muted animate-pulse rounded-md border" />
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Filter:</span>
+                  <div className="h-10 w-[160px] bg-muted animate-pulse rounded-md border" />
                 </div>
               </>
             ) : activeDimensions.length === 0 ? (
@@ -905,8 +905,8 @@ export const FiltersBar = ({
 
             {isLoadingFilters ? (
               <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted-foreground">Date Range</span>
-                <Skeleton className="h-10 w-[200px]" />
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Date Range:</span>
+                <Skeleton className="h-10 w-[180px]" />
               </div>
             ) : (
               <DateRangeFilter
