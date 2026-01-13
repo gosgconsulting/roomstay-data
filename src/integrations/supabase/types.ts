@@ -1219,6 +1219,7 @@ export type Database = {
           account_id: string | null
           created_at: string
           created_by: string
+          dimension_filters: Json | null
           id: string
           password_hash: string
           report_ids: string[]
@@ -1229,6 +1230,7 @@ export type Database = {
           account_id?: string | null
           created_at?: string
           created_by: string
+          dimension_filters?: Json | null
           id?: string
           password_hash: string
           report_ids?: string[]
@@ -1239,6 +1241,7 @@ export type Database = {
           account_id?: string | null
           created_at?: string
           created_by?: string
+          dimension_filters?: Json | null
           id?: string
           password_hash?: string
           report_ids?: string[]
