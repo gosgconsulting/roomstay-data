@@ -467,11 +467,11 @@ export function KPIMetricsCards({
           {headerAction}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Card key={i} className="bg-card border border-border shadow-sm rounded-lg animate-pulse">
-              <CardContent className="p-4">
-                <div className="h-3 bg-muted rounded w-16 mb-2" />
-                <div className="h-7 bg-muted rounded w-20" />
+          {Array.from({ length: 12 }).map((_, i) => (
+            <Card key={i} className="bg-card border border-border shadow-sm rounded-xl border-l-4 border-l-primary animate-pulse">
+              <CardContent className="p-5">
+                <div className="h-3 bg-muted rounded w-20 mb-3" />
+                <div className="h-8 bg-muted rounded w-24" />
               </CardContent>
             </Card>
           ))}
@@ -487,11 +487,11 @@ export function KPIMetricsCards({
           {headerAction}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Card key={i} className="bg-card border border-border shadow-sm rounded-lg">
-              <CardContent className="p-4">
-                <div className="h-3 bg-muted/50 rounded w-16 mb-2" />
-                <div className="h-7 bg-muted/50 rounded w-20" />
+          {Array.from({ length: 12 }).map((_, i) => (
+            <Card key={i} className="bg-card border border-border shadow-sm rounded-xl border-l-4 border-l-primary">
+              <CardContent className="p-5">
+                <div className="h-3 bg-muted/50 rounded w-20 mb-3" />
+                <div className="h-8 bg-muted/50 rounded w-24" />
               </CardContent>
             </Card>
           ))}
@@ -508,17 +508,17 @@ export function KPIMetricsCards({
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-4">
         {metrics.map((metric, index) => {
           return (
-            <Card key={index} className="bg-card border border-border shadow-sm rounded-lg">
-              <CardContent className="p-4">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+            <Card key={index} className="bg-card border border-border shadow-sm rounded-xl border-l-4 border-l-primary">
+              <CardContent className="p-5">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
                   {metric.label}
                 </p>
-                <p className="text-2xl font-bold text-foreground">
+                <p className="text-3xl font-bold text-foreground">
                   {metric.value}
                 </p>
                 {metric.change !== undefined && metric.compareValue !== undefined && (
                   <p className={cn(
-                    "text-xs flex items-center gap-1 font-medium mt-1",
+                    "text-xs flex items-center gap-1 font-medium mt-2",
                     metric.change >= 0 ? 'text-green-600' : 'text-red-600'
                   )}>
                     {metric.change >= 0 ? (
