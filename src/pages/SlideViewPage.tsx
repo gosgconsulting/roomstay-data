@@ -25,231 +25,236 @@ import { SlideDataBrowser } from "@/components/slides/SlideDataBrowser";
 import { RefreshStepIndicator, ChannelTabsList, DimensionValuesList } from "@/components/slides/EditSourceModal";
 import { ShareModal } from "@/components/ShareModal";
 
+// HARDCODED DATA - COMMENTED OUT: Now using data from Supabase pivot_data
 // REAL DATA from database queries - December 2025 Brady Hotels Account (after resync)
-const METASEARCH_DATA = {
-  impressions: 27067,
-  clicks: 1915,
-  cost: 2729.84,
-  revenue: 35093.16,
-  bookings: 70,
-};
+// const METASEARCH_DATA = {
+//   impressions: 27067,
+//   clicks: 1915,
+//   cost: 2729.84,
+//   revenue: 35093.16,
+//   bookings: 70,
+// };
 
 // SEM data - December 2025 Brady Hotels
-const SEM_DATA = {
-  impressions: 432114,
-  clicks: 9797,
-  cost: 8208.69,
-  revenue: 155596.64,
-  bookings: 298,
-};
+// const SEM_DATA = {
+//   impressions: 432114,
+//   clicks: 9797,
+//   cost: 8208.69,
+//   revenue: 155596.64,
+//   bookings: 298,
+// };
 
 // Social data - December 2025 Brady Hotels
-const SOCIAL_DATA = {
-  impressions: 491612,
-  clicks: 3021,
-  cost: 4337.01,
-  revenue: 87867.77,
-  bookings: 154,
-};
+// const SOCIAL_DATA = {
+//   impressions: 491612,
+//   clicks: 3021,
+//   cost: 4337.01,
+//   revenue: 87867.77,
+//   bookings: 154,
+// };
 
 // PREVIOUS PERIOD DATA - November 2025 (verified from database after resync)
-const METASEARCH_PREV_PERIOD = {
-  impressions: 30662,
-  clicks: 1736,
-  cost: 2516.30,
-  revenue: 62764.16,
-  bookings: 98,
-};
+// const METASEARCH_PREV_PERIOD = {
+//   impressions: 30662,
+//   clicks: 1736,
+//   cost: 2516.30,
+//   revenue: 62764.16,
+//   bookings: 98,
+// };
 
-const SEM_PREV_PERIOD = {
-  impressions: 521421,
-  clicks: 11068,
-  cost: 8067.78,
-  revenue: 278315.94,
-  bookings: 444,
-};
+// const SEM_PREV_PERIOD = {
+//   impressions: 521421,
+//   clicks: 11068,
+//   cost: 8067.78,
+//   revenue: 278315.94,
+//   bookings: 444,
+// };
 
-const SOCIAL_PREV_PERIOD = {
-  impressions: 480445,
-  clicks: 2889,
-  cost: 4330.90,
-  revenue: 107535.63,
-  bookings: 180,
-};
+// const SOCIAL_PREV_PERIOD = {
+//   impressions: 480445,
+//   clicks: 2889,
+//   cost: 4330.90,
+//   revenue: 107535.63,
+//   bookings: 180,
+// };
 
 // PREVIOUS YEAR DATA - December 2024 (estimated from Oct 2025 proxy)
-const METASEARCH_PREV_YEAR = {
-  impressions: 60000,
-  clicks: 3500,
-  cost: 4800.00,
-  revenue: 110000.00,
-  bookings: 180,
-};
+// const METASEARCH_PREV_YEAR = {
+//   impressions: 60000,
+//   clicks: 3500,
+//   cost: 4800.00,
+//   revenue: 110000.00,
+//   bookings: 180,
+// };
 
-const SOCIAL_PREV_YEAR = {
-  impressions: 1200000,
-  clicks: 15000,
-  cost: 15000.00,
-  revenue: 250000.00,
-  bookings: 1000,
-};
+// const SOCIAL_PREV_YEAR = {
+//   impressions: 1200000,
+//   clicks: 15000,
+//   cost: 15000.00,
+//   revenue: 250000.00,
+//   bookings: 1000,
+// };
 
+// HARDCODED BREAKDOWN DATA - COMMENTED OUT: Now using data from Supabase pivot_data.breakdowns
 // METASEARCH BREAKDOWN BY HOTEL (December 2025) - ONLY 4 BRADY HOTELS
-const METASEARCH_BY_HOTEL = [
-  { hotel: "Brady Hotels Central Melbourne", impressions: 11271, clicks: 735, cost: 1188.40, revenue: 13701.50, bookings: 27 },
-  { hotel: "Brady Hotels Jones Lane", impressions: 6285, clicks: 496, cost: 672.99, revenue: 12588.50, bookings: 26 },
-  { hotel: "Brady Apartment Hotel Flinders Street", impressions: 5158, clicks: 352, cost: 635.32, revenue: 8010.13, bookings: 13 },
-  { hotel: "Brady Apartment Hotel Hardware Lane", impressions: 7295, clicks: 549, cost: 575.62, revenue: 6590.51, bookings: 15 },
-];
+// const METASEARCH_BY_HOTEL = [
+//   { hotel: "Brady Hotels Central Melbourne", impressions: 11271, clicks: 735, cost: 1188.40, revenue: 13701.50, bookings: 27 },
+//   { hotel: "Brady Hotels Jones Lane", impressions: 6285, clicks: 496, cost: 672.99, revenue: 12588.50, bookings: 26 },
+//   { hotel: "Brady Apartment Hotel Flinders Street", impressions: 5158, clicks: 352, cost: 635.32, revenue: 8010.13, bookings: 13 },
+//   { hotel: "Brady Apartment Hotel Hardware Lane", impressions: 7295, clicks: 549, cost: 575.62, revenue: 6590.51, bookings: 15 },
+// ];
 
 // METASEARCH BREAKDOWN BY LINK TYPE (December 2025) - FILTERED FOR BRADY HOTELS ONLY
-const METASEARCH_BY_LINK_TYPE = [
-  { linkType: "Paid", impressions: 30009, clicks: 1068, cost: 3072.33, revenue: 30466.99, bookings: 54 },
-  { linkType: "Google Organic", impressions: 0, clicks: 1064, cost: 0, revenue: 10423.65, bookings: 27 },
-];
+// const METASEARCH_BY_LINK_TYPE = [
+//   { linkType: "Paid", impressions: 30009, clicks: 1068, cost: 3072.33, revenue: 30466.99, bookings: 54 },
+//   { linkType: "Google Organic", impressions: 0, clicks: 1064, cost: 0, revenue: 10423.65, bookings: 27 },
+// ];
 
+// HARDCODED SEM BREAKDOWN DATA - COMMENTED OUT: Now using data from Supabase pivot_data.breakdowns
 // SEM BREAKDOWN BY CAMPAIGN (December 2025) - Brady Hotels Group
 // Note: This table shows the top campaigns + an "Other campaigns" row so totals match SEM_DATA.
-const SEM_BY_CAMPAIGN = [
-  { campaign: "Brady Hotels Central Melbourne | Search | Brand", impressions: 3248, clicks: 666, cost: 1050.91, revenue: 31932.30, bookings: 45 },
-  { campaign: "Brady Group | Search | Brand", impressions: 3155, clicks: 895, cost: 1059.14, revenue: 25988.77, bookings: 52 },
-  { campaign: "Brady Hotels Jones Lane | Search | Brand", impressions: 2655, clicks: 633, cost: 1047.45, revenue: 22245.90, bookings: 58 },
-  { campaign: "Brady Apartment Hotel Hardware Lane | Search | Brand", impressions: 2142, clicks: 574, cost: 1038.45, revenue: 14744.00, bookings: 25 },
-  { campaign: "Brady Apartment Hotel Flinders Street | Search | Brand", impressions: 2689, clicks: 604, cost: 1044.86, revenue: 14300.23, bookings: 29 },
-  { campaign: "Brady Apartment Hotel Flinders Street | Performance Max", impressions: 27627, clicks: 485, cost: 229.14, revenue: 13196.13, bookings: 11 },
-  { campaign: "Brady Apartment Hotel Hardware Lane | Performance Max", impressions: 65162, clicks: 935, cost: 276.58, revenue: 11338.89, bookings: 19 },
-  { campaign: "Brady Hotels Central Melbourne | Performance Max", impressions: 26301, clicks: 638, cost: 274.40, revenue: 4433.15, bookings: 14 },
-  { campaign: "Brady Group | Performance Max", impressions: 152199, clicks: 1992, cost: 270.84, revenue: 3548.18, bookings: 9 },
-  { campaign: "Brady Hotels Jones Lane | Performance Max", impressions: 46178, clicks: 701, cost: 231.27, revenue: 2342.81, bookings: 8 },
-];
+// const SEM_BY_CAMPAIGN = [
+//   { campaign: "Brady Hotels Central Melbourne | Search | Brand", impressions: 3248, clicks: 666, cost: 1050.91, revenue: 31932.30, bookings: 45 },
+//   { campaign: "Brady Group | Search | Brand", impressions: 3155, clicks: 895, cost: 1059.14, revenue: 25988.77, bookings: 52 },
+//   { campaign: "Brady Hotels Jones Lane | Search | Brand", impressions: 2655, clicks: 633, cost: 1047.45, revenue: 22245.90, bookings: 58 },
+//   { campaign: "Brady Apartment Hotel Hardware Lane | Search | Brand", impressions: 2142, clicks: 574, cost: 1038.45, revenue: 14744.00, bookings: 25 },
+//   { campaign: "Brady Apartment Hotel Flinders Street | Search | Brand", impressions: 2689, clicks: 604, cost: 1044.86, revenue: 14300.23, bookings: 29 },
+//   { campaign: "Brady Apartment Hotel Flinders Street | Performance Max", impressions: 27627, clicks: 485, cost: 229.14, revenue: 13196.13, bookings: 11 },
+//   { campaign: "Brady Apartment Hotel Hardware Lane | Performance Max", impressions: 65162, clicks: 935, cost: 276.58, revenue: 11338.89, bookings: 19 },
+//   { campaign: "Brady Hotels Central Melbourne | Performance Max", impressions: 26301, clicks: 638, cost: 274.40, revenue: 4433.15, bookings: 14 },
+//   { campaign: "Brady Group | Performance Max", impressions: 152199, clicks: 1992, cost: 270.84, revenue: 3548.18, bookings: 9 },
+//   { campaign: "Brady Hotels Jones Lane | Performance Max", impressions: 46178, clicks: 701, cost: 231.27, revenue: 2342.81, bookings: 8 },
+// ];
 
-const SEM_TOP_CAMPAIGNS_TOTAL = SEM_BY_CAMPAIGN.reduce(
-  (acc, row) => ({
-    impressions: acc.impressions + row.impressions,
-    clicks: acc.clicks + row.clicks,
-    cost: acc.cost + row.cost,
-    revenue: acc.revenue + row.revenue,
-    bookings: acc.bookings + row.bookings,
-  }),
-  { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
-);
+// const SEM_TOP_CAMPAIGNS_TOTAL = SEM_BY_CAMPAIGN.reduce(
+//   (acc, row) => ({
+//     impressions: acc.impressions + row.impressions,
+//     clicks: acc.clicks + row.clicks,
+//     cost: acc.cost + row.cost,
+//     revenue: acc.revenue + row.revenue,
+//     bookings: acc.bookings + row.bookings,
+//   }),
+//   { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
+// );
 
-const SEM_OTHER_CAMPAIGNS = {
-  campaign: "Other campaigns",
-  impressions: Math.max(0, SEM_DATA.impressions - SEM_TOP_CAMPAIGNS_TOTAL.impressions),
-  clicks: Math.max(0, SEM_DATA.clicks - SEM_TOP_CAMPAIGNS_TOTAL.clicks),
-  cost: Math.max(0, Number((SEM_DATA.cost - SEM_TOP_CAMPAIGNS_TOTAL.cost).toFixed(2))),
-  revenue: Math.max(0, Number((SEM_DATA.revenue - SEM_TOP_CAMPAIGNS_TOTAL.revenue).toFixed(2))),
-  bookings: Math.max(0, Number((SEM_DATA.bookings - SEM_TOP_CAMPAIGNS_TOTAL.bookings).toFixed(2))),
-};
+// const SEM_OTHER_CAMPAIGNS = {
+//   campaign: "Other campaigns",
+//   impressions: Math.max(0, SEM_DATA.impressions - SEM_TOP_CAMPAIGNS_TOTAL.impressions),
+//   clicks: Math.max(0, SEM_DATA.clicks - SEM_TOP_CAMPAIGNS_TOTAL.clicks),
+//   cost: Math.max(0, Number((SEM_DATA.cost - SEM_TOP_CAMPAIGNS_TOTAL.cost).toFixed(2))),
+//   revenue: Math.max(0, Number((SEM_DATA.revenue - SEM_TOP_CAMPAIGNS_TOTAL.revenue).toFixed(2))),
+//   bookings: Math.max(0, Number((SEM_DATA.bookings - SEM_TOP_CAMPAIGNS_TOTAL.bookings).toFixed(2))),
+// };
 
-const SEM_BY_CAMPAIGN_WITH_OTHER =
-  SEM_OTHER_CAMPAIGNS.impressions > 0 ||
-  SEM_OTHER_CAMPAIGNS.clicks > 0 ||
-  SEM_OTHER_CAMPAIGNS.cost > 0 ||
-  SEM_OTHER_CAMPAIGNS.revenue > 0 ||
-  SEM_OTHER_CAMPAIGNS.bookings > 0
-    ? [...SEM_BY_CAMPAIGN, SEM_OTHER_CAMPAIGNS]
-    : SEM_BY_CAMPAIGN;
+// const SEM_BY_CAMPAIGN_WITH_OTHER =
+//   SEM_OTHER_CAMPAIGNS.impressions > 0 ||
+//   SEM_OTHER_CAMPAIGNS.clicks > 0 ||
+//   SEM_OTHER_CAMPAIGNS.cost > 0 ||
+//   SEM_OTHER_CAMPAIGNS.revenue > 0 ||
+//   SEM_OTHER_CAMPAIGNS.bookings > 0
+//     ? [...SEM_BY_CAMPAIGN, SEM_OTHER_CAMPAIGNS]
+//     : SEM_BY_CAMPAIGN;
 
+// HARDCODED SOCIAL BREAKDOWN DATA - COMMENTED OUT: Now using data from Supabase pivot_data.breakdowns
 // SOCIAL BREAKDOWN BY CAMPAIGN (December 2025) - Brady Hotels 2025 Account
-const SOCIAL_BY_CAMPAIGN = [
-  { campaign: "Brady Hotels Jones Lane | Sales", impressions: 27562, clicks: 275, cost: 463.60, revenue: 17751.01, bookings: 40 },
-  { campaign: "Brady Apartment Hotel Flinders Street | Sales", impressions: 35164, clicks: 367, cost: 577.52, revenue: 17215.57, bookings: 33 },
-  { campaign: "Brady Apartment Hotel Hardware Lane | Sales", impressions: 26685, clicks: 246, cost: 464.15, revenue: 17051.53, bookings: 22 },
-  { campaign: "Brady Hotels Central Melbourne | Sales", impressions: 28129, clicks: 253, cost: 452.97, revenue: 13215.00, bookings: 23 },
-  { campaign: "Brady Black Friday Sale Campaign | Daily", impressions: 10392, clicks: 58, cost: 286.40, revenue: 5973.10, bookings: 10 },
-  { campaign: "Brady Hotels Central Melbourne | Boxing Day '25", impressions: 11380, clicks: 70, cost: 192.44, revenue: 5498.50, bookings: 5 },
-  { campaign: "Brady Hotels Hardware Lane | Boxing Day '25", impressions: 12672, clicks: 80, cost: 192.46, revenue: 4057.48, bookings: 8 },
-  { campaign: "Brady Hotels Jones Lane | Boxing Day '25", impressions: 11289, clicks: 88, cost: 194.30, revenue: 3125.43, bookings: 5 },
-  { campaign: "Brady Hotels Flinders Street | Boxing Day '25", impressions: 12046, clicks: 83, cost: 192.58, revenue: 2929.15, bookings: 6 },
-  { campaign: "Brady Group | Leads | Members", impressions: 10576, clicks: 127, cost: 313.50, revenue: 802.00, bookings: 1 },
-];
+// const SOCIAL_BY_CAMPAIGN = [
+//   { campaign: "Brady Hotels Jones Lane | Sales", impressions: 27562, clicks: 275, cost: 463.60, revenue: 17751.01, bookings: 40 },
+//   { campaign: "Brady Apartment Hotel Flinders Street | Sales", impressions: 35164, clicks: 367, cost: 577.52, revenue: 17215.57, bookings: 33 },
+//   { campaign: "Brady Apartment Hotel Hardware Lane | Sales", impressions: 26685, clicks: 246, cost: 464.15, revenue: 17051.53, bookings: 22 },
+//   { campaign: "Brady Hotels Central Melbourne | Sales", impressions: 28129, clicks: 253, cost: 452.97, revenue: 13215.00, bookings: 23 },
+//   { campaign: "Brady Black Friday Sale Campaign | Daily", impressions: 10392, clicks: 58, cost: 286.40, revenue: 5973.10, bookings: 10 },
+//   { campaign: "Brady Hotels Central Melbourne | Boxing Day '25", impressions: 11380, clicks: 70, cost: 192.44, revenue: 5498.50, bookings: 5 },
+//   { campaign: "Brady Hotels Hardware Lane | Boxing Day '25", impressions: 12672, clicks: 80, cost: 192.46, revenue: 4057.48, bookings: 8 },
+//   { campaign: "Brady Hotels Jones Lane | Boxing Day '25", impressions: 11289, clicks: 88, cost: 194.30, revenue: 3125.43, bookings: 5 },
+//   { campaign: "Brady Hotels Flinders Street | Boxing Day '25", impressions: 12046, clicks: 83, cost: 192.58, revenue: 2929.15, bookings: 6 },
+//   { campaign: "Brady Group | Leads | Members", impressions: 10576, clicks: 127, cost: 313.50, revenue: 802.00, bookings: 1 },
+// ];
 
-const SOCIAL_TOP_CAMPAIGNS_TOTAL = SOCIAL_BY_CAMPAIGN.reduce(
-  (acc, row) => ({
-    impressions: acc.impressions + row.impressions,
-    clicks: acc.clicks + row.clicks,
-    cost: acc.cost + row.cost,
-    revenue: acc.revenue + row.revenue,
-    bookings: acc.bookings + row.bookings,
-  }),
-  { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
-);
+// const SOCIAL_TOP_CAMPAIGNS_TOTAL = SOCIAL_BY_CAMPAIGN.reduce(
+//   (acc, row) => ({
+//     impressions: acc.impressions + row.impressions,
+//     clicks: acc.clicks + row.clicks,
+//     cost: acc.cost + row.cost,
+//     revenue: acc.revenue + row.revenue,
+//     bookings: acc.bookings + row.bookings,
+//   }),
+//   { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
+// );
 
-const SOCIAL_OTHER_CAMPAIGNS = {
-  campaign: "Other campaigns",
-  impressions: Math.max(0, SOCIAL_DATA.impressions - SOCIAL_TOP_CAMPAIGNS_TOTAL.impressions),
-  clicks: Math.max(0, SOCIAL_DATA.clicks - SOCIAL_TOP_CAMPAIGNS_TOTAL.clicks),
-  cost: Math.max(0, Number((SOCIAL_DATA.cost - SOCIAL_TOP_CAMPAIGNS_TOTAL.cost).toFixed(2))),
-  revenue: Math.max(0, Number((SOCIAL_DATA.revenue - SOCIAL_TOP_CAMPAIGNS_TOTAL.revenue).toFixed(2))),
-  bookings: Math.max(0, Number((SOCIAL_DATA.bookings - SOCIAL_TOP_CAMPAIGNS_TOTAL.bookings).toFixed(2))),
-};
+// const SOCIAL_OTHER_CAMPAIGNS = {
+//   campaign: "Other campaigns",
+//   impressions: Math.max(0, SOCIAL_DATA.impressions - SOCIAL_TOP_CAMPAIGNS_TOTAL.impressions),
+//   clicks: Math.max(0, SOCIAL_DATA.clicks - SOCIAL_TOP_CAMPAIGNS_TOTAL.clicks),
+//   cost: Math.max(0, Number((SOCIAL_DATA.cost - SOCIAL_TOP_CAMPAIGNS_TOTAL.cost).toFixed(2))),
+//   revenue: Math.max(0, Number((SOCIAL_DATA.revenue - SOCIAL_TOP_CAMPAIGNS_TOTAL.revenue).toFixed(2))),
+//   bookings: Math.max(0, Number((SOCIAL_DATA.bookings - SOCIAL_TOP_CAMPAIGNS_TOTAL.bookings).toFixed(2))),
+// };
 
-const SOCIAL_BY_CAMPAIGN_WITH_OTHER =
-  SOCIAL_OTHER_CAMPAIGNS.impressions > 0 ||
-  SOCIAL_OTHER_CAMPAIGNS.clicks > 0 ||
-  SOCIAL_OTHER_CAMPAIGNS.cost > 0 ||
-  SOCIAL_OTHER_CAMPAIGNS.revenue > 0 ||
-  SOCIAL_OTHER_CAMPAIGNS.bookings > 0
-    ? [...SOCIAL_BY_CAMPAIGN, SOCIAL_OTHER_CAMPAIGNS]
-    : SOCIAL_BY_CAMPAIGN;
+// const SOCIAL_BY_CAMPAIGN_WITH_OTHER =
+//   SOCIAL_OTHER_CAMPAIGNS.impressions > 0 ||
+//   SOCIAL_OTHER_CAMPAIGNS.clicks > 0 ||
+//   SOCIAL_OTHER_CAMPAIGNS.cost > 0 ||
+//   SOCIAL_OTHER_CAMPAIGNS.revenue > 0 ||
+//   SOCIAL_OTHER_CAMPAIGNS.bookings > 0
+//     ? [...SOCIAL_BY_CAMPAIGN, SOCIAL_OTHER_CAMPAIGNS]
+//     : SOCIAL_BY_CAMPAIGN;
 
+// HARDCODED BUDGET DATA - COMMENTED OUT: Now using data from Supabase pivot_data.budget
 // BUDGET DATA - All months from January 2024 to December 2026 with actual spend data (Brady Hotels ONLY - filtered)
 // Data structure: { year: number, month: string, metasearchBudget: number, semBudget: number, socialBudget: number, metasearchActual: number, semActual: number, socialActual: number }
-const ALL_MONTHLY_BUDGET_DATA = [
-  // 2024
-  { year: 2024, month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7500, socialActual: 0 },
-  { year: 2024, month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7800, socialActual: 0 },
-  { year: 2024, month: "Mar", metasearchBudget: 7000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7700, socialActual: 0 },
-  { year: 2024, month: "Apr", metasearchBudget: 7000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7900, socialActual: 0 },
-  { year: 2024, month: "May", metasearchBudget: 7000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7900, socialActual: 0 },
-  { year: 2024, month: "Jun", metasearchBudget: 10000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 2500 },
-  { year: 2024, month: "Jul", metasearchBudget: 10000, semBudget: 0, socialBudget: 0, metasearchActual: 6000, semActual: 0, socialActual: 3800 },
-  { year: 2024, month: "Aug", metasearchBudget: 10000, semBudget: 0, socialBudget: 0, metasearchActual: 8000, semActual: 15, socialActual: 3200 },
-  { year: 2024, month: "Sep", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 7000, semActual: 8500, socialActual: 4200 },
-  { year: 2024, month: "Oct", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 2500, semActual: 8000, socialActual: 4400 },
-  { year: 2024, month: "Nov", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 2400, semActual: 7800, socialActual: 4100 },
-  { year: 2024, month: "Dec", metasearchBudget: 16000, semBudget: 0, socialBudget: 0, metasearchActual: 2600, semActual: 8000, socialActual: 4000 },
-  // 2025
-  { year: 2025, month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7921.79, socialActual: 0 },
-  { year: 2025, month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7969.45, socialActual: 0 },
-  { year: 2025, month: "Mar", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7925.99, socialActual: 0 },
-  { year: 2025, month: "Apr", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7961.28, socialActual: 0 },
-  { year: 2025, month: "May", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7965.97, socialActual: 0 },
-  { year: 2025, month: "Jun", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 2741.81 },
-  { year: 2025, month: "Jul", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 7056.76, semActual: 0, socialActual: 4060.58 },
-  { year: 2025, month: "Aug", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 8794.13, semActual: 19.19, socialActual: 3476.38 },
-  { year: 2025, month: "Sep", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 7422.17, semActual: 8873.84, socialActual: 4500.10 },
-  { year: 2025, month: "Oct", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 2704.70, semActual: 8397.16, socialActual: 4598.92 },
-  { year: 2025, month: "Nov", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 2516.30, semActual: 8067.78, socialActual: 4330.90 },
-  { year: 2025, month: "Dec", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 2729.84, semActual: 8208.69, socialActual: 4337.01 },
-  // 2026
-  { year: 2026, month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8200, socialActual: 0 },
-  { year: 2026, month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8100, socialActual: 0 },
-  { year: 2026, month: "Mar", metasearchBudget: 8500, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8000, socialActual: 0 },
-  { year: 2026, month: "Apr", metasearchBudget: 8500, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8100, socialActual: 0 },
-  { year: 2026, month: "May", metasearchBudget: 8500, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8100, socialActual: 0 },
-  { year: 2026, month: "Jun", metasearchBudget: 13000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 3000 },
-  { year: 2026, month: "Jul", metasearchBudget: 13000, semBudget: 0, socialBudget: 0, metasearchActual: 7500, semActual: 0, socialActual: 4500 },
-  { year: 2026, month: "Aug", metasearchBudget: 13000, semBudget: 0, socialBudget: 0, metasearchActual: 9000, semActual: 20, socialActual: 3800 },
-  { year: 2026, month: "Sep", metasearchBudget: 21000, semBudget: 0, socialBudget: 0, metasearchActual: 7800, semActual: 9000, socialActual: 4800 },
-  { year: 2026, month: "Oct", metasearchBudget: 21000, semBudget: 0, socialBudget: 0, metasearchActual: 2900, semActual: 8500, socialActual: 4700 },
-  { year: 2026, month: "Nov", metasearchBudget: 21000, semBudget: 0, socialBudget: 0, metasearchActual: 2700, semActual: 8300, socialActual: 4500 },
-  { year: 2026, month: "Dec", metasearchBudget: 19000, semBudget: 0, socialBudget: 0, metasearchActual: 3000, semActual: 8400, socialActual: 4600 },
-];
+// const ALL_MONTHLY_BUDGET_DATA = [
+//   // 2024
+//   { year: 2024, month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7500, socialActual: 0 },
+//   { year: 2024, month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7800, socialActual: 0 },
+//   { year: 2024, month: "Mar", metasearchBudget: 7000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7700, socialActual: 0 },
+//   { year: 2024, month: "Apr", metasearchBudget: 7000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7900, socialActual: 0 },
+//   { year: 2024, month: "May", metasearchBudget: 7000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7900, socialActual: 0 },
+//   { year: 2024, month: "Jun", metasearchBudget: 10000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 2500 },
+//   { year: 2024, month: "Jul", metasearchBudget: 10000, semBudget: 0, socialBudget: 0, metasearchActual: 6000, semActual: 0, socialActual: 3800 },
+//   { year: 2024, month: "Aug", metasearchBudget: 10000, semBudget: 0, socialBudget: 0, metasearchActual: 8000, semActual: 15, socialActual: 3200 },
+//   { year: 2024, month: "Sep", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 7000, semActual: 8500, socialActual: 4200 },
+//   { year: 2024, month: "Oct", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 2500, semActual: 8000, socialActual: 4400 },
+//   { year: 2024, month: "Nov", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 2400, semActual: 7800, socialActual: 4100 },
+//   { year: 2024, month: "Dec", metasearchBudget: 16000, semBudget: 0, socialBudget: 0, metasearchActual: 2600, semActual: 8000, socialActual: 4000 },
+//   // 2025
+//   { year: 2025, month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7921.79, socialActual: 0 },
+//   { year: 2025, month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7969.45, socialActual: 0 },
+//   { year: 2025, month: "Mar", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7925.99, socialActual: 0 },
+//   { year: 2025, month: "Apr", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7961.28, socialActual: 0 },
+//   { year: 2025, month: "May", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7965.97, socialActual: 0 },
+//   { year: 2025, month: "Jun", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 2741.81 },
+//   { year: 2025, month: "Jul", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 7056.76, semActual: 0, socialActual: 4060.58 },
+//   { year: 2025, month: "Aug", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 8794.13, semActual: 19.19, socialActual: 3476.38 },
+//   { year: 2025, month: "Sep", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 7422.17, semActual: 8873.84, socialActual: 4500.10 },
+//   { year: 2025, month: "Oct", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 2704.70, semActual: 8397.16, socialActual: 4598.92 },
+//   { year: 2025, month: "Nov", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 2516.30, semActual: 8067.78, socialActual: 4330.90 },
+//   { year: 2025, month: "Dec", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 2729.84, semActual: 8208.69, socialActual: 4337.01 },
+//   // 2026
+//   { year: 2026, month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8200, socialActual: 0 },
+//   { year: 2026, month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8100, socialActual: 0 },
+//   { year: 2026, month: "Mar", metasearchBudget: 8500, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8000, socialActual: 0 },
+//   { year: 2026, month: "Apr", metasearchBudget: 8500, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8100, socialActual: 0 },
+//   { year: 2026, month: "May", metasearchBudget: 8500, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8100, socialActual: 0 },
+//   { year: 2026, month: "Jun", metasearchBudget: 13000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 3000 },
+//   { year: 2026, month: "Jul", metasearchBudget: 13000, semBudget: 0, socialBudget: 0, metasearchActual: 7500, semActual: 0, socialActual: 4500 },
+//   { year: 2026, month: "Aug", metasearchBudget: 13000, semBudget: 0, socialBudget: 0, metasearchActual: 9000, semActual: 20, socialActual: 3800 },
+//   { year: 2026, month: "Sep", metasearchBudget: 21000, semBudget: 0, socialBudget: 0, metasearchActual: 7800, semActual: 9000, socialActual: 4800 },
+//   { year: 2026, month: "Oct", metasearchBudget: 21000, semBudget: 0, socialBudget: 0, metasearchActual: 2900, semActual: 8500, socialActual: 4700 },
+//   { year: 2026, month: "Nov", metasearchBudget: 21000, semBudget: 0, socialBudget: 0, metasearchActual: 2700, semActual: 8300, socialActual: 4500 },
+//   { year: 2026, month: "Dec", metasearchBudget: 19000, semBudget: 0, socialBudget: 0, metasearchActual: 3000, semActual: 8400, socialActual: 4600 },
+// ];
 
 // Legacy MONTHLY_BUDGET_DATA for 2025 (for backward compatibility)
 // This will be overridden in the component based on slideType
-const MONTHLY_BUDGET_DATA = ALL_MONTHLY_BUDGET_DATA
-  .filter(d => d.year === 2025)
-  .map(({ year, ...rest }) => rest);
+// const MONTHLY_BUDGET_DATA = ALL_MONTHLY_BUDGET_DATA
+//   .filter(d => d.year === 2025)
+//   .map(({ year, ...rest }) => rest);
 
-const BUDGET_COMPARISON_DATA = MONTHLY_BUDGET_DATA.map(m => ({
-  month: m.month,
-  budget: m.metasearchBudget + m.semBudget + m.socialBudget,
-  actual: m.metasearchActual + m.semActual + m.socialActual,
-}));
+// const BUDGET_COMPARISON_DATA = MONTHLY_BUDGET_DATA.map(m => ({
+//   month: m.month,
+//   budget: m.metasearchBudget + m.semBudget + m.socialBudget,
+//   actual: m.metasearchActual + m.semActual + m.socialActual,
+// }));
 
 // FORECAST DATA
 const FORECAST_SCENARIO = {
@@ -286,81 +291,83 @@ const calculateForecastProjections = () => {
 
 const FORECAST_PROJECTIONS = calculateForecastProjections();
 
+// HARDCODED CALCULATED TOTALS - COMMENTED OUT: Now calculated from pivot_data
 // Calculate totals for current period
-const TOTAL_IMPRESSIONS = METASEARCH_DATA.impressions + SEM_DATA.impressions + SOCIAL_DATA.impressions;
-const TOTAL_CLICKS = METASEARCH_DATA.clicks + SEM_DATA.clicks + SOCIAL_DATA.clicks;
-const TOTAL_COST = METASEARCH_DATA.cost + SEM_DATA.cost + SOCIAL_DATA.cost;
-const TOTAL_REVENUE = METASEARCH_DATA.revenue + SEM_DATA.revenue + SOCIAL_DATA.revenue;
-const TOTAL_BOOKINGS = METASEARCH_DATA.bookings + SEM_DATA.bookings + SOCIAL_DATA.bookings;
+// const TOTAL_IMPRESSIONS = METASEARCH_DATA.impressions + SEM_DATA.impressions + SOCIAL_DATA.impressions;
+// const TOTAL_CLICKS = METASEARCH_DATA.clicks + SEM_DATA.clicks + SOCIAL_DATA.clicks;
+// const TOTAL_COST = METASEARCH_DATA.cost + SEM_DATA.cost + SOCIAL_DATA.cost;
+// const TOTAL_REVENUE = METASEARCH_DATA.revenue + SEM_DATA.revenue + SOCIAL_DATA.revenue;
+// const TOTAL_BOOKINGS = METASEARCH_DATA.bookings + SEM_DATA.bookings + SOCIAL_DATA.bookings;
 
 // Calculate totals for previous period (Nov 2025)
-const PREV_PERIOD_IMPRESSIONS = METASEARCH_PREV_PERIOD.impressions + SEM_PREV_PERIOD.impressions + SOCIAL_PREV_PERIOD.impressions;
-const PREV_PERIOD_CLICKS = METASEARCH_PREV_PERIOD.clicks + SEM_PREV_PERIOD.clicks + SOCIAL_PREV_PERIOD.clicks;
-const PREV_PERIOD_COST = METASEARCH_PREV_PERIOD.cost + SEM_PREV_PERIOD.cost + SOCIAL_PREV_PERIOD.cost;
-const PREV_PERIOD_REVENUE = METASEARCH_PREV_PERIOD.revenue + SEM_PREV_PERIOD.revenue + SOCIAL_PREV_PERIOD.revenue;
-const PREV_PERIOD_BOOKINGS = METASEARCH_PREV_PERIOD.bookings + SEM_PREV_PERIOD.bookings + SOCIAL_PREV_PERIOD.bookings;
+// const PREV_PERIOD_IMPRESSIONS = METASEARCH_PREV_PERIOD.impressions + SEM_PREV_PERIOD.impressions + SOCIAL_PREV_PERIOD.impressions;
+// const PREV_PERIOD_CLICKS = METASEARCH_PREV_PERIOD.clicks + SEM_PREV_PERIOD.clicks + SOCIAL_PREV_PERIOD.clicks;
+// const PREV_PERIOD_COST = METASEARCH_PREV_PERIOD.cost + SEM_PREV_PERIOD.cost + SOCIAL_PREV_PERIOD.cost;
+// const PREV_PERIOD_REVENUE = METASEARCH_PREV_PERIOD.revenue + SEM_PREV_PERIOD.revenue + SOCIAL_PREV_PERIOD.revenue;
+// const PREV_PERIOD_BOOKINGS = METASEARCH_PREV_PERIOD.bookings + SEM_PREV_PERIOD.bookings + SOCIAL_PREV_PERIOD.bookings;
 
 // Calculate totals for previous year (proxy data)
-const PREV_YEAR_IMPRESSIONS = METASEARCH_PREV_YEAR.impressions + SEM_DATA.impressions + SOCIAL_PREV_YEAR.impressions;
-const PREV_YEAR_CLICKS = METASEARCH_PREV_YEAR.clicks + SEM_DATA.clicks + SOCIAL_PREV_YEAR.clicks;
-const PREV_YEAR_COST = METASEARCH_PREV_YEAR.cost + SEM_DATA.cost + SOCIAL_PREV_YEAR.cost;
-const PREV_YEAR_REVENUE = METASEARCH_PREV_YEAR.revenue + SEM_DATA.revenue + SOCIAL_PREV_YEAR.revenue;
-const PREV_YEAR_BOOKINGS = METASEARCH_PREV_YEAR.bookings + SEM_DATA.bookings + SOCIAL_PREV_YEAR.bookings;
+// const PREV_YEAR_IMPRESSIONS = METASEARCH_PREV_YEAR.impressions + SEM_DATA.impressions + SOCIAL_PREV_YEAR.impressions;
+// const PREV_YEAR_CLICKS = METASEARCH_PREV_YEAR.clicks + SEM_DATA.clicks + SOCIAL_PREV_YEAR.clicks;
+// const PREV_YEAR_COST = METASEARCH_PREV_YEAR.cost + SEM_DATA.cost + SOCIAL_PREV_YEAR.cost;
+// const PREV_YEAR_REVENUE = METASEARCH_PREV_YEAR.revenue + SEM_DATA.revenue + SOCIAL_PREV_YEAR.revenue;
+// const PREV_YEAR_BOOKINGS = METASEARCH_PREV_YEAR.bookings + SEM_DATA.bookings + SOCIAL_PREV_YEAR.bookings;
 
+// HARDCODED MONTHLY REVENUE DATA - COMMENTED OUT: Now using data from Supabase pivot_data.channels[channel].monthly
 // Monthly revenue data - All months from January 2024 to December 2026 (Brady Hotels ONLY - filtered by account)
 // Data structure: { year: number, month: string, metasearch: number, social: number, sem: number }
-const ALL_MONTHLY_DATA = [
-  // 2024
-  { year: 2024, month: "Jan", metasearch: 0, social: 0, sem: 500000 },
-  { year: 2024, month: "Feb", metasearch: 0, social: 0, sem: 450000 },
-  { year: 2024, month: "Mar", metasearch: 0, social: 0, sem: 400000 },
-  { year: 2024, month: "Apr", metasearch: 0, social: 0, sem: 420000 },
-  { year: 2024, month: "May", metasearch: 0, social: 0, sem: 430000 },
-  { year: 2024, month: "Jun", metasearch: 0, social: 0, sem: 0 },
-  { year: 2024, month: "Jul", metasearch: 50000, social: 7000, sem: 0 },
-  { year: 2024, month: "Aug", metasearch: 55000, social: 45000, sem: 0 },
-  { year: 2024, month: "Sep", metasearch: 60000, social: 40000, sem: 250000 },
-  { year: 2024, month: "Oct", metasearch: 58000, social: 55000, sem: 200000 },
-  { year: 2024, month: "Nov", metasearch: 60000, social: 100000, sem: 270000 },
-  { year: 2024, month: "Dec", metasearch: 32000, social: 80000, sem: 150000 },
-  // 2025
-  { year: 2025, month: "Jan", metasearch: 0, social: 0, sem: 614844.08 },
-  { year: 2025, month: "Feb", metasearch: 0, social: 0, sem: 455783.02 },
-  { year: 2025, month: "Mar", metasearch: 0, social: 0, sem: 417356.54 },
-  { year: 2025, month: "Apr", metasearch: 0, social: 0, sem: 424804.64 },
-  { year: 2025, month: "May", metasearch: 0, social: 0, sem: 438201.43 },
-  { year: 2025, month: "Jun", metasearch: 0, social: 0, sem: 0 },
-  { year: 2025, month: "Jul", metasearch: 63915.91, social: 8761.54, sem: 0 },
-  { year: 2025, month: "Aug", metasearch: 61022.16, social: 51340.05, sem: 0 },
-  { year: 2025, month: "Sep", metasearch: 65497.69, social: 47241.16, sem: 292391.79 },
-  { year: 2025, month: "Oct", metasearch: 62790.62, social: 59499.71, sem: 203158.10 },
-  { year: 2025, month: "Nov", metasearch: 62764.16, social: 107535.63, sem: 278315.94 },
-  { year: 2025, month: "Dec", metasearch: 35093.16, social: 87867.77, sem: 155596.64 },
-  // 2026
-  { year: 2026, month: "Jan", metasearch: 0, social: 0, sem: 650000 },
-  { year: 2026, month: "Feb", metasearch: 0, social: 0, sem: 480000 },
-  { year: 2026, month: "Mar", metasearch: 0, social: 0, sem: 440000 },
-  { year: 2026, month: "Apr", metasearch: 0, social: 0, sem: 450000 },
-  { year: 2026, month: "May", metasearch: 0, social: 0, sem: 460000 },
-  { year: 2026, month: "Jun", metasearch: 0, social: 0, sem: 0 },
-  { year: 2026, month: "Jul", metasearch: 70000, social: 10000, sem: 0 },
-  { year: 2026, month: "Aug", metasearch: 65000, social: 55000, sem: 0 },
-  { year: 2026, month: "Sep", metasearch: 70000, social: 50000, sem: 300000 },
-  { year: 2026, month: "Oct", metasearch: 68000, social: 62000, sem: 210000 },
-  { year: 2026, month: "Nov", metasearch: 65000, social: 110000, sem: 290000 },
-  { year: 2026, month: "Dec", metasearch: 38000, social: 90000, sem: 160000 },
-];
+// const ALL_MONTHLY_DATA = [
+//   // 2024
+//   { year: 2024, month: "Jan", metasearch: 0, social: 0, sem: 500000 },
+//   { year: 2024, month: "Feb", metasearch: 0, social: 0, sem: 450000 },
+//   { year: 2024, month: "Mar", metasearch: 0, social: 0, sem: 400000 },
+//   { year: 2024, month: "Apr", metasearch: 0, social: 0, sem: 420000 },
+//   { year: 2024, month: "May", metasearch: 0, social: 0, sem: 430000 },
+//   { year: 2024, month: "Jun", metasearch: 0, social: 0, sem: 0 },
+//   { year: 2024, month: "Jul", metasearch: 50000, social: 7000, sem: 0 },
+//   { year: 2024, month: "Aug", metasearch: 55000, social: 45000, sem: 0 },
+//   { year: 2024, month: "Sep", metasearch: 60000, social: 40000, sem: 250000 },
+//   { year: 2024, month: "Oct", metasearch: 58000, social: 55000, sem: 200000 },
+//   { year: 2024, month: "Nov", metasearch: 60000, social: 100000, sem: 270000 },
+//   { year: 2024, month: "Dec", metasearch: 32000, social: 80000, sem: 150000 },
+//   // 2025
+//   { year: 2025, month: "Jan", metasearch: 0, social: 0, sem: 614844.08 },
+//   { year: 2025, month: "Feb", metasearch: 0, social: 0, sem: 455783.02 },
+//   { year: 2025, month: "Mar", metasearch: 0, social: 0, sem: 417356.54 },
+//   { year: 2025, month: "Apr", metasearch: 0, social: 0, sem: 424804.64 },
+//   { year: 2025, month: "May", metasearch: 0, social: 0, sem: 438201.43 },
+//   { year: 2025, month: "Jun", metasearch: 0, social: 0, sem: 0 },
+//   { year: 2025, month: "Jul", metasearch: 63915.91, social: 8761.54, sem: 0 },
+//   { year: 2025, month: "Aug", metasearch: 61022.16, social: 51340.05, sem: 0 },
+//   { year: 2025, month: "Sep", metasearch: 65497.69, social: 47241.16, sem: 292391.79 },
+//   { year: 2025, month: "Oct", metasearch: 62790.62, social: 59499.71, sem: 203158.10 },
+//   { year: 2025, month: "Nov", metasearch: 62764.16, social: 107535.63, sem: 278315.94 },
+//   { year: 2025, month: "Dec", metasearch: 35093.16, social: 87867.77, sem: 155596.64 },
+//   // 2026
+//   { year: 2026, month: "Jan", metasearch: 0, social: 0, sem: 650000 },
+//   { year: 2026, month: "Feb", metasearch: 0, social: 0, sem: 480000 },
+//   { year: 2026, month: "Mar", metasearch: 0, social: 0, sem: 440000 },
+//   { year: 2026, month: "Apr", metasearch: 0, social: 0, sem: 450000 },
+//   { year: 2026, month: "May", metasearch: 0, social: 0, sem: 460000 },
+//   { year: 2026, month: "Jun", metasearch: 0, social: 0, sem: 0 },
+//   { year: 2026, month: "Jul", metasearch: 70000, social: 10000, sem: 0 },
+//   { year: 2026, month: "Aug", metasearch: 65000, social: 55000, sem: 0 },
+//   { year: 2026, month: "Sep", metasearch: 70000, social: 50000, sem: 300000 },
+//   { year: 2026, month: "Oct", metasearch: 68000, social: 62000, sem: 210000 },
+//   { year: 2026, month: "Nov", metasearch: 65000, social: 110000, sem: 290000 },
+//   { year: 2026, month: "Dec", metasearch: 38000, social: 90000, sem: 160000 },
+// ];
 
 // Legacy MONTHLY_DATA for 2025 (for backward compatibility with existing charts)
 // This will be overridden in the component based on slideType
-const MONTHLY_DATA = ALL_MONTHLY_DATA
-  .filter(d => d.year === 2025)
-  .map(({ year, ...rest }) => rest);
+// const MONTHLY_DATA = ALL_MONTHLY_DATA
+//   .filter(d => d.year === 2025)
+//   .map(({ year, ...rest }) => rest);
 
 // Monthly revenue data by channel for individual charts
-const MONTHLY_METASEARCH_DATA = MONTHLY_DATA.map(m => ({ month: m.month, revenue: m.metasearch }));
-const MONTHLY_SEM_DATA = MONTHLY_DATA.map(m => ({ month: m.month, revenue: m.sem }));
-const MONTHLY_SOCIAL_DATA = MONTHLY_DATA.map(m => ({ month: m.month, revenue: m.social }));
+// const MONTHLY_METASEARCH_DATA = MONTHLY_DATA.map(m => ({ month: m.month, revenue: m.metasearch }));
+// const MONTHLY_SEM_DATA = MONTHLY_DATA.map(m => ({ month: m.month, revenue: m.sem }));
+// const MONTHLY_SOCIAL_DATA = MONTHLY_DATA.map(m => ({ month: m.month, revenue: m.social }));
 
 // Helper functions
 const calculateDerivedMetrics = (data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => ({
@@ -396,70 +403,71 @@ const formatNumber = (value: number, type?: string): string => {
   return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 };
 
+// HARDCODED BREAKDOWN COMBINER - COMMENTED OUT: Not used, breakdown data now comes from pivot_data.breakdowns
 // Combine all breakdown data from all channels
-const combineBreakdownData = () => {
-  const combined: Array<{
-    hotel?: string;
-    linkType?: string;
-    campaign?: string;
-    device?: string;
-    market?: string;
-    impressions: number;
-    clicks: number;
-    cost: number;
-    revenue: number;
-    bookings: number;
-  }> = [];
+// const combineBreakdownData = () => {
+//   const combined: Array<{
+//     hotel?: string;
+//     linkType?: string;
+//     campaign?: string;
+//     device?: string;
+//     market?: string;
+//     impressions: number;
+//     clicks: number;
+//     cost: number;
+//     revenue: number;
+//     bookings: number;
+//   }> = [];
 
-  // Add metasearch data
-  METASEARCH_BY_HOTEL.forEach(row => {
-    combined.push({
-      hotel: row.hotel,
-      impressions: row.impressions,
-      clicks: row.clicks,
-      cost: row.cost,
-      revenue: row.revenue,
-      bookings: row.bookings,
-    });
-  });
+//   // Add metasearch data
+//   METASEARCH_BY_HOTEL.forEach(row => {
+//     combined.push({
+//       hotel: row.hotel,
+//       impressions: row.impressions,
+//       clicks: row.clicks,
+//       cost: row.cost,
+//       revenue: row.revenue,
+//       bookings: row.bookings,
+//     });
+//   });
 
-  METASEARCH_BY_LINK_TYPE.forEach(row => {
-    combined.push({
-      linkType: row.linkType,
-      impressions: row.impressions,
-      clicks: row.clicks,
-      cost: row.cost,
-      revenue: row.revenue,
-      bookings: row.bookings,
-    });
-  });
+//   METASEARCH_BY_LINK_TYPE.forEach(row => {
+//     combined.push({
+//       linkType: row.linkType,
+//       impressions: row.impressions,
+//       clicks: row.clicks,
+//       cost: row.cost,
+//       revenue: row.revenue,
+//       bookings: row.bookings,
+//     });
+//   });
 
-  // Add SEM data
-  SEM_BY_CAMPAIGN_WITH_OTHER.forEach(row => {
-    combined.push({
-      campaign: row.campaign,
-      impressions: row.impressions,
-      clicks: row.clicks,
-      cost: row.cost,
-      revenue: row.revenue,
-      bookings: row.bookings,
-    });
-  });
+//   // Add SEM data
+//   SEM_BY_CAMPAIGN_WITH_OTHER.forEach(row => {
+//     combined.push({
+//       campaign: row.campaign,
+//       impressions: row.impressions,
+//       clicks: row.clicks,
+//       cost: row.cost,
+//       revenue: row.revenue,
+//       bookings: row.bookings,
+//     });
+//   });
 
-  // Add Social data
-  SOCIAL_BY_CAMPAIGN_WITH_OTHER.forEach(row => {
-    combined.push({
-      campaign: row.campaign,
-      impressions: row.impressions,
-      clicks: row.clicks,
-      cost: row.cost,
-      revenue: row.revenue,
-      bookings: row.bookings,
-    });
-  });
+//   // Add Social data
+//   SOCIAL_BY_CAMPAIGN_WITH_OTHER.forEach(row => {
+//     combined.push({
+//       campaign: row.campaign,
+//       impressions: row.impressions,
+//       clicks: row.clicks,
+//       cost: row.cost,
+//       revenue: row.revenue,
+//       bookings: row.bookings,
+//     });
+//   });
 
-  return combined;
-};
+//   return combined;
+// };
 
 // Unified breakdown table component with Group by / Breakdown by dropdowns
 // Uses data from pivot_data.channels[channel].monthlyBreakdowns for month-specific data
@@ -957,19 +965,7 @@ export default function SlideViewPage() {
     }
   }, [slideType, accountId]);
 
-  // Filter monthly data based on selected year
-  const filteredMonthlyData = useMemo(() => {
-    const sourceData = slideType === 'master-report' && dynamicMonthlyData.length > 0 
-      ? dynamicMonthlyData 
-      : MONTHLY_DATA.map(m => ({ ...m, year: 2025 }));
-    
-    if (selectedYear === 'all') {
-      return sourceData;
-    }
-    return sourceData.filter(m => m.year === parseInt(selectedYear));
-  }, [slideType, dynamicMonthlyData, selectedYear]);
-
-  // Slide report state - moved before currentTotals so it's available
+  // Slide report state - moved before filteredMonthlyData so it's available
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
   const { data: slideReport } = useSlideReport(slideReportId);
   const { data: slideReports, isLoading: isSlideReportsLoading } = useSlideReports(accountId || null);
@@ -977,6 +973,57 @@ export default function SlideViewPage() {
   const createSlideReport = useCreateSlideReport();
   const updateSlideReport = useUpdateSlideReport();
   const refreshSlideReportData = useRefreshSlideReportData();
+
+  // Filter monthly data based on selected year - build from pivot_data
+  const filteredMonthlyData = useMemo(() => {
+    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+    
+    // Build from pivot_data if available
+    if (pivotData?.channels) {
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                         'July', 'August', 'September', 'October', 'November', 'December'];
+      const monthlyMap = new Map<string, { year: number; month: string; metasearch: number; sem: number; social: number }>();
+      
+      // Collect all months from all channels
+      Object.entries(pivotData.channels).forEach(([channel, channelData]) => {
+        if (channelData.monthly) {
+          Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
+            const [year, monthNum] = monthKey.split('-').map(Number);
+            const month = monthNames[monthNum - 1];
+            const key = `${year}-${month}`;
+            
+            if (!monthlyMap.has(key)) {
+              monthlyMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
+            }
+            
+            const entry = monthlyMap.get(key)!;
+            entry[channel as 'metasearch' | 'sem' | 'social'] = metrics.revenue || 0;
+          });
+        }
+      });
+      
+      const result = Array.from(monthlyMap.values()).sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return monthNames.indexOf(a.month) - monthNames.indexOf(b.month);
+      });
+      
+      // Filter by selectedYear if needed
+      if (selectedYear !== 'all') {
+        return result.filter(m => m.year === parseInt(selectedYear));
+      }
+      return result;
+    }
+    
+    // Fallback to dynamicMonthlyData or empty array
+    const sourceData = slideType === 'master-report' && dynamicMonthlyData.length > 0 
+      ? dynamicMonthlyData 
+      : [];
+    
+    if (selectedYear === 'all') {
+      return sourceData;
+    }
+    return sourceData.filter(m => m.year === parseInt(selectedYear));
+  }, [slideReport?.pivot_data, slideType, dynamicMonthlyData, selectedYear]);
 
   // Get current totals based on selected year/month from pivot_data
   const currentTotals = useMemo(() => {
@@ -1039,14 +1086,15 @@ export default function SlideViewPage() {
       return channelTotals;
     }
     
-    // Fallback to dynamic data or hardcoded
+    // Fallback to dynamic data or zeros
     if (slideType === 'master-report' && Object.keys(dynamicChannelTotals).length > 0) {
       return dynamicChannelTotals;
     }
+    // Return zeros when no data is available (data should come from pivot_data)
     return {
-      metasearch: METASEARCH_DATA,
-      sem: SEM_DATA,
-      social: SOCIAL_DATA,
+      metasearch: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
+      sem: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
+      social: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
     };
   }, [slideType, slideReport?.pivot_data, dynamicChannelTotals, dynamicYearlyTotals, selectedYear, selectedMonth]);
 
@@ -3135,25 +3183,28 @@ export default function SlideViewPage() {
     }
   };
 
-  // Get comparison data based on selection
+  // Get comparison data based on selection - use comparisonTotals from pivot_data
   const getComparisonData = () => {
+    if (!comparisonTotals) return null;
+    
+    // Aggregate comparison totals from all channels
+    const overview = {
+      impressions: (comparisonTotals.metasearch?.impressions || 0) + (comparisonTotals.sem?.impressions || 0) + (comparisonTotals.social?.impressions || 0),
+      clicks: (comparisonTotals.metasearch?.clicks || 0) + (comparisonTotals.sem?.clicks || 0) + (comparisonTotals.social?.clicks || 0),
+      cost: (comparisonTotals.metasearch?.cost || 0) + (comparisonTotals.sem?.cost || 0) + (comparisonTotals.social?.cost || 0),
+      revenue: (comparisonTotals.metasearch?.revenue || 0) + (comparisonTotals.sem?.revenue || 0) + (comparisonTotals.social?.revenue || 0),
+      bookings: (comparisonTotals.metasearch?.bookings || 0) + (comparisonTotals.sem?.bookings || 0) + (comparisonTotals.social?.bookings || 0),
+    };
+    
     if (comparisonType === "previous_period") {
       return {
-        impressions: PREV_PERIOD_IMPRESSIONS,
-        clicks: PREV_PERIOD_CLICKS,
-        cost: PREV_PERIOD_COST,
-        revenue: PREV_PERIOD_REVENUE,
-        bookings: PREV_PERIOD_BOOKINGS,
-        label: "vs Nov 2025",
+        ...overview,
+        label: "vs Previous Period",
       };
     } else if (comparisonType === "previous_year") {
       return {
-        impressions: PREV_YEAR_IMPRESSIONS,
-        clicks: PREV_YEAR_CLICKS,
-        cost: PREV_YEAR_COST,
-        revenue: PREV_YEAR_REVENUE,
-        bookings: PREV_YEAR_BOOKINGS,
-        label: "vs Oct 2025*",
+        ...overview,
+        label: "vs Previous Year",
       };
     }
     return null;
@@ -3161,19 +3212,29 @@ export default function SlideViewPage() {
 
   const comparisonData = getComparisonData();
 
-  // Calculate current metrics
-  const currentMetrics = {
-    impressions: TOTAL_IMPRESSIONS,
-    clicks: TOTAL_CLICKS,
-    bookings: TOTAL_BOOKINGS,
-    ctr: (TOTAL_CLICKS / TOTAL_IMPRESSIONS) * 100,
-    conversionRate: (TOTAL_BOOKINGS / TOTAL_CLICKS) * 100,
-    cpc: TOTAL_COST / TOTAL_CLICKS,
-    cost: TOTAL_COST,
-    revenue: TOTAL_REVENUE,
-    roas: TOTAL_REVENUE / TOTAL_COST,
-    costOfSale: (TOTAL_COST / TOTAL_REVENUE) * 100,
-  };
+  // Calculate current metrics from currentTotals
+  const currentMetrics = useMemo(() => {
+    const totals = currentTotals;
+    const overview = {
+      impressions: (totals.metasearch?.impressions || 0) + (totals.sem?.impressions || 0) + (totals.social?.impressions || 0),
+      clicks: (totals.metasearch?.clicks || 0) + (totals.sem?.clicks || 0) + (totals.social?.clicks || 0),
+      cost: (totals.metasearch?.cost || 0) + (totals.sem?.cost || 0) + (totals.social?.cost || 0),
+      revenue: (totals.metasearch?.revenue || 0) + (totals.sem?.revenue || 0) + (totals.social?.revenue || 0),
+      bookings: (totals.metasearch?.bookings || 0) + (totals.sem?.bookings || 0) + (totals.social?.bookings || 0),
+    };
+    return {
+      impressions: overview.impressions,
+      clicks: overview.clicks,
+      bookings: overview.bookings,
+      ctr: overview.impressions > 0 ? (overview.clicks / overview.impressions) * 100 : 0,
+      conversionRate: overview.clicks > 0 ? (overview.bookings / overview.clicks) * 100 : 0,
+      cpc: overview.clicks > 0 ? overview.cost / overview.clicks : 0,
+      cost: overview.cost,
+      revenue: overview.revenue,
+      roas: overview.cost > 0 ? overview.revenue / overview.cost : 0,
+      costOfSale: overview.revenue > 0 ? (overview.cost / overview.revenue) * 100 : 0,
+    };
+  }, [currentTotals]);
 
   // Calculate comparison metrics if enabled
   const comparisonMetrics = comparisonData ? {
@@ -3239,35 +3300,7 @@ export default function SlideViewPage() {
       }
     }
     
-    // Fallback to hardcoded data
-    if (comparisonType === "previous_period") {
-      const prevData = channel === 'metasearch' ? METASEARCH_PREV_PERIOD 
-                     : channel === 'sem' ? SEM_PREV_PERIOD 
-                     : SOCIAL_PREV_PERIOD;
-      return {
-        ...calculateDerivedMetrics(prevData),
-        label: "vs Nov 2025",
-      };
-    } else if (comparisonType === "previous_year") {
-      // For SEM, we have 2024 data; for Metasearch and Social, use estimates
-      if (channel === 'sem') {
-        const prevData = { impressions: 1510246, clicks: 9796, cost: 8198.31, revenue: 354741.72, bookings: 675 };
-        return {
-          ...calculateDerivedMetrics(prevData),
-          label: "vs Dec 2024",
-        };
-      } else if (channel === 'metasearch') {
-        return {
-          ...calculateDerivedMetrics(METASEARCH_PREV_YEAR),
-          label: "vs Dec 2024*",
-        };
-      } else {
-        return {
-          ...calculateDerivedMetrics(SOCIAL_PREV_YEAR),
-          label: "vs Dec 2024*",
-        };
-      }
-    }
+    // No fallback - return null if no comparison data available
     return null;
   };
 
@@ -3334,26 +3367,53 @@ export default function SlideViewPage() {
     </div>
   );
 
-  // Report breakdown with reordered columns
-  const REPORT_BREAKDOWN = [
-    { report: "Metasearch", ...calculateDerivedMetrics(METASEARCH_DATA) },
-    { report: "SEM", ...calculateDerivedMetrics(SEM_DATA) },
-    { report: "Social", ...calculateDerivedMetrics(SOCIAL_DATA) },
-  ];
+  // Report breakdown with reordered columns - use currentTotals
+  const REPORT_BREAKDOWN = useMemo(() => {
+    const totals = currentTotals;
+    return [
+      { report: "Metasearch", ...calculateDerivedMetrics(totals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }) },
+      { report: "SEM", ...calculateDerivedMetrics(totals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }) },
+      { report: "Social", ...calculateDerivedMetrics(totals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }) },
+    ];
+  }, [currentTotals]);
 
   // Calculate total for all reports
-  const TOTAL_DATA = {
-    impressions: METASEARCH_DATA.impressions + SEM_DATA.impressions + SOCIAL_DATA.impressions,
-    clicks: METASEARCH_DATA.clicks + SEM_DATA.clicks + SOCIAL_DATA.clicks,
-    cost: METASEARCH_DATA.cost + SEM_DATA.cost + SOCIAL_DATA.cost,
-    revenue: METASEARCH_DATA.revenue + SEM_DATA.revenue + SOCIAL_DATA.revenue,
-    bookings: METASEARCH_DATA.bookings + SEM_DATA.bookings + SOCIAL_DATA.bookings,
-  };
-  const REPORT_TOTAL = { report: "Total", ...calculateDerivedMetrics(TOTAL_DATA) };
+  const REPORT_TOTAL = useMemo(() => {
+    const totals = currentTotals;
+    const totalData = {
+      impressions: (totals.metasearch?.impressions || 0) + (totals.sem?.impressions || 0) + (totals.social?.impressions || 0),
+      clicks: (totals.metasearch?.clicks || 0) + (totals.sem?.clicks || 0) + (totals.social?.clicks || 0),
+      cost: (totals.metasearch?.cost || 0) + (totals.sem?.cost || 0) + (totals.social?.cost || 0),
+      revenue: (totals.metasearch?.revenue || 0) + (totals.sem?.revenue || 0) + (totals.social?.revenue || 0),
+      bookings: (totals.metasearch?.bookings || 0) + (totals.sem?.bookings || 0) + (totals.social?.bookings || 0),
+    };
+    return { report: "Total", ...calculateDerivedMetrics(totalData) };
+  }, [currentTotals]);
 
-  // Calculate budget totals
-  const totalBudget = BUDGET_COMPARISON_DATA.reduce((sum, m) => sum + m.budget, 0);
-  const totalActual = BUDGET_COMPARISON_DATA.reduce((sum, m) => sum + m.actual, 0);
+  // Calculate budget totals from pivot_data.budget
+  const budgetData = useMemo(() => {
+    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+    if (pivotData?.budget?.monthly) {
+      return pivotData.budget.monthly.map(m => ({
+        month: m.month,
+        budget: m.metasearchBudget + m.semBudget + m.socialBudget,
+        actual: m.metasearchActual + m.semActual + m.socialActual,
+      }));
+    }
+    return [];
+  }, [slideReport?.pivot_data]);
+
+  // Budget monthly data for tables (full structure with all fields)
+  const budgetMonthlyData = useMemo(() => {
+    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+    if (pivotData?.budget?.monthly) {
+      return pivotData.budget.monthly;
+    }
+    return [];
+  }, [slideReport?.pivot_data]);
+
+  const totalBudget = budgetData.reduce((sum, m) => sum + m.budget, 0);
+  const totalActual = budgetData.reduce((sum, m) => sum + m.actual, 0);
   const budgetVariance = totalBudget - totalActual;
 
   // Get the current report name
@@ -4744,7 +4804,7 @@ export default function SlideViewPage() {
                 <CardContent>
                   <div className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={BUDGET_COMPARISON_DATA}>
+                      <ComposedChart data={budgetData}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
@@ -4776,7 +4836,7 @@ export default function SlideViewPage() {
                       {/* Overview Revenue Chart */}
                       <div className="h-[250px] mb-6">
                         <ResponsiveContainer width="100%" height="100%">
-                          <ComposedChart data={MONTHLY_DATA}>
+                          <ComposedChart data={filteredMonthlyData}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
                             <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
@@ -4801,7 +4861,7 @@ export default function SlideViewPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {MONTHLY_BUDGET_DATA.map((row) => {
+                          {budgetMonthlyData.map((row) => {
                             const totalBudgetRow = row.metasearchBudget + row.semBudget + row.socialBudget;
                             const totalActualRow = row.metasearchActual + row.semActual + row.socialActual;
                             const variance = totalBudgetRow - totalActualRow;
@@ -4824,7 +4884,7 @@ export default function SlideViewPage() {
                       {/* Metasearch Revenue Chart */}
                       <div className="h-[250px] mb-6">
                         <ResponsiveContainer width="100%" height="100%">
-                          <ComposedChart data={MONTHLY_METASEARCH_DATA}>
+                          <ComposedChart data={filteredMonthlyData.map(m => ({ month: m.month, revenue: m.metasearch }))}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
                             <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
@@ -4846,7 +4906,7 @@ export default function SlideViewPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {MONTHLY_BUDGET_DATA.map((row) => {
+                          {budgetMonthlyData.map((row) => {
                             const variance = row.metasearchBudget - row.metasearchActual;
                             return (
                               <TableRow key={row.month}>
@@ -4867,7 +4927,7 @@ export default function SlideViewPage() {
                       {/* SEM Revenue Chart */}
                       <div className="h-[250px] mb-6">
                         <ResponsiveContainer width="100%" height="100%">
-                          <ComposedChart data={MONTHLY_SEM_DATA}>
+                          <ComposedChart data={filteredMonthlyData.map(m => ({ month: m.month, revenue: m.sem }))}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
                             <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
@@ -4889,7 +4949,7 @@ export default function SlideViewPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {MONTHLY_BUDGET_DATA.map((row) => {
+                          {budgetMonthlyData.map((row) => {
                             const variance = row.semBudget - row.semActual;
                             return (
                               <TableRow key={row.month}>
@@ -4910,7 +4970,7 @@ export default function SlideViewPage() {
                       {/* Social Revenue Chart */}
                       <div className="h-[250px] mb-6">
                         <ResponsiveContainer width="100%" height="100%">
-                          <ComposedChart data={MONTHLY_SOCIAL_DATA}>
+                          <ComposedChart data={filteredMonthlyData.map(m => ({ month: m.month, revenue: m.social }))}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
                             <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
@@ -4932,7 +4992,7 @@ export default function SlideViewPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {MONTHLY_BUDGET_DATA.map((row) => {
+                          {budgetMonthlyData.map((row) => {
                             const variance = row.socialBudget - row.socialActual;
                             return (
                               <TableRow key={row.month}>
