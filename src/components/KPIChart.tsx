@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useTransition } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff } from "@/lib/debug";
 import { getCurrentMonthDateRange, Dimension } from "@/lib/data-loading-fix";
@@ -605,36 +605,26 @@ export function KPIChart({
   
   if (showSkeleton) {
     return (
-      <Card className="shadow-sm">
-        <CardHeader className="flex flex-col items-end pb-2">
-          <Skeleton className="h-8 w-40" />
+      <Card className="bg-card border border-border shadow-sm rounded-lg">
+        <CardHeader className="pb-2 pt-4 px-4">
+          <Skeleton className="h-4 w-20" />
         </CardHeader>
-        <CardContent>
-          <div className="h-56 md:h-64 flex flex-col gap-4">
-            {/* Y-axis labels skeleton */}
+        <CardContent className="px-4 pb-4">
+          <div className="h-48 flex flex-col gap-4">
             <div className="flex gap-2 h-full">
               <div className="flex flex-col justify-between py-2">
                 <Skeleton className="h-3 w-8" />
-                <Skeleton className="h-3 w-10" />
                 <Skeleton className="h-3 w-8" />
-                <Skeleton className="h-3 w-12" />
                 <Skeleton className="h-3 w-8" />
               </div>
-              {/* Chart area skeleton */}
               <div className="flex-1 flex flex-col justify-end">
-                <div className="flex items-end justify-between gap-1 h-[180px] border-l border-b border-muted px-2">
-                  {Array.from({ length: 12 }).map((_, i) => (
+                <div className="flex items-end justify-between gap-1 h-[140px] px-2">
+                  {Array.from({ length: 10 }).map((_, i) => (
                     <Skeleton
                       key={i}
-                      className="flex-1 max-w-8 rounded-t"
+                      className="flex-1 max-w-6 rounded-t"
                       style={{ height: `${30 + Math.sin(i * 0.8) * 40 + 20}%` }}
                     />
-                  ))}
-                </div>
-                {/* X-axis labels skeleton */}
-                <div className="flex justify-between px-2 pt-2">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton key={i} className="h-3 w-8" />
                   ))}
                 </div>
               </div>
@@ -647,50 +637,13 @@ export function KPIChart({
 
   if (chartData.length === 0) {
     return (
-      <Card className="shadow-sm">
-        <CardHeader className="flex flex-col items-end pb-2">
-          <div className="flex items-center gap-2">
-            <Select value={selectedMetric} onValueChange={handleMetricChange}>
-              <SelectTrigger className="w-40 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availableMetrics.map((metric) => (
-                  <SelectItem key={metric} value={metric}>
-                    {metric}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      <Card className="bg-card border border-border shadow-sm rounded-lg">
+        <CardHeader className="pb-2 pt-4 px-4">
+          <CardTitle className="text-sm font-medium text-foreground">{selectedMetric}</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="h-56 md:h-64 flex flex-col gap-4">
-            <div className="flex gap-2 h-full">
-              <div className="flex flex-col justify-between py-2">
-                <Skeleton className="h-3 w-8 opacity-40" />
-                <Skeleton className="h-3 w-10 opacity-40" />
-                <Skeleton className="h-3 w-8 opacity-40" />
-                <Skeleton className="h-3 w-12 opacity-40" />
-                <Skeleton className="h-3 w-8 opacity-40" />
-              </div>
-              <div className="flex-1 flex flex-col justify-end">
-                <div className="flex items-end justify-between gap-1 h-[180px] border-l border-b border-muted/50 px-2">
-                  {Array.from({ length: 12 }).map((_, i) => (
-                    <Skeleton
-                      key={i}
-                      className="flex-1 max-w-8 rounded-t opacity-30"
-                      style={{ height: '20%' }}
-                    />
-                  ))}
-                </div>
-                <div className="flex justify-between px-2 pt-2">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton key={i} className="h-3 w-8 opacity-40" />
-                  ))}
-                </div>
-              </div>
-            </div>
+        <CardContent className="px-4 pb-4">
+          <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
+            No data available
           </div>
         </CardContent>
       </Card>
@@ -698,79 +651,66 @@ export function KPIChart({
   }
 
   return (
-    <Card className="shadow-sm">
-      <CardHeader className="flex flex-col items-end pb-2">
-        <div className="flex items-center gap-2">
-          <Select value={selectedMetric} onValueChange={handleMetricChange}>
-            <SelectTrigger className="w-40 h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {availableMetrics.map((metric) => (
-                <SelectItem key={metric} value={metric}>
-                  {metric}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+    <Card className="bg-card border border-border shadow-sm rounded-lg">
+      <CardHeader className="pb-2 pt-4 px-4">
+        <CardTitle className="text-sm font-medium text-foreground">{selectedMetric}</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="h-56 md:h-64">
+      <CardContent className="px-4 pb-4">
+        <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
+            <AreaChart data={chartData}>
               <defs>
-                <linearGradient id="colorPrimary" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                <linearGradient id={`colorGradient-${selectedMetric}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
+                  <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.05}/>
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis 
                 dataKey="formattedDate" 
-                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-                angle={-45}
-                textAnchor="end"
-                height={50}
-                stroke="hsl(var(--border))"
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
               />
-              <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} stroke="hsl(var(--border))" />
+              <YAxis 
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} 
+                axisLine={false}
+                tickLine={false}
+                width={40}
+              />
               <Tooltip 
                 formatter={(value: number, name: string) => [
                   formatTooltipValue(value, name),
                   name
                 ]}
-                labelFormatter={(label) => `Date: ${label}`}
+                labelFormatter={(label) => `${label}`}
                 contentStyle={{
                   backgroundColor: 'hsl(var(--popover))',
                   border: '1px solid hsl(var(--border))',
-                  borderRadius: '6px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
                 }}
               />
-              <Legend />
-              <Line 
+              <Area 
                 type="monotone" 
                 dataKey={selectedMetric} 
                 stroke="hsl(var(--primary))" 
                 strokeWidth={2}
-                fill="url(#colorPrimary)"
-                dot={{ fill: 'hsl(var(--primary))', strokeWidth: 1.5, r: 3 }}
-                activeDot={{ r: 5 }}
+                fill={`url(#colorGradient-${selectedMetric})`}
                 name="Current Period"
               />
               {stableFilters.compareEnabled && (
-                <Line 
+                <Area 
                   type="monotone" 
                   dataKey={`${selectedMetric}_previous`} 
                   stroke="hsl(var(--muted-foreground))" 
                   strokeWidth={1.5}
-                  dot={{ fill: 'hsl(var(--muted-foreground))', strokeWidth: 1.5, r: 3 }}
-                  activeDot={{ r: 5 }}
+                  fill="transparent"
                   name="Previous Period"
                   strokeDasharray="5 5"
                 />
               )}
-            </LineChart>
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       </CardContent>
