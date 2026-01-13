@@ -43,7 +43,8 @@ interface Dimension {
 }
 
 interface ChannelDimensionConfig {
-  selectedDimensionId: string;
+  viewByDimensionId: string;
+  breakdownByDimensionId: string;
   selectedValues: string[];
 }
 
@@ -67,9 +68,9 @@ export function CreateChildReportModal({
   const [isCreating, setIsCreating] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<"metasearch" | "sem" | "social">("metasearch");
   const [filterSelections, setFilterSelections] = useState<ChannelFilterSelection>({
-    metasearch: { selectedDimensionId: "", selectedValues: [] },
-    sem: { selectedDimensionId: "", selectedValues: [] },
-    social: { selectedDimensionId: "", selectedValues: [] },
+    metasearch: { viewByDimensionId: "", breakdownByDimensionId: "", selectedValues: [] },
+    sem: { viewByDimensionId: "", breakdownByDimensionId: "", selectedValues: [] },
+    social: { viewByDimensionId: "", breakdownByDimensionId: "", selectedValues: [] },
   });
   const [searchQuery, setSearchQuery] = useState("");
   
@@ -200,11 +201,12 @@ export function CreateChildReportModal({
   };
 
   // Handle dimension selection change
-  const handleDimensionChange = (channel: keyof ChannelFilterSelection, dimensionId: string) => {
+  const handleViewByChange = (channel: keyof ChannelFilterSelection, dimensionId: string) => {
     setFilterSelections(prev => ({
       ...prev,
       [channel]: {
-        selectedDimensionId: dimensionId,
+        ...prev[channel],
+        viewByDimensionId: dimensionId,
         selectedValues: [], // Reset values when dimension changes
       },
     }));
@@ -216,6 +218,16 @@ export function CreateChildReportModal({
     }
   };
 
+  const handleBreakdownByChange = (channel: keyof ChannelFilterSelection, dimensionId: string) => {
+    setFilterSelections(prev => ({
+      ...prev,
+      [channel]: {
+        ...prev[channel],
+        breakdownByDimensionId: dimensionId,
+      },
+    }));
+  };
+
   // Reset on modal open
   useEffect(() => {
     if (open) {
@@ -224,9 +236,9 @@ export function CreateChildReportModal({
       setSelectedChannel("metasearch");
       setSearchQuery("");
       setFilterSelections({
-        metasearch: { selectedDimensionId: "", selectedValues: [] },
-        sem: { selectedDimensionId: "", selectedValues: [] },
-        social: { selectedDimensionId: "", selectedValues: [] },
+        metasearch: { viewByDimensionId: "", breakdownByDimensionId: "", selectedValues: [] },
+        sem: { viewByDimensionId: "", breakdownByDimensionId: "", selectedValues: [] },
+        social: { viewByDimensionId: "", breakdownByDimensionId: "", selectedValues: [] },
       });
       setDimensionValues({});
     }
@@ -324,7 +336,7 @@ export function CreateChildReportModal({
   };
 
   const selectAll = () => {
-    const dimId = filterSelections[selectedChannel].selectedDimensionId;
+    const dimId = filterSelections[selectedChannel].viewByDimensionId;
     const allValues = dimensionValues[dimId] || [];
     setFilterSelections(prev => ({
       ...prev,
@@ -346,8 +358,9 @@ export function CreateChildReportModal({
   };
 
   const currentDimensions = channelDimensions[selectedChannel] || [];
-  const selectedDimId = filterSelections[selectedChannel].selectedDimensionId;
-  const currentValues = dimensionValues[selectedDimId] || [];
+  const viewByDimId = filterSelections[selectedChannel].viewByDimensionId;
+  const breakdownByDimId = filterSelections[selectedChannel].breakdownByDimensionId;
+  const currentValues = dimensionValues[viewByDimId] || [];
   const selectedValues = filterSelections[selectedChannel].selectedValues;
 
   const filteredValues = currentValues.filter(v =>
@@ -442,7 +455,7 @@ export function CreateChildReportModal({
                 })}
               </div>
 
-              {/* Dimension Selector + Values List */}
+              {/* Dimension Selectors + Values List */}
               <div className="flex-1 flex flex-col border rounded-lg">
                 {isLoadingDimensions ? (
                   <div className="flex-1 flex items-center justify-center">
@@ -450,68 +463,99 @@ export function CreateChildReportModal({
                   </div>
                 ) : currentDimensions.length > 0 ? (
                   <>
-                    {/* Dimension Selector */}
-                    <div className="p-3 border-b space-y-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Select Dimension</Label>
-                        <Select
-                          value={selectedDimId}
-                          onValueChange={(value) => handleDimensionChange(selectedChannel, value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Choose a dimension..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {currentDimensions.map((dim) => (
-                              <SelectItem key={dim.id} value={dim.id}>
-                                {dim.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    {/* Dimension Selectors Header */}
+                    <div className="p-3 border-b bg-muted/30">
+                      <div className="flex items-center gap-6">
+                        {/* View by Selector */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                            View by:
+                          </span>
+                          <Select
+                            value={viewByDimId}
+                            onValueChange={(value) => handleViewByChange(selectedChannel, value)}
+                          >
+                            <SelectTrigger className="w-[160px] h-8 bg-background">
+                              <SelectValue placeholder="Select..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {currentDimensions.map((dim) => (
+                                <SelectItem key={dim.id} value={dim.id}>
+                                  {dim.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                      {selectedDimId && (
-                        <>
-                          <div className="relative">
-                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input
-                              placeholder="Search values..."
-                              value={searchQuery}
-                              onChange={(e) => setSearchQuery(e.target.value)}
-                              className="pl-8"
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1"
-                              onClick={selectAll}
-                              disabled={currentValues.length === 0}
-                            >
-                              Select All
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1"
-                              onClick={deselectAll}
-                              disabled={selectedValues.length === 0}
-                            >
-                              Deselect All
-                            </Button>
-                          </div>
-                        </>
-                      )}
+                        {/* Breakdown by Selector */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                            Breakdown by:
+                          </span>
+                          <Select
+                            value={breakdownByDimId}
+                            onValueChange={(value) => handleBreakdownByChange(selectedChannel, value)}
+                          >
+                            <SelectTrigger className="w-[160px] h-8 bg-background">
+                              <SelectValue placeholder="None" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="">None</SelectItem>
+                              {currentDimensions
+                                .filter((dim) => dim.id !== viewByDimId)
+                                .map((dim) => (
+                                  <SelectItem key={dim.id} value={dim.id}>
+                                    {dim.name}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Search and Select Controls */}
+                    {viewByDimId && (
+                      <div className="p-3 border-b space-y-3">
+                        <div className="relative">
+                          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            placeholder="Search values..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-8"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={selectAll}
+                            disabled={currentValues.length === 0}
+                          >
+                            Select All
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={deselectAll}
+                            disabled={selectedValues.length === 0}
+                          >
+                            Deselect All
+                          </Button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Values List */}
                     <ScrollArea className="flex-1">
-                      {!selectedDimId ? (
+                      {!viewByDimId ? (
                         <div className="flex items-center justify-center h-full p-4">
                           <p className="text-sm text-muted-foreground text-center">
-                            Select a dimension to see available values
+                            Select a dimension in "View by" to see available values
                           </p>
                         </div>
                       ) : isLoadingValues ? (
