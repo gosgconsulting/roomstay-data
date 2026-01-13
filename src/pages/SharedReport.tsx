@@ -24,6 +24,7 @@ export default function SharedReport() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [shareLink, setShareLink] = useState<any>(null);
+  const [sharedDimensionFilters, setSharedDimensionFilters] = useState<Record<string, Record<string, string[]>>>({});
   const [authenticated, setAuthenticated] = useState(false);
   
   // Report dashboard state
@@ -119,6 +120,12 @@ export default function SharedReport() {
   const initializeReport = async (linkData: any) => {
     console.log('[testing] SharedReport - Initializing report with data:', linkData);
     
+    // Store dimension filters from the share link
+    if (linkData.dimension_filters) {
+      setSharedDimensionFilters(linkData.dimension_filters);
+      console.log('[testing] SharedReport - Applying dimension filters:', linkData.dimension_filters);
+    }
+    
     // For shared links with multiple reports, set reportId to null to show "All Reports" view
     // For single report links, set the specific reportId
     if (linkData.report_ids && linkData.report_ids.length > 0) {
@@ -135,6 +142,15 @@ export default function SharedReport() {
         markComponentLoading('chart');
         markComponentLoading('table');
         setReportId(linkData.report_ids[0]);
+        
+        // Apply dimension filters for this report to filter state
+        const reportFilters = linkData.dimension_filters?.[linkData.report_ids[0]];
+        if (reportFilters) {
+          setFilters(prev => ({
+            ...prev,
+            dimensionFilters: reportFilters
+          }));
+        }
       } else {
         // Multiple reports - show "All Reports" view
         console.log('[testing] SharedReport - Multiple reports shared, showing All Reports view');
