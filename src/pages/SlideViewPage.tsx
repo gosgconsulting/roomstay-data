@@ -1485,6 +1485,13 @@ export default function SlideViewPage() {
     sem: {},
     social: {},
   });
+  
+  // Track loading state for filter values per dimension
+  const [filterValuesLoading, setFilterValuesLoading] = useState<Record<string, Record<string, boolean>>>({
+    metasearch: {},
+    sem: {},
+    social: {},
+  });
 
   // Filter monthly data based on selected year - build from pivot_data
   // Applies filterValues if they are set (but not when "All" is selected)
@@ -2412,31 +2419,73 @@ export default function SlideViewPage() {
       const newNames: Record<string, string> = {};
       const missingDimIds: string[] = [];
       
+      // Also check rawDataRows as a fast fallback (in-memory, no DB query)
+      const rawDataRows = (channelData as any)?.rawDataRows as any[] | undefined;
+      
       for (const filterDimId of filterDimIds) {
         if (filterDimensionValues[currentChannel]?.[filterDimId]?.length > 0) continue;
         
-        // Check pivot_data first
+        // FASTEST: Check pre-computed filterUniqueValues from pivot_data first
         if (filterUniqueValues?.[filterDimId]) {
           newValues[filterDimId] = filterUniqueValues[filterDimId].values;
           newNames[filterDimId] = filterUniqueValues[filterDimId].name;
           console.log(`[selectedTab] Using ${filterUniqueValues[filterDimId].values.length} pre-computed values for ${filterUniqueValues[filterDimId].name}`);
+        } else if (rawDataRows && rawDataRows.length > 0) {
+          // FAST: Extract from rawDataRows (already in memory)
+          const uniqueValues = new Set<string>();
+          for (const row of rawDataRows) {
+            const rowData = row.dimension_values || row;
+            const value = rowData[filterDimId];
+            if (value !== undefined && value !== null && String(value).trim() !== '') {
+              uniqueValues.add(String(value).trim());
+            }
+          }
+          const sortedValues = Array.from(uniqueValues).sort();
+          if (sortedValues.length > 0) {
+            newValues[filterDimId] = sortedValues;
+            // Try to get dimension name from dimensionMap or dimensions list
+            const dimName = (channelData as any)?.dimensionMap?.[filterDimId] 
+              || dimensions[currentChannel]?.find(d => d.id === filterDimId)?.name
+              || filterDimId;
+            newNames[filterDimId] = dimName;
+            console.log(`[selectedTab] Extracted ${sortedValues.length} values from rawDataRows for ${dimName}`);
+          } else {
+            missingDimIds.push(filterDimId);
+          }
         } else {
           missingDimIds.push(filterDimId);
         }
       }
       
-      // Fallback: Load missing values from database
+      // SLOW: Fallback to database only if needed (load in parallel for speed)
       if (missingDimIds.length > 0) {
         console.log(`[selectedTab] Loading ${missingDimIds.length} missing filter values from database for ${currentChannel}...`);
-        const loadPromises: Promise<void>[] = [];
         
-        for (const filterDimId of missingDimIds) {
-          loadPromises.push(
-            loadFilterDimensionValues(currentChannel, filterDimId).then(values => {
+        // Set loading state
+        setFilterValuesLoading(prev => {
+          const updated = { ...prev };
+          if (!updated[currentChannel]) updated[currentChannel] = {};
+          missingDimIds.forEach(id => {
+            updated[currentChannel][id] = true;
+          });
+          return updated;
+        });
+        
+        const loadPromises = missingDimIds.map(filterDimId =>
+          loadFilterDimensionValues(currentChannel, filterDimId).then(values => {
+            if (values.length > 0) {
               newValues[filterDimId] = values;
-            })
-          );
-        }
+            }
+            // Clear loading state for this dimension
+            setFilterValuesLoading(prev => ({
+              ...prev,
+              [currentChannel]: {
+                ...prev[currentChannel],
+                [filterDimId]: false,
+              },
+            }));
+          })
+        );
         
         await Promise.all(loadPromises);
       }
@@ -3190,6 +3239,7 @@ export default function SlideViewPage() {
   };
 
   // Helper function to load filter dimension values for a specific dimension
+  // Optimized to use fastest available data source: rawDataRows > filterUniqueValues > database
   const loadFilterDimensionValues = async (channel: 'metasearch' | 'sem' | 'social', filterDimId: string): Promise<string[]> => {
     const reportId = CHANNEL_REPORT_IDS[channel];
     if (!reportId) {
@@ -3198,6 +3248,38 @@ export default function SlideViewPage() {
     }
 
     try {
+      // FASTEST PATH: Use rawDataRows if available (already in memory, no DB query needed)
+      const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+      const channelData = pivotData?.channels?.[channel];
+      const rawDataRows = (channelData as any)?.rawDataRows as any[] | undefined;
+      
+      if (rawDataRows && rawDataRows.length > 0) {
+        console.log(`[loadFilterDimensionValues] Using rawDataRows (${rawDataRows.length} rows) for ${channel}/${filterDimId}`);
+        const uniqueValues = new Set<string>();
+        
+        for (const row of rawDataRows) {
+          const rowData = row.dimension_values || row;
+          const value = rowData[filterDimId];
+          if (value !== undefined && value !== null && String(value).trim() !== '') {
+            uniqueValues.add(String(value).trim());
+          }
+        }
+        
+        const sortedValues = Array.from(uniqueValues).sort();
+        console.log(`[loadFilterDimensionValues] Extracted ${sortedValues.length} unique values from rawDataRows for ${channel}/${filterDimId}:`, sortedValues.slice(0, 5));
+        return sortedValues;
+      }
+      
+      // FAST PATH: Use pre-computed filterUniqueValues from pivot_data
+      const filterUniqueValues = (channelData as any)?.filterUniqueValues as Record<string, { name: string; values: string[] }> | undefined;
+      if (filterUniqueValues?.[filterDimId]) {
+        console.log(`[loadFilterDimensionValues] Using pre-computed filterUniqueValues for ${channel}/${filterDimId}`);
+        return filterUniqueValues[filterDimId].values;
+      }
+
+      // SLOW PATH: Fallback to database query (only if above methods unavailable)
+      console.log(`[loadFilterDimensionValues] Falling back to database query for ${channel}/${filterDimId}...`);
+      
       // Fetch all rows using pagination to ensure no values are missing
       const allDimData: any[] = [];
       const batchSize = 1000;
@@ -3225,16 +3307,14 @@ export default function SlideViewPage() {
         }
       }
 
-      const dimData = allDimData;
-
-      if (!dimData || dimData.length === 0) {
+      if (allDimData.length === 0) {
         console.log(`[loadFilterDimensionValues] No dimension_data found for ${channel} (report: ${reportId})`);
         return [];
       }
 
       // Extract unique values only for this specific filter dimension ID
       const uniqueValues = new Set<string>();
-      for (const row of dimData) {
+      for (const row of allDimData) {
         const rowValues = row.dimension_values as Record<string, any>;
         // Only extract values for this specific filter dimension ID
         if (rowValues && rowValues[filterDimId] !== undefined && rowValues[filterDimId] !== null) {
@@ -3246,7 +3326,7 @@ export default function SlideViewPage() {
       }
 
       const sortedValues = Array.from(uniqueValues).sort();
-      console.log(`[loadFilterDimensionValues] Loaded ${sortedValues.length} filter values for ${channel}/${filterDimId}:`, sortedValues.slice(0, 5));
+      console.log(`[loadFilterDimensionValues] Loaded ${sortedValues.length} filter values from database for ${channel}/${filterDimId}:`, sortedValues.slice(0, 5));
       return sortedValues;
     } catch (error) {
       console.error(`[loadFilterDimensionValues] Error loading filter values for ${channel}/${filterDimId}:`, error);
@@ -5006,7 +5086,7 @@ export default function SlideViewPage() {
                   return (
                     <Popover 
                       key={`filter-${currentChannel}-${filterDimId}`}
-                      onOpenChange={(open) => {
+                      onOpenChange={async (open) => {
                         if (open) {
                           // Initialize pending values with current selection when opening
                           setPendingFilterValues(prev => ({
@@ -5016,6 +5096,52 @@ export default function SlideViewPage() {
                               [filterDimId]: selectedFilterValues,
                             },
                           }));
+                          
+                          // If values aren't loaded yet, trigger loading immediately
+                          if (!hasValues && !filterValuesLoading[currentChannel]?.[filterDimId]) {
+                            console.log(`[FilterPopover] Triggering immediate load for ${currentChannel}/${filterDimId}`);
+                            setFilterValuesLoading(prev => ({
+                              ...prev,
+                              [currentChannel]: {
+                                ...prev[currentChannel],
+                                [filterDimId]: true,
+                              },
+                            }));
+                            
+                            const values = await loadFilterDimensionValues(currentChannel, filterDimId);
+                            if (values.length > 0) {
+                              setFilterDimensionValues(prev => ({
+                                ...prev,
+                                [currentChannel]: {
+                                  ...prev[currentChannel],
+                                  [filterDimId]: values,
+                                },
+                              }));
+                              
+                              // Get dimension name
+                              const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+                              const channelData = pivotData?.channels?.[currentChannel];
+                              const dimName = (channelData as any)?.dimensionMap?.[filterDimId] 
+                                || dimensions[currentChannel]?.find(d => d.id === filterDimId)?.name
+                                || filterDimId;
+                              
+                              setFilterDimensionNames(prev => ({
+                                ...prev,
+                                [currentChannel]: {
+                                  ...prev[currentChannel],
+                                  [filterDimId]: dimName,
+                                },
+                              }));
+                            }
+                            
+                            setFilterValuesLoading(prev => ({
+                              ...prev,
+                              [currentChannel]: {
+                                ...prev[currentChannel],
+                                [filterDimId]: false,
+                              },
+                            }));
+                          }
                         }
                       }}
                     >
@@ -5072,7 +5198,19 @@ export default function SlideViewPage() {
                           </div>
                           <ScrollArea className="h-[200px]">
                             <div className="space-y-1 p-1">
-                              {hasValues ? filterValuesList.map(value => {
+                              {(() => {
+                                const isLoading = filterValuesLoading[currentChannel]?.[filterDimId];
+                                
+                                if (isLoading) {
+                                  return (
+                                    <div className="flex items-center justify-center py-8">
+                                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mr-2" />
+                                      <span className="text-sm text-muted-foreground">Loading values...</span>
+                                    </div>
+                                  );
+                                }
+                                
+                                return hasValues ? filterValuesList.map(value => {
                                 const isSelected = pendingValues.includes(value);
                                 return (
                                   <div
@@ -5105,7 +5243,8 @@ export default function SlideViewPage() {
                                 <div className="text-center py-4 text-muted-foreground text-sm">
                                   Click "Refresh Data" to load filter values
                                 </div>
-                              )}
+                              );
+                              })()}
                             </div>
                           </ScrollArea>
                           <div className="border-t p-2">
