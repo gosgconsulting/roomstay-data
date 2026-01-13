@@ -54,13 +54,13 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
 
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs text-muted-foreground">Date Range</label>
+      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Date Range:</label>
       <Popover>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             className={cn(
-              "w-[200px] justify-start text-left font-normal bg-background",
+              "w-[180px] justify-start text-left font-normal bg-background border-input",
               !dateRange?.from && datePreset !== "all_time" && "text-muted-foreground"
             )}
           >

@@ -47,15 +47,15 @@ export const DimensionFilter: React.FC<DimensionFilterProps> = ({
   if (isLoading) {
     return (
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">{dimension.name}</span>
-        <Skeleton className="h-10 w-[200px]" />
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{dimension.name}:</span>
+        <Skeleton className="h-10 w-[160px]" />
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs text-muted-foreground">{dimension.name}</label>
+      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{dimension.name}:</label>
       <Popover open={open} onOpenChange={(o) => {
         onOpenChange(o);
         if (!o) onSearchTermChange("");
@@ -63,10 +63,10 @@ export const DimensionFilter: React.FC<DimensionFilterProps> = ({
         <PopoverTrigger asChild>
           <Button
             variant="outline"
-            className="w-[200px] justify-between bg-background"
+            className="w-[160px] justify-between bg-background border-input"
           >
             {selectedCount === 0 ? (
-              <span>All {dimension.name}</span>
+              <span>All</span>
             ) : (
               <span>
                 {selectedCount === 1 ? selectedValues[0] : `${selectedCount} selected`}
