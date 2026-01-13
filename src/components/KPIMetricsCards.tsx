@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Eye, MousePointer, ShoppingCart, DollarSign, Percent, Target } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -466,16 +466,12 @@ export function KPIMetricsCards({
         <div className="flex items-center justify-end mb-4">
           {headerAction}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 mb-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-4">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Card key={i} className="animate-pulse shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-xs font-medium uppercase text-muted-foreground">
-                  <div className="h-3 bg-muted rounded w-20"></div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-10 bg-muted rounded w-24 mb-1"></div>
+            <Card key={i} className="bg-card border border-border shadow-sm rounded-lg animate-pulse">
+              <CardContent className="p-4">
+                <div className="h-3 bg-muted rounded w-16 mb-2" />
+                <div className="h-7 bg-muted rounded w-20" />
               </CardContent>
             </Card>
           ))}
@@ -490,14 +486,12 @@ export function KPIMetricsCards({
         <div className="flex items-center justify-end mb-4">
           {headerAction}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 mb-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-4">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Card key={i} className="shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <div className="h-3 bg-muted/50 rounded w-20" />
-              </CardHeader>
-              <CardContent>
-                <div className="h-10 bg-muted/50 rounded w-24 mb-1" />
+            <Card key={i} className="bg-card border border-border shadow-sm rounded-lg">
+              <CardContent className="p-4">
+                <div className="h-3 bg-muted/50 rounded w-16 mb-2" />
+                <div className="h-7 bg-muted/50 rounded w-20" />
               </CardContent>
             </Card>
           ))}
@@ -511,20 +505,21 @@ export function KPIMetricsCards({
       <div className="flex items-center justify-end mb-4">
         {headerAction}
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 mb-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-4">
         {metrics.map((metric, index) => {
-          const IconComponent = metric.icon;
           return (
-            <Card key={index} className="shadow-sm border-border bg-card">
-              <CardHeader className="space-y-0 pb-2">
-                <CardTitle className="text-xs font-medium uppercase text-muted-foreground tracking-wide">{metric.label}</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="text-2xl font-bold text-foreground mb-1">{metric.value}</div>
+            <Card key={index} className="bg-card border border-border shadow-sm rounded-lg">
+              <CardContent className="p-4">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                  {metric.label}
+                </p>
+                <p className="text-2xl font-bold text-foreground">
+                  {metric.value}
+                </p>
                 {metric.change !== undefined && metric.compareValue !== undefined && (
                   <p className={cn(
-                    "text-xs flex items-center gap-1 font-medium",
-                    metric.change >= 0 ? 'text-success' : 'text-destructive'
+                    "text-xs flex items-center gap-1 font-medium mt-1",
+                    metric.change >= 0 ? 'text-green-600' : 'text-red-600'
                   )}>
                     {metric.change >= 0 ? (
                       <TrendingUp className="h-3 w-3" />
