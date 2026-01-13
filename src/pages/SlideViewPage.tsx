@@ -24,6 +24,10 @@ import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { SlideDataBrowser } from "@/components/slides/SlideDataBrowser";
 import { RefreshStepIndicator, ChannelTabsList, DimensionValuesList } from "@/components/slides/EditSourceModal";
 import { ShareModal } from "@/components/ShareModal";
+import { isWithinInterval } from "date-fns";
+import { aggregateMetrics } from "@/components/AISummaryPivotTable";
+
+const BASE_METRICS = ["Impressions", "Clicks", "Cost", "Revenue", "Bookings"];
 
 // HARDCODED DATA - COMMENTED OUT: Now using data from Supabase pivot_data
 // REAL DATA from database queries - December 2025 Brady Hotels Account (after resync)
@@ -379,6 +383,129 @@ const calculateDerivedMetrics = (data: { impressions: number; clicks: number; co
   costOfSale: data.revenue > 0 ? (data.cost / data.revenue) * 100 : 0,
 });
 
+// Helper function to check if filters are actually applied (not "All" selected)
+const hasActiveFilters = (
+  filterValues: Record<string, string[]>,
+  availableValues?: Record<string, string[]>
+): boolean => {
+  // If no filter values at all, no filters are applied
+  if (!filterValues || Object.keys(filterValues).length === 0) {
+    return false;
+  }
+  
+  // Check each filter dimension
+  for (const [dimensionId, selectedValues] of Object.entries(filterValues)) {
+    // If no values selected, it means "All" - no filter
+    if (!selectedValues || selectedValues.length === 0) {
+      continue;
+    }
+    
+    // If we have available values, check if all are selected (means "All" - no filter)
+    if (availableValues?.[dimensionId]) {
+      const allAvailableValues = availableValues[dimensionId];
+      // If selected values equals all available values, it's "All" - no filter
+      if (selectedValues.length === allAvailableValues.length) {
+        // Double-check: are they the same set?
+        const selectedSet = new Set(selectedValues);
+        const allSet = new Set(allAvailableValues);
+        if (selectedSet.size === allSet.size && 
+            [...selectedSet].every(v => allSet.has(v))) {
+          continue; // This is "All" - no filter
+        }
+      }
+    }
+    
+    // If we have selected values that are a subset, filter is applied
+    return true;
+  }
+  
+  // No active filters found
+  return false;
+};
+
+// Helper function to filter rawDataRows based on filterValues
+const filterRawDataRows = (
+  rawDataRows: any[],
+  filterValues: Record<string, string[]>,
+  dateRange?: { start: Date; end: Date }
+): any[] => {
+  if (!rawDataRows || rawDataRows.length === 0) return [];
+  
+  return rawDataRows.filter((row) => {
+    const rowData = row.dimension_values || row;
+    
+    // Apply date filter if provided
+    if (dateRange) {
+      let dateValue: any = null;
+      // Try to find date by common field names
+      dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
+      
+      // Search for date pattern
+      if (!dateValue) {
+        for (const [key, val] of Object.entries(rowData)) {
+          if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+            dateValue = val;
+            break;
+          }
+        }
+      }
+      
+      if (dateValue) {
+        const rowDate = new Date(dateValue);
+        if (isNaN(rowDate.getTime()) || !isWithinInterval(rowDate, dateRange)) {
+          return false;
+        }
+      }
+    }
+    
+    // Apply dimension filters
+    for (const [dimensionId, selectedValues] of Object.entries(filterValues)) {
+      if (!selectedValues || selectedValues.length === 0) continue; // "All" selected - no filter
+      
+      const rowValue = rowData[dimensionId];
+      if (rowValue === undefined || rowValue === null) {
+        return false; // Row doesn't have this dimension
+      }
+      
+      const normalizedRowValue = String(rowValue).trim();
+      const normalizedFilterValues = selectedValues.map(v => String(v).trim());
+      
+      if (!normalizedFilterValues.includes(normalizedRowValue)) {
+        return false; // Row value doesn't match any selected filter value
+      }
+    }
+    
+    return true;
+  });
+};
+
+// Helper function to aggregate metrics from filtered rawDataRows
+const aggregateMetricsFromRows = (
+  filteredRows: any[],
+  metricIds: { impressions: string; clicks: string; cost: string; revenue: string; bookings: string }
+): { impressions: number; clicks: number; cost: number; revenue: number; bookings: number } => {
+  const result = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+  
+  filteredRows.forEach((row) => {
+    const rowData = row.dimension_values || row;
+    
+    // Aggregate each metric by its dimension ID
+    const impressions = parseFloat(String(rowData[metricIds.impressions] || rowData['Impressions'] || 0).replace(/[^0-9.-]/g, ''));
+    const clicks = parseFloat(String(rowData[metricIds.clicks] || rowData['Clicks'] || 0).replace(/[^0-9.-]/g, ''));
+    const cost = parseFloat(String(rowData[metricIds.cost] || rowData['Cost'] || 0).replace(/[^0-9.-]/g, ''));
+    const revenue = parseFloat(String(rowData[metricIds.revenue] || rowData['Revenue'] || 0).replace(/[^0-9.-]/g, ''));
+    const bookings = parseFloat(String(rowData[metricIds.bookings] || rowData['Bookings'] || 0).replace(/[^0-9.-]/g, ''));
+    
+    if (!isNaN(impressions)) result.impressions += impressions;
+    if (!isNaN(clicks)) result.clicks += clicks;
+    if (!isNaN(cost)) result.cost += cost;
+    if (!isNaN(revenue)) result.revenue += revenue;
+    if (!isNaN(bookings)) result.bookings += bookings;
+  });
+  
+  return result;
+};
+
 const calculatePercentChange = (current: number, previous: number): number => {
   if (previous === 0) return current > 0 ? 100 : 0;
   return ((current - previous) / previous) * 100;
@@ -469,6 +596,70 @@ const formatNumber = (value: number, type?: string): string => {
 //   return combined;
 // };
 
+// Helper functions for dynamic metric resolution
+// Builds a mapping from metric names to dimension IDs using the dimensionMap
+const buildMetricNameToIdsMap = (dimensionMap: Record<string, string> | undefined): Record<string, string[]> => {
+  if (!dimensionMap) return {};
+  
+  const nameToIds: Record<string, string[]> = {};
+  
+  Object.entries(dimensionMap).forEach(([dimensionId, dimensionName]) => {
+    if (!dimensionName) return;
+    
+    const normalizedName = dimensionName.toLowerCase().trim();
+    
+    // Map common metric name variations to standard names
+    const metricVariations: Record<string, string[]> = {
+      'impressions': ['impressions', 'impression'],
+      'clicks': ['clicks', 'click'],
+      'cost': ['cost', 'spend', 'amount spent'],
+      'revenue': ['revenue', 'conversion value', 'purchase value'],
+      'bookings': ['bookings', 'conversions', 'conversion'],
+    };
+    
+    for (const [standardName, variations] of Object.entries(metricVariations)) {
+      if (variations.some(v => normalizedName.includes(v) || v.includes(normalizedName))) {
+        if (!nameToIds[standardName]) {
+          nameToIds[standardName] = [];
+        }
+        nameToIds[standardName].push(dimensionId);
+        if (!nameToIds[dimensionName]) {
+          nameToIds[dimensionName] = [];
+        }
+        nameToIds[dimensionName].push(dimensionId);
+        if (!nameToIds[normalizedName]) {
+          nameToIds[normalizedName] = [];
+        }
+        nameToIds[normalizedName].push(dimensionId);
+        break;
+      }
+    }
+  });
+  
+  return nameToIds;
+};
+
+// Helper function to get all possible keys (names + IDs) for a metric
+const getMetricKeys = (
+  metricName: string,
+  nameToIdsMap: Record<string, string[]>
+): string[] => {
+  const keys: string[] = [];
+  
+  // Add the metric name itself and common variations
+  keys.push(metricName);
+  keys.push(metricName.toLowerCase());
+  keys.push(metricName.charAt(0).toUpperCase() + metricName.slice(1).toLowerCase());
+  
+  // Add all dimension IDs for this metric
+  const dimensionIds = nameToIdsMap[metricName.toLowerCase()] || 
+                       nameToIdsMap[metricName] || 
+                       [];
+  keys.push(...dimensionIds);
+  
+  return keys;
+};
+
 // Unified breakdown table component with Group by / Breakdown by dropdowns
 // Uses data from pivot_data.channels[channel].monthlyBreakdowns for month-specific data
 const UnifiedBreakdownTable = ({ 
@@ -483,6 +674,8 @@ const UnifiedBreakdownTable = ({
   selectedChannel,
   selectedYear,
   selectedMonth,
+  filterValues,
+  filterDimensionValues,
 }: {
   groupBy: string;
   breakdownBy: string;
@@ -495,6 +688,8 @@ const UnifiedBreakdownTable = ({
   selectedChannel?: 'metasearch' | 'sem' | 'social' | 'overview';
   selectedYear?: string;
   selectedMonth?: string;
+  filterValues?: Record<string, Record<string, string[]>>;
+  filterDimensionValues?: Record<string, Record<string, string[]>>;
 }) => {
   // Auto-select defaults when dimensions are available
   useEffect(() => {
@@ -524,11 +719,34 @@ const UnifiedBreakdownTable = ({
   }, [selectedYear, selectedMonth]);
 
   // Get breakdown data from pivotData based on selected dimension and month
+  // Applies filterValues if they are set
   const groupedData = useMemo(() => {
     if (!pivotData?.channels) return [];
     
     const groupByDim = availableDimensions.find(d => d.id === groupBy);
     const groupByName = groupByDim?.name || groupBy;
+    const groupByDimId = groupByDim?.id || groupBy;
+    
+    // Check if filters are actually applied for the selected channel (not "All" selected)
+    const hasFilters = selectedChannel && selectedChannel !== 'overview' && filterValues?.[selectedChannel]
+      ? Object.entries(filterValues[selectedChannel]).some(([dimensionId, selectedValues]) => {
+          if (!selectedValues || selectedValues.length === 0) {
+            return false; // Empty = "All" selected = no filter
+          }
+          // Check if all available values are selected (also means "All" = no filter)
+          const availableValues = filterDimensionValues?.[selectedChannel]?.[dimensionId] || [];
+          if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
+            // Check if they're the same set
+            const selectedSet = new Set(selectedValues);
+            const availableSet = new Set(availableValues);
+            if (selectedSet.size === availableSet.size && 
+                [...selectedSet].every(v => availableSet.has(v))) {
+              return false; // All values selected = "All" = no filter
+            }
+          }
+          return true; // Subset selected = filter is applied
+        })
+      : false;
     
     // Collect breakdown data from all channels (or specific channel if selected)
     const allBreakdowns: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
@@ -541,30 +759,114 @@ const UnifiedBreakdownTable = ({
       const channelData = pivotData.channels[channel];
       if (!channelData) continue;
       
-      // Use monthlyBreakdowns if a specific month is selected, otherwise use aggregated breakdowns
-      let breakdownData: any[] = [];
+      const rawDataRows = (channelData as any).rawDataRows || [];
       
-      if (monthKey && channelData.monthlyBreakdowns?.[monthKey]) {
-        // Use month-specific breakdown data
-        breakdownData = channelData.monthlyBreakdowns[monthKey][groupByName] || [];
-        console.log(`[UnifiedBreakdownTable] Using monthlyBreakdowns for ${channel}/${monthKey}/${groupByName}:`, breakdownData.length, 'rows');
-      } else if (channelData.breakdowns) {
-        // Fall back to aggregated breakdowns
-        breakdownData = channelData.breakdowns[groupByName] || [];
-        console.log(`[UnifiedBreakdownTable] Using aggregated breakdowns for ${channel}/${groupByName}:`, breakdownData.length, 'rows');
-      }
-      
-      breakdownData.forEach((row: any) => {
-        const groupValue = row.name || row[groupByName.toLowerCase().replace(/\s+/g, '_')] || 'Unknown';
-        if (!allBreakdowns[groupValue]) {
-          allBreakdowns[groupValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+      // Always use rawDataRows when available for consistency and completeness
+      // This ensures we use the dynamic dimension resolution and get all data
+      if (rawDataRows.length > 0) {
+        const channelFilterValues = hasFilters && channel === selectedChannel 
+          ? (filterValues?.[channel] || {})
+          : {};
+        
+        // Build date range if month/year is selected
+        let dateRange: { start: Date; end: Date } | undefined;
+        if (monthKey) {
+          const [year, monthNum] = monthKey.split('-').map(Number);
+          const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+          dateRange = {
+            start: new Date(year, monthNum - 1, 1),
+            end: new Date(year, monthNum, 0, 23, 59, 59),
+          };
+        } else if (selectedYear && selectedYear !== 'all') {
+          const yearNum = parseInt(selectedYear);
+          dateRange = {
+            start: new Date(yearNum, 0, 1),
+            end: new Date(yearNum, 11, 31, 23, 59, 59),
+          };
         }
-        allBreakdowns[groupValue].impressions += row.impressions || 0;
-        allBreakdowns[groupValue].clicks += row.clicks || 0;
-        allBreakdowns[groupValue].cost += row.cost || 0;
-        allBreakdowns[groupValue].revenue += row.revenue || 0;
-        allBreakdowns[groupValue].bookings += row.bookings || 0;
-      });
+        
+        // Filter rows (applies date range and any filters)
+        const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange);
+        
+        // Group by breakdown dimension and aggregate metrics
+        const groupedRows: Record<string, any[]> = {};
+        filteredRows.forEach((row) => {
+          const rowData = row.dimension_values || row;
+          const groupValue = rowData[groupByDimId] || rowData[groupByName] || 'Unknown';
+          const normalizedGroupValue = String(groupValue).trim();
+          
+          if (normalizedGroupValue && normalizedGroupValue !== 'Unknown') {
+            if (!groupedRows[normalizedGroupValue]) {
+              groupedRows[normalizedGroupValue] = [];
+            }
+            groupedRows[normalizedGroupValue].push(row);
+          }
+        });
+        
+        // Build dynamic metric mapping from dimensionMap (once per channel)
+        const dimensionMap = (channelData as any).dimensionMap || {};
+        const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+        
+        // Aggregate metrics for each group
+        Object.entries(groupedRows).forEach(([groupValue, groupRows]) => {
+          if (!allBreakdowns[groupValue]) {
+            allBreakdowns[groupValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+          }
+          
+          groupRows.forEach((row) => {
+            const rowData = row.dimension_values || row;
+            
+            // Extract metrics using dynamic resolution
+            const getMetricValue = (keys: string[]): number => {
+              for (const key of keys) {
+                const value = rowData[key];
+                if (value !== undefined && value !== null) {
+                  if (typeof value === 'number') {
+                    return isNaN(value) ? 0 : value;
+                  }
+                  const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
+                  if (!isNaN(parsed)) {
+                    return parsed;
+                  }
+                }
+              }
+              return 0;
+            };
+            
+            allBreakdowns[groupValue].impressions += getMetricValue(getMetricKeys('impressions', nameToIdsMap));
+            allBreakdowns[groupValue].clicks += getMetricValue(getMetricKeys('clicks', nameToIdsMap));
+            allBreakdowns[groupValue].cost += getMetricValue(getMetricKeys('cost', nameToIdsMap));
+            allBreakdowns[groupValue].revenue += getMetricValue(getMetricKeys('revenue', nameToIdsMap));
+            allBreakdowns[groupValue].bookings += getMetricValue(getMetricKeys('bookings', nameToIdsMap));
+          });
+        });
+      } else {
+        // Fallback: No rawDataRows available - use pre-computed breakdown data
+        // Use monthlyBreakdowns if a specific month is selected, otherwise use aggregated breakdowns
+        let breakdownData: any[] = [];
+        
+        if (monthKey && channelData.monthlyBreakdowns?.[monthKey]) {
+          // Use month-specific breakdown data
+          breakdownData = channelData.monthlyBreakdowns[monthKey][groupByName] || [];
+          console.log(`[UnifiedBreakdownTable] Fallback: Using monthlyBreakdowns for ${channel}/${monthKey}/${groupByName}:`, breakdownData.length, 'rows');
+        } else if (channelData.breakdowns) {
+          // Fall back to aggregated breakdowns
+          breakdownData = channelData.breakdowns[groupByName] || [];
+          console.log(`[UnifiedBreakdownTable] Fallback: Using aggregated breakdowns for ${channel}/${groupByName}:`, breakdownData.length, 'rows');
+        }
+        
+        breakdownData.forEach((row: any) => {
+          const groupValue = row.name || row[groupByName.toLowerCase().replace(/\s+/g, '_')] || 'Unknown';
+          if (!allBreakdowns[groupValue]) {
+            allBreakdowns[groupValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+          }
+          allBreakdowns[groupValue].impressions += row.impressions || 0;
+          allBreakdowns[groupValue].clicks += row.clicks || 0;
+          allBreakdowns[groupValue].cost += row.cost || 0;
+          allBreakdowns[groupValue].revenue += row.revenue || 0;
+          allBreakdowns[groupValue].bookings += row.bookings || 0;
+        });
+      }
     }
 
     // Convert to array and calculate derived metrics
@@ -576,46 +878,149 @@ const UnifiedBreakdownTable = ({
         metrics: calculateDerivedMetrics(data),
         rawData: data,
       }));
-  }, [pivotData, groupBy, availableDimensions, selectedChannel, monthKey]);
+  }, [pivotData, groupBy, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear]);
 
   // Get breakdown data for expanded row (also uses month-specific data)
+  // This should show breakdown data ONLY for the expanded parent row value
   const getExpandedBreakdownData = useMemo(() => {
     if (!expandedRow || !pivotData?.channels || !breakdownBy) return [];
     
+    const groupByDim = availableDimensions.find(d => d.id === groupBy);
+    const groupByDimId = groupByDim?.id || groupBy;
+    const groupByName = groupByDim?.name || groupBy;
+    
     const breakdownByDim = availableDimensions.find(d => d.id === breakdownBy);
     const breakdownByName = breakdownByDim?.name || breakdownBy;
+    const breakdownByDimId = breakdownByDim?.id || breakdownBy;
     
     const channelsToCheck = selectedChannel && selectedChannel !== 'overview' 
       ? [selectedChannel] 
       : Object.keys(pivotData.channels);
     
-    // For now, show the breakdown data filtered by the expanded row
-    // This would ideally be cross-breakdown data, but we'll show the breakdownBy dimension data
+    // Check if filters are actually applied (not "All" selected)
+    const hasFilters = selectedChannel && selectedChannel !== 'overview' && filterValues?.[selectedChannel]
+      ? Object.entries(filterValues[selectedChannel]).some(([dimensionId, selectedValues]) => {
+          if (!selectedValues || selectedValues.length === 0) {
+            return false; // Empty = "All" selected = no filter
+          }
+          // Check if all available values are selected (also means "All" = no filter)
+          const availableValues = filterDimensionValues?.[selectedChannel]?.[dimensionId] || [];
+          if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
+            // Check if they're the same set
+            const selectedSet = new Set(selectedValues);
+            const availableSet = new Set(availableValues);
+            if (selectedSet.size === availableSet.size && 
+                [...selectedSet].every(v => availableSet.has(v))) {
+              return false; // All values selected = "All" = no filter
+            }
+          }
+          return true; // Subset selected = filter is applied
+        })
+      : false;
+    
     const allBreakdowns: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
     
     for (const channel of channelsToCheck) {
       const channelData = pivotData.channels[channel];
       if (!channelData) continue;
       
-      // Use monthlyBreakdowns if a specific month is selected, otherwise use aggregated breakdowns
-      let breakdownData: any[] = [];
-      
-      if (monthKey && channelData.monthlyBreakdowns?.[monthKey]) {
-        breakdownData = channelData.monthlyBreakdowns[monthKey][breakdownByName] || [];
-      } else if (channelData.breakdowns) {
-        breakdownData = channelData.breakdowns[breakdownByName] || [];
+      // Build date range if month is selected
+      let dateRange: { start: Date; end: Date } | undefined;
+      if (monthKey) {
+        const [year, monthNum] = monthKey.split('-').map(Number);
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        dateRange = {
+          start: new Date(year, monthNum - 1, 1),
+          end: new Date(year, monthNum, 0, 23, 59, 59),
+        };
+      } else if (selectedYear && selectedYear !== 'all') {
+        const yearNum = parseInt(selectedYear);
+        dateRange = {
+          start: new Date(yearNum, 0, 1),
+          end: new Date(yearNum, 11, 31, 23, 59, 59),
+        };
       }
       
-      breakdownData.forEach((row: any) => {
-        const value = row.name || row[breakdownByName.toLowerCase().replace(/\s+/g, '_')] || 'Unknown';
-        if (!allBreakdowns[value]) {
-          allBreakdowns[value] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+      // Get raw data rows
+      const rawDataRows = (channelData as any).rawDataRows || [];
+      
+      // Apply filters if they exist
+      let filteredRows = rawDataRows;
+      if (hasFilters && channel === selectedChannel) {
+        const channelFilterValues = filterValues?.[channel] || {};
+        filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange);
+      } else if (dateRange) {
+        // Even without filters, apply date range if specified
+        filteredRows = filterRawDataRows(rawDataRows, {}, dateRange);
+      }
+      
+      // Filter to only rows where groupBy dimension matches expandedRow
+      const rowsForExpandedRow = filteredRows.filter((row) => {
+        const rowData = row.dimension_values || row;
+        const rowGroupValue = rowData[groupByDimId] || rowData[groupByName];
+        const normalizedRowGroupValue = String(rowGroupValue || '').trim();
+        const normalizedExpandedRow = String(expandedRow).trim();
+        return normalizedRowGroupValue === normalizedExpandedRow;
+      });
+      
+      console.log(`[getExpandedBreakdownData] Filtered rows for ${expandedRow}:`, {
+        totalRows: filteredRows.length,
+        rowsForExpandedRow: rowsForExpandedRow.length,
+        groupByDimId,
+        groupByName,
+      });
+      
+      // Group by breakdownBy dimension
+      const groupedRows: Record<string, any[]> = {};
+      rowsForExpandedRow.forEach((row) => {
+        const rowData = row.dimension_values || row;
+        const breakdownValue = rowData[breakdownByDimId] || rowData[breakdownByName] || 'Unknown';
+        const normalizedBreakdownValue = String(breakdownValue).trim();
+        
+        if (normalizedBreakdownValue && normalizedBreakdownValue !== 'Unknown') {
+          if (!groupedRows[normalizedBreakdownValue]) {
+            groupedRows[normalizedBreakdownValue] = [];
+          }
+          groupedRows[normalizedBreakdownValue].push(row);
         }
-        allBreakdowns[value].impressions += row.impressions || 0;
-        allBreakdowns[value].clicks += row.clicks || 0;
-        allBreakdowns[value].cost += row.cost || 0;
-        allBreakdowns[value].revenue += row.revenue || 0;
-        allBreakdowns[value].bookings += row.bookings || 0;
+      });
+      
+      // Aggregate metrics for each breakdown value
+      Object.entries(groupedRows).forEach(([breakdownValue, groupRows]) => {
+        if (!allBreakdowns[breakdownValue]) {
+          allBreakdowns[breakdownValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+        }
+        
+        groupRows.forEach((row) => {
+          const rowData = row.dimension_values || row;
+          
+          // Build dynamic metric mapping from dimensionMap
+          const dimensionMap = (channelData as any).dimensionMap || {};
+          const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+          
+          // Extract metrics using dynamic resolution
+          const getMetricValue = (keys: string[]): number => {
+            for (const key of keys) {
+              const value = rowData[key];
+              if (value !== undefined && value !== null) {
+                if (typeof value === 'number') {
+                  return isNaN(value) ? 0 : value;
+                }
+                const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
+                if (!isNaN(parsed)) {
+                  return parsed;
+                }
+              }
+            }
+            return 0;
+          };
+          
+          allBreakdowns[breakdownValue].impressions += getMetricValue(getMetricKeys('impressions', nameToIdsMap));
+          allBreakdowns[breakdownValue].clicks += getMetricValue(getMetricKeys('clicks', nameToIdsMap));
+          allBreakdowns[breakdownValue].cost += getMetricValue(getMetricKeys('cost', nameToIdsMap));
+          allBreakdowns[breakdownValue].revenue += getMetricValue(getMetricKeys('revenue', nameToIdsMap));
+          allBreakdowns[breakdownValue].bookings += getMetricValue(getMetricKeys('bookings', nameToIdsMap));
+        });
       });
     }
     
@@ -626,7 +1031,7 @@ const UnifiedBreakdownTable = ({
         value,
         metrics: calculateDerivedMetrics(data),
       }));
-  }, [expandedRow, pivotData, breakdownBy, availableDimensions, selectedChannel, monthKey]);
+  }, [expandedRow, pivotData, breakdownBy, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear, groupBy]);
 
   // Calculate totals
   const totals = groupedData.reduce((acc, group) => ({
@@ -974,10 +1379,111 @@ export default function SlideViewPage() {
   const updateSlideReport = useUpdateSlideReport();
   const refreshSlideReportData = useRefreshSlideReportData();
 
+  // Filter values state for slides page (channel -> dimensionId -> selected value)
+  // Moved here so it's available for useMemo hooks
+  const [filterValues, setFilterValues] = useState<Record<string, Record<string, string[]>>>({
+    metasearch: {},
+    sem: {},
+    social: {},
+  });
+
+  // Filter dimension values state (for dropdowns) - channel -> dimensionId -> values[]
+  // Moved here so it's available for useMemo hooks
+  const [filterDimensionValues, setFilterDimensionValues] = useState<Record<string, Record<string, string[]>>>({
+    metasearch: {},
+    sem: {},
+    social: {},
+  });
+
   // Filter monthly data based on selected year - build from pivot_data
+  // Applies filterValues if they are set (but not when "All" is selected)
   const filteredMonthlyData = useMemo(() => {
     const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
     
+    // Check if any filters are actually applied (not "All" selected)
+    const hasFilters = Object.entries(filterValues).some(([channel, channelFilters]) => {
+      return Object.entries(channelFilters).some(([dimensionId, selectedValues]) => {
+        if (!selectedValues || selectedValues.length === 0) {
+          return false; // Empty = "All" selected = no filter
+        }
+        // Check if all available values are selected (also means "All" = no filter)
+        const availableValues = filterDimensionValues[channel]?.[dimensionId] || [];
+        if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
+          // Check if they're the same set
+          const selectedSet = new Set(selectedValues);
+          const availableSet = new Set(availableValues);
+          if (selectedSet.size === availableSet.size && 
+              [...selectedSet].every(v => availableSet.has(v))) {
+            return false; // All values selected = "All" = no filter
+          }
+        }
+        return true; // Subset selected = filter is applied
+      });
+    });
+    
+    // If filters are applied, filter rawDataRows and aggregate by month
+    if (hasFilters && pivotData?.channels) {
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                         'July', 'August', 'September', 'October', 'November', 'December'];
+      const monthlyMap = new Map<string, { year: number; month: string; metasearch: number; sem: number; social: number }>();
+      
+      // Aggregate from filtered rawDataRows for each channel
+      for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+        const channelFilterValues = filterValues[channel] || {};
+        const rawDataRows = (channelData as any).rawDataRows || [];
+        
+        // Filter rows based on filterValues (no date filter here - we want all months)
+        const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues);
+        
+        // Group by month and aggregate revenue
+        filteredRows.forEach((row) => {
+          const rowData = row.dimension_values || row;
+          
+          // Find date value
+          let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
+          if (!dateValue) {
+            for (const [key, val] of Object.entries(rowData)) {
+              if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+                dateValue = val;
+                break;
+              }
+            }
+          }
+          
+          if (dateValue) {
+            const rowDate = new Date(dateValue);
+            if (!isNaN(rowDate.getTime())) {
+              const year = rowDate.getFullYear();
+              const month = monthNames[rowDate.getMonth()];
+              const key = `${year}-${month}`;
+              
+              if (!monthlyMap.has(key)) {
+                monthlyMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
+              }
+              
+              const entry = monthlyMap.get(key)!;
+              const revenue = parseFloat(String(rowData['Revenue'] || rowData['revenue'] || 0).replace(/[^0-9.-]/g, ''));
+              if (!isNaN(revenue)) {
+                entry[channel as 'metasearch' | 'sem' | 'social'] += revenue;
+              }
+            }
+          }
+        });
+      }
+      
+      const result = Array.from(monthlyMap.values()).sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return monthNames.indexOf(a.month) - monthNames.indexOf(b.month);
+      });
+      
+      // Filter by selectedYear if needed
+      if (selectedYear !== 'all') {
+        return result.filter(m => m.year === parseInt(selectedYear));
+      }
+      return result;
+    }
+    
+    // No filters applied - use pre-computed monthly data
     // Build from pivot_data if available
     if (pivotData?.channels) {
       const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
@@ -1022,68 +1528,329 @@ export default function SlideViewPage() {
     if (selectedYear === 'all') {
       return sourceData;
     }
-    return sourceData.filter(m => m.year === parseInt(selectedYear));
-  }, [slideReport?.pivot_data, slideType, dynamicMonthlyData, selectedYear]);
+      return sourceData.filter(m => m.year === parseInt(selectedYear));
+  }, [slideReport?.pivot_data, slideType, dynamicMonthlyData, selectedYear, filterValues, filterDimensionValues]);
 
   // Get current totals based on selected year/month from pivot_data
+  // Applies filterValues if they are set (but not when "All" is selected)
   const currentTotals = useMemo(() => {
     const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
     
-    // Data flow verification: Log when Overview/Report tabs read from pivot_data
-    if (pivotData && slideType === 'master-report') {
-      console.log('[testing] Data Flow: Reading from pivot_data for currentTotals', {
-        hasOverview: !!pivotData.overview,
-        hasChannels: Object.keys(pivotData.channels || {}).length,
-        selectedYear,
-        selectedMonth,
-        overviewMonthlyMonths: Object.keys(pivotData.overview?.monthly || {}).length,
+    // Check if any filters are actually applied (not "All" selected)
+    const hasFilters = Object.entries(filterValues).some(([channel, channelFilters]) => {
+      return Object.entries(channelFilters).some(([dimensionId, selectedValues]) => {
+        if (!selectedValues || selectedValues.length === 0) {
+          return false; // Empty = "All" selected = no filter
+        }
+        // Check if all available values are selected (also means "All" = no filter)
+        const availableValues = filterDimensionValues[channel]?.[dimensionId] || [];
+        if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
+          // Check if they're the same set
+          const selectedSet = new Set(selectedValues);
+          const availableSet = new Set(availableValues);
+          if (selectedSet.size === availableSet.size && 
+              [...selectedSet].every(v => availableSet.has(v))) {
+            return false; // All values selected = "All" = no filter
+          }
+        }
+        return true; // Subset selected = filter is applied
       });
-    }
+    });
     
-    // If we have pivot_data and a specific month is selected, use monthly data
-    if (pivotData?.channels && selectedMonth && selectedMonth !== 'all') {
+    // If filters are applied, we need to filter rawDataRows and re-aggregate
+    if (hasFilters && pivotData?.channels) {
       const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-      const monthNum = monthNames.indexOf(selectedMonth) + 1;
-      const monthKey = selectedYear !== 'all' 
-        ? `${selectedYear}-${monthNum.toString().padStart(2, '0')}`
-        : null;
       
-      if (monthKey) {
-        const channelTotals: Record<string, any> = {};
-        for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-          const monthlyData = (channelData as any).monthly?.[monthKey];
-          if (monthlyData) {
-            channelTotals[channel] = monthlyData;
+      // Build date range based on selected year/month
+      // Only apply date filter if a specific year or month is selected
+      let dateRange: { start: Date; end: Date } | undefined;
+      if (selectedMonth !== 'all' && selectedYear !== 'all') {
+        const monthNum = monthNames.indexOf(selectedMonth);
+        const yearNum = parseInt(selectedYear);
+        dateRange = {
+          start: new Date(yearNum, monthNum, 1),
+          end: new Date(yearNum, monthNum + 1, 0, 23, 59, 59),
+        };
+      } else if (selectedYear !== 'all') {
+        const yearNum = parseInt(selectedYear);
+        dateRange = {
+          start: new Date(yearNum, 0, 1),
+          end: new Date(yearNum, 11, 31, 23, 59, 59),
+        };
+      }
+      // If both are 'all', don't filter by date - use all data
+      
+      const channelTotals: Record<string, any> = {};
+      
+      // Determine which channels have active filters
+      const channelsWithFilters = new Set<string>();
+      Object.entries(filterValues).forEach(([channel, channelFilters]) => {
+        const hasChannelFilters = Object.entries(channelFilters).some(([dimensionId, selectedValues]) => {
+          if (!selectedValues || selectedValues.length === 0) {
+            return false; // Empty = "All" selected = no filter
+          }
+          // Check if all available values are selected (also means "All" = no filter)
+          const availableValues = filterDimensionValues[channel]?.[dimensionId] || [];
+          if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
+            // Check if they're the same set
+            const selectedSet = new Set(selectedValues);
+            const availableSet = new Set(availableValues);
+            if (selectedSet.size === availableSet.size && 
+                [...selectedSet].every(v => availableSet.has(v))) {
+              return false; // All values selected = "All" = no filter
+            }
+          }
+          return true; // Subset selected = filter is applied
+        });
+        if (hasChannelFilters) {
+          channelsWithFilters.add(channel);
+        }
+      });
+      
+      for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+        const channelFilterValues = filterValues[channel] || {};
+        const hasChannelFilters = channelsWithFilters.has(channel);
+        
+        // If this channel has filters, filter rawDataRows and re-aggregate
+        if (hasChannelFilters) {
+          const rawDataRows = (channelData as any).rawDataRows || [];
+          
+          console.log(`[currentTotals] Filtering ${channel}:`, {
+            rawRowsCount: rawDataRows.length,
+            filterValues: channelFilterValues,
+            dateRange,
+            hasDateRange: !!dateRange,
+          });
+          
+          // Filter rows based on filterValues and date range
+          const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange);
+          
+          console.log(`[currentTotals] Filtered ${channel}:`, {
+            filteredRowsCount: filteredRows.length,
+            sampleRow: filteredRows[0] ? Object.keys(filteredRows[0]).slice(0, 5) : null,
+          });
+          
+          if (filteredRows.length > 0) {
+          // Build dynamic metric mapping from dimensionMap
+          const dimensionMap = (channelData as any).dimensionMap || {};
+          const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+          
+          // Manually aggregate metrics from filtered rows
+          // rawDataRows store metrics by dimension IDs, so we need to try both IDs and names
+          const metrics = {
+            impressions: 0,
+            clicks: 0,
+            cost: 0,
+            revenue: 0,
+            bookings: 0,
+          };
+          
+          filteredRows.forEach((row) => {
+            const rowData = row.dimension_values || row;
+            
+            // Helper to safely extract numeric value
+            const getMetricValue = (keys: string[]): number => {
+              for (const key of keys) {
+                const value = rowData[key];
+                if (value !== undefined && value !== null) {
+                  if (typeof value === 'number') {
+                    return isNaN(value) ? 0 : value;
+                  }
+                  const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
+                  if (!isNaN(parsed)) {
+                    return parsed;
+                  }
+                }
+              }
+              return 0;
+            };
+            
+            // Dynamically resolve metric keys using dimensionMap
+            metrics.impressions += getMetricValue(getMetricKeys('impressions', nameToIdsMap));
+            metrics.clicks += getMetricValue(getMetricKeys('clicks', nameToIdsMap));
+            metrics.cost += getMetricValue(getMetricKeys('cost', nameToIdsMap));
+            metrics.revenue += getMetricValue(getMetricKeys('revenue', nameToIdsMap));
+            metrics.bookings += getMetricValue(getMetricKeys('bookings', nameToIdsMap));
+          });
+          
+          console.log(`[currentTotals] Aggregated metrics for ${channel}:`, metrics);
+          
+          channelTotals[channel] = metrics;
           } else {
             channelTotals[channel] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
           }
+        } else {
+          // This channel has no filters - use pre-computed data (same logic as when no filters are applied)
+          if (selectedMonth && selectedMonth !== 'all') {
+            const monthNum = monthNames.indexOf(selectedMonth) + 1;
+            const monthKey = selectedYear !== 'all' 
+              ? `${selectedYear}-${monthNum.toString().padStart(2, '0')}`
+              : null;
+            
+            if (monthKey) {
+              const monthlyData = (channelData as any).monthly?.[monthKey];
+              if (monthlyData) {
+                channelTotals[channel] = monthlyData;
+              } else {
+                channelTotals[channel] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+              }
+            } else {
+              channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+            }
+          } else if (selectedYear !== 'all') {
+            const yearNum = parseInt(selectedYear);
+            const yearlyData = (channelData as any).yearly?.[String(yearNum)];
+            if (yearlyData) {
+              channelTotals[channel] = yearlyData;
+            } else {
+              channelTotals[channel] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+            }
+          } else {
+            channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+          }
         }
-        return channelTotals;
       }
+      
+      return channelTotals;
     }
     
-    // If "All Months" is selected, use yearly totals or current data
+    // No filters applied - but still use rawDataRows when available for consistency
+    // This ensures KPIs match the breakdown analysis table
     if (pivotData?.channels) {
-      // If specific year selected, use yearly totals
-      if (selectedYear !== 'all') {
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      
+      // Build date range based on selected year/month
+      let dateRange: { start: Date; end: Date } | undefined;
+      if (selectedMonth !== 'all' && selectedYear !== 'all') {
+        const monthNum = monthNames.indexOf(selectedMonth);
         const yearNum = parseInt(selectedYear);
-        const channelTotals: Record<string, any> = {};
+        dateRange = {
+          start: new Date(yearNum, monthNum, 1),
+          end: new Date(yearNum, monthNum + 1, 0, 23, 59, 59),
+        };
+      } else if (selectedYear !== 'all') {
+        const yearNum = parseInt(selectedYear);
+        dateRange = {
+          start: new Date(yearNum, 0, 1),
+          end: new Date(yearNum, 11, 31, 23, 59, 59),
+        };
+      }
+      
+      const channelTotals: Record<string, any> = {};
+      
+      // Check if we should use rawDataRows (preferred) or fall back to pre-computed data
+      const hasRawDataRows = Object.values(pivotData.channels).some(
+        (channelData: any) => (channelData.rawDataRows || []).length > 0
+      );
+      
+      if (hasRawDataRows) {
+        // Use rawDataRows for consistency with breakdown analysis
         for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-          const yearlyData = (channelData as any).yearly?.[String(yearNum)];
-          if (yearlyData) {
-            channelTotals[channel] = yearlyData;
+          const rawDataRows = (channelData as any).rawDataRows || [];
+          
+          if (rawDataRows.length > 0) {
+            // Filter by date range if specified
+            const filteredRows = filterRawDataRows(rawDataRows, {}, dateRange);
+            
+            // Build dynamic metric mapping from dimensionMap
+            const dimensionMap = (channelData as any).dimensionMap || {};
+            const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+            
+            // Aggregate metrics from filtered rows
+            const metrics = {
+              impressions: 0,
+              clicks: 0,
+              cost: 0,
+              revenue: 0,
+              bookings: 0,
+            };
+            
+            filteredRows.forEach((row) => {
+              const rowData = row.dimension_values || row;
+              
+              // Helper to safely extract numeric value
+              const getMetricValue = (keys: string[]): number => {
+                for (const key of keys) {
+                  const value = rowData[key];
+                  if (value !== undefined && value !== null) {
+                    if (typeof value === 'number') {
+                      return isNaN(value) ? 0 : value;
+                    }
+                    const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
+                    if (!isNaN(parsed)) {
+                      return parsed;
+                    }
+                  }
+                }
+                return 0;
+              };
+              
+              // Dynamically resolve metric keys using dimensionMap
+              metrics.impressions += getMetricValue(getMetricKeys('impressions', nameToIdsMap));
+              metrics.clicks += getMetricValue(getMetricKeys('clicks', nameToIdsMap));
+              metrics.cost += getMetricValue(getMetricKeys('cost', nameToIdsMap));
+              metrics.revenue += getMetricValue(getMetricKeys('revenue', nameToIdsMap));
+              metrics.bookings += getMetricValue(getMetricKeys('bookings', nameToIdsMap));
+            });
+            
+            channelTotals[channel] = metrics;
           } else {
-            channelTotals[channel] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+            // Fallback to pre-computed data if no rawDataRows
+            if (selectedMonth !== 'all' && selectedYear !== 'all') {
+              const monthNum = monthNames.indexOf(selectedMonth) + 1;
+              const monthKey = selectedYear !== 'all' 
+                ? `${selectedYear}-${monthNum.toString().padStart(2, '0')}`
+                : null;
+              
+              if (monthKey) {
+                const monthlyData = (channelData as any).monthly?.[monthKey];
+                channelTotals[channel] = monthlyData || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+              } else {
+                channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+              }
+            } else if (selectedYear !== 'all') {
+              const yearNum = parseInt(selectedYear);
+              const yearlyData = (channelData as any).yearly?.[String(yearNum)];
+              channelTotals[channel] = yearlyData || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+            } else {
+              channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+            }
           }
+        }
+        
+        return channelTotals;
+      } else {
+        // Fallback: No rawDataRows available - use pre-computed aggregated data
+        if (selectedMonth !== 'all' && selectedYear !== 'all') {
+          const monthNum = monthNames.indexOf(selectedMonth) + 1;
+          const monthKey = selectedYear !== 'all' 
+            ? `${selectedYear}-${monthNum.toString().padStart(2, '0')}`
+            : null;
+          
+          if (monthKey) {
+            for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+              const monthlyData = (channelData as any).monthly?.[monthKey];
+              channelTotals[channel] = monthlyData || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+            }
+            return channelTotals;
+          }
+        }
+        
+        if (selectedYear !== 'all') {
+          const yearNum = parseInt(selectedYear);
+          for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+            const yearlyData = (channelData as any).yearly?.[String(yearNum)];
+            channelTotals[channel] = yearlyData || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+          }
+          return channelTotals;
+        }
+        
+        // Use current totals for all years
+        for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+          channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
         }
         return channelTotals;
       }
-      // Use current totals for all years
-      const channelTotals: Record<string, any> = {};
-      for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-        channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-      }
-      return channelTotals;
     }
     
     // Fallback to dynamic data or zeros
@@ -1096,7 +1863,7 @@ export default function SlideViewPage() {
       sem: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
       social: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
     };
-  }, [slideType, slideReport?.pivot_data, dynamicChannelTotals, dynamicYearlyTotals, selectedYear, selectedMonth]);
+  }, [slideType, slideReport?.pivot_data, dynamicChannelTotals, dynamicYearlyTotals, selectedYear, selectedMonth, filterValues, filterDimensionValues, slideReport?.date_range]);
 
   // Get comparison totals based on comparison type and selected year/month
   const comparisonTotals = useMemo(() => {
@@ -1709,13 +2476,6 @@ export default function SlideViewPage() {
     social: { filterDimensionIds: [] },
   });
 
-  // Filter values state for slides page (channel -> dimensionId -> selected value)
-  // Filter values state - changed to arrays for multi-select support
-  const [filterValues, setFilterValues] = useState<Record<string, Record<string, string[]>>>({
-    metasearch: {},
-    sem: {},
-    social: {},
-  });
 
   // Pending filter values (before Apply is clicked)
   const [pendingFilterValues, setPendingFilterValues] = useState<Record<string, Record<string, string[]>>>({
@@ -1724,13 +2484,6 @@ export default function SlideViewPage() {
     social: {},
   });
 
-  // Filter dimension values state (for dropdowns) - channel -> dimensionId -> values[]
-  const [filterDimensionValues, setFilterDimensionValues] = useState<Record<string, Record<string, string[]>>>({
-    metasearch: {},
-    sem: {},
-    social: {},
-  });
-  
   // Filter dimension names lookup (for rendering) - channel -> dimensionId -> name
   const [filterDimensionNames, setFilterDimensionNames] = useState<Record<string, Record<string, string>>>({
     metasearch: {},
@@ -4128,7 +4881,7 @@ export default function SlideViewPage() {
 
       <div className="p-6 space-y-6">
         {/* Filters Row */}
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-end justify-end gap-2">
           {/* Channel Filter Dropdowns - Show when on channel tabs */}
           {selectedTab !== "overview" && selectedTab !== "budget" && (() => {
             const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
@@ -4167,7 +4920,7 @@ export default function SlideViewPage() {
                       }}
                     >
                       <PopoverTrigger asChild>
-                        <Button variant="outline" className="h-9 justify-between min-w-[140px]">
+                        <Button variant="outline" className="h-9 justify-between min-w-[140px] px-4 pt-[20px] pb-[18px]">
                           <span className="truncate">
                             {isAllSelected 
                               ? `All ${filterDimName}` 
@@ -4640,6 +5393,8 @@ export default function SlideViewPage() {
                         selectedChannel="metasearch"
                         selectedYear={selectedYear}
                         selectedMonth={selectedMonth}
+                        filterValues={filterValues}
+                        filterDimensionValues={filterDimensionValues}
                         availableDimensions={[
                           ...new Map([
                             ...(breakdownDimensions.metasearch || []).filter(dim => 
@@ -4700,6 +5455,8 @@ export default function SlideViewPage() {
                     selectedChannel="sem"
                     selectedYear={selectedYear}
                     selectedMonth={selectedMonth}
+                    filterValues={filterValues}
+                    filterDimensionValues={filterDimensionValues}
                     availableDimensions={[
                       ...new Map([
                         ...(breakdownDimensions.sem || []).filter(dim => {
@@ -4760,6 +5517,8 @@ export default function SlideViewPage() {
                     selectedChannel="social"
                     selectedYear={selectedYear}
                     selectedMonth={selectedMonth}
+                    filterValues={filterValues}
+                    filterDimensionValues={filterDimensionValues}
                     availableDimensions={[
                       ...new Map([
                         ...(breakdownDimensions.social || []).filter(dim => {
