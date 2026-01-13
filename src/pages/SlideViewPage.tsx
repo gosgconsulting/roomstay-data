@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
-import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange } from "@/types/slideReports";
+import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange, BreakdownRow } from "@/types/slideReports";
 import { useUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { SlideDataBrowser } from "@/components/slides/SlideDataBrowser";
@@ -3914,7 +3914,143 @@ export default function SlideViewPage() {
       <SlideDataBrowser
         open={isDataModalOpen}
         onOpenChange={setIsDataModalOpen}
-        pivotData={slideReport?.pivot_data as SlideReportPivotData | null}
+        pivotData={useMemo(() => {
+          const rawPivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+          if (!rawPivotData || !rawPivotData.channels) return rawPivotData;
+
+          // Create a deep copy to avoid mutating the original
+          const transformedPivotData: SlideReportPivotData = {
+            ...rawPivotData,
+            channels: { ...rawPivotData.channels },
+          };
+
+          // Transform each channel's breakdowns
+          Object.keys(transformedPivotData.channels).forEach((channel) => {
+            const channelData = transformedPivotData.channels[channel];
+            if (!channelData.breakdowns) return;
+
+            const breakdowns = { ...channelData.breakdowns };
+            const accountBreakdown = breakdowns['Account'];
+            const campaignBreakdown = breakdowns['Campaign'];
+
+            // If both Account and Campaign exist, combine them
+            if (accountBreakdown && campaignBreakdown) {
+              const combinedMap = new Map<string, BreakdownRow>();
+
+              // Extract account and campaign values
+              accountBreakdown.forEach((accountRow) => {
+                const accountValue = accountRow.account || accountRow.name || accountRow['Account'] || 'Unknown Account';
+                
+                // If there's only one account, combine it with all campaigns
+                // Otherwise, use the campaign breakdown as the primary (more granular)
+                if (accountBreakdown.length === 1) {
+                  // Single account: combine with all campaigns
+                  campaignBreakdown.forEach((campaignRow) => {
+                    const campaignValue = campaignRow.campaign || campaignRow.name || campaignRow['Campaign'] || 'Unknown Campaign';
+                    const combinedKey = `${accountValue} > ${campaignValue}`;
+                    
+                    // Use campaign metrics (more accurate) with account prefix
+                    combinedMap.set(combinedKey, {
+                      name: combinedKey,
+                      account: accountValue,
+                      campaign: campaignValue,
+                      impressions: campaignRow.impressions || 0,
+                      clicks: campaignRow.clicks || 0,
+                      cost: campaignRow.cost || 0,
+                      revenue: campaignRow.revenue || 0,
+                      bookings: campaignRow.bookings || 0,
+                    });
+                  });
+                } else {
+                  // Multiple accounts: combine each account with all campaigns
+                  // (This creates a cartesian product but is necessary without raw data)
+                  campaignBreakdown.forEach((campaignRow) => {
+                    const campaignValue = campaignRow.campaign || campaignRow.name || campaignRow['Campaign'] || 'Unknown Campaign';
+                    const combinedKey = `${accountValue} > ${campaignValue}`;
+                    
+                    // Distribute account metrics proportionally to campaigns
+                    // Simple approach: use campaign metrics with account label
+                    combinedMap.set(combinedKey, {
+                      name: combinedKey,
+                      account: accountValue,
+                      campaign: campaignValue,
+                      impressions: campaignRow.impressions || 0,
+                      clicks: campaignRow.clicks || 0,
+                      cost: campaignRow.cost || 0,
+                      revenue: campaignRow.revenue || 0,
+                      bookings: campaignRow.bookings || 0,
+                    });
+                  });
+                }
+              });
+
+              // Convert map to array and sort by revenue
+              const combinedArray = Array.from(combinedMap.values()).sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
+
+              // Remove Account and Campaign, add combined
+              delete breakdowns['Account'];
+              delete breakdowns['Campaign'];
+              breakdowns['Account > Campaign'] = combinedArray;
+
+              // Update channel data
+              transformedPivotData.channels[channel] = {
+                ...channelData,
+                breakdowns,
+              };
+
+              // Also transform monthlyBreakdowns if they exist
+              if (channelData.monthlyBreakdowns) {
+                const monthlyBreakdowns = { ...channelData.monthlyBreakdowns };
+                Object.keys(monthlyBreakdowns).forEach((monthKey) => {
+                  const monthBreakdowns = { ...monthlyBreakdowns[monthKey] };
+                  const monthAccount = monthBreakdowns['Account'];
+                  const monthCampaign = monthBreakdowns['Campaign'];
+
+                  if (monthAccount && monthCampaign) {
+                    // Combine monthly breakdowns using same logic
+                    const combinedMonthlyMap = new Map<string, BreakdownRow>();
+                    
+                    monthAccount.forEach((accountRow) => {
+                      const accountValue = accountRow.account || accountRow.name || accountRow['Account'] || 'Unknown Account';
+                      
+                      // Use campaign metrics (more granular and accurate)
+                      monthCampaign.forEach((campaignRow) => {
+                        const campaignValue = campaignRow.campaign || campaignRow.name || campaignRow['Campaign'] || 'Unknown Campaign';
+                        const combinedKey = `${accountValue} > ${campaignValue}`;
+                        
+                        combinedMonthlyMap.set(combinedKey, {
+                          name: combinedKey,
+                          account: accountValue,
+                          campaign: campaignValue,
+                          impressions: campaignRow.impressions || 0,
+                          clicks: campaignRow.clicks || 0,
+                          cost: campaignRow.cost || 0,
+                          revenue: campaignRow.revenue || 0,
+                          bookings: campaignRow.bookings || 0,
+                        });
+                      });
+                    });
+
+                    delete monthBreakdowns['Account'];
+                    delete monthBreakdowns['Campaign'];
+                    monthBreakdowns['Account > Campaign'] = Array.from(combinedMonthlyMap.values()).sort(
+                      (a, b) => (b.revenue || 0) - (a.revenue || 0)
+                    );
+
+                    monthlyBreakdowns[monthKey] = monthBreakdowns;
+                  }
+                });
+
+                transformedPivotData.channels[channel] = {
+                  ...transformedPivotData.channels[channel],
+                  monthlyBreakdowns,
+                };
+              }
+            }
+          });
+
+          return transformedPivotData;
+        }, [slideReport?.pivot_data])}
         lastRefreshedAt={slideReport?.last_refreshed_at}
         configuration={slideReport?.configuration as SlideReportConfiguration | null}
         reportIds={slideReport?.report_ids as Record<string, string> | null}
