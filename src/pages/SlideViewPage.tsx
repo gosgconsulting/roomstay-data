@@ -1533,11 +1533,16 @@ export default function SlideViewPage() {
 
   // Get current totals based on selected year/month from pivot_data
   // Applies filterValues if they are set (but not when "All" is selected)
+  // Overview tab ignores custom filters and shows unfiltered aggregated data
   const currentTotals = useMemo(() => {
     const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
     
+    // Overview tab should ignore custom filters - always show unfiltered aggregated data
+    const isOverviewTab = selectedTab === 'overview';
+    
     // Check if any filters are actually applied (not "All" selected)
-    const hasFilters = Object.entries(filterValues).some(([channel, channelFilters]) => {
+    // Skip this check if we're on Overview tab
+    const hasFilters = !isOverviewTab && Object.entries(filterValues).some(([channel, channelFilters]) => {
       return Object.entries(channelFilters).some(([dimensionId, selectedValues]) => {
         if (!selectedValues || selectedValues.length === 0) {
           return false; // Empty = "All" selected = no filter
@@ -1557,7 +1562,7 @@ export default function SlideViewPage() {
       });
     });
     
-    // If filters are applied, we need to filter rawDataRows and re-aggregate
+    // If filters are applied (and not on Overview tab), we need to filter rawDataRows and re-aggregate
     if (hasFilters && pivotData?.channels) {
       const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
       
@@ -1863,7 +1868,7 @@ export default function SlideViewPage() {
       sem: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
       social: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
     };
-  }, [slideType, slideReport?.pivot_data, dynamicChannelTotals, dynamicYearlyTotals, selectedYear, selectedMonth, filterValues, filterDimensionValues, slideReport?.date_range]);
+  }, [slideType, slideReport?.pivot_data, dynamicChannelTotals, dynamicYearlyTotals, selectedYear, selectedMonth, selectedTab, filterValues, filterDimensionValues, slideReport?.date_range]);
 
   // Get comparison totals based on comparison type and selected year/month
   const comparisonTotals = useMemo(() => {
