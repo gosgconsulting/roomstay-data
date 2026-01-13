@@ -374,14 +374,37 @@ const FORECAST_PROJECTIONS = calculateForecastProjections();
 // const MONTHLY_SOCIAL_DATA = MONTHLY_DATA.map(m => ({ month: m.month, revenue: m.social }));
 
 // Helper functions
-const calculateDerivedMetrics = (data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => ({
-  ...data,
-  ctr: data.clicks > 0 && data.impressions > 0 ? (data.clicks / data.impressions) * 100 : 0,
-  conversionRate: data.clicks > 0 ? (data.bookings / data.clicks) * 100 : 0,
-  cpc: data.clicks > 0 ? data.cost / data.clicks : 0,
-  roas: data.cost > 0 ? data.revenue / data.cost : 0,
-  costOfSale: data.revenue > 0 ? (data.cost / data.revenue) * 100 : 0,
-});
+const calculateDerivedMetrics = (data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => {
+  // Ensure all values are numbers
+  const impressions = Number(data.impressions) || 0;
+  const clicks = Number(data.clicks) || 0;
+  const cost = Number(data.cost) || 0;
+  const revenue = Number(data.revenue) || 0;
+  const bookings = Number(data.bookings) || 0;
+  
+  const cpc = clicks > 0 ? cost / clicks : 0;
+  const roas = cost > 0 ? revenue / cost : 0;
+  const costOfSale = revenue > 0 ? (cost / revenue) * 100 : 0;
+  
+  // Debug logging for first few calculations
+  if (cost > 0 || clicks > 0 || revenue > 0) {
+    console.log('[calculateDerivedMetrics] Input:', { impressions, clicks, cost, revenue, bookings });
+    console.log('[calculateDerivedMetrics] Calculated:', { cpc, roas, costOfSale, ctr: clicks > 0 && impressions > 0 ? (clicks / impressions) * 100 : 0 });
+  }
+  
+  return {
+    impressions,
+    clicks,
+    cost,
+    revenue,
+    bookings,
+    ctr: clicks > 0 && impressions > 0 ? (clicks / impressions) * 100 : 0,
+    conversionRate: clicks > 0 ? (bookings / clicks) * 100 : 0,
+    cpc,
+    roas,
+    costOfSale,
+  };
+};
 
 // Helper function to check if filters are actually applied (not "All" selected)
 const hasActiveFilters = (
@@ -833,11 +856,36 @@ const UnifiedBreakdownTable = ({
               return 0;
             };
             
-            allBreakdowns[groupValue].impressions += getMetricValue(getMetricKeys('impressions', nameToIdsMap));
-            allBreakdowns[groupValue].clicks += getMetricValue(getMetricKeys('clicks', nameToIdsMap));
-            allBreakdowns[groupValue].cost += getMetricValue(getMetricKeys('cost', nameToIdsMap));
-            allBreakdowns[groupValue].revenue += getMetricValue(getMetricKeys('revenue', nameToIdsMap));
-            allBreakdowns[groupValue].bookings += getMetricValue(getMetricKeys('bookings', nameToIdsMap));
+            const impressionsValue = getMetricValue(getMetricKeys('impressions', nameToIdsMap));
+            const clicksValue = getMetricValue(getMetricKeys('clicks', nameToIdsMap));
+            const costValue = getMetricValue(getMetricKeys('cost', nameToIdsMap));
+            const revenueValue = getMetricValue(getMetricKeys('revenue', nameToIdsMap));
+            const bookingsValue = getMetricValue(getMetricKeys('bookings', nameToIdsMap));
+            
+            allBreakdowns[groupValue].impressions += impressionsValue;
+            allBreakdowns[groupValue].clicks += clicksValue;
+            allBreakdowns[groupValue].cost += costValue;
+            allBreakdowns[groupValue].revenue += revenueValue;
+            allBreakdowns[groupValue].bookings += bookingsValue;
+            
+            // Debug first row to see what values we're getting
+            if (groupRows.indexOf(row) === 0 && Object.keys(allBreakdowns).length === 1) {
+              console.log('[BreakdownTable] First row metric extraction:', {
+                dimensionMap,
+                nameToIdsMap,
+                costKeys: getMetricKeys('cost', nameToIdsMap),
+                clicksKeys: getMetricKeys('clicks', nameToIdsMap),
+                revenueKeys: getMetricKeys('revenue', nameToIdsMap),
+                rowDataKeys: Object.keys(rowData).slice(0, 10),
+                extractedValues: {
+                  impressions: impressionsValue,
+                  clicks: clicksValue,
+                  cost: costValue,
+                  revenue: revenueValue,
+                  bookings: bookingsValue,
+                },
+              });
+            }
           });
         });
       } else {
@@ -870,14 +918,41 @@ const UnifiedBreakdownTable = ({
     }
 
     // Convert to array and calculate derived metrics
-    return Object.entries(allBreakdowns)
+    const result = Object.entries(allBreakdowns)
       .filter(([groupValue]) => groupValue && groupValue !== 'Unknown')
       .sort(([, a], [, b]) => b.revenue - a.revenue)
-      .map(([groupValue, data]) => ({
-        groupValue,
-        metrics: calculateDerivedMetrics(data),
-        rawData: data,
-      }));
+      .map(([groupValue, data]) => {
+        // Ensure data has all required fields with proper types
+        const cleanData = {
+          impressions: Number(data.impressions) || 0,
+          clicks: Number(data.clicks) || 0,
+          cost: Number(data.cost) || 0,
+          revenue: Number(data.revenue) || 0,
+          bookings: Number(data.bookings) || 0,
+        };
+        
+        const metrics = calculateDerivedMetrics(cleanData);
+        
+        // Debug first group to verify calculations
+        if (groupValue === Object.keys(allBreakdowns)[0]) {
+          console.log('[BreakdownTable] First group calculation:', {
+            groupValue,
+            cleanData,
+            metrics,
+            cpc: metrics.cpc,
+            roas: metrics.roas,
+            costOfSale: metrics.costOfSale,
+          });
+        }
+        
+        return {
+          groupValue,
+          metrics,
+          rawData: cleanData,
+        };
+      });
+    
+    return result;
   }, [pivotData, groupBy, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear]);
 
   // Get breakdown data for expanded row (also uses month-specific data)
@@ -1033,15 +1108,31 @@ const UnifiedBreakdownTable = ({
       }));
   }, [expandedRow, pivotData, breakdownBy, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear, groupBy]);
 
-  // Calculate totals
+  // Calculate totals - use rawData to ensure we're summing base metrics only
+  // Then recalculate derived metrics (CPC, ROAS, Cost of Sale) from the aggregated totals
   const totals = groupedData.reduce((acc, group) => ({
-    impressions: acc.impressions + group.metrics.impressions,
-    clicks: acc.clicks + group.metrics.clicks,
-    cost: acc.cost + group.metrics.cost,
-    revenue: acc.revenue + group.metrics.revenue,
-    bookings: acc.bookings + group.metrics.bookings,
+    impressions: acc.impressions + (group.rawData?.impressions || group.metrics.impressions || 0),
+    clicks: acc.clicks + (group.rawData?.clicks || group.metrics.clicks || 0),
+    cost: acc.cost + (group.rawData?.cost || group.metrics.cost || 0),
+    revenue: acc.revenue + (group.rawData?.revenue || group.metrics.revenue || 0),
+    bookings: acc.bookings + (group.rawData?.bookings || group.metrics.bookings || 0),
   }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
   const totalMetrics = calculateDerivedMetrics(totals);
+  
+  // Debug logging to help diagnose calculation issues
+  if (groupedData.length > 0) {
+    console.log('[BreakdownTable] Calculation debug:', {
+      sampleGroup: {
+        rawData: groupedData[0].rawData,
+        metrics: groupedData[0].metrics,
+      },
+      totals,
+      totalMetrics,
+      firstGroupCPC: groupedData[0].metrics.cpc,
+      firstGroupROAS: groupedData[0].metrics.roas,
+      firstGroupCostOfSale: groupedData[0].metrics.costOfSale,
+    });
+  }
 
   const groupByDim = availableDimensions.find(d => d.id === groupBy);
   const breakdownByDim = availableDimensions.find(d => d.id === breakdownBy);
@@ -1160,11 +1251,11 @@ const UnifiedBreakdownTable = ({
                 <TableCell className="text-right">{group.metrics.ctr.toFixed(2)}%</TableCell>
                 <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
                 <TableCell className="text-right">{group.metrics.conversionRate.toFixed(2)}%</TableCell>
-                <TableCell className="text-right">${group.metrics.cpc.toFixed(2)}</TableCell>
+                <TableCell className="text-right">${group.metrics.cpc < 0.01 ? group.metrics.cpc.toFixed(4) : group.metrics.cpc.toFixed(2)}</TableCell>
                 <TableCell className="text-right">${formatNumber(group.metrics.cost)}</TableCell>
                 <TableCell className="text-right">${formatNumber(group.metrics.revenue)}</TableCell>
                 <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
-                <TableCell className="text-right">{group.metrics.costOfSale.toFixed(2)}%</TableCell>
+                <TableCell className="text-right">{group.metrics.costOfSale < 0.01 ? group.metrics.costOfSale.toFixed(4) : group.metrics.costOfSale.toFixed(2)}%</TableCell>
               </TableRow>
               {/* Expanded breakdown rows */}
               {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
@@ -1181,11 +1272,11 @@ const UnifiedBreakdownTable = ({
                       <TableCell className="text-right text-muted-foreground">{item.metrics.ctr.toFixed(2)}%</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.bookings.toFixed(2)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.conversionRate.toFixed(2)}%</TableCell>
-                      <TableCell className="text-right text-muted-foreground">${item.metrics.cpc.toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">${item.metrics.cpc < 0.01 ? item.metrics.cpc.toFixed(4) : item.metrics.cpc.toFixed(2)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">${formatNumber(item.metrics.cost)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">${formatNumber(item.metrics.revenue)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.roas.toFixed(1)}x</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{item.metrics.costOfSale.toFixed(2)}%</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{item.metrics.costOfSale < 0.01 ? item.metrics.costOfSale.toFixed(4) : item.metrics.costOfSale.toFixed(2)}%</TableCell>
                     </TableRow>
                   ))}
                 </>
@@ -1201,11 +1292,11 @@ const UnifiedBreakdownTable = ({
             <TableCell className="text-right">{totalMetrics.ctr.toFixed(2)}%</TableCell>
             <TableCell className="text-right">{totalMetrics.bookings.toFixed(2)}</TableCell>
             <TableCell className="text-right">{totalMetrics.conversionRate.toFixed(2)}%</TableCell>
-            <TableCell className="text-right">${totalMetrics.cpc.toFixed(2)}</TableCell>
+            <TableCell className="text-right">${totalMetrics.cpc < 0.01 ? totalMetrics.cpc.toFixed(4) : totalMetrics.cpc.toFixed(2)}</TableCell>
             <TableCell className="text-right">${formatNumber(totalMetrics.cost)}</TableCell>
             <TableCell className="text-right">${formatNumber(totalMetrics.revenue)}</TableCell>
             <TableCell className="text-right">{totalMetrics.roas.toFixed(1)}x</TableCell>
-            <TableCell className="text-right">{totalMetrics.costOfSale.toFixed(2)}%</TableCell>
+            <TableCell className="text-right">{totalMetrics.costOfSale < 0.01 ? totalMetrics.costOfSale.toFixed(4) : totalMetrics.costOfSale.toFixed(2)}%</TableCell>
           </TableRow>
         </TableBody>
       </Table>
@@ -4104,9 +4195,13 @@ export default function SlideViewPage() {
               </p>
               <div className="text-2xl font-bold text-foreground">
                 {kpi.format === "currency" 
-                  ? `$${formatNumber(kpi.value)}`
+                  ? kpi.key === "cpc" && kpi.value < 0.01
+                    ? `$${kpi.value.toFixed(4)}`
+                    : `$${formatNumber(kpi.value)}`
                   : kpi.format === "percent"
-                  ? `${kpi.value.toFixed(2)}%`
+                  ? kpi.key === "costOfSale" && kpi.value < 0.01
+                    ? `${kpi.value.toFixed(4)}%`
+                    : `${kpi.value.toFixed(2)}%`
                   : kpi.format === "roas"
                   ? `${kpi.value.toFixed(1)}x`
                   : formatNumber(kpi.value)}
