@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles, Search, Loader2, Database, Check, Share2 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -3293,7 +3293,7 @@ export default function SlideViewPage() {
   };
 
   const renderKPICards = (cards: typeof KPI_CARDS, channelCompMetrics?: ReturnType<typeof getChannelComparisonMetrics>) => (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
       {cards.map((kpi) => {
         // Use channel-specific comparison if provided, otherwise fall back to global
         const effectiveCompMetrics = channelCompMetrics !== undefined ? channelCompMetrics : comparisonMetrics;
@@ -3306,14 +3306,12 @@ export default function SlideViewPage() {
         const compLabel = channelCompMetrics?.label || comparisonData?.label;
         
         return (
-          <Card key={kpi.label} className="shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className={`text-xs font-medium uppercase ${kpi.color}`}>
+          <Card key={kpi.label} className="shadow-sm border-l-4 border-l-primary/60 bg-card">
+            <CardContent className="p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 {kpi.label}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
+              </p>
+              <div className="text-2xl font-bold text-foreground">
                 {kpi.format === "currency" 
                   ? `$${formatNumber(kpi.value)}`
                   : kpi.format === "percent"
@@ -4090,50 +4088,62 @@ export default function SlideViewPage() {
 
           {/* Date Filters - Show on all tabs except Budget */}
           {selectedTab !== "budget" && (
-            <div className="flex items-center gap-2">
-              <Select value={selectedYear} onValueChange={setSelectedYear}>
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Years</SelectItem>
-                  <SelectItem value="2024">2024</SelectItem>
-                  <SelectItem value="2025">2025</SelectItem>
-                  <SelectItem value="2026">2026</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Months</SelectItem>
-                  <SelectItem value="January">January</SelectItem>
-                  <SelectItem value="February">February</SelectItem>
-                  <SelectItem value="March">March</SelectItem>
-                  <SelectItem value="April">April</SelectItem>
-                  <SelectItem value="May">May</SelectItem>
-                  <SelectItem value="June">June</SelectItem>
-                  <SelectItem value="July">July</SelectItem>
-                  <SelectItem value="August">August</SelectItem>
-                  <SelectItem value="September">September</SelectItem>
-                  <SelectItem value="October">October</SelectItem>
-                  <SelectItem value="November">November</SelectItem>
-                  <SelectItem value="December">December</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="flex items-center gap-6">
+              {/* Year Filter */}
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Year:</span>
+                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                  <SelectTrigger className="w-[130px] bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Years</SelectItem>
+                    <SelectItem value="2024">2024</SelectItem>
+                    <SelectItem value="2025">2025</SelectItem>
+                    <SelectItem value="2026">2026</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Month Filter */}
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Month:</span>
+                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                  <SelectTrigger className="w-[140px] bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Months</SelectItem>
+                    <SelectItem value="January">January</SelectItem>
+                    <SelectItem value="February">February</SelectItem>
+                    <SelectItem value="March">March</SelectItem>
+                    <SelectItem value="April">April</SelectItem>
+                    <SelectItem value="May">May</SelectItem>
+                    <SelectItem value="June">June</SelectItem>
+                    <SelectItem value="July">July</SelectItem>
+                    <SelectItem value="August">August</SelectItem>
+                    <SelectItem value="September">September</SelectItem>
+                    <SelectItem value="October">October</SelectItem>
+                    <SelectItem value="November">November</SelectItem>
+                    <SelectItem value="December">December</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               
-              {/* Comparison dropdown - Show on all tabs except Budget */}
-              <Select value={comparisonType} onValueChange={setComparisonType}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="No Comparison" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Comparison</SelectItem>
-                  <SelectItem value="previous_period">Previous Period</SelectItem>
-                  <SelectItem value="previous_year">Previous Year</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Comparison dropdown */}
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Compare:</span>
+                <Select value={comparisonType} onValueChange={setComparisonType}>
+                  <SelectTrigger className="w-[160px] bg-background">
+                    <SelectValue placeholder="No Comparison" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Comparison</SelectItem>
+                    <SelectItem value="previous_period">Previous Period</SelectItem>
+                    <SelectItem value="previous_year">Previous Year</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           )}
         </div>
@@ -4217,29 +4227,39 @@ export default function SlideViewPage() {
 
               {/* Monthly Results Chart */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base font-medium">
-                    Monthly Results ({selectedYear === 'all' ? '2024-2026' : selectedYear}) - Metasearch + Social + SEM Revenue
-                  </CardTitle>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base font-medium">Revenue</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-[300px]">
+                  <div className="h-[250px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={filteredMonthlyData.map(m => ({ 
-                        label: selectedYear === 'all' ? `${m.month} ${m.year}` : m.month,
+                      <AreaChart data={filteredMonthlyData.map(m => ({ 
+                        label: selectedYear === 'all' ? `${m.month.slice(0,2)} ${m.year}` : m.month.slice(0,2),
                         month: m.month,
                         year: m.year,
                         total: m.metasearch + m.social + m.sem 
                       }))}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} interval={selectedYear === 'all' ? 2 : 0} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
+                        <defs>
+                          <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.05}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                        <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={selectedYear === 'all' ? 2 : 0} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
                         <Tooltip 
                           formatter={(value: number) => [`$${value.toLocaleString()}`, "Revenue"]}
                           contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                         />
-                        <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                      </BarChart>
+                        <Area 
+                          type="monotone" 
+                          dataKey="total" 
+                          stroke="#8b5cf6" 
+                          strokeWidth={2}
+                          fill="url(#revenueGradient)" 
+                        />
+                      </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 </CardContent>
@@ -4355,20 +4375,26 @@ export default function SlideViewPage() {
               
               {/* Monthly Revenue Chart */}
               <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Monthly Results ({selectedYear === 'all' ? 'All Years' : selectedYear})</CardTitle></CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="text-base font-medium">Revenue</CardTitle></CardHeader>
                 <CardContent>
-                  <div className="h-[250px]">
+                  <div className="h-[200px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={filteredMonthlyData.map(m => ({ month: m.month, revenue: m.metasearch || 0 }))}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
+                      <AreaChart data={filteredMonthlyData.map(m => ({ month: m.month.slice(0,2), revenue: m.metasearch || 0 }))}>
+                        <defs>
+                          <linearGradient id="metasearchGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.05}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
                         <Tooltip 
                           formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
                           contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                         />
-                        <Bar dataKey="revenue" fill="#8b5cf6" name="Metasearch Revenue" radius={[4, 4, 0, 0]} />
-                      </BarChart>
+                        <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} fill="url(#metasearchGradient)" />
+                      </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 </CardContent>
@@ -4438,20 +4464,26 @@ export default function SlideViewPage() {
               
               {/* Monthly Revenue Chart */}
               <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Monthly Results ({selectedYear === 'all' ? 'All Years' : selectedYear})</CardTitle></CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="text-base font-medium">Revenue</CardTitle></CardHeader>
                 <CardContent>
-                  <div className="h-[250px]">
+                  <div className="h-[200px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={filteredMonthlyData.map(m => ({ month: m.month, revenue: m.sem || 0 }))}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
+                      <AreaChart data={filteredMonthlyData.map(m => ({ month: m.month.slice(0,2), revenue: m.sem || 0 }))}>
+                        <defs>
+                          <linearGradient id="semGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.05}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
                         <Tooltip 
                           formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
                           contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                         />
-                        <Bar dataKey="revenue" fill="#8b5cf6" name="SEM Revenue" radius={[4, 4, 0, 0]} />
-                      </BarChart>
+                        <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} fill="url(#semGradient)" />
+                      </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 </CardContent>
@@ -4492,20 +4524,26 @@ export default function SlideViewPage() {
               
               {/* Monthly Revenue Chart */}
               <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Monthly Results ({selectedYear === 'all' ? 'All Years' : selectedYear})</CardTitle></CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="text-base font-medium">Revenue</CardTitle></CardHeader>
                 <CardContent>
-                  <div className="h-[250px]">
+                  <div className="h-[200px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={filteredMonthlyData.map(m => ({ month: m.month, revenue: m.social || 0 }))}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
+                      <AreaChart data={filteredMonthlyData.map(m => ({ month: m.month.slice(0,2), revenue: m.social || 0 }))}>
+                        <defs>
+                          <linearGradient id="socialGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.05}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
                         <Tooltip 
                           formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
                           contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                         />
-                        <Bar dataKey="revenue" fill="#8b5cf6" name="Social Revenue" radius={[4, 4, 0, 0]} />
-                      </BarChart>
+                        <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} fill="url(#socialGradient)" />
+                      </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 </CardContent>
