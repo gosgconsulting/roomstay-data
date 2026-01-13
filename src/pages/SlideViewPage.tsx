@@ -646,7 +646,7 @@ const UnifiedBreakdownTable = ({
           <div className="flex items-center gap-2">
             <Label className="text-sm text-muted-foreground">Group by:</Label>
             <Select value={groupBy} onValueChange={(value) => { onGroupByChange(value); onRowClick(null); }}>
-              <SelectTrigger className="w-40 bg-primary text-primary-foreground">
+              <SelectTrigger className="w-40 bg-background border border-input">
                 <SelectValue placeholder="Select dimension" />
               </SelectTrigger>
               <SelectContent>
@@ -685,7 +685,7 @@ const UnifiedBreakdownTable = ({
         <div className="flex items-center gap-2">
           <Label className="text-sm text-muted-foreground">Group by:</Label>
           <Select value={groupBy} onValueChange={(value) => { onGroupByChange(value); onRowClick(null); }}>
-            <SelectTrigger className="w-40 bg-primary text-primary-foreground">
+            <SelectTrigger className="w-40 bg-background border border-input">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
