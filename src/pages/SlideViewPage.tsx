@@ -3990,7 +3990,7 @@ export default function SlideViewPage() {
               // Remove Account and Campaign, add combined
               delete breakdowns['Account'];
               delete breakdowns['Campaign'];
-              breakdowns['Account > Campaign'] = combinedArray;
+              breakdowns['Campaign'] = combinedArray;
 
               // Update channel data
               transformedPivotData.channels[channel] = {
@@ -4033,7 +4033,7 @@ export default function SlideViewPage() {
 
                     delete monthBreakdowns['Account'];
                     delete monthBreakdowns['Campaign'];
-                    monthBreakdowns['Account > Campaign'] = Array.from(combinedMonthlyMap.values()).sort(
+                    monthBreakdowns['Campaign'] = Array.from(combinedMonthlyMap.values()).sort(
                       (a, b) => (b.revenue || 0) - (a.revenue || 0)
                     );
 
