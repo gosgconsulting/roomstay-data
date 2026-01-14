@@ -1367,6 +1367,7 @@ export default function SlideViewPage() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonthName); // Default to current month
   const [selectedTab, setSelectedTab] = useState("overview");
   const [comparisonType, setComparisonType] = useState("none");
+  const [chartTimeRange, setChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('this_year');
   const [isEditSourceOpen, setIsEditSourceOpen] = useState(false);
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -5238,18 +5239,95 @@ export default function SlideViewPage() {
 
               {/* Monthly Results Chart */}
               <Card>
-                <CardHeader className="pb-2">
+                <CardHeader className="pb-2 flex flex-row items-center justify-between">
                   <CardTitle className="text-base font-medium">Revenue</CardTitle>
+                  <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as typeof chartTimeRange)}>
+                    <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover z-50">
+                      <SelectItem value="this_year">This Year</SelectItem>
+                      <SelectItem value="last_12_months">Last 12 Months</SelectItem>
+                      <SelectItem value="last_6_months">Last 6 Months</SelectItem>
+                      <SelectItem value="last_3_months">Last 3 Months</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </CardHeader>
                 <CardContent>
                   <div className="h-[250px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={filteredMonthlyData.map(m => ({ 
-                        label: selectedYear === 'all' ? `${m.month.slice(0,2)} ${m.year}` : m.month.slice(0,2),
-                        month: m.month,
-                        year: m.year,
-                        total: m.metasearch + m.social + m.sem 
-                      }))}>
+                      <AreaChart data={(() => {
+                        // Get all available monthly data
+                        const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                                           'July', 'August', 'September', 'October', 'November', 'December'];
+                        
+                        // Build complete monthly data from pivot_data
+                        let allMonthlyData: { year: number; month: string; metasearch: number; sem: number; social: number }[] = [];
+                        
+                        if (pivotData?.channels) {
+                          const monthlyMap = new Map<string, { year: number; month: string; metasearch: number; sem: number; social: number }>();
+                          
+                          Object.entries(pivotData.channels).forEach(([channel, channelData]) => {
+                            if (channelData.monthly) {
+                              Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
+                                const [year, monthNum] = monthKey.split('-').map(Number);
+                                const month = monthNames[monthNum - 1];
+                                const key = `${year}-${month}`;
+                                
+                                if (!monthlyMap.has(key)) {
+                                  monthlyMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
+                                }
+                                
+                                const entry = monthlyMap.get(key)!;
+                                entry[channel as 'metasearch' | 'sem' | 'social'] = metrics.revenue || 0;
+                              });
+                            }
+                          });
+                          
+                          allMonthlyData = Array.from(monthlyMap.values()).sort((a, b) => {
+                            if (a.year !== b.year) return a.year - b.year;
+                            return monthNames.indexOf(a.month) - monthNames.indexOf(b.month);
+                          });
+                        }
+                        
+                        // Apply time range filter
+                        const now = new Date();
+                        let filteredData = allMonthlyData;
+                        
+                        if (chartTimeRange === 'this_year') {
+                          const currentYear = now.getFullYear();
+                          filteredData = allMonthlyData.filter(m => m.year === currentYear);
+                        } else if (chartTimeRange === 'last_12_months') {
+                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+                          filteredData = allMonthlyData.filter(m => {
+                            const monthIndex = monthNames.indexOf(m.month);
+                            const monthDate = new Date(m.year, monthIndex, 1);
+                            return monthDate >= cutoffDate;
+                          });
+                        } else if (chartTimeRange === 'last_6_months') {
+                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+                          filteredData = allMonthlyData.filter(m => {
+                            const monthIndex = monthNames.indexOf(m.month);
+                            const monthDate = new Date(m.year, monthIndex, 1);
+                            return monthDate >= cutoffDate;
+                          });
+                        } else if (chartTimeRange === 'last_3_months') {
+                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+                          filteredData = allMonthlyData.filter(m => {
+                            const monthIndex = monthNames.indexOf(m.month);
+                            const monthDate = new Date(m.year, monthIndex, 1);
+                            return monthDate >= cutoffDate;
+                          });
+                        }
+                        
+                        return filteredData.map(m => ({ 
+                          label: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
+                          month: m.month,
+                          year: m.year,
+                          total: m.metasearch + m.social + m.sem 
+                        }));
+                      })()}>
                         <defs>
                           <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
@@ -5257,7 +5335,7 @@ export default function SlideViewPage() {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                        <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={selectedYear === 'all' ? 2 : 0} />
+                        <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
                         <Tooltip 
                           formatter={(value: number) => [`$${value.toLocaleString()}`, "Revenue"]}
