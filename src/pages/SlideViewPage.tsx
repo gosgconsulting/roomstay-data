@@ -386,12 +386,6 @@ const calculateDerivedMetrics = (data: { impressions: number; clicks: number; co
   const roas = cost > 0 ? revenue / cost : 0;
   const costOfSale = revenue > 0 ? (cost / revenue) * 100 : 0;
   
-  // Debug logging for first few calculations
-  if (cost > 0 || clicks > 0 || revenue > 0) {
-    console.log('[calculateDerivedMetrics] Input:', { impressions, clicks, cost, revenue, bookings });
-    console.log('[calculateDerivedMetrics] Calculated:', { cpc, roas, costOfSale, ctr: clicks > 0 && impressions > 0 ? (clicks / impressions) * 100 : 0 });
-  }
-  
   return {
     impressions,
     clicks,
@@ -885,39 +879,11 @@ const UnifiedBreakdownTable = ({
             const revenueValue = parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
             const bookingsValue = parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
             
-            // Debug logging for cost extraction (first row of first group only)
-            if (groupRows.indexOf(row) === 0 && Object.keys(allBreakdowns).length === 1) {
-              console.log('[BreakdownAnalysis] Cost extraction debug:', {
-                metricNameToIdMapCost: metricNameToIdMap['Cost'],
-                rowDataCostById: rowData[metricNameToIdMap['Cost']],
-                rowDataCostByName: rowData['Cost'],
-                extractedCost: costValue,
-                allMetricKeys: Object.keys(metricNameToIdMap).filter(k => k.toLowerCase().includes('cost') || k.toLowerCase().includes('spend')),
-                sampleRowDataKeys: Object.keys(rowData).slice(0, 10),
-              });
-            }
-            
             allBreakdowns[groupValue].impressions += impressionsValue;
             allBreakdowns[groupValue].clicks += clicksValue;
             allBreakdowns[groupValue].cost += costValue;
             allBreakdowns[groupValue].revenue += revenueValue;
             allBreakdowns[groupValue].bookings += bookingsValue;
-            
-            // Debug first row to see what values we're getting
-            if (groupRows.indexOf(row) === 0 && Object.keys(allBreakdowns).length === 1) {
-              console.log('[BreakdownTable] First row metric extraction:', {
-                dimensionMap,
-                metricNameToIdMap,
-                rowDataKeys: Object.keys(rowData).slice(0, 10),
-                extractedValues: {
-                  impressions: impressionsValue,
-                  clicks: clicksValue,
-                  cost: costValue,
-                  revenue: revenueValue,
-                  bookings: bookingsValue,
-                },
-              });
-            }
           });
         });
       } else {
@@ -928,11 +894,9 @@ const UnifiedBreakdownTable = ({
         if (monthKey && channelData.monthlyBreakdowns?.[monthKey]) {
           // Use month-specific breakdown data
           breakdownData = channelData.monthlyBreakdowns[monthKey][groupByName] || [];
-          console.log(`[UnifiedBreakdownTable] Fallback: Using monthlyBreakdowns for ${channel}/${monthKey}/${groupByName}:`, breakdownData.length, 'rows');
         } else if (channelData.breakdowns) {
           // Fall back to aggregated breakdowns
           breakdownData = channelData.breakdowns[groupByName] || [];
-          console.log(`[UnifiedBreakdownTable] Fallback: Using aggregated breakdowns for ${channel}/${groupByName}:`, breakdownData.length, 'rows');
         }
         
         breakdownData.forEach((row: any) => {
@@ -964,18 +928,6 @@ const UnifiedBreakdownTable = ({
         };
         
         const metrics = calculateDerivedMetrics(cleanData);
-        
-        // Debug first group to verify calculations
-        if (groupValue === Object.keys(allBreakdowns)[0]) {
-          console.log('[BreakdownTable] First group calculation:', {
-            groupValue,
-            cleanData,
-            metrics,
-            cpc: metrics.cpc,
-            roas: metrics.roas,
-            costOfSale: metrics.costOfSale,
-          });
-        }
         
         return {
           groupValue,
@@ -1070,13 +1022,6 @@ const UnifiedBreakdownTable = ({
         return normalizedRowGroupValue === normalizedExpandedRow;
       });
       
-      console.log(`[getExpandedBreakdownData] Filtered rows for ${expandedRow}:`, {
-        totalRows: filteredRows.length,
-        rowsForExpandedRow: rowsForExpandedRow.length,
-        groupByDimId,
-        groupByName,
-      });
-      
       // Group by breakdownBy dimension
       const groupedRows: Record<string, any[]> = {};
       rowsForExpandedRow.forEach((row) => {
@@ -1142,21 +1087,6 @@ const UnifiedBreakdownTable = ({
   }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
   const totalMetrics = calculateDerivedMetrics(totals);
   
-  // Debug logging to help diagnose calculation issues
-  if (groupedData.length > 0) {
-    console.log('[BreakdownTable] Calculation debug:', {
-      sampleGroup: {
-        rawData: groupedData[0].rawData,
-        metrics: groupedData[0].metrics,
-      },
-      totals,
-      totalMetrics,
-      firstGroupCPC: groupedData[0].metrics.cpc,
-      firstGroupROAS: groupedData[0].metrics.roas,
-      firstGroupCostOfSale: groupedData[0].metrics.costOfSale,
-    });
-  }
-
   const groupByDim = availableDimensions.find(d => d.id === groupBy);
   const breakdownByDim = availableDimensions.find(d => d.id === breakdownBy);
 
@@ -1466,7 +1396,6 @@ export default function SlideViewPage() {
         return;
       }
 
-      console.log('Fetched slide report data:', data);
       setDynamicMonthlyData(data.monthlyRevenue || []);
       setDynamicChannelTotals(data.channelTotals || {});
       setDynamicYearlyTotals(data.yearlyTotals || {});
@@ -1741,20 +1670,8 @@ export default function SlideViewPage() {
         if (hasChannelFilters) {
           const rawDataRows = (channelData as any).rawDataRows || [];
           
-          console.log(`[currentTotals] Filtering ${channel}:`, {
-            rawRowsCount: rawDataRows.length,
-            filterValues: channelFilterValues,
-            dateRange,
-            hasDateRange: !!dateRange,
-          });
-          
           // Filter rows based on filterValues and date range
           const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange);
-          
-          console.log(`[currentTotals] Filtered ${channel}:`, {
-            filteredRowsCount: filteredRows.length,
-            sampleRow: filteredRows[0] ? Object.keys(filteredRows[0]).slice(0, 5) : null,
-          });
           
           if (filteredRows.length > 0) {
           // Build dynamic metric mapping from dimensionMap
@@ -1798,8 +1715,6 @@ export default function SlideViewPage() {
             metrics.revenue += getMetricValue(getMetricKeys('revenue', nameToIdsMap));
             metrics.bookings += getMetricValue(getMetricKeys('bookings', nameToIdsMap));
           });
-          
-          console.log(`[currentTotals] Aggregated metrics for ${channel}:`, metrics);
           
           channelTotals[channel] = metrics;
           } else {
@@ -2014,7 +1929,6 @@ export default function SlideViewPage() {
   // Load data from stored pivot_data when slideReport changes
   useEffect(() => {
     if (slideReport?.pivot_data && slideType === 'master-report') {
-      console.log('[testing] Loading pivot_data into UI state from slideReport');
       const pivotData = slideReport.pivot_data;
       
       // Build monthly data with per-channel breakdown
@@ -2105,12 +2019,6 @@ export default function SlideViewPage() {
           setDynamicYearlyTotals(yearlyTotals);
         }
       }
-      
-      console.log('Loaded pivot data from slideReport:', {
-        monthlyCount: Object.keys(pivotData.overview?.monthly || {}).length,
-        channels: Object.keys(pivotData.channels || {}),
-        computedAt: (pivotData as any).computedAt,
-      });
     }
   }, [slideReport?.pivot_data, slideType]);
 
@@ -2120,7 +2028,6 @@ export default function SlideViewPage() {
       
       // Wait for slideReports to finish loading before deciding to create
       if (isSlideReportsLoading) {
-        console.log('[loadOrCreateSlideReport] Waiting for slideReports to load...');
         return;
       }
 
@@ -2230,7 +2137,6 @@ export default function SlideViewPage() {
           } else {
             // No Master Report exists - instead of creating automatically,
             // open the Edit Source wizard so user can configure first
-            console.log('[loadOrCreateSlideReport] No Master Report found, opening Edit Source wizard...');
             const currentYear = new Date().getFullYear();
             setSelectedYear(currentYear.toString());
             setSelectedMonth('January');
@@ -2321,7 +2227,6 @@ export default function SlideViewPage() {
       if (config.channelConfigs) {
         setChannelConfigs(config.channelConfigs as any);
       }
-      console.log('[testing] Synced local state with slideReport.configuration');
     }
   }, [slideReport?.configuration]);
 
@@ -2332,7 +2237,6 @@ export default function SlideViewPage() {
       const config = slideReport?.configuration as SlideReportConfiguration | null;
       
       if (!pivotData?.channels || !config?.filterConfigs) {
-        console.log('[loadFilterValues] No pivot data or filter config available');
         return;
       }
       
@@ -2366,12 +2270,10 @@ export default function SlideViewPage() {
               updatedFilterDimensionValues[channel][filterDimId] = filterData.values;
               updatedFilterDimensionNames[channel][filterDimId] = filterData.name;
               hasValues = true;
-              console.log(`[loadFilterValues] Using ${filterData.values.length} pre-computed values for ${channel}/${filterData.name}`);
             }
           }
         } else {
           // Fallback: Load from database (for old reports without pre-computed values)
-          console.log(`[loadFilterValues] No pre-computed filter values for ${channel}, loading from database...`);
           for (const filterDimId of filterConfig.filterDimensionIds) {
             const values = await loadFilterDimensionValues(channel, filterDimId);
             if (values.length > 0) {
@@ -2399,11 +2301,9 @@ export default function SlideViewPage() {
       
       if (hasValues) {
         setFilterDimensionValues(prev => ({ ...prev, ...updatedFilterDimensionValues }));
-        console.log('[loadFilterValues] Filter dimension values loaded from pivot_data');
       }
       if (Object.values(updatedFilterDimensionNames).some(ch => Object.keys(ch).length > 0)) {
         setFilterDimensionNames(prev => ({ ...prev, ...updatedFilterDimensionNames }));
-        console.log('[loadFilterValues] Filter dimension names loaded:', updatedFilterDimensionNames);
       }
     };
 
@@ -2429,7 +2329,6 @@ export default function SlideViewPage() {
       );
       
       if (hasAllValues) {
-        console.log(`[selectedTab] Filter values already loaded for ${currentChannel}`);
         return;
       }
       
@@ -2452,7 +2351,6 @@ export default function SlideViewPage() {
         if (filterUniqueValues?.[filterDimId]) {
           newValues[filterDimId] = filterUniqueValues[filterDimId].values;
           newNames[filterDimId] = filterUniqueValues[filterDimId].name;
-          console.log(`[selectedTab] Using ${filterUniqueValues[filterDimId].values.length} pre-computed values for ${filterUniqueValues[filterDimId].name}`);
         } else if (rawDataRows && rawDataRows.length > 0) {
           // FAST: Extract from rawDataRows (already in memory)
           const uniqueValues = new Set<string>();
@@ -2471,7 +2369,6 @@ export default function SlideViewPage() {
               || dimensions[currentChannel]?.find(d => d.id === filterDimId)?.name
               || filterDimId;
             newNames[filterDimId] = dimName;
-            console.log(`[selectedTab] Extracted ${sortedValues.length} values from rawDataRows for ${dimName}`);
           } else {
             missingDimIds.push(filterDimId);
           }
@@ -2482,8 +2379,6 @@ export default function SlideViewPage() {
       
       // SLOW: Fallback to database only if needed (load in parallel for speed)
       if (missingDimIds.length > 0) {
-        console.log(`[selectedTab] Loading ${missingDimIds.length} missing filter values from database for ${currentChannel}...`);
-        
         // Set loading state
         setFilterValuesLoading(prev => {
           const updated = { ...prev };
@@ -2531,7 +2426,6 @@ export default function SlideViewPage() {
           },
         }));
       }
-      console.log(`[selectedTab] Loaded filter values for ${currentChannel}:`, Object.keys(newValues));
     };
 
     loadValuesForCurrentTab();
@@ -2822,7 +2716,6 @@ export default function SlideViewPage() {
       if (dimensionId && existingValues.length === 0 && !loadingValues[activeChannelTab]) {
         // Set loading to true IMMEDIATELY before async call to prevent race condition
         setLoadingValues(prev => ({ ...prev, [activeChannelTab]: true }));
-        console.log(`[activeChannelTab change] Loading values for ${activeChannelTab}/${dimensionId} (not preloaded)`);
         loadValuesForDimension(activeChannelTab, dimensionId);
       }
     }
@@ -2879,7 +2772,6 @@ export default function SlideViewPage() {
       
       // Load values for the dimension (use the determined ID directly, not from state)
       if (dimensionIdToLoad) {
-        console.log(`[loadDimensionsForChannel] Loading values for ${channel}/${dimensionIdToLoad}`);
         await loadValuesForDimension(channel, dimensionIdToLoad);
       }
     } catch (err) {
@@ -2892,15 +2784,12 @@ export default function SlideViewPage() {
   // Load values for a dimension from stored pivot_data first, fallback to dimension_data table
   // Also uses cached/saved selected values from channelConfigs for instant display
   const loadValuesForDimension = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
-    console.log(`[loadValuesForDimension] START - channel: ${channel}, dimensionId: ${dimensionId}`);
-    
     // FIRST: Immediately show cached selected values from saved config (instant display)
     const savedConfig = channelConfigs[channel];
     const cachedSelectedValues = savedConfig?.selectedValues || [];
     
     // If we have cached values and the dimension matches, show them immediately
     if (cachedSelectedValues.length > 0 && savedConfig?.dimensionId === dimensionId) {
-      console.log(`[loadValuesForDimension] Using ${cachedSelectedValues.length} cached selected values for ${channel}/${dimensionId}`);
       setDimensionValues(prev => ({ ...prev, [channel]: cachedSelectedValues }));
     }
     
@@ -2915,8 +2804,6 @@ export default function SlideViewPage() {
       
       // Try rawDataRows first - this contains ALL rows with ALL dimension values
       if (channelData?.rawDataRows && channelData.rawDataRows.length > 0) {
-        console.log(`[loadValuesForDimension] Using rawDataRows (${channelData.rawDataRows.length} rows) for ${channel}/${dimensionId}`);
-        
         const valueSet = new Set<string>();
         cachedSelectedValues.forEach(v => valueSet.add(v));
         
@@ -2928,7 +2815,6 @@ export default function SlideViewPage() {
         });
         
         const sortedValues = Array.from(valueSet).sort();
-        console.log(`[loadValuesForDimension] Extracted ${sortedValues.length} unique values from rawDataRows for ${channel}/${dimensionId}`);
         
         setDimensionValues(prev => ({ ...prev, [channel]: sortedValues }));
         setLoadingValues(prev => ({ ...prev, [channel]: false }));
@@ -2939,8 +2825,6 @@ export default function SlideViewPage() {
       const storedFilterValues = channelData?.filterUniqueValues?.[dimensionId];
       
       if (storedFilterValues?.values && storedFilterValues.values.length > 0) {
-        console.log(`[loadValuesForDimension] Using ${storedFilterValues.values.length} pre-computed values from filterUniqueValues for ${channel}/${dimensionId}`);
-        
         // Merge with cached selected values to ensure they're included
         const allValues = new Set([...storedFilterValues.values, ...cachedSelectedValues]);
         const sortedValues = Array.from(allValues).sort();
@@ -2971,8 +2855,6 @@ export default function SlideViewPage() {
               })
               .filter((v): v is string => v !== null && v !== '');
             
-            console.log(`[loadValuesForDimension] Using ${breakdownValues.length} values from breakdowns for ${channel}/${dimensionId}`);
-            
             // Merge with cached selected values
             const allValues = new Set([...breakdownValues, ...cachedSelectedValues]);
             const sortedValues = Array.from(allValues).sort();
@@ -2984,11 +2866,8 @@ export default function SlideViewPage() {
         }
       }
       
-      console.log(`[loadValuesForDimension] No stored values found, falling back to dimension_data query for ${channel}/${dimensionId}`);
-      
       // FALLBACK: Fetch from dimension_data table
       const reportId = CHANNEL_REPORT_IDS[channel];
-      console.log(`[loadValuesForDimension] Report ID for ${channel}: ${reportId}`);
       
       if (!reportId) {
         console.error(`[loadValuesForDimension] No report ID for channel: ${channel}`);
@@ -3005,7 +2884,6 @@ export default function SlideViewPage() {
       let hasMore = true;
 
       while (hasMore) {
-        console.log(`[loadValuesForDimension] Fetching batch at offset ${offset} for ${channel}`);
         const { data: batchData, error: dimError } = await supabase
           .from('dimension_data')
           .select('dimension_values')
@@ -3024,14 +2902,12 @@ export default function SlideViewPage() {
           allDimData.push(...batchData);
           offset += batchSize;
           hasMore = batchData.length === batchSize;
-          console.log(`[loadValuesForDimension] Got ${batchData.length} rows, total: ${allDimData.length}`);
         } else {
           hasMore = false;
         }
       }
 
       const dimData = allDimData;
-      console.log(`[loadValuesForDimension] Total rows fetched for ${channel}: ${dimData.length}`);
 
       if (!dimData || dimData.length === 0) {
         console.error(`[loadValuesForDimension] No dimension_data found for ${channel} (report: ${reportId})`);
@@ -3059,14 +2935,12 @@ export default function SlideViewPage() {
       });
 
       let values = Array.from(valueSet).sort();
-      console.log(`[loadValuesForDimension] Extracted ${values.length} unique values for dimension ${dimensionId}`);
       
       // For Metasearch Hotel dimension, filter to only Brady hotels (only for brady slide, not master-report)
       if (slideType === 'brady' && channel === 'metasearch' && dimensionId === '093ac487-dd90-4466-9972-ac51d110e91e') {
         values = values.filter(v => v.startsWith('Brady'));
       }
 
-      console.log(`[loadValuesForDimension] SUCCESS - ${values.length} values for ${channel}/${dimensionId}:`, values.slice(0, 5));
       setDimensionValues(prev => ({ ...prev, [channel]: values }));
       
       // Auto-select all Brady values for metasearch Hotel (only for brady slide, not master-report)
@@ -3085,7 +2959,6 @@ export default function SlideViewPage() {
         setDimensionValues(prev => ({ ...prev, [channel]: [] }));
       }
     } finally {
-      console.log(`[loadValuesForDimension] FINALLY - setting loading false for ${channel}`);
       setLoadingValues(prev => ({ ...prev, [channel]: false }));
     }
   };
@@ -3106,7 +2979,6 @@ export default function SlideViewPage() {
           const existingValues = dimensionValues[channel] || [];
           if (existingValues.length === 0 && !loadingValues[channel]) {
             const dimensionId = channelConfigs[channel].dimensionId;
-            console.log(`[Step 4 fallback] Loading values for ${channel}/${dimensionId}`);
             setLoadingValues(prev => ({ ...prev, [channel]: true }));
             loadValuesForDimension(channel, dimensionId);
           }
@@ -3277,7 +3149,6 @@ export default function SlideViewPage() {
       const rawDataRows = (channelData as any)?.rawDataRows as any[] | undefined;
       
       if (rawDataRows && rawDataRows.length > 0) {
-        console.log(`[loadFilterDimensionValues] Using rawDataRows (${rawDataRows.length} rows) for ${channel}/${filterDimId}`);
         const uniqueValues = new Set<string>();
         
         for (const row of rawDataRows) {
@@ -3289,20 +3160,16 @@ export default function SlideViewPage() {
         }
         
         const sortedValues = Array.from(uniqueValues).sort();
-        console.log(`[loadFilterDimensionValues] Extracted ${sortedValues.length} unique values from rawDataRows for ${channel}/${filterDimId}:`, sortedValues.slice(0, 5));
         return sortedValues;
       }
       
       // FAST PATH: Use pre-computed filterUniqueValues from pivot_data
       const filterUniqueValues = (channelData as any)?.filterUniqueValues as Record<string, { name: string; values: string[] }> | undefined;
       if (filterUniqueValues?.[filterDimId]) {
-        console.log(`[loadFilterDimensionValues] Using pre-computed filterUniqueValues for ${channel}/${filterDimId}`);
         return filterUniqueValues[filterDimId].values;
       }
 
       // SLOW PATH: Fallback to database query (only if above methods unavailable)
-      console.log(`[loadFilterDimensionValues] Falling back to database query for ${channel}/${filterDimId}...`);
-      
       // Fetch all rows using pagination to ensure no values are missing
       const allDimData: any[] = [];
       const batchSize = 1000;
@@ -3331,7 +3198,6 @@ export default function SlideViewPage() {
       }
 
       if (allDimData.length === 0) {
-        console.log(`[loadFilterDimensionValues] No dimension_data found for ${channel} (report: ${reportId})`);
         return [];
       }
 
@@ -3349,7 +3215,6 @@ export default function SlideViewPage() {
       }
 
       const sortedValues = Array.from(uniqueValues).sort();
-      console.log(`[loadFilterDimensionValues] Loaded ${sortedValues.length} filter values from database for ${channel}/${filterDimId}:`, sortedValues.slice(0, 5));
       return sortedValues;
     } catch (error) {
       console.error(`[loadFilterDimensionValues] Error loading filter values for ${channel}/${filterDimId}:`, error);
@@ -3576,19 +3441,6 @@ export default function SlideViewPage() {
       setSelectedYear(sinceYear.toString());
       setSelectedMonth(sinceMonth);
 
-      console.log('[testing] Edit Source: Configuration saved successfully', {
-        slideReportId: slideReportId || 'new',
-        configuration: {
-          selectedChannels: configuration.selectedChannels,
-          hasChannelConfigs: Object.keys(configuration.channelConfigs || {}).length > 0,
-          hasBreakdownConfigs: Object.keys(configuration.breakdownConfigs || {}).length > 0,
-          hasFilterConfigs: Object.keys(configuration.filterConfigs || {}).length > 0,
-          selectedValueDimensionIds: configuration.selectedValueDimensionIds?.length || 0,
-        },
-        dateRange,
-        reportIds,
-      });
-
       toast({
         title: "Configuration saved",
         description: "Your report settings have been saved. Click 'Refresh Data' to fetch updated data.",
@@ -3636,24 +3488,16 @@ export default function SlideViewPage() {
     
     if (Object.keys(updatedFilterDimensionValues).length > 0) {
       setFilterDimensionValues(prev => ({ ...prev, ...updatedFilterDimensionValues }));
-      console.log('[handleSave] Filter dimension values loaded in background');
     }
   };
 
   // Load saved configuration into modal state, including dimension values
   const loadSavedConfigurationIntoModal = async () => {
     if (!slideReport?.configuration) {
-      console.log('[testing] No saved configuration found, using defaults');
       return;
     }
 
     const config = slideReport.configuration;
-    console.log('[testing] Loading saved configuration into modal:', {
-      selectedChannels: config.selectedChannels,
-      hasChannelConfigs: Object.keys(config.channelConfigs || {}).length > 0,
-      hasBreakdownConfigs: Object.keys(config.breakdownConfigs || {}).length > 0,
-      hasFilterConfigs: Object.keys(config.filterConfigs || {}).length > 0,
-    });
 
     // Load basic configuration
     if (config.selectedChannels) {
@@ -3686,7 +3530,6 @@ export default function SlideViewPage() {
     for (const channel of config.selectedChannels || []) {
       const channelConfig = config.channelConfigs?.[channel];
       if (channelConfig?.dimensionId) {
-        console.log(`[testing] Loading dimension values for ${channel}/${channelConfig.dimensionId}`);
         await loadValuesForDimension(channel, channelConfig.dimensionId);
       }
     }
@@ -3710,8 +3553,6 @@ export default function SlideViewPage() {
     for (const channel of config.selectedChannels || []) {
       await loadBreakdownDimensionsForChannel(channel);
     }
-
-    console.log('[testing] Saved configuration loaded into modal successfully');
   };
 
   const resetModalState = () => {
@@ -3771,7 +3612,6 @@ export default function SlideViewPage() {
     setIsEditSourceOpen(open);
     if (open) {
       // Modal is opening - load saved configuration
-      console.log('[testing] Modal opening, loading saved configuration...');
       await loadSavedConfigurationIntoModal();
     } else {
       // Modal is closing - reset state
@@ -3810,14 +3650,6 @@ export default function SlideViewPage() {
       return;
     }
 
-    console.log('[testing] Refresh Data: Starting with configuration:', {
-      channels: slideReport.configuration.selectedChannels,
-      hasChannelConfigs: Object.keys(slideReport.configuration.channelConfigs || {}).length > 0,
-      hasBreakdownConfigs: Object.keys(slideReport.configuration.breakdownConfigs || {}).length > 0,
-      hasFilterConfigs: Object.keys(slideReport.configuration.filterConfigs || {}).length > 0,
-      dateRange: slideReport.date_range,
-    });
-
     // Open modal and reset state - now with 5 clear steps
     setIsRefreshModalOpen(true);
     setRefreshStep(1);
@@ -3832,7 +3664,6 @@ export default function SlideViewPage() {
 
     try {
       // Step 1: Verify settings
-      console.log('[refresh] Step 1: Verifying settings...');
       setRefreshStepStatus(prev => ({ ...prev, 1: 'loading' }));
       
       const { data: latestReport, error: fetchError } = await supabase
@@ -3846,24 +3677,13 @@ export default function SlideViewPage() {
         throw new Error("Configuration or date range not found. Please save Edit Source settings first.");
       }
 
-      console.log('[refresh] Step 1: Settings verified');
       setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'loading' }));
       setRefreshStep(2);
 
       // Step 2: Compute pivot data
-      console.log('[refresh] Step 2: Computing pivot data...');
-      
       const config = latestReport.configuration as unknown as SlideReportConfiguration;
       const reportIdsMap = latestReport.report_ids as unknown as Record<string, string>;
       const dateRange = latestReport.date_range as unknown as SlideReportDateRange;
-      
-      console.log('[refresh] Step 2: Config:', {
-        channels: config.selectedChannels,
-        reportIds: reportIdsMap,
-        dateRange,
-        hasBreakdownConfigs: Object.keys(config.breakdownConfigs || {}).length > 0,
-        hasFilterConfigs: Object.keys(config.filterConfigs || {}).length > 0,
-      });
       
       let pivotData: any;
       try {
@@ -3899,16 +3719,10 @@ export default function SlideViewPage() {
         throw new Error('Pivot data computation returned invalid data');
       }
       
-      console.log('[refresh] Step 2: Pivot data computed successfully', {
-        channelsComputed: Object.keys(pivotData.channels),
-        overviewMonthsCount: Object.keys(pivotData.overview?.monthly || {}).length,
-      });
       setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'loading' }));
       setRefreshStep(3);
 
       // Step 3: Store monthly data in Supabase (organized by year/month)
-      console.log('[refresh] Step 3: Storing monthly data to database...');
-      
       // First, delete existing monthly data for this slide report
       const { error: deleteError } = await supabase
         .from("slide_report_monthly_data")
@@ -3992,16 +3806,12 @@ export default function SlideViewPage() {
             // Continue with other batches even if one fails
           }
         }
-        console.log(`[refresh] Stored ${monthlyRecords.length} monthly data records`);
       }
 
-      console.log('[refresh] Step 3: Monthly data stored');
       setRefreshStepStatus(prev => ({ ...prev, 3: 'complete', 4: 'loading' }));
       setRefreshStep(4);
 
       // Step 4: Store breakdown and filter configurations
-      console.log('[refresh] Step 4: Storing breakdown and filter configurations...');
-      
       const breakdownConfigs = config.breakdownConfigs || {};
       const filterConfigs = config.filterConfigs || {};
       
@@ -4013,13 +3823,6 @@ export default function SlideViewPage() {
         (sum, cfg) => sum + ((cfg as any)?.filterDimensionIds?.length || 0), 0
       );
       
-      console.log('[refresh] Step 4: Breakdown/Filter config:', {
-        breakdownCount,
-        filterCount,
-        breakdownConfigs,
-        filterConfigs,
-      });
-      
       // The breakdown and filter configs are already part of the configuration
       // They will be saved in step 5 along with the pivot_data
       // Here we ensure the pivot_data includes breakdown tables for each configured breakdown dimension
@@ -4028,8 +3831,6 @@ export default function SlideViewPage() {
       setRefreshStep(5);
 
       // Step 5: Update slide report and refresh UI
-      console.log('[refresh] Step 5: Updating slide report and refreshing UI...');
-      
       const { error: updateError } = await supabase
         .from("slide_reports")
         .update({
@@ -4059,7 +3860,6 @@ export default function SlideViewPage() {
       }
       
       // Force reload filter dimension values from the updated pivot data
-      console.log('[refresh] Reloading filter dimension values from refreshed pivot data...');
       const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {
         metasearch: {},
         sem: {},
@@ -4085,7 +3885,6 @@ export default function SlideViewPage() {
             if (filterData) {
               updatedFilterDimensionValues[channel][filterDimId] = filterData.values;
               updatedFilterDimensionNames[channel][filterDimId] = filterData.name;
-              console.log(`[refresh] Loaded ${filterData.values.length} filter values for ${channel}/${filterData.name}`);
             }
           }
         }
@@ -4108,13 +3907,6 @@ export default function SlideViewPage() {
       setIsRefreshModalOpen(false);
       
       const totalChannels = config.selectedChannels?.length || 0;
-      
-      console.log('[refresh] Complete:', {
-        totalChannels,
-        monthlyRecordsStored: monthlyRecords.length,
-        breakdownCount,
-        filterCount,
-      });
       
       toast({ 
         title: "Data refreshed", 
@@ -5122,7 +4914,6 @@ export default function SlideViewPage() {
                           
                           // If values aren't loaded yet, trigger loading immediately
                           if (!hasValues && !filterValuesLoading[currentChannel]?.[filterDimId]) {
-                            console.log(`[FilterPopover] Triggering immediate load for ${currentChannel}/${filterDimId}`);
                             setFilterValuesLoading(prev => ({
                               ...prev,
                               [currentChannel]: {
@@ -5573,13 +5364,7 @@ export default function SlideViewPage() {
                 const savedBreakdownConfigs = slideReport?.configuration?.breakdownConfigs?.[channel];
                 const filterConfigsForChannel = savedFilterConfigs?.filterDimensionIds || filterConfigs[channel]?.filterDimensionIds || [];
                 const breakdownConfigsForChannel = savedBreakdownConfigs?.breakdownDimensionIds || breakdownConfigs[channel]?.breakdownDimensionIds || [];
-                console.log('[testing] Metasearch Tab - Filters:', {
-                  filterConfigs: filterConfigsForChannel,
-                  activeFilterValues: activeFilters,
-                  hasPivotData: !!slideReport?.pivot_data?.channels?.[channel],
-                  breakdownConfigs: breakdownConfigsForChannel,
-                  usingSavedConfig: !!slideReport?.configuration,
-                });
+
                 return null;
               })()}
               {renderKPICards(getReportKPICards(currentTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('metasearch'))}
@@ -5622,17 +5407,6 @@ export default function SlideViewPage() {
                     const breakdownData = channelData?.breakdowns || {};
                     const savedBreakdownConfigs = slideReport?.configuration?.breakdownConfigs?.metasearch;
                     const configuredBreakdowns = savedBreakdownConfigs?.breakdownDimensionIds || breakdownConfigs.metasearch?.breakdownDimensionIds || [];
-                    
-                    console.log('[testing] Metasearch Breakdown Table:', {
-                      hasPivotData: !!pivotData,
-                      hasChannelData: !!channelData,
-                      breakdownDimensions: Object.keys(breakdownData),
-                      configuredBreakdowns,
-                      usingSavedConfig: !!savedBreakdownConfigs,
-                      availableDimensions: (breakdownDimensions.metasearch || []).filter(dim => 
-                        configuredBreakdowns.includes(dim.id)
-                      ).map(d => d.name),
-                    });
                     
                     if (configuredBreakdowns.length === 0) {
                       return (
