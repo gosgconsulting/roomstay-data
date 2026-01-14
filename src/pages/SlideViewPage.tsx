@@ -37,6 +37,7 @@ import {
   formatNumber,
   buildMetricNameToIdsMap,
   getMetricKeys,
+  ensureMinimumChartData,
 } from "@/lib/slideViewHelpers";
 import type { RawDataRow, MetricData } from "@/types/slideView";
 
@@ -958,7 +959,7 @@ export default function SlideViewPage() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonthName); // Default to current month
   const [selectedTab, setSelectedTab] = useState("overview");
   const [comparisonType, setComparisonType] = useState("none");
-  const [chartTimeRange, setChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('this_year');
+  const [chartTimeRange, setChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
   const [isEditSourceOpen, setIsEditSourceOpen] = useState(false);
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -4969,6 +4970,9 @@ export default function SlideViewPage() {
                           });
                         }
                         
+                        // Ensure at least 6 months of data for meaningful chart display
+                        filteredData = ensureMinimumChartData(filteredData, allMonthlyData, 6);
+                        
                         return filteredData.map(m => ({ 
                           label: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
                           month: m.month,
@@ -5152,14 +5156,17 @@ export default function SlideViewPage() {
                           filteredData = allMonthlyData.filter(m => m.year === now.getFullYear());
                         } else if (chartTimeRange === 'last_12_months') {
                           const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
                         } else if (chartTimeRange === 'last_6_months') {
                           const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
                         } else if (chartTimeRange === 'last_3_months') {
                           const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
                         }
+                        
+                        // Ensure at least 6 months of data for meaningful chart display
+                        filteredData = ensureMinimumChartData(filteredData, allMonthlyData, 6);
                         
                         return filteredData.map(m => ({ 
                           month: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
@@ -5282,14 +5289,17 @@ export default function SlideViewPage() {
                           filteredData = allMonthlyData.filter(m => m.year === now.getFullYear());
                         } else if (chartTimeRange === 'last_12_months') {
                           const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
                         } else if (chartTimeRange === 'last_6_months') {
                           const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
                         } else if (chartTimeRange === 'last_3_months') {
                           const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
                         }
+                        
+                        // Ensure at least 6 months of data for meaningful chart display
+                        filteredData = ensureMinimumChartData(filteredData, allMonthlyData, 6);
                         
                         return filteredData.map(m => ({ 
                           month: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
@@ -5394,14 +5404,17 @@ export default function SlideViewPage() {
                           filteredData = allMonthlyData.filter(m => m.year === now.getFullYear());
                         } else if (chartTimeRange === 'last_12_months') {
                           const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
                         } else if (chartTimeRange === 'last_6_months') {
                           const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
                         } else if (chartTimeRange === 'last_3_months') {
                           const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
                         }
+                        
+                        // Ensure at least 6 months of data for meaningful chart display
+                        filteredData = ensureMinimumChartData(filteredData, allMonthlyData, 6);
                         
                         return filteredData.map(m => ({ 
                           month: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,

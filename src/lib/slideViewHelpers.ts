@@ -3,6 +3,7 @@
  */
 
 import { isWithinInterval } from 'date-fns';
+import { MONTH_NAMES } from '@/constants/slideViewConstants';
 import type {
   RawDataRow,
   MetricData,
@@ -353,4 +354,54 @@ export const getMetricKeys = (
   });
 
   return keys;
+};
+
+/**
+ * Ensure chart data has at least 6 months for meaningful display
+ * If filtered data has less than 6 months, expands to show more historical data
+ */
+export const ensureMinimumChartData = <T extends { year: number; month: string }>(
+  filteredData: T[],
+  allData: T[],
+  minMonths = 6
+): T[] => {
+  if (filteredData.length === 0) return filteredData;
+  
+  // If we already have at least minMonths, return as is
+  if (filteredData.length >= minMonths) return filteredData;
+  
+  // Get the most recent month from filtered data
+  const mostRecentMonth = filteredData[filteredData.length - 1];
+  const mostRecentDate = new Date(
+    mostRecentMonth.year,
+    MONTH_NAMES.indexOf(mostRecentMonth.month),
+    1
+  );
+  
+  // Calculate cutoff to get at least minMonths
+  const minCutoffDate = new Date(
+    mostRecentDate.getFullYear(),
+    mostRecentDate.getMonth() - (minMonths - 1),
+    1
+  );
+  
+  // Expand filtered data to include at least minMonths
+  const expandedData = allData.filter((m) => {
+    const monthDate = new Date(m.year, MONTH_NAMES.indexOf(m.month), 1);
+    return monthDate >= minCutoffDate && monthDate <= mostRecentDate;
+  });
+  
+  // Use expanded data if it has more months, otherwise use original filtered data
+  if (expandedData.length >= minMonths) {
+    return expandedData;
+  }
+  
+  // If we still don't have minMonths, show all available data up to the most recent
+  const allUpToRecent = allData.filter((m) => {
+    const monthDate = new Date(m.year, MONTH_NAMES.indexOf(m.month), 1);
+    return monthDate <= mostRecentDate;
+  });
+  
+  // Take last minMonths available (or all if less than minMonths)
+  return allUpToRecent.slice(-minMonths);
 };
