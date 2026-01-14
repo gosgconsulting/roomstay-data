@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
-import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange, BreakdownRow } from "@/types/slideReports";
+import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange, BreakdownRow, ChannelMetrics } from "@/types/slideReports";
 import { useUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { SlideDataBrowser } from "@/components/slides/SlideDataBrowser";
@@ -1432,6 +1432,48 @@ export default function SlideViewPage() {
   const updateSlideReport = useUpdateSlideReport();
   const refreshSlideReportData = useRefreshSlideReportData();
 
+  // Monthly data from database (same source as SlideDataBrowser)
+  const [monthlyDataRecords, setMonthlyDataRecords] = useState<Array<{
+    id: string;
+    slide_report_id: string;
+    year: number;
+    month: number;
+    channel: string;
+    metrics: ChannelMetrics;
+    breakdowns: Record<string, BreakdownRow[]>;
+    row_count: number;
+    computed_at: string;
+  }>>([]);
+  const [isLoadingMonthlyData, setIsLoadingMonthlyData] = useState(false);
+
+  // Fetch monthly data from database (same as SlideDataBrowser)
+  useEffect(() => {
+    if (slideReportId) {
+      const fetchMonthlyData = async () => {
+        setIsLoadingMonthlyData(true);
+        try {
+          const { data, error } = await supabase
+            .from('slide_report_monthly_data')
+            .select('*')
+            .eq('slide_report_id', slideReportId)
+            .order('year', { ascending: false })
+            .order('month', { ascending: true });
+
+          if (error) {
+            console.error('Error fetching monthly data:', error);
+          } else {
+            setMonthlyDataRecords((data as any[]) || []);
+          }
+        } catch (err) {
+          console.error('Error:', err);
+        } finally {
+          setIsLoadingMonthlyData(false);
+        }
+      };
+      fetchMonthlyData();
+    }
+  }, [slideReportId]);
+
   // Filter values state for slides page (channel -> dimensionId -> selected value)
   // Moved here so it's available for useMemo hooks
   const [filterValues, setFilterValues] = useState<Record<string, Record<string, string[]>>>({
@@ -1590,6 +1632,55 @@ export default function SlideViewPage() {
     }
       return sourceData.filter(m => m.year === parseInt(selectedYear));
   }, [slideReport?.pivot_data, slideType, dynamicMonthlyData, selectedYear, filterValues, filterDimensionValues]);
+
+  // Get channel totals from monthly_data table (same source as SlideDataBrowser)
+  // This is the correct source of truth for the data
+  const monthlyDataTotals = useMemo(() => {
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const channelTotals: Record<string, {
+      impressions: number;
+      clicks: number;
+      cost: number;
+      revenue: number;
+      bookings: number;
+    }> = {
+      metasearch: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
+      sem: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
+      social: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
+    };
+
+    if (monthlyDataRecords.length === 0) {
+      return channelTotals;
+    }
+
+    // Filter records based on selected year/month
+    let filteredRecords = monthlyDataRecords;
+    
+    if (selectedYear !== 'all') {
+      const yearNum = parseInt(selectedYear);
+      filteredRecords = filteredRecords.filter(r => r.year === yearNum);
+    }
+    
+    if (selectedMonth !== 'all') {
+      const monthNum = monthNames.indexOf(selectedMonth) + 1;
+      filteredRecords = filteredRecords.filter(r => r.month === monthNum);
+    }
+
+    // Aggregate metrics by channel
+    filteredRecords.forEach(record => {
+      const channel = record.channel.toLowerCase();
+      if (channelTotals[channel] && record.metrics) {
+        const metrics = record.metrics;
+        channelTotals[channel].impressions += metrics.impressions || 0;
+        channelTotals[channel].clicks += metrics.clicks || 0;
+        channelTotals[channel].cost += metrics.cost || 0;
+        channelTotals[channel].revenue += metrics.revenue || 0;
+        channelTotals[channel].bookings += metrics.bookings || 0;
+      }
+    });
+
+    return channelTotals;
+  }, [monthlyDataRecords, selectedYear, selectedMonth]);
 
   // Get current totals based on selected year/month from pivot_data
   // Applies filterValues if they are set (but not when "All" is selected)
@@ -5381,10 +5472,11 @@ export default function SlideViewPage() {
                     </TableHeader>
                     <TableBody>
                       {(() => {
-                        // Use dynamic data for master-report, otherwise hardcoded
+                        // Use monthly data from database (same source as SlideDataBrowser) for accurate data
                         const channels = ['metasearch', 'sem', 'social'];
                         const rows = channels.map(channel => {
-                          const data = currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                          // Use monthlyDataTotals which comes from slide_report_monthly_data table
+                          const data = monthlyDataTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
                           const derived = calculateDerivedMetrics(data);
                           return {
                             report: channel.charAt(0).toUpperCase() + channel.slice(1),
