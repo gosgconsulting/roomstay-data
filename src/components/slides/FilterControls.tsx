@@ -12,14 +12,15 @@
  * @module FilterControls
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { ChevronRight, Loader2, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MONTH_NAMES } from '@/constants/slideViewConstants';
 import type { SlideReportPivotData } from '@/types/slideReports';
@@ -90,6 +91,8 @@ export const FilterControls = React.memo<FilterControlsProps>(
     onFilterDimensionNameChange,
     onFilterLoadingChange,
   }) => {
+    const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
+
     const handleFilterOpen = useCallback(
       async (open: boolean, filterDimId: string) => {
         if (!open || !currentChannel || !onLoadFilterValues) return;
@@ -98,9 +101,14 @@ export const FilterControls = React.memo<FilterControlsProps>(
         const selectedFilterValues = filterValues[currentChannel]?.[filterDimId] || [];
         const hasValues = filterValuesList.length > 0;
 
-        // Initialize pending values with current selection when opening
+        // Initialize pending values with all values by default (all checked)
         if (onPendingFilterValueChange) {
-          onPendingFilterValueChange(currentChannel, filterDimId, selectedFilterValues);
+          // If no values are selected, select all by default
+          if (selectedFilterValues.length === 0 && filterValuesList.length > 0) {
+            onPendingFilterValueChange(currentChannel, filterDimId, [...filterValuesList]);
+          } else {
+            onPendingFilterValueChange(currentChannel, filterDimId, selectedFilterValues);
+          }
         }
 
         // If values aren't loaded yet, trigger loading immediately
@@ -178,9 +186,19 @@ export const FilterControls = React.memo<FilterControlsProps>(
                 const isLoading = filterValuesLoading[currentChannel]?.[filterDimId];
 
                 return (
-                  <Popover
+                    <Popover
                     key={`filter-${currentChannel}-${filterDimId}`}
-                    onOpenChange={(open) => handleFilterOpen(open, filterDimId)}
+                    onOpenChange={(open) => {
+                      handleFilterOpen(open, filterDimId);
+                      if (!open) {
+                        // Clear search term when closing
+                        setSearchTerms(prev => {
+                          const key = `${currentChannel}-${filterDimId}`;
+                          const { [key]: _, ...rest } = prev;
+                          return rest;
+                        });
+                      }
+                    }}
                   >
                     <PopoverTrigger asChild>
                       <div className="flex flex-col gap-1">
@@ -237,6 +255,22 @@ export const FilterControls = React.memo<FilterControlsProps>(
                             </Button>
                           </div>
                         </div>
+                        <div className="mb-2 border-b pb-2">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              placeholder="Type to search"
+                              value={searchTerms[`${currentChannel}-${filterDimId}`] || ''}
+                              onChange={(e) => {
+                                setSearchTerms(prev => ({
+                                  ...prev,
+                                  [`${currentChannel}-${filterDimId}`]: e.target.value
+                                }));
+                              }}
+                              className="pl-8 h-8"
+                            />
+                          </div>
+                        </div>
                         <ScrollArea className="h-[200px]">
                           <div className="space-y-1 p-1">
                             {isLoading ? (
@@ -247,42 +281,62 @@ export const FilterControls = React.memo<FilterControlsProps>(
                                 </span>
                               </div>
                             ) : hasValues ? (
-                              filterValuesList.map((value) => {
-                                const isSelected = pendingValues.includes(value);
-                                return (
-                                  <div
-                                    key={value}
-                                    className={cn(
-                                      'flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent text-sm',
-                                      isSelected && 'bg-primary text-primary-foreground'
-                                    )}
-                                    onClick={() => {
-                                      if (onPendingFilterValueChange) {
-                                        const current =
-                                          pendingFilterValues[currentChannel]?.[filterDimId] || [];
-                                        const newValues = isSelected
-                                          ? current.filter((v) => v !== value)
-                                          : [...current, value];
-                                        onPendingFilterValueChange(
-                                          currentChannel,
-                                          filterDimId,
-                                          newValues
-                                        );
-                                      }
-                                    }}
-                                  >
-                                    <Checkbox
-                                      checked={isSelected}
-                                      className={
-                                        isSelected
-                                          ? 'border-primary-foreground data-[state=checked]:bg-primary-foreground data-[state=checked]:text-primary'
-                                          : ''
-                                      }
-                                    />
-                                    <span className="truncate">{value}</span>
-                                  </div>
-                                );
-                              })
+                              (() => {
+                                const searchTerm = searchTerms[`${currentChannel}-${filterDimId}`] || '';
+                                const filteredList = searchTerm
+                                  ? filterValuesList.filter(v => 
+                                      v.toLowerCase().includes(searchTerm.toLowerCase())
+                                    )
+                                  : filterValuesList;
+                                
+                                return filteredList.map((value) => {
+                                  const isSelected = pendingValues.includes(value);
+                                  return (
+                                    <div
+                                      key={value}
+                                      className="group flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent text-sm relative"
+                                      onClick={() => {
+                                        if (onPendingFilterValueChange) {
+                                          const current =
+                                            pendingFilterValues[currentChannel]?.[filterDimId] || [];
+                                          const newValues = isSelected
+                                            ? current.filter((v) => v !== value)
+                                            : [...current, value];
+                                          onPendingFilterValueChange(
+                                            currentChannel,
+                                            filterDimId,
+                                            newValues
+                                          );
+                                        }
+                                      }}
+                                    >
+                                      <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={() => {}}
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                      <span className="truncate flex-1">{value}</span>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (onPendingFilterValueChange) {
+                                            onPendingFilterValueChange(
+                                              currentChannel,
+                                              filterDimId,
+                                              [value]
+                                            );
+                                          }
+                                        }}
+                                      >
+                                        ONLY
+                                      </Button>
+                                    </div>
+                                  );
+                                });
+                              })()
                             ) : (
                               <div className="text-center py-4 text-muted-foreground text-sm">
                                 Click "Refresh Data" to load filter values

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useTransition } from "react";
+import { useState, useEffect, useMemo, useTransition, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -176,7 +176,7 @@ export function KPIChart({
     startTransition(() => {
       loadChartData();
     });
-  }, [reportId, accountId, stableFilters, selectedMetric, sourceData, isLoadingSource, dimensions, isLoadingDimensions]);
+  }, [reportId, accountId, stableFilters, selectedMetric, sourceData, isLoadingSource, dimensions, isLoadingDimensions, loadChartData]);
 
   // Keep selectedMetric in sync if parent changes initialMetric
   useEffect(() => {
@@ -193,89 +193,68 @@ export function KPIChart({
     }
   };
 
-  // Helper: evaluate conditions for a formula-condition pair against a row
-  const meetsConditions = (dv: Record<string, any>, conditions?: { dimension_id: string; operator: 'equals' | 'not_equals' | 'contains' | 'not_contains'; value: string }[]) => {
-    if (!conditions || conditions.length === 0) return true;
-    return conditions.every(cond => {
-      const raw = dv[cond.dimension_id];
-      if (raw === undefined || raw === null) return false;
-      const rowVal = String(raw).trim().toLowerCase();
-      const target = String(cond.value).trim().toLowerCase();
-      switch (cond.operator) {
-        case 'equals': return rowVal === target;
-        case 'not_equals': return rowVal !== target;
-        case 'contains': return rowVal.includes(target);
-        case 'not_contains': return !rowVal.includes(target);
-        default: return false;
+  const loadChartData = useCallback(async () => {
+    // Helper functions defined inside to ensure they're always in sync
+    const meetsConditions = (dv: Record<string, any>, conditions?: { dimension_id: string; operator: 'equals' | 'not_equals' | 'contains' | 'not_contains'; value: string }[]) => {
+      if (!conditions || conditions.length === 0) return true;
+      return conditions.every(cond => {
+        const raw = dv[cond.dimension_id];
+        if (raw === undefined || raw === null) return false;
+        const rowVal = String(raw).trim().toLowerCase();
+        const target = String(cond.value).trim().toLowerCase();
+        switch (cond.operator) {
+          case 'equals': return rowVal === target;
+          case 'not_equals': return rowVal !== target;
+          case 'contains': return rowVal.includes(target);
+          case 'not_contains': return !rowVal.includes(target);
+          default: return false;
+        }
+      });
+    };
+
+    const evaluateFormulaForRow = (formula: string, dv: Record<string, any>, dimensions: Dimension[]): number | null => {
+      if (!formula) return null;
+      let expr = formula;
+      expr = expr.replace(/(\d+(?:\.\d+)?)\s*%/g, (_, num) => `(${parseFloat(num) / 100})`);
+      for (const dim of dimensions) {
+        const val = dv[dim.id];
+        const numeric = typeof val === 'number' ? val : (val !== undefined && val !== null ? parseFloat(String(val)) : 0);
+        const re = new RegExp(`\\b${dim.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
+        expr = expr.replace(re, String(isFinite(numeric) ? numeric : 0));
       }
-    });
-  };
+      if (expr.includes('/ 0')) return 0;
+      try {
+        const result = Function(`"use strict"; return (${expr})`)();
+        return isFinite(result) ? Number(result) : null;
+      } catch {
+        return null;
+      }
+    };
 
-  // Helper: evaluate a formula string for a row using dimension names
-  const evaluateFormulaForRow = (formula: string, dv: Record<string, any>, dimensions: Dimension[]): number | null => {
-    if (!formula) return null;
-
-    // Map dimension names to numeric values from the row
-    let expr = formula;
-
-    // Replace percentage literals like "15%" with "(0.15)"
-    expr = expr.replace(/(\d+(?:\.\d+)?)\s*%/g, (_, num) => `(${parseFloat(num) / 100})`);
-
-    // Replace dimension names with values
-    for (const dim of dimensions) {
-      const val = dv[dim.id];
-      const numeric = typeof val === 'number' ? val : (val !== undefined && val !== null ? parseFloat(String(val)) : 0);
-      // word-boundary replacement to avoid partial name matches
-      const re = new RegExp(`\\b${dim.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
-      expr = expr.replace(re, String(isFinite(numeric) ? numeric : 0));
-    }
-
-    // Avoid / 0
-    if (expr.includes('/ 0')) return 0;
-
-    try {
-      const result = Function(`"use strict"; return (${expr})`)();
-      return isFinite(result) ? Number(result) : null;
-    } catch {
+    const getMetricValueForRow = (
+      dv: Record<string, any>,
+      metricDimension: Dimension,
+      dimensions: Dimension[]
+    ): number | null => {
+      const direct = dv[metricDimension.id];
+      if (direct !== undefined && direct !== null) {
+        return typeof direct === 'number' ? direct : parseFloat(String(direct)) || 0;
+      }
+      const pairs = (metricDimension as any).formula_condition_pairs as
+        { formula: string; conditions?: { dimension_id: string; operator: any; value: string }[] }[] | undefined;
+      if (pairs && pairs.length > 0) {
+        const matched = pairs.find(p => meetsConditions(dv, p.conditions)) || pairs[0];
+        const val = evaluateFormulaForRow(matched?.formula || '', dv, dimensions);
+        return val ?? null;
+      }
+      const singleFormula = (metricDimension as any).formula as string | undefined;
+      if (singleFormula) {
+        const val = evaluateFormulaForRow(singleFormula, dv, dimensions);
+        return val ?? null;
+      }
       return null;
-    }
-  };
+    };
 
-  // Helper: compute metric value for a row (direct value or derived via formula)
-  const getMetricValueForRow = (
-    dv: Record<string, any>,
-    metricDimension: Dimension,
-    dimensions: Dimension[]
-  ): number | null => {
-    // Use direct value if present
-    const direct = dv[metricDimension.id];
-    if (direct !== undefined && direct !== null) {
-      return typeof direct === 'number' ? direct : parseFloat(String(direct)) || 0;
-    }
-
-    // Try multiple formula-condition pairs first
-    const pairs = (metricDimension as any).formula_condition_pairs as
-      { formula: string; conditions?: { dimension_id: string; operator: any; value: string }[] }[] | undefined;
-
-    if (pairs && pairs.length > 0) {
-      // Prefer a pair whose conditions match; otherwise fallback to first pair
-      const matched = pairs.find(p => meetsConditions(dv, p.conditions)) || pairs[0];
-      const val = evaluateFormulaForRow(matched?.formula || '', dv, dimensions);
-      return val ?? null;
-    }
-
-    // Fallback to single formula
-    const singleFormula = (metricDimension as any).formula as string | undefined;
-    if (singleFormula) {
-      const val = evaluateFormulaForRow(singleFormula, dv, dimensions);
-      return val ?? null;
-    }
-
-    // No data or formula
-    return null;
-  };
-
-  const loadChartData = async () => {
     console.log('[CHART-FIXED] Loading chart data for metric:', selectedMetric);
     setIsLoading(true);
     
@@ -351,7 +330,14 @@ export function KPIChart({
         filteredData = filteredData.filter((row: any) => {
           const dv = row.dimension_values || {};
           for (const [dimId, values] of Object.entries(normalizedFilters)) {
-            if (!values || values.length === 0) continue;
+            // If filter is explicitly set to empty array, filter out all rows (show zero data)
+            if (values && values.length === 0) {
+              return false; // Explicitly empty = no matches = zero data
+            }
+            
+            // If filter is not set (undefined/null), skip (show all)
+            if (!values) continue;
+
             const rowVal = dv[dimId];
             if (rowVal === undefined || rowVal === null) return false;
 
@@ -503,7 +489,14 @@ export function KPIChart({
           previousData = previousData.filter((row: any) => {
             const dv = row.dimension_values || {};
             for (const [dimId, values] of Object.entries(normalizedFilters)) {
-              if (!values || values.length === 0) continue;
+              // If filter is explicitly set to empty array, filter out all rows (show zero data)
+              if (values && values.length === 0) {
+                return false; // Explicitly empty = no matches = zero data
+              }
+              
+              // If filter is not set (undefined/null), skip (show all)
+              if (!values) continue;
+
               const rowVal = dv[dimId];
               if (rowVal === undefined || rowVal === null) return false;
 
@@ -581,7 +574,7 @@ export function KPIChart({
       setIsLoading(false);
       onLoadingComplete?.();
     }
-  };
+  }, [reportId, accountId, sourceData, dimensions, stableFilters, selectedMetric, onLoadingComplete]);
 
      const formatTooltipValue = (value: number, name: string) => {
      // Clean the metric name for formatting (remove _previous suffix)

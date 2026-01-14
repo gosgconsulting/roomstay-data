@@ -265,6 +265,7 @@ export type Database = {
           report_id: string | null
           updated_at: string | null
           user_id: string
+          view_id: string | null
         }
         Insert: {
           account_id?: string | null
@@ -276,6 +277,7 @@ export type Database = {
           report_id?: string | null
           updated_at?: string | null
           user_id: string
+          view_id?: string | null
         }
         Update: {
           account_id?: string | null
@@ -287,6 +289,7 @@ export type Database = {
           report_id?: string | null
           updated_at?: string | null
           user_id?: string
+          view_id?: string | null
         }
         Relationships: [
           {

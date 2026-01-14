@@ -104,9 +104,16 @@ export function useChannelMetrics({
     // Check if any filters are actually applied (not "All" selected)
     const hasFilters = Object.entries(filterValues).some(([channel, channelFilters]) => {
       return Object.entries(channelFilters).some(([dimensionId, selectedValues]) => {
-        if (!selectedValues || selectedValues.length === 0) {
-          return false; // Empty = "All" selected = no filter
+        // If filter is explicitly set to empty array, it's an active filter that excludes everything
+        if (selectedValues && selectedValues.length === 0) {
+          return true; // Explicitly empty = active filter = filter out everything
         }
+        
+        // If filter is not set (undefined/null), skip (no filter)
+        if (!selectedValues) {
+          return false; // No filter = show all
+        }
+        
         // Check if all available values are selected (also means "All" = no filter)
         const availableValues = filterDimensionValues[channel]?.[dimensionId] || [];
         if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
@@ -150,9 +157,16 @@ export function useChannelMetrics({
       Object.entries(filterValues).forEach(([channel, channelFilters]) => {
         const hasChannelFilters = Object.entries(channelFilters).some(
           ([dimensionId, selectedValues]) => {
-            if (!selectedValues || selectedValues.length === 0) {
-              return false;
+            // If filter is explicitly set to empty array, it's an active filter that excludes everything
+            if (selectedValues && selectedValues.length === 0) {
+              return true; // Explicitly empty = active filter = filter out everything
             }
+            
+            // If filter is not set (undefined/null), skip (no filter)
+            if (!selectedValues) {
+              return false; // No filter = show all
+            }
+            
             const availableValues = filterDimensionValues[channel]?.[dimensionId] || [];
             if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
               const selectedSet = new Set(selectedValues);

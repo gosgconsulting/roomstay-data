@@ -55,9 +55,14 @@ export const hasActiveFilters = (
 
   // Check each filter dimension
   for (const [dimensionId, selectedValues] of Object.entries(filterValues)) {
-    // If no values selected, it means "All" - no filter
-    if (!selectedValues || selectedValues.length === 0) {
+    // If selectedValues is null/undefined, filter is not set - no filter
+    if (!selectedValues) {
       continue;
+    }
+    
+    // If empty array, it's an active filter that filters out everything
+    if (selectedValues.length === 0) {
+      return true; // Empty array is an active filter (shows zero data)
     }
 
     // If we have available values, check if all are selected (means "All" - no filter)
@@ -128,7 +133,13 @@ export const filterRawDataRows = (
 
     // Apply dimension filters
     for (const [dimensionId, selectedValues] of Object.entries(filterValues)) {
-      if (!selectedValues || selectedValues.length === 0) continue; // "All" selected - no filter
+      // If filter is explicitly set to empty array, filter out all rows (show zero data)
+      if (selectedValues && selectedValues.length === 0) {
+        return false; // Explicitly empty = no matches = zero data
+      }
+      
+      // If filter is not set (undefined/null), skip (show all)
+      if (!selectedValues) continue;
 
       const rowValue = (rowData as Record<string, unknown>)[dimensionId];
       if (rowValue === undefined || rowValue === null) {
