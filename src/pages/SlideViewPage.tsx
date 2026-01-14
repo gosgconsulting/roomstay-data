@@ -17,6 +17,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
+import { useChannelMetrics } from "@/hooks/useChannelMetrics";
+import { useEditSourceModal } from "@/hooks/useEditSourceModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange, BreakdownRow, ChannelMetrics } from "@/types/slideReports";
@@ -1269,6 +1271,18 @@ export default function SlideViewPage() {
     return channelTotals;
   }, [monthlyDataRecords, selectedYear, selectedMonth]);
 
+  // Get channel metrics using hook
+  const { currentTotals: hookCurrentTotals, comparisonTotals: hookComparisonTotals } = useChannelMetrics({
+    pivotData: slideReport?.pivot_data as SlideReportPivotData | null,
+    selectedYear,
+    selectedMonth,
+    filterValues,
+    filterDimensionValues,
+    slideType,
+    dynamicChannelTotals,
+    comparisonType: comparisonType as 'none' | 'previous_period' | 'previous_year',
+  });
+
   // Get current totals based on selected year/month from pivot_data
   // Applies filterValues if they are set (but not when "All" is selected)
   // Overview tab also applies filters from individual channel tabs
@@ -1499,7 +1513,13 @@ export default function SlideViewPage() {
   }, [slideType, slideReport?.pivot_data, dynamicChannelTotals, dynamicYearlyTotals, selectedYear, selectedMonth, selectedTab, filterValues, filterDimensionValues, slideReport?.date_range]);
 
   // Get comparison totals based on comparison type and selected year/month
+  // TODO: Migrate fully to useChannelMetrics hook
   const comparisonTotals = useMemo(() => {
+    // Use hook result if available, otherwise fall back to legacy calculation
+    if (hookComparisonTotals) {
+      return hookComparisonTotals;
+    }
+    
     if (comparisonType === 'none') return null;
     
     const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
@@ -1516,7 +1536,7 @@ export default function SlideViewPage() {
       }
     }
     return channelTotals;
-  }, [comparisonType, slideReport?.pivot_data]);
+  }, [comparisonType, slideReport?.pivot_data, hookComparisonTotals]);
 
   // Load data from stored pivot_data when slideReport changes
   useEffect(() => {
@@ -3205,13 +3225,7 @@ export default function SlideViewPage() {
 
   const handleModalClose = async (open: boolean) => {
     setIsEditSourceOpen(open);
-    if (open) {
-      // Modal is opening - load saved configuration
-      await loadSavedConfigurationIntoModal();
-    } else {
-      // Modal is closing - reset state
-      resetModalState();
-    }
+    // Note: onOpen/onClose callbacks in useEditSourceModal handle the rest
   };
 
   // Handle Refresh Data with step-by-step modal
