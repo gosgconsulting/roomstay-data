@@ -535,22 +535,23 @@ const calculatePercentChange = (current: number, previous: number): number => {
 };
 
 const formatNumber = (value: number, type?: string): string => {
+  if (value === undefined || value === null || isNaN(value)) return '-';
+  
   if (type === "currency") {
-    return `$${value.toLocaleString("en-US", { maximumFractionDigits: 1 })}`;
+    // Match SlideDataBrowser: currency with 0 decimal places
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
   }
   if (type === "percent") {
+    return `${value.toFixed(2)}%`;
+  }
+  if (type === "percentage") {
     return `${value.toFixed(2)}%`;
   }
   if (type === "roas") {
     return `${value.toFixed(1)}x`;
   }
-  if (value >= 1000) {
-    if (value >= 1000000) {
-      return `${(value / 1000000).toFixed(1)}M`;
-    }
-    return `${(value / 1000).toFixed(1)}K`;
-  }
-  return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  // For regular numbers, use 2 decimal places (matching SlideDataBrowser)
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value);
 };
 
 // HARDCODED BREAKDOWN COMBINER - COMMENTED OUT: Not used, breakdown data now comes from pivot_data.breakdowns
@@ -663,22 +664,53 @@ const buildMetricNameToIdsMap = (dimensionMap: Record<string, string> | undefine
 };
 
 // Helper function to get all possible keys (names + IDs) for a metric
+// IMPORTANT: Order matters! Check dimension IDs first (like computation does), then dimension names
 const getMetricKeys = (
   metricName: string,
   nameToIdsMap: Record<string, string[]>
 ): string[] => {
   const keys: string[] = [];
+  const seenKeys = new Set<string>();
   
-  // Add the metric name itself and common variations
-  keys.push(metricName);
-  keys.push(metricName.toLowerCase());
-  keys.push(metricName.charAt(0).toUpperCase() + metricName.slice(1).toLowerCase());
+  // PRIORITY 1: Get all dimension IDs for this metric (check both lowercase and original case)
+  // This matches the computation logic: rowData[metricNameToIdMap['Cost']] (dimension ID first)
+  const dimensionIds = new Set<string>();
+  const idsFromLowercase = nameToIdsMap[metricName.toLowerCase()] || [];
+  const idsFromOriginal = nameToIdsMap[metricName] || [];
+  [...idsFromLowercase, ...idsFromOriginal].forEach(id => dimensionIds.add(id));
   
-  // Add all dimension IDs for this metric
-  const dimensionIds = nameToIdsMap[metricName.toLowerCase()] || 
-                       nameToIdsMap[metricName] || 
-                       [];
-  keys.push(...dimensionIds);
+  // Add dimension IDs FIRST (highest priority)
+  dimensionIds.forEach(id => {
+    if (!seenKeys.has(id)) {
+      keys.push(id);
+      seenKeys.add(id);
+    }
+  });
+  
+  // PRIORITY 2: Add dimension names that map to this metric's dimension IDs
+  // This matches the computation fallback: rowData['Cost'] (dimension name as fallback)
+  Object.entries(nameToIdsMap).forEach(([name, ids]) => {
+    // If any of this name's IDs match our metric's dimension IDs, include the name
+    if (ids.some(id => dimensionIds.has(id))) {
+      if (!seenKeys.has(name)) {
+        keys.push(name); // Add the original dimension name (e.g., "Cost", "Revenue")
+        seenKeys.add(name);
+      }
+    }
+  });
+  
+  // PRIORITY 3: Add metric name variations as final fallback
+  const variations = [
+    metricName,
+    metricName.toLowerCase(),
+    metricName.charAt(0).toUpperCase() + metricName.slice(1).toLowerCase(),
+  ];
+  variations.forEach(v => {
+    if (!seenKeys.has(v)) {
+      keys.push(v);
+      seenKeys.add(v);
+    }
+  });
   
   return keys;
 };
@@ -826,9 +858,15 @@ const UnifiedBreakdownTable = ({
           }
         });
         
-        // Build dynamic metric mapping from dimensionMap (once per channel)
+        // Build metricNameToIdMap from dimensionMap (reverse mapping: name -> id)
+        // This matches the exact structure used in slideReportPivotComputation.ts
         const dimensionMap = (channelData as any).dimensionMap || {};
-        const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+        const metricNameToIdMap: Record<string, string> = {};
+        Object.entries(dimensionMap as Record<string, string>).forEach(([dimensionId, dimensionName]) => {
+          if (dimensionName && typeof dimensionName === 'string') {
+            metricNameToIdMap[dimensionName] = dimensionId;
+          }
+        });
         
         // Aggregate metrics for each group
         Object.entries(groupedRows).forEach(([groupValue, groupRows]) => {
@@ -839,28 +877,25 @@ const UnifiedBreakdownTable = ({
           groupRows.forEach((row) => {
             const rowData = row.dimension_values || row;
             
-            // Extract metrics using dynamic resolution
-            const getMetricValue = (keys: string[]): number => {
-              for (const key of keys) {
-                const value = rowData[key];
-                if (value !== undefined && value !== null) {
-                  if (typeof value === 'number') {
-                    return isNaN(value) ? 0 : value;
-                  }
-                  const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
-                  if (!isNaN(parsed)) {
-                    return parsed;
-                  }
-                }
-              }
-              return 0;
-            };
+            // Use EXACT same extraction logic as computeBreakdownAllTime/computeBreakdownForMonth
+            // This ensures we get the same values as the pre-computed breakdowns
+            const impressionsValue = parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
+            const clicksValue = parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
+            const costValue = parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
+            const revenueValue = parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
+            const bookingsValue = parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
             
-            const impressionsValue = getMetricValue(getMetricKeys('impressions', nameToIdsMap));
-            const clicksValue = getMetricValue(getMetricKeys('clicks', nameToIdsMap));
-            const costValue = getMetricValue(getMetricKeys('cost', nameToIdsMap));
-            const revenueValue = getMetricValue(getMetricKeys('revenue', nameToIdsMap));
-            const bookingsValue = getMetricValue(getMetricKeys('bookings', nameToIdsMap));
+            // Debug logging for cost extraction (first row of first group only)
+            if (groupRows.indexOf(row) === 0 && Object.keys(allBreakdowns).length === 1) {
+              console.log('[BreakdownAnalysis] Cost extraction debug:', {
+                metricNameToIdMapCost: metricNameToIdMap['Cost'],
+                rowDataCostById: rowData[metricNameToIdMap['Cost']],
+                rowDataCostByName: rowData['Cost'],
+                extractedCost: costValue,
+                allMetricKeys: Object.keys(metricNameToIdMap).filter(k => k.toLowerCase().includes('cost') || k.toLowerCase().includes('spend')),
+                sampleRowDataKeys: Object.keys(rowData).slice(0, 10),
+              });
+            }
             
             allBreakdowns[groupValue].impressions += impressionsValue;
             allBreakdowns[groupValue].clicks += clicksValue;
@@ -872,10 +907,7 @@ const UnifiedBreakdownTable = ({
             if (groupRows.indexOf(row) === 0 && Object.keys(allBreakdowns).length === 1) {
               console.log('[BreakdownTable] First row metric extraction:', {
                 dimensionMap,
-                nameToIdsMap,
-                costKeys: getMetricKeys('cost', nameToIdsMap),
-                clicksKeys: getMetricKeys('clicks', nameToIdsMap),
-                revenueKeys: getMetricKeys('revenue', nameToIdsMap),
+                metricNameToIdMap,
                 rowDataKeys: Object.keys(rowData).slice(0, 10),
                 extractedValues: {
                   impressions: impressionsValue,
@@ -1066,35 +1098,26 @@ const UnifiedBreakdownTable = ({
           allBreakdowns[breakdownValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
         }
         
+        // Build metricNameToIdMap from dimensionMap (reverse mapping: name -> id)
+        // This matches the exact structure used in slideReportPivotComputation.ts
+        const dimensionMap = (channelData as any).dimensionMap || {};
+        const metricNameToIdMap: Record<string, string> = {};
+        Object.entries(dimensionMap as Record<string, string>).forEach(([dimensionId, dimensionName]) => {
+          if (dimensionName && typeof dimensionName === 'string') {
+            metricNameToIdMap[dimensionName] = dimensionId;
+          }
+        });
+        
         groupRows.forEach((row) => {
           const rowData = row.dimension_values || row;
           
-          // Build dynamic metric mapping from dimensionMap
-          const dimensionMap = (channelData as any).dimensionMap || {};
-          const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
-          
-          // Extract metrics using dynamic resolution
-          const getMetricValue = (keys: string[]): number => {
-            for (const key of keys) {
-              const value = rowData[key];
-              if (value !== undefined && value !== null) {
-                if (typeof value === 'number') {
-                  return isNaN(value) ? 0 : value;
-                }
-                const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
-                if (!isNaN(parsed)) {
-                  return parsed;
-                }
-              }
-            }
-            return 0;
-          };
-          
-          allBreakdowns[breakdownValue].impressions += getMetricValue(getMetricKeys('impressions', nameToIdsMap));
-          allBreakdowns[breakdownValue].clicks += getMetricValue(getMetricKeys('clicks', nameToIdsMap));
-          allBreakdowns[breakdownValue].cost += getMetricValue(getMetricKeys('cost', nameToIdsMap));
-          allBreakdowns[breakdownValue].revenue += getMetricValue(getMetricKeys('revenue', nameToIdsMap));
-          allBreakdowns[breakdownValue].bookings += getMetricValue(getMetricKeys('bookings', nameToIdsMap));
+          // Use EXACT same extraction logic as computeBreakdownAllTime/computeBreakdownForMonth
+          // This ensures we get the same values as the pre-computed breakdowns
+          allBreakdowns[breakdownValue].impressions += parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
+          allBreakdowns[breakdownValue].clicks += parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
+          allBreakdowns[breakdownValue].cost += parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
+          allBreakdowns[breakdownValue].revenue += parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
+          allBreakdowns[breakdownValue].bookings += parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
         });
       });
     }
@@ -1252,8 +1275,8 @@ const UnifiedBreakdownTable = ({
                 <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
                 <TableCell className="text-right">{group.metrics.conversionRate.toFixed(2)}%</TableCell>
                 <TableCell className="text-right">${group.metrics.cpc < 0.01 ? group.metrics.cpc.toFixed(4) : group.metrics.cpc.toFixed(2)}</TableCell>
-                <TableCell className="text-right">${formatNumber(group.metrics.cost)}</TableCell>
-                <TableCell className="text-right">${formatNumber(group.metrics.revenue)}</TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.cost, 'currency')}</TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.revenue, 'currency')}</TableCell>
                 <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
                 <TableCell className="text-right">{group.metrics.costOfSale < 0.01 ? group.metrics.costOfSale.toFixed(4) : group.metrics.costOfSale.toFixed(2)}%</TableCell>
               </TableRow>
@@ -1273,8 +1296,8 @@ const UnifiedBreakdownTable = ({
                       <TableCell className="text-right text-muted-foreground">{item.metrics.bookings.toFixed(2)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.conversionRate.toFixed(2)}%</TableCell>
                       <TableCell className="text-right text-muted-foreground">${item.metrics.cpc < 0.01 ? item.metrics.cpc.toFixed(4) : item.metrics.cpc.toFixed(2)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">${formatNumber(item.metrics.cost)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">${formatNumber(item.metrics.revenue)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.cost, 'currency')}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.revenue, 'currency')}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.roas.toFixed(1)}x</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.costOfSale < 0.01 ? item.metrics.costOfSale.toFixed(4) : item.metrics.costOfSale.toFixed(2)}%</TableCell>
                     </TableRow>
@@ -1293,8 +1316,8 @@ const UnifiedBreakdownTable = ({
             <TableCell className="text-right">{totalMetrics.bookings.toFixed(2)}</TableCell>
             <TableCell className="text-right">{totalMetrics.conversionRate.toFixed(2)}%</TableCell>
             <TableCell className="text-right">${totalMetrics.cpc < 0.01 ? totalMetrics.cpc.toFixed(4) : totalMetrics.cpc.toFixed(2)}</TableCell>
-            <TableCell className="text-right">${formatNumber(totalMetrics.cost)}</TableCell>
-            <TableCell className="text-right">${formatNumber(totalMetrics.revenue)}</TableCell>
+            <TableCell className="text-right">{formatNumber(totalMetrics.cost, 'currency')}</TableCell>
+            <TableCell className="text-right">{formatNumber(totalMetrics.revenue, 'currency')}</TableCell>
             <TableCell className="text-right">{totalMetrics.roas.toFixed(1)}x</TableCell>
             <TableCell className="text-right">{totalMetrics.costOfSale < 0.01 ? totalMetrics.costOfSale.toFixed(4) : totalMetrics.costOfSale.toFixed(2)}%</TableCell>
           </TableRow>
@@ -1357,8 +1380,8 @@ const BreakdownTable = ({
             <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
             <TableCell className="text-right">{row.conversionRate.toFixed(2)}%</TableCell>
             <TableCell className="text-right">${row.cpc.toFixed(2)}</TableCell>
-            <TableCell className="text-right">${formatNumber(row.cost)}</TableCell>
-            <TableCell className="text-right">${formatNumber(row.revenue)}</TableCell>
+            <TableCell className="text-right">{formatNumber(row.cost, 'currency')}</TableCell>
+            <TableCell className="text-right">{formatNumber(row.revenue, 'currency')}</TableCell>
             <TableCell className="text-right">{row.roas.toFixed(1)}x</TableCell>
             <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
           </TableRow>
@@ -1372,8 +1395,8 @@ const BreakdownTable = ({
           <TableCell className="text-right">{totalMetrics.bookings.toFixed(2)}</TableCell>
           <TableCell className="text-right">{totalMetrics.conversionRate.toFixed(2)}%</TableCell>
           <TableCell className="text-right">${totalMetrics.cpc.toFixed(2)}</TableCell>
-          <TableCell className="text-right">${formatNumber(totalMetrics.cost)}</TableCell>
-          <TableCell className="text-right">${formatNumber(totalMetrics.revenue)}</TableCell>
+          <TableCell className="text-right">{formatNumber(totalMetrics.cost, 'currency')}</TableCell>
+          <TableCell className="text-right">{formatNumber(totalMetrics.revenue, 'currency')}</TableCell>
           <TableCell className="text-right">{totalMetrics.roas.toFixed(1)}x</TableCell>
           <TableCell className="text-right">{totalMetrics.costOfSale.toFixed(2)}%</TableCell>
         </TableRow>
@@ -5510,8 +5533,8 @@ export default function SlideViewPage() {
                                 <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
                                 <TableCell className="text-right">{row.conversionRate.toFixed(2)}%</TableCell>
                                 <TableCell className="text-right">${row.cpc.toFixed(2)}</TableCell>
-                                <TableCell className="text-right">${formatNumber(row.cost)}</TableCell>
-                                <TableCell className="text-right">${formatNumber(row.revenue)}</TableCell>
+                                <TableCell className="text-right">{formatNumber(row.cost, 'currency')}</TableCell>
+                                <TableCell className="text-right">{formatNumber(row.revenue, 'currency')}</TableCell>
                                 <TableCell className="text-right">{row.roas.toFixed(1)}x</TableCell>
                                 <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
                               </TableRow>
@@ -5525,8 +5548,8 @@ export default function SlideViewPage() {
                               <TableCell className="text-right">{totalDerived.bookings.toFixed(2)}</TableCell>
                               <TableCell className="text-right">{totalDerived.conversionRate.toFixed(2)}%</TableCell>
                               <TableCell className="text-right">${totalDerived.cpc.toFixed(2)}</TableCell>
-                              <TableCell className="text-right">${formatNumber(totalDerived.cost)}</TableCell>
-                              <TableCell className="text-right">${formatNumber(totalDerived.revenue)}</TableCell>
+                              <TableCell className="text-right">{formatNumber(totalDerived.cost, 'currency')}</TableCell>
+                              <TableCell className="text-right">{formatNumber(totalDerived.revenue, 'currency')}</TableCell>
                               <TableCell className="text-right">{totalDerived.roas.toFixed(1)}x</TableCell>
                               <TableCell className="text-right">{totalDerived.costOfSale.toFixed(2)}%</TableCell>
                             </TableRow>
