@@ -21,8 +21,11 @@ interface CreateShareLinkModalProps {
     slug: string;
     report_ids: string[];
     dimension_filters?: Record<string, Record<string, string[]>>;
+    view_id?: string | null;
   } | null;
   accountId?: string;
+  slideReportId?: string | null; // For slide reports
+  availableViews?: Array<{ id: string | null; name: string }>; // Available views for slide reports
 }
 
 interface Report {
@@ -43,7 +46,9 @@ export const CreateShareLinkModal = ({
   onOpenChange,
   onSuccess,
   editingLink,
-  accountId
+  accountId,
+  slideReportId,
+  availableViews = []
 }: CreateShareLinkModalProps) => {
   const [step, setStep] = useState<1 | 2>(1);
   const [slug, setSlug] = useState("");
@@ -51,6 +56,7 @@ export const CreateShareLinkModal = ({
   const [selectedReports, setSelectedReports] = useState<string[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
   const { toast } = useToast();
   const { data: userResult } = useUser();
   const user = userResult?.user;
@@ -73,10 +79,12 @@ export const CreateShareLinkModal = ({
         setSlug(editingLink.slug);
         setPassword("");
         setDimensionFilters(editingLink.dimension_filters || {});
+        setSelectedViewId(editingLink.view_id || null);
       } else {
         setSlug("");
         setPassword("");
         setDimensionFilters({});
+        setSelectedViewId(null);
       }
     }
   }, [open, editingLink, accountId]);
@@ -376,8 +384,15 @@ export const CreateShareLinkModal = ({
 
   const handleNextStep = () => {
     if (handleStep1Validate()) {
-      setStep(2);
-      setSearchQuery("");
+      // For slide reports with a view selected, skip step 2 (data selector) and submit directly
+      // The view already contains all filter information
+      if (slideReportId && selectedViewId) {
+        handleSubmit();
+      } else {
+        // For regular reports or slide reports without a view, go to step 2 (data selector)
+        setStep(2);
+        setSearchQuery("");
+      }
     }
   };
 
@@ -396,6 +411,12 @@ export const CreateShareLinkModal = ({
       
       if (password) {
         updateData.password_hash = passwordHash;
+      }
+
+      // Add view_id if provided (for slide reports)
+      // For updates, include view_id if slideReportId is set and selectedViewId is explicitly set (can be null to clear)
+      if (slideReportId !== undefined && selectedViewId !== undefined) {
+        updateData.view_id = selectedViewId; // Can be null to clear, but won't be undefined
       }
 
       const { error } = await supabase
@@ -419,16 +440,23 @@ export const CreateShareLinkModal = ({
         description: `/${slug} has been updated`,
       });
     } else {
+      const insertData: any = {
+        slug: slug.toLowerCase().trim(),
+        password_hash: passwordHash,
+        report_ids: selectedReports,
+        created_by: user.id,
+        account_id: accountId,
+        dimension_filters: dimensionFilters,
+      };
+
+      // Add view_id if provided (for slide reports)
+      if (slideReportId && selectedViewId) {
+        insertData.view_id = selectedViewId;
+      }
+
       const { error } = await supabase
         .from("share_links")
-        .insert({
-          slug: slug.toLowerCase().trim(),
-          password_hash: passwordHash,
-          report_ids: selectedReports,
-          created_by: user.id,
-          account_id: accountId,
-          dimension_filters: dimensionFilters,
-        });
+        .insert(insertData);
 
       setLoading(false);
 
@@ -516,36 +544,77 @@ export const CreateShareLinkModal = ({
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label>Reports to Share</Label>
-              <div className="rounded-md border p-4 bg-muted/50">
-                <p className="text-sm text-muted-foreground mb-2">
-                  All reports from this account will be shared automatically:
-                </p>
-                <ul className="text-sm space-y-1">
-                  {reports.length > 0 ? (
-                    reports.map((report) => (
-                      <li key={report.id} className="flex items-center gap-2">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary"></span>
-                        {report.name}
-                      </li>
-                    ))
-                  ) : (
-                    <li className="text-muted-foreground">No reports available for this account</li>
-                  )}
-                </ul>
-                <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">
-                  💡 This includes the "All Reports" view
+            {slideReportId ? (
+              <div className="space-y-2">
+                <Label>View to Share (Optional)</Label>
+                <Select 
+                  value={selectedViewId || 'none'} 
+                  onValueChange={(value) => setSelectedViewId(value === 'none' ? null : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a view (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No view (default filters)</SelectItem>
+                    {availableViews
+                      .filter(v => v.id !== null && v.id !== 'unsaved')
+                      .map((view) => (
+                        <SelectItem key={view.id} value={view.id!}>
+                          {view.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {selectedViewId 
+                    ? "Selected view's filters will be locked for viewers"
+                    : "Viewers can change filters freely"}
                 </p>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Reports to Share</Label>
+                <div className="rounded-md border p-4 bg-muted/50">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    All reports from this account will be shared automatically:
+                  </p>
+                  <ul className="text-sm space-y-1">
+                    {reports.length > 0 ? (
+                      reports.map((report) => (
+                        <li key={report.id} className="flex items-center gap-2">
+                          <span className="h-1.5 w-1.5 rounded-full bg-primary"></span>
+                          {report.name}
+                        </li>
+                      ))
+                    ) : (
+                      <li className="text-muted-foreground">No reports available for this account</li>
+                    )}
+                  </ul>
+                  <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">
+                    💡 This includes the "All Reports" view
+                  </p>
+                </div>
+              </div>
+            )}
 
             <Button 
               onClick={handleNextStep} 
               className="w-full"
+              disabled={loading}
             >
-              Next
-              <ArrowRight className="ml-2 h-4 w-4" />
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {editingLink ? "Updating..." : "Creating..."}
+                </>
+              ) : slideReportId && selectedViewId ? (
+                editingLink ? "Update Link" : "Create Link"
+              ) : (
+                <>
+                  Next
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </>
+              )}
             </Button>
           </div>
         ) : (

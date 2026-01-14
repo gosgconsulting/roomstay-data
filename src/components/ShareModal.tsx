@@ -14,6 +14,8 @@ interface ShareModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   accountId?: string;
+  slideReportId?: string | null; // For slide reports
+  availableViews?: Array<{ id: string | null; name: string }>; // Available views for slide reports
 }
 
 interface ShareLink {
@@ -23,7 +25,7 @@ interface ShareLink {
   created_at: string;
 }
 
-export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId }: ShareModalProps) => {
+export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId, slideReportId, availableViews = [] }: ShareModalProps) => {
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
@@ -195,6 +197,8 @@ export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId
         onSuccess={handleCreateSuccess}
         editingLink={editingLink}
         accountId={accountId}
+        slideReportId={slideReportId}
+        availableViews={availableViews}
       />
     </>
   );

@@ -968,6 +968,7 @@ export default function SlideViewPage() {
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null); // Selected view ID (null = Master, 'unsaved' = Unsaved)
   const [isSaveViewDialogOpen, setIsSaveViewDialogOpen] = useState(false);
   const isApplyingViewRef = useRef(false); // Track when we're applying a view to avoid triggering "Unsaved"
+  const [isReadOnlyMode, setIsReadOnlyMode] = useState(false); // Read-only mode when viewing shared view
   const [isEditSourceOpen, setIsEditSourceOpen] = useState(false);
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -1037,6 +1038,47 @@ export default function SlideViewPage() {
   const { data: views = [], isLoading: isLoadingViews } = useSlideReportViews(slideReportId);
   const createView = useCreateSlideReportView();
   const deleteView = useDeleteSlideReportView();
+
+  // Check for viewId in URL params or share link on mount and when views load
+  useEffect(() => {
+    const urlViewId = searchParams.get('viewId');
+    
+    // Also check if we're accessing via a share link with view_id
+    // This would be set by the shared link page if it exists
+    const shareViewId = sessionStorage.getItem(`share_view_id_${slideReportId}`);
+    
+    const viewIdToUse = urlViewId || shareViewId;
+    
+    if (viewIdToUse && views.length > 0 && !isReadOnlyMode) {
+      // Check if viewId exists in views
+      const view = views.find(v => v.id === viewIdToUse);
+      if (view) {
+        // Enable read-only mode and apply the view
+        setIsReadOnlyMode(true);
+        setSelectedViewId(viewIdToUse);
+        handleApplyView(viewIdToUse);
+        
+        // Clear the session storage after using it
+        if (shareViewId) {
+          sessionStorage.removeItem(`share_view_id_${slideReportId}`);
+        }
+      } else {
+        // View not found, remove from URL and session storage
+        if (urlViewId) {
+          const newParams = new URLSearchParams(searchParams);
+          newParams.delete('viewId');
+          setSearchParams(newParams, { replace: true });
+        }
+        if (shareViewId) {
+          sessionStorage.removeItem(`share_view_id_${slideReportId}`);
+        }
+      }
+    } else if (!viewIdToUse && isReadOnlyMode) {
+      // If viewId is removed from URL, disable read-only mode
+      setIsReadOnlyMode(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, views.length, isReadOnlyMode, slideReportId]);
 
   // Monthly data from database (same source as SlideDataBrowser)
   const [monthlyDataRecords, setMonthlyDataRecords] = useState<Array<{
@@ -4761,6 +4803,8 @@ export default function SlideViewPage() {
         open={isShareModalOpen}
         onOpenChange={setIsShareModalOpen}
         accountId={accountId}
+        slideReportId={slideReportId}
+        availableViews={availableViews}
       />
 
       {/* Save View Dialog */}
@@ -4772,6 +4816,32 @@ export default function SlideViewPage() {
       />
 
       <div className="p-6 space-y-6">
+        {/* Read-only mode banner */}
+        {isReadOnlyMode && (
+          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg text-sm flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-blue-700 dark:text-blue-300 font-medium">
+                🔒 Viewing shared view - Filters are locked
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                // Remove viewId from URL to exit read-only mode
+                const newParams = new URLSearchParams(searchParams);
+                newParams.delete('viewId');
+                setSearchParams(newParams, { replace: true });
+                setIsReadOnlyMode(false);
+                setSelectedViewId(null);
+              }}
+              className="text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100"
+            >
+              Exit View
+            </Button>
+          </div>
+        )}
+
         {/* Filters Row */}
         <div className="flex items-end justify-end gap-6">
           {/* View selector - Show when on overview tab */}
@@ -4783,6 +4853,7 @@ export default function SlideViewPage() {
                   <Select 
                     value={selectedViewId === null ? 'master' : selectedViewId || 'master'} 
                     onValueChange={(value) => {
+                      if (isReadOnlyMode) return; // Prevent changes in read-only mode
                       const newViewId = value === 'master' ? null : (value === 'unsaved' ? 'unsaved' : value);
                       setSelectedViewId(newViewId);
                       // Immediately apply the view filters (unless it's Unsaved)
@@ -4790,6 +4861,7 @@ export default function SlideViewPage() {
                         handleApplyView(newViewId);
                       }
                     }}
+                    disabled={isReadOnlyMode}
                   >
                     <SelectTrigger className="w-[150px] text-sm bg-background">
                       <SelectValue />
@@ -4802,25 +4874,29 @@ export default function SlideViewPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-10 px-3"
-                    onClick={() => setIsSaveViewDialogOpen(true)}
-                    title="Save current filters as a view"
-                  >
-                    <BookmarkPlus className="h-4 w-4" />
-                  </Button>
-                  {selectedViewId && selectedViewId !== 'unsaved' && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-10 px-3 text-destructive hover:text-destructive"
-                      onClick={() => handleDeleteView(selectedViewId)}
-                      title="Delete this view"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                  {!isReadOnlyMode && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-10 px-3"
+                        onClick={() => setIsSaveViewDialogOpen(true)}
+                        title="Save current filters as a view"
+                      >
+                        <BookmarkPlus className="h-4 w-4" />
+                      </Button>
+                      {selectedViewId && selectedViewId !== 'unsaved' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-10 px-3 text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteView(selectedViewId)}
+                          title="Delete this view"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -4852,6 +4928,7 @@ export default function SlideViewPage() {
                     <Popover 
                       key={`filter-${currentChannel}-${filterDimId}`}
                       onOpenChange={async (open) => {
+                        if (isReadOnlyMode) return; // Prevent opening in read-only mode
                         if (open) {
                           // Initialize pending values with current selection when opening
                           setPendingFilterValues(prev => ({
@@ -4987,6 +5064,7 @@ export default function SlideViewPage() {
                                       isSelected && "bg-primary text-primary-foreground"
                                     )}
                                     onClick={() => {
+                                      if (isReadOnlyMode) return; // Prevent changes in read-only mode
                                       setPendingFilterValues(prev => {
                                         const current = prev[currentChannel]?.[filterDimId] || [];
                                         const newValues = isSelected
@@ -5019,6 +5097,7 @@ export default function SlideViewPage() {
                               size="sm"
                               className="w-full"
                               onClick={() => {
+                                if (isReadOnlyMode) return; // Prevent changes in read-only mode
                                 // Apply the pending filter values
                                 setFilterValues(prev => ({
                                   ...prev,
@@ -5028,6 +5107,7 @@ export default function SlideViewPage() {
                                   },
                                 }));
                               }}
+                              disabled={isReadOnlyMode}
                             >
                               Apply
                             </Button>
@@ -5047,7 +5127,7 @@ export default function SlideViewPage() {
               {/* Year Filter */}
               <div className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Year:</span>
-                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <Select value={selectedYear} onValueChange={setSelectedYear} disabled={isReadOnlyMode}>
                   <SelectTrigger className="w-[130px] bg-background">
                     <SelectValue />
                   </SelectTrigger>
@@ -5063,7 +5143,7 @@ export default function SlideViewPage() {
               {/* Month Filter */}
               <div className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Month:</span>
-                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <Select value={selectedMonth} onValueChange={setSelectedMonth} disabled={isReadOnlyMode}>
                   <SelectTrigger className="w-[140px] bg-background">
                     <SelectValue />
                   </SelectTrigger>
@@ -5088,7 +5168,7 @@ export default function SlideViewPage() {
               {/* Comparison dropdown */}
               <div className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Compare:</span>
-                <Select value={comparisonType} onValueChange={setComparisonType}>
+                <Select value={comparisonType} onValueChange={setComparisonType} disabled={isReadOnlyMode}>
                   <SelectTrigger className="w-[160px] bg-background">
                     <SelectValue placeholder="No Comparison" />
                   </SelectTrigger>
@@ -5182,7 +5262,7 @@ export default function SlideViewPage() {
                 <Card>
                   <CardHeader className="pb-2 flex flex-row items-center justify-between">
                     <CardTitle className="text-base font-medium">Revenue</CardTitle>
-                    <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as typeof chartTimeRange)}>
+                    <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as typeof chartTimeRange)} disabled={isReadOnlyMode}>
                       <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
                         <SelectValue />
                       </SelectTrigger>
