@@ -32,6 +32,28 @@ export interface SlideReportConfiguration {
   };
 }
 
+/**
+ * Saved view configuration for quick filter access
+ */
+export interface SlideReportView {
+  id: string;
+  slide_report_id: string;
+  account_id: string | null;
+  user_id: string;
+  name: string;
+  selected_year: string;
+  selected_month: string;
+  comparison_type: 'none' | 'previous_period' | 'previous_year';
+  chart_time_range?: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months' | null;
+  filter_values: {
+    [channel: string]: {
+      [dimensionId: string]: string[];
+    };
+  };
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ChannelMetrics {
   impressions: number;
   clicks: number;

@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles, Search, Loader2, Database, Check, Share2 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles, Search, Loader2, Database, Check, Share2, BookmarkPlus, Trash2 } from "lucide-react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { SaveViewDialog } from "@/components/slides/SaveViewDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
+import { useSlideReportViews, useCreateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
 import { useChannelMetrics } from "@/hooks/useChannelMetrics";
 import { useEditSourceModal } from "@/hooks/useEditSourceModal";
 import { useDataLoadingCache } from "@/hooks/useDataLoadingCache";
@@ -963,6 +965,8 @@ export default function SlideViewPage() {
   const [selectedTab, setSelectedTab] = useState("overview");
   const [comparisonType, setComparisonType] = useState("none");
   const [chartTimeRange, setChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
+  const [selectedViewId, setSelectedViewId] = useState<string | null>(null); // Selected view ID (null = default)
+  const [isSaveViewDialogOpen, setIsSaveViewDialogOpen] = useState(false);
   const [isEditSourceOpen, setIsEditSourceOpen] = useState(false);
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -1027,6 +1031,11 @@ export default function SlideViewPage() {
   const createSlideReport = useCreateSlideReport();
   const updateSlideReport = useUpdateSlideReport();
   const refreshSlideReportData = useRefreshSlideReportData();
+  
+  // Views management
+  const { data: views = [], isLoading: isLoadingViews } = useSlideReportViews(slideReportId);
+  const createView = useCreateSlideReportView();
+  const deleteView = useDeleteSlideReportView();
 
   // Monthly data from database (same source as SlideDataBrowser)
   const [monthlyDataRecords, setMonthlyDataRecords] = useState<Array<{
@@ -3127,6 +3136,129 @@ export default function SlideViewPage() {
     }
   };
 
+  // Get available views (default + saved views)
+  const availableViews = useMemo(() => {
+    return [
+      { id: null, name: 'default' },
+      ...views.map(v => ({ id: v.id, name: v.name }))
+    ];
+  }, [views]);
+
+  // Save current filter configuration as a view
+  const handleSaveView = useCallback(async (viewName: string) => {
+    if (!slideReportId || !slideReport || !user) {
+      toast({
+        title: "Error",
+        description: "No report selected. Please configure your report first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await createView.mutateAsync({
+        slide_report_id: slideReportId,
+        account_id: accountId || null,
+        user_id: user.id,
+        name: viewName,
+        selected_year: selectedYear,
+        selected_month: selectedMonth,
+        comparison_type: comparisonType as 'none' | 'previous_period' | 'previous_year',
+        chart_time_range: chartTimeRange,
+        filter_values: { ...filterValues }, // Deep copy to avoid mutations
+      });
+
+      // The view will be automatically refetched by the query
+      // We'll select it after the query refetches
+      queryClient.invalidateQueries({ queryKey: ['slide_report_views', 'list', slideReportId] });
+      
+      // Use a small delay to allow the query to refetch, then find and select the new view
+      setTimeout(() => {
+        const updatedViews = queryClient.getQueryData<any[]>(['slide_report_views', 'list', slideReportId]) || [];
+        const newView = updatedViews.find(v => v.name === viewName);
+        if (newView) {
+          setSelectedViewId(newView.id);
+        }
+      }, 300);
+    } catch (error) {
+      // Error toast is handled by the mutation
+      console.error('Error saving view:', error);
+    }
+  }, [slideReportId, slideReport, user, accountId, selectedYear, selectedMonth, comparisonType, chartTimeRange, filterValues, createView, views, queryClient]);
+
+  // Apply a saved view
+  const handleApplyView = useCallback((viewId: string | null) => {
+    if (!viewId) {
+      // Default view - reset to defaults
+      return;
+    }
+
+    const view = views.find(v => v.id === viewId);
+    if (!view) {
+      toast({
+        title: "Error",
+        description: "View not found.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Apply view settings
+    setSelectedYear(view.selected_year);
+    setSelectedMonth(view.selected_month);
+    setComparisonType(view.comparison_type);
+    if (view.chart_time_range) {
+      setChartTimeRange(view.chart_time_range);
+    }
+    setFilterValues(view.filter_values);
+
+    toast({
+      title: "View applied",
+      description: `View "${view.name}" has been applied.`,
+    });
+  }, [views]);
+
+  // Delete a saved view
+  const handleDeleteView = useCallback(async (viewId: string) => {
+    if (!viewId) {
+      toast({
+        title: "Error",
+        description: "Cannot delete the default view.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await deleteView.mutateAsync(viewId);
+
+      // If deleted view was selected, switch to default
+      if (selectedViewId === viewId) {
+        setSelectedViewId(null);
+      }
+    } catch (error) {
+      // Error toast is handled by the mutation
+      console.error('Error deleting view:', error);
+    }
+  }, [selectedViewId, deleteView]);
+
+  // Apply view when selected (but not on initial mount to avoid overriding user's current filters)
+  useEffect(() => {
+    if (selectedViewId) {
+      const view = views.find(v => v.id === selectedViewId);
+      if (view) {
+        setSelectedYear(view.selected_year);
+        setSelectedMonth(view.selected_month);
+        setComparisonType(view.comparison_type);
+        if (view.chart_time_range) {
+          setChartTimeRange(view.chart_time_range);
+        }
+        setFilterValues(view.filter_values);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedViewId]);
+
   // Background loader for filter dimension values after save
   const loadFilterDimensionValuesAfterSave = async (
     channels: ('metasearch' | 'sem' | 'social')[],
@@ -4601,9 +4733,63 @@ export default function SlideViewPage() {
         accountId={accountId}
       />
 
+      {/* Save View Dialog */}
+      <SaveViewDialog
+        open={isSaveViewDialogOpen}
+        onOpenChange={setIsSaveViewDialogOpen}
+        onSave={handleSaveView}
+        existingViewNames={availableViews.filter(v => v.id !== null).map(v => v.name)}
+      />
+
       <div className="p-6 space-y-6">
         {/* Filters Row */}
         <div className="flex items-end justify-end gap-6">
+          {/* View selector - Show when on overview tab */}
+          {selectedTab === "overview" && (
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">View:</span>
+                <div className="flex items-center gap-2">
+                  <Select 
+                    value={selectedViewId || 'default'} 
+                    onValueChange={(value) => setSelectedViewId(value === 'default' ? null : value)}
+                  >
+                    <SelectTrigger className="w-[150px] text-sm bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableViews.map((view) => (
+                        <SelectItem key={view.id || 'default'} value={view.id || 'default'}>
+                          {view.name === 'default' ? 'Default' : view.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-10 px-3"
+                    onClick={() => setIsSaveViewDialogOpen(true)}
+                    title="Save current filters as a view"
+                  >
+                    <BookmarkPlus className="h-4 w-4" />
+                  </Button>
+                  {selectedViewId && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 px-3 text-destructive hover:text-destructive"
+                      onClick={() => handleDeleteView(selectedViewId)}
+                      title="Delete this view"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Channel Filter Dropdowns - Show when on channel tabs */}
           {selectedTab !== "overview" && selectedTab !== "budget" && (() => {
             const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
