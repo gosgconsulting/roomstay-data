@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -965,8 +965,9 @@ export default function SlideViewPage() {
   const [selectedTab, setSelectedTab] = useState("overview");
   const [comparisonType, setComparisonType] = useState("none");
   const [chartTimeRange, setChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
-  const [selectedViewId, setSelectedViewId] = useState<string | null>(null); // Selected view ID (null = default)
+  const [selectedViewId, setSelectedViewId] = useState<string | null>(null); // Selected view ID (null = Master, 'unsaved' = Unsaved)
   const [isSaveViewDialogOpen, setIsSaveViewDialogOpen] = useState(false);
+  const isApplyingViewRef = useRef(false); // Track when we're applying a view to avoid triggering "Unsaved"
   const [isEditSourceOpen, setIsEditSourceOpen] = useState(false);
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -3139,7 +3140,7 @@ export default function SlideViewPage() {
   // Get available views (default + saved views)
   const availableViews = useMemo(() => {
     return [
-      { id: null, name: 'default' },
+      { id: null, name: 'Master' },
       ...views.map(v => ({ id: v.id, name: v.name }))
     ];
   }, [views]);
@@ -3188,8 +3189,19 @@ export default function SlideViewPage() {
 
   // Apply a saved view
   const handleApplyView = useCallback((viewId: string | null) => {
-    if (!viewId) {
-      // Default view - reset to defaults
+    isApplyingViewRef.current = true; // Mark that we're applying a view
+    
+    if (!viewId || viewId === 'unsaved') {
+      // Master view - reset to defaults
+      setSelectedYear(currentYearStr);
+      setSelectedMonth(currentMonthName);
+      setComparisonType('none');
+      setChartTimeRange('last_6_months');
+      setFilterValues({
+        metasearch: {},
+        sem: {},
+        social: {},
+      });
       return;
     }
 
@@ -3200,23 +3212,31 @@ export default function SlideViewPage() {
         description: "View not found.",
         variant: "destructive",
       });
+      isApplyingViewRef.current = false;
       return;
     }
     
-    // Apply view settings
+    // Apply view settings immediately
     setSelectedYear(view.selected_year);
     setSelectedMonth(view.selected_month);
     setComparisonType(view.comparison_type);
     if (view.chart_time_range) {
       setChartTimeRange(view.chart_time_range);
+    } else {
+      setChartTimeRange('last_6_months'); // Default
     }
-    setFilterValues(view.filter_values);
+    // Apply filter values - this will filter the data on all tabs including Overview
+    setFilterValues(view.filter_values || {
+      metasearch: {},
+      sem: {},
+      social: {},
+    });
 
     toast({
       title: "View applied",
       description: `View "${view.name}" has been applied.`,
     });
-  }, [views]);
+  }, [views, currentYearStr, currentMonthName]);
 
   // Delete a saved view
   const handleDeleteView = useCallback(async (viewId: string) => {
@@ -3242,22 +3262,32 @@ export default function SlideViewPage() {
     }
   }, [selectedViewId, deleteView]);
 
-  // Apply view when selected (but not on initial mount to avoid overriding user's current filters)
+  // Apply view when selectedViewId changes (e.g., after saving a new view)
+  // Note: The main application happens in handleApplyView which is called from the Select onChange
   useEffect(() => {
-    if (selectedViewId) {
+    if (selectedViewId && selectedViewId !== 'unsaved' && views.length > 0) {
+      // Only apply if views are loaded and we have a valid view ID (not Unsaved)
       const view = views.find(v => v.id === selectedViewId);
       if (view) {
+        isApplyingViewRef.current = true;
+        // Apply view settings
         setSelectedYear(view.selected_year);
         setSelectedMonth(view.selected_month);
         setComparisonType(view.comparison_type);
         if (view.chart_time_range) {
           setChartTimeRange(view.chart_time_range);
+        } else {
+          setChartTimeRange('last_6_months');
         }
-        setFilterValues(view.filter_values);
+        setFilterValues(view.filter_values || {
+          metasearch: {},
+          sem: {},
+          social: {},
+        });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedViewId]);
+  }, [selectedViewId, views.length]);
 
   // Background loader for filter dimension values after save
   const loadFilterDimensionValuesAfterSave = async (
@@ -4751,16 +4781,23 @@ export default function SlideViewPage() {
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">View:</span>
                 <div className="flex items-center gap-2">
                   <Select 
-                    value={selectedViewId || 'default'} 
-                    onValueChange={(value) => setSelectedViewId(value === 'default' ? null : value)}
+                    value={selectedViewId === null ? 'master' : selectedViewId || 'master'} 
+                    onValueChange={(value) => {
+                      const newViewId = value === 'master' ? null : (value === 'unsaved' ? 'unsaved' : value);
+                      setSelectedViewId(newViewId);
+                      // Immediately apply the view filters (unless it's Unsaved)
+                      if (newViewId !== 'unsaved') {
+                        handleApplyView(newViewId);
+                      }
+                    }}
                   >
                     <SelectTrigger className="w-[150px] text-sm bg-background">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {availableViews.map((view) => (
-                        <SelectItem key={view.id || 'default'} value={view.id || 'default'}>
-                          {view.name === 'default' ? 'Default' : view.name}
+                        <SelectItem key={view.id === null ? 'master' : view.id} value={view.id === null ? 'master' : view.id}>
+                          {view.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -4774,7 +4811,7 @@ export default function SlideViewPage() {
                   >
                     <BookmarkPlus className="h-4 w-4" />
                   </Button>
-                  {selectedViewId && (
+                  {selectedViewId && selectedViewId !== 'unsaved' && (
                     <Button
                       variant="outline"
                       size="sm"
