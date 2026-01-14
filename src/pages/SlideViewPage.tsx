@@ -5458,11 +5458,60 @@ export default function SlideViewPage() {
               
               {/* Monthly Revenue Chart */}
               <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-base font-medium">Revenue</CardTitle></CardHeader>
+                <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                  <CardTitle className="text-base font-medium">Revenue</CardTitle>
+                  <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as typeof chartTimeRange)}>
+                    <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover z-50">
+                      <SelectItem value="this_year">This Year</SelectItem>
+                      <SelectItem value="last_12_months">Last 12 Months</SelectItem>
+                      <SelectItem value="last_6_months">Last 6 Months</SelectItem>
+                      <SelectItem value="last_3_months">Last 3 Months</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </CardHeader>
                 <CardContent>
                   <div className="h-[200px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={filteredMonthlyData.map(m => ({ month: m.month.slice(0,2), revenue: m.metasearch || 0 }))}>
+                      <AreaChart data={(() => {
+                        const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                                           'July', 'August', 'September', 'October', 'November', 'December'];
+                        
+                        let allMonthlyData: { year: number; month: string; revenue: number }[] = [];
+                        
+                        if (pivotData?.channels?.metasearch?.monthly) {
+                          Object.entries(pivotData.channels.metasearch.monthly).forEach(([monthKey, metrics]) => {
+                            const [year, monthNum] = monthKey.split('-').map(Number);
+                            const month = monthNames[monthNum - 1];
+                            allMonthlyData.push({ year, month, revenue: metrics.revenue || 0 });
+                          });
+                          allMonthlyData.sort((a, b) => a.year !== b.year ? a.year - b.year : monthNames.indexOf(a.month) - monthNames.indexOf(b.month));
+                        }
+                        
+                        const now = new Date();
+                        let filteredData = allMonthlyData;
+                        
+                        if (chartTimeRange === 'this_year') {
+                          filteredData = allMonthlyData.filter(m => m.year === now.getFullYear());
+                        } else if (chartTimeRange === 'last_12_months') {
+                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                        } else if (chartTimeRange === 'last_6_months') {
+                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                        } else if (chartTimeRange === 'last_3_months') {
+                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                        }
+                        
+                        return filteredData.map(m => ({ 
+                          month: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
+                          revenue: m.revenue 
+                        }));
+                      })()}>
                         <defs>
                           <linearGradient id="metasearchGradient" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
@@ -5470,7 +5519,7 @@ export default function SlideViewPage() {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
                         <Tooltip 
                           formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
@@ -5539,11 +5588,60 @@ export default function SlideViewPage() {
               
               {/* Monthly Revenue Chart */}
               <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-base font-medium">Revenue</CardTitle></CardHeader>
+                <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                  <CardTitle className="text-base font-medium">Revenue</CardTitle>
+                  <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as typeof chartTimeRange)}>
+                    <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover z-50">
+                      <SelectItem value="this_year">This Year</SelectItem>
+                      <SelectItem value="last_12_months">Last 12 Months</SelectItem>
+                      <SelectItem value="last_6_months">Last 6 Months</SelectItem>
+                      <SelectItem value="last_3_months">Last 3 Months</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </CardHeader>
                 <CardContent>
                   <div className="h-[200px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={filteredMonthlyData.map(m => ({ month: m.month.slice(0,2), revenue: m.sem || 0 }))}>
+                      <AreaChart data={(() => {
+                        const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                                           'July', 'August', 'September', 'October', 'November', 'December'];
+                        
+                        let allMonthlyData: { year: number; month: string; revenue: number }[] = [];
+                        
+                        if (pivotData?.channels?.sem?.monthly) {
+                          Object.entries(pivotData.channels.sem.monthly).forEach(([monthKey, metrics]) => {
+                            const [year, monthNum] = monthKey.split('-').map(Number);
+                            const month = monthNames[monthNum - 1];
+                            allMonthlyData.push({ year, month, revenue: metrics.revenue || 0 });
+                          });
+                          allMonthlyData.sort((a, b) => a.year !== b.year ? a.year - b.year : monthNames.indexOf(a.month) - monthNames.indexOf(b.month));
+                        }
+                        
+                        const now = new Date();
+                        let filteredData = allMonthlyData;
+                        
+                        if (chartTimeRange === 'this_year') {
+                          filteredData = allMonthlyData.filter(m => m.year === now.getFullYear());
+                        } else if (chartTimeRange === 'last_12_months') {
+                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                        } else if (chartTimeRange === 'last_6_months') {
+                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                        } else if (chartTimeRange === 'last_3_months') {
+                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                        }
+                        
+                        return filteredData.map(m => ({ 
+                          month: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
+                          revenue: m.revenue 
+                        }));
+                      })()}>
                         <defs>
                           <linearGradient id="semGradient" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
@@ -5551,7 +5649,7 @@ export default function SlideViewPage() {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
                         <Tooltip 
                           formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
@@ -5602,11 +5700,60 @@ export default function SlideViewPage() {
               
               {/* Monthly Revenue Chart */}
               <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-base font-medium">Revenue</CardTitle></CardHeader>
+                <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                  <CardTitle className="text-base font-medium">Revenue</CardTitle>
+                  <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as typeof chartTimeRange)}>
+                    <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover z-50">
+                      <SelectItem value="this_year">This Year</SelectItem>
+                      <SelectItem value="last_12_months">Last 12 Months</SelectItem>
+                      <SelectItem value="last_6_months">Last 6 Months</SelectItem>
+                      <SelectItem value="last_3_months">Last 3 Months</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </CardHeader>
                 <CardContent>
                   <div className="h-[200px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={filteredMonthlyData.map(m => ({ month: m.month.slice(0,2), revenue: m.social || 0 }))}>
+                      <AreaChart data={(() => {
+                        const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                                           'July', 'August', 'September', 'October', 'November', 'December'];
+                        
+                        let allMonthlyData: { year: number; month: string; revenue: number }[] = [];
+                        
+                        if (pivotData?.channels?.social?.monthly) {
+                          Object.entries(pivotData.channels.social.monthly).forEach(([monthKey, metrics]) => {
+                            const [year, monthNum] = monthKey.split('-').map(Number);
+                            const month = monthNames[monthNum - 1];
+                            allMonthlyData.push({ year, month, revenue: metrics.revenue || 0 });
+                          });
+                          allMonthlyData.sort((a, b) => a.year !== b.year ? a.year - b.year : monthNames.indexOf(a.month) - monthNames.indexOf(b.month));
+                        }
+                        
+                        const now = new Date();
+                        let filteredData = allMonthlyData;
+                        
+                        if (chartTimeRange === 'this_year') {
+                          filteredData = allMonthlyData.filter(m => m.year === now.getFullYear());
+                        } else if (chartTimeRange === 'last_12_months') {
+                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                        } else if (chartTimeRange === 'last_6_months') {
+                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                        } else if (chartTimeRange === 'last_3_months') {
+                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+                          filteredData = allMonthlyData.filter(m => new Date(m.year, monthNames.indexOf(m.month), 1) >= cutoffDate);
+                        }
+                        
+                        return filteredData.map(m => ({ 
+                          month: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
+                          revenue: m.revenue 
+                        }));
+                      })()}>
                         <defs>
                           <linearGradient id="socialGradient" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
@@ -5614,7 +5761,7 @@ export default function SlideViewPage() {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
                         <Tooltip 
                           formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
