@@ -725,6 +725,7 @@ const UnifiedBreakdownTable = ({
   selectedMonth,
   filterValues,
   filterDimensionValues,
+  onTotalsChange,
 }: {
   groupBy: string;
   breakdownBy: string;
@@ -739,6 +740,7 @@ const UnifiedBreakdownTable = ({
   selectedMonth?: string;
   filterValues?: Record<string, Record<string, string[]>>;
   filterDimensionValues?: Record<string, Record<string, string[]>>;
+  onTotalsChange?: (totals: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => void;
 }) => {
   // Auto-select defaults when dimensions are available
   useEffect(() => {
@@ -1086,6 +1088,13 @@ const UnifiedBreakdownTable = ({
     bookings: acc.bookings + (group.rawData?.bookings || group.metrics.bookings || 0),
   }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
   const totalMetrics = calculateDerivedMetrics(totals);
+  
+  // Expose totals to parent component for KPI cards synchronization
+  useEffect(() => {
+    if (onTotalsChange && selectedChannel) {
+      onTotalsChange(totals);
+    }
+  }, [totals, onTotalsChange, selectedChannel]);
   
   const groupByDim = availableDimensions.find(d => d.id === groupBy);
   const breakdownByDim = availableDimensions.find(d => d.id === breakdownBy);
@@ -2664,6 +2673,9 @@ export default function SlideViewPage() {
   // Combined breakdown table state
   const [groupByDimension, setGroupByDimension] = useState<string>('hotel');
   const [breakdownByDimension, setBreakdownByDimension] = useState<string>('link_type');
+  
+  // Store breakdown totals from Breakdown Analysis table for KPI synchronization
+  const [breakdownTotals, setBreakdownTotals] = useState<Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>>({});
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const handleDimensionToggle = (dimension: 'metasearch' | 'sem' | 'social') => {
@@ -5367,7 +5379,7 @@ export default function SlideViewPage() {
 
                 return null;
               })()}
-              {renderKPICards(getReportKPICards(currentTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('metasearch'))}
+              {renderKPICards(getReportKPICards(breakdownTotals.metasearch || currentTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('metasearch'))}
               
               {/* Monthly Revenue Chart */}
               <Card>
@@ -5431,6 +5443,7 @@ export default function SlideViewPage() {
                         selectedMonth={selectedMonth}
                         filterValues={filterValues}
                         filterDimensionValues={filterDimensionValues}
+                        onTotalsChange={(totals) => setBreakdownTotals(prev => ({ ...prev, metasearch: totals }))}
                         availableDimensions={[
                           ...new Map([
                             ...(breakdownDimensions.metasearch || []).filter(dim => 
@@ -5447,7 +5460,7 @@ export default function SlideViewPage() {
 
             {/* SEM Tab */}
             <TabsContent value="sem" className="space-y-6">
-              {renderKPICards(getReportKPICards(currentTotals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('sem'))}
+              {renderKPICards(getReportKPICards(breakdownTotals.sem || currentTotals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('sem'))}
               
               {/* Monthly Revenue Chart */}
               <Card>
@@ -5493,6 +5506,7 @@ export default function SlideViewPage() {
                     selectedMonth={selectedMonth}
                     filterValues={filterValues}
                     filterDimensionValues={filterDimensionValues}
+                    onTotalsChange={(totals) => setBreakdownTotals(prev => ({ ...prev, sem: totals }))}
                     availableDimensions={[
                       ...new Map([
                         ...(breakdownDimensions.sem || []).filter(dim => {
@@ -5509,7 +5523,7 @@ export default function SlideViewPage() {
 
             {/* Social Tab */}
             <TabsContent value="social" className="space-y-6">
-              {renderKPICards(getReportKPICards(currentTotals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('social'))}
+              {renderKPICards(getReportKPICards(breakdownTotals.social || currentTotals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('social'))}
               
               {/* Monthly Revenue Chart */}
               <Card>
@@ -5555,6 +5569,7 @@ export default function SlideViewPage() {
                     selectedMonth={selectedMonth}
                     filterValues={filterValues}
                     filterDimensionValues={filterDimensionValues}
+                    onTotalsChange={(totals) => setBreakdownTotals(prev => ({ ...prev, social: totals }))}
                     availableDimensions={[
                       ...new Map([
                         ...(breakdownDimensions.social || []).filter(dim => {
