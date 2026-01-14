@@ -983,31 +983,32 @@ export default function SlideViewPage() {
 
   // Fetch real data from edge function for master-report
   const fetchSlideReportData = async () => {
-    if (slideType !== 'master-report') return;
+    // TODO: Uncomment this when we have the edge function working
+    // if (slideType !== 'master-report') return;
     
-    setIsLoadingData(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('get-slide-report-data', {
-        body: {
-          accountId,
-          years: [2024, 2025, 2026],
-          hotelFilter: true, // Only Brady hotels for metasearch
-        },
-      });
+    // setIsLoadingData(true);
+    // try {
+    //   const { data, error } = await supabase.functions.invoke('get-slide-report-data', {
+    //     body: {
+    //       accountId,
+    //       years: [2024, 2025, 2026],
+    //       hotelFilter: true, // Only Brady hotels for metasearch
+    //     },
+    //   });
 
-      if (error) {
-        console.error('Error fetching slide report data:', error);
-        return;
-      }
+    //   if (error) {
+    //     console.error('Error fetching slide report data:', error);
+    //     return;
+    //   }
 
-      setDynamicMonthlyData(data.monthlyRevenue || []);
-      setDynamicChannelTotals(data.channelTotals || {});
-      setDynamicYearlyTotals(data.yearlyTotals || {});
-    } catch (err) {
-      console.error('Error calling edge function:', err);
-    } finally {
-      setIsLoadingData(false);
-    }
+    //   setDynamicMonthlyData(data.monthlyRevenue || []);
+    //   setDynamicChannelTotals(data.channelTotals || {});
+    //   setDynamicYearlyTotals(data.yearlyTotals || {});
+    // } catch (err) {
+    //   console.error('Error calling edge function:', err);
+    // } finally {
+    //   setIsLoadingData(false);
+    // }
   };
 
   // Fetch data on mount for master-report
