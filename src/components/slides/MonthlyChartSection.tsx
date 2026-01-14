@@ -1,6 +1,11 @@
 /**
  * Monthly Chart Section Component
- * Displays monthly revenue charts with time range filtering
+ * 
+ * Displays monthly revenue charts with time range filtering. Supports both
+ * overview charts (aggregating all channels) and channel-specific charts.
+ * Automatically ensures at least 6 months of data for meaningful visualization.
+ * 
+ * @module MonthlyChartSection
  */
 
 import React, { useMemo } from 'react';
@@ -12,22 +17,43 @@ import { MONTH_NAMES } from '@/constants/slideViewConstants';
 import { ensureMinimumChartData } from '@/lib/slideViewHelpers';
 import type { SlideReportPivotData } from '@/types/slideReports';
 
+/**
+ * Available chart time range options
+ */
 export type ChartTimeRange = 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
 
+/**
+ * Props for MonthlyChartSection component
+ */
 interface MonthlyChartSectionProps {
+  /** Chart title (default: 'Revenue') */
   title?: string;
+  /** Currently selected time range */
   chartTimeRange: ChartTimeRange;
+  /** Callback when time range changes */
   onTimeRangeChange: (range: ChartTimeRange) => void;
+  /** Pivot data containing monthly metrics */
   pivotData: SlideReportPivotData | null;
+  /** Optional channel filter for single-channel charts */
   channel?: 'metasearch' | 'sem' | 'social';
+  /** Whether data is currently loading */
   isLoading?: boolean;
+  /** CSS gradient ID for chart fill (default: 'revenueGradient') */
   gradientId?: string;
+  /** Stroke color for chart line (default: '#8b5cf6') */
   strokeColor?: string;
+  /** Chart height in pixels (default: 200) */
   height?: number;
 }
 
 /**
  * Skeleton loader for chart
+ * 
+ * Displays a loading placeholder while chart data is being fetched.
+ * 
+ * @param props - Component props
+ * @param props.height - Height of the skeleton in pixels
+ * @returns Skeleton component
  */
 export const ChartSkeleton = ({ height = 250 }: { height?: number }) => (
   <Card>
@@ -45,6 +71,17 @@ export const ChartSkeleton = ({ height = 250 }: { height?: number }) => (
 
 /**
  * Monthly Chart Section Component
+ * 
+ * Displays an area chart showing monthly revenue trends. Supports:
+ * - Overview mode: Aggregates revenue from all channels
+ * - Channel mode: Shows revenue for a specific channel
+ * - Time range filtering: This Year, Last 12/6/3 Months
+ * - Automatic data expansion: Ensures at least 6 months of data for meaningful visualization
+ * 
+ * The component is memoized for performance optimization.
+ * 
+ * @param props - Component props
+ * @returns MonthlyChartSection component
  */
 export const MonthlyChartSection = React.memo<MonthlyChartSectionProps>(
   ({

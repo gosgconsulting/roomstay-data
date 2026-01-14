@@ -1017,7 +1017,7 @@ export default function SlideViewPage() {
     if (slideType === 'master-report' && accountId) {
       fetchSlideReportData();
     }
-  }, [slideType, accountId]);
+  }, [slideType, accountId, fetchSlideReportData]);
 
   // Slide report state - moved before filteredMonthlyData so it's available
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
@@ -1044,30 +1044,42 @@ export default function SlideViewPage() {
 
   // Fetch monthly data from database (same as SlideDataBrowser)
   useEffect(() => {
-    if (slideReportId) {
-      const fetchMonthlyData = async () => {
-        setIsLoadingMonthlyData(true);
-        try {
-          const { data, error } = await supabase
-            .from('slide_report_monthly_data')
-            .select('*')
-            .eq('slide_report_id', slideReportId)
-            .order('year', { ascending: false })
-            .order('month', { ascending: true });
+    if (!slideReportId) return;
 
-          if (error) {
-            console.error('Error fetching monthly data:', error);
-          } else {
-            setMonthlyDataRecords((data as any[]) || []);
-          }
-        } catch (err) {
+    let cancelled = false;
+    const fetchMonthlyData = async () => {
+      setIsLoadingMonthlyData(true);
+      try {
+        const { data, error } = await supabase
+          .from('slide_report_monthly_data')
+          .select('*')
+          .eq('slide_report_id', slideReportId)
+          .order('year', { ascending: false })
+          .order('month', { ascending: true });
+
+        if (cancelled) return;
+
+        if (error) {
+          console.error('Error fetching monthly data:', error);
+        } else {
+          setMonthlyDataRecords((data as any[]) || []);
+        }
+      } catch (err) {
+        if (!cancelled) {
           console.error('Error:', err);
-        } finally {
+        }
+      } finally {
+        if (!cancelled) {
           setIsLoadingMonthlyData(false);
         }
-      };
-      fetchMonthlyData();
-    }
+      }
+    };
+
+    fetchMonthlyData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [slideReportId]);
 
   // Filter values state for slides page (channel -> dimensionId -> selected value)
@@ -1927,8 +1939,11 @@ export default function SlideViewPage() {
 
   // Load filter dimension values when switching to a channel tab that has filters
   useEffect(() => {
+    let cancelled = false;
+    
     const loadValuesForCurrentTab = async () => {
       if (selectedTab === 'overview' || selectedTab === 'budget') return;
+      if (cancelled) return;
       
       const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
       const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
@@ -1992,7 +2007,7 @@ export default function SlideViewPage() {
       }
       
       // SLOW: Fallback to database only if needed (load in parallel for speed)
-      if (missingDimIds.length > 0) {
+      if (missingDimIds.length > 0 && !cancelled) {
         // Set loading state
         setFilterValuesLoading(prev => {
           const updated = { ...prev };
@@ -2005,22 +2020,27 @@ export default function SlideViewPage() {
         
         const loadPromises = missingDimIds.map(filterDimId =>
           loadFilterDimensionValues(currentChannel, filterDimId).then(values => {
+            if (cancelled) return;
             if (values.length > 0) {
               newValues[filterDimId] = values;
             }
             // Clear loading state for this dimension
-            setFilterValuesLoading(prev => ({
-              ...prev,
-              [currentChannel]: {
-                ...prev[currentChannel],
-                [filterDimId]: false,
-              },
-            }));
+            if (!cancelled) {
+              setFilterValuesLoading(prev => ({
+                ...prev,
+                [currentChannel]: {
+                  ...prev[currentChannel],
+                  [filterDimId]: false,
+                },
+              }));
+            }
           })
         );
         
         await Promise.all(loadPromises);
       }
+      
+      if (cancelled) return;
       
       if (Object.keys(newValues).length > 0) {
         setFilterDimensionValues(prev => ({
@@ -2043,8 +2063,12 @@ export default function SlideViewPage() {
     };
 
     loadValuesForCurrentTab();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTab, slideReport?.pivot_data]);
+  }, [selectedTab, slideReport?.pivot_data, slideReport?.configuration?.filterConfigs]);
 
   // Open modal if ?edit=true in URL
   useEffect(() => {
@@ -2336,6 +2360,7 @@ export default function SlideViewPage() {
         loadValuesForDimension(activeChannelTab, dimensionId);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeChannelTab, modalStep, isEditSourceOpen]);
 
   // Hardcoded TEXT dimension mappings per channel (from actual report data)
@@ -2614,7 +2639,7 @@ export default function SlideViewPage() {
         }
       });
     }
-  }, [modalStep, isEditSourceOpen, selectedChannels]);
+  }, [modalStep, isEditSourceOpen, selectedChannels, dimensions, loadingDimensions, channelConfigs, dimensionValues, loadingValues, loadDimensionsForChannel, loadValuesForDimension]);
 
   // Load breakdown dimensions when entering step 5
   useEffect(() => {

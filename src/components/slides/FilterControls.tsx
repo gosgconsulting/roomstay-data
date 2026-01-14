@@ -1,6 +1,15 @@
 /**
  * Filter Controls Component
- * Displays filter dropdowns for channels, dates, and comparison
+ * 
+ * Displays filter controls for the SlideViewPage including:
+ * - Channel-specific dimension filters (shown on channel tabs)
+ * - Date filters (Year, Month)
+ * - Comparison type selector (None, Previous Period, Previous Year)
+ * 
+ * Supports loading states, pending filter values, and automatic value loading
+ * from pivot_data or database.
+ * 
+ * @module FilterControls
  */
 
 import React, { useCallback } from 'react';
@@ -48,6 +57,14 @@ interface FilterControlsProps {
 
 /**
  * Filter Controls Component
+ * 
+ * Renders filter dropdowns for channel dimensions, date selection, and comparison types.
+ * Handles filter value loading, pending state management, and applies filters to data.
+ * 
+ * The component is memoized for performance optimization.
+ * 
+ * @param props - Component props
+ * @returns FilterControls component
  */
 export const FilterControls = React.memo<FilterControlsProps>(
   ({
@@ -362,6 +379,16 @@ FilterControls.displayName = 'FilterControls';
 
 /**
  * Comparison Info Banner Component
+ * 
+ * Displays a banner showing the current comparison configuration (Previous Period
+ * or Previous Year) with the selected date range.
+ * 
+ * @param props - Component props
+ * @param props.selectedTab - Currently selected tab
+ * @param props.comparisonType - Type of comparison being performed
+ * @param props.selectedYear - Selected year filter
+ * @param props.selectedMonth - Selected month filter
+ * @returns ComparisonInfoBanner component or null if comparison is disabled
  */
 export const ComparisonInfoBanner = React.memo<{
   selectedTab: string;

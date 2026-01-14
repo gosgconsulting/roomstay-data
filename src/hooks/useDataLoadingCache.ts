@@ -1,25 +1,74 @@
 /**
  * Hook for caching data loading results to improve performance
- * Prevents redundant database queries and expensive computations
+ * 
+ * This hook provides an in-memory cache with TTL (time-to-live) support to prevent
+ * redundant database queries and expensive computations. Cache entries automatically
+ * expire after the specified TTL period.
+ * 
+ * @module useDataLoadingCache
  */
 
 import { useRef, useCallback } from 'react';
 
+/**
+ * Cache entry structure
+ */
 interface CacheEntry<T> {
+  /** Cached data */
   data: T;
+  /** Timestamp when entry was created */
   timestamp: number;
 }
 
+/**
+ * Cache configuration options
+ */
 interface CacheOptions {
-  ttl?: number; // Time to live in milliseconds
+  /** Time to live in milliseconds (default: 5 minutes) */
+  ttl?: number;
+}
+
+/**
+ * Cache operations interface
+ */
+interface CacheOperations<T> {
+  /** Get cached value by key (returns null if expired or not found) */
+  get: (key: string) => T | null;
+  /** Set cached value with key */
+  set: (key: string, data: T) => void;
+  /** Clear all cache entries */
+  clear: () => void;
+  /** Invalidate specific cache entry */
+  invalidate: (key: string) => void;
+  /** Check if cache entry exists and is valid */
+  has: (key: string) => boolean;
 }
 
 /**
  * Hook for caching async data loading operations
+ * 
+ * Provides a simple in-memory cache with automatic expiration. Useful for caching
+ * expensive operations like database queries or complex computations.
+ * 
+ * @param options - Cache configuration options
+ * @returns Cache operations object
+ * 
+ * @example
+ * ```tsx
+ * const cache = useDataLoadingCache<string[]>({ ttl: 10 * 60 * 1000 }); // 10 minutes
+ * 
+ * // Check cache first
+ * const cached = cache.get('my-key');
+ * if (cached) return cached;
+ * 
+ * // Load data and cache it
+ * const data = await loadData();
+ * cache.set('my-key', data);
+ * ```
  */
 export function useDataLoadingCache<T>(
   options: CacheOptions = {}
-) {
+): CacheOperations<T> {
   const cacheRef = useRef<Map<string, CacheEntry<T>>>(new Map());
   const { ttl = 5 * 60 * 1000 } = options; // Default 5 minutes
 

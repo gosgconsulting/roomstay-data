@@ -1,6 +1,12 @@
 /**
  * Hook for managing channel metrics calculations in SlideViewPage
- * Handles current totals, comparison totals, and breakdown totals
+ * 
+ * This hook handles the complex logic for calculating current and comparison channel metrics
+ * based on selected filters, date ranges, and comparison types. It optimizes performance by
+ * prioritizing pre-computed data from pivot_data when available, falling back to raw data
+ * processing only when filters are applied.
+ * 
+ * @module useChannelMetrics
  */
 
 import { useMemo } from 'react';
@@ -13,25 +19,65 @@ import {
 import type { SlideReportPivotData } from '@/types/slideReports';
 import type { MetricData } from '@/types/slideView';
 
+/**
+ * Channel metrics structure containing totals for each channel
+ */
 export interface ChannelMetrics {
+  /** Metasearch channel metrics */
   metasearch: MetricData;
+  /** SEM channel metrics */
   sem: MetricData;
+  /** Social channel metrics */
   social: MetricData;
 }
 
+/**
+ * Parameters for useChannelMetrics hook
+ */
 interface UseChannelMetricsParams {
+  /** Pre-computed pivot data containing aggregated metrics */
   pivotData: SlideReportPivotData | null;
+  /** Selected year filter ('all' or specific year) */
   selectedYear: string;
+  /** Selected month filter ('all' or specific month name) */
   selectedMonth: string;
+  /** Active filter values by channel and dimension */
   filterValues: Record<string, Record<string, string[]>>;
+  /** Available filter dimension values for dropdowns */
   filterDimensionValues: Record<string, Record<string, string[]>>;
+  /** Type of slide report ('master-report', 'brady', etc.) */
   slideType: string;
+  /** Dynamic channel totals for fallback scenarios */
   dynamicChannelTotals: Record<string, any>;
+  /** Comparison type for metrics comparison */
   comparisonType: 'none' | 'previous_period' | 'previous_year';
 }
 
 /**
  * Calculate current channel totals based on selected filters and date range
+ * 
+ * This hook provides optimized metric calculations by:
+ * 1. Using pre-computed data from pivot_data when no filters are applied (fast path)
+ * 2. Filtering and re-aggregating raw data rows when filters are active
+ * 3. Supporting date range filtering (year/month selection)
+ * 4. Providing comparison metrics for previous period/year analysis
+ * 
+ * @param params - Configuration parameters for metrics calculation
+ * @returns Object containing currentTotals and comparisonTotals
+ * 
+ * @example
+ * ```tsx
+ * const { currentTotals, comparisonTotals } = useChannelMetrics({
+ *   pivotData: slideReport?.pivot_data,
+ *   selectedYear: '2024',
+ *   selectedMonth: 'January',
+ *   filterValues: { metasearch: { hotel: ['Hotel A'] } },
+ *   filterDimensionValues: {},
+ *   slideType: 'master-report',
+ *   dynamicChannelTotals: {},
+ *   comparisonType: 'previous_period'
+ * });
+ * ```
  */
 export function useChannelMetrics({
   pivotData,

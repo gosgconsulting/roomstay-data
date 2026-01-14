@@ -1,6 +1,17 @@
 /**
  * Breakdown Table Section Component
- * Displays breakdown analysis tables with group by / breakdown by functionality
+ * 
+ * Displays a unified breakdown analysis table with group by / breakdown by functionality.
+ * Supports:
+ * - Dynamic dimension selection for grouping and breakdown
+ * - Expandable rows for drill-down analysis
+ * - Filtering by date range and channel-specific filters
+ * - Real-time totals calculation and synchronization with KPI cards
+ * 
+ * Uses data from pivot_data for optimal performance, falling back to raw data
+ * processing when filters are applied.
+ * 
+ * @module BreakdownTableSection
  */
 
 import React, { useEffect, useMemo } from 'react';
@@ -45,7 +56,18 @@ interface BreakdownTableSectionProps {
 
 /**
  * Unified Breakdown Table Component
+ * 
+ * Renders a breakdown analysis table with group by and breakdown by dimensions.
+ * Supports expandable rows for detailed drill-down analysis and automatically
+ * synchronizes totals with parent KPI cards.
+ * 
  * Uses data from pivot_data.channels[channel].monthlyBreakdowns for month-specific data
+ * and falls back to raw data processing when filters are applied.
+ * 
+ * The component is memoized for performance optimization.
+ * 
+ * @param props - Component props
+ * @returns UnifiedBreakdownTable component
  */
 export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
   ({
