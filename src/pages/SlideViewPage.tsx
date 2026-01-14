@@ -4918,7 +4918,7 @@ export default function SlideViewPage() {
               )}
 
               {/* Show skeletons when loading - only show if we don't have pivot_data yet or actively loading */}
-              {slideReportId && (!slideReport?.pivot_data || isLoadingData) ? (
+              {(isSlideReportsLoading || (slideReportId && (!slideReport?.pivot_data || isLoadingData))) ? (
                 renderKPICardsSkeleton()
               ) : slideReportId && slideReport?.pivot_data && Object.keys(currentTotals).length > 0 && renderKPICards(
                 slideType === 'master-report' && Object.keys(currentTotals).length > 0
@@ -4953,7 +4953,7 @@ export default function SlideViewPage() {
               )}
 
               {/* Monthly Results Chart */}
-              {slideReportId && (isLoadingData || (!slideReport?.pivot_data && isLoadingMonthlyData)) ? (
+              {(isSlideReportsLoading || (slideReportId && (isLoadingData || (!slideReport?.pivot_data && isLoadingMonthlyData)))) ? (
                 renderChartSkeleton()
               ) : (
                 <Card>
@@ -5077,7 +5077,7 @@ export default function SlideViewPage() {
               )}
 
               {/* Report Breakdown Table */}
-              {slideReportId && (isLoadingData || (!slideReport?.pivot_data && isLoadingMonthlyData)) ? (
+              {(isSlideReportsLoading || (slideReportId && (isLoadingData || (!slideReport?.pivot_data && isLoadingMonthlyData)))) ? (
                 renderTableSkeleton()
               ) : (
                 <Card>
@@ -5169,19 +5169,23 @@ export default function SlideViewPage() {
 
             {/* Metasearch Tab */}
             <TabsContent value="metasearch" className="space-y-6">
-              {(() => {
-                // Log filter usage for debugging
-                const channel = 'metasearch';
-                const activeFilters = filterValues[channel] || {};
-                // Use saved configuration from slideReport
-                const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[channel];
-                const savedBreakdownConfigs = slideReport?.configuration?.breakdownConfigs?.[channel];
-                const filterConfigsForChannel = savedFilterConfigs?.filterDimensionIds || filterConfigs[channel]?.filterDimensionIds || [];
-                const breakdownConfigsForChannel = savedBreakdownConfigs?.breakdownDimensionIds || breakdownConfigs[channel]?.breakdownDimensionIds || [];
+              {isSlideReportsLoading || (slideReportId && (!slideReport?.pivot_data || isLoadingData)) ? (
+                renderKPICardsSkeleton()
+              ) : (
+                <>
+                  {(() => {
+                    // Log filter usage for debugging
+                    const channel = 'metasearch';
+                    const activeFilters = filterValues[channel] || {};
+                    // Use saved configuration from slideReport
+                    const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[channel];
+                    const savedBreakdownConfigs = slideReport?.configuration?.breakdownConfigs?.[channel];
+                    const filterConfigsForChannel = savedFilterConfigs?.filterDimensionIds || filterConfigs[channel]?.filterDimensionIds || [];
+                    const breakdownConfigsForChannel = savedBreakdownConfigs?.breakdownDimensionIds || breakdownConfigs[channel]?.breakdownDimensionIds || [];
 
-                return null;
-              })()}
-              {renderKPICards(getReportKPICards(breakdownTotals.metasearch || currentTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('metasearch'))}
+                    return null;
+                  })()}
+                  {renderKPICards(getReportKPICards(breakdownTotals.metasearch || currentTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('metasearch'))}
               
               {/* Monthly Revenue Chart */}
               <Card>
@@ -5310,13 +5314,19 @@ export default function SlideViewPage() {
                   })()}
                 </CardContent>
               </Card>
+                </>
+              )}
             </TabsContent>
 
             {/* SEM Tab */}
             <TabsContent value="sem" className="space-y-6">
-              {renderKPICards(getReportKPICards(breakdownTotals.sem || currentTotals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('sem'))}
-              
-              {/* Monthly Revenue Chart */}
+              {isSlideReportsLoading || (slideReportId && (!slideReport?.pivot_data || isLoadingData)) ? (
+                renderKPICardsSkeleton()
+              ) : (
+                <>
+                  {renderKPICards(getReportKPICards(breakdownTotals.sem || currentTotals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('sem'))}
+                  
+                  {/* Monthly Revenue Chart */}
               <Card>
                 <CardHeader className="pb-2 flex flex-row items-center justify-between">
                   <CardTitle className="text-base font-medium">Revenue</CardTitle>
@@ -5425,13 +5435,19 @@ export default function SlideViewPage() {
                   />
                 </CardContent>
               </Card>
+                </>
+              )}
             </TabsContent>
 
             {/* Social Tab */}
             <TabsContent value="social" className="space-y-6">
-              {renderKPICards(getReportKPICards(breakdownTotals.social || currentTotals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('social'))}
-              
-              {/* Monthly Revenue Chart */}
+              {isSlideReportsLoading || (slideReportId && (!slideReport?.pivot_data || isLoadingData)) ? (
+                renderKPICardsSkeleton()
+              ) : (
+                <>
+                  {renderKPICards(getReportKPICards(breakdownTotals.social || currentTotals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('social'))}
+                  
+                  {/* Monthly Revenue Chart */}
               <Card>
                 <CardHeader className="pb-2 flex flex-row items-center justify-between">
                   <CardTitle className="text-base font-medium">Revenue</CardTitle>
@@ -5540,6 +5556,8 @@ export default function SlideViewPage() {
                   />
                 </CardContent>
               </Card>
+                </>
+              )}
             </TabsContent>
 
             {/* Budget Tab */}
