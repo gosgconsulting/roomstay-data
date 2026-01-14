@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
 import { useChannelMetrics } from "@/hooks/useChannelMetrics";
 import { useEditSourceModal } from "@/hooks/useEditSourceModal";
+import { useDataLoadingCache } from "@/hooks/useDataLoadingCache";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange, BreakdownRow, ChannelMetrics } from "@/types/slideReports";
@@ -981,8 +982,8 @@ export default function SlideViewPage() {
   const [dynamicChannelTotals, setDynamicChannelTotals] = useState<Record<string, any>>({});
   const [dynamicYearlyTotals, setDynamicYearlyTotals] = useState<Record<number, Record<string, any>>>({});
 
-  // Fetch real data from edge function for master-report
-  const fetchSlideReportData = async () => {
+  // Fetch real data from edge function for master-report - memoized with useCallback
+  const fetchSlideReportData = useCallback(async () => {
     // TODO: Uncomment this when we have the edge function working
     // if (slideType !== 'master-report') return;
     
@@ -1009,7 +1010,7 @@ export default function SlideViewPage() {
     // } finally {
     //   setIsLoadingData(false);
     // }
-  };
+  }, [accountId, slideType]);
 
   // Fetch data on mount for master-report
   useEffect(() => {
@@ -2282,12 +2283,12 @@ export default function SlideViewPage() {
   const [breakdownTotals, setBreakdownTotals] = useState<Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>>({});
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
-  const handleDimensionToggle = (dimension: 'metasearch' | 'sem' | 'social') => {
+  const handleDimensionToggle = useCallback((dimension: 'metasearch' | 'sem' | 'social') => {
     setSelectedDimensions(prev => ({
       ...prev,
       [dimension]: !prev[dimension],
     }));
-  };
+  }, []);
 
   // Get selected channels
   const selectedChannels = useMemo(() => {
@@ -2397,9 +2398,21 @@ export default function SlideViewPage() {
     }
   };
 
+  // Dimension values cache
+  const dimensionValuesCache = useDataLoadingCache<string[]>({ ttl: 10 * 60 * 1000 }); // 10 minutes cache
+
   // Load values for a dimension from stored pivot_data first, fallback to dimension_data table
   // Also uses cached/saved selected values from channelConfigs for instant display
-  const loadValuesForDimension = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
+  // Now with caching to improve performance
+  const loadValuesForDimension = useCallback(async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
+    // Check cache first
+    const cacheKey = `${channel}-${dimensionId}`;
+    const cached = dimensionValuesCache.get(cacheKey);
+    if (cached) {
+      setDimensionValues(prev => ({ ...prev, [channel]: cached }));
+      setLoadingValues(prev => ({ ...prev, [channel]: false }));
+      return;
+    }
     // FIRST: Immediately show cached selected values from saved config (instant display)
     const savedConfig = channelConfigs[channel];
     const cachedSelectedValues = savedConfig?.selectedValues || [];
@@ -2577,7 +2590,7 @@ export default function SlideViewPage() {
     } finally {
       setLoadingValues(prev => ({ ...prev, [channel]: false }));
     }
-  };
+  }, [slideReport?.pivot_data, channelConfigs, slideType, dimensions, dimensionValuesCache]);
 
   // Load dimensions when entering step 3, 4, 5, or 6 (after Date and Channels steps)
   // Most loading is now done via preloadAllChannelData on step 2->3 transition
@@ -2749,9 +2762,19 @@ export default function SlideViewPage() {
     }
   };
 
+  // Data loading cache to prevent redundant queries
+  const filterValuesCache = useDataLoadingCache<string[]>({ ttl: 10 * 60 * 1000 }); // 10 minutes cache
+
   // Helper function to load filter dimension values for a specific dimension
   // Optimized to use fastest available data source: rawDataRows > filterUniqueValues > database
-  const loadFilterDimensionValues = async (channel: 'metasearch' | 'sem' | 'social', filterDimId: string): Promise<string[]> => {
+  // Now with caching to improve performance
+  const loadFilterDimensionValues = useCallback(async (channel: 'metasearch' | 'sem' | 'social', filterDimId: string): Promise<string[]> => {
+    // Check cache first
+    const cacheKey = `${channel}-${filterDimId}`;
+    const cached = filterValuesCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
     const reportId = CHANNEL_REPORT_IDS[channel];
     if (!reportId) {
       console.warn(`[loadFilterDimensionValues] No report ID for channel: ${channel}`);
@@ -2831,12 +2854,16 @@ export default function SlideViewPage() {
       }
 
       const sortedValues = Array.from(uniqueValues).sort();
+      
+      // Cache the result
+      filterValuesCache.set(cacheKey, sortedValues);
+      
       return sortedValues;
     } catch (error) {
       console.error(`[loadFilterDimensionValues] Error loading filter values for ${channel}/${filterDimId}:`, error);
       return [];
     }
-  };
+  }, [slideReport?.pivot_data, filterValuesCache]);
 
   // Filtered values based on search query
   const filteredValues = useMemo(() => {
@@ -3538,7 +3565,7 @@ export default function SlideViewPage() {
   };
 
   // Get comparison data based on selection - use comparisonTotals from pivot_data
-  const getComparisonData = () => {
+  const comparisonData = useMemo(() => {
     if (!comparisonTotals) return null;
     
     // Aggregate comparison totals from all channels
@@ -3562,9 +3589,7 @@ export default function SlideViewPage() {
       };
     }
     return null;
-  };
-
-  const comparisonData = getComparisonData();
+  }, [comparisonTotals, comparisonType]);
 
   // Calculate current metrics from currentTotals
   const currentMetrics = useMemo(() => {
@@ -3591,21 +3616,24 @@ export default function SlideViewPage() {
   }, [currentTotals]);
 
   // Calculate comparison metrics if enabled
-  const comparisonMetrics = comparisonData ? {
-    impressions: comparisonData.impressions,
-    clicks: comparisonData.clicks,
-    bookings: comparisonData.bookings,
-    ctr: (comparisonData.clicks / comparisonData.impressions) * 100,
-    conversionRate: (comparisonData.bookings / comparisonData.clicks) * 100,
-    cpc: comparisonData.cost / comparisonData.clicks,
-    cost: comparisonData.cost,
-    revenue: comparisonData.revenue,
-    roas: comparisonData.revenue / comparisonData.cost,
-    costOfSale: (comparisonData.cost / comparisonData.revenue) * 100,
-  } : null;
+  const comparisonMetrics = useMemo(() => {
+    if (!comparisonData) return null;
+    return {
+      impressions: comparisonData.impressions,
+      clicks: comparisonData.clicks,
+      bookings: comparisonData.bookings,
+      ctr: comparisonData.impressions > 0 ? (comparisonData.clicks / comparisonData.impressions) * 100 : 0,
+      conversionRate: comparisonData.clicks > 0 ? (comparisonData.bookings / comparisonData.clicks) * 100 : 0,
+      cpc: comparisonData.clicks > 0 ? comparisonData.cost / comparisonData.clicks : 0,
+      cost: comparisonData.cost,
+      revenue: comparisonData.revenue,
+      roas: comparisonData.cost > 0 ? comparisonData.revenue / comparisonData.cost : 0,
+      costOfSale: comparisonData.revenue > 0 ? (comparisonData.cost / comparisonData.revenue) * 100 : 0,
+    };
+  }, [comparisonData]);
 
   // KPI Cards - REORDERED: Bookings before Conversion Rate
-  const KPI_CARDS = [
+  const KPI_CARDS = useMemo(() => [
     { label: "IMPRESSIONS", key: "impressions", value: currentMetrics.impressions, icon: Eye, color: "text-pink-600" },
     { label: "CLICKS", key: "clicks", value: currentMetrics.clicks, icon: MousePointer, color: "text-purple-600" },
     { label: "CTR", key: "ctr", value: currentMetrics.ctr, icon: Percent, color: "text-purple-600", format: "percent" },
@@ -3616,10 +3644,10 @@ export default function SlideViewPage() {
     { label: "REVENUE", key: "revenue", value: currentMetrics.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency" },
     { label: "ROAS", key: "roas", value: currentMetrics.roas, icon: TrendingUp, color: "text-green-600", format: "roas" },
     { label: "COST OF SALE", key: "costOfSale", value: currentMetrics.costOfSale, icon: Percent, color: "text-purple-600", format: "percent" },
-  ];
+  ], [currentMetrics]);
 
-  // Generate KPI cards for specific report
-  const getReportKPICards = (data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => {
+  // Generate KPI cards for specific report - memoized with useCallback
+  const getReportKPICards = useCallback((data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => {
     const metrics = calculateDerivedMetrics(data);
     return [
       { label: "IMPRESSIONS", key: "impressions", value: metrics.impressions, icon: Eye, color: "text-pink-600" },
@@ -3633,10 +3661,10 @@ export default function SlideViewPage() {
       { label: "ROAS", key: "roas", value: metrics.roas, icon: TrendingUp, color: "text-green-600", format: "roas" },
       { label: "COST OF SALE", key: "costOfSale", value: metrics.costOfSale, icon: Percent, color: "text-purple-600", format: "percent" },
     ];
-  };
+  }, []);
 
-  // Get channel-specific comparison data
-  const getChannelComparisonMetrics = (channel: 'metasearch' | 'sem' | 'social') => {
+  // Get channel-specific comparison data - memoized
+  const getChannelComparisonMetrics = useCallback((channel: 'metasearch' | 'sem' | 'social') => {
     // Use pivot_data if available
     const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
     if (pivotData?.channels?.[channel]) {
@@ -3656,10 +3684,10 @@ export default function SlideViewPage() {
     
     // No fallback - return null if no comparison data available
     return null;
-  };
+  }, [slideReport?.pivot_data, comparisonType]);
 
-  // Get overview comparison metrics from pivot_data
-  const getOverviewComparisonMetrics = () => {
+  // Get overview comparison metrics from pivot_data - memoized
+  const getOverviewComparisonMetrics = useCallback(() => {
     if (comparisonType === 'none') return null;
     
     const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
@@ -3677,10 +3705,10 @@ export default function SlideViewPage() {
       }
     }
     return null;
-  };
+  }, [slideReport?.pivot_data, comparisonType]);
 
-  // Skeleton loader for KPI Cards
-  const renderKPICardsSkeleton = () => (
+  // Skeleton loader for KPI Cards - memoized
+  const renderKPICardsSkeleton = useCallback(() => (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
       {Array.from({ length: 10 }).map((_, index) => (
         <Card key={index} className="shadow-sm border-l-4 border-l-primary/60 bg-card">
@@ -3692,10 +3720,10 @@ export default function SlideViewPage() {
         </Card>
       ))}
     </div>
-  );
+  ), []);
 
-  // Skeleton loader for Chart
-  const renderChartSkeleton = () => (
+  // Skeleton loader for Chart - memoized
+  const renderChartSkeleton = useCallback(() => (
     <Card>
       <CardHeader className="pb-2 flex flex-row items-center justify-between">
         <Skeleton className="h-5 w-24" />
@@ -3707,10 +3735,10 @@ export default function SlideViewPage() {
         </div>
       </CardContent>
     </Card>
-  );
+  ), []);
 
-  // Skeleton loader for Table
-  const renderTableSkeleton = () => (
+  // Skeleton loader for Table - memoized
+  const renderTableSkeleton = useCallback(() => (
     <Card>
       <CardHeader>
         <Skeleton className="h-5 w-48" />
@@ -3740,9 +3768,10 @@ export default function SlideViewPage() {
         </Table>
       </CardContent>
     </Card>
-  );
+  ), []);
 
-  const renderKPICards = (cards: typeof KPI_CARDS, channelCompMetrics?: ReturnType<typeof getChannelComparisonMetrics>) => (
+  // Memoized render function for KPI Cards
+  const renderKPICards = useCallback((cards: typeof KPI_CARDS, channelCompMetrics?: ReturnType<typeof getChannelComparisonMetrics>) => (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
       {cards.map((kpi) => {
         // Use channel-specific comparison if provided, otherwise fall back to global
@@ -3786,7 +3815,7 @@ export default function SlideViewPage() {
         );
       })}
     </div>
-  );
+  ), [comparisonMetrics, comparisonData]);
 
   // Report breakdown with reordered columns - use currentTotals
   const REPORT_BREAKDOWN = useMemo(() => {
