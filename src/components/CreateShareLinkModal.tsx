@@ -506,10 +506,15 @@ export const CreateShareLinkModal = ({
         updateData.password_hash = passwordHash;
       }
 
-      // Add view_id if provided (for slide reports)
+      // Add view_id and slide_report_id if provided (for slide reports)
       // For updates, include view_id if slideReportId is set and selectedViewId is explicitly set (can be null to clear)
       if (slideReportId !== undefined && selectedViewId !== undefined) {
         updateData.view_id = selectedViewId; // Can be null to clear, but won't be undefined
+        if (selectedViewId) {
+          updateData.slide_report_id = slideReportId;
+        } else {
+          updateData.slide_report_id = null; // Clear if view is removed
+        }
       }
 
       const { error } = await supabase
@@ -542,9 +547,10 @@ export const CreateShareLinkModal = ({
         dimension_filters: dimensionFilters,
       };
 
-      // Add view_id if provided (for slide reports)
+      // Add view_id and slide_report_id if provided (for slide reports)
       if (slideReportId && selectedViewId) {
         insertData.view_id = selectedViewId;
+        insertData.slide_report_id = slideReportId;
       }
 
       const { error } = await supabase

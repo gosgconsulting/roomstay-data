@@ -125,26 +125,21 @@ export default function SharedReport() {
     // Redirect to the slide report view
     if (linkData.view_id) {
       try {
-        console.log('[testing] SharedReport - Share link has view_id, loading slide report view');
+        console.log('[testing] SharedReport - Share link has view_id, redirecting to slide report view');
         
-        // Load the view to get slide_report_id and account_id
-        const { data: view, error: viewError } = await (supabase.from("slide_report_views" as any) as any)
-          .select("slide_report_id, account_id")
-          .eq("id", linkData.view_id)
-          .single();
+        // Get slide_report_id directly from share_links (avoids RLS issues with slide_report_views)
+        const slideReportId = linkData.slide_report_id;
+        const accountId = linkData.account_id;
 
-        if (viewError || !view) {
-          console.error('[testing] Error loading view:', viewError);
+        if (!slideReportId || !accountId) {
+          console.error('[testing] Missing slide_report_id or account_id in share link');
           toast({
-            title: "Error",
-            description: "Failed to load view",
+            title: "Invalid share link",
+            description: "This share link is missing required information. Please contact the link creator.",
             variant: "destructive",
           });
           return;
         }
-
-        const slideReportId = view.slide_report_id;
-        const accountId = view.account_id || linkData.account_id;
 
         if (!slideReportId || !accountId) {
           toast({
