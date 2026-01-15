@@ -5968,11 +5968,11 @@ export default function SlideViewPage() {
                     </TableHeader>
                     <TableBody>
                       {(() => {
-                        // Use monthly data from database (same source as SlideDataBrowser) for accurate data
+                        // Use filtered channel totals (respects dimension filters)
                         const channels = ['metasearch', 'sem', 'social'];
                         const rows = channels.map(channel => {
-                          // Use monthlyDataTotals which comes from slide_report_monthly_data table
-                          const data = monthlyDataTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                          // Use filteredData.channelTotals which respects all filters
+                          const data = filteredData.channelTotals[channel as 'metasearch' | 'sem' | 'social'] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
                           const derived = calculateDerivedMetrics(data);
                           return {
                             report: channel.charAt(0).toUpperCase() + channel.slice(1),
