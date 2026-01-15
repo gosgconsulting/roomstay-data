@@ -1189,6 +1189,324 @@ export default function SlideViewPage() {
     return sourceData.filter(m => m.year === parseInt(selectedYear));
   }, [filteredData.monthlyData, slideType, dynamicMonthlyData, selectedYear]);
 
+  // Helper function to generate all months in a time range
+  const generateMonthsInTimeRange = useCallback((
+    timeRange: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'
+  ): { year: number; month: string }[] => {
+    const now = new Date();
+    const months: { year: number; month: string }[] = [];
+    
+    let startDate: Date;
+    let endDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    if (timeRange === 'this_year') {
+      startDate = new Date(now.getFullYear(), 0, 1);
+    } else if (timeRange === 'last_12_months') {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    } else if (timeRange === 'last_6_months') {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    } else if (timeRange === 'last_3_months') {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    } else {
+      return [];
+    }
+    
+    // Generate all months from startDate to endDate (inclusive)
+    const current = new Date(startDate);
+    while (current <= endDate) {
+      months.push({
+        year: current.getFullYear(),
+        month: MONTH_NAMES[current.getMonth()],
+      });
+      // Move to next month
+      current.setMonth(current.getMonth() + 1);
+    }
+    
+    return months;
+  }, []);
+
+  // Helper function to apply chartTimeRange filter (extracted to avoid duplication)
+  const applyChartTimeRangeFilter = useCallback(<T extends { year: number; month: string }>(
+    data: T[],
+    timeRange: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'
+  ): T[] => {
+    const now = new Date();
+    
+    if (timeRange === 'this_year') {
+      return data.filter(m => m.year === now.getFullYear());
+    } else if (timeRange === 'last_12_months') {
+      const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+      return data.filter(m => {
+        const monthDate = new Date(m.year, MONTH_NAMES.indexOf(m.month), 1);
+        return monthDate >= cutoffDate;
+      });
+    } else if (timeRange === 'last_6_months') {
+      const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      return data.filter(m => {
+        const monthDate = new Date(m.year, MONTH_NAMES.indexOf(m.month), 1);
+        return monthDate >= cutoffDate;
+      });
+    } else if (timeRange === 'last_3_months') {
+      const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      return data.filter(m => {
+        const monthDate = new Date(m.year, MONTH_NAMES.indexOf(m.month), 1);
+        return monthDate >= cutoffDate;
+      });
+    }
+    
+    return data;
+  }, []);
+
+  // Chart data helpers that use filteredData.monthlyData when filters are active
+  // Overview chart data (combined revenue from all channels)
+  const overviewChartData = useMemo(() => {
+    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+    
+    // Get base monthly data - use filteredData when filters are active, otherwise use pre-computed data
+    let allMonthlyData: { year: number; month: string; metasearch: number; sem: number; social: number }[] = [];
+    
+    // When filters are active, generate filtered data for all months in the time range
+    if (filteredData.hasFilters) {
+      console.log('[testing] Filtered monthlyData from hook:', filteredData.monthlyData);
+      console.log('[testing] Filtered monthlyData length:', filteredData.monthlyData.length);
+      
+      // Generate all months in the chartTimeRange
+      const monthsInRange = generateMonthsInTimeRange(chartTimeRange);
+      
+      // Build a monthly map initialized with zeros for all months in the time range
+      const monthlyMap = new Map<string, { year: number; month: string; metasearch: number; sem: number; social: number }>();
+      
+      // For each month in the range, filter and aggregate data for that specific month
+      if (pivotData?.channels) {
+        monthsInRange.forEach(({ year, month }) => {
+          const key = `${year}-${month}`;
+          monthlyMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
+          
+          // Get month date range
+          const monthIndex = MONTH_NAMES.indexOf(month);
+          const monthStart = new Date(year, monthIndex, 1);
+          const monthEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59);
+          
+          // Process each channel
+          Object.entries(pivotData.channels).forEach(([channel, channelData]) => {
+            const channelFilterValues = filterValues[channel] || {};
+            const hasChannelFilters = filteredData.channelsWithFilters.has(channel);
+            const rawDataRows = (channelData as any).rawDataRows || [];
+            
+            if (hasChannelFilters && rawDataRows.length > 0) {
+              // Filter rows for this specific month and channel filters
+              const monthFilteredRows = filterRawDataRows(rawDataRows, channelFilterValues, { start: monthStart, end: monthEnd });
+              
+              if (monthFilteredRows.length > 0) {
+                // Build dynamic metric mapping
+                const dimensionMap = (channelData as any).dimensionMap || {};
+                const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+                const revenueKeys = getMetricKeys('revenue', nameToIdsMap);
+                
+                // Aggregate revenue for this month
+                let monthRevenue = 0;
+                monthFilteredRows.forEach((row) => {
+                  const rowData = row.dimension_values || row;
+                  for (const key of revenueKeys) {
+                    const value = rowData[key];
+                    if (value !== undefined && value !== null) {
+                      if (typeof value === 'number') {
+                        monthRevenue += isNaN(value) ? 0 : value;
+                        break;
+                      }
+                      const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
+                      if (!isNaN(parsed)) {
+                        monthRevenue += parsed;
+                        break;
+                      }
+                    }
+                  }
+                });
+                
+                const entry = monthlyMap.get(key)!;
+                entry[channel as 'metasearch' | 'sem' | 'social'] = monthRevenue;
+              }
+            } else if (!hasChannelFilters && rawDataRows.length > 0) {
+              // No filters for this channel - use pre-computed monthly data if available
+              const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+              const monthlyData = (channelData as any).monthly?.[monthKey];
+              if (monthlyData) {
+                const entry = monthlyMap.get(key)!;
+                entry[channel as 'metasearch' | 'sem' | 'social'] = monthlyData.revenue || 0;
+              }
+            }
+          });
+        });
+      }
+      
+      allMonthlyData = Array.from(monthlyMap.values()).sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
+      });
+      
+      console.log('[testing] Generated monthlyData for all months in range for overview chart:', allMonthlyData);
+    } else if (pivotData?.channels) {
+      // No filters - use pre-computed data (fast path)
+      const monthlyMap = new Map<string, { year: number; month: string; metasearch: number; sem: number; social: number }>();
+      
+      Object.entries(pivotData.channels).forEach(([channel, channelData]) => {
+        if (channelData.monthly) {
+          Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
+            const [year, monthNum] = monthKey.split('-').map(Number);
+            const month = MONTH_NAMES[monthNum - 1];
+            const key = `${year}-${month}`;
+            
+            if (!monthlyMap.has(key)) {
+              monthlyMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
+            }
+            
+            const entry = monthlyMap.get(key)!;
+            entry[channel as 'metasearch' | 'sem' | 'social'] = metrics.revenue || 0;
+          });
+        }
+      });
+      
+      allMonthlyData = Array.from(monthlyMap.values()).sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
+      });
+    }
+    
+    // Apply chartTimeRange filter
+    let filtered: { year: number; month: string; metasearch: number; sem: number; social: number }[] = 
+      applyChartTimeRangeFilter(allMonthlyData, chartTimeRange);
+    
+    // Ensure at least 6 months of data for meaningful chart display
+    filtered = ensureMinimumChartData(filtered, allMonthlyData, 6);
+    
+    // Format for chart
+    return filtered.map(m => ({ 
+      label: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
+      month: m.month,
+      year: m.year,
+      total: m.metasearch + m.social + m.sem 
+    }));
+  }, [filteredData.hasFilters, filteredData.monthlyData, filteredData.channelsWithFilters, filterValues, chartTimeRange, slideReport?.pivot_data, applyChartTimeRangeFilter, generateMonthsInTimeRange]);
+
+  // Channel-specific chart data (for individual channel tabs)
+  const channelChartData = useMemo(() => {
+    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+    const result: Record<string, { month: string; revenue: number }[]> = {
+      metasearch: [],
+      sem: [],
+      social: [],
+    };
+    
+    // For each channel, get filtered or pre-computed data
+    ['metasearch', 'sem', 'social'].forEach(channel => {
+      let allMonthlyData: { year: number; month: string; revenue: number }[] = [];
+      
+      // When filters are active, generate filtered data for all months in the time range
+      if (filteredData.hasFilters) {
+        // Generate all months in the chartTimeRange
+        const monthsInRange = generateMonthsInTimeRange(chartTimeRange);
+        
+        // Build a monthly map initialized with zeros for all months in the time range
+        const monthlyMap = new Map<string, { year: number; month: string; revenue: number }>();
+        
+        // For each month in the range, filter and aggregate data for that specific month
+        const channelData = pivotData?.channels?.[channel];
+        if (channelData) {
+          const channelFilterValues = filterValues[channel] || {};
+          const hasChannelFilters = filteredData.channelsWithFilters.has(channel);
+          const rawDataRows = (channelData as any).rawDataRows || [];
+          
+          monthsInRange.forEach(({ year, month }) => {
+            const key = `${year}-${month}`;
+            monthlyMap.set(key, { year, month, revenue: 0 });
+            
+            // Get month date range
+            const monthIndex = MONTH_NAMES.indexOf(month);
+            const monthStart = new Date(year, monthIndex, 1);
+            const monthEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59);
+            
+            if (hasChannelFilters && rawDataRows.length > 0) {
+              // Filter rows for this specific month and channel filters
+              const monthFilteredRows = filterRawDataRows(rawDataRows, channelFilterValues, { start: monthStart, end: monthEnd });
+              
+              if (monthFilteredRows.length > 0) {
+                // Build dynamic metric mapping
+                const dimensionMap = (channelData as any).dimensionMap || {};
+                const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+                const revenueKeys = getMetricKeys('revenue', nameToIdsMap);
+                
+                // Aggregate revenue for this month
+                let monthRevenue = 0;
+                monthFilteredRows.forEach((row) => {
+                  const rowData = row.dimension_values || row;
+                  for (const key of revenueKeys) {
+                    const value = rowData[key];
+                    if (value !== undefined && value !== null) {
+                      if (typeof value === 'number') {
+                        monthRevenue += isNaN(value) ? 0 : value;
+                        break;
+                      }
+                      const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
+                      if (!isNaN(parsed)) {
+                        monthRevenue += parsed;
+                        break;
+                      }
+                    }
+                  }
+                });
+                
+                const entry = monthlyMap.get(key)!;
+                entry.revenue = monthRevenue;
+              }
+            } else if (!hasChannelFilters && rawDataRows.length > 0) {
+              // No filters for this channel - use pre-computed monthly data if available
+              const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+              const monthlyData = (channelData as any).monthly?.[monthKey];
+              if (monthlyData) {
+                const entry = monthlyMap.get(key)!;
+                entry.revenue = monthlyData.revenue || 0;
+              }
+            }
+          });
+        }
+        
+        allMonthlyData = Array.from(monthlyMap.values()).sort((a, b) => {
+          if (a.year !== b.year) return a.year - b.year;
+          return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
+        });
+        
+        console.log(`[testing] Generated monthlyData for all months in range for ${channel} chart:`, allMonthlyData);
+      } else if (pivotData?.channels?.[channel]?.monthly) {
+        // No filters - use pre-computed data (fast path)
+        const channelData = pivotData.channels[channel];
+        Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
+          const [year, monthNum] = monthKey.split('-').map(Number);
+          const month = MONTH_NAMES[monthNum - 1];
+          allMonthlyData.push({ year, month, revenue: metrics.revenue || 0 });
+        });
+        allMonthlyData.sort((a, b) => {
+          if (a.year !== b.year) return a.year - b.year;
+          return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
+        });
+      }
+      
+      // Apply chartTimeRange filter
+      let filtered: { year: number; month: string; revenue: number }[] = 
+        applyChartTimeRangeFilter(allMonthlyData, chartTimeRange);
+      
+      // Apply ensureMinimumChartData
+      filtered = ensureMinimumChartData(filtered, allMonthlyData, 6);
+      
+      // Format for chart
+      result[channel] = filtered.map(m => ({
+        month: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
+        revenue: m.revenue
+      }));
+    });
+    
+    return result;
+  }, [filteredData.hasFilters, filteredData.monthlyData, filteredData.channelsWithFilters, filterValues, chartTimeRange, slideReport?.pivot_data, applyChartTimeRangeFilter, generateMonthsInTimeRange]);
+
   // Get channel totals from monthly_data table (same source as SlideDataBrowser)
   // This is the correct source of truth for the data
   const monthlyDataTotals = useMemo(() => {
@@ -5592,81 +5910,7 @@ export default function SlideViewPage() {
                   <CardContent>
                   <div className="h-[250px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={(() => {
-                        // Get all available monthly data
-                        const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
-                                           'July', 'August', 'September', 'October', 'November', 'December'];
-                        
-                        // Build complete monthly data from pivot_data
-                        let allMonthlyData: { year: number; month: string; metasearch: number; sem: number; social: number }[] = [];
-                        
-                        if (pivotData?.channels) {
-                          const monthlyMap = new Map<string, { year: number; month: string; metasearch: number; sem: number; social: number }>();
-                          
-                          Object.entries(pivotData.channels).forEach(([channel, channelData]) => {
-                            if (channelData.monthly) {
-                              Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
-                                const [year, monthNum] = monthKey.split('-').map(Number);
-                                const month = MONTH_NAMES[monthNum - 1];
-                                const key = `${year}-${month}`;
-                                
-                                if (!monthlyMap.has(key)) {
-                                  monthlyMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
-                                }
-                                
-                                const entry = monthlyMap.get(key)!;
-                                entry[channel as 'metasearch' | 'sem' | 'social'] = metrics.revenue || 0;
-                              });
-                            }
-                          });
-                          
-                          allMonthlyData = Array.from(monthlyMap.values()).sort((a, b) => {
-                            if (a.year !== b.year) return a.year - b.year;
-                            return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
-                          });
-                        }
-                        
-                        // Apply time range filter
-                        const now = new Date();
-                        let filteredData = allMonthlyData;
-                        
-                        if (chartTimeRange === 'this_year') {
-                          const currentYear = now.getFullYear();
-                          filteredData = allMonthlyData.filter(m => m.year === currentYear);
-                        } else if (chartTimeRange === 'last_12_months') {
-                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-                          filteredData = allMonthlyData.filter(m => {
-                            const monthIndex = monthNames.indexOf(m.month);
-                            const monthDate = new Date(m.year, monthIndex, 1);
-                            return monthDate >= cutoffDate;
-                          });
-                        } else if (chartTimeRange === 'last_6_months') {
-                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-                          filteredData = allMonthlyData.filter(m => {
-                            const monthIndex = monthNames.indexOf(m.month);
-                            const monthDate = new Date(m.year, monthIndex, 1);
-                            return monthDate >= cutoffDate;
-                          });
-                        } else if (chartTimeRange === 'last_3_months') {
-                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-                          filteredData = allMonthlyData.filter(m => {
-                            const monthIndex = monthNames.indexOf(m.month);
-                            const monthDate = new Date(m.year, monthIndex, 1);
-                            return monthDate >= cutoffDate;
-                          });
-                        }
-                        
-                        // Ensure at least 6 months of data for meaningful chart display
-                        filteredData = ensureMinimumChartData(filteredData, allMonthlyData, 6);
-                        
-                        return filteredData.map(m => ({ 
-                          label: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
-                          month: m.month,
-                          year: m.year,
-                          total: m.metasearch + m.social + m.sem 
-                        }));
-                      })()}>
+                      <AreaChart data={overviewChartData}>
                         <defs>
                           <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
@@ -5846,46 +6090,7 @@ export default function SlideViewPage() {
                 <CardContent>
                   <div className="h-[200px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={(() => {
-                        const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
-                                           'July', 'August', 'September', 'October', 'November', 'December'];
-                        
-                        let allMonthlyData: { year: number; month: string; revenue: number }[] = [];
-                        
-                        if (pivotData?.channels?.metasearch?.monthly) {
-                          Object.entries(pivotData.channels.metasearch.monthly).forEach(([monthKey, metrics]) => {
-                            const [year, monthNum] = monthKey.split('-').map(Number);
-                            const month = MONTH_NAMES[monthNum - 1];
-                            allMonthlyData.push({ year, month, revenue: metrics.revenue || 0 });
-                          });
-                          allMonthlyData.sort((a, b) => a.year !== b.year ? a.year - b.year : monthNames.indexOf(a.month) - monthNames.indexOf(b.month));
-                        }
-                        
-                        const now = new Date();
-                        let filteredData = allMonthlyData;
-                        
-                        if (chartTimeRange === 'this_year') {
-                          filteredData = allMonthlyData.filter(m => m.year === now.getFullYear());
-                        } else if (chartTimeRange === 'last_12_months') {
-                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
-                        } else if (chartTimeRange === 'last_6_months') {
-                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
-                        } else if (chartTimeRange === 'last_3_months') {
-                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
-                        }
-                        
-                        // Ensure at least 6 months of data for meaningful chart display
-                        filteredData = ensureMinimumChartData(filteredData, allMonthlyData, 6);
-                        
-                        return filteredData.map(m => ({ 
-                          month: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
-                          revenue: m.revenue 
-                        }));
-                      })()}>
+                      <AreaChart data={channelChartData.metasearch}>
                         <defs>
                           <linearGradient id="metasearchGradient" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
@@ -5985,46 +6190,7 @@ export default function SlideViewPage() {
                 <CardContent>
                   <div className="h-[200px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={(() => {
-                        const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
-                                           'July', 'August', 'September', 'October', 'November', 'December'];
-                        
-                        let allMonthlyData: { year: number; month: string; revenue: number }[] = [];
-                        
-                        if (pivotData?.channels?.sem?.monthly) {
-                          Object.entries(pivotData.channels.sem.monthly).forEach(([monthKey, metrics]) => {
-                            const [year, monthNum] = monthKey.split('-').map(Number);
-                            const month = MONTH_NAMES[monthNum - 1];
-                            allMonthlyData.push({ year, month, revenue: metrics.revenue || 0 });
-                          });
-                          allMonthlyData.sort((a, b) => a.year !== b.year ? a.year - b.year : monthNames.indexOf(a.month) - monthNames.indexOf(b.month));
-                        }
-                        
-                        const now = new Date();
-                        let filteredData = allMonthlyData;
-                        
-                        if (chartTimeRange === 'this_year') {
-                          filteredData = allMonthlyData.filter(m => m.year === now.getFullYear());
-                        } else if (chartTimeRange === 'last_12_months') {
-                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
-                        } else if (chartTimeRange === 'last_6_months') {
-                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
-                        } else if (chartTimeRange === 'last_3_months') {
-                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
-                        }
-                        
-                        // Ensure at least 6 months of data for meaningful chart display
-                        filteredData = ensureMinimumChartData(filteredData, allMonthlyData, 6);
-                        
-                        return filteredData.map(m => ({ 
-                          month: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
-                          revenue: m.revenue 
-                        }));
-                      })()}>
+                      <AreaChart data={channelChartData.sem}>
                         <defs>
                           <linearGradient id="semGradient" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
@@ -6106,46 +6272,7 @@ export default function SlideViewPage() {
                 <CardContent>
                   <div className="h-[200px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={(() => {
-                        const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
-                                           'July', 'August', 'September', 'October', 'November', 'December'];
-                        
-                        let allMonthlyData: { year: number; month: string; revenue: number }[] = [];
-                        
-                        if (pivotData?.channels?.social?.monthly) {
-                          Object.entries(pivotData.channels.social.monthly).forEach(([monthKey, metrics]) => {
-                            const [year, monthNum] = monthKey.split('-').map(Number);
-                            const month = MONTH_NAMES[monthNum - 1];
-                            allMonthlyData.push({ year, month, revenue: metrics.revenue || 0 });
-                          });
-                          allMonthlyData.sort((a, b) => a.year !== b.year ? a.year - b.year : monthNames.indexOf(a.month) - monthNames.indexOf(b.month));
-                        }
-                        
-                        const now = new Date();
-                        let filteredData = allMonthlyData;
-                        
-                        if (chartTimeRange === 'this_year') {
-                          filteredData = allMonthlyData.filter(m => m.year === now.getFullYear());
-                        } else if (chartTimeRange === 'last_12_months') {
-                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
-                        } else if (chartTimeRange === 'last_6_months') {
-                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
-                        } else if (chartTimeRange === 'last_3_months') {
-                          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-                          filteredData = allMonthlyData.filter(m => new Date(m.year, MONTH_NAMES.indexOf(m.month), 1) >= cutoffDate);
-                        }
-                        
-                        // Ensure at least 6 months of data for meaningful chart display
-                        filteredData = ensureMinimumChartData(filteredData, allMonthlyData, 6);
-                        
-                        return filteredData.map(m => ({ 
-                          month: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
-                          revenue: m.revenue 
-                        }));
-                      })()}>
+                      <AreaChart data={channelChartData.social}>
                         <defs>
                           <linearGradient id="socialGradient" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>

@@ -134,6 +134,8 @@ export function useFilteredSlideData({
         const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange);
         filteredRawRows[channel] = filteredRows;
 
+        console.log(`[testing] Channel ${channel}: ${rawDataRows.length} raw rows, ${filteredRows.length} filtered rows`);
+
         if (filteredRows.length > 0) {
           // Build dynamic metric mapping from dimensionMap
           const dimensionMap = (channelData as any).dimensionMap || {};
@@ -147,6 +149,10 @@ export function useFilteredSlideData({
             revenue: 0,
             bookings: 0,
           };
+
+          let rowsWithDates = 0;
+          let rowsWithRevenue = 0;
+          let totalRevenue = 0;
 
           filteredRows.forEach((row) => {
             const rowData = row.dimension_values || row;
@@ -189,6 +195,7 @@ export function useFilteredSlideData({
             if (dateValue) {
               const rowDate = new Date(dateValue);
               if (!isNaN(rowDate.getTime())) {
+                rowsWithDates++;
                 const year = rowDate.getFullYear();
                 const month = MONTH_NAMES[rowDate.getMonth()];
                 const key = `${year}-${month}`;
@@ -198,13 +205,24 @@ export function useFilteredSlideData({
                 }
 
                 const entry = monthlyDataMap.get(key)!;
-                const revenue = parseFloat(String(rowData['Revenue'] || rowData['revenue'] || 0).replace(/[^0-9.-]/g, ''));
-                if (!isNaN(revenue)) {
-                  entry[channel as 'metasearch' | 'sem' | 'social'] += revenue;
+                // Use the same dynamic metric extraction as channel totals
+                const revenue = getMetricValue(getMetricKeys('revenue', nameToIdsMap));
+                if (revenue > 0) {
+                  rowsWithRevenue++;
+                  totalRevenue += revenue;
                 }
+                entry[channel as 'metasearch' | 'sem' | 'social'] += revenue;
+              } else {
+                console.log(`[testing] Invalid date value for row in channel ${channel}:`, dateValue);
+              }
+            } else {
+              if (filteredRows.length <= 5) {
+                console.log(`[testing] No date value found for row in channel ${channel}, rowData keys:`, Object.keys(rowData), 'sample rowData:', rowData);
               }
             }
           });
+
+          console.log(`[testing] Channel ${channel} monthly aggregation: ${rowsWithDates} rows with dates, ${rowsWithRevenue} rows with revenue, total revenue: ${totalRevenue}, monthlyDataMap size: ${monthlyDataMap.size}`);
 
           channelTotals[channel] = metrics;
         } else {
@@ -304,6 +322,8 @@ export function useFilteredSlideData({
       selectedYear !== 'all'
         ? monthlyData.filter((m) => m.year === parseInt(selectedYear))
         : monthlyData;
+
+    console.log('[testing] Final monthlyData from useFilteredSlideData:', filteredMonthlyData);
 
     // Ensure all channels have totals (default to zeros if missing)
     const defaultMetrics: MetricData = {
