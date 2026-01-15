@@ -15,6 +15,8 @@ import {
   filterRawDataRows,
   buildMetricNameToIdsMap,
   getMetricKeys,
+  hasAnyActiveFilters,
+  getChannelsWithFilters,
 } from '@/lib/slideViewHelpers';
 import type { SlideReportPivotData } from '@/types/slideReports';
 import type { MetricData } from '@/types/slideView';
@@ -101,35 +103,8 @@ export function useChannelMetrics({
       };
     }
 
-    // Check if any filters are actually applied (not "All" selected)
-    const hasFilters = Object.entries(filterValues).some(([channel, channelFilters]) => {
-      return Object.entries(channelFilters).some(([dimensionId, selectedValues]) => {
-        // If filter is explicitly set to empty array, it's an active filter that excludes everything
-        if (selectedValues && selectedValues.length === 0) {
-          return true; // Explicitly empty = active filter = filter out everything
-        }
-        
-        // If filter is not set (undefined/null), skip (no filter)
-        if (!selectedValues) {
-          return false; // No filter = show all
-        }
-        
-        // Check if all available values are selected (also means "All" = no filter)
-        const availableValues = filterDimensionValues[channel]?.[dimensionId] || [];
-        if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
-          // Check if they're the same set
-          const selectedSet = new Set(selectedValues);
-          const availableSet = new Set(availableValues);
-          if (
-            selectedSet.size === availableSet.size &&
-            [...selectedSet].every((v) => availableSet.has(v))
-          ) {
-            return false; // All values selected = "All" = no filter
-          }
-        }
-        return true; // Subset selected = filter is applied
-      });
-    });
+    // Check if any filters are actually applied using centralized function
+    const hasFilters = hasAnyActiveFilters(filterValues, filterDimensionValues);
 
     // If filters are applied, we need to filter rawDataRows and re-aggregate
     if (hasFilters && pivotData?.channels) {
@@ -152,39 +127,8 @@ export function useChannelMetrics({
 
       const channelTotals: Record<string, MetricData> = {};
 
-      // Determine which channels have active filters
-      const channelsWithFilters = new Set<string>();
-      Object.entries(filterValues).forEach(([channel, channelFilters]) => {
-        const hasChannelFilters = Object.entries(channelFilters).some(
-          ([dimensionId, selectedValues]) => {
-            // If filter is explicitly set to empty array, it's an active filter that excludes everything
-            if (selectedValues && selectedValues.length === 0) {
-              return true; // Explicitly empty = active filter = filter out everything
-            }
-            
-            // If filter is not set (undefined/null), skip (no filter)
-            if (!selectedValues) {
-              return false; // No filter = show all
-            }
-            
-            const availableValues = filterDimensionValues[channel]?.[dimensionId] || [];
-            if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
-              const selectedSet = new Set(selectedValues);
-              const availableSet = new Set(availableValues);
-              if (
-                selectedSet.size === availableSet.size &&
-                [...selectedSet].every((v) => availableSet.has(v))
-              ) {
-                return false;
-              }
-            }
-            return true;
-          }
-        );
-        if (hasChannelFilters) {
-          channelsWithFilters.add(channel);
-        }
-      });
+      // Determine which channels have active filters using centralized function
+      const channelsWithFilters = getChannelsWithFilters(filterValues, filterDimensionValues);
 
       for (const [channel, channelData] of Object.entries(pivotData.channels)) {
         const channelFilterValues = filterValues[channel] || {};

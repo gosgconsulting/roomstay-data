@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
 import { useSlideReportViews, useCreateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
 import { useChannelMetrics } from "@/hooks/useChannelMetrics";
+import { useFilteredSlideData } from "@/hooks/useFilteredSlideData";
 import { useEditSourceModal } from "@/hooks/useEditSourceModal";
 import { useDataLoadingCache } from "@/hooks/useDataLoadingCache";
 import { useQueryClient } from "@tanstack/react-query";
@@ -37,6 +38,7 @@ import { BASE_METRICS, CHANNEL_REPORT_IDS, MONTH_NAMES } from "@/constants/slide
 import {
   calculateDerivedMetrics,
   hasActiveFilters,
+  hasActiveFiltersForChannel,
   filterRawDataRows,
   aggregateMetricsFromRows,
   calculatePercentChange,
@@ -382,30 +384,12 @@ const UnifiedBreakdownTable = ({
     const groupByName = groupByDim?.name || groupBy;
     const groupByDimId = groupByDim?.id || groupBy;
     
-    // Check if filters are actually applied for the selected channel (not "All" selected)
+    // Check if filters are actually applied for the selected channel using centralized function
     const hasFilters = selectedChannel && selectedChannel !== 'overview' && filterValues?.[selectedChannel]
-      ? Object.entries(filterValues[selectedChannel]).some(([dimensionId, selectedValues]) => {
-          // If selectedValues is null/undefined, filter is not set - no filter
-          if (!selectedValues) {
-            return false;
-          }
-          // If empty array, it's an active filter (shows zero data)
-          if (selectedValues.length === 0) {
-            return true; // Empty array = active filter (filters out everything)
-          }
-          // Check if all available values are selected (also means "All" = no filter)
-          const availableValues = filterDimensionValues?.[selectedChannel]?.[dimensionId] || [];
-          if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
-            // Check if they're the same set
-            const selectedSet = new Set(selectedValues);
-            const availableSet = new Set(availableValues);
-            if (selectedSet.size === availableSet.size && 
-                [...selectedSet].every(v => availableSet.has(v))) {
-              return false; // All values selected = "All" = no filter
-            }
-          }
-          return true; // Subset selected = filter is applied
-        })
+      ? hasActiveFiltersForChannel(
+          filterValues[selectedChannel],
+          filterDimensionValues?.[selectedChannel]
+        )
       : false;
     
     // Collect breakdown data from all channels (or specific channel if selected)
@@ -567,30 +551,12 @@ const UnifiedBreakdownTable = ({
       ? [selectedChannel] 
       : Object.keys(pivotData.channels);
     
-    // Check if filters are actually applied (not "All" selected)
+    // Check if filters are actually applied using centralized function
     const hasFilters = selectedChannel && selectedChannel !== 'overview' && filterValues?.[selectedChannel]
-      ? Object.entries(filterValues[selectedChannel]).some(([dimensionId, selectedValues]) => {
-          // If selectedValues is null/undefined, filter is not set - no filter
-          if (!selectedValues) {
-            return false;
-          }
-          // If empty array, it's an active filter (shows zero data)
-          if (selectedValues.length === 0) {
-            return true; // Empty array = active filter (filters out everything)
-          }
-          // Check if all available values are selected (also means "All" = no filter)
-          const availableValues = filterDimensionValues?.[selectedChannel]?.[dimensionId] || [];
-          if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
-            // Check if they're the same set
-            const selectedSet = new Set(selectedValues);
-            const availableSet = new Set(availableValues);
-            if (selectedSet.size === availableSet.size && 
-                [...selectedSet].every(v => availableSet.has(v))) {
-              return false; // All values selected = "All" = no filter
-            }
-          }
-          return true; // Subset selected = filter is applied
-        })
+      ? hasActiveFiltersForChannel(
+          filterValues[selectedChannel],
+          filterDimensionValues?.[selectedChannel]
+        )
       : false;
     
     const allBreakdowns: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
@@ -1192,133 +1158,27 @@ export default function SlideViewPage() {
     social: {},
   });
 
-  // Filter monthly data based on selected year - build from pivot_data
-  // Applies filterValues if they are set (but not when "All" is selected)
+  // Single source of truth for all filtered data
+  const filteredData = useFilteredSlideData({
+    pivotData: slideReport?.pivot_data as SlideReportPivotData | null,
+    filterValues,
+    filterDimensionValues,
+    selectedYear,
+    selectedMonth,
+    selectedTab,
+    slideType,
+    dynamicChannelTotals,
+  });
+
+  // Filter monthly data - now uses unified filteredData hook
+  // Fallback to dynamicMonthlyData for master-report if no pivot data
   const filteredMonthlyData = useMemo(() => {
-    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-    
-    // Check if any filters are actually applied (not "All" selected)
-    const hasFilters = Object.entries(filterValues).some(([channel, channelFilters]) => {
-      return Object.entries(channelFilters).some(([dimensionId, selectedValues]) => {
-        // If selectedValues is null/undefined, filter is not set - no filter
-        if (!selectedValues) {
-          return false;
-        }
-        // If empty array, it's an active filter (shows zero data)
-        if (selectedValues.length === 0) {
-          return true; // Empty array = active filter (filters out everything)
-        }
-        // Check if all available values are selected (also means "All" = no filter)
-        const availableValues = filterDimensionValues[channel]?.[dimensionId] || [];
-        if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
-          // Check if they're the same set
-          const selectedSet = new Set(selectedValues);
-          const availableSet = new Set(availableValues);
-          if (selectedSet.size === availableSet.size && 
-              [...selectedSet].every(v => availableSet.has(v))) {
-            return false; // All values selected = "All" = no filter
-          }
-        }
-        return true; // Subset selected = filter is applied
-      });
-    });
-    
-    // If filters are applied, filter rawDataRows and aggregate by month
-    if (hasFilters && pivotData?.channels) {
-      const monthlyMap = new Map<string, { year: number; month: string; metasearch: number; sem: number; social: number }>();
-      
-      // Aggregate from filtered rawDataRows for each channel
-      for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-        const channelFilterValues = filterValues[channel] || {};
-        const rawDataRows = (channelData as any).rawDataRows || [];
-        
-        // Filter rows based on filterValues (no date filter here - we want all months)
-        const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues);
-        
-        // Group by month and aggregate revenue
-        filteredRows.forEach((row) => {
-          const rowData = row.dimension_values || row;
-          
-          // Find date value
-          let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
-          if (!dateValue) {
-            for (const [key, val] of Object.entries(rowData)) {
-              if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-                dateValue = val;
-                break;
-              }
-            }
-          }
-          
-          if (dateValue) {
-            const rowDate = new Date(dateValue);
-            if (!isNaN(rowDate.getTime())) {
-              const year = rowDate.getFullYear();
-              const month = MONTH_NAMES[rowDate.getMonth()];
-              const key = `${year}-${month}`;
-              
-              if (!monthlyMap.has(key)) {
-                monthlyMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
-              }
-              
-              const entry = monthlyMap.get(key)!;
-              const revenue = parseFloat(String(rowData['Revenue'] || rowData['revenue'] || 0).replace(/[^0-9.-]/g, ''));
-              if (!isNaN(revenue)) {
-                entry[channel as 'metasearch' | 'sem' | 'social'] += revenue;
-              }
-            }
-          }
-        });
-      }
-      
-      const result = Array.from(monthlyMap.values()).sort((a, b) => {
-        if (a.year !== b.year) return a.year - b.year;
-        return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
-      });
-      
-      // Filter by selectedYear if needed
-      if (selectedYear !== 'all') {
-        return result.filter(m => m.year === parseInt(selectedYear));
-      }
-      return result;
+    // Use filtered data from hook (single source of truth)
+    if (filteredData.monthlyData.length > 0) {
+      return filteredData.monthlyData;
     }
     
-    // No filters applied - use pre-computed monthly data
-    // Build from pivot_data if available
-    if (pivotData?.channels) {
-      const monthlyMap = new Map<string, { year: number; month: string; metasearch: number; sem: number; social: number }>();
-      
-      // Collect all months from all channels
-      Object.entries(pivotData.channels).forEach(([channel, channelData]) => {
-        if (channelData.monthly) {
-          Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
-            const [year, monthNum] = monthKey.split('-').map(Number);
-            const month = MONTH_NAMES[monthNum - 1];
-            const key = `${year}-${month}`;
-            
-            if (!monthlyMap.has(key)) {
-              monthlyMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
-            }
-            
-            const entry = monthlyMap.get(key)!;
-            entry[channel as 'metasearch' | 'sem' | 'social'] = metrics.revenue || 0;
-          });
-        }
-      });
-      
-      const result = Array.from(monthlyMap.values()).sort((a, b) => {
-        if (a.year !== b.year) return a.year - b.year;
-        return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
-      });
-      
-      // Filter by selectedYear if needed
-      if (selectedYear !== 'all') {
-        return result.filter(m => m.year === parseInt(selectedYear));
-      }
-      return result;
-    }
-    
-    // Fallback to dynamicMonthlyData or empty array
+    // Fallback to dynamicMonthlyData for master-report
     const sourceData = slideType === 'master-report' && dynamicMonthlyData.length > 0 
       ? dynamicMonthlyData 
       : [];
@@ -1326,8 +1186,8 @@ export default function SlideViewPage() {
     if (selectedYear === 'all') {
       return sourceData;
     }
-      return sourceData.filter(m => m.year === parseInt(selectedYear));
-  }, [slideReport?.pivot_data, slideType, dynamicMonthlyData, selectedYear, filterValues, filterDimensionValues]);
+    return sourceData.filter(m => m.year === parseInt(selectedYear));
+  }, [filteredData.monthlyData, slideType, dynamicMonthlyData, selectedYear]);
 
   // Get channel totals from monthly_data table (same source as SlideDataBrowser)
   // This is the correct source of truth for the data
@@ -1389,239 +1249,8 @@ export default function SlideViewPage() {
     comparisonType: comparisonType as 'none' | 'previous_period' | 'previous_year',
   });
 
-  // Get current totals based on selected year/month from pivot_data
-  // Applies filterValues if they are set (but not when "All" is selected)
-  // Overview tab also applies filters from individual channel tabs
-  const currentTotals = useMemo(() => {
-    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-    
-    // Early return if no pivot data available yet
-    if (!pivotData?.channels) {
-      return {
-        metasearch: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
-        sem: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
-        social: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
-      };
-    }
-    
-    // Check if any filters are actually applied (not "All" selected)
-    // Filters now apply across all tabs including Overview
-    const hasFilters = Object.entries(filterValues).some(([channel, channelFilters]) => {
-      return Object.entries(channelFilters).some(([dimensionId, selectedValues]) => {
-        if (!selectedValues || selectedValues.length === 0) {
-          return false; // Empty = "All" selected = no filter
-        }
-        // Check if all available values are selected (also means "All" = no filter)
-        const availableValues = filterDimensionValues[channel]?.[dimensionId] || [];
-        if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
-          // Check if they're the same set
-          const selectedSet = new Set(selectedValues);
-          const availableSet = new Set(availableValues);
-          if (selectedSet.size === availableSet.size && 
-              [...selectedSet].every(v => availableSet.has(v))) {
-            return false; // All values selected = "All" = no filter
-          }
-        }
-        return true; // Subset selected = filter is applied
-      });
-    });
-    
-    // If filters are applied, we need to filter rawDataRows and re-aggregate
-    if (hasFilters && pivotData?.channels) {
-      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-      
-      // Build date range based on selected year/month
-      // Only apply date filter if a specific year or month is selected
-      let dateRange: { start: Date; end: Date } | undefined;
-      if (selectedMonth !== 'all' && selectedYear !== 'all') {
-        const monthNum = MONTH_NAMES.indexOf(selectedMonth);
-        const yearNum = parseInt(selectedYear);
-        dateRange = {
-          start: new Date(yearNum, monthNum, 1),
-          end: new Date(yearNum, monthNum + 1, 0, 23, 59, 59),
-        };
-      } else if (selectedYear !== 'all') {
-        const yearNum = parseInt(selectedYear);
-        dateRange = {
-          start: new Date(yearNum, 0, 1),
-          end: new Date(yearNum, 11, 31, 23, 59, 59),
-        };
-      }
-      // If both are 'all', don't filter by date - use all data
-      
-      const channelTotals: Record<string, any> = {};
-      
-      // Determine which channels have active filters
-      const channelsWithFilters = new Set<string>();
-      Object.entries(filterValues).forEach(([channel, channelFilters]) => {
-        const hasChannelFilters = Object.entries(channelFilters).some(([dimensionId, selectedValues]) => {
-          // If selectedValues is null/undefined, filter is not set - no filter
-          if (!selectedValues) {
-            return false;
-          }
-          // If empty array, it's an active filter (shows zero data)
-          if (selectedValues.length === 0) {
-            return true; // Empty array = active filter (filters out everything)
-          }
-          // Check if all available values are selected (also means "All" = no filter)
-          const availableValues = filterDimensionValues[channel]?.[dimensionId] || [];
-          if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
-            // Check if they're the same set
-            const selectedSet = new Set(selectedValues);
-            const availableSet = new Set(availableValues);
-            if (selectedSet.size === availableSet.size && 
-                [...selectedSet].every(v => availableSet.has(v))) {
-              return false; // All values selected = "All" = no filter
-            }
-          }
-          return true; // Subset selected = filter is applied
-        });
-        if (hasChannelFilters) {
-          channelsWithFilters.add(channel);
-        }
-      });
-      
-      for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-        const channelFilterValues = filterValues[channel] || {};
-        const hasChannelFilters = channelsWithFilters.has(channel);
-        
-        // If this channel has filters, filter rawDataRows and re-aggregate
-        if (hasChannelFilters) {
-          const rawDataRows = (channelData as any).rawDataRows || [];
-          
-          // Filter rows based on filterValues and date range
-          const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange);
-          
-          if (filteredRows.length > 0) {
-          // Build dynamic metric mapping from dimensionMap
-          const dimensionMap = (channelData as any).dimensionMap || {};
-          const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
-          
-          // Manually aggregate metrics from filtered rows
-          // rawDataRows store metrics by dimension IDs, so we need to try both IDs and names
-          const metrics = {
-            impressions: 0,
-            clicks: 0,
-            cost: 0,
-            revenue: 0,
-            bookings: 0,
-          };
-          
-          filteredRows.forEach((row) => {
-            const rowData = row.dimension_values || row;
-            
-            // Helper to safely extract numeric value
-            const getMetricValue = (keys: string[]): number => {
-              for (const key of keys) {
-                const value = rowData[key];
-                if (value !== undefined && value !== null) {
-                  if (typeof value === 'number') {
-                    return isNaN(value) ? 0 : value;
-                  }
-                  const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
-                  if (!isNaN(parsed)) {
-                    return parsed;
-                  }
-                }
-              }
-              return 0;
-            };
-            
-            // Dynamically resolve metric keys using dimensionMap
-            metrics.impressions += getMetricValue(getMetricKeys('impressions', nameToIdsMap));
-            metrics.clicks += getMetricValue(getMetricKeys('clicks', nameToIdsMap));
-            metrics.cost += getMetricValue(getMetricKeys('cost', nameToIdsMap));
-            metrics.revenue += getMetricValue(getMetricKeys('revenue', nameToIdsMap));
-            metrics.bookings += getMetricValue(getMetricKeys('bookings', nameToIdsMap));
-          });
-          
-          channelTotals[channel] = metrics;
-          } else {
-            channelTotals[channel] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-          }
-        } else {
-          // This channel has no filters - use pre-computed data (same logic as when no filters are applied)
-          if (selectedMonth && selectedMonth !== 'all') {
-            const monthNum = MONTH_NAMES.indexOf(selectedMonth) + 1;
-            const monthKey = selectedYear !== 'all' 
-              ? `${selectedYear}-${monthNum.toString().padStart(2, '0')}`
-              : null;
-            
-            if (monthKey) {
-              const monthlyData = (channelData as any).monthly?.[monthKey];
-              if (monthlyData) {
-                channelTotals[channel] = monthlyData;
-              } else {
-                channelTotals[channel] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-              }
-            } else {
-              channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-            }
-          } else if (selectedYear !== 'all') {
-            const yearNum = parseInt(selectedYear);
-            const yearlyData = (channelData as any).yearly?.[String(yearNum)];
-            if (yearlyData) {
-              channelTotals[channel] = yearlyData;
-            } else {
-              channelTotals[channel] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-            }
-          } else {
-            channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-          }
-        }
-      }
-      
-      return channelTotals;
-    }
-    
-    // No filters applied - use pre-computed aggregated data (fast path)
-    // Only process rawDataRows when filters are applied (handled above)
-    if (pivotData?.channels) {
-      const channelTotals: Record<string, any> = {};
-      
-      // Use pre-computed data based on selected year/month (much faster than processing rawDataRows)
-      if (selectedMonth !== 'all' && selectedYear !== 'all') {
-        const monthNum = MONTH_NAMES.indexOf(selectedMonth) + 1;
-        const monthKey = selectedYear !== 'all' 
-          ? `${selectedYear}-${monthNum.toString().padStart(2, '0')}`
-          : null;
-        
-        if (monthKey) {
-          for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-            const monthlyData = (channelData as any).monthly?.[monthKey];
-            channelTotals[channel] = monthlyData || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-          }
-          return channelTotals;
-        }
-      }
-      
-      if (selectedYear !== 'all') {
-        const yearNum = parseInt(selectedYear);
-        for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-          const yearlyData = (channelData as any).yearly?.[String(yearNum)];
-          channelTotals[channel] = yearlyData || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-        }
-        return channelTotals;
-      }
-      
-      // Use current totals for all years (fastest - pre-computed)
-      for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-        channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-      }
-      return channelTotals;
-    }
-    
-    // Fallback to dynamic data or zeros
-    if (slideType === 'master-report' && Object.keys(dynamicChannelTotals).length > 0) {
-      return dynamicChannelTotals;
-    }
-    // Return zeros when no data is available (data should come from pivot_data)
-    return {
-      metasearch: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
-      sem: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
-      social: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
-    };
-  }, [slideType, slideReport?.pivot_data, dynamicChannelTotals, dynamicYearlyTotals, selectedYear, selectedMonth, selectedTab, filterValues, filterDimensionValues, slideReport?.date_range]);
+  // Get current totals - now uses unified filteredData hook (single source of truth)
+  const currentTotals = filteredData.channelTotals;
 
   // Helper function to check if any channel has non-zero data
   const hasAnyData = (totals: typeof currentTotals): boolean => {
@@ -4283,6 +3912,7 @@ export default function SlideViewPage() {
 
   // Budget monthly data for tables (full structure with all fields)
   // Uses filtered data when view is selected (filters rawDataRows based on filterValues)
+  // Now uses unified filteredData hook for consistency
   const budgetMonthlyData = useMemo(() => {
     const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
     
@@ -4299,24 +3929,8 @@ export default function SlideViewPage() {
       social: number;
     };
     
-    // Check if filters are applied (view selected)
-    const hasFilters = Object.entries(filterValues).some(([channel, channelFilters]) => {
-      return Object.entries(channelFilters).some(([dimensionId, selectedValues]) => {
-        if (!selectedValues || selectedValues.length === 0) {
-          return false;
-        }
-        const availableValues = filterDimensionValues[channel]?.[dimensionId] || [];
-        if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
-          const selectedSet = new Set(selectedValues);
-          const availableSet = new Set(availableValues);
-          if (selectedSet.size === availableSet.size && 
-              [...selectedSet].every(v => availableSet.has(v))) {
-            return false;
-          }
-        }
-        return true;
-      });
-    });
+    // Use centralized filter detection from filteredData hook
+    const hasFilters = filteredData.hasFilters;
     
     // If a view is selected, construct monthly data from view budgets and filtered data
     if (selectedViewId && viewBudgets.length > 0) {
@@ -4328,13 +3942,11 @@ export default function SlideViewPage() {
         ['metasearch', 'sem', 'social'].forEach(channel => {
           const channelData = pivotData.channels[channel];
           
-          if (hasFilters && (channelData as any).rawDataRows) {
-            // Filter rawDataRows based on filterValues
-            const channelFilterValues = filterValues[channel] || {};
-            const rawDataRows = (channelData as any).rawDataRows || [];
-            const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues);
+          if (hasFilters) {
+            // Use filtered rows from unified hook
+            const filteredRows = filteredData.getFilteredRowsForChannel(channel);
             
-            // Aggregate by month
+            // Aggregate by month from filtered rows
             filteredRows.forEach((row: RawDataRow) => {
               const rowData = row.dimension_values || row;
               
@@ -4533,7 +4145,7 @@ export default function SlideViewPage() {
       return monthlyData;
     }
     return [];
-  }, [selectedViewId, viewBudgets, slideReport?.pivot_data, selectedYear, filterValues, filterDimensionValues]);
+  }, [selectedViewId, viewBudgets, slideReport?.pivot_data, selectedYear, filteredData]);
 
   const totalBudget = budgetData.reduce((sum, m) => sum + m.budget, 0);
   // Use REPORT_TOTAL.cost for actual spend (already filtered by view)
