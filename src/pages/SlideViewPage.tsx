@@ -1026,6 +1026,33 @@ export default function SlideViewPage() {
     }
   }, [slideType, accountId, fetchSlideReportData]);
 
+  // Check for share authentication when user is not authenticated
+  const [isSharedAccess, setIsSharedAccess] = useState(false);
+  useEffect(() => {
+    if (!user) {
+      // Check if we're accessing via a share link
+      const isShared = searchParams.get('shared') === 'true';
+      const slug = searchParams.get('slug');
+      
+      if (isShared && slug) {
+        // Check if share authentication exists in sessionStorage
+        const authKey = `share_auth_${slug}`;
+        const shareAuth = sessionStorage.getItem(authKey);
+        
+        if (shareAuth === "true") {
+          console.log('[testing] SlideViewPage - Share access detected, allowing public access');
+          setIsSharedAccess(true);
+        } else {
+          // No share auth found, redirect back to share link
+          console.log('[testing] SlideViewPage - No share auth found, redirecting to share link');
+          navigate(`/${slug}`);
+        }
+      }
+    } else {
+      setIsSharedAccess(false);
+    }
+  }, [user, searchParams, navigate]);
+
   // Slide report state - moved before filteredMonthlyData so it's available
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
   const { data: slideReport } = useSlideReport(slideReportId);

@@ -103,6 +103,99 @@ export const CreateShareLinkModal = ({
     }
   }, [step, activeReportId, selectedDimensionId]);
 
+  // Load view filters and convert to report-based format when a view is selected (for slide reports)
+  useEffect(() => {
+    const loadViewFiltersAndLinkReports = async () => {
+      if (!slideReportId || !selectedViewId || !user) {
+        // If view is cleared, reset filters but keep selectedReports as is
+        if (slideReportId && !selectedViewId) {
+          setDimensionFilters({});
+        }
+        return;
+      }
+
+      try {
+        console.log("[testing] Loading view filters for view:", selectedViewId);
+        
+        // Load the view
+        const { data: view, error: viewError } = await (supabase.from("slide_report_views" as any) as any)
+          .select("filter_values")
+          .eq("id", selectedViewId)
+          .single();
+
+        if (viewError || !view) {
+          console.error("[testing] Error loading view:", viewError);
+          toast({
+            title: "Error",
+            description: "Failed to load view filters",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Load the slide report to get report_ids mapping
+        const { data: slideReport, error: reportError } = await supabase
+          .from("slide_reports")
+          .select("report_ids")
+          .eq("id", slideReportId)
+          .single();
+
+        if (reportError || !slideReport) {
+          console.error("[testing] Error loading slide report:", reportError);
+          toast({
+            title: "Error",
+            description: "Failed to load slide report",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Convert view filter_values (channel-based) to dimension_filters (report-based)
+        // View format: { "metasearch": { "dimensionId": ["value1"] }, "sem": {...}, "social": {...} }
+        // Share link format: { "reportId1": { "dimensionId": ["value1"] }, "reportId2": {...} }
+        const reportIds = slideReport.report_ids as Record<string, string>;
+        const viewFilters = (view.filter_values || {}) as Record<string, Record<string, string[]>>;
+        
+        const convertedFilters: DimensionFilters = {};
+        const linkedReportIds: string[] = [];
+
+        // Map each channel to its report ID and convert filters
+        for (const [channel, channelFilters] of Object.entries(viewFilters)) {
+          const reportId = reportIds[channel];
+          if (reportId) {
+            // Add this report ID to the linked reports
+            linkedReportIds.push(reportId);
+            
+            // Convert channel filters to report filters
+            if (channelFilters && Object.keys(channelFilters).length > 0) {
+              convertedFilters[reportId] = channelFilters;
+            }
+          }
+        }
+
+        console.log("[testing] Converted view filters:", convertedFilters);
+        console.log("[testing] Linked report IDs:", linkedReportIds);
+
+        // Update dimension filters with converted view filters
+        setDimensionFilters(convertedFilters);
+        
+        // Update selectedReports to only include reports that are in the view
+        if (linkedReportIds.length > 0) {
+          setSelectedReports(linkedReportIds);
+        }
+      } catch (error) {
+        console.error("[testing] Error loading view filters:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load view filters",
+          variant: "destructive",
+        });
+      }
+    };
+
+    loadViewFiltersAndLinkReports();
+  }, [slideReportId, selectedViewId, user, toast]);
+
   const loadReportsAndAutoSelect = async () => {
     if (!user) return;
 

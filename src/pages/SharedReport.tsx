@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useLocation } from "react-router-dom";
+import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import { LoadingToast } from "@/components/LoadingToast";
 export default function SharedReport() {
   const { slug } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const { toast } = useToast();
   
   // Authentication state
@@ -119,6 +120,63 @@ export default function SharedReport() {
 
   const initializeReport = async (linkData: any) => {
     console.log('[testing] SharedReport - Initializing report with data:', linkData);
+    
+    // If this share link has a view_id, it's for a slide report
+    // Redirect to the slide report view
+    if (linkData.view_id) {
+      try {
+        console.log('[testing] SharedReport - Share link has view_id, loading slide report view');
+        
+        // Load the view to get slide_report_id and account_id
+        const { data: view, error: viewError } = await (supabase.from("slide_report_views" as any) as any)
+          .select("slide_report_id, account_id")
+          .eq("id", linkData.view_id)
+          .single();
+
+        if (viewError || !view) {
+          console.error('[testing] Error loading view:', viewError);
+          toast({
+            title: "Error",
+            description: "Failed to load view",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const slideReportId = view.slide_report_id;
+        const accountId = view.account_id || linkData.account_id;
+
+        if (!slideReportId || !accountId) {
+          toast({
+            title: "Error",
+            description: "Invalid view configuration",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Store view_id in sessionStorage so SlideViewPage can pick it up
+        sessionStorage.setItem(`share_view_id_${slideReportId}`, linkData.view_id);
+        
+        // Store share link data for authentication persistence
+        const authKey = `share_auth_${slug}`;
+        sessionStorage.setItem(authKey, "true");
+        sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(linkData));
+
+        console.log('[testing] Redirecting to slide report view:', { slideReportId, accountId });
+        
+        // Navigate to the slide report view with shared flag
+        navigate(`/tools/reports/${accountId}/view/${slideReportId}?shared=true&slug=${slug}`);
+      } catch (error) {
+        console.error('[testing] Error handling slide report view:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load slide report view",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
     
     // Store dimension filters from the share link
     if (linkData.dimension_filters) {
