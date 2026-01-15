@@ -517,10 +517,25 @@ export const CreateShareLinkModal = ({
         }
       }
 
-      const { error } = await supabase
+      let { error } = await supabase
         .from("share_links")
         .update(updateData)
         .eq("id", editingLink.id);
+
+      // If error is about missing slide_report_id column, retry without it
+      if (error && (error.message?.includes("slide_report_id") || error.message?.includes("schema cache"))) {
+        console.warn('[testing] slide_report_id column not available, retrying without it');
+        // Remove slide_report_id and retry
+        const retryData = { ...updateData };
+        delete retryData.slide_report_id;
+        
+        const retryResult = await supabase
+          .from("share_links")
+          .update(retryData)
+          .eq("id", editingLink.id);
+        
+        error = retryResult.error;
+      }
 
       setLoading(false);
 
@@ -553,9 +568,23 @@ export const CreateShareLinkModal = ({
         insertData.slide_report_id = slideReportId;
       }
 
-      const { error } = await supabase
+      let { error } = await supabase
         .from("share_links")
         .insert(insertData);
+
+      // If error is about missing slide_report_id column, retry without it
+      if (error && (error.message?.includes("slide_report_id") || error.message?.includes("schema cache"))) {
+        console.warn('[testing] slide_report_id column not available, retrying without it');
+        // Remove slide_report_id and retry
+        const retryData = { ...insertData };
+        delete retryData.slide_report_id;
+        
+        const retryResult = await supabase
+          .from("share_links")
+          .insert(retryData);
+        
+        error = retryResult.error;
+      }
 
       setLoading(false);
 

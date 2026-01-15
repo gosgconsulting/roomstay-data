@@ -128,23 +128,29 @@ export default function SharedReport() {
         console.log('[testing] SharedReport - Share link has view_id, redirecting to slide report view');
         
         // Get slide_report_id directly from share_links (avoids RLS issues with slide_report_views)
-        const slideReportId = linkData.slide_report_id;
-        const accountId = linkData.account_id;
+        // Fallback to querying the view if slide_report_id is not stored (for older share links)
+        let slideReportId = linkData.slide_report_id;
+        let accountId = linkData.account_id;
+
+        // If slide_report_id is not stored, try to get it from the view
+        if (!slideReportId && linkData.view_id) {
+          console.log('[testing] slide_report_id not in share link, querying view');
+          const { data: view, error: viewError } = await (supabase.from("slide_report_views" as any) as any)
+            .select("slide_report_id, account_id")
+            .eq("id", linkData.view_id)
+            .maybeSingle();
+
+          if (!viewError && view) {
+            slideReportId = view.slide_report_id;
+            accountId = view.account_id || accountId;
+          }
+        }
 
         if (!slideReportId || !accountId) {
           console.error('[testing] Missing slide_report_id or account_id in share link');
           toast({
             title: "Invalid share link",
             description: "This share link is missing required information. Please contact the link creator.",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        if (!slideReportId || !accountId) {
-          toast({
-            title: "Error",
-            description: "Invalid view configuration",
             variant: "destructive",
           });
           return;
