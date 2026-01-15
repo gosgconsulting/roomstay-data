@@ -125,32 +125,92 @@ export default function SharedReport() {
     // Redirect to the slide report view
     if (linkData.view_id) {
       try {
-        console.log('[testing] SharedReport - Share link has view_id, redirecting to slide report view');
+        console.log('[testing] SharedReport - Share link has view_id, looking up slide report', {
+          view_id: linkData.view_id,
+          account_id: linkData.account_id
+        });
         
-        // Get slide_report_id directly from share_links (avoids RLS issues with slide_report_views)
-        // Fallback to querying the view if slide_report_id is not stored (for older share links)
-        let slideReportId = linkData.slide_report_id;
+        // Use account_id + view_id to look up slide_report_id
+        // This avoids schema cache issues with slide_report_id column
+        let slideReportId: string | undefined;
         let accountId = linkData.account_id;
 
-        // If slide_report_id is not stored, try to get it from the view
-        if (!slideReportId && linkData.view_id) {
-          console.log('[testing] slide_report_id not in share link, querying view');
-          const { data: view, error: viewError } = await (supabase.from("slide_report_views" as any) as any)
-            .select("slide_report_id, account_id")
-            .eq("id", linkData.view_id)
+        // Query slide_report_views using view_id
+        // The RLS policy should allow access to views referenced by share_links
+        console.log('[testing] Querying slide_report_views with view_id and account_id');
+        try {
+          // First try: Query through share_links relationship to leverage RLS policy
+          const { data: shareLinkWithView, error: shareLinkError } = await supabase
+            .from("share_links")
+            .select(`
+              view_id,
+              slide_report_views!inner (
+                slide_report_id,
+                account_id
+              )
+            `)
+            .eq("slug", slug)
+            .eq("view_id", linkData.view_id)
             .maybeSingle();
 
-          if (!viewError && view) {
-            slideReportId = view.slide_report_id;
-            accountId = view.account_id || accountId;
+          if (!shareLinkError && shareLinkWithView) {
+            const view = (shareLinkWithView as any).slide_report_views;
+            if (view && Array.isArray(view) && view.length > 0) {
+              slideReportId = view[0].slide_report_id;
+              accountId = view[0].account_id || accountId;
+              console.log('[testing] Successfully retrieved slide_report_id through share_links join:', slideReportId);
+            } else if (view && view.slide_report_id) {
+              // Handle case where it's a single object, not an array
+              slideReportId = view.slide_report_id;
+              accountId = view.account_id || accountId;
+              console.log('[testing] Successfully retrieved slide_report_id through share_links join:', slideReportId);
+            }
+          }
+
+          // Fallback: Try direct query if join didn't work
+          if (!slideReportId) {
+            console.log('[testing] Join query failed, trying direct view query');
+            const { data: view, error: viewError } = await (supabase.from("slide_report_views" as any) as any)
+              .select("slide_report_id, account_id")
+              .eq("id", linkData.view_id)
+              .maybeSingle();
+
+            if (!viewError && view && view.slide_report_id) {
+              console.log('[testing] Successfully retrieved slide_report_id from direct view query');
+              slideReportId = view.slide_report_id;
+              accountId = view.account_id || accountId;
+            } else if (viewError) {
+              console.error('[testing] Direct view query also failed:', viewError);
+            }
+          }
+        } catch (err) {
+          console.error('[testing] Exception while querying view:', err);
+        }
+
+        // If accountId is still missing, try to get it from the first report
+        if (!accountId && linkData.report_ids && linkData.report_ids.length > 0) {
+          console.log('[testing] account_id missing, attempting to get from report');
+          const { data: report } = await supabase
+            .from("reports")
+            .select("account_id")
+            .eq("id", linkData.report_ids[0])
+            .maybeSingle();
+          
+          if (report?.account_id) {
+            accountId = report.account_id;
+            console.log('[testing] Got account_id from report:', accountId);
           }
         }
 
         if (!slideReportId || !accountId) {
-          console.error('[testing] Missing slide_report_id or account_id in share link');
+          console.error('[testing] Missing slide_report_id or account_id in share link', {
+            slideReportId,
+            accountId,
+            view_id: linkData.view_id
+          });
           toast({
             title: "Invalid share link",
-            description: "This share link is missing required information. Please contact the link creator.",
+            description: "This share link is missing required information. The share link may need to be recreated. Please contact the link creator.",
             variant: "destructive",
           });
           return;

@@ -1,5 +1,5 @@
 -- Create slide_reports table for pre-computed pivot table data
-CREATE TABLE public.slide_reports (
+CREATE TABLE IF NOT EXISTS public.slide_reports (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   account_id UUID NOT NULL REFERENCES public.accounts(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -77,26 +77,57 @@ CREATE TABLE public.slide_reports (
 -- Enable Row Level Security
 ALTER TABLE public.slide_reports ENABLE ROW LEVEL SECURITY;
 
--- Create policies for user access
-CREATE POLICY "Users can view their own slide reports" 
-ON public.slide_reports 
-FOR SELECT 
-USING (auth.uid() = user_id);
+-- Create policies for user access (only if they don't exist)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' 
+    AND tablename = 'slide_reports' 
+    AND policyname = 'Users can view their own slide reports'
+  ) THEN
+    CREATE POLICY "Users can view their own slide reports" 
+    ON public.slide_reports 
+    FOR SELECT 
+    USING (auth.uid() = user_id);
+  END IF;
 
-CREATE POLICY "Users can create their own slide reports" 
-ON public.slide_reports 
-FOR INSERT 
-WITH CHECK (auth.uid() = user_id);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' 
+    AND tablename = 'slide_reports' 
+    AND policyname = 'Users can create their own slide reports'
+  ) THEN
+    CREATE POLICY "Users can create their own slide reports" 
+    ON public.slide_reports 
+    FOR INSERT 
+    WITH CHECK (auth.uid() = user_id);
+  END IF;
 
-CREATE POLICY "Users can update their own slide reports" 
-ON public.slide_reports 
-FOR UPDATE 
-USING (auth.uid() = user_id);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' 
+    AND tablename = 'slide_reports' 
+    AND policyname = 'Users can update their own slide reports'
+  ) THEN
+    CREATE POLICY "Users can update their own slide reports" 
+    ON public.slide_reports 
+    FOR UPDATE 
+    USING (auth.uid() = user_id);
+  END IF;
 
-CREATE POLICY "Users can delete their own slide reports" 
-ON public.slide_reports 
-FOR DELETE 
-USING (auth.uid() = user_id);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' 
+    AND tablename = 'slide_reports' 
+    AND policyname = 'Users can delete their own slide reports'
+  ) THEN
+    CREATE POLICY "Users can delete their own slide reports" 
+    ON public.slide_reports 
+    FOR DELETE 
+    USING (auth.uid() = user_id);
+  END IF;
+END $$;
 
 -- Create indexes for better performance
 CREATE INDEX idx_slide_reports_account_id ON public.slide_reports(account_id);
@@ -108,8 +139,21 @@ CREATE INDEX idx_slide_reports_configuration ON public.slide_reports USING gin(c
 CREATE INDEX idx_slide_reports_report_ids ON public.slide_reports USING gin(report_ids);
 CREATE INDEX idx_slide_reports_pivot_data ON public.slide_reports USING gin(pivot_data);
 
--- Create trigger for automatic timestamp updates
-CREATE TRIGGER update_slide_reports_updated_at
-BEFORE UPDATE ON public.slide_reports
-FOR EACH ROW
-EXECUTE FUNCTION public.update_updated_at_column();
+-- Create trigger for automatic timestamp updates (only if function exists)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON p.pronamespace = n.oid
+    WHERE n.nspname = 'public' 
+    AND p.proname = 'update_updated_at_column'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM pg_trigger 
+    WHERE tgname = 'update_slide_reports_updated_at'
+  ) THEN
+    CREATE TRIGGER update_slide_reports_updated_at
+    BEFORE UPDATE ON public.slide_reports
+    FOR EACH ROW
+    EXECUTE FUNCTION public.update_updated_at_column();
+  END IF;
+END $$;

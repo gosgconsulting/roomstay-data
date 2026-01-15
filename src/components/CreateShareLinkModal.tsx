@@ -506,36 +506,18 @@ export const CreateShareLinkModal = ({
         updateData.password_hash = passwordHash;
       }
 
-      // Add view_id and slide_report_id if provided (for slide reports)
+      // Add view_id if provided (for slide reports)
       // For updates, include view_id if slideReportId is set and selectedViewId is explicitly set (can be null to clear)
+      // We use account_id + view_id to look up slide_report_id later (avoids schema cache issues)
       if (slideReportId !== undefined && selectedViewId !== undefined) {
         updateData.view_id = selectedViewId; // Can be null to clear, but won't be undefined
-        if (selectedViewId) {
-          updateData.slide_report_id = slideReportId;
-        } else {
-          updateData.slide_report_id = null; // Clear if view is removed
-        }
       }
 
-      let { error } = await supabase
+      // Update share link - no need for slide_report_id, we'll look it up using account_id + view_id
+      const { error } = await supabase
         .from("share_links")
         .update(updateData)
         .eq("id", editingLink.id);
-
-      // If error is about missing slide_report_id column, retry without it
-      if (error && (error.message?.includes("slide_report_id") || error.message?.includes("schema cache"))) {
-        console.warn('[testing] slide_report_id column not available, retrying without it');
-        // Remove slide_report_id and retry
-        const retryData = { ...updateData };
-        delete retryData.slide_report_id;
-        
-        const retryResult = await supabase
-          .from("share_links")
-          .update(retryData)
-          .eq("id", editingLink.id);
-        
-        error = retryResult.error;
-      }
 
       setLoading(false);
 
@@ -562,28 +544,25 @@ export const CreateShareLinkModal = ({
         dimension_filters: dimensionFilters,
       };
 
-      // Add view_id and slide_report_id if provided (for slide reports)
+      // Add view_id if provided (for slide reports)
+      // We use account_id + view_id to look up slide_report_id later (avoids schema cache issues)
       if (slideReportId && selectedViewId) {
         insertData.view_id = selectedViewId;
-        insertData.slide_report_id = slideReportId;
+        // account_id is already in insertData, we'll use it with view_id to get slide_report_id
+        console.log('[testing] Creating share link with view_id', {
+          view_id: selectedViewId,
+          account_id: insertData.account_id,
+          note: 'slide_report_id will be retrieved from view_id + account_id'
+        });
       }
 
-      let { error } = await supabase
+      // Insert share link - no need for slide_report_id, we'll look it up using account_id + view_id
+      const { error } = await supabase
         .from("share_links")
         .insert(insertData);
 
-      // If error is about missing slide_report_id column, retry without it
-      if (error && (error.message?.includes("slide_report_id") || error.message?.includes("schema cache"))) {
-        console.warn('[testing] slide_report_id column not available, retrying without it');
-        // Remove slide_report_id and retry
-        const retryData = { ...insertData };
-        delete retryData.slide_report_id;
-        
-        const retryResult = await supabase
-          .from("share_links")
-          .insert(retryData);
-        
-        error = retryResult.error;
+      if (!error && insertData.view_id) {
+        console.log('[testing] Successfully created share link with view_id:', insertData.view_id);
       }
 
       setLoading(false);
