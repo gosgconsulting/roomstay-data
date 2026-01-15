@@ -3802,11 +3802,14 @@ export default function SlideViewPage() {
     }
   };
 
-  // Get comparison data based on selection - use comparisonTotals from pivot_data
+  // Get comparison data based on selection - use comparisonTotals from hook (same source of truth)
   const comparisonData = useMemo(() => {
-    if (!comparisonTotals) return null;
+    if (!comparisonTotals) {
+      console.log('[testing] No comparisonTotals available for comparisonData');
+      return null;
+    }
     
-    // Aggregate comparison totals from all channels
+    // Aggregate comparison totals from all channels (same source as current data)
     const overview = {
       impressions: (comparisonTotals.metasearch?.impressions || 0) + (comparisonTotals.sem?.impressions || 0) + (comparisonTotals.social?.impressions || 0),
       clicks: (comparisonTotals.metasearch?.clicks || 0) + (comparisonTotals.sem?.clicks || 0) + (comparisonTotals.social?.clicks || 0),
@@ -3815,14 +3818,19 @@ export default function SlideViewPage() {
       bookings: (comparisonTotals.metasearch?.bookings || 0) + (comparisonTotals.sem?.bookings || 0) + (comparisonTotals.social?.bookings || 0),
     };
     
+    // Calculate derived metrics for consistency with current data calculation
+    const derived = calculateDerivedMetrics(overview);
+    
     if (comparisonType === "previous_period") {
       return {
         ...overview,
+        ...derived,
         label: "vs Previous Period",
       };
     } else if (comparisonType === "previous_year") {
       return {
         ...overview,
+        ...derived,
         label: "vs Previous Year",
       };
     }
@@ -3854,19 +3862,53 @@ export default function SlideViewPage() {
   }, [currentTotals]);
 
   // Calculate comparison metrics if enabled
+  // Use derived metrics from comparisonData if available (already calculated), otherwise calculate them
   const comparisonMetrics = useMemo(() => {
     if (!comparisonData) return null;
+    
+    // comparisonData should always have base metrics and derived metrics after our fix
+    // Type assertion to ensure TypeScript knows the structure
+    const data = comparisonData as {
+      impressions: number;
+      clicks: number;
+      cost: number;
+      revenue: number;
+      bookings: number;
+      ctr?: number;
+      conversionRate?: number;
+      cpc?: number;
+      roas?: number;
+      costOfSale?: number;
+    };
+    
+    // If derived metrics are already calculated, use them
+    if (data.ctr !== undefined && data.cpc !== undefined && data.roas !== undefined) {
+      return {
+        impressions: data.impressions || 0,
+        clicks: data.clicks || 0,
+        bookings: data.bookings || 0,
+        ctr: data.ctr || 0,
+        conversionRate: data.conversionRate || 0,
+        cpc: data.cpc || 0,
+        cost: data.cost || 0,
+        revenue: data.revenue || 0,
+        roas: data.roas || 0,
+        costOfSale: data.costOfSale || 0,
+      };
+    }
+    
+    // Fallback: calculate derived metrics (shouldn't happen after our fix, but keep for safety)
     return {
-      impressions: comparisonData.impressions,
-      clicks: comparisonData.clicks,
-      bookings: comparisonData.bookings,
-      ctr: comparisonData.impressions > 0 ? (comparisonData.clicks / comparisonData.impressions) * 100 : 0,
-      conversionRate: comparisonData.clicks > 0 ? (comparisonData.bookings / comparisonData.clicks) * 100 : 0,
-      cpc: comparisonData.clicks > 0 ? comparisonData.cost / comparisonData.clicks : 0,
-      cost: comparisonData.cost,
-      revenue: comparisonData.revenue,
-      roas: comparisonData.cost > 0 ? comparisonData.revenue / comparisonData.cost : 0,
-      costOfSale: comparisonData.revenue > 0 ? (comparisonData.cost / comparisonData.revenue) * 100 : 0,
+      impressions: data.impressions || 0,
+      clicks: data.clicks || 0,
+      bookings: data.bookings || 0,
+      ctr: (data.impressions || 0) > 0 ? ((data.clicks || 0) / (data.impressions || 1)) * 100 : 0,
+      conversionRate: (data.clicks || 0) > 0 ? ((data.bookings || 0) / (data.clicks || 1)) * 100 : 0,
+      cpc: (data.clicks || 0) > 0 ? (data.cost || 0) / (data.clicks || 1) : 0,
+      cost: data.cost || 0,
+      revenue: data.revenue || 0,
+      roas: (data.cost || 0) > 0 ? (data.revenue || 0) / (data.cost || 1) : 0,
+      costOfSale: (data.revenue || 0) > 0 ? ((data.cost || 0) / (data.revenue || 1)) * 100 : 0,
     };
   }, [comparisonData]);
 
@@ -3902,48 +3944,65 @@ export default function SlideViewPage() {
   }, []);
 
   // Get channel-specific comparison data - memoized
+  // Use comparisonTotals from hook (same source of truth as current data) instead of directly from pivot_data
   const getChannelComparisonMetrics = useCallback((channel: 'metasearch' | 'sem' | 'social') => {
-    // Use pivot_data if available
-    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-    if (pivotData?.channels?.[channel]) {
-      const channelData = pivotData.channels[channel];
-      if (comparisonType === "previous_period" && channelData.previous_period) {
-        return {
-          ...channelData.previous_period,
-          label: "vs Previous Period",
-        };
-      } else if (comparisonType === "previous_year" && channelData.previous_year) {
-        return {
-          ...channelData.previous_year,
-          label: "vs Previous Year",
-        };
-      }
+    // Use comparisonTotals from hook to ensure consistency with current data source
+    if (!comparisonTotals) return null;
+    
+    const channelComparisonData = comparisonTotals[channel];
+    if (!channelComparisonData) return null;
+    
+    // Always calculate derived metrics even if base values are 0
+    // This ensures we can show percentage changes even when values are small
+    const derived = calculateDerivedMetrics(channelComparisonData);
+    
+    if (comparisonType === "previous_period") {
+      return {
+        ...derived,
+        label: "vs Previous Period",
+      };
+    } else if (comparisonType === "previous_year") {
+      return {
+        ...derived,
+        label: "vs Previous Year",
+      };
     }
     
-    // No fallback - return null if no comparison data available
     return null;
-  }, [slideReport?.pivot_data, comparisonType]);
+  }, [comparisonTotals, comparisonType]);
 
-  // Get overview comparison metrics from pivot_data - memoized
+  // Get overview comparison metrics - memoized
+  // Use comparisonTotals from hook (same source of truth as current data) instead of directly from pivot_data
   const getOverviewComparisonMetrics = useCallback(() => {
     if (comparisonType === 'none') return null;
+    if (!comparisonTotals) return null;
     
-    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-    if (pivotData?.overview) {
-      if (comparisonType === "previous_period" && pivotData.overview.previous_period) {
-        return {
-          ...pivotData.overview.previous_period,
-          label: "vs Previous Period",
-        };
-      } else if (comparisonType === "previous_year" && pivotData.overview.previous_year) {
-        return {
-          ...pivotData.overview.previous_year,
-          label: "vs Previous Year",
-        };
-      }
+    // Aggregate comparison totals from all channels (same logic as comparisonData)
+    const overview = {
+      impressions: (comparisonTotals.metasearch?.impressions || 0) + (comparisonTotals.sem?.impressions || 0) + (comparisonTotals.social?.impressions || 0),
+      clicks: (comparisonTotals.metasearch?.clicks || 0) + (comparisonTotals.sem?.clicks || 0) + (comparisonTotals.social?.clicks || 0),
+      cost: (comparisonTotals.metasearch?.cost || 0) + (comparisonTotals.sem?.cost || 0) + (comparisonTotals.social?.cost || 0),
+      revenue: (comparisonTotals.metasearch?.revenue || 0) + (comparisonTotals.sem?.revenue || 0) + (comparisonTotals.social?.revenue || 0),
+      bookings: (comparisonTotals.metasearch?.bookings || 0) + (comparisonTotals.sem?.bookings || 0) + (comparisonTotals.social?.bookings || 0),
+    };
+    
+    // Calculate derived metrics for comparison
+    const derived = calculateDerivedMetrics(overview);
+    
+    if (comparisonType === "previous_period") {
+      return {
+        ...derived,
+        label: "vs Previous Period",
+      };
+    } else if (comparisonType === "previous_year") {
+      return {
+        ...derived,
+        label: "vs Previous Year",
+      };
     }
+    
     return null;
-  }, [slideReport?.pivot_data, comparisonType]);
+  }, [comparisonTotals, comparisonType]);
 
   // Skeleton loader for KPI Cards - memoized
   const renderKPICardsSkeleton = useCallback(() => (
@@ -4015,7 +4074,29 @@ export default function SlideViewPage() {
         // Use channel-specific comparison if provided, otherwise fall back to global
         const effectiveCompMetrics = channelCompMetrics !== undefined ? channelCompMetrics : comparisonMetrics;
         const compValue = effectiveCompMetrics ? effectiveCompMetrics[kpi.key as keyof typeof effectiveCompMetrics] : null;
-        const percentChange = compValue !== null ? calculatePercentChange(kpi.value, compValue as number) : null;
+        
+        // Calculate percent change - only if both values are valid numbers
+        let percentChange: number | null = null;
+        if (compValue !== null && compValue !== undefined && typeof compValue === 'number' && !isNaN(compValue)) {
+          // Only calculate percentage if comparison value is meaningful (not 0)
+          // If comparison is 0, it likely means:
+          // 1. No data in comparison period (shouldn't show percentage)
+          // 2. Filters don't match comparison period (shouldn't show percentage)
+          if (compValue === 0) {
+            // Don't show percentage when comparison is 0 - it's misleading
+            // (would show 100% even though there's no meaningful comparison)
+            percentChange = null;
+          } else {
+            // Calculate percentage change when we have a valid comparison value
+            percentChange = calculatePercentChange(kpi.value, compValue);
+          }
+          
+          // Hide percentage if both values are exactly 0 (no meaningful comparison)
+          if (kpi.value === 0 && compValue === 0) {
+            percentChange = null;
+          }
+        }
+        
         const isPositive = percentChange !== null && percentChange >= 0;
         // For cost metrics, lower is better
         const isCostMetric = ['cpc', 'cost', 'costOfSale'].includes(kpi.key);
@@ -4053,7 +4134,7 @@ export default function SlideViewPage() {
         );
       })}
     </div>
-  ), [comparisonMetrics, comparisonData]);
+  ), [comparisonMetrics, comparisonData, getChannelComparisonMetrics]);
 
   // Report breakdown with reordered columns - use currentTotals
   const REPORT_BREAKDOWN = useMemo(() => {
@@ -5817,22 +5898,66 @@ export default function SlideViewPage() {
         </div>
 
         {/* Comparison info banner - Show on all tabs except Budget */}
-        {selectedTab !== "budget" && comparisonType !== "none" && (
-          <div className="mb-4 p-3 bg-muted rounded-lg text-sm">
-            {comparisonType === "previous_period" && (
-              <span>
-                Comparing {selectedYear !== 'all' ? selectedYear : 'Current Period'} 
-                {selectedMonth !== 'all' ? ` ${selectedMonth}` : ''} vs Previous Period
-              </span>
-            )}
-            {comparisonType === "previous_year" && (
-              <span>
-                Comparing {selectedYear !== 'all' ? selectedYear : 'Current Year'} 
-                {selectedMonth !== 'all' ? ` ${selectedMonth}` : ''} vs Previous Year
-              </span>
-            )}
-          </div>
-        )}
+        {selectedTab !== "budget" && comparisonType !== "none" && (() => {
+          // Calculate previous period/year information
+          const getPreviousPeriodInfo = () => {
+            if (comparisonType === "previous_period") {
+              if (selectedMonth !== 'all' && selectedYear !== 'all') {
+                // Specific month selected - previous period is previous month
+                const monthIndex = MONTH_NAMES.indexOf(selectedMonth);
+                const year = parseInt(selectedYear);
+                const currentDate = new Date(year, monthIndex, 1);
+                const previousDate = new Date(year, monthIndex - 1, 1);
+                const previousMonth = MONTH_NAMES[previousDate.getMonth()];
+                const previousYear = previousDate.getFullYear();
+                return { month: previousMonth, year: previousYear };
+              } else if (selectedYear !== 'all') {
+                // Year selected but all months - previous period is previous year
+                const year = parseInt(selectedYear);
+                return { month: null, year: year - 1 };
+              }
+              // All years and all months - can't determine specific previous period
+              return { month: null, year: null };
+            } else if (comparisonType === "previous_year") {
+              if (selectedYear !== 'all') {
+                const year = parseInt(selectedYear);
+                return { month: selectedMonth !== 'all' ? selectedMonth : null, year: year - 1 };
+              }
+              return { month: null, year: null };
+            }
+            return { month: null, year: null };
+          };
+
+          const prevInfo = getPreviousPeriodInfo();
+          const currentPeriod = selectedYear !== 'all' 
+            ? `${selectedYear}${selectedMonth !== 'all' ? ` ${selectedMonth}` : ''}`
+            : (selectedMonth !== 'all' ? selectedMonth : 'Current Period');
+          
+          return (
+            <div className="mb-4 p-3 bg-muted rounded-lg text-sm">
+              {comparisonType === "previous_period" && (
+                <span>
+                  Comparing {currentPeriod} vs Previous Period
+                  {prevInfo.year !== null && (
+                    <span>
+                      {' '}({prevInfo.month ? `${prevInfo.month} ` : ''}{prevInfo.year})
+                    </span>
+                  )}
+                </span>
+              )}
+              {comparisonType === "previous_year" && (
+                <span>
+                  Comparing {currentPeriod} vs Previous Year
+                  {prevInfo.year !== null && (
+                    <span>
+                      {' '}({prevInfo.month ? `${prevInfo.month} ` : ''}{prevInfo.year})
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+          );
+        })()}
 
             {/* Overview Tab */}
             <TabsContent value="overview" className="space-y-6">

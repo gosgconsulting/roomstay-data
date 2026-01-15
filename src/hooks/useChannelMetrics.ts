@@ -327,10 +327,158 @@ export function useChannelMetrics({
   ]);
 
   // Get comparison totals based on comparison type
+  // IMPORTANT: When filters are applied, we need to filter comparison data the same way as current data
+  // Otherwise, comparison values will be incorrect (unfiltered vs filtered)
   const comparisonTotals = useMemo((): ChannelMetrics | null => {
     if (comparisonType === 'none') return null;
     if (!pivotData?.channels) return null;
 
+    // Check if any filters are applied - if so, we need to filter comparison data too
+    const hasFilters = hasAnyActiveFilters(filterValues, filterDimensionValues);
+    const channelsWithFilters = getChannelsWithFilters(filterValues, filterDimensionValues);
+
+    // Build comparison period date range
+    let comparisonDateRange: { start: Date; end: Date } | undefined;
+    if (selectedMonth !== 'all' && selectedYear !== 'all') {
+      const monthNum = MONTH_NAMES.indexOf(selectedMonth);
+      const yearNum = parseInt(selectedYear);
+      const currentDate = new Date(yearNum, monthNum, 1);
+      
+      if (comparisonType === 'previous_period') {
+        // Previous period: previous month
+        const prevDate = new Date(yearNum, monthNum - 1, 1);
+        comparisonDateRange = {
+          start: prevDate,
+          end: new Date(yearNum, monthNum, 0, 23, 59, 59), // Last day of previous month
+        };
+      } else if (comparisonType === 'previous_year') {
+        // Previous year: same month last year
+        comparisonDateRange = {
+          start: new Date(yearNum - 1, monthNum, 1),
+          end: new Date(yearNum - 1, monthNum + 1, 0, 23, 59, 59),
+        };
+      }
+    } else if (selectedYear !== 'all') {
+      const yearNum = parseInt(selectedYear);
+      if (comparisonType === 'previous_period') {
+        // Previous period: previous year (when all months selected)
+        comparisonDateRange = {
+          start: new Date(yearNum - 1, 0, 1),
+          end: new Date(yearNum - 1, 11, 31, 23, 59, 59),
+        };
+      } else if (comparisonType === 'previous_year') {
+        // Previous year: same year range last year
+        comparisonDateRange = {
+          start: new Date(yearNum - 1, 0, 1),
+          end: new Date(yearNum - 1, 11, 31, 23, 59, 59),
+        };
+      }
+    }
+
+    // If filters are applied, filter comparison period raw data
+    if (hasFilters && comparisonDateRange) {
+      const channelTotals: Record<string, MetricData> = {};
+      
+      for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+        const channelFilterValues = filterValues[channel] || {};
+        const hasChannelFilters = channelsWithFilters.has(channel);
+        
+        if (hasChannelFilters) {
+          // Filter raw data for comparison period
+          const rawDataRows = (channelData as any).rawDataRows || [];
+          
+          if (rawDataRows.length > 0) {
+            // Filter rows by comparison period date range and dimension filters
+            const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, comparisonDateRange);
+            
+            if (filteredRows.length > 0) {
+              // Build metric mapping and aggregate
+              const dimensionMap = (channelData as any).dimensionMap || {};
+              const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+              
+              const metrics: MetricData = {
+                impressions: 0,
+                clicks: 0,
+                cost: 0,
+                revenue: 0,
+                bookings: 0,
+              };
+              
+              filteredRows.forEach((row) => {
+                const rowData = row.dimension_values || row;
+                
+                const getMetricValue = (keys: string[]): number => {
+                  for (const key of keys) {
+                    const value = rowData[key];
+                    if (value !== undefined && value !== null) {
+                      if (typeof value === 'number') {
+                        return isNaN(value) ? 0 : value;
+                      }
+                      const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
+                      if (!isNaN(parsed)) {
+                        return parsed;
+                      }
+                    }
+                  }
+                  return 0;
+                };
+                
+                metrics.impressions += getMetricValue(getMetricKeys('impressions', nameToIdsMap));
+                metrics.clicks += getMetricValue(getMetricKeys('clicks', nameToIdsMap));
+                metrics.cost += getMetricValue(getMetricKeys('cost', nameToIdsMap));
+                metrics.revenue += getMetricValue(getMetricKeys('revenue', nameToIdsMap));
+                metrics.bookings += getMetricValue(getMetricKeys('bookings', nameToIdsMap));
+              });
+              
+              channelTotals[channel] = metrics;
+            } else {
+              // No filtered rows - set to zeros
+              channelTotals[channel] = {
+                impressions: 0,
+                clicks: 0,
+                cost: 0,
+                revenue: 0,
+                bookings: 0,
+              };
+            }
+          } else {
+            // No raw data - fall back to pre-computed (unfiltered)
+            if (comparisonType === 'previous_period' && (channelData as any).previous_period) {
+              channelTotals[channel] = (channelData as any).previous_period;
+            } else if (comparisonType === 'previous_year' && (channelData as any).previous_year) {
+              channelTotals[channel] = (channelData as any).previous_year;
+            } else {
+              channelTotals[channel] = {
+                impressions: 0,
+                clicks: 0,
+                cost: 0,
+                revenue: 0,
+                bookings: 0,
+              };
+            }
+          }
+        } else {
+          // No filters for this channel - use pre-computed data
+          if (comparisonType === 'previous_period' && (channelData as any).previous_period) {
+            channelTotals[channel] = (channelData as any).previous_period;
+          } else if (comparisonType === 'previous_year' && (channelData as any).previous_year) {
+            channelTotals[channel] = (channelData as any).previous_year;
+          } else {
+            channelTotals[channel] = {
+              impressions: 0,
+              clicks: 0,
+              cost: 0,
+              revenue: 0,
+              bookings: 0,
+            };
+          }
+        }
+      }
+      
+      return channelTotals as ChannelMetrics;
+    }
+
+    // No filters - use pre-computed data (fast path)
     const channelTotals: Record<string, MetricData> = {};
     for (const [channel, channelData] of Object.entries(pivotData.channels)) {
       if (comparisonType === 'previous_period' && (channelData as any).previous_period) {
@@ -348,7 +496,7 @@ export function useChannelMetrics({
       }
     }
     return channelTotals as ChannelMetrics;
-  }, [comparisonType, pivotData]);
+  }, [comparisonType, pivotData, filterValues, filterDimensionValues, selectedYear, selectedMonth]);
 
   return {
     currentTotals,
