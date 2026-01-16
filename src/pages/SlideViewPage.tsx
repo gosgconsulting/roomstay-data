@@ -1169,6 +1169,11 @@ export default function SlideViewPage() {
     sem: {},
     social: {},
   });
+  
+  // Debug logging to track when filterValues changes
+  useEffect(() => {
+    console.log('[testing] filterValues state changed:', filterValues);
+  }, [filterValues]);
 
   // Filter dimension values state (for dropdowns) - channel -> dimensionId -> values[]
   // Moved here so it's available for useMemo hooks
@@ -1596,6 +1601,11 @@ export default function SlideViewPage() {
 
   // Get current totals - now uses unified filteredData hook (single source of truth)
   const currentTotals = filteredData.channelTotals;
+  
+  // Debug logging to track when currentTotals updates
+  useEffect(() => {
+    console.log('[testing] currentTotals updated:', currentTotals);
+  }, [currentTotals]);
 
   // Helper function to check if any channel has non-zero data
   const hasAnyData = (totals: typeof currentTotals): boolean => {
@@ -3271,15 +3281,21 @@ export default function SlideViewPage() {
     
     if (!viewId || viewId === 'unsaved') {
       // Master view - reset to defaults
+      console.log('[testing] Applying master view - resetting to defaults');
       setSelectedYear(currentYearStr);
       setSelectedMonth(currentMonthName);
       setComparisonType('none');
       setChartTimeRange('last_6_months');
+      // Deep clone to ensure React detects the change
       setFilterValues({
         metasearch: {},
         sem: {},
         social: {},
       });
+      // Reset flag after state updates complete
+      setTimeout(() => {
+        isApplyingViewRef.current = false;
+      }, 0);
       return;
     }
 
@@ -3294,6 +3310,8 @@ export default function SlideViewPage() {
       return;
     }
     
+    console.log('[testing] Applying view:', view.name, 'with filter_values:', view.filter_values);
+    
     // Apply view settings immediately
     setSelectedYear(view.selected_year);
     setSelectedMonth(view.selected_month);
@@ -3303,17 +3321,30 @@ export default function SlideViewPage() {
     } else {
       setChartTimeRange('last_6_months'); // Default
     }
-    // Apply filter values - this will filter the data on all tabs including Overview
-    setFilterValues(view.filter_values || {
-      metasearch: {},
-      sem: {},
-      social: {},
-    });
+    
+    // Deep clone filter values to ensure React detects the state change
+    // This is critical for triggering recalculation in useFilteredSlideData
+    const clonedFilterValues = view.filter_values 
+      ? JSON.parse(JSON.stringify(view.filter_values))
+      : {
+          metasearch: {},
+          sem: {},
+          social: {},
+        };
+    
+    console.log('[testing] Setting filterValues (cloned):', clonedFilterValues);
+    setFilterValues(clonedFilterValues);
 
     toast({
       title: "View applied",
       description: `View "${view.name}" has been applied.`,
     });
+    
+    // Reset flag after state updates complete
+    setTimeout(() => {
+      isApplyingViewRef.current = false;
+      console.log('[testing] View application complete, isApplyingViewRef reset');
+    }, 0);
   }, [views, currentYearStr, currentMonthName]);
 
   // Delete a saved view
@@ -3347,6 +3378,7 @@ export default function SlideViewPage() {
       // Only apply if views are loaded and we have a valid view ID (not Unsaved)
       const view = views.find(v => v.id === selectedViewId);
       if (view) {
+        console.log('[testing] useEffect applying view from selectedViewId change:', view.name);
         isApplyingViewRef.current = true;
         // Apply view settings
         setSelectedYear(view.selected_year);
@@ -3357,11 +3389,23 @@ export default function SlideViewPage() {
         } else {
           setChartTimeRange('last_6_months');
         }
-        setFilterValues(view.filter_values || {
-          metasearch: {},
-          sem: {},
-          social: {},
-        });
+        
+        // Deep clone filter values to ensure React detects the state change
+        const clonedFilterValues = view.filter_values 
+          ? JSON.parse(JSON.stringify(view.filter_values))
+          : {
+              metasearch: {},
+              sem: {},
+              social: {},
+            };
+        
+        console.log('[testing] useEffect setting filterValues (cloned):', clonedFilterValues);
+        setFilterValues(clonedFilterValues);
+        
+        // Reset flag after state updates complete
+        setTimeout(() => {
+          isApplyingViewRef.current = false;
+        }, 0);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3866,6 +3910,7 @@ export default function SlideViewPage() {
 
   // Calculate current metrics from currentTotals
   const currentMetrics = useMemo(() => {
+    console.log('[testing] Recalculating currentMetrics from currentTotals:', currentTotals);
     const totals = currentTotals;
     const overview = {
       impressions: (totals.metasearch?.impressions || 0) + (totals.sem?.impressions || 0) + (totals.social?.impressions || 0),

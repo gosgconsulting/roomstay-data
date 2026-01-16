@@ -98,6 +98,8 @@ export function useFilteredSlideData({
 
   // Calculate all filtered data in a single memoized computation
   const filteredData = useMemo(() => {
+    console.log('[testing] useFilteredSlideData recalculating with filterValues:', filterValues, 'selectedYear:', selectedYear, 'selectedMonth:', selectedMonth);
+    
     // Early return if no pivot data
     if (!pivotData?.channels) {
       const emptyMetrics: MetricData = {
@@ -235,20 +237,60 @@ export function useFilteredSlideData({
           };
         }
       } else {
-        // This channel has no filters - use pre-computed data (fast path)
+        // This channel has no filters
         filteredRawRows[channel] = rawDataRows; // Store all rows for consistency
 
-        if (selectedMonth && selectedMonth !== 'all') {
-          const monthNum = MONTH_NAMES.indexOf(selectedMonth) + 1;
-          const monthKey =
-            selectedYear !== 'all'
-              ? `${selectedYear}-${monthNum.toString().padStart(2, '0')}`
-              : null;
+        // IMPORTANT: If ANY channel has filters, channels WITHOUT filters should show zeros
+        // This ensures that when filtering to only one channel (e.g., metasearch),
+        // the other channels (sem, social) show zeros instead of their full unfiltered data
+        if (hasFilters) {
+          // Other channels have filters, so this channel should be zeroed out
+          console.log(`[testing] Channel ${channel} has no filters but other channels do - zeroing out`);
+          channelTotals[channel] = {
+            impressions: 0,
+            clicks: 0,
+            cost: 0,
+            revenue: 0,
+            bookings: 0,
+          };
+          // Don't add to monthlyDataMap when zeroed out
+        } else {
+          // No filters on any channel - use pre-computed data (fast path)
+          if (selectedMonth && selectedMonth !== 'all') {
+            const monthNum = MONTH_NAMES.indexOf(selectedMonth) + 1;
+            const monthKey =
+              selectedYear !== 'all'
+                ? `${selectedYear}-${monthNum.toString().padStart(2, '0')}`
+                : null;
 
-          if (monthKey) {
-            const monthlyData = (channelData as any).monthly?.[monthKey];
-            if (monthlyData) {
-              channelTotals[channel] = monthlyData;
+            if (monthKey) {
+              const monthlyData = (channelData as any).monthly?.[monthKey];
+              if (monthlyData) {
+                channelTotals[channel] = monthlyData;
+              } else {
+                channelTotals[channel] = {
+                  impressions: 0,
+                  clicks: 0,
+                  cost: 0,
+                  revenue: 0,
+                  bookings: 0,
+                };
+              }
+            } else {
+              channelTotals[channel] =
+                (channelData as any).current || {
+                  impressions: 0,
+                  clicks: 0,
+                  cost: 0,
+                  revenue: 0,
+                  bookings: 0,
+                };
+            }
+          } else if (selectedYear !== 'all') {
+            const yearNum = parseInt(selectedYear);
+            const yearlyData = (channelData as any).yearly?.[String(yearNum)];
+            if (yearlyData) {
+              channelTotals[channel] = yearlyData;
             } else {
               channelTotals[channel] = {
                 impressions: 0,
@@ -268,45 +310,22 @@ export function useFilteredSlideData({
                 bookings: 0,
               };
           }
-        } else if (selectedYear !== 'all') {
-          const yearNum = parseInt(selectedYear);
-          const yearlyData = (channelData as any).yearly?.[String(yearNum)];
-          if (yearlyData) {
-            channelTotals[channel] = yearlyData;
-          } else {
-            channelTotals[channel] = {
-              impressions: 0,
-              clicks: 0,
-              cost: 0,
-              revenue: 0,
-              bookings: 0,
-            };
+
+          // Build monthly data from pre-computed data
+          if (channelData.monthly) {
+            Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
+              const [year, monthNum] = monthKey.split('-').map(Number);
+              const month = MONTH_NAMES[monthNum - 1];
+              const key = `${year}-${month}`;
+
+              if (!monthlyDataMap.has(key)) {
+                monthlyDataMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
+              }
+
+              const entry = monthlyDataMap.get(key)!;
+              entry[channel as 'metasearch' | 'sem' | 'social'] = metrics.revenue || 0;
+            });
           }
-        } else {
-          channelTotals[channel] =
-            (channelData as any).current || {
-              impressions: 0,
-              clicks: 0,
-              cost: 0,
-              revenue: 0,
-              bookings: 0,
-            };
-        }
-
-        // Build monthly data from pre-computed data
-        if (channelData.monthly) {
-          Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
-            const [year, monthNum] = monthKey.split('-').map(Number);
-            const month = MONTH_NAMES[monthNum - 1];
-            const key = `${year}-${month}`;
-
-            if (!monthlyDataMap.has(key)) {
-              monthlyDataMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
-            }
-
-            const entry = monthlyDataMap.get(key)!;
-            entry[channel as 'metasearch' | 'sem' | 'social'] = metrics.revenue || 0;
-          });
         }
       }
     }
@@ -324,6 +343,7 @@ export function useFilteredSlideData({
         : monthlyData;
 
     console.log('[testing] Final monthlyData from useFilteredSlideData:', filteredMonthlyData);
+    console.log('[testing] Final channelTotals from useFilteredSlideData:', channelTotals);
 
     // Ensure all channels have totals (default to zeros if missing)
     const defaultMetrics: MetricData = {
@@ -334,12 +354,16 @@ export function useFilteredSlideData({
       bookings: 0,
     };
 
+    const finalChannelTotals = {
+      metasearch: channelTotals.metasearch || defaultMetrics,
+      sem: channelTotals.sem || defaultMetrics,
+      social: channelTotals.social || defaultMetrics,
+    };
+
+    console.log('[testing] Final channelTotals (with defaults):', finalChannelTotals);
+
     return {
-      channelTotals: {
-        metasearch: channelTotals.metasearch || defaultMetrics,
-        sem: channelTotals.sem || defaultMetrics,
-        social: channelTotals.social || defaultMetrics,
-      },
+      channelTotals: finalChannelTotals,
       monthlyData: filteredMonthlyData,
       filteredRawRows,
     };
