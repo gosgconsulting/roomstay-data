@@ -137,8 +137,12 @@ export function calculateBudgetMonthlyData(
   hasFilters: boolean,
   getFilteredRowsForChannel: (channel: string) => RawDataRow[]
 ): BudgetMonthlyRow[] {
-  // If a view is selected, construct monthly data from view budgets and filtered data
-  if (selectedViewId && viewBudgets.length > 0) {
+  // Process channel data for both Master View (no view selected) and custom views
+  // Master View: process all channel data without budget data
+  // Custom View: process channel data + add budget data from viewBudgets
+  const isMasterView = !selectedViewId || viewBudgets.length === 0;
+  
+  if (isMasterView || (selectedViewId && viewBudgets.length > 0)) {
     const monthlyDataMap: Record<string, BudgetMonthlyRow> = {};
 
     // Get actual costs and revenue from filtered rawDataRows (when filters are applied)
@@ -251,6 +255,7 @@ export function calculateBudgetMonthlyData(
               const monthName = MONTH_NAMES[monthNum - 1];
               const yearMonthKey = `${monthName} ${year}`;
 
+              // Initialize the month entry if it doesn't exist
               if (!monthlyDataMap[yearMonthKey]) {
                 monthlyDataMap[yearMonthKey] = {
                   month: yearMonthKey,
@@ -269,6 +274,7 @@ export function calculateBudgetMonthlyData(
               const cost = metrics.cost || 0;
               const revenue = metrics.revenue || 0;
 
+              // Set values for the specific channel (don't overwrite other channels' data)
               if (channel === 'metasearch') {
                 monthlyDataMap[yearMonthKey].metasearchActual = cost;
                 monthlyDataMap[yearMonthKey].metasearch = revenue;
@@ -285,9 +291,10 @@ export function calculateBudgetMonthlyData(
       });
     }
 
-    // Add budgets from view budgets
-    viewBudgets.forEach((budget) => {
-      Object.entries(budget.budget_data).forEach(([monthKey, amount]) => {
+    // Add budgets from view budgets (only if a view is selected)
+    if (!isMasterView && viewBudgets.length > 0) {
+      viewBudgets.forEach((budget) => {
+        Object.entries(budget.budget_data).forEach(([monthKey, amount]) => {
         const [year, month] = monthKey.split('-');
         const monthName = MONTH_NAMES[parseInt(month) - 1];
         const yearMonthKey = `${monthName} ${year}`;
@@ -318,8 +325,9 @@ export function calculateBudgetMonthlyData(
         monthlyDataMap[yearMonthKey].metasearchBudget += budgetPerChannel;
         monthlyDataMap[yearMonthKey].semBudget += budgetPerChannel;
         monthlyDataMap[yearMonthKey].socialBudget += budgetPerChannel;
+        });
       });
-    });
+    }
 
     let monthlyDataArray = Object.values(monthlyDataMap).sort((a, b) => {
       // Parse "Month Year" format (e.g., "November 2025")
@@ -339,6 +347,46 @@ export function calculateBudgetMonthlyData(
         const [, year] = item.month.split(' ');
         return year === selectedYear;
       });
+
+      // Ensure all 12 months are present for the selected year
+      // Create a map for quick lookup using full month string as key to avoid any parsing issues
+      const dataMap = new Map<string, BudgetMonthlyRow>();
+      monthlyDataArray.forEach(item => {
+        const [monthName] = item.month.split(' ');
+        // Use month name as key, but verify it matches the selected year
+        const [, year] = item.month.split(' ');
+        if (year === selectedYear) {
+          dataMap.set(monthName, item);
+        }
+      });
+
+      // Generate all 12 months for the selected year
+      const allMonths: BudgetMonthlyRow[] = MONTH_NAMES.map(monthName => {
+        const yearMonthKey = `${monthName} ${selectedYear}`;
+        if (dataMap.has(monthName)) {
+          // Return the existing data, ensuring the month string is correct
+          const existingData = dataMap.get(monthName)!;
+          return {
+            ...existingData,
+            month: yearMonthKey, // Ensure month string matches the selected year
+          };
+        }
+        // Create empty row for missing month
+        return {
+          month: yearMonthKey,
+          metasearchBudget: 0,
+          semBudget: 0,
+          socialBudget: 0,
+          metasearchActual: 0,
+          semActual: 0,
+          socialActual: 0,
+          metasearch: 0,
+          sem: 0,
+          social: 0,
+        };
+      });
+
+      return allMonths;
     }
 
     return monthlyDataArray;
@@ -371,6 +419,46 @@ export function calculateBudgetMonthlyData(
         const [, year] = item.month.split(' ');
         return year === selectedYear;
       });
+
+      // Ensure all 12 months are present for the selected year
+      // Create a map for quick lookup using full month string as key to avoid any parsing issues
+      const dataMap = new Map<string, BudgetMonthlyRow>();
+      monthlyData.forEach(item => {
+        const [monthName] = item.month.split(' ');
+        // Use month name as key, but verify it matches the selected year
+        const [, year] = item.month.split(' ');
+        if (year === selectedYear) {
+          dataMap.set(monthName, item);
+        }
+      });
+
+      // Generate all 12 months for the selected year
+      const allMonths: BudgetMonthlyRow[] = MONTH_NAMES.map(monthName => {
+        const yearMonthKey = `${monthName} ${selectedYear}`;
+        if (dataMap.has(monthName)) {
+          // Return the existing data, ensuring the month string is correct
+          const existingData = dataMap.get(monthName)!;
+          return {
+            ...existingData,
+            month: yearMonthKey, // Ensure month string matches the selected year
+          };
+        }
+        // Create empty row for missing month
+        return {
+          month: yearMonthKey,
+          metasearchBudget: 0,
+          semBudget: 0,
+          socialBudget: 0,
+          metasearchActual: 0,
+          semActual: 0,
+          socialActual: 0,
+          metasearch: 0,
+          sem: 0,
+          social: 0,
+        };
+      });
+
+      return allMonths;
     }
     return monthlyData;
   }
