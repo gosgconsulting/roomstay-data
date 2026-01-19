@@ -2,6 +2,12 @@ import { TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Pagination,
   PaginationContent,
@@ -11,7 +17,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { Loader2 } from "lucide-react";
+import { Loader2, ChevronRight, Search } from "lucide-react";
 import { useEffect, useState, useMemo, Fragment } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
@@ -19,6 +25,7 @@ import { useUser } from "@/lib/auth";
 import { MONTH_NAMES } from "@/constants/slideViewConstants";
 import { isWithinInterval } from "date-fns";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
 
 interface BookingTabProps {
   accountId: string | undefined;
@@ -34,13 +41,22 @@ export function BookingTab({ accountId }: BookingTabProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [columns, setColumns] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
-  const [selectedMonth, setSelectedMonth] = useState<string>('all');
-  const [selectedHotel, setSelectedHotel] = useState<string>('all');
+  // Set default to current year and month
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = MONTH_NAMES[currentDate.getMonth()];
+  
+  const [selectedYear, setSelectedYear] = useState<string>(currentYear.toString());
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonth);
+  const [selectedHotels, setSelectedHotels] = useState<string[]>([]); // Empty array = all hotels
   const [hotelOptions, setHotelOptions] = useState<string[]>([]);
+  const [hotelFilterOpen, setHotelFilterOpen] = useState(false);
+  const [pendingHotels, setPendingHotels] = useState<string[]>([]);
+  const [hotelSearchTerm, setHotelSearchTerm] = useState('');
   const [dimensionNameToIdMap, setDimensionNameToIdMap] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [bookingStatuses, setBookingStatuses] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const loadBookingData = async () => {
@@ -218,22 +234,280 @@ export function BookingTab({ accountId }: BookingTabProps) {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedYear, selectedMonth, selectedHotel]);
+  }, [selectedYear, selectedMonth, selectedHotels]);
+
+  // Initialize pending hotels when popover opens
+  useEffect(() => {
+    if (hotelFilterOpen) {
+      const isFilterSet = selectedHotels.length > 0;
+      setPendingHotels(isFilterSet ? [...selectedHotels] : [...hotelOptions]);
+    }
+  }, [hotelFilterOpen, selectedHotels, hotelOptions]);
+
+  // Check if all hotels are selected
+  const isAllHotelsSelected = useMemo(() => {
+    if (selectedHotels.length === 0) return true; // No filter = all selected
+    return selectedHotels.length === hotelOptions.length;
+  }, [selectedHotels, hotelOptions]);
+
+  // Get display text for selected hotels
+  const hotelDisplayText = useMemo(() => {
+    if (isAllHotelsSelected) return 'All';
+    if (selectedHotels.length === 0) return '0 selected';
+    if (selectedHotels.length === 1) return selectedHotels[0];
+    return `${selectedHotels.length} selected`;
+  }, [selectedHotels, isAllHotelsSelected]);
+
+  // Filter hotels by search term
+  const filteredHotels = useMemo(() => {
+    if (!hotelSearchTerm) return hotelOptions;
+    return hotelOptions.filter(hotel => 
+      hotel.toLowerCase().includes(hotelSearchTerm.toLowerCase())
+    );
+  }, [hotelOptions, hotelSearchTerm]);
+
+  const handleApplyHotelFilter = () => {
+    setSelectedHotels(pendingHotels.length === hotelOptions.length ? [] : pendingHotels);
+    setHotelFilterOpen(false);
+    setHotelSearchTerm('');
+  };
+
+  // Helper function to find checkout date column
+  const getCheckoutDateColumn = useMemo(() => {
+    return columns.find(col => {
+      const colLower = col.toLowerCase();
+      return colLower.includes('checkout');
+    });
+  }, [columns]);
+
+  // Helper function to find booking number column
+  const getBookingNumberColumn = useMemo(() => {
+    return columns.find(col => {
+      const colLower = col.toLowerCase();
+      return colLower.includes('booking') && (colLower.includes('number') || colLower.includes('#') || colLower.includes('id') || colLower.includes('no'));
+    });
+  }, [columns]);
+
+  // Generate key from individual fields (used for loading statuses from DB)
+  const getBookingKeyFromFields = (hotel: string, bookingNumber: string, checkoutDate: string | Date): string => {
+    let checkoutDateStr = '';
+    if (checkoutDate) {
+      try {
+        const date = checkoutDate instanceof Date ? checkoutDate : new Date(checkoutDate);
+        if (!isNaN(date.getTime())) {
+          checkoutDateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+        }
+      } catch {
+        // Invalid date, use empty string
+      }
+    }
+    return `${String(hotel).trim()}|||${String(bookingNumber).trim()}|||${checkoutDateStr}`;
+  };
+
+  // Generate unique key for a booking row
+  const getBookingKey = (row: BookingDataRow): string => {
+    const hotel = String(row['Hotel'] || '').trim();
+    const bookingNumber = getBookingNumberColumn 
+      ? String(row[getBookingNumberColumn] || '').trim()
+      : '';
+    const checkoutDate = getCheckoutDateColumn
+      ? row[getCheckoutDateColumn]
+      : null;
+    
+    let checkoutDateStr = '';
+    if (checkoutDate) {
+      try {
+        const date = new Date(checkoutDate);
+        if (!isNaN(date.getTime())) {
+          checkoutDateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+        }
+      } catch {
+        // Invalid date, use empty string
+      }
+    }
+    
+    return `${hotel}|||${bookingNumber}|||${checkoutDateStr}`;
+  };
+
+  // Load booking statuses from database
+  useEffect(() => {
+    const loadBookingStatuses = async () => {
+      if (!accountId) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('booking_statuses')
+          .select('hotel, booking_number, checkout_date, status')
+          .eq('account_id', accountId);
+
+        if (error) {
+          // If table doesn't exist yet (migration not run), just log and continue
+          if (error.code === '42P01' || error.message?.includes('does not exist')) {
+            console.warn("Booking statuses table not found. Migration may need to be run.");
+            return;
+          }
+          throw error;
+        }
+
+        if (data) {
+          const statusMap: Record<string, string> = {};
+          data.forEach((status) => {
+            const key = getBookingKeyFromFields(
+              status.hotel,
+              status.booking_number,
+              status.checkout_date
+            );
+            statusMap[key] = status.status || '';
+          });
+          setBookingStatuses(statusMap);
+        }
+      } catch (err) {
+        console.error("Error loading booking statuses:", err);
+        // Don't block the component from rendering if status loading fails
+      }
+    };
+
+    loadBookingStatuses();
+  }, [accountId]);
+
+  // Get initial status based on checkout date
+  const getInitialStatus = (row: BookingDataRow): string => {
+    const checkoutDate = getCheckoutDateColumn ? row[getCheckoutDateColumn] : null;
+    if (!checkoutDate) return '';
+
+    try {
+      const date = new Date(checkoutDate);
+      if (isNaN(date.getTime())) return '';
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      date.setHours(0, 0, 0, 0);
+
+      // If checkout date is past today, default to "Confirmed"
+      if (date <= today) {
+        return 'Confirmed';
+      }
+      // Future bookings default to empty
+      return '';
+    } catch {
+      return '';
+    }
+  };
+
+  // Get status for a row (from DB or computed initial)
+  const getStatusForRow = (row: BookingDataRow): string => {
+    const key = getBookingKey(row);
+    if (key in bookingStatuses) {
+      const status = bookingStatuses[key];
+      return status || 'none'; // Return 'none' instead of empty string for Select component
+    }
+    const initialStatus = getInitialStatus(row);
+    return initialStatus || 'none'; // Return 'none' instead of empty string for Select component
+  };
+
+  // Handle status change
+  const handleStatusChange = async (row: BookingDataRow, newStatus: string) => {
+    if (!accountId) return;
+
+    const hotel = String(row['Hotel'] || '').trim();
+    const bookingNumber = getBookingNumberColumn 
+      ? String(row[getBookingNumberColumn] || '').trim()
+      : '';
+    const checkoutDate = getCheckoutDateColumn
+      ? row[getCheckoutDateColumn]
+      : null;
+
+    if (!hotel || !bookingNumber || !checkoutDate) {
+      toast({
+        title: "Error",
+        description: "Missing required fields (Hotel, Booking Number, or Checkout Date)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    let checkoutDateObj: Date;
+    try {
+      checkoutDateObj = new Date(checkoutDate);
+      if (isNaN(checkoutDateObj.getTime())) {
+        throw new Error("Invalid checkout date");
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Invalid checkout date format",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const checkoutDateStr = checkoutDateObj.toISOString().split('T')[0]; // YYYY-MM-DD format
+    const key = getBookingKey(row);
+
+    try {
+      // Upsert status to database
+      const { error } = await supabase
+        .from('booking_statuses')
+        .upsert({
+          account_id: accountId,
+          hotel,
+          booking_number: bookingNumber,
+          checkout_date: checkoutDateStr,
+          status: newStatus || '',
+        }, {
+          onConflict: 'account_id,hotel,booking_number,checkout_date'
+        });
+
+      if (error) {
+        // If table doesn't exist yet, show helpful message
+        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          toast({
+            title: "Database migration required",
+            description: "Please run the booking_statuses migration to enable status tracking.",
+            variant: "destructive",
+          });
+          return;
+        }
+        throw error;
+      }
+
+      // Update local state
+      setBookingStatuses(prev => ({
+        ...prev,
+        [key]: newStatus || '',
+      }));
+
+      toast({
+        title: "Status updated",
+        description: "Booking status has been saved",
+      });
+    } catch (err) {
+      console.error("Error saving booking status:", err);
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to save booking status",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Apply filters to booking data
   const filteredBookingData = useMemo(() => {
     let filtered = [...allBookingData];
 
-    // Filter by Hotel
-    if (selectedHotel !== 'all') {
+    // Filter by Hotels (multi-select)
+    if (selectedHotels.length > 0) {
       filtered = filtered.filter(row => {
         const hotelValue = row['Hotel'];
-        return hotelValue !== undefined && hotelValue !== null && String(hotelValue).trim() === selectedHotel;
+        if (hotelValue === undefined || hotelValue === null) return false;
+        return selectedHotels.includes(String(hotelValue).trim());
       });
     }
 
-    // Filter by Date (Year/Month)
-    if (selectedYear !== 'all' && selectedMonth !== 'all') {
+    // Filter by Checkout Date (Year/Month) - always filter by selected year and month
+    const checkoutDateColumn = getCheckoutDateColumn;
+    
+    if (checkoutDateColumn && selectedYear && selectedMonth) {
       const monthNum = MONTH_NAMES.indexOf(selectedMonth);
       const yearNum = parseInt(selectedYear);
       const dateRange = {
@@ -241,56 +515,22 @@ export function BookingTab({ accountId }: BookingTabProps) {
         end: new Date(yearNum, monthNum + 1, 0, 23, 59, 59),
       };
 
-      // Find date dimension
-      const dateDimensionName = columns.find(col => {
-        const colLower = col.toLowerCase();
-        return colLower.includes('date') || colLower.includes('day') || colLower === 'date';
+      filtered = filtered.filter(row => {
+        const dateValue = row[checkoutDateColumn];
+        if (!dateValue) return false;
+        
+        try {
+          const rowDate = new Date(dateValue);
+          if (isNaN(rowDate.getTime())) return false;
+          return isWithinInterval(rowDate, dateRange);
+        } catch {
+          return false;
+        }
       });
-
-      if (dateDimensionName) {
-        filtered = filtered.filter(row => {
-          const dateValue = row[dateDimensionName];
-          if (!dateValue) return false;
-          
-          try {
-            const rowDate = new Date(dateValue);
-            if (isNaN(rowDate.getTime())) return false;
-            return isWithinInterval(rowDate, dateRange);
-          } catch {
-            return false;
-          }
-        });
-      }
-    } else if (selectedYear !== 'all') {
-      const yearNum = parseInt(selectedYear);
-      const dateRange = {
-        start: new Date(yearNum, 0, 1),
-        end: new Date(yearNum, 11, 31, 23, 59, 59),
-      };
-
-      const dateDimensionName = columns.find(col => {
-        const colLower = col.toLowerCase();
-        return colLower.includes('date') || colLower.includes('day') || colLower === 'date';
-      });
-
-      if (dateDimensionName) {
-        filtered = filtered.filter(row => {
-          const dateValue = row[dateDimensionName];
-          if (!dateValue) return false;
-          
-          try {
-            const rowDate = new Date(dateValue);
-            if (isNaN(rowDate.getTime())) return false;
-            return isWithinInterval(rowDate, dateRange);
-          } catch {
-            return false;
-          }
-        });
-      }
     }
 
     return filtered;
-  }, [allBookingData, selectedYear, selectedMonth, selectedHotel, columns]);
+  }, [allBookingData, selectedYear, selectedMonth, selectedHotels, columns, getCheckoutDateColumn]);
 
   // Paginate filtered data
   const paginatedData = useMemo(() => {
@@ -319,17 +559,17 @@ export function BookingTab({ accountId }: BookingTabProps) {
     return String(value);
   };
 
-  // Get available years from data
+  // Get available years from checkout date data
   const availableYears = useMemo(() => {
     const years = new Set<number>();
-    const dateDimensionName = columns.find(col => {
-      const colLower = col.toLowerCase();
-      return colLower.includes('date') || colLower.includes('day') || colLower === 'date';
-    });
+    const checkoutDateColumn = getCheckoutDateColumn;
 
-    if (dateDimensionName) {
+    // Always include current year to ensure it's always available
+    years.add(currentYear);
+
+    if (checkoutDateColumn && allBookingData.length > 0) {
       allBookingData.forEach(row => {
-        const dateValue = row[dateDimensionName];
+        const dateValue = row[checkoutDateColumn];
         if (dateValue) {
           try {
             const date = new Date(dateValue);
@@ -343,62 +583,162 @@ export function BookingTab({ accountId }: BookingTabProps) {
       });
     }
 
-    return Array.from(years).sort((a, b) => b - a); // Descending order
-  }, [allBookingData, columns]);
+    const yearsArray = Array.from(years).sort((a, b) => b - a); // Descending order
+    
+    // If no years found in data, at least return current year
+    return yearsArray.length > 0 ? yearsArray : [currentYear];
+  }, [allBookingData, getCheckoutDateColumn, currentYear]);
+
+  // Ensure selectedYear is valid when availableYears changes
+  useEffect(() => {
+    if (availableYears.length > 0) {
+      const selectedYearNum = parseInt(selectedYear);
+      if (!availableYears.includes(selectedYearNum)) {
+        // If selected year is not available, set to the first available year (most recent)
+        setSelectedYear(availableYears[0].toString());
+      }
+    }
+  }, [availableYears, selectedYear]);
 
   return (
     <TabsContent value="booking" className="space-y-6">
       {/* Filters */}
       <div className="flex items-end justify-end gap-4">
         {/* Year Filter */}
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Year:</span>
-          <Select value={selectedYear} onValueChange={setSelectedYear}>
-            <SelectTrigger className="w-[130px] bg-background">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Years</SelectItem>
-              {availableYears.map(year => (
-                <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Month Filter */}
-        {selectedYear !== 'all' && (
+        {availableYears.length > 0 && (
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Month:</span>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Year:</span>
+            <Select value={selectedYear} onValueChange={setSelectedYear}>
               <SelectTrigger className="w-[130px] bg-background">
-                <SelectValue />
+                <SelectValue placeholder={selectedYear || currentYear.toString()} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Months</SelectItem>
-                {MONTH_NAMES.map(month => (
-                  <SelectItem key={month} value={month}>{month}</SelectItem>
+                {availableYears.map(year => (
+                  <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
         )}
 
-        {/* Hotel Filter */}
+        {/* Month Filter */}
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Month:</span>
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger className="w-[130px] bg-background">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MONTH_NAMES.map(month => (
+                <SelectItem key={month} value={month}>{month}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Hotel Filter - Multi-select with search */}
         {hotelOptions.length > 0 && (
           <div className="flex flex-col gap-1">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hotel:</span>
-            <Select value={selectedHotel} onValueChange={setSelectedHotel}>
-              <SelectTrigger className="w-[200px] bg-background">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Hotels</SelectItem>
-                {hotelOptions.map(hotel => (
-                  <SelectItem key={hotel} value={hotel}>{hotel}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={hotelFilterOpen} onOpenChange={(isOpen) => {
+              setHotelFilterOpen(isOpen);
+              if (!isOpen) {
+                setHotelSearchTerm('');
+              }
+            }}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="h-9 justify-between min-w-[140px] px-4 pt-[20px] pb-[18px]">
+                  <span className="truncate">{hotelDisplayText}</span>
+                  <ChevronRight className="h-4 w-4 opacity-50 rotate-90 ml-2" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[250px] p-0 bg-popover z-50" align="start">
+                <div className="p-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-sm font-medium">Filter</Label>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => {
+                          setPendingHotels([...hotelOptions]);
+                        }}
+                      >
+                        All
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => {
+                          setPendingHotels([]);
+                        }}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mb-2 border-b pb-2">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Type to search"
+                        value={hotelSearchTerm}
+                        onChange={(e) => setHotelSearchTerm(e.target.value)}
+                        className="pl-8 h-8"
+                      />
+                    </div>
+                  </div>
+                  <ScrollArea className="h-[200px]">
+                    <div className="space-y-1 p-1">
+                      {filteredHotels.map(hotel => {
+                        const isSelected = pendingHotels.includes(hotel);
+                        return (
+                          <div
+                            key={hotel}
+                            className="group flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent text-sm relative"
+                            onClick={() => {
+                              const newHotels = isSelected
+                                ? pendingHotels.filter(h => h !== hotel)
+                                : [...pendingHotels, hotel];
+                              setPendingHotels(newHotels);
+                            }}
+                          >
+                            <Checkbox 
+                              checked={isSelected} 
+                              onCheckedChange={() => {}}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <span className="truncate flex-1">{hotel}</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPendingHotels([hotel]);
+                              }}
+                            >
+                              ONLY
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                  <div className="border-t p-2">
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      onClick={handleApplyHotelFilter}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         )}
       </div>
@@ -432,18 +772,52 @@ export function BookingTab({ accountId }: BookingTabProps) {
                           {column}
                         </TableHead>
                       ))}
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedData.map((row, index) => (
-                      <TableRow key={index}>
-                        {columns.map((column) => (
-                          <TableCell key={column} className="whitespace-nowrap">
-                            {formatValue(row[column])}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
+                    {paginatedData.map((row, index) => {
+                      try {
+                        const currentStatus = getStatusForRow(row);
+                        return (
+                          <TableRow key={index}>
+                            {columns.map((column) => (
+                              <TableCell key={column} className="whitespace-nowrap">
+                                {formatValue(row[column])}
+                              </TableCell>
+                            ))}
+                            <TableCell className="whitespace-nowrap">
+                              <Select
+                                value={currentStatus || "none"}
+                                onValueChange={(value) => handleStatusChange(row, value === "none" ? "" : value)}
+                              >
+                                <SelectTrigger className="w-[140px] h-8 text-sm">
+                                  <SelectValue placeholder="-" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">-</SelectItem>
+                                  <SelectItem value="Confirmed">Confirmed</SelectItem>
+                                  <SelectItem value="Cancelled">Cancelled</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      } catch (err) {
+                        console.error("Error rendering booking row:", err);
+                        // Fallback: render row without status column if there's an error
+                        return (
+                          <TableRow key={index}>
+                            {columns.map((column) => (
+                              <TableCell key={column} className="whitespace-nowrap">
+                                {formatValue(row[column])}
+                              </TableCell>
+                            ))}
+                            <TableCell className="whitespace-nowrap">-</TableCell>
+                          </TableRow>
+                        );
+                      }
+                    })}
                   </TableBody>
                 </Table>
               </div>

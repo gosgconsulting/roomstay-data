@@ -211,36 +211,28 @@ export default function Landing() {
 
   const tools: Tool[] = [
     {
-      id: "data-sources",
-      name: "Data Sources",
-      description: "Manage database sources and add new ones",
-      icon: <Database className="h-6 w-6" />,
-      getPath: (accountId: string) => `/tools/data-sources/${accountId}`,
-      available: true,
-    },
-    {
-      id: "dimensions",
-      name: "Dimensions",
-      description: "View and manage text and value dimensions",
-      icon: <Layers className="h-6 w-6" />,
-      getPath: (accountId: string) => `/tools/dimensions/${accountId}`,
-      available: true,
-    },
-    {
-      id: "data-studio",
-      name: "Data Studio",
-      description: "Looker Studio feature for adding and managing data sources",
-      icon: <BarChart3 className="h-6 w-6" />,
-      getPath: (accountId: string) => `/tools/data/${accountId}`,
-      available: true,
-    },
-    {
       id: "reports",
       name: "Reports",
       description: "Pre-rendered data snapshots for fast performance",
       icon: <Presentation className="h-6 w-6" />,
       getPath: (accountId: string) => `/tools/reports/${accountId}`,
       available: true,
+    },
+    {
+      id: "forecast",
+      name: "Forecast",
+      description: "Forecasting and scenario planning",
+      icon: <TrendingUp className="h-6 w-6" />,
+      getPath: (accountId: string) => `/tools/forecasting/${accountId}`,
+      available: true,
+    },
+    {
+      id: "price-widget",
+      name: "Price Widget",
+      description: "Price monitoring and comparison tools",
+      icon: <BarChart3 className="h-6 w-6" />,
+      getPath: (accountId: string) => `/tools/price-widget/${accountId}`,
+      available: false,
     },
   ];
 

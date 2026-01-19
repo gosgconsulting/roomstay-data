@@ -2,10 +2,10 @@ import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
-import { ArrowLeft, Plus, Presentation, LogOut, ChevronDown, Trash2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Plus, Presentation, LogOut, ChevronDown, Trash2, RefreshCw, Database, Layers, ChevronRight } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SlideListItem } from "@/components/slides/SlideListItem";
 import { CreateChildReportModal } from "@/components/slides/CreateChildReportModal";
@@ -318,17 +318,13 @@ export default function SlidesPage() {
       <main className="container mx-auto px-6 py-8">
         <div className="max-w-4xl mx-auto">
           {/* Section Header */}
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6">
             <div>
               <h2 className="text-xl font-semibold">Your Reports</h2>
               <p className="text-sm text-muted-foreground">
                 {slideReports.length + 1} report{slideReports.length !== 0 ? "s" : ""}
               </p>
             </div>
-            <Button onClick={() => setCreateModalOpen(true)} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Create Report
-            </Button>
           </div>
 
           {/* Reports List */}
@@ -427,13 +423,63 @@ export default function SlidesPage() {
                   <p className="text-muted-foreground mb-6">
                     Create your first report to display pre-rendered data snapshots.
                   </p>
-                  <Button onClick={() => setCreateModalOpen(true)} className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Create Your First Report
-                  </Button>
                 </CardContent>
               </Card>
             )}
+          </div>
+
+          {/* Data Sources and Dimensions Cards */}
+          <div className="mt-12">
+            <h2 className="text-xl font-semibold mb-6">Configuration</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {/* Data Sources Card */}
+              <Card
+                className="hover:shadow-lg hover:border-primary/50 cursor-pointer transition-all group"
+                onClick={() => navigate(`/tools/data-sources/${accountId}`)}
+              >
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="p-3 rounded-lg bg-primary/10 text-primary">
+                      <Database className="h-6 w-6" />
+                    </div>
+                  </div>
+                  <CardTitle className="mt-4 flex items-center gap-2">
+                    Data Sources
+                  </CardTitle>
+                  <CardDescription>Manage database sources and add new ones</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button className="w-full">
+                    Open Data Sources
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Dimensions Card */}
+              <Card
+                className="hover:shadow-lg hover:border-primary/50 cursor-pointer transition-all group"
+                onClick={() => navigate(`/tools/dimensions/${accountId}`)}
+              >
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="p-3 rounded-lg bg-primary/10 text-primary">
+                      <Layers className="h-6 w-6" />
+                    </div>
+                  </div>
+                  <CardTitle className="mt-4 flex items-center gap-2">
+                    Dimensions
+                  </CardTitle>
+                  <CardDescription>View and manage text and value dimensions</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button className="w-full">
+                    Open Dimensions
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
       </main>

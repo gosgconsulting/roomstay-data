@@ -46,6 +46,7 @@ import { OverviewTab } from "@/components/slides/OverviewTab";
 import { ChannelTab } from "@/components/slides/ChannelTab";
 import { BudgetTab } from "@/components/slides/BudgetTab";
 import { BookingTab } from "@/components/slides/BookingTab";
+import { PriceCheckTab } from "@/components/slides/PriceCheckTab";
 import { RefreshDataModal } from "@/components/slides/RefreshDataModal";
 import { isWithinInterval } from "date-fns";
 import { aggregateMetrics } from "@/components/AISummaryPivotTable";
@@ -898,6 +899,7 @@ export default function SlideViewPage() {
     metasearch: {},
     sem: {},
     social: {},
+    'price-check': {},
   });
 
   // Filter dimension values state (for dropdowns) - channel -> dimensionId -> values[]
@@ -2779,6 +2781,7 @@ export default function SlideViewPage() {
         metasearch: {},
         sem: {},
         social: {},
+        'price-check': {},
       });
       return;
     }
@@ -2808,6 +2811,7 @@ export default function SlideViewPage() {
       metasearch: {},
       sem: {},
       social: {},
+      'price-check': {},
     });
 
     toast({
@@ -4087,7 +4091,7 @@ export default function SlideViewPage() {
           </div>
         )}
 
-        {selectedTab !== 'booking' && (
+        {selectedTab !== 'booking' && selectedTab !== 'price-check' && (
           <FiltersRow
             selectedTab={selectedTab}
             selectedViewId={selectedViewId}
@@ -4281,6 +4285,22 @@ export default function SlideViewPage() {
             />
 
             <BookingTab accountId={accountId} />
+
+            <PriceCheckTab 
+              accountId={accountId}
+              selectedHotels={filterValues['price-check']?.['hotel'] || []}
+              onHotelsChange={(hotels) => {
+                setFilterValues(prev => ({
+                  ...prev,
+                  'price-check': {
+                    ...prev['price-check'],
+                    hotel: hotels,
+                  },
+                }));
+              }}
+              chartTimeRange={chartTimeRange}
+              onChartTimeRangeChange={setChartTimeRange}
+            />
 
         </div>
 
