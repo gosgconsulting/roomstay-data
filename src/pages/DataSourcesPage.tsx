@@ -13,6 +13,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Plus, ArrowLeft, FileSpreadsheet, RefreshCw, Trash2, Eye, Settings, Pencil, Check, X } from "lucide-react";
+import type { Session } from "@supabase/supabase-js";
 import { DataSourceSelectionModal } from "@/components/DataSourceSelectionModal";
 import { UnifiedDataSourceModal } from "@/components/UnifiedDataSourceModal";
 import { ViewDataModal } from "@/components/ViewDataModal";
@@ -54,6 +55,7 @@ export default function DataSourcesPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [showDataSourceSelectionModal, setShowDataSourceSelectionModal] = useState(false);
   const [showUnifiedDataSourceModal, setShowUnifiedDataSourceModal] = useState(false);
   const [showReportSelectionModal, setShowReportSelectionModal] = useState(false);
@@ -68,6 +70,11 @@ export default function DataSourcesPage() {
   const [deletingDataSource, setDeletingDataSource] = useState<DataSource | null>(null);
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [editingNameValue, setEditingNameValue] = useState<string>("");
+  const [isCreatingBookingReport, setIsCreatingBookingReport] = useState(false);
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
 
   useEffect(() => {
     if (accountId) {
@@ -75,6 +82,16 @@ export default function DataSourcesPage() {
       loadDataSources();
     }
   }, [accountId]);
+
+  const checkAuth = async () => {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      setSession(session);
+    } catch (error) {
+      console.error("Error checking auth:", error);
+    }
+  };
 
   const loadReports = async () => {
     if (!accountId) return;
@@ -185,6 +202,77 @@ export default function DataSourcesPage() {
     setSelectedReportId(reportId);
     setShowReportSelectionModal(false);
     setShowUnifiedDataSourceModal(true);
+  };
+
+  const handleCreateBookingReport = async () => {
+    if (!accountId) {
+      toast({
+        title: "Error",
+        description: "Account ID is required to create a report",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!session?.user) {
+      toast({
+        title: "Error",
+        description: "You must be signed in to create a report",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreatingBookingReport(true);
+    try {
+      // Check if Booking report already exists
+      const existingReport = reports.find(r => r.name === "Booking");
+      if (existingReport) {
+        toast({
+          title: "Report already exists",
+          description: "A Booking report already exists. Please select it from the list.",
+        });
+        setSelectedReportId(existingReport.id);
+        setShowReportSelectionModal(false);
+        setShowUnifiedDataSourceModal(true);
+        setIsCreatingBookingReport(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('reports')
+        .insert({
+          name: "Booking",
+          user_id: session.user.id,
+          account_id: accountId
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Refresh reports list
+      await loadReports();
+      
+      // Auto-select the newly created report
+      setSelectedReportId(data.id);
+      setShowReportSelectionModal(false);
+      setShowUnifiedDataSourceModal(true);
+
+      toast({
+        title: "Report created",
+        description: "Booking report created successfully",
+      });
+    } catch (error) {
+      console.error("Error creating Booking report:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create Booking report",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingBookingReport(false);
+    }
   };
 
   const handleDataSourceCreated = () => {
@@ -609,6 +697,26 @@ export default function DataSourcesPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="pt-2 border-t">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleCreateBookingReport}
+                disabled={isCreatingBookingReport}
+              >
+                {isCreatingBookingReport ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Creating Booking Report...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Booking Report
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </DialogContent>
