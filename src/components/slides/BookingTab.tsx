@@ -1,0 +1,431 @@
+import { TabsContent } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2 } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
+import { useUser } from "@/lib/auth";
+import { MONTH_NAMES } from "@/constants/slideViewConstants";
+import { isWithinInterval } from "date-fns";
+
+interface BookingTabProps {
+  accountId: string | undefined;
+}
+
+interface BookingDataRow {
+  [key: string]: any;
+}
+
+export function BookingTab({ accountId }: BookingTabProps) {
+  const { data: userData } = useUser();
+  const [allBookingData, setAllBookingData] = useState<BookingDataRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [columns, setColumns] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
+  const [selectedMonth, setSelectedMonth] = useState<string>('all');
+  const [selectedHotel, setSelectedHotel] = useState<string>('all');
+  const [hotelOptions, setHotelOptions] = useState<string[]>([]);
+  const [dimensionNameToIdMap, setDimensionNameToIdMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const loadBookingData = async () => {
+      if (!accountId || !userData?.user) {
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        // Find the Booking report for this account
+        const { data: bookingReport, error: reportError } = await supabase
+          .from('reports')
+          .select('id')
+          .eq('account_id', accountId)
+          .eq('name', 'Booking')
+          .maybeSingle();
+
+        if (reportError) throw reportError;
+
+        if (!bookingReport) {
+          setError("No Booking report found. Please create a Booking report first.");
+          setIsLoading(false);
+          return;
+        }
+
+        // Get data sources for the Booking report
+        const { data: dataSources, error: dsError } = await supabase
+          .from('data_sources')
+          .select('*')
+          .eq('report_id', bookingReport.id)
+          .order('created_at', { ascending: false });
+
+        if (dsError) throw dsError;
+
+        if (!dataSources || dataSources.length === 0) {
+          setError("No data sources found for the Booking report. Please add a data source first.");
+          setIsLoading(false);
+          return;
+        }
+
+        // Load data from all data sources and build dimension name mapping
+        const allRows: BookingDataRow[] = [];
+        const dimensionIdSet = new Set<string>();
+        const dimensionIdToNameMap: Record<string, string> = {};
+
+        // First pass: collect all dimension IDs from transformed rows and column mappings
+        for (const dataSource of dataSources) {
+          try {
+            const result = await fetchSourceData(
+              dataSource as any,
+              userData.user.id,
+              accountId
+            );
+
+            if (result.transformedRows && result.transformedRows.length > 0) {
+              // Extract dimension IDs from dimension_values in each row
+              result.transformedRows.forEach((row: any) => {
+                if (row.dimension_values) {
+                  Object.keys(row.dimension_values).forEach(dimId => {
+                    dimensionIdSet.add(dimId);
+                  });
+                }
+              });
+              
+              allRows.push(...result.transformedRows);
+            }
+
+            // Also check column mappings for dimension names
+            const columnMappings = (dataSource.column_mappings || []) as any[];
+            columnMappings.forEach((mapping: any) => {
+              if (mapping.dimensionId && mapping.dimensionId !== 'none' && mapping.dimensionId !== 'create_new') {
+                dimensionIdSet.add(mapping.dimensionId);
+                // If dimensionName is available in mapping, use it
+                if (mapping.dimensionName) {
+                  dimensionIdToNameMap[mapping.dimensionId] = mapping.dimensionName;
+                }
+              }
+            });
+          } catch (err) {
+            console.error(`Error loading data from source ${dataSource.name}:`, err);
+            // Continue with other sources even if one fails
+          }
+        }
+
+        // Fetch dimension names from database for IDs not found in mappings
+        const dimensionIdsToFetch = Array.from(dimensionIdSet).filter(
+          id => !dimensionIdToNameMap[id]
+        );
+
+        if (dimensionIdsToFetch.length > 0) {
+          const { data: dimensions, error: dimError } = await supabase
+            .from('dimensions')
+            .select('id, name')
+            .in('id', dimensionIdsToFetch);
+
+          if (!dimError && dimensions) {
+            dimensions.forEach((dim: any) => {
+              dimensionIdToNameMap[dim.id] = dim.name;
+            });
+          }
+        }
+
+        // Build column list from dimension names with Hotel first, then Booking Number
+        const allColumnNames = Array.from(dimensionIdSet)
+          .map(dimId => dimensionIdToNameMap[dimId] || dimId)
+          .filter(colName => !colName.toLowerCase().includes('channel')); // Hide Channel column
+        
+        // Sort columns: Hotel first, then Booking Number, then rest alphabetically
+        const columnNames = allColumnNames.sort((a, b) => {
+          const aLower = a.toLowerCase();
+          const bLower = b.toLowerCase();
+          
+          // Hotel comes first
+          if (aLower === 'hotel') return -1;
+          if (bLower === 'hotel') return 1;
+          
+          // Booking Number comes second (check for variations like "Booking Number", "Booking #", "Booking ID", etc.)
+          const aIsBooking = aLower.includes('booking') && (aLower.includes('number') || aLower.includes('#') || aLower.includes('id') || aLower.includes('no'));
+          const bIsBooking = bLower.includes('booking') && (bLower.includes('number') || bLower.includes('#') || bLower.includes('id') || bLower.includes('no'));
+          if (aIsBooking && !bIsBooking) return -1;
+          if (!aIsBooking && bIsBooking) return 1;
+          
+          // Rest sorted alphabetically
+          return a.localeCompare(b);
+        });
+
+        // Transform rows to use dimension names as keys instead of IDs
+        const transformedRows = allRows.map((row: any) => {
+          const transformedRow: BookingDataRow = {};
+          if (row.dimension_values) {
+            Object.entries(row.dimension_values).forEach(([dimId, value]) => {
+              const dimName = dimensionIdToNameMap[dimId] || dimId;
+              transformedRow[dimName] = value;
+            });
+          }
+          return transformedRow;
+        });
+
+        // Build reverse mapping (name to ID) for filtering
+        const nameToIdMap: Record<string, string> = {};
+        Object.entries(dimensionIdToNameMap).forEach(([id, name]) => {
+          nameToIdMap[name] = id;
+        });
+        setDimensionNameToIdMap(nameToIdMap);
+
+        // Extract hotel options for filter
+        const hotelDimensionId = nameToIdMap['Hotel'] || Object.entries(dimensionIdToNameMap).find(([_, name]) => name.toLowerCase() === 'hotel')?.[0];
+        if (hotelDimensionId) {
+          const hotels = new Set<string>();
+          transformedRows.forEach(row => {
+            const hotelValue = row['Hotel'];
+            if (hotelValue !== undefined && hotelValue !== null && String(hotelValue).trim() !== '') {
+              hotels.add(String(hotelValue).trim());
+            }
+          });
+          setHotelOptions(Array.from(hotels).sort());
+        }
+
+        console.log('[booking] dimensionIdToNameMap', dimensionIdToNameMap);
+        console.log('[booking] columnNames', columnNames);
+        console.log('[booking] transformedRows', transformedRows);
+        setColumns(columnNames);
+        setAllBookingData(transformedRows);
+      } catch (err) {
+        console.error("Error loading booking data:", err);
+        setError(err instanceof Error ? err.message : "Failed to load booking data");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadBookingData();
+  }, [accountId, userData?.user]);
+
+  // Apply filters to booking data
+  const filteredBookingData = useMemo(() => {
+    let filtered = [...allBookingData];
+
+    // Filter by Hotel
+    if (selectedHotel !== 'all') {
+      filtered = filtered.filter(row => {
+        const hotelValue = row['Hotel'];
+        return hotelValue !== undefined && hotelValue !== null && String(hotelValue).trim() === selectedHotel;
+      });
+    }
+
+    // Filter by Date (Year/Month)
+    if (selectedYear !== 'all' && selectedMonth !== 'all') {
+      const monthNum = MONTH_NAMES.indexOf(selectedMonth);
+      const yearNum = parseInt(selectedYear);
+      const dateRange = {
+        start: new Date(yearNum, monthNum, 1),
+        end: new Date(yearNum, monthNum + 1, 0, 23, 59, 59),
+      };
+
+      // Find date dimension
+      const dateDimensionName = columns.find(col => {
+        const colLower = col.toLowerCase();
+        return colLower.includes('date') || colLower.includes('day') || colLower === 'date';
+      });
+
+      if (dateDimensionName) {
+        filtered = filtered.filter(row => {
+          const dateValue = row[dateDimensionName];
+          if (!dateValue) return false;
+          
+          try {
+            const rowDate = new Date(dateValue);
+            if (isNaN(rowDate.getTime())) return false;
+            return isWithinInterval(rowDate, dateRange);
+          } catch {
+            return false;
+          }
+        });
+      }
+    } else if (selectedYear !== 'all') {
+      const yearNum = parseInt(selectedYear);
+      const dateRange = {
+        start: new Date(yearNum, 0, 1),
+        end: new Date(yearNum, 11, 31, 23, 59, 59),
+      };
+
+      const dateDimensionName = columns.find(col => {
+        const colLower = col.toLowerCase();
+        return colLower.includes('date') || colLower.includes('day') || colLower === 'date';
+      });
+
+      if (dateDimensionName) {
+        filtered = filtered.filter(row => {
+          const dateValue = row[dateDimensionName];
+          if (!dateValue) return false;
+          
+          try {
+            const rowDate = new Date(dateValue);
+            if (isNaN(rowDate.getTime())) return false;
+            return isWithinInterval(rowDate, dateRange);
+          } catch {
+            return false;
+          }
+        });
+      }
+    }
+
+    return filtered;
+  }, [allBookingData, selectedYear, selectedMonth, selectedHotel, columns]);
+
+  const formatValue = (value: any): string => {
+    if (value === null || value === undefined) return '-';
+    if (typeof value === 'number') {
+      // Format numbers with commas
+      return value.toLocaleString();
+    }
+    if (typeof value === 'string' && value.includes('T') && value.includes('Z')) {
+      // Try to format as date
+      try {
+        const date = new Date(value);
+        return date.toLocaleDateString();
+      } catch {
+        return value;
+      }
+    }
+    return String(value);
+  };
+
+  // Get available years from data
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    const dateDimensionName = columns.find(col => {
+      const colLower = col.toLowerCase();
+      return colLower.includes('date') || colLower.includes('day') || colLower === 'date';
+    });
+
+    if (dateDimensionName) {
+      allBookingData.forEach(row => {
+        const dateValue = row[dateDimensionName];
+        if (dateValue) {
+          try {
+            const date = new Date(dateValue);
+            if (!isNaN(date.getTime())) {
+              years.add(date.getFullYear());
+            }
+          } catch {
+            // Ignore invalid dates
+          }
+        }
+      });
+    }
+
+    return Array.from(years).sort((a, b) => b - a); // Descending order
+  }, [allBookingData, columns]);
+
+  return (
+    <TabsContent value="booking" className="space-y-6">
+      {/* Filters */}
+      <div className="flex items-end justify-end gap-4">
+        {/* Year Filter */}
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Year:</span>
+          <Select value={selectedYear} onValueChange={setSelectedYear}>
+            <SelectTrigger className="w-[130px] bg-background">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Years</SelectItem>
+              {availableYears.map(year => (
+                <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Month Filter */}
+        {selectedYear !== 'all' && (
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Month:</span>
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="w-[130px] bg-background">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Months</SelectItem>
+                {MONTH_NAMES.map(month => (
+                  <SelectItem key={month} value={month}>{month}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Hotel Filter */}
+        {hotelOptions.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hotel:</span>
+            <Select value={selectedHotel} onValueChange={setSelectedHotel}>
+              <SelectTrigger className="w-[200px] bg-background">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Hotels</SelectItem>
+                {hotelOptions.map(hotel => (
+                  <SelectItem key={hotel} value={hotel}>{hotel}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Booking Data {filteredBookingData.length !== allBookingData.length && `(${filteredBookingData.length} of ${allBookingData.length})`}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" />
+              <span className="text-muted-foreground">Loading booking data...</span>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <p className="text-destructive">{error}</p>
+            </div>
+          ) : filteredBookingData.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No booking data available for the selected filters.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {columns.map((column) => (
+                      <TableHead key={column} className="whitespace-nowrap">
+                        {column}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredBookingData.map((row, index) => (
+                    <TableRow key={index}>
+                      {columns.map((column) => (
+                        <TableCell key={column} className="whitespace-nowrap">
+                          {formatValue(row[column])}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </TabsContent>
+  );
+}

@@ -45,6 +45,7 @@ import { ComparisonBanner } from "@/components/slides/ComparisonBanner";
 import { OverviewTab } from "@/components/slides/OverviewTab";
 import { ChannelTab } from "@/components/slides/ChannelTab";
 import { BudgetTab } from "@/components/slides/BudgetTab";
+import { BookingTab } from "@/components/slides/BookingTab";
 import { RefreshDataModal } from "@/components/slides/RefreshDataModal";
 import { isWithinInterval } from "date-fns";
 import { aggregateMetrics } from "@/components/AISummaryPivotTable";
@@ -4086,40 +4087,42 @@ export default function SlideViewPage() {
           </div>
         )}
 
-        <FiltersRow
-          selectedTab={selectedTab}
-          selectedViewId={selectedViewId}
-          setSelectedViewId={setSelectedViewId}
-          isReadOnlyMode={isReadOnlyMode}
-          availableViews={availableViews}
-          handleApplyView={handleApplyView}
-          handleDeleteView={handleDeleteView}
-          setIsSaveViewDialogOpen={setIsSaveViewDialogOpen}
-          filterValues={filterValues}
-          setFilterValues={setFilterValues}
-          filterDimensionValues={filterDimensionValues}
-          setFilterDimensionValues={setFilterDimensionValues}
-          setFilterDimensionNames={setFilterDimensionNames}
-          filterDimensionNames={filterDimensionNames}
-          dimensions={dimensions}
-          filterConfigs={filterConfigs}
-          slideReport={slideReport}
-          selectedYear={selectedYear}
-          setSelectedYear={setSelectedYear}
-          selectedMonth={selectedMonth}
-          setSelectedMonth={setSelectedMonth}
-          comparisonType={comparisonType}
-          setComparisonType={setComparisonType}
-          pendingFilterValues={pendingFilterValues}
-          setPendingFilterValues={setPendingFilterValues}
-          filterSearchTerms={filterSearchTerms}
-          setFilterSearchTerms={setFilterSearchTerms}
-          openFilterPopovers={openFilterPopovers}
-          setOpenFilterPopovers={setOpenFilterPopovers}
-          filterValuesLoading={filterValuesLoading}
-          setFilterValuesLoading={setFilterValuesLoading}
-          loadFilterDimensionValues={loadFilterDimensionValues}
-        />
+        {selectedTab !== 'booking' && (
+          <FiltersRow
+            selectedTab={selectedTab}
+            selectedViewId={selectedViewId}
+            setSelectedViewId={setSelectedViewId}
+            isReadOnlyMode={isReadOnlyMode}
+            availableViews={availableViews}
+            handleApplyView={handleApplyView}
+            handleDeleteView={handleDeleteView}
+            setIsSaveViewDialogOpen={setIsSaveViewDialogOpen}
+            filterValues={filterValues}
+            setFilterValues={setFilterValues}
+            filterDimensionValues={filterDimensionValues}
+            setFilterDimensionValues={setFilterDimensionValues}
+            setFilterDimensionNames={setFilterDimensionNames}
+            filterDimensionNames={filterDimensionNames}
+            dimensions={dimensions}
+            filterConfigs={filterConfigs}
+            slideReport={slideReport}
+            selectedYear={selectedYear}
+            setSelectedYear={setSelectedYear}
+            selectedMonth={selectedMonth}
+            setSelectedMonth={setSelectedMonth}
+            comparisonType={comparisonType}
+            setComparisonType={setComparisonType}
+            pendingFilterValues={pendingFilterValues}
+            setPendingFilterValues={setPendingFilterValues}
+            filterSearchTerms={filterSearchTerms}
+            setFilterSearchTerms={setFilterSearchTerms}
+            openFilterPopovers={openFilterPopovers}
+            setOpenFilterPopovers={setOpenFilterPopovers}
+            filterValuesLoading={filterValuesLoading}
+            setFilterValuesLoading={setFilterValuesLoading}
+            loadFilterDimensionValues={loadFilterDimensionValues}
+          />
+        )}
 
         <ComparisonBanner
           selectedTab={selectedTab}
@@ -4276,6 +4279,8 @@ export default function SlideViewPage() {
               pnlConfig={pnlConfig}
               setPnlConfig={setPnlConfig}
             />
+
+            <BookingTab accountId={accountId} />
 
         </div>
 

@@ -46,6 +46,7 @@ export function SlideViewHeader({
             <TabsTrigger value="sem">SEM</TabsTrigger>
             <TabsTrigger value="social">Social</TabsTrigger>
             <TabsTrigger value="budget">Budget</TabsTrigger>
+            <TabsTrigger value="booking">Booking</TabsTrigger>
           </TabsList>
         </div>
         <div className="flex items-center gap-2">
