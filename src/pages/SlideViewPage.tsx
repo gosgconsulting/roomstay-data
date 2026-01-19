@@ -4357,6 +4357,16 @@ export default function SlideViewPage() {
             // Use filtered rows from unified hook
             const filteredRows = filteredData.getFilteredRowsForChannel(channel);
             
+            // Build metricNameToIdMap (same as breakdown table) - reverse mapping: name -> id
+            // This ensures we use "Cost" and "Revenue" with capital letters as the source of truth
+            const dimensionMap = (channelData as any).dimensionMap || {};
+            const metricNameToIdMap: Record<string, string> = {};
+            Object.entries(dimensionMap as Record<string, string>).forEach(([dimensionId, dimensionName]) => {
+              if (dimensionName && typeof dimensionName === 'string') {
+                metricNameToIdMap[dimensionName] = dimensionId;
+              }
+            });
+            
             // Aggregate by month from filtered rows
             filteredRows.forEach((row: RawDataRow) => {
               const rowData = row.dimension_values || row;
@@ -4403,19 +4413,20 @@ export default function SlideViewPage() {
                     };
                   }
                   
-                  // Get cost and revenue from row data
-                  const cost = parseFloat(String(rowData['Cost'] || rowData['cost'] || rowData['Spend'] || rowData['spend'] || 0).replace(/[^0-9.-]/g, ''));
-                  const revenue = parseFloat(String(rowData['Revenue'] || rowData['revenue'] || 0).replace(/[^0-9.-]/g, ''));
+                  // Use EXACT same extraction logic as UnifiedBreakdownTable for consistency
+                  // This ensures we get the same values as the breakdown table
+                  const costValue = parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
+                  const revenueValue = parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
                   
                   if (channel === 'metasearch') {
-                    monthlyDataMap[yearMonthKey].metasearchActual += isNaN(cost) ? 0 : cost;
-                    monthlyDataMap[yearMonthKey].metasearch += isNaN(revenue) ? 0 : revenue;
+                    monthlyDataMap[yearMonthKey].metasearchActual += costValue;
+                    monthlyDataMap[yearMonthKey].metasearch += revenueValue;
                   } else if (channel === 'sem') {
-                    monthlyDataMap[yearMonthKey].semActual += isNaN(cost) ? 0 : cost;
-                    monthlyDataMap[yearMonthKey].sem += isNaN(revenue) ? 0 : revenue;
+                    monthlyDataMap[yearMonthKey].semActual += costValue;
+                    monthlyDataMap[yearMonthKey].sem += revenueValue;
                   } else if (channel === 'social') {
-                    monthlyDataMap[yearMonthKey].socialActual += isNaN(cost) ? 0 : cost;
-                    monthlyDataMap[yearMonthKey].social += isNaN(revenue) ? 0 : revenue;
+                    monthlyDataMap[yearMonthKey].socialActual += costValue;
+                    monthlyDataMap[yearMonthKey].social += revenueValue;
                   }
                 }
               }
