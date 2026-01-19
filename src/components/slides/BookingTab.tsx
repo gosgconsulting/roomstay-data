@@ -202,9 +202,6 @@ export function BookingTab({ accountId }: BookingTabProps) {
           setHotelOptions(Array.from(hotels).sort());
         }
 
-        console.log('[booking] dimensionIdToNameMap', dimensionIdToNameMap);
-        console.log('[booking] columnNames', columnNames);
-        console.log('[booking] transformedRows', transformedRows);
         setColumns(columnNames);
         setAllBookingData(transformedRows);
       } catch (err) {
