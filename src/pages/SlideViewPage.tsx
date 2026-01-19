@@ -4415,8 +4415,8 @@ export default function SlideViewPage() {
                   
                   // Use EXACT same extraction logic as UnifiedBreakdownTable for consistency
                   // This ensures we get the same values as the breakdown table
-                  const costValue = parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
-                  const revenueValue = parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
+                  const costValue = parseFloat(String(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0).replace(/[^0-9.-]/g, '')) || 0;
+                  const revenueValue = parseFloat(String(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0).replace(/[^0-9.-]/g, '')) || 0;
                   
                   if (channel === 'metasearch') {
                     monthlyDataMap[yearMonthKey].metasearchActual += costValue;
