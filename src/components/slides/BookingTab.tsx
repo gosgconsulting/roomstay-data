@@ -2,13 +2,23 @@ import { TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, Fragment } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { useUser } from "@/lib/auth";
 import { MONTH_NAMES } from "@/constants/slideViewConstants";
 import { isWithinInterval } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface BookingTabProps {
   accountId: string | undefined;
@@ -29,6 +39,8 @@ export function BookingTab({ accountId }: BookingTabProps) {
   const [selectedHotel, setSelectedHotel] = useState<string>('all');
   const [hotelOptions, setHotelOptions] = useState<string[]>([]);
   const [dimensionNameToIdMap, setDimensionNameToIdMap] = useState<Record<string, string>>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   useEffect(() => {
     const loadBookingData = async () => {
@@ -206,6 +218,11 @@ export function BookingTab({ accountId }: BookingTabProps) {
     loadBookingData();
   }, [accountId, userData?.user]);
 
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedYear, selectedMonth, selectedHotel]);
+
   // Apply filters to booking data
   const filteredBookingData = useMemo(() => {
     let filtered = [...allBookingData];
@@ -277,6 +294,15 @@ export function BookingTab({ accountId }: BookingTabProps) {
 
     return filtered;
   }, [allBookingData, selectedYear, selectedMonth, selectedHotel, columns]);
+
+  // Paginate filtered data
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredBookingData.slice(startIndex, endIndex);
+  }, [filteredBookingData, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredBookingData.length / itemsPerPage);
 
   const formatValue = (value: any): string => {
     if (value === null || value === undefined) return '-';
@@ -399,30 +425,119 @@ export function BookingTab({ accountId }: BookingTabProps) {
               <p className="text-muted-foreground">No booking data available for the selected filters.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {columns.map((column) => (
-                      <TableHead key={column} className="whitespace-nowrap">
-                        {column}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredBookingData.map((row, index) => (
-                    <TableRow key={index}>
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
                       {columns.map((column) => (
-                        <TableCell key={column} className="whitespace-nowrap">
-                          {formatValue(row[column])}
-                        </TableCell>
+                        <TableHead key={column} className="whitespace-nowrap">
+                          {column}
+                        </TableHead>
                       ))}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedData.map((row, index) => (
+                      <TableRow key={index}>
+                        {columns.map((column) => (
+                          <TableCell key={column} className="whitespace-nowrap">
+                            {formatValue(row[column])}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
+                    {Math.min(currentPage * itemsPerPage, filteredBookingData.length)} of{" "}
+                    {filteredBookingData.length} rows
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                          className={cn(
+                            currentPage === 1 && "pointer-events-none opacity-50",
+                            "cursor-pointer"
+                          )}
+                        />
+                      </PaginationItem>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1)
+                        .filter((page) => {
+                          // Show first page, last page, current page, and pages around current
+                          return (
+                            page === 1 ||
+                            page === totalPages ||
+                            Math.abs(page - currentPage) <= 1
+                          );
+                        })
+                        .map((page, index, array) => {
+                          // Add ellipsis if there's a gap
+                          const prevPage = array[index - 1];
+                          const showEllipsis = prevPage && page - prevPage > 1;
+                          
+                          return (
+                            <Fragment key={page}>
+                              {showEllipsis && (
+                                <PaginationItem key={`ellipsis-${page}`}>
+                                  <PaginationEllipsis />
+                                </PaginationItem>
+                              )}
+                              <PaginationItem>
+                                <PaginationLink
+                                  onClick={() => setCurrentPage(page)}
+                                  isActive={currentPage === page}
+                                  className="cursor-pointer"
+                                >
+                                  {page}
+                                </PaginationLink>
+                              </PaginationItem>
+                            </Fragment>
+                          );
+                        })}
+                      <PaginationItem>
+                        <PaginationNext
+                          onClick={() =>
+                            setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                          }
+                          className={cn(
+                            currentPage === totalPages && "pointer-events-none opacity-50",
+                            "cursor-pointer"
+                          )}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                    </Pagination>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Rows per page:</span>
+                    <Select value={itemsPerPage.toString()} onValueChange={(value) => {
+                      setItemsPerPage(parseInt(value));
+                      setCurrentPage(1); // Reset to first page when changing items per page
+                    }}>
+                      <SelectTrigger className="w-[80px] h-8 text-sm">
+                        <SelectValue />
+                       </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
