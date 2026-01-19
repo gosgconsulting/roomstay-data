@@ -232,7 +232,7 @@ export default function Landing() {
       description: "Price monitoring and comparison tools",
       icon: <BarChart3 className="h-6 w-6" />,
       getPath: (accountId: string) => `/tools/price-widget/${accountId}`,
-      available: false,
+      available: true,
     },
   ];
 
