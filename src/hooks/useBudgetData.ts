@@ -34,7 +34,8 @@ export function useBudgetMonthlyData(
   viewBudgets: ViewBudget[],
   selectedYear: string,
   hasFilters: boolean,
-  getFilteredRowsForChannel: (channel: string) => RawDataRow[]
+  getFilteredRowsForChannel: (channel: string) => RawDataRow[],
+  filterValues?: Record<string, Record<string, string[]>>
 ) {
   return useMemo(() => {
     return calculateBudgetMonthlyData(
@@ -43,7 +44,8 @@ export function useBudgetMonthlyData(
       viewBudgets,
       selectedYear,
       hasFilters,
-      getFilteredRowsForChannel
+      getFilteredRowsForChannel,
+      filterValues
     );
   }, [
     pivotData,
@@ -52,5 +54,6 @@ export function useBudgetMonthlyData(
     selectedYear,
     hasFilters,
     getFilteredRowsForChannel,
+    filterValues,
   ]);
 }

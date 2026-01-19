@@ -3,6 +3,7 @@
  */
 
 import { MONTH_NAMES } from '@/constants/slideViewConstants';
+import { filterRawDataRows } from '@/lib/slideViewHelpers';
 import type { SlideReportPivotData } from '@/types/slideReports';
 import type { RawDataRow } from '@/types/slideView';
 
@@ -135,7 +136,8 @@ export function calculateBudgetMonthlyData(
   viewBudgets: ViewBudget[],
   selectedYear: string,
   hasFilters: boolean,
-  getFilteredRowsForChannel: (channel: string) => RawDataRow[]
+  getFilteredRowsForChannel: (channel: string) => RawDataRow[],
+  filterValues?: Record<string, Record<string, string[]>>
 ): BudgetMonthlyRow[] {
   // Process channel data for both Master View (no view selected) and custom views
   // Master View: process all channel data without budget data
@@ -145,15 +147,26 @@ export function calculateBudgetMonthlyData(
   if (isMasterView || (selectedViewId && viewBudgets.length > 0)) {
     const monthlyDataMap: Record<string, BudgetMonthlyRow> = {};
 
-    // Get actual costs and revenue from filtered rawDataRows (when filters are applied)
-    // or from pivot_data.channels.monthly (when no filters)
+    // Get actual costs and revenue from filtered rawDataRows (when filters are applied or view is selected)
+    // or from pivot_data.channels.monthly (when no filters and Master View)
+    // When a view is selected, pivotData.channels.monthly might be pre-filtered, so we should use
+    // getFilteredRowsForChannel to ensure we get all months that match the view
     if (pivotData?.channels) {
       ['metasearch', 'sem', 'social'].forEach((channel) => {
         const channelData = pivotData.channels[channel];
 
-        if (hasFilters) {
-          // Use filtered rows from unified hook
-          const filteredRows = getFilteredRowsForChannel(channel);
+        // Use filtered rows if filters are applied OR if a view is selected (view applies its own filters)
+        if (hasFilters || !isMasterView) {
+          // Get raw rows directly and filter by dimension filters only (not year filter)
+          // Year filtering will be applied at the end for display purposes
+          const rawDataRows = (channelData as any).rawDataRows || [];
+          
+          // Get filter values for this channel (view filters or dimension filters, but not year)
+          const channelFilterValues = filterValues?.[channel] || {};
+          
+          // Filter rows by dimension filters only (no dateRange/year filter)
+          // This ensures we aggregate ALL months, then filter by year at the end
+          const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, undefined);
 
           // Build metricNameToIdMap (same as breakdown table) - reverse mapping: name -> id
           // This ensures we use "Cost" and "Revenue" with capital letters as the source of truth

@@ -2707,8 +2707,8 @@ export default function SlideViewPage() {
     isApplyingViewRef.current = true; // Mark that we're applying a view
     
     if (!viewId || viewId === 'unsaved') {
-      // Master view - reset to defaults
-      setSelectedYear(currentYearStr);
+      // Master view - reset to defaults (but keep selectedYear)
+      // Don't reset selectedYear - let user keep their year filter
       setSelectedMonth(currentMonthName);
       setComparisonType('none');
       setChartTimeRange('last_6_months');
@@ -2731,8 +2731,8 @@ export default function SlideViewPage() {
       return;
     }
     
-    // Apply view settings immediately
-    setSelectedYear(view.selected_year);
+    // Apply view settings immediately (but keep selectedYear - don't reset it)
+    // Don't reset selectedYear - let user keep their year filter
     setSelectedMonth(view.selected_month);
     setComparisonType(view.comparison_type);
     if (view.chart_time_range) {
@@ -2751,7 +2751,7 @@ export default function SlideViewPage() {
       title: "View applied",
       description: `View "${view.name}" has been applied.`,
     });
-  }, [views, currentYearStr, currentMonthName]);
+  }, [views, currentMonthName]);
 
   // Delete a saved view
   const handleDeleteView = useCallback(async (viewId: string) => {
@@ -2785,8 +2785,8 @@ export default function SlideViewPage() {
       const view = views.find(v => v.id === selectedViewId);
       if (view) {
         isApplyingViewRef.current = true;
-        // Apply view settings
-        setSelectedYear(view.selected_year);
+        // Apply view settings (but keep selectedYear - don't reset it)
+        // Don't reset selectedYear - let user keep their year filter
         setSelectedMonth(view.selected_month);
         setComparisonType(view.comparison_type);
         if (view.chart_time_range) {
@@ -3598,7 +3598,8 @@ export default function SlideViewPage() {
     viewBudgets as Array<{ id: string; dimension_name: string; dimension_item: string; budget_data: Record<string, number> }>,
     selectedYear,
     filteredData.hasFilters,
-    filteredData.getFilteredRowsForChannel
+    filteredData.getFilteredRowsForChannel,
+    filterValues
   );
 
   const totalBudget = budgetData.reduce((sum, m) => sum + m.budget, 0);
