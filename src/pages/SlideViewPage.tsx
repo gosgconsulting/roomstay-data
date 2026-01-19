@@ -697,28 +697,6 @@ export default function SlideViewPage() {
 
   // Check for share authentication when user is not authenticated
   const [isSharedAccess, setIsSharedAccess] = useState(false);
-  useEffect(() => {
-    if (!user) {
-      // Check if we're accessing via a share link
-      const isShared = searchParams.get('shared') === 'true';
-      const slug = searchParams.get('slug');
-      
-      if (isShared && slug) {
-        // Check if share authentication exists in sessionStorage
-        const authKey = `share_auth_${slug}`;
-        const shareAuth = sessionStorage.getItem(authKey);
-        
-        if (shareAuth === "true") {
-          setIsSharedAccess(true);
-        } else {
-          // No share auth found, redirect back to share link
-          navigate(`/${slug}`);
-        }
-      }
-    } else {
-      setIsSharedAccess(false);
-    }
-  }, [user, searchParams, navigate]);
 
   // Slide report state - moved before filteredMonthlyData so it's available
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
@@ -734,14 +712,98 @@ export default function SlideViewPage() {
   const createView = useCreateSlideReportView();
   const deleteView = useDeleteSlideReportView();
 
-  // Check for viewId in URL params or share link on mount and when views load
+  // Check for share authentication when user is not authenticated (moved after slideReportId declaration)
   useEffect(() => {
+    if (!user) {
+      // Check if we're accessing via a share link
+      const isShared = searchParams.get('shared') === 'true';
+      const slug = searchParams.get('slug');
+      
+      if (isShared && slug) {
+        // Check if share authentication exists in sessionStorage
+        const authKey = `share_auth_${slug}`;
+        const shareAuth = sessionStorage.getItem(authKey);
+        
+        if (shareAuth === "true") {
+          setIsSharedAccess(true);
+          
+          // Load filters from share link if available
+          const filtersKey = `share_filters_${slug}`;
+          const storedFilters = sessionStorage.getItem(filtersKey);
+          if (storedFilters) {
+            try {
+              const channelFilters = JSON.parse(storedFilters);
+              // Apply filters immediately
+              setFilterValues(channelFilters);
+              console.log('[testing] Applied filters from share link:', channelFilters);
+            } catch (error) {
+              console.error('[testing] Error parsing share link filters:', error);
+            }
+          }
+          
+          // Load slide_report_id and account_id from share link if available
+          const storedSlideReportId = sessionStorage.getItem(`share_slide_report_id_${slug}`);
+          const storedAccountId = sessionStorage.getItem(`share_account_id_${slug}`);
+          
+          if (storedSlideReportId && storedAccountId) {
+            // Set slide report ID if not already set
+            if (!slideReportId) {
+              setSlideReportId(storedSlideReportId);
+            }
+            // Verify accountId matches
+            if (accountId !== storedAccountId) {
+              console.warn('[testing] Account ID mismatch:', { accountId, storedAccountId });
+            }
+          }
+        } else {
+          // No share auth found, redirect back to share link
+          navigate(`/${slug}`);
+        }
+      }
+    } else {
+      setIsSharedAccess(false);
+    }
+  }, [user, searchParams, navigate, slideReportId, accountId]);
+
+  // Check for viewId in URL params or share link on mount and when views load
+  // Also check if we're accessing via a share link (shared=true)
+  useEffect(() => {
+    const isShared = searchParams.get('shared') === 'true';
+    const slug = searchParams.get('slug');
+    
+    // If accessing via share link, enable read-only mode
+    if (isShared && slug) {
+      setIsReadOnlyMode(true);
+      
+      // Load filters from share link if not already loaded
+      const filtersKey = `share_filters_${slug}`;
+      const storedFilters = sessionStorage.getItem(filtersKey);
+      if (storedFilters) {
+        try {
+          const channelFilters = JSON.parse(storedFilters);
+          setFilterValues(channelFilters);
+        } catch (error) {
+          console.error('[testing] Error parsing share link filters:', error);
+        }
+      }
+      
+      // Legacy: Check for view_id from share link (backward compatibility)
+      const shareViewId = sessionStorage.getItem(`share_view_id_${slideReportId}`);
+      if (shareViewId && views.length > 0) {
+        const view = views.find(v => v.id === shareViewId);
+        if (view) {
+          setSelectedViewId(shareViewId);
+          handleApplyView(shareViewId);
+          // Clear the session storage after using it
+          sessionStorage.removeItem(`share_view_id_${slideReportId}`);
+        }
+      }
+      return;
+    }
+    
+    // Regular view handling (not from share link)
     const urlViewId = searchParams.get('viewId');
-    
-    // Also check if we're accessing via a share link with view_id
-    // This would be set by the shared link page if it exists
     const shareViewId = sessionStorage.getItem(`share_view_id_${slideReportId}`);
-    
     const viewIdToUse = urlViewId || shareViewId;
     
     if (viewIdToUse && views.length > 0 && !isReadOnlyMode) {
@@ -768,8 +830,8 @@ export default function SlideViewPage() {
           sessionStorage.removeItem(`share_view_id_${slideReportId}`);
         }
       }
-    } else if (!viewIdToUse && isReadOnlyMode) {
-      // If viewId is removed from URL, disable read-only mode
+    } else if (!viewIdToUse && isReadOnlyMode && !isShared) {
+      // If viewId is removed from URL and not from share link, disable read-only mode
       setIsReadOnlyMode(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3986,6 +4048,7 @@ export default function SlideViewPage() {
         accountId={accountId}
         slideReportId={slideReportId}
         availableViews={availableViews}
+        currentFilterValues={filterValues}
       />
 
       {/* Save View Dialog */}

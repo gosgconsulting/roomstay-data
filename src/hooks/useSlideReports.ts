@@ -47,7 +47,7 @@ export function useSlideReport(slideReportId: string | null) {
         .from("slide_reports")
         .select("*")
         .eq("id", slideReportId)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
 

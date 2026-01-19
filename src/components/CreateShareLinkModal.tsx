@@ -22,10 +22,12 @@ interface CreateShareLinkModalProps {
     report_ids: string[];
     dimension_filters?: Record<string, Record<string, string[]>>;
     view_id?: string | null;
+    slide_report_id?: string | null;
   } | null;
   accountId?: string;
   slideReportId?: string | null; // For slide reports
   availableViews?: Array<{ id: string | null; name: string }>; // Available views for slide reports
+  currentFilterValues?: Record<string, Record<string, string[]>>; // Current channel-based filter values from SlideViewPage
 }
 
 interface Report {
@@ -48,7 +50,8 @@ export const CreateShareLinkModal = ({
   editingLink,
   accountId,
   slideReportId,
-  availableViews = []
+  availableViews = [],
+  currentFilterValues
 }: CreateShareLinkModalProps) => {
   const [step, setStep] = useState<1 | 2>(1);
   const [slug, setSlug] = useState("");
@@ -78,7 +81,22 @@ export const CreateShareLinkModal = ({
       if (editingLink) {
         setSlug(editingLink.slug);
         setPassword("");
-        setDimensionFilters(editingLink.dimension_filters || {});
+        // For slide reports, use channel-based filters if available, otherwise use report-based
+        if (slideReportId && editingLink.dimension_filters) {
+          // Check if filters are in channel-based format (has 'metasearch', 'sem', 'social' keys)
+          const hasChannelKeys = Object.keys(editingLink.dimension_filters).some(key => 
+            ['metasearch', 'sem', 'social'].includes(key)
+          );
+          if (hasChannelKeys) {
+            // Already in channel-based format
+            setDimensionFilters(editingLink.dimension_filters);
+          } else {
+            // Convert from report-based to channel-based (for backward compatibility)
+            setDimensionFilters({});
+          }
+        } else {
+          setDimensionFilters(editingLink.dimension_filters || {});
+        }
         setSelectedViewId(editingLink.view_id || null);
       } else {
         setSlug("");
@@ -496,24 +514,58 @@ export const CreateShareLinkModal = ({
 
     const passwordHash = btoa(password || editingLink?.slug || "");
 
+    // For slide reports, use channel-based filters from currentFilterValues
+    // Otherwise, use dimensionFilters (report-based format for regular reports)
+    let filtersToStore: DimensionFilters = {};
+    
+    if (slideReportId) {
+      // For slide reports, store channel-based filters
+      if (currentFilterValues && Object.keys(currentFilterValues).length > 0) {
+        // Use current filter values from SlideViewPage (channel-based format)
+        filtersToStore = currentFilterValues;
+      } else if (selectedViewId) {
+        // Fallback: If view is selected, load filters from view
+        try {
+          const { data: view } = await (supabase.from("slide_report_views" as any) as any)
+            .select("filter_values")
+            .eq("id", selectedViewId)
+            .single();
+          
+          if (view?.filter_values) {
+            filtersToStore = view.filter_values as DimensionFilters;
+          }
+        } catch (error) {
+          console.error('[testing] Error loading view filters:', error);
+        }
+      }
+    } else {
+      // For regular reports, use report-based filters
+      filtersToStore = dimensionFilters;
+    }
+
     if (editingLink) {
       const updateData: any = {
         report_ids: selectedReports,
-        dimension_filters: dimensionFilters,
+        dimension_filters: filtersToStore,
       };
       
       if (password) {
         updateData.password_hash = passwordHash;
       }
 
-      // Add view_id if provided (for slide reports)
-      // For updates, include view_id if slideReportId is set and selectedViewId is explicitly set (can be null to clear)
-      // We use account_id + view_id to look up slide_report_id later (avoids schema cache issues)
-      if (slideReportId !== undefined && selectedViewId !== undefined) {
-        updateData.view_id = selectedViewId; // Can be null to clear, but won't be undefined
+      // For slide reports, store slide_report_id and account_id directly
+      if (slideReportId) {
+        updateData.slide_report_id = slideReportId;
+        updateData.account_id = accountId;
+        // Keep view_id for backward compatibility, but prefer slide_report_id
+        if (selectedViewId !== undefined) {
+          updateData.view_id = selectedViewId;
+        }
+      } else if (slideReportId !== undefined && selectedViewId !== undefined) {
+        // Legacy: keep view_id for backward compatibility
+        updateData.view_id = selectedViewId;
       }
 
-      // Update share link - no need for slide_report_id, we'll look it up using account_id + view_id
       const { error } = await supabase
         .from("share_links")
         .update(updateData)
@@ -541,29 +593,29 @@ export const CreateShareLinkModal = ({
         report_ids: selectedReports,
         created_by: user.id,
         account_id: accountId,
-        dimension_filters: dimensionFilters,
+        dimension_filters: filtersToStore,
       };
 
-      // Add view_id if provided (for slide reports)
-      // We use account_id + view_id to look up slide_report_id later (avoids schema cache issues)
-      if (slideReportId && selectedViewId) {
-        insertData.view_id = selectedViewId;
-        // account_id is already in insertData, we'll use it with view_id to get slide_report_id
-        console.log('[testing] Creating share link with view_id', {
-          view_id: selectedViewId,
-          account_id: insertData.account_id,
-          note: 'slide_report_id will be retrieved from view_id + account_id'
+      // For slide reports, store slide_report_id directly
+      if (slideReportId) {
+        insertData.slide_report_id = slideReportId;
+        // Keep view_id for backward compatibility if provided
+        if (selectedViewId) {
+          insertData.view_id = selectedViewId;
+        }
+        console.log('[testing] Creating share link with slide_report_id', {
+          slide_report_id: slideReportId,
+          account_id: accountId,
+          has_filters: Object.keys(filtersToStore).length > 0
         });
+      } else if (selectedViewId) {
+        // Legacy: keep view_id for backward compatibility
+        insertData.view_id = selectedViewId;
       }
 
-      // Insert share link - no need for slide_report_id, we'll look it up using account_id + view_id
       const { error } = await supabase
         .from("share_links")
         .insert(insertData);
-
-      if (!error && insertData.view_id) {
-        console.log('[testing] Successfully created share link with view_id:', insertData.view_id);
-      }
 
       setLoading(false);
 

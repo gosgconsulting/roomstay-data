@@ -121,75 +121,73 @@ export default function SharedReport() {
   const initializeReport = async (linkData: any) => {
     console.log('[testing] SharedReport - Initializing report with data:', linkData);
     
-    // If this share link has a view_id, it's for a slide report
-    // Redirect to the slide report view
-    if (linkData.view_id) {
+    // Check if this is a slide report share link (has slide_report_id or view_id)
+    const slideReportId = linkData.slide_report_id;
+    const hasViewId = linkData.view_id;
+    
+    if (slideReportId || hasViewId) {
       try {
-        console.log('[testing] SharedReport - Share link has view_id, looking up slide report', {
-          view_id: linkData.view_id,
-          account_id: linkData.account_id
-        });
-        
-        // Use account_id + view_id to look up slide_report_id
-        // This avoids schema cache issues with slide_report_id column
-        let slideReportId: string | undefined;
+        let finalSlideReportId = slideReportId;
         let accountId = linkData.account_id;
 
-        // Query slide_report_views using view_id
-        // The RLS policy should allow access to views referenced by share_links
-        console.log('[testing] Querying slide_report_views with view_id and account_id');
-        try {
-          // First try: Query through share_links relationship to leverage RLS policy
-          const { data: shareLinkWithView, error: shareLinkError } = await supabase
-            .from("share_links")
-            .select(`
-              view_id,
-              slide_report_views!inner (
-                slide_report_id,
-                account_id
-              )
-            `)
-            .eq("slug", slug)
-            .eq("view_id", linkData.view_id)
-            .maybeSingle();
-
-          if (!shareLinkError && shareLinkWithView) {
-            const view = (shareLinkWithView as any).slide_report_views;
-            if (view && Array.isArray(view) && view.length > 0) {
-              slideReportId = view[0].slide_report_id;
-              accountId = view[0].account_id || accountId;
-              console.log('[testing] Successfully retrieved slide_report_id through share_links join:', slideReportId);
-            } else if (view && view.slide_report_id) {
-              // Handle case where it's a single object, not an array
-              slideReportId = view.slide_report_id;
-              accountId = view.account_id || accountId;
-              console.log('[testing] Successfully retrieved slide_report_id through share_links join:', slideReportId);
-            }
-          }
-
-          // Fallback: Try direct query if join didn't work
-          if (!slideReportId) {
-            console.log('[testing] Join query failed, trying direct view query');
-            const { data: view, error: viewError } = await (supabase.from("slide_report_views" as any) as any)
-              .select("slide_report_id, account_id")
-              .eq("id", linkData.view_id)
+        // If we have slide_report_id directly, use it (new format)
+        if (slideReportId) {
+          console.log('[testing] SharedReport - Share link has slide_report_id (new format)', {
+            slide_report_id: slideReportId,
+            account_id: accountId
+          });
+        } else if (hasViewId) {
+          // Legacy: Use view_id to look up slide_report_id (backward compatibility)
+          console.log('[testing] SharedReport - Share link has view_id (legacy format), looking up slide report', {
+            view_id: linkData.view_id,
+            account_id: accountId
+          });
+          
+          // Query slide_report_views using view_id
+          try {
+            const { data: shareLinkWithView, error: shareLinkError } = await supabase
+              .from("share_links")
+              .select(`
+                view_id,
+                slide_report_views!inner (
+                  slide_report_id,
+                  account_id
+                )
+              `)
+              .eq("slug", slug)
+              .eq("view_id", linkData.view_id)
               .maybeSingle();
 
-            if (!viewError && view && view.slide_report_id) {
-              console.log('[testing] Successfully retrieved slide_report_id from direct view query');
-              slideReportId = view.slide_report_id;
-              accountId = view.account_id || accountId;
-            } else if (viewError) {
-              console.error('[testing] Direct view query also failed:', viewError);
+            if (!shareLinkError && shareLinkWithView) {
+              const view = (shareLinkWithView as any).slide_report_views;
+              if (view && Array.isArray(view) && view.length > 0) {
+                finalSlideReportId = view[0].slide_report_id;
+                accountId = view[0].account_id || accountId;
+              } else if (view && view.slide_report_id) {
+                finalSlideReportId = view.slide_report_id;
+                accountId = view.account_id || accountId;
+              }
             }
+
+            // Fallback: Try direct query if join didn't work
+            if (!finalSlideReportId) {
+              const { data: view, error: viewError } = await (supabase.from("slide_report_views" as any) as any)
+                .select("slide_report_id, account_id")
+                .eq("id", linkData.view_id)
+                .maybeSingle();
+
+              if (!viewError && view && view.slide_report_id) {
+                finalSlideReportId = view.slide_report_id;
+                accountId = view.account_id || accountId;
+              }
+            }
+          } catch (err) {
+            console.error('[testing] Exception while querying view:', err);
           }
-        } catch (err) {
-          console.error('[testing] Exception while querying view:', err);
         }
 
         // If accountId is still missing, try to get it from the first report
         if (!accountId && linkData.report_ids && linkData.report_ids.length > 0) {
-          console.log('[testing] account_id missing, attempting to get from report');
           const { data: report } = await supabase
             .from("reports")
             .select("account_id")
@@ -198,15 +196,13 @@ export default function SharedReport() {
           
           if (report?.account_id) {
             accountId = report.account_id;
-            console.log('[testing] Got account_id from report:', accountId);
           }
         }
 
-        if (!slideReportId || !accountId) {
+        if (!finalSlideReportId || !accountId) {
           console.error('[testing] Missing slide_report_id or account_id in share link', {
-            slideReportId,
-            accountId,
-            view_id: linkData.view_id
+            slideReportId: finalSlideReportId,
+            accountId
           });
           toast({
             title: "Invalid share link",
@@ -216,18 +212,73 @@ export default function SharedReport() {
           return;
         }
 
-        // Store view_id in sessionStorage so SlideViewPage can pick it up
-        sessionStorage.setItem(`share_view_id_${slideReportId}`, linkData.view_id);
+        // Extract channel-based filters from dimension_filters
+        const channelFilters = linkData.dimension_filters || {};
+        
+        // Store filters in sessionStorage for SlideViewPage to pick up
+        // Use channel-based format: { "metasearch": { "dimensionId": ["value1"] }, ... }
+        if (Object.keys(channelFilters).length > 0) {
+          // Check if filters are already in channel-based format
+          const hasChannelKeys = Object.keys(channelFilters).some(key => 
+            ['metasearch', 'sem', 'social'].includes(key)
+          );
+          
+          if (hasChannelKeys) {
+            // Already in channel-based format
+            sessionStorage.setItem(`share_filters_${slug}`, JSON.stringify(channelFilters));
+          } else {
+            // Convert from report-based to channel-based format
+            // This requires the slide report's report_ids mapping
+            try {
+              const { data: slideReport } = await supabase
+                .from("slide_reports")
+                .select("report_ids")
+                .eq("id", finalSlideReportId)
+                .single();
+              
+              if (slideReport?.report_ids) {
+                const reportIds = slideReport.report_ids as Record<string, string>;
+                const convertedFilters: Record<string, Record<string, string[]>> = {};
+                
+                // Map report IDs to channels
+                for (const [channel, reportId] of Object.entries(reportIds)) {
+                  if (channelFilters[reportId]) {
+                    convertedFilters[channel] = channelFilters[reportId];
+                  }
+                }
+                
+                if (Object.keys(convertedFilters).length > 0) {
+                  sessionStorage.setItem(`share_filters_${slug}`, JSON.stringify(convertedFilters));
+                }
+              }
+            } catch (error) {
+              console.error('[testing] Error converting filters:', error);
+            }
+          }
+        }
+        
+        // Store slide_report_id and account_id in sessionStorage
+        sessionStorage.setItem(`share_slide_report_id_${slug}`, finalSlideReportId);
+        sessionStorage.setItem(`share_account_id_${slug}`, accountId);
+        
+        // Legacy: Store view_id if it exists (for backward compatibility)
+        if (hasViewId) {
+          sessionStorage.setItem(`share_view_id_${finalSlideReportId}`, linkData.view_id);
+        }
         
         // Store share link data for authentication persistence
         const authKey = `share_auth_${slug}`;
         sessionStorage.setItem(authKey, "true");
         sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(linkData));
 
-        console.log('[testing] Redirecting to slide report view:', { slideReportId, accountId });
+        console.log('[testing] Redirecting to slide report view:', { 
+          slideReportId: finalSlideReportId, 
+          accountId,
+          hasFilters: Object.keys(channelFilters).length > 0
+        });
         
         // Navigate to the slide report view with shared flag
-        navigate(`/tools/reports/${accountId}/view/${slideReportId}?shared=true&slug=${slug}`);
+        navigate(`/tools/reports/${accountId}/view/${finalSlideReportId}?shared=true&slug=${slug}`);
       } catch (error) {
         console.error('[testing] Error handling slide report view:', error);
         toast({
