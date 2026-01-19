@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
+import { AISummaryButton } from "./AISummaryButton";
 
 interface Dimension {
   id: string;
@@ -43,6 +44,9 @@ interface ChannelTabProps {
   getChannelComparisonMetrics: (channel: 'metasearch' | 'sem' | 'social') => any;
   setBreakdownTotals: (updater: (prev: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>) => Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>) => void;
   UnifiedBreakdownTable: React.ComponentType<any>;
+  onAISummaryClick?: () => void;
+  isAISummaryDisabled?: boolean;
+  summaryText?: string | null;
 }
 
 export function ChannelTab({
@@ -74,6 +78,9 @@ export function ChannelTab({
   getChannelComparisonMetrics,
   setBreakdownTotals,
   UnifiedBreakdownTable,
+  onAISummaryClick,
+  isAISummaryDisabled,
+  summaryText,
 }: ChannelTabProps) {
   const gradientId = `${channel}Gradient`;
   
@@ -177,6 +184,21 @@ export function ChannelTab({
               })()}
             </CardContent>
           </Card>
+
+          {/* AI Summary Display - After last report component */}
+          {summaryText && (
+            <AISummaryDisplay summary={summaryText} title={`AI Summary - ${channel.charAt(0).toUpperCase() + channel.slice(1)}`} />
+          )}
+
+          {/* AI Summary Button - After last report component */}
+          {onAISummaryClick && (
+            <div className="flex justify-end">
+              <AISummaryButton
+                onClick={onAISummaryClick}
+                disabled={isAISummaryDisabled}
+              />
+            </div>
+          )}
         </>
       )}
     </TabsContent>

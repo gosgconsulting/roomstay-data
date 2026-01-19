@@ -414,18 +414,6 @@ export default function SlidesPage() {
               return null;
             })()}
 
-            {/* Create First Report CTA - Only show if no custom reports */}
-            {slideReports.filter(r => r.name !== 'Master Report').length === 0 && (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Presentation className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">No custom reports yet</h3>
-                  <p className="text-muted-foreground mb-6">
-                    Create your first report to display pre-rendered data snapshots.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
           </div>
 
           {/* Data Sources and Dimensions Cards */}

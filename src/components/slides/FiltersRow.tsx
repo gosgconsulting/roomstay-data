@@ -32,6 +32,7 @@ interface FiltersRowProps {
   handleApplyView: (viewId: string | null) => void;
   handleDeleteView: (viewId: string) => void;
   setIsSaveViewDialogOpen: (open: boolean) => void;
+  setIsSaveOrUpdateViewDialogOpen: (open: boolean) => void;
   filterValues: Record<string, Record<string, string[]>>;
   setFilterValues: (values: Record<string, Record<string, string[]>> | ((prev: Record<string, Record<string, string[]>>) => Record<string, Record<string, string[]>>)) => void;
   filterDimensionValues: Record<string, Record<string, string[]>>;
@@ -67,6 +68,7 @@ export function FiltersRow({
   handleApplyView,
   handleDeleteView,
   setIsSaveViewDialogOpen,
+  setIsSaveOrUpdateViewDialogOpen,
   filterValues,
   setFilterValues,
   filterDimensionValues,
@@ -129,7 +131,15 @@ export function FiltersRow({
                     variant="outline"
                     size="sm"
                     className="h-10 px-3"
-                    onClick={() => setIsSaveViewDialogOpen(true)}
+                    onClick={() => {
+                      // If a view is selected (and not 'unsaved'), show SaveOrUpdate dialog
+                      // Otherwise, show Save dialog directly
+                      if (selectedViewId && selectedViewId !== 'unsaved') {
+                        setIsSaveOrUpdateViewDialogOpen(true);
+                      } else {
+                        setIsSaveViewDialogOpen(true);
+                      }
+                    }}
                     title="Save current filters as a view"
                   >
                     <BookmarkPlus className="h-4 w-4" />

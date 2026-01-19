@@ -46,12 +46,65 @@ interface CachedPivotData {
   };
 }
 
+interface MinimalAIData {
+  view: 'overview' | 'metasearch' | 'sem' | 'social';
+  period: {
+    year: number;
+    month: string;
+    monthKey: string;
+  };
+  metrics: {
+    [channel: string]: {
+      impressions: number;
+      clicks: number;
+      cost: number;
+      revenue: number;
+      bookings: number;
+      ctr: number;
+      conversionRate: number;
+      cpc: number;
+      roas: number;
+      costOfSale: number;
+    };
+  };
+  comparison?: {
+    previous_period?: {
+      impressions: number;
+      clicks: number;
+      cost: number;
+      revenue: number;
+      bookings: number;
+      ctr: number;
+      conversionRate: number;
+      cpc: number;
+      roas: number;
+      costOfSale: number;
+    };
+    previous_year?: {
+      impressions: number;
+      clicks: number;
+      cost: number;
+      revenue: number;
+      bookings: number;
+      ctr: number;
+      conversionRate: number;
+      cpc: number;
+      roas: number;
+      costOfSale: number;
+    };
+  };
+}
+
 interface RequestBody {
   cardId?: string;
-  pivotData: CachedPivotData | { tableContext: any[] };
-  selectedMetrics: string[];
+  pivotData?: CachedPivotData | { tableContext: any[] };
+  minimalData?: MinimalAIData;
+  selectedTab?: 'overview' | 'metasearch' | 'sem' | 'social';
+  selectedYear?: string;
+  selectedMonth?: string;
+  selectedMetrics?: string[];
   reportConfigs?: Record<string, any>;
-  aiPrompt: string;
+  aiPrompt?: string;
   isTableComment?: boolean;
   comparisonType?: 'previous_period' | 'previous_year' | 'both';
 }
@@ -161,6 +214,136 @@ const formatBreakdownTable = (
   return table + "\n";
 };
 
+/**
+ * Handle AI summary generation for minimal data (single view, single month)
+ */
+async function handleMinimalDataSummary(
+  minimalData: MinimalAIData,
+  selectedTab: string | undefined,
+  selectedYear: string | undefined,
+  selectedMonth: string | undefined,
+  comparisonType: 'previous_period' | 'previous_year' | 'both',
+  aiPrompt: string
+): Promise<Response> {
+  const { view, period, metrics, comparison } = minimalData;
+  
+  // Build data context string
+  let dataContext = `Performance Data for ${period.month} ${period.year}\n`;
+  dataContext += `View: ${view === 'overview' ? 'Overview (All Channels)' : view.toUpperCase()}\n\n`;
+  
+  dataContext += "METRICS:\n";
+  Object.entries(metrics).forEach(([channel, channelMetrics]) => {
+    const channelLabel = channel === 'overview' ? 'Overview' : channel.toUpperCase();
+    dataContext += `\n${channelLabel}:\n`;
+    dataContext += `  Impressions: ${channelMetrics.impressions.toLocaleString()}\n`;
+    dataContext += `  Clicks: ${channelMetrics.clicks.toLocaleString()}\n`;
+    dataContext += `  Cost: $${channelMetrics.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`;
+    dataContext += `  Revenue: $${channelMetrics.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`;
+    dataContext += `  Bookings: ${channelMetrics.bookings}\n`;
+    dataContext += `  CTR: ${channelMetrics.ctr.toFixed(2)}%\n`;
+    dataContext += `  Conversion Rate: ${channelMetrics.conversionRate.toFixed(2)}%\n`;
+    dataContext += `  CPC: $${channelMetrics.cpc.toFixed(2)}\n`;
+    dataContext += `  ROAS: ${channelMetrics.roas.toFixed(2)}x\n`;
+    dataContext += `  Cost of Sale: ${channelMetrics.costOfSale.toFixed(2)}%\n`;
+  });
+
+  // Add comparison data if available
+  if (comparison) {
+    dataContext += "\n\nCOMPARISON DATA:\n";
+    if (comparison.previous_period && (comparisonType === "previous_period" || comparisonType === "both")) {
+      const comp = comparison.previous_period;
+      dataContext += "\nPrevious Period:\n";
+      dataContext += `  Impressions: ${comp.impressions.toLocaleString()}\n`;
+      dataContext += `  Clicks: ${comp.clicks.toLocaleString()}\n`;
+      dataContext += `  Cost: $${comp.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`;
+      dataContext += `  Revenue: $${comp.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`;
+      dataContext += `  Bookings: ${comp.bookings}\n`;
+    }
+    if (comparison.previous_year && (comparisonType === "previous_year" || comparisonType === "both")) {
+      const comp = comparison.previous_year;
+      dataContext += "\nPrevious Year (Same Period):\n";
+      dataContext += `  Impressions: ${comp.impressions.toLocaleString()}\n`;
+      dataContext += `  Clicks: ${comp.clicks.toLocaleString()}\n`;
+      dataContext += `  Cost: $${comp.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`;
+      dataContext += `  Revenue: $${comp.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`;
+      dataContext += `  Bookings: ${comp.bookings}\n`;
+    }
+  }
+
+  // Build system prompt optimized for single-view, single-month analysis
+  const viewLabel = view === 'overview' ? 'Overview (All Channels)' : view.toUpperCase();
+  const systemPrompt = `You are an expert digital marketing analyst writing executive summaries for hotel and hospitality clients. 
+
+## CONTEXT
+You are analyzing ${viewLabel} performance data for ${period.month} ${period.year}.
+
+${comparison ? `COMPARISON: ${comparisonType === 'both' ? 'Compare against both previous period and previous year' : comparisonType === 'previous_period' ? 'Compare against previous period' : 'Compare against same period last year'}` : 'No comparison data available.'}
+
+## REQUIREMENTS
+1. Provide a concise executive summary (3-4 paragraphs, ~200-300 words)
+2. Focus on key performance indicators: Revenue, ROAS, Cost, Bookings, and efficiency metrics (CTR, Conversion Rate, CPC)
+3. ${view === 'overview' ? 'Compare performance across channels (Metasearch, SEM, Social) and identify which channel is most efficient' : `Analyze ${view.toUpperCase()} channel performance in detail`}
+4. ${comparison ? 'Include specific percentage changes when comparison data is available. Use +/- signs for changes.' : 'Focus on current performance without comparisons.'}
+5. Provide 2-3 actionable recommendations
+6. Keep the tone professional and data-driven
+
+## OUTPUT FORMAT
+- Executive Summary (2-3 paragraphs)
+- Key Insights (2-3 bullet points)
+- Recommendations (2-3 actionable items)
+
+Focus on strategic insights, not just restating the numbers.`;
+
+  const userPrompt = aiPrompt || `Please analyze the following ${viewLabel} performance data for ${period.month} ${period.year} and generate an executive summary.\n\n${dataContext}`;
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openRouterApiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://lovable.dev',
+        'X-Title': 'AI Summary Generator'
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.0-flash-exp:free',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        max_tokens: 1500,
+        temperature: 0.7
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('OpenRouter API error:', response.status, errorText);
+      return new Response(
+        JSON.stringify({ error: `API error: ${response.status}` }),
+        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const data = await response.json();
+    const summary = data.choices?.[0]?.message?.content || '';
+
+    return new Response(
+      JSON.stringify({ 
+        summary: summary,
+        executiveSummary: summary // For consistency with existing API
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (error) {
+    console.error('Error generating minimal data summary:', error);
+    return new Response(
+      JSON.stringify({ error: 'Failed to generate summary' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -176,10 +359,27 @@ serve(async (req) => {
     }
 
     const body: RequestBody = await req.json();
-    const { cardId, pivotData, selectedMetrics, reportConfigs, aiPrompt, isTableComment, comparisonType = 'previous_year' } = body;
+    const { 
+      cardId, 
+      pivotData, 
+      minimalData,
+      selectedTab,
+      selectedYear,
+      selectedMonth,
+      selectedMetrics = [], 
+      reportConfigs, 
+      aiPrompt = '', 
+      isTableComment, 
+      comparisonType = 'previous_year' 
+    } = body;
 
     console.log('Generating AI summary, isTableComment:', isTableComment, 'comparisonType:', comparisonType);
-    console.log('Selected metrics:', selectedMetrics);
+    console.log('Has minimalData:', !!minimalData, 'Has pivotData:', !!pivotData);
+
+    // Handle minimal data path (from slide view)
+    if (minimalData) {
+      return handleMinimalDataSummary(minimalData, selectedTab, selectedYear, selectedMonth, comparisonType, aiPrompt);
+    }
 
     if (!pivotData) {
       return new Response(

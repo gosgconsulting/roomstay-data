@@ -7,6 +7,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Settings2, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart } from "lucide-react";
 import { SlideReport } from "@/types/slideReports";
 import { calculateDerivedMetrics, formatNumber } from "@/lib/slideViewHelpers";
+import { AISummaryButton } from "./AISummaryButton";
 
 interface OverviewTabProps {
   slideReportId: string | null;
@@ -40,6 +41,9 @@ interface OverviewTabProps {
     color: string;
     format?: string;
   }>;
+  onAISummaryClick?: () => void;
+  isAISummaryDisabled?: boolean;
+  summaryText?: string | null;
 }
 
 const hasAnyData = (totals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>): boolean => {
@@ -75,6 +79,9 @@ export function OverviewTab({
   filteredData,
   slideType,
   KPI_CARDS,
+  onAISummaryClick,
+  isAISummaryDisabled,
+  summaryText,
 }: OverviewTabProps) {
   return (
     <TabsContent value="overview" className="space-y-6">
@@ -298,6 +305,21 @@ export function OverviewTab({
             </Table>
           </CardContent>
         </Card>
+      )}
+
+      {/* AI Summary Display - After last report component */}
+      {summaryText && (
+        <AISummaryDisplay summary={summaryText} title="AI Summary" />
+      )}
+
+      {/* AI Summary Button - After last report component */}
+      {onAISummaryClick && (
+        <div className="flex justify-end">
+          <AISummaryButton
+            onClick={onAISummaryClick}
+            disabled={isAISummaryDisabled}
+          />
+        </div>
       )}
     </TabsContent>
   );

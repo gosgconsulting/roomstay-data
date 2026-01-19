@@ -9,6 +9,7 @@ import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingU
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { SaveViewDialog } from "@/components/slides/SaveViewDialog";
+import { SaveOrUpdateViewDialog } from "@/components/slides/SaveOrUpdateViewDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
-import { useSlideReportViews, useCreateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
+import { useSlideReportViews, useCreateSlideReportView, useUpdateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
 import { useChannelMetrics } from "@/hooks/useChannelMetrics";
 import { useFilteredSlideData } from "@/hooks/useFilteredSlideData";
 import { useEditSourceModal } from "@/hooks/useEditSourceModal";
@@ -48,6 +49,10 @@ import { BudgetTab } from "@/components/slides/BudgetTab";
 import { BookingTab } from "@/components/slides/BookingTab";
 import { PriceCheckTab } from "@/components/slides/PriceCheckTab";
 import { RefreshDataModal } from "@/components/slides/RefreshDataModal";
+import { AISummaryButton } from "@/components/slides/AISummaryButton";
+import { SlideViewAISummaryModal } from "@/components/slides/SlideViewAISummaryModal";
+import { useSlideReportSummaries, useGetSummaryForTab } from "@/hooks/useSlideReportSummaries";
+import { extractMinimalAIData } from "@/lib/extractMinimalAIData";
 import { isWithinInterval } from "date-fns";
 import { aggregateMetrics } from "@/components/AISummaryPivotTable";
 import { BASE_METRICS, CHANNEL_REPORT_IDS, MONTH_NAMES } from "@/constants/slideViewConstants";
@@ -613,13 +618,16 @@ export default function SlideViewPage() {
   const [selectedTab, setSelectedTab] = useState("overview");
   const [comparisonType, setComparisonType] = useState("none");
   const [chartTimeRange, setChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
+  const [priceCheckChartTimeRange, setPriceCheckChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null); // Selected view ID (null = Master, 'unsaved' = Unsaved)
   const [isSaveViewDialogOpen, setIsSaveViewDialogOpen] = useState(false);
+  const [isSaveOrUpdateViewDialogOpen, setIsSaveOrUpdateViewDialogOpen] = useState(false);
   const isApplyingViewRef = useRef(false); // Track when we're applying a view to avoid triggering "Unsaved"
   const [isReadOnlyMode, setIsReadOnlyMode] = useState(false); // Read-only mode when viewing shared view
   const [isEditSourceOpen, setIsEditSourceOpen] = useState(false);
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isAISummaryModalOpen, setIsAISummaryModalOpen] = useState(false);
   const [forecastEnabled, setForecastEnabled] = useState(false); // Forecast mode for budget table
   const [pnlModeEnabled, setPnlModeEnabled] = useState(false); // PnL mode for budget table
   const [editingBudget, setEditingBudget] = useState<{ month: string; channel: string | null } | null>(null); // { month: "November 2025", channel: "metasearch" | "sem" | "social" | null for overview }
@@ -712,7 +720,11 @@ export default function SlideViewPage() {
   // Views management
   const { data: views = [], isLoading: isLoadingViews } = useSlideReportViews(slideReportId);
   const createView = useCreateSlideReportView();
+  const updateView = useUpdateSlideReportView();
   const deleteView = useDeleteSlideReportView();
+  
+  // Load summaries
+  const { data: summaries = [] } = useSlideReportSummaries(slideReportId);
 
   // Check for share authentication when user is not authenticated (moved after slideReportId declaration)
   useEffect(() => {
@@ -928,6 +940,22 @@ export default function SlideViewPage() {
     slideType,
     dynamicChannelTotals,
   });
+
+  // Extract minimal data for AI summary (only for report tabs)
+  const minimalAIData = useMemo(() => {
+    if (!slideReport?.pivot_data || selectedYear === 'all' || selectedMonth === 'all') {
+      return null;
+    }
+    if (selectedTab !== 'overview' && selectedTab !== 'metasearch' && selectedTab !== 'sem' && selectedTab !== 'social') {
+      return null;
+    }
+    return extractMinimalAIData(
+      slideReport.pivot_data,
+      selectedTab as 'overview' | 'metasearch' | 'sem' | 'social',
+      selectedYear,
+      selectedMonth
+    );
+  }, [slideReport?.pivot_data, selectedTab, selectedYear, selectedMonth]);
 
   // Filter monthly data - now uses unified filteredData hook
   // Fallback to dynamicMonthlyData for master-report if no pivot data
@@ -2746,6 +2774,7 @@ export default function SlideViewPage() {
         selected_month: selectedMonth,
         comparison_type: comparisonType as 'none' | 'previous_period' | 'previous_year',
         chart_time_range: chartTimeRange,
+        price_check_chart_time_range: priceCheckChartTimeRange,
         filter_values: { ...filterValues }, // Deep copy to avoid mutations
       });
 
@@ -2765,7 +2794,37 @@ export default function SlideViewPage() {
       // Error toast is handled by the mutation
       console.error('Error saving view:', error);
     }
-  }, [slideReportId, slideReport, user, accountId, selectedYear, selectedMonth, comparisonType, chartTimeRange, filterValues, createView, views, queryClient]);
+  }, [slideReportId, slideReport, user, accountId, selectedYear, selectedMonth, comparisonType, chartTimeRange, priceCheckChartTimeRange, filterValues, createView, views, queryClient]);
+
+  // Update an existing view
+  const handleUpdateView = useCallback(async (viewId: string) => {
+    if (!slideReportId || !slideReport || !user) {
+      toast({
+        title: "Error",
+        description: "No report selected. Please configure your report first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await updateView.mutateAsync({
+        id: viewId,
+        selected_year: selectedYear,
+        selected_month: selectedMonth,
+        comparison_type: comparisonType as 'none' | 'previous_period' | 'previous_year',
+        chart_time_range: chartTimeRange,
+        price_check_chart_time_range: priceCheckChartTimeRange,
+        filter_values: { ...filterValues }, // Deep copy to avoid mutations
+      });
+
+      // The view will be automatically refetched by the query
+      queryClient.invalidateQueries({ queryKey: ['slide_report_views', 'list', slideReportId] });
+    } catch (error) {
+      // Error toast is handled by the mutation
+      console.error('Error updating view:', error);
+    }
+  }, [slideReportId, slideReport, user, selectedYear, selectedMonth, comparisonType, chartTimeRange, priceCheckChartTimeRange, filterValues, updateView, queryClient]);
 
   // Apply a saved view
   const handleApplyView = useCallback((viewId: string | null) => {
@@ -2777,6 +2836,7 @@ export default function SlideViewPage() {
       setSelectedMonth(currentMonthName);
       setComparisonType('none');
       setChartTimeRange('last_6_months');
+      setPriceCheckChartTimeRange('last_6_months');
       setFilterValues({
         metasearch: {},
         sem: {},
@@ -2805,6 +2865,11 @@ export default function SlideViewPage() {
       setChartTimeRange(view.chart_time_range);
     } else {
       setChartTimeRange('last_6_months'); // Default
+    }
+    if (view.price_check_chart_time_range) {
+      setPriceCheckChartTimeRange(view.price_check_chart_time_range);
+    } else {
+      setPriceCheckChartTimeRange('last_6_months'); // Default
     }
     // Apply filter values - this will filter the data on all tabs including Overview
     setFilterValues(view.filter_values || {
@@ -2861,10 +2926,16 @@ export default function SlideViewPage() {
         } else {
           setChartTimeRange('last_6_months');
         }
+        if (view.price_check_chart_time_range) {
+          setPriceCheckChartTimeRange(view.price_check_chart_time_range);
+        } else {
+          setPriceCheckChartTimeRange('last_6_months');
+        }
         setFilterValues(view.filter_values || {
           metasearch: {},
           sem: {},
           social: {},
+          'price-check': {},
         });
       }
     }
@@ -4064,6 +4135,19 @@ export default function SlideViewPage() {
         existingViewNames={availableViews.filter(v => v.id !== null).map(v => v.name)}
       />
 
+      {/* Save or Update View Dialog */}
+      <SaveOrUpdateViewDialog
+        open={isSaveOrUpdateViewDialogOpen}
+        onOpenChange={setIsSaveOrUpdateViewDialogOpen}
+        onSaveNew={() => {
+          setIsSaveOrUpdateViewDialogOpen(false);
+          setIsSaveViewDialogOpen(true);
+        }}
+        onUpdate={handleUpdateView}
+        availableViews={availableViews}
+        currentViewId={selectedViewId}
+      />
+
       <div className="p-6 space-y-6">
         {/* Read-only mode banner */}
         {isReadOnlyMode && (
@@ -4101,6 +4185,7 @@ export default function SlideViewPage() {
             handleApplyView={handleApplyView}
             handleDeleteView={handleDeleteView}
             setIsSaveViewDialogOpen={setIsSaveViewDialogOpen}
+            setIsSaveOrUpdateViewDialogOpen={setIsSaveOrUpdateViewDialogOpen}
             filterValues={filterValues}
             setFilterValues={setFilterValues}
             filterDimensionValues={filterDimensionValues}
@@ -4158,6 +4243,8 @@ export default function SlideViewPage() {
               filteredData={filteredData}
               slideType={slideType}
               KPI_CARDS={KPI_CARDS}
+              onAISummaryClick={() => setIsAISummaryModalOpen(true)}
+              isAISummaryDisabled={!slideReport?.pivot_data || selectedYear === 'all' || selectedMonth === 'all'}
             />
 
             <ChannelTab
@@ -4181,6 +4268,7 @@ export default function SlideViewPage() {
               selectedMonth={selectedMonth}
               filterValues={filterValues}
               filterDimensionValues={filterDimensionValues}
+              summaryText={summaries.find(s => s.tab === 'metasearch' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId || s.view_id === selectedViewId))?.summary_text}
               breakdownDimensions={breakdownDimensions}
               breakdownConfigs={breakdownConfigs}
               renderKPICards={renderKPICards}
@@ -4189,6 +4277,8 @@ export default function SlideViewPage() {
               getChannelComparisonMetrics={getChannelComparisonMetrics}
               setBreakdownTotals={setBreakdownTotals}
               UnifiedBreakdownTable={UnifiedBreakdownTable}
+              onAISummaryClick={() => setIsAISummaryModalOpen(true)}
+              isAISummaryDisabled={!slideReport?.pivot_data || selectedYear === 'all' || selectedMonth === 'all'}
             />
 
             <ChannelTab
@@ -4220,6 +4310,9 @@ export default function SlideViewPage() {
               getChannelComparisonMetrics={getChannelComparisonMetrics}
               setBreakdownTotals={setBreakdownTotals}
               UnifiedBreakdownTable={UnifiedBreakdownTable}
+              onAISummaryClick={() => setIsAISummaryModalOpen(true)}
+              isAISummaryDisabled={!slideReport?.pivot_data || selectedYear === 'all' || selectedMonth === 'all'}
+              summaryText={summaries.find(s => s.tab === 'sem' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId || s.view_id === selectedViewId))?.summary_text}
             />
 
             <ChannelTab
@@ -4251,6 +4344,8 @@ export default function SlideViewPage() {
               getChannelComparisonMetrics={getChannelComparisonMetrics}
               setBreakdownTotals={setBreakdownTotals}
               UnifiedBreakdownTable={UnifiedBreakdownTable}
+              onAISummaryClick={() => setIsAISummaryModalOpen(true)}
+              isAISummaryDisabled={!slideReport?.pivot_data || selectedYear === 'all' || selectedMonth === 'all'}
             />
 
             <BudgetTab
@@ -4298,8 +4393,8 @@ export default function SlideViewPage() {
                   },
                 }));
               }}
-              chartTimeRange={chartTimeRange}
-              onChartTimeRangeChange={setChartTimeRange}
+              chartTimeRange={priceCheckChartTimeRange}
+              onChartTimeRangeChange={setPriceCheckChartTimeRange}
             />
 
         </div>
@@ -4311,6 +4406,22 @@ export default function SlideViewPage() {
         refreshStepStatus={refreshStepStatus}
         refreshError={refreshError}
       />
+
+      {/* AI Summary Modal */}
+      {(selectedTab === 'overview' || selectedTab === 'metasearch' || selectedTab === 'sem' || selectedTab === 'social') && (
+        <SlideViewAISummaryModal
+          open={isAISummaryModalOpen}
+          onOpenChange={setIsAISummaryModalOpen}
+          minimalData={minimalAIData}
+          selectedTab={selectedTab as 'overview' | 'metasearch' | 'sem' | 'social'}
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+          pivotData={slideReport?.pivot_data as SlideReportPivotData | null}
+          availableViews={availableViews}
+          views={views}
+          slideReportId={slideReportId}
+        />
+      )}
     </Tabs>
   );
 }
