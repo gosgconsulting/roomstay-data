@@ -50,6 +50,11 @@ export function SlideViewHeader({
           </TabsList>
         </div>
         <div className="flex items-center gap-2">
+          {slideReport?.last_refreshed_at && (
+            <span className="text-xs text-muted-foreground mr-2">
+              Last refreshed: {new Date(slideReport.last_refreshed_at).toLocaleString()}
+            </span>
+          )}
           <Button variant="outline" size="sm" onClick={() => setIsShareModalOpen(true)}>
             <Share2 className="h-4 w-4 mr-2" />
             Share
