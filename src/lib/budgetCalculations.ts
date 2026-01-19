@@ -1,0 +1,378 @@
+/**
+ * Utility functions for calculating budget data
+ */
+
+import { MONTH_NAMES } from '@/constants/slideViewConstants';
+import type { SlideReportPivotData } from '@/types/slideReports';
+import type { RawDataRow } from '@/types/slideView';
+
+export type BudgetMonthlyRow = {
+  month: string;
+  metasearchBudget: number;
+  semBudget: number;
+  socialBudget: number;
+  metasearchActual: number;
+  semActual: number;
+  socialActual: number;
+  metasearch: number;
+  sem: number;
+  social: number;
+};
+
+export type ViewBudget = {
+  id: string;
+  dimension_name: string;
+  dimension_item: string;
+  budget_data: Record<string, number>;
+};
+
+/**
+ * Calculate budget data from pivot data or view budgets
+ */
+export function calculateBudgetData(
+  pivotData: SlideReportPivotData | null,
+  selectedViewId: string | null,
+  viewBudgets: ViewBudget[],
+  selectedYear: string
+): Array<{ month: string; budget: number; actual: number }> {
+  // If a view is selected, use view budgets
+  if (selectedViewId && viewBudgets.length > 0) {
+    // Aggregate budgets by month from view budgets
+    const monthlyBudgetMap: Record<string, { budget: number; actual: number }> = {};
+
+    // Get actual costs from pivot_data.overview.monthly (already filtered by view)
+    if (pivotData?.overview?.monthly) {
+      Object.entries(pivotData.overview.monthly).forEach(([monthKey, metrics]) => {
+        // monthKey format: "2025-11" -> convert to "November 2025"
+        const [year, month] = monthKey.split('-');
+        const monthNum = parseInt(month);
+        if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+          return;
+        }
+        const monthName = MONTH_NAMES[monthNum - 1];
+        const yearMonthKey = `${monthName} ${year}`;
+
+        if (!monthlyBudgetMap[yearMonthKey]) {
+          monthlyBudgetMap[yearMonthKey] = { budget: 0, actual: 0 };
+        }
+        // Use cost from overview monthly data (already filtered by view)
+        monthlyBudgetMap[yearMonthKey].actual = metrics.cost || 0;
+      });
+    }
+
+    // Aggregate budgets from view budgets
+    viewBudgets.forEach((budget) => {
+      Object.entries(budget.budget_data).forEach(([monthKey, amount]) => {
+        // monthKey format: "2025-11" -> convert to "November 2025"
+        const [year, month] = monthKey.split('-');
+        const monthNum = parseInt(month);
+        if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+          console.warn('Invalid month in budget key:', monthKey);
+          return;
+        }
+        const monthName = MONTH_NAMES[monthNum - 1];
+        const yearMonthKey = `${monthName} ${year}`;
+
+        if (!monthlyBudgetMap[yearMonthKey]) {
+          monthlyBudgetMap[yearMonthKey] = { budget: 0, actual: 0 };
+        }
+        monthlyBudgetMap[yearMonthKey].budget += Number(amount) || 0;
+      });
+    });
+
+    let budgetDataArray = Object.entries(monthlyBudgetMap)
+      .map(([month, data]) => ({ month, ...data }))
+      .sort((a, b) => {
+        // Parse "Month Year" format (e.g., "November 2025")
+        const parseMonthYear = (str: string) => {
+          const [monthName, year] = str.split(' ');
+          const monthIndex = MONTH_NAMES.indexOf(monthName);
+          return new Date(parseInt(year), monthIndex, 1);
+        };
+        const aDate = parseMonthYear(a.month);
+        const bDate = parseMonthYear(b.month);
+        return aDate.getTime() - bDate.getTime();
+      });
+
+    // Filter by selected year if not "all"
+    if (selectedYear !== 'all') {
+      budgetDataArray = budgetDataArray.filter((item) => {
+        const [, year] = item.month.split(' ');
+        return year === selectedYear;
+      });
+    }
+
+    return budgetDataArray;
+  }
+
+  // Fallback to pivot_data.budget
+  if (pivotData?.budget?.monthly) {
+    let monthlyData = pivotData.budget.monthly.map((m) => ({
+      month: m.month,
+      budget: m.metasearchBudget + m.semBudget + m.socialBudget,
+      actual: m.metasearchActual + m.semActual + m.socialActual,
+    }));
+
+    // Filter by selected year if not "all"
+    if (selectedYear !== 'all') {
+      monthlyData = monthlyData.filter((item) => {
+        const [, year] = item.month.split(' ');
+        return year === selectedYear;
+      });
+    }
+
+    return monthlyData;
+  }
+  return [];
+}
+
+/**
+ * Calculate budget monthly data for tables (full structure with all fields)
+ */
+export function calculateBudgetMonthlyData(
+  pivotData: SlideReportPivotData | null,
+  selectedViewId: string | null,
+  viewBudgets: ViewBudget[],
+  selectedYear: string,
+  hasFilters: boolean,
+  getFilteredRowsForChannel: (channel: string) => RawDataRow[]
+): BudgetMonthlyRow[] {
+  // If a view is selected, construct monthly data from view budgets and filtered data
+  if (selectedViewId && viewBudgets.length > 0) {
+    const monthlyDataMap: Record<string, BudgetMonthlyRow> = {};
+
+    // Get actual costs and revenue from filtered rawDataRows (when filters are applied)
+    // or from pivot_data.channels.monthly (when no filters)
+    if (pivotData?.channels) {
+      ['metasearch', 'sem', 'social'].forEach((channel) => {
+        const channelData = pivotData.channels[channel];
+
+        if (hasFilters) {
+          // Use filtered rows from unified hook
+          const filteredRows = getFilteredRowsForChannel(channel);
+
+          // Build metricNameToIdMap (same as breakdown table) - reverse mapping: name -> id
+          // This ensures we use "Cost" and "Revenue" with capital letters as the source of truth
+          const dimensionMap = (channelData as any).dimensionMap || {};
+          const metricNameToIdMap: Record<string, string> = {};
+          Object.entries(dimensionMap as Record<string, string>).forEach(
+            ([dimensionId, dimensionName]) => {
+              if (dimensionName && typeof dimensionName === 'string') {
+                metricNameToIdMap[dimensionName] = dimensionId;
+              }
+            }
+          );
+
+          // Aggregate by month from filtered rows
+          filteredRows.forEach((row: RawDataRow) => {
+            const rowData = row.dimension_values || row;
+
+            // Find date value
+            let dateValue: string | undefined = (rowData as Record<string, unknown>)
+              .Date as string | undefined;
+            if (!dateValue) {
+              dateValue = (rowData as Record<string, unknown>).date as string | undefined;
+            }
+            if (!dateValue) {
+              dateValue = (rowData as Record<string, unknown>).Day as string | undefined;
+            }
+            if (!dateValue) {
+              dateValue = (rowData as Record<string, unknown>).day as string | undefined;
+            }
+            if (!dateValue) {
+              for (const [key, val] of Object.entries(rowData)) {
+                if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+                  dateValue = val;
+                  break;
+                }
+              }
+            }
+
+            if (dateValue) {
+              const rowDate = new Date(dateValue);
+              if (!isNaN(rowDate.getTime())) {
+                const year = rowDate.getFullYear();
+                const monthName = MONTH_NAMES[rowDate.getMonth()];
+                const yearMonthKey = `${monthName} ${year}`;
+
+                if (!monthlyDataMap[yearMonthKey]) {
+                  monthlyDataMap[yearMonthKey] = {
+                    month: yearMonthKey,
+                    metasearchBudget: 0,
+                    semBudget: 0,
+                    socialBudget: 0,
+                    metasearchActual: 0,
+                    semActual: 0,
+                    socialActual: 0,
+                    metasearch: 0,
+                    sem: 0,
+                    social: 0,
+                  };
+                }
+
+                // Use EXACT same extraction logic as UnifiedBreakdownTable for consistency
+                // This ensures we get the same values as the breakdown table
+                const costValue =
+                  parseFloat(
+                    String(
+                      rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0
+                    ).replace(/[^0-9.-]/g, '')
+                  ) || 0;
+                const revenueValue =
+                  parseFloat(
+                    String(
+                      rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0
+                    ).replace(/[^0-9.-]/g, '')
+                  ) || 0;
+
+                if (channel === 'metasearch') {
+                  monthlyDataMap[yearMonthKey].metasearchActual += costValue;
+                  monthlyDataMap[yearMonthKey].metasearch += revenueValue;
+                } else if (channel === 'sem') {
+                  monthlyDataMap[yearMonthKey].semActual += costValue;
+                  monthlyDataMap[yearMonthKey].sem += revenueValue;
+                } else if (channel === 'social') {
+                  monthlyDataMap[yearMonthKey].socialActual += costValue;
+                  monthlyDataMap[yearMonthKey].social += revenueValue;
+                }
+              }
+            }
+          });
+        } else {
+          // No filters - use pre-computed monthly data
+          if (channelData?.monthly) {
+            Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
+              // monthKey format: "2025-11" -> convert to "November 2025"
+              const [year, month] = monthKey.split('-');
+              const monthNum = parseInt(month);
+              if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+                return;
+              }
+              const monthName = MONTH_NAMES[monthNum - 1];
+              const yearMonthKey = `${monthName} ${year}`;
+
+              if (!monthlyDataMap[yearMonthKey]) {
+                monthlyDataMap[yearMonthKey] = {
+                  month: yearMonthKey,
+                  metasearchBudget: 0,
+                  semBudget: 0,
+                  socialBudget: 0,
+                  metasearchActual: 0,
+                  semActual: 0,
+                  socialActual: 0,
+                  metasearch: 0,
+                  sem: 0,
+                  social: 0,
+                };
+              }
+
+              const cost = metrics.cost || 0;
+              const revenue = metrics.revenue || 0;
+
+              if (channel === 'metasearch') {
+                monthlyDataMap[yearMonthKey].metasearchActual = cost;
+                monthlyDataMap[yearMonthKey].metasearch = revenue;
+              } else if (channel === 'sem') {
+                monthlyDataMap[yearMonthKey].semActual = cost;
+                monthlyDataMap[yearMonthKey].sem = revenue;
+              } else if (channel === 'social') {
+                monthlyDataMap[yearMonthKey].socialActual = cost;
+                monthlyDataMap[yearMonthKey].social = revenue;
+              }
+            });
+          }
+        }
+      });
+    }
+
+    // Add budgets from view budgets
+    viewBudgets.forEach((budget) => {
+      Object.entries(budget.budget_data).forEach(([monthKey, amount]) => {
+        const [year, month] = monthKey.split('-');
+        const monthName = MONTH_NAMES[parseInt(month) - 1];
+        const yearMonthKey = `${monthName} ${year}`;
+
+        if (!monthlyDataMap[yearMonthKey]) {
+          monthlyDataMap[yearMonthKey] = {
+            month: yearMonthKey,
+            metasearchBudget: 0,
+            semBudget: 0,
+            socialBudget: 0,
+            metasearchActual: 0,
+            semActual: 0,
+            socialActual: 0,
+            metasearch: 0,
+            sem: 0,
+            social: 0,
+          };
+        }
+
+        // Aggregate budgets - budgets are stored per hotel (dimension_item)
+        // Since we don't have channel info in budgets, we'll distribute evenly across channels
+        // or you can adjust this based on your actual budget structure
+        const budgetAmount = Number(amount) || 0;
+
+        // For now, distribute budget evenly across all three channels
+        // In the future, you might want to store channel info in the budget or use dimension_name
+        const budgetPerChannel = budgetAmount / 3;
+        monthlyDataMap[yearMonthKey].metasearchBudget += budgetPerChannel;
+        monthlyDataMap[yearMonthKey].semBudget += budgetPerChannel;
+        monthlyDataMap[yearMonthKey].socialBudget += budgetPerChannel;
+      });
+    });
+
+    let monthlyDataArray = Object.values(monthlyDataMap).sort((a, b) => {
+      // Parse "Month Year" format (e.g., "November 2025")
+      const parseMonthYear = (str: string) => {
+        const [monthName, year] = str.split(' ');
+        const monthIndex = MONTH_NAMES.indexOf(monthName);
+        return new Date(parseInt(year), monthIndex, 1);
+      };
+      const aDate = parseMonthYear(a.month);
+      const bDate = parseMonthYear(b.month);
+      return aDate.getTime() - bDate.getTime();
+    });
+
+    // Filter by selected year if not "all"
+    if (selectedYear !== 'all') {
+      monthlyDataArray = monthlyDataArray.filter((item) => {
+        const [, year] = item.month.split(' ');
+        return year === selectedYear;
+      });
+    }
+
+    return monthlyDataArray;
+  }
+
+  // Fallback to pivot_data.budget - need to add revenue data
+  if (pivotData?.budget?.monthly) {
+    let monthlyData: BudgetMonthlyRow[] = pivotData.budget.monthly.map((row) => {
+      // Get revenue from channels data
+      const [monthName, year] = row.month.split(' ');
+      const monthIndex = MONTH_NAMES.indexOf(monthName);
+      const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+
+      const metasearchRevenue =
+        pivotData.channels?.metasearch?.monthly?.[monthKey]?.revenue || 0;
+      const semRevenue = pivotData.channels?.sem?.monthly?.[monthKey]?.revenue || 0;
+      const socialRevenue = pivotData.channels?.social?.monthly?.[monthKey]?.revenue || 0;
+
+      return {
+        ...row,
+        metasearch: metasearchRevenue,
+        sem: semRevenue,
+        social: socialRevenue,
+      };
+    });
+
+    // Filter by selected year if not "all"
+    if (selectedYear !== 'all') {
+      monthlyData = monthlyData.filter((item) => {
+        const [, year] = item.month.split(' ');
+        return year === selectedYear;
+      });
+    }
+    return monthlyData;
+  }
+  return [];
+}

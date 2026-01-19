@@ -24,6 +24,12 @@ import { useChannelMetrics } from "@/hooks/useChannelMetrics";
 import { useFilteredSlideData } from "@/hooks/useFilteredSlideData";
 import { useEditSourceModal } from "@/hooks/useEditSourceModal";
 import { useDataLoadingCache } from "@/hooks/useDataLoadingCache";
+import { useOverviewMetrics } from "@/hooks/useOverviewMetrics";
+import { useComparisonMetrics, useChannelComparisonMetrics } from "@/hooks/useComparisonMetrics";
+import { useKPICards, useReportKPICards } from "@/hooks/useKPICards";
+import { useOverviewChartData, useAllChannelChartData } from "@/hooks/useChartData";
+import { useBudgetData, useBudgetMonthlyData } from "@/hooks/useBudgetData";
+import { calculateReportBreakdown, calculateReportTotal } from "@/lib/metricsCalculations";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange, BreakdownRow, ChannelMetrics } from "@/types/slideReports";
@@ -31,7 +37,15 @@ import { useUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { SlideDataBrowser } from "@/components/slides/SlideDataBrowser";
 import { RefreshStepIndicator, ChannelTabsList, DimensionValuesList } from "@/components/slides/EditSourceModal";
+import { EditSourceModal } from "@/components/slides/EditSourceModal/EditSourceModal";
 import { ShareModal } from "@/components/ShareModal";
+import { SlideViewHeader } from "@/components/slides/SlideViewHeader";
+import { FiltersRow } from "@/components/slides/FiltersRow";
+import { ComparisonBanner } from "@/components/slides/ComparisonBanner";
+import { OverviewTab } from "@/components/slides/OverviewTab";
+import { ChannelTab } from "@/components/slides/ChannelTab";
+import { BudgetTab } from "@/components/slides/BudgetTab";
+import { RefreshDataModal } from "@/components/slides/RefreshDataModal";
 import { isWithinInterval } from "date-fns";
 import { aggregateMetrics } from "@/components/AISummaryPivotTable";
 import { BASE_METRICS, CHANNEL_REPORT_IDS, MONTH_NAMES } from "@/constants/slideViewConstants";
@@ -48,272 +62,6 @@ import {
   ensureMinimumChartData,
 } from "@/lib/slideViewHelpers";
 import type { RawDataRow, MetricData } from "@/types/slideView";
-
-// FORECAST DATA
-// REAL DATA from database queries - December 2025 Brady Hotels Account (after resync)
-// const METASEARCH_DATA = {
-//   impressions: 27067,
-//   clicks: 1915,
-//   cost: 2729.84,
-//   revenue: 35093.16,
-//   bookings: 70,
-// };
-
-// SEM data - December 2025 Brady Hotels
-// const SEM_DATA = {
-//   impressions: 432114,
-//   clicks: 9797,
-//   cost: 8208.69,
-//   revenue: 155596.64,
-//   bookings: 298,
-// };
-
-// Social data - December 2025 Brady Hotels
-// const SOCIAL_DATA = {
-//   impressions: 491612,
-//   clicks: 3021,
-//   cost: 4337.01,
-//   revenue: 87867.77,
-//   bookings: 154,
-// };
-
-// PREVIOUS PERIOD DATA - November 2025 (verified from database after resync)
-// const METASEARCH_PREV_PERIOD = {
-//   impressions: 30662,
-//   clicks: 1736,
-//   cost: 2516.30,
-//   revenue: 62764.16,
-//   bookings: 98,
-// };
-
-// const SEM_PREV_PERIOD = {
-//   impressions: 521421,
-//   clicks: 11068,
-//   cost: 8067.78,
-//   revenue: 278315.94,
-//   bookings: 444,
-// };
-
-// const SOCIAL_PREV_PERIOD = {
-//   impressions: 480445,
-//   clicks: 2889,
-//   cost: 4330.90,
-//   revenue: 107535.63,
-//   bookings: 180,
-// };
-
-// PREVIOUS YEAR DATA - December 2024 (estimated from Oct 2025 proxy)
-// const METASEARCH_PREV_YEAR = {
-//   impressions: 60000,
-//   clicks: 3500,
-//   cost: 4800.00,
-//   revenue: 110000.00,
-//   bookings: 180,
-// };
-
-// const SOCIAL_PREV_YEAR = {
-//   impressions: 1200000,
-//   clicks: 15000,
-//   cost: 15000.00,
-//   revenue: 250000.00,
-//   bookings: 1000,
-// };
-
-// HARDCODED BREAKDOWN DATA - COMMENTED OUT: Now using data from Supabase pivot_data.breakdowns
-// METASEARCH BREAKDOWN BY HOTEL (December 2025) - ONLY 4 BRADY HOTELS
-// const METASEARCH_BY_HOTEL = [
-//   { hotel: "Brady Hotels Central Melbourne", impressions: 11271, clicks: 735, cost: 1188.40, revenue: 13701.50, bookings: 27 },
-//   { hotel: "Brady Hotels Jones Lane", impressions: 6285, clicks: 496, cost: 672.99, revenue: 12588.50, bookings: 26 },
-//   { hotel: "Brady Apartment Hotel Flinders Street", impressions: 5158, clicks: 352, cost: 635.32, revenue: 8010.13, bookings: 13 },
-//   { hotel: "Brady Apartment Hotel Hardware Lane", impressions: 7295, clicks: 549, cost: 575.62, revenue: 6590.51, bookings: 15 },
-// ];
-
-// METASEARCH BREAKDOWN BY LINK TYPE (December 2025) - FILTERED FOR BRADY HOTELS ONLY
-// const METASEARCH_BY_LINK_TYPE = [
-//   { linkType: "Paid", impressions: 30009, clicks: 1068, cost: 3072.33, revenue: 30466.99, bookings: 54 },
-//   { linkType: "Google Organic", impressions: 0, clicks: 1064, cost: 0, revenue: 10423.65, bookings: 27 },
-// ];
-
-// HARDCODED SEM BREAKDOWN DATA - COMMENTED OUT: Now using data from Supabase pivot_data.breakdowns
-// SEM BREAKDOWN BY CAMPAIGN (December 2025) - Brady Hotels Group
-// Note: This table shows the top campaigns + an "Other campaigns" row so totals match SEM_DATA.
-// const SEM_BY_CAMPAIGN = [
-//   { campaign: "Brady Hotels Central Melbourne | Search | Brand", impressions: 3248, clicks: 666, cost: 1050.91, revenue: 31932.30, bookings: 45 },
-//   { campaign: "Brady Group | Search | Brand", impressions: 3155, clicks: 895, cost: 1059.14, revenue: 25988.77, bookings: 52 },
-//   { campaign: "Brady Hotels Jones Lane | Search | Brand", impressions: 2655, clicks: 633, cost: 1047.45, revenue: 22245.90, bookings: 58 },
-//   { campaign: "Brady Apartment Hotel Hardware Lane | Search | Brand", impressions: 2142, clicks: 574, cost: 1038.45, revenue: 14744.00, bookings: 25 },
-//   { campaign: "Brady Apartment Hotel Flinders Street | Search | Brand", impressions: 2689, clicks: 604, cost: 1044.86, revenue: 14300.23, bookings: 29 },
-//   { campaign: "Brady Apartment Hotel Flinders Street | Performance Max", impressions: 27627, clicks: 485, cost: 229.14, revenue: 13196.13, bookings: 11 },
-//   { campaign: "Brady Apartment Hotel Hardware Lane | Performance Max", impressions: 65162, clicks: 935, cost: 276.58, revenue: 11338.89, bookings: 19 },
-//   { campaign: "Brady Hotels Central Melbourne | Performance Max", impressions: 26301, clicks: 638, cost: 274.40, revenue: 4433.15, bookings: 14 },
-//   { campaign: "Brady Group | Performance Max", impressions: 152199, clicks: 1992, cost: 270.84, revenue: 3548.18, bookings: 9 },
-//   { campaign: "Brady Hotels Jones Lane | Performance Max", impressions: 46178, clicks: 701, cost: 231.27, revenue: 2342.81, bookings: 8 },
-// ];
-
-// const SEM_TOP_CAMPAIGNS_TOTAL = SEM_BY_CAMPAIGN.reduce(
-//   (acc, row) => ({
-//     impressions: acc.impressions + row.impressions,
-//     clicks: acc.clicks + row.clicks,
-//     cost: acc.cost + row.cost,
-//     revenue: acc.revenue + row.revenue,
-//     bookings: acc.bookings + row.bookings,
-//   }),
-//   { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
-// );
-
-// const SEM_OTHER_CAMPAIGNS = {
-//   campaign: "Other campaigns",
-//   impressions: Math.max(0, SEM_DATA.impressions - SEM_TOP_CAMPAIGNS_TOTAL.impressions),
-//   clicks: Math.max(0, SEM_DATA.clicks - SEM_TOP_CAMPAIGNS_TOTAL.clicks),
-//   cost: Math.max(0, Number((SEM_DATA.cost - SEM_TOP_CAMPAIGNS_TOTAL.cost).toFixed(2))),
-//   revenue: Math.max(0, Number((SEM_DATA.revenue - SEM_TOP_CAMPAIGNS_TOTAL.revenue).toFixed(2))),
-//   bookings: Math.max(0, Number((SEM_DATA.bookings - SEM_TOP_CAMPAIGNS_TOTAL.bookings).toFixed(2))),
-// };
-
-// const SEM_BY_CAMPAIGN_WITH_OTHER =
-//   SEM_OTHER_CAMPAIGNS.impressions > 0 ||
-//   SEM_OTHER_CAMPAIGNS.clicks > 0 ||
-//   SEM_OTHER_CAMPAIGNS.cost > 0 ||
-//   SEM_OTHER_CAMPAIGNS.revenue > 0 ||
-//   SEM_OTHER_CAMPAIGNS.bookings > 0
-//     ? [...SEM_BY_CAMPAIGN, SEM_OTHER_CAMPAIGNS]
-//     : SEM_BY_CAMPAIGN;
-
-// HARDCODED SOCIAL BREAKDOWN DATA - COMMENTED OUT: Now using data from Supabase pivot_data.breakdowns
-// SOCIAL BREAKDOWN BY CAMPAIGN (December 2025) - Brady Hotels 2025 Account
-// const SOCIAL_BY_CAMPAIGN = [
-//   { campaign: "Brady Hotels Jones Lane | Sales", impressions: 27562, clicks: 275, cost: 463.60, revenue: 17751.01, bookings: 40 },
-//   { campaign: "Brady Apartment Hotel Flinders Street | Sales", impressions: 35164, clicks: 367, cost: 577.52, revenue: 17215.57, bookings: 33 },
-//   { campaign: "Brady Apartment Hotel Hardware Lane | Sales", impressions: 26685, clicks: 246, cost: 464.15, revenue: 17051.53, bookings: 22 },
-//   { campaign: "Brady Hotels Central Melbourne | Sales", impressions: 28129, clicks: 253, cost: 452.97, revenue: 13215.00, bookings: 23 },
-//   { campaign: "Brady Black Friday Sale Campaign | Daily", impressions: 10392, clicks: 58, cost: 286.40, revenue: 5973.10, bookings: 10 },
-//   { campaign: "Brady Hotels Central Melbourne | Boxing Day '25", impressions: 11380, clicks: 70, cost: 192.44, revenue: 5498.50, bookings: 5 },
-//   { campaign: "Brady Hotels Hardware Lane | Boxing Day '25", impressions: 12672, clicks: 80, cost: 192.46, revenue: 4057.48, bookings: 8 },
-//   { campaign: "Brady Hotels Jones Lane | Boxing Day '25", impressions: 11289, clicks: 88, cost: 194.30, revenue: 3125.43, bookings: 5 },
-//   { campaign: "Brady Hotels Flinders Street | Boxing Day '25", impressions: 12046, clicks: 83, cost: 192.58, revenue: 2929.15, bookings: 6 },
-//   { campaign: "Brady Group | Leads | Members", impressions: 10576, clicks: 127, cost: 313.50, revenue: 802.00, bookings: 1 },
-// ];
-
-// const SOCIAL_TOP_CAMPAIGNS_TOTAL = SOCIAL_BY_CAMPAIGN.reduce(
-//   (acc, row) => ({
-//     impressions: acc.impressions + row.impressions,
-//     clicks: acc.clicks + row.clicks,
-//     cost: acc.cost + row.cost,
-//     revenue: acc.revenue + row.revenue,
-//     bookings: acc.bookings + row.bookings,
-//   }),
-//   { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
-// );
-
-// const SOCIAL_OTHER_CAMPAIGNS = {
-//   campaign: "Other campaigns",
-//   impressions: Math.max(0, SOCIAL_DATA.impressions - SOCIAL_TOP_CAMPAIGNS_TOTAL.impressions),
-//   clicks: Math.max(0, SOCIAL_DATA.clicks - SOCIAL_TOP_CAMPAIGNS_TOTAL.clicks),
-//   cost: Math.max(0, Number((SOCIAL_DATA.cost - SOCIAL_TOP_CAMPAIGNS_TOTAL.cost).toFixed(2))),
-//   revenue: Math.max(0, Number((SOCIAL_DATA.revenue - SOCIAL_TOP_CAMPAIGNS_TOTAL.revenue).toFixed(2))),
-//   bookings: Math.max(0, Number((SOCIAL_DATA.bookings - SOCIAL_TOP_CAMPAIGNS_TOTAL.bookings).toFixed(2))),
-// };
-
-// const SOCIAL_BY_CAMPAIGN_WITH_OTHER =
-//   SOCIAL_OTHER_CAMPAIGNS.impressions > 0 ||
-//   SOCIAL_OTHER_CAMPAIGNS.clicks > 0 ||
-//   SOCIAL_OTHER_CAMPAIGNS.cost > 0 ||
-//   SOCIAL_OTHER_CAMPAIGNS.revenue > 0 ||
-//   SOCIAL_OTHER_CAMPAIGNS.bookings > 0
-//     ? [...SOCIAL_BY_CAMPAIGN, SOCIAL_OTHER_CAMPAIGNS]
-//     : SOCIAL_BY_CAMPAIGN;
-
-// HARDCODED BUDGET DATA - COMMENTED OUT: Now using data from Supabase pivot_data.budget
-// BUDGET DATA - All months from January 2024 to December 2026 with actual spend data (Brady Hotels ONLY - filtered)
-// Data structure: { year: number, month: string, metasearchBudget: number, semBudget: number, socialBudget: number, metasearchActual: number, semActual: number, socialActual: number }
-// const ALL_MONTHLY_BUDGET_DATA = [
-//   // 2024
-//   { year: 2024, month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7500, socialActual: 0 },
-//   { year: 2024, month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7800, socialActual: 0 },
-//   { year: 2024, month: "Mar", metasearchBudget: 7000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7700, socialActual: 0 },
-//   { year: 2024, month: "Apr", metasearchBudget: 7000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7900, socialActual: 0 },
-//   { year: 2024, month: "May", metasearchBudget: 7000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7900, socialActual: 0 },
-//   { year: 2024, month: "Jun", metasearchBudget: 10000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 2500 },
-//   { year: 2024, month: "Jul", metasearchBudget: 10000, semBudget: 0, socialBudget: 0, metasearchActual: 6000, semActual: 0, socialActual: 3800 },
-//   { year: 2024, month: "Aug", metasearchBudget: 10000, semBudget: 0, socialBudget: 0, metasearchActual: 8000, semActual: 15, socialActual: 3200 },
-//   { year: 2024, month: "Sep", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 7000, semActual: 8500, socialActual: 4200 },
-//   { year: 2024, month: "Oct", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 2500, semActual: 8000, socialActual: 4400 },
-//   { year: 2024, month: "Nov", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 2400, semActual: 7800, socialActual: 4100 },
-//   { year: 2024, month: "Dec", metasearchBudget: 16000, semBudget: 0, socialBudget: 0, metasearchActual: 2600, semActual: 8000, socialActual: 4000 },
-//   // 2025
-//   { year: 2025, month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7921.79, socialActual: 0 },
-//   { year: 2025, month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7969.45, socialActual: 0 },
-//   { year: 2025, month: "Mar", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7925.99, socialActual: 0 },
-//   { year: 2025, month: "Apr", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7961.28, socialActual: 0 },
-//   { year: 2025, month: "May", metasearchBudget: 8000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 7965.97, socialActual: 0 },
-//   { year: 2025, month: "Jun", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 2741.81 },
-//   { year: 2025, month: "Jul", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 7056.76, semActual: 0, socialActual: 4060.58 },
-//   { year: 2025, month: "Aug", metasearchBudget: 12000, semBudget: 0, socialBudget: 0, metasearchActual: 8794.13, semActual: 19.19, socialActual: 3476.38 },
-//   { year: 2025, month: "Sep", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 7422.17, semActual: 8873.84, socialActual: 4500.10 },
-//   { year: 2025, month: "Oct", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 2704.70, semActual: 8397.16, socialActual: 4598.92 },
-//   { year: 2025, month: "Nov", metasearchBudget: 20000, semBudget: 0, socialBudget: 0, metasearchActual: 2516.30, semActual: 8067.78, socialActual: 4330.90 },
-//   { year: 2025, month: "Dec", metasearchBudget: 18000, semBudget: 0, socialBudget: 0, metasearchActual: 2729.84, semActual: 8208.69, socialActual: 4337.01 },
-//   // 2026
-//   { year: 2026, month: "Jan", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8200, socialActual: 0 },
-//   { year: 2026, month: "Feb", metasearchBudget: 0, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8100, socialActual: 0 },
-//   { year: 2026, month: "Mar", metasearchBudget: 8500, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8000, socialActual: 0 },
-//   { year: 2026, month: "Apr", metasearchBudget: 8500, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8100, socialActual: 0 },
-//   { year: 2026, month: "May", metasearchBudget: 8500, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 8100, socialActual: 0 },
-//   { year: 2026, month: "Jun", metasearchBudget: 13000, semBudget: 0, socialBudget: 0, metasearchActual: 0, semActual: 0, socialActual: 3000 },
-//   { year: 2026, month: "Jul", metasearchBudget: 13000, semBudget: 0, socialBudget: 0, metasearchActual: 7500, semActual: 0, socialActual: 4500 },
-//   { year: 2026, month: "Aug", metasearchBudget: 13000, semBudget: 0, socialBudget: 0, metasearchActual: 9000, semActual: 20, socialActual: 3800 },
-//   { year: 2026, month: "Sep", metasearchBudget: 21000, semBudget: 0, socialBudget: 0, metasearchActual: 7800, semActual: 9000, socialActual: 4800 },
-//   { year: 2026, month: "Oct", metasearchBudget: 21000, semBudget: 0, socialBudget: 0, metasearchActual: 2900, semActual: 8500, socialActual: 4700 },
-//   { year: 2026, month: "Nov", metasearchBudget: 21000, semBudget: 0, socialBudget: 0, metasearchActual: 2700, semActual: 8300, socialActual: 4500 },
-//   { year: 2026, month: "Dec", metasearchBudget: 19000, semBudget: 0, socialBudget: 0, metasearchActual: 3000, semActual: 8400, socialActual: 4600 },
-// ];
-
-// Legacy MONTHLY_BUDGET_DATA for 2025 (for backward compatibility)
-// This will be overridden in the component based on slideType
-// const MONTHLY_BUDGET_DATA = ALL_MONTHLY_BUDGET_DATA
-//   .filter(d => d.year === 2025)
-//   .map(({ year, ...rest }) => rest);
-
-// const BUDGET_COMPARISON_DATA = MONTHLY_BUDGET_DATA.map(m => ({
-//   month: m.month,
-//   budget: m.metasearchBudget + m.semBudget + m.socialBudget,
-//   actual: m.metasearchActual + m.semActual + m.socialActual,
-// }));
-
-// FORECAST DATA
-const FORECAST_SCENARIO = {
-  name: "Brady",
-  rooms: 554,
-  occupancyRate: 71,
-  averageDailyRate: 120,
-  conversionRate: 3.69,
-  costOfSell: 10,
-  directBookingsTarget: 5,
-  services: [
-    { name: "SEM", weight: 40, percentRevenue: 5, recurrentFee: 2000, costOfSell: 0, budgetPayer: "client" },
-    { name: "Social", weight: 40, percentRevenue: 0, recurrentFee: 1800, costOfSell: 0, budgetPayer: "client" },
-    { name: "Metasearch Paid", weight: 20, percentRevenue: 0, recurrentFee: 1600, costOfSell: 5, budgetPayer: "client" },
-  ],
-};
-
-const calculateForecastProjections = () => {
-  const { rooms, occupancyRate, averageDailyRate, directBookingsTarget, conversionRate } = FORECAST_SCENARIO;
-  const annualRoomNights = rooms * 365 * (occupancyRate / 100);
-  const annualRevenue = annualRoomNights * averageDailyRate;
-  const directBookingsRevenue = annualRevenue * (directBookingsTarget / 100);
-  const requiredClicks = (directBookingsRevenue / averageDailyRate) / (conversionRate / 100);
-  
-  return {
-    annualRoomNights: Math.round(annualRoomNights),
-    annualRevenue: Math.round(annualRevenue),
-    directBookingsRevenue: Math.round(directBookingsRevenue),
-    requiredClicks: Math.round(requiredClicks),
-    monthlyRevenue: Math.round(directBookingsRevenue / 12),
-    monthlyClicks: Math.round(requiredClicks / 12),
-  };
-};
-
-const FORECAST_PROJECTIONS = calculateForecastProjections();
 
 // Unified breakdown table component with Group by / Breakdown by dropdowns
 // Uses data from pivot_data.channels[channel].monthlyBreakdowns for month-specific data
@@ -846,85 +594,6 @@ const UnifiedBreakdownTable = ({
   );
 };
 
-// Breakdown table component - REORDERED: Bookings before Conversion Rate (kept for backward compatibility)
-const BreakdownTable = ({ 
-  data, 
-  labelKey, 
-  labelHeader 
-}: { 
-  data: Array<{ impressions: number; clicks: number; cost: number; revenue: number; bookings: number } & Record<string, unknown>>; 
-  labelKey: string;
-  labelHeader: string;
-}) => {
-  const rows = data.map(row => ({
-    label: row[labelKey] as string,
-    ...calculateDerivedMetrics(row),
-  }));
-
-  // Calculate totals
-  const totals = data.reduce((acc, row) => ({
-    impressions: acc.impressions + row.impressions,
-    clicks: acc.clicks + row.clicks,
-    cost: acc.cost + row.cost,
-    revenue: acc.revenue + row.revenue,
-    bookings: acc.bookings + row.bookings,
-  }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
-
-  const totalMetrics = calculateDerivedMetrics(totals);
-
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>{labelHeader}</TableHead>
-          <TableHead className="text-right">Impressions</TableHead>
-          <TableHead className="text-right">Clicks</TableHead>
-          <TableHead className="text-right">CTR</TableHead>
-          <TableHead className="text-right">Bookings</TableHead>
-          <TableHead className="text-right">Conv. Rate</TableHead>
-          <TableHead className="text-right">CPC</TableHead>
-          <TableHead className="text-right">Cost</TableHead>
-          <TableHead className="text-right">Revenue</TableHead>
-          <TableHead className="text-right">ROAS</TableHead>
-          <TableHead className="text-right">Cost of Sale</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row, idx) => (
-          <TableRow key={idx}>
-            <TableCell className="font-medium">{row.label}</TableCell>
-            <TableCell className="text-right">{formatNumber(row.impressions)}</TableCell>
-            <TableCell className="text-right">{formatNumber(row.clicks)}</TableCell>
-            <TableCell className="text-right">{row.ctr.toFixed(2)}%</TableCell>
-            <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
-            <TableCell className="text-right">{row.conversionRate.toFixed(2)}%</TableCell>
-            <TableCell className="text-right">${row.cpc.toFixed(2)}</TableCell>
-            <TableCell className="text-right">{formatNumber(row.cost, 'currency')}</TableCell>
-            <TableCell className="text-right">{formatNumber(row.revenue, 'currency')}</TableCell>
-            <TableCell className="text-right">{row.roas.toFixed(1)}x</TableCell>
-            <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
-          </TableRow>
-        ))}
-        {/* Totals Row */}
-        <TableRow className="bg-muted/50 font-semibold border-t-2">
-          <TableCell className="font-bold">Total</TableCell>
-          <TableCell className="text-right">{formatNumber(totalMetrics.impressions)}</TableCell>
-          <TableCell className="text-right">{formatNumber(totalMetrics.clicks)}</TableCell>
-          <TableCell className="text-right">{totalMetrics.ctr.toFixed(2)}%</TableCell>
-          <TableCell className="text-right">{totalMetrics.bookings.toFixed(2)}</TableCell>
-          <TableCell className="text-right">{totalMetrics.conversionRate.toFixed(2)}%</TableCell>
-          <TableCell className="text-right">${totalMetrics.cpc.toFixed(2)}</TableCell>
-          <TableCell className="text-right">{formatNumber(totalMetrics.cost, 'currency')}</TableCell>
-          <TableCell className="text-right">{formatNumber(totalMetrics.revenue, 'currency')}</TableCell>
-          <TableCell className="text-right">{totalMetrics.roas.toFixed(1)}x</TableCell>
-          <TableCell className="text-right">{totalMetrics.costOfSale.toFixed(2)}%</TableCell>
-        </TableRow>
-      </TableBody>
-    </Table>
-  );
-};
-
-
 export default function SlideViewPage() {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
@@ -1282,248 +951,21 @@ export default function SlideViewPage() {
     return data;
   }, []);
 
-  // Chart data helpers that use filteredData.monthlyData when filters are active
-  // Overview chart data (combined revenue from all channels)
-  const overviewChartData = useMemo(() => {
-    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-    
-    // Get base monthly data - use filteredData when filters are active, otherwise use pre-computed data
-    let allMonthlyData: { year: number; month: string; metasearch: number; sem: number; social: number }[] = [];
-    
-    // When filters are active, generate filtered data for all months in the time range
-    if (filteredData.hasFilters) {
-      // Generate all months in the chartTimeRange
-      const monthsInRange = generateMonthsInTimeRange(chartTimeRange);
-      
-      // Build a monthly map initialized with zeros for all months in the time range
-      const monthlyMap = new Map<string, { year: number; month: string; metasearch: number; sem: number; social: number }>();
-      
-      // For each month in the range, filter and aggregate data for that specific month
-      if (pivotData?.channels) {
-        monthsInRange.forEach(({ year, month }) => {
-          const key = `${year}-${month}`;
-          monthlyMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
-          
-          // Get month date range
-          const monthIndex = MONTH_NAMES.indexOf(month);
-          const monthStart = new Date(year, monthIndex, 1);
-          const monthEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59);
-          
-          // Process each channel
-          Object.entries(pivotData.channels).forEach(([channel, channelData]) => {
-            const channelFilterValues = filterValues[channel] || {};
-            const hasChannelFilters = filteredData.channelsWithFilters.has(channel);
-            const rawDataRows = (channelData as any).rawDataRows || [];
-            
-            if (hasChannelFilters && rawDataRows.length > 0) {
-              // Filter rows for this specific month and channel filters
-              const monthFilteredRows = filterRawDataRows(rawDataRows, channelFilterValues, { start: monthStart, end: monthEnd });
-              
-              if (monthFilteredRows.length > 0) {
-                // Build dynamic metric mapping
-                const dimensionMap = (channelData as any).dimensionMap || {};
-                const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
-                const revenueKeys = getMetricKeys('revenue', nameToIdsMap);
-                
-                // Aggregate revenue for this month
-                let monthRevenue = 0;
-                monthFilteredRows.forEach((row) => {
-                  const rowData = row.dimension_values || row;
-                  for (const key of revenueKeys) {
-                    const value = rowData[key];
-                    if (value !== undefined && value !== null) {
-                      if (typeof value === 'number') {
-                        monthRevenue += isNaN(value) ? 0 : value;
-                        break;
-                      }
-                      const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
-                      if (!isNaN(parsed)) {
-                        monthRevenue += parsed;
-                        break;
-                      }
-                    }
-                  }
-                });
-                
-                const entry = monthlyMap.get(key)!;
-                entry[channel as 'metasearch' | 'sem' | 'social'] = monthRevenue;
-              }
-            } else if (!hasChannelFilters && rawDataRows.length > 0) {
-              // No filters for this channel - use pre-computed monthly data if available
-              const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-              const monthlyData = (channelData as any).monthly?.[monthKey];
-              if (monthlyData) {
-                const entry = monthlyMap.get(key)!;
-                entry[channel as 'metasearch' | 'sem' | 'social'] = monthlyData.revenue || 0;
-              }
-            }
-          });
-        });
-      }
-      
-      allMonthlyData = Array.from(monthlyMap.values()).sort((a, b) => {
-        if (a.year !== b.year) return a.year - b.year;
-        return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
-      });
-    } else if (pivotData?.channels) {
-      // No filters - use pre-computed data (fast path)
-      const monthlyMap = new Map<string, { year: number; month: string; metasearch: number; sem: number; social: number }>();
-      
-      Object.entries(pivotData.channels).forEach(([channel, channelData]) => {
-        if (channelData.monthly) {
-          Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
-            const [year, monthNum] = monthKey.split('-').map(Number);
-            const month = MONTH_NAMES[monthNum - 1];
-            const key = `${year}-${month}`;
-            
-            if (!monthlyMap.has(key)) {
-              monthlyMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
-            }
-            
-            const entry = monthlyMap.get(key)!;
-            entry[channel as 'metasearch' | 'sem' | 'social'] = metrics.revenue || 0;
-          });
-        }
-      });
-      
-      allMonthlyData = Array.from(monthlyMap.values()).sort((a, b) => {
-        if (a.year !== b.year) return a.year - b.year;
-        return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
-      });
-    }
-    
-    // Apply chartTimeRange filter
-    let filtered: { year: number; month: string; metasearch: number; sem: number; social: number }[] = 
-      applyChartTimeRangeFilter(allMonthlyData, chartTimeRange);
-    
-    // Ensure at least 6 months of data for meaningful chart display
-    filtered = ensureMinimumChartData(filtered, allMonthlyData, 6);
-    
-    // Format for chart
-    return filtered.map(m => ({ 
-      label: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
-      month: m.month,
-      year: m.year,
-      total: m.metasearch + m.social + m.sem 
-    }));
-  }, [filteredData.hasFilters, filteredData.monthlyData, filteredData.channelsWithFilters, filterValues, chartTimeRange, slideReport?.pivot_data, applyChartTimeRangeFilter, generateMonthsInTimeRange]);
+  // Chart data helpers - using hooks
+  const overviewChartData = useOverviewChartData(
+    slideReport?.pivot_data as SlideReportPivotData | null,
+    filterValues,
+    filteredData.channelsWithFilters,
+    chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'
+  );
 
-  // Channel-specific chart data (for individual channel tabs)
-  const channelChartData = useMemo(() => {
-    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-    const result: Record<string, { month: string; revenue: number }[]> = {
-      metasearch: [],
-      sem: [],
-      social: [],
-    };
-    
-    // For each channel, get filtered or pre-computed data
-    ['metasearch', 'sem', 'social'].forEach(channel => {
-      let allMonthlyData: { year: number; month: string; revenue: number }[] = [];
-      
-      // When filters are active, generate filtered data for all months in the time range
-      if (filteredData.hasFilters) {
-        // Generate all months in the chartTimeRange
-        const monthsInRange = generateMonthsInTimeRange(chartTimeRange);
-        
-        // Build a monthly map initialized with zeros for all months in the time range
-        const monthlyMap = new Map<string, { year: number; month: string; revenue: number }>();
-        
-        // For each month in the range, filter and aggregate data for that specific month
-        const channelData = pivotData?.channels?.[channel];
-        if (channelData) {
-          const channelFilterValues = filterValues[channel] || {};
-          const hasChannelFilters = filteredData.channelsWithFilters.has(channel);
-          const rawDataRows = (channelData as any).rawDataRows || [];
-          
-          monthsInRange.forEach(({ year, month }) => {
-            const key = `${year}-${month}`;
-            monthlyMap.set(key, { year, month, revenue: 0 });
-            
-            // Get month date range
-            const monthIndex = MONTH_NAMES.indexOf(month);
-            const monthStart = new Date(year, monthIndex, 1);
-            const monthEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59);
-            
-            if (hasChannelFilters && rawDataRows.length > 0) {
-              // Filter rows for this specific month and channel filters
-              const monthFilteredRows = filterRawDataRows(rawDataRows, channelFilterValues, { start: monthStart, end: monthEnd });
-              
-              if (monthFilteredRows.length > 0) {
-                // Build dynamic metric mapping
-                const dimensionMap = (channelData as any).dimensionMap || {};
-                const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
-                const revenueKeys = getMetricKeys('revenue', nameToIdsMap);
-                
-                // Aggregate revenue for this month
-                let monthRevenue = 0;
-                monthFilteredRows.forEach((row) => {
-                  const rowData = row.dimension_values || row;
-                  for (const key of revenueKeys) {
-                    const value = rowData[key];
-                    if (value !== undefined && value !== null) {
-                      if (typeof value === 'number') {
-                        monthRevenue += isNaN(value) ? 0 : value;
-                        break;
-                      }
-                      const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
-                      if (!isNaN(parsed)) {
-                        monthRevenue += parsed;
-                        break;
-                      }
-                    }
-                  }
-                });
-                
-                const entry = monthlyMap.get(key)!;
-                entry.revenue = monthRevenue;
-              }
-            } else if (!hasChannelFilters && rawDataRows.length > 0) {
-              // No filters for this channel - use pre-computed monthly data if available
-              const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-              const monthlyData = (channelData as any).monthly?.[monthKey];
-              if (monthlyData) {
-                const entry = monthlyMap.get(key)!;
-                entry.revenue = monthlyData.revenue || 0;
-              }
-            }
-          });
-        }
-        
-        allMonthlyData = Array.from(monthlyMap.values()).sort((a, b) => {
-          if (a.year !== b.year) return a.year - b.year;
-          return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
-        });
-      } else if (pivotData?.channels?.[channel]?.monthly) {
-        // No filters - use pre-computed data (fast path)
-        const channelData = pivotData.channels[channel];
-        Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
-          const [year, monthNum] = monthKey.split('-').map(Number);
-          const month = MONTH_NAMES[monthNum - 1];
-          allMonthlyData.push({ year, month, revenue: metrics.revenue || 0 });
-        });
-        allMonthlyData.sort((a, b) => {
-          if (a.year !== b.year) return a.year - b.year;
-          return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
-        });
-      }
-      
-      // Apply chartTimeRange filter
-      let filtered: { year: number; month: string; revenue: number }[] = 
-        applyChartTimeRangeFilter(allMonthlyData, chartTimeRange);
-      
-      // Apply ensureMinimumChartData
-      filtered = ensureMinimumChartData(filtered, allMonthlyData, 6);
-      
-      // Format for chart
-      result[channel] = filtered.map(m => ({
-        month: `${m.month.slice(0,3)} ${m.year.toString().slice(-2)}`,
-        revenue: m.revenue
-      }));
-    });
-    
-    return result;
-  }, [filteredData.hasFilters, filteredData.monthlyData, filteredData.channelsWithFilters, filterValues, chartTimeRange, slideReport?.pivot_data, applyChartTimeRangeFilter, generateMonthsInTimeRange]);
+  // Channel-specific chart data (for individual channel tabs) - using hook
+  const channelChartData = useAllChannelChartData(
+    slideReport?.pivot_data as SlideReportPivotData | null,
+    filterValues,
+    filteredData.channelsWithFilters,
+    chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'
+  );
 
   // Get channel totals from monthly_data table (same source as SlideDataBrowser)
   // This is the correct source of truth for the data
@@ -2300,7 +1742,7 @@ export default function SlideViewPage() {
   // Refresh Data Modal state - 5 steps now
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
   const [refreshStep, setRefreshStep] = useState(0); // 0 = not started, 1-5 = steps
-  const [refreshStepStatus, setRefreshStepStatus] = useState<Record<number, 'pending' | 'loading' | 'complete' | 'error'>>({
+  const [refreshStepStatus, setRefreshStepStatus] = useState<Record<number, 'pending' | 'in_progress' | 'complete' | 'error'>>({
     1: 'pending',
     2: 'pending',
     3: 'pending',
@@ -3548,7 +2990,7 @@ export default function SlideViewPage() {
     setRefreshStep(1);
     setRefreshError(null);
     setRefreshStepStatus({
-      1: 'loading',
+      1: 'in_progress',
       2: 'pending',
       3: 'pending',
       4: 'pending',
@@ -3557,7 +2999,7 @@ export default function SlideViewPage() {
 
     try {
       // Step 1: Verify settings
-      setRefreshStepStatus(prev => ({ ...prev, 1: 'loading' }));
+      setRefreshStepStatus(prev => ({ ...prev, 1: 'in_progress' }));
       
       const { data: latestReport, error: fetchError } = await supabase
         .from("slide_reports")
@@ -3570,7 +3012,7 @@ export default function SlideViewPage() {
         throw new Error("Configuration or date range not found. Please save Edit Source settings first.");
       }
 
-      setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'loading' }));
+      setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'in_progress' }));
       setRefreshStep(2);
 
       // Step 2: Compute pivot data
@@ -3612,7 +3054,7 @@ export default function SlideViewPage() {
         throw new Error('Pivot data computation returned invalid data');
       }
       
-      setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'loading' }));
+      setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'in_progress' }));
       setRefreshStep(3);
 
       // Step 3: Store monthly data in Supabase (organized by year/month)
@@ -3701,7 +3143,7 @@ export default function SlideViewPage() {
         }
       }
 
-      setRefreshStepStatus(prev => ({ ...prev, 3: 'complete', 4: 'loading' }));
+      setRefreshStepStatus(prev => ({ ...prev, 3: 'complete', 4: 'in_progress' }));
       setRefreshStep(4);
 
       // Step 4: Store breakdown and filter configurations
@@ -3720,7 +3162,7 @@ export default function SlideViewPage() {
       // They will be saved in step 5 along with the pivot_data
       // Here we ensure the pivot_data includes breakdown tables for each configured breakdown dimension
       
-      setRefreshStepStatus(prev => ({ ...prev, 4: 'complete', 5: 'loading' }));
+      setRefreshStepStatus(prev => ({ ...prev, 4: 'complete', 5: 'in_progress' }));
       setRefreshStep(5);
 
       // Step 5: Update slide report and refresh UI
@@ -3854,37 +3296,18 @@ export default function SlideViewPage() {
     return null;
   }, [comparisonTotals, comparisonType]);
 
-  // Calculate current metrics from currentTotals
-  const currentMetrics = useMemo(() => {
-    const totals = currentTotals;
-    
-    const overview = {
-      impressions: (totals.metasearch?.impressions || 0) + (totals.sem?.impressions || 0) + (totals.social?.impressions || 0),
-      clicks: (totals.metasearch?.clicks || 0) + (totals.sem?.clicks || 0) + (totals.social?.clicks || 0),
-      cost: (totals.metasearch?.cost || 0) + (totals.sem?.cost || 0) + (totals.social?.cost || 0),
-      revenue: (totals.metasearch?.revenue || 0) + (totals.sem?.revenue || 0) + (totals.social?.revenue || 0),
-      bookings: (totals.metasearch?.bookings || 0) + (totals.sem?.bookings || 0) + (totals.social?.bookings || 0),
-    };
-    
-    const cpc = overview.clicks > 0 ? overview.cost / overview.clicks : 0;
-    
-    return {
-      impressions: overview.impressions,
-      clicks: overview.clicks,
-      bookings: overview.bookings,
-      ctr: overview.impressions > 0 ? (overview.clicks / overview.impressions) * 100 : 0,
-      conversionRate: overview.clicks > 0 ? (overview.bookings / overview.clicks) * 100 : 0,
-      cpc,
-      cost: overview.cost,
-      revenue: overview.revenue,
-      roas: overview.cost > 0 ? overview.revenue / overview.cost : 0,
-      costOfSale: overview.revenue > 0 ? (overview.cost / overview.revenue) * 100 : 0,
-    };
-  }, [currentTotals]);
+  // Calculate current metrics from currentTotals using hook
+  const currentMetrics = useOverviewMetrics(currentTotals as { metasearch: MetricData; sem: MetricData; social: MetricData });
 
-  // Calculate comparison metrics if enabled
-  // Use derived metrics from comparisonData if available (already calculated), otherwise calculate them
+  // Calculate comparison metrics using hook
+  const comparisonMetricsHook = useComparisonMetrics(
+    comparisonTotals as { metasearch: MetricData; sem: MetricData; social: MetricData } | null,
+    comparisonType as 'none' | 'previous_period' | 'previous_year'
+  );
+  
+  // Fallback to comparisonData if hook returns null (for backward compatibility)
   const comparisonMetrics = useMemo(() => {
+    if (comparisonMetricsHook) return comparisonMetricsHook;
     if (!comparisonData) return null;
     
     // comparisonData should always have base metrics and derived metrics after our fix
@@ -3931,99 +3354,42 @@ export default function SlideViewPage() {
       roas: (data.cost || 0) > 0 ? (data.revenue || 0) / (data.cost || 1) : 0,
       costOfSale: (data.revenue || 0) > 0 ? ((data.cost || 0) / (data.revenue || 1)) * 100 : 0,
     };
-  }, [comparisonData]);
+  }, [comparisonMetricsHook, comparisonData]);
 
-  // KPI Cards - REORDERED: Bookings before Conversion Rate
-  const KPI_CARDS = useMemo(() => [
-    { label: "IMPRESSIONS", key: "impressions", value: currentMetrics.impressions, icon: Eye, color: "text-pink-600" },
-    { label: "CLICKS", key: "clicks", value: currentMetrics.clicks, icon: MousePointer, color: "text-purple-600" },
-    { label: "CTR", key: "ctr", value: currentMetrics.ctr, icon: Percent, color: "text-purple-600", format: "percent" },
-    { label: "BOOKINGS", key: "bookings", value: currentMetrics.bookings, icon: ShoppingCart, color: "text-orange-600" },
-    { label: "CONVERSION RATE", key: "conversionRate", value: currentMetrics.conversionRate, icon: Percent, color: "text-purple-600", format: "percent" },
-    { label: "CPC", key: "cpc", value: currentMetrics.cpc, icon: DollarSign, color: "text-blue-600", format: "currency" },
-    { label: "COST", key: "cost", value: currentMetrics.cost, icon: DollarSign, color: "text-blue-600", format: "currency" },
-    { label: "REVENUE", key: "revenue", value: currentMetrics.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency" },
-    { label: "ROAS", key: "roas", value: currentMetrics.roas, icon: TrendingUp, color: "text-green-600", format: "roas" },
-    { label: "COST OF SALE", key: "costOfSale", value: currentMetrics.costOfSale, icon: Percent, color: "text-purple-600", format: "percent" },
-  ], [currentMetrics]);
+  // KPI Cards - using hook
+  const KPI_CARDS = useKPICards(currentMetrics);
 
-  // Generate KPI cards for specific report - memoized with useCallback
-  const getReportKPICards = useCallback((data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => {
-    const metrics = calculateDerivedMetrics(data);
-    return [
-      { label: "IMPRESSIONS", key: "impressions", value: metrics.impressions, icon: Eye, color: "text-pink-600" },
-      { label: "CLICKS", key: "clicks", value: metrics.clicks, icon: MousePointer, color: "text-purple-600" },
-      { label: "CTR", key: "ctr", value: metrics.ctr, icon: Percent, color: "text-purple-600", format: "percent" },
-      { label: "BOOKINGS", key: "bookings", value: metrics.bookings, icon: ShoppingCart, color: "text-orange-600" },
-      { label: "CONVERSION RATE", key: "conversionRate", value: metrics.conversionRate, icon: Percent, color: "text-purple-600", format: "percent" },
-      { label: "CPC", key: "cpc", value: metrics.cpc, icon: DollarSign, color: "text-blue-600", format: "currency" },
-      { label: "COST", key: "cost", value: metrics.cost, icon: DollarSign, color: "text-blue-600", format: "currency" },
-      { label: "REVENUE", key: "revenue", value: metrics.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency" },
-      { label: "ROAS", key: "roas", value: metrics.roas, icon: TrendingUp, color: "text-green-600", format: "roas" },
-      { label: "COST OF SALE", key: "costOfSale", value: metrics.costOfSale, icon: Percent, color: "text-purple-600", format: "percent" },
-    ];
-  }, []);
+  // Generate KPI cards for specific report - using hook
+  const getReportKPICards = useReportKPICards();
 
-  // Get channel-specific comparison data - memoized
-  // Use comparisonTotals from hook (same source of truth as current data) instead of directly from pivot_data
+  // Get channel-specific comparison data - calculate for each channel
+  const metasearchComparisonMetrics = useChannelComparisonMetrics(
+    'metasearch',
+    comparisonTotals as { metasearch: MetricData; sem: MetricData; social: MetricData } | null,
+    comparisonType as 'none' | 'previous_period' | 'previous_year'
+  );
+  const semComparisonMetrics = useChannelComparisonMetrics(
+    'sem',
+    comparisonTotals as { metasearch: MetricData; sem: MetricData; social: MetricData } | null,
+    comparisonType as 'none' | 'previous_period' | 'previous_year'
+  );
+  const socialComparisonMetrics = useChannelComparisonMetrics(
+    'social',
+    comparisonTotals as { metasearch: MetricData; sem: MetricData; social: MetricData } | null,
+    comparisonType as 'none' | 'previous_period' | 'previous_year'
+  );
+  
   const getChannelComparisonMetrics = useCallback((channel: 'metasearch' | 'sem' | 'social') => {
-    // Use comparisonTotals from hook to ensure consistency with current data source
-    if (!comparisonTotals) return null;
-    
-    const channelComparisonData = comparisonTotals[channel];
-    if (!channelComparisonData) return null;
-    
-    // Always calculate derived metrics even if base values are 0
-    // This ensures we can show percentage changes even when values are small
-    const derived = calculateDerivedMetrics(channelComparisonData);
-    
-    if (comparisonType === "previous_period") {
-      return {
-        ...derived,
-        label: "vs Previous Period",
-      };
-    } else if (comparisonType === "previous_year") {
-      return {
-        ...derived,
-        label: "vs Previous Year",
-      };
-    }
-    
+    if (channel === 'metasearch') return metasearchComparisonMetrics;
+    if (channel === 'sem') return semComparisonMetrics;
+    if (channel === 'social') return socialComparisonMetrics;
     return null;
-  }, [comparisonTotals, comparisonType]);
+  }, [metasearchComparisonMetrics, semComparisonMetrics, socialComparisonMetrics]);
 
-  // Get overview comparison metrics - memoized
-  // Use comparisonTotals from hook (same source of truth as current data) instead of directly from pivot_data
+  // Get overview comparison metrics - using hook
   const getOverviewComparisonMetrics = useCallback(() => {
-    if (comparisonType === 'none') return null;
-    if (!comparisonTotals) return null;
-    
-    // Aggregate comparison totals from all channels (same logic as comparisonData)
-    const overview = {
-      impressions: (comparisonTotals.metasearch?.impressions || 0) + (comparisonTotals.sem?.impressions || 0) + (comparisonTotals.social?.impressions || 0),
-      clicks: (comparisonTotals.metasearch?.clicks || 0) + (comparisonTotals.sem?.clicks || 0) + (comparisonTotals.social?.clicks || 0),
-      cost: (comparisonTotals.metasearch?.cost || 0) + (comparisonTotals.sem?.cost || 0) + (comparisonTotals.social?.cost || 0),
-      revenue: (comparisonTotals.metasearch?.revenue || 0) + (comparisonTotals.sem?.revenue || 0) + (comparisonTotals.social?.revenue || 0),
-      bookings: (comparisonTotals.metasearch?.bookings || 0) + (comparisonTotals.sem?.bookings || 0) + (comparisonTotals.social?.bookings || 0),
-    };
-    
-    // Calculate derived metrics for comparison
-    const derived = calculateDerivedMetrics(overview);
-    
-    if (comparisonType === "previous_period") {
-      return {
-        ...derived,
-        label: "vs Previous Period",
-      };
-    } else if (comparisonType === "previous_year") {
-      return {
-        ...derived,
-        label: "vs Previous Year",
-      };
-    }
-    
-    return null;
-  }, [comparisonTotals, comparisonType]);
+    return comparisonMetricsHook;
+  }, [comparisonMetricsHook]);
 
   // Skeleton loader for KPI Cards - memoized
   const renderKPICardsSkeleton = useCallback(() => (
@@ -4158,26 +3524,14 @@ export default function SlideViewPage() {
   ), [comparisonMetrics, comparisonData, getChannelComparisonMetrics]);
 
   // Report breakdown with reordered columns - use currentTotals
+  // Calculate report breakdown using utility
   const REPORT_BREAKDOWN = useMemo(() => {
-    const totals = currentTotals;
-    return [
-      { report: "Metasearch", ...calculateDerivedMetrics(totals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }) },
-      { report: "SEM", ...calculateDerivedMetrics(totals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }) },
-      { report: "Social", ...calculateDerivedMetrics(totals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }) },
-    ];
+    return calculateReportBreakdown(currentTotals);
   }, [currentTotals]);
 
-  // Calculate total for all reports
+  // Calculate total for all reports using utility
   const REPORT_TOTAL = useMemo(() => {
-    const totals = currentTotals;
-    const totalData = {
-      impressions: (totals.metasearch?.impressions || 0) + (totals.sem?.impressions || 0) + (totals.social?.impressions || 0),
-      clicks: (totals.metasearch?.clicks || 0) + (totals.sem?.clicks || 0) + (totals.social?.clicks || 0),
-      cost: (totals.metasearch?.cost || 0) + (totals.sem?.cost || 0) + (totals.social?.cost || 0),
-      revenue: (totals.metasearch?.revenue || 0) + (totals.sem?.revenue || 0) + (totals.social?.revenue || 0),
-      bookings: (totals.metasearch?.bookings || 0) + (totals.sem?.bookings || 0) + (totals.social?.bookings || 0),
-    };
-    return { report: "Total", ...calculateDerivedMetrics(totalData) };
+    return calculateReportTotal(currentTotals);
   }, [currentTotals]);
 
   // State for view-based budgets
@@ -4225,349 +3579,23 @@ export default function SlideViewPage() {
     fetchViewBudgets();
   }, [selectedViewId, accountId, user]);
 
-  // Calculate budget totals from pivot_data.budget or view budgets
-  // Actual spend uses overview totals which already have view filters applied
-  const budgetData = useMemo(() => {
-    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-    
-    // If a view is selected, use view budgets
-    if (selectedViewId && viewBudgets.length > 0) {
-      // Aggregate budgets by month from view budgets
-      const monthlyBudgetMap: Record<string, { budget: number; actual: number }> = {};
-      
-      // Get actual costs from pivot_data.overview.monthly (already filtered by view)
-      if (pivotData?.overview?.monthly) {
-        Object.entries(pivotData.overview.monthly).forEach(([monthKey, metrics]) => {
-          // monthKey format: "2025-11" -> convert to "November 2025"
-          const [year, month] = monthKey.split('-');
-          const monthNum = parseInt(month);
-          if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
-            return;
-          }
-          const monthName = MONTH_NAMES[monthNum - 1];
-          const yearMonthKey = `${monthName} ${year}`;
-          
-          if (!monthlyBudgetMap[yearMonthKey]) {
-            monthlyBudgetMap[yearMonthKey] = { budget: 0, actual: 0 };
-          }
-          // Use cost from overview monthly data (already filtered by view)
-          monthlyBudgetMap[yearMonthKey].actual = metrics.cost || 0;
-        });
-      }
-      
-      // Aggregate budgets from view budgets
-      viewBudgets.forEach(budget => {
-        Object.entries(budget.budget_data).forEach(([monthKey, amount]) => {
-          // monthKey format: "2025-11" -> convert to "November 2025"
-          const [year, month] = monthKey.split('-');
-          const monthNum = parseInt(month);
-          if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
-            console.warn('Invalid month in budget key:', monthKey);
-            return;
-          }
-          const monthName = MONTH_NAMES[monthNum - 1];
-          const yearMonthKey = `${monthName} ${year}`;
-          
-          if (!monthlyBudgetMap[yearMonthKey]) {
-            monthlyBudgetMap[yearMonthKey] = { budget: 0, actual: 0 };
-          }
-          monthlyBudgetMap[yearMonthKey].budget += Number(amount) || 0;
-        });
-      });
-      
-      let budgetDataArray = Object.entries(monthlyBudgetMap)
-        .map(([month, data]) => ({ month, ...data }))
-        .sort((a, b) => {
-          // Parse "Month Year" format (e.g., "November 2025")
-          const parseMonthYear = (str: string) => {
-            const [monthName, year] = str.split(' ');
-            const monthIndex = MONTH_NAMES.indexOf(monthName);
-            return new Date(parseInt(year), monthIndex, 1);
-          };
-          const aDate = parseMonthYear(a.month);
-          const bDate = parseMonthYear(b.month);
-          return aDate.getTime() - bDate.getTime();
-        });
-      
-      // Filter by selected year if not "all"
-      if (selectedYear !== 'all') {
-        budgetDataArray = budgetDataArray.filter(item => {
-          const [, year] = item.month.split(' ');
-          return year === selectedYear;
-        });
-      }
-      
-      return budgetDataArray;
-    }
-    
-    // Fallback to pivot_data.budget
-    if (pivotData?.budget?.monthly) {
-      let monthlyData = pivotData.budget.monthly.map(m => ({
-        month: m.month,
-        budget: m.metasearchBudget + m.semBudget + m.socialBudget,
-        actual: m.metasearchActual + m.semActual + m.socialActual,
-      }));
-      
-      // Filter by selected year if not "all"
-      if (selectedYear !== 'all') {
-        monthlyData = monthlyData.filter(item => {
-          const [, year] = item.month.split(' ');
-          return year === selectedYear;
-        });
-      }
-      
-      return monthlyData;
-    }
-    return [];
-  }, [selectedViewId, viewBudgets, slideReport?.pivot_data, selectedYear]);
+  // Calculate budget totals from pivot_data.budget or view budgets - using hook
+  const budgetData = useBudgetData(
+    slideReport?.pivot_data as SlideReportPivotData | null,
+    selectedViewId,
+    viewBudgets as Array<{ id: string; dimension_name: string; dimension_item: string; budget_data: Record<string, number> }>,
+    selectedYear
+  );
 
-  // Budget monthly data for tables (full structure with all fields)
-  // Uses filtered data when view is selected (filters rawDataRows based on filterValues)
-  // Now uses unified filteredData hook for consistency
-  const budgetMonthlyData = useMemo(() => {
-    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-    
-    type BudgetMonthlyRow = {
-      month: string;
-      metasearchBudget: number;
-      semBudget: number;
-      socialBudget: number;
-      metasearchActual: number;
-      semActual: number;
-      socialActual: number;
-      metasearch: number;
-      sem: number;
-      social: number;
-    };
-    
-    // Use centralized filter detection from filteredData hook
-    const hasFilters = filteredData.hasFilters;
-    
-    // If a view is selected, construct monthly data from view budgets and filtered data
-    if (selectedViewId && viewBudgets.length > 0) {
-      const monthlyDataMap: Record<string, BudgetMonthlyRow> = {};
-      
-      // Get actual costs and revenue from filtered rawDataRows (when filters are applied)
-      // or from pivot_data.channels.monthly (when no filters)
-      if (pivotData?.channels) {
-        ['metasearch', 'sem', 'social'].forEach(channel => {
-          const channelData = pivotData.channels[channel];
-          
-          if (hasFilters) {
-            // Use filtered rows from unified hook
-            const filteredRows = filteredData.getFilteredRowsForChannel(channel);
-            
-            // Build metricNameToIdMap (same as breakdown table) - reverse mapping: name -> id
-            // This ensures we use "Cost" and "Revenue" with capital letters as the source of truth
-            const dimensionMap = (channelData as any).dimensionMap || {};
-            const metricNameToIdMap: Record<string, string> = {};
-            Object.entries(dimensionMap as Record<string, string>).forEach(([dimensionId, dimensionName]) => {
-              if (dimensionName && typeof dimensionName === 'string') {
-                metricNameToIdMap[dimensionName] = dimensionId;
-              }
-            });
-            
-            // Aggregate by month from filtered rows
-            filteredRows.forEach((row: RawDataRow) => {
-              const rowData = row.dimension_values || row;
-              
-              // Find date value
-              let dateValue: string | undefined = (rowData as Record<string, unknown>).Date as string | undefined;
-              if (!dateValue) {
-                dateValue = (rowData as Record<string, unknown>).date as string | undefined;
-              }
-              if (!dateValue) {
-                dateValue = (rowData as Record<string, unknown>).Day as string | undefined;
-              }
-              if (!dateValue) {
-                dateValue = (rowData as Record<string, unknown>).day as string | undefined;
-              }
-              if (!dateValue) {
-                for (const [key, val] of Object.entries(rowData)) {
-                  if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-                    dateValue = val;
-                    break;
-                  }
-                }
-              }
-              
-              if (dateValue) {
-                const rowDate = new Date(dateValue);
-                if (!isNaN(rowDate.getTime())) {
-                  const year = rowDate.getFullYear();
-                  const monthName = MONTH_NAMES[rowDate.getMonth()];
-                  const yearMonthKey = `${monthName} ${year}`;
-                  
-                  if (!monthlyDataMap[yearMonthKey]) {
-                    monthlyDataMap[yearMonthKey] = {
-                      month: yearMonthKey,
-                      metasearchBudget: 0,
-                      semBudget: 0,
-                      socialBudget: 0,
-                      metasearchActual: 0,
-                      semActual: 0,
-                      socialActual: 0,
-                      metasearch: 0,
-                      sem: 0,
-                      social: 0,
-                    };
-                  }
-                  
-                  // Use EXACT same extraction logic as UnifiedBreakdownTable for consistency
-                  // This ensures we get the same values as the breakdown table
-                  const costValue = parseFloat(String(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0).replace(/[^0-9.-]/g, '')) || 0;
-                  const revenueValue = parseFloat(String(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0).replace(/[^0-9.-]/g, '')) || 0;
-                  
-                  if (channel === 'metasearch') {
-                    monthlyDataMap[yearMonthKey].metasearchActual += costValue;
-                    monthlyDataMap[yearMonthKey].metasearch += revenueValue;
-                  } else if (channel === 'sem') {
-                    monthlyDataMap[yearMonthKey].semActual += costValue;
-                    monthlyDataMap[yearMonthKey].sem += revenueValue;
-                  } else if (channel === 'social') {
-                    monthlyDataMap[yearMonthKey].socialActual += costValue;
-                    monthlyDataMap[yearMonthKey].social += revenueValue;
-                  }
-                }
-              }
-            });
-          } else {
-            // No filters - use pre-computed monthly data
-            if (channelData?.monthly) {
-              Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
-                // monthKey format: "2025-11" -> convert to "November 2025"
-                const [year, month] = monthKey.split('-');
-                const monthNum = parseInt(month);
-                if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
-                  return;
-                }
-                const monthName = MONTH_NAMES[monthNum - 1];
-                const yearMonthKey = `${monthName} ${year}`;
-                
-                if (!monthlyDataMap[yearMonthKey]) {
-                  monthlyDataMap[yearMonthKey] = {
-                    month: yearMonthKey,
-                    metasearchBudget: 0,
-                    semBudget: 0,
-                    socialBudget: 0,
-                    metasearchActual: 0,
-                    semActual: 0,
-                    socialActual: 0,
-                    metasearch: 0,
-                    sem: 0,
-                    social: 0,
-                  };
-                }
-                
-                const cost = metrics.cost || 0;
-                const revenue = metrics.revenue || 0;
-                
-                if (channel === 'metasearch') {
-                  monthlyDataMap[yearMonthKey].metasearchActual = cost;
-                  monthlyDataMap[yearMonthKey].metasearch = revenue;
-                } else if (channel === 'sem') {
-                  monthlyDataMap[yearMonthKey].semActual = cost;
-                  monthlyDataMap[yearMonthKey].sem = revenue;
-                } else if (channel === 'social') {
-                  monthlyDataMap[yearMonthKey].socialActual = cost;
-                  monthlyDataMap[yearMonthKey].social = revenue;
-                }
-              });
-            }
-          }
-        });
-      }
-      
-      // Add budgets from view budgets
-      viewBudgets.forEach(budget => {
-        Object.entries(budget.budget_data).forEach(([monthKey, amount]) => {
-          const [year, month] = monthKey.split('-');
-          const monthName = MONTH_NAMES[parseInt(month) - 1];
-          const yearMonthKey = `${monthName} ${year}`;
-          
-          if (!monthlyDataMap[yearMonthKey]) {
-            monthlyDataMap[yearMonthKey] = {
-              month: yearMonthKey,
-              metasearchBudget: 0,
-              semBudget: 0,
-              socialBudget: 0,
-              metasearchActual: 0,
-              semActual: 0,
-              socialActual: 0,
-              metasearch: 0,
-              sem: 0,
-              social: 0,
-            };
-          }
-          
-          // Aggregate budgets - budgets are stored per hotel (dimension_item)
-          // Since we don't have channel info in budgets, we'll distribute evenly across channels
-          // or you can adjust this based on your actual budget structure
-          const budgetAmount = Number(amount) || 0;
-          
-          // For now, distribute budget evenly across all three channels
-          // In the future, you might want to store channel info in the budget or use dimension_name
-          const budgetPerChannel = budgetAmount / 3;
-          monthlyDataMap[yearMonthKey].metasearchBudget += budgetPerChannel;
-          monthlyDataMap[yearMonthKey].semBudget += budgetPerChannel;
-          monthlyDataMap[yearMonthKey].socialBudget += budgetPerChannel;
-        });
-      });
-      
-      let monthlyDataArray = Object.values(monthlyDataMap).sort((a, b) => {
-        // Parse "Month Year" format (e.g., "November 2025")
-        const parseMonthYear = (str: string) => {
-          const [monthName, year] = str.split(' ');
-          const monthIndex = MONTH_NAMES.indexOf(monthName);
-          return new Date(parseInt(year), monthIndex, 1);
-        };
-        const aDate = parseMonthYear(a.month);
-        const bDate = parseMonthYear(b.month);
-        return aDate.getTime() - bDate.getTime();
-      });
-      
-      // Filter by selected year if not "all"
-      if (selectedYear !== 'all') {
-        monthlyDataArray = monthlyDataArray.filter(item => {
-          const [, year] = item.month.split(' ');
-          return year === selectedYear;
-        });
-      }
-      
-      return monthlyDataArray;
-    }
-    
-    // Fallback to pivot_data.budget - need to add revenue data
-    if (pivotData?.budget?.monthly) {
-      let monthlyData: BudgetMonthlyRow[] = pivotData.budget.monthly.map(row => {
-        // Get revenue from channels data
-        const [monthName, year] = row.month.split(' ');
-        const monthIndex = MONTH_NAMES.indexOf(monthName);
-        const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-        
-        const metasearchRevenue = pivotData.channels?.metasearch?.monthly?.[monthKey]?.revenue || 0;
-        const semRevenue = pivotData.channels?.sem?.monthly?.[monthKey]?.revenue || 0;
-        const socialRevenue = pivotData.channels?.social?.monthly?.[monthKey]?.revenue || 0;
-        
-        return {
-          ...row,
-          metasearch: metasearchRevenue,
-          sem: semRevenue,
-          social: socialRevenue,
-        };
-      });
-      
-      // Filter by selected year if not "all"
-      if (selectedYear !== 'all') {
-        monthlyData = monthlyData.filter(item => {
-          const [, year] = item.month.split(' ');
-          return year === selectedYear;
-        });
-      }
-      return monthlyData;
-    }
-    return [];
-  }, [selectedViewId, viewBudgets, slideReport?.pivot_data, selectedYear, filteredData]);
+  // Budget monthly data for tables (full structure with all fields) - using hook
+  const budgetMonthlyData = useBudgetMonthlyData(
+    slideReport?.pivot_data as SlideReportPivotData | null,
+    selectedViewId,
+    viewBudgets as Array<{ id: string; dimension_name: string; dimension_item: string; budget_data: Record<string, number> }>,
+    selectedYear,
+    filteredData.hasFilters,
+    filteredData.getFilteredRowsForChannel
+  );
 
   const totalBudget = budgetData.reduce((sum, m) => sum + m.budget, 0);
   // Use REPORT_TOTAL.cost for actual spend (already filtered by view)
@@ -4741,559 +3769,61 @@ export default function SlideViewPage() {
     setEditPnlValue("");
   };
 
-  // Get the current report name
-  const currentReportName = slideReport?.name || 'Master Report';
-
   return (
     <Tabs value={selectedTab} onValueChange={setSelectedTab} className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b bg-card px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => navigate(`/tools/reports/${accountId}`)}
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            {/* Tabs in header */}
-            <TabsList>
-              <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Overview</TabsTrigger>
-              <TabsTrigger value="metasearch">Metasearch</TabsTrigger>
-              <TabsTrigger value="sem">SEM</TabsTrigger>
-              <TabsTrigger value="social">Social</TabsTrigger>
-              <TabsTrigger value="budget">Budget</TabsTrigger>
-            </TabsList>
-            
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setIsShareModalOpen(true)}>
-              <Share2 className="h-4 w-4 mr-2" />
-              Share
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setIsDataModalOpen(true)}>
-              <Database className="h-4 w-4 mr-2" />
-              Data
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setIsEditSourceOpen(true)}>
-              <Settings2 className="h-4 w-4 mr-2" />
-              Edit Source
-            </Button>
-            {/* Only show Refresh Data button for master reports (not child reports) */}
-            {!slideReport?.configuration?.isChildReport && (
-              <Button 
-                variant="default" 
-                size="sm" 
-                onClick={handleRefreshDataWithModal}
-                disabled={isRefreshModalOpen}
-                className="bg-primary hover:bg-primary/90"
-              >
-                {isRefreshModalOpen ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                )}
-                Refresh Data
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
+      <SlideViewHeader
+        selectedTab={selectedTab}
+        setSelectedTab={setSelectedTab}
+        navigate={navigate}
+        accountId={accountId}
+        setIsShareModalOpen={setIsShareModalOpen}
+        setIsDataModalOpen={setIsDataModalOpen}
+        setIsEditSourceOpen={setIsEditSourceOpen}
+        handleRefreshDataWithModal={handleRefreshDataWithModal}
+        isRefreshModalOpen={isRefreshModalOpen}
+        slideReport={slideReport}
+      />
 
-      {/* Edit Source Modal - Step by Step */}
-      <Dialog open={isEditSourceOpen} onOpenChange={(open) => handleModalClose(open)}>
-        <DialogContent className="max-w-4xl h-[85vh] max-h-[700px] flex flex-col overflow-hidden">
-          <DialogHeader className="flex-shrink-0">
-            <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-                <DialogTitle>
-                  {modalStep === 1 && "Date Range"}
-                  {modalStep === 2 && "Select Channels"}
-                  {modalStep === 3 && "Value Dimensions"}
-                  {modalStep === 4 && "Data Source"}
-                  {modalStep === 5 && "Breakdown Dimensions"}
-                  {modalStep === 6 && "Filters"}
-                </DialogTitle>
-            </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleModalClose(false)}
-                className="h-6 w-6"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <p className="text-sm text-muted-foreground mt-2">
-              {modalStep === 1 && "Set the starting date for your report data. All data from this date onwards will be included."}
-              {modalStep !== 1 && "Tip: \"Breakdown by\" tables render on the specific report tab, not on Overview/Budget. After saving, select the report tab to view the breakdown."}
-            </p>
-          </DialogHeader>
-
-          <ScrollArea className="flex-1 min-h-0">
-            {/* Step 1: Date Range */}
-            {modalStep === 1 && (
-              <div className="space-y-6 py-4">
-                <div className="bg-muted/30 rounded-lg p-4">
-                  <p className="text-sm text-muted-foreground">
-                    Select the starting point for your report. Data will be fetched from this date to the present.
-                  </p>
-                </div>
-                
-                <div className="space-y-4">
-                  <Label className="text-sm font-medium">Since</Label>
-                  <div className="flex items-center gap-4">
-                    <Select value={sinceMonth} onValueChange={setSinceMonth}>
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Select month" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="January">January</SelectItem>
-                        <SelectItem value="February">February</SelectItem>
-                        <SelectItem value="March">March</SelectItem>
-                        <SelectItem value="April">April</SelectItem>
-                        <SelectItem value="May">May</SelectItem>
-                        <SelectItem value="June">June</SelectItem>
-                        <SelectItem value="July">July</SelectItem>
-                        <SelectItem value="August">August</SelectItem>
-                        <SelectItem value="September">September</SelectItem>
-                        <SelectItem value="October">October</SelectItem>
-                        <SelectItem value="November">November</SelectItem>
-                        <SelectItem value="December">December</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    
-                    <Select value={sinceYear.toString()} onValueChange={(v) => setSinceYear(parseInt(v))}>
-                      <SelectTrigger className="w-[120px]">
-                        <SelectValue placeholder="Select year" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="2023">2023</SelectItem>
-                        <SelectItem value="2024">2024</SelectItem>
-                        <SelectItem value="2025">2025</SelectItem>
-                        <SelectItem value="2026">2026</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="mt-4 p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                    <p className="text-sm">
-                      <span className="font-medium">Data range: </span>
-                      {sinceMonth} {sinceYear} → Present
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Step 2: Channel Selection */}
-            {modalStep === 2 && (
-              <div className="space-y-4">
-                <div className="space-y-3">
-                  <div 
-                    className={cn(
-                      "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
-                      selectedDimensions.metasearch ? 'border-primary bg-primary/5' : 'border-border'
-                    )}
-                    onClick={() => handleDimensionToggle('metasearch')}
-                  >
-                    <Checkbox 
-                      checked={selectedDimensions.metasearch}
-                      onCheckedChange={() => handleDimensionToggle('metasearch')}
-                      className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                    />
-                    <span className="font-medium">Metasearch</span>
-                  </div>
-                  <div 
-                    className={cn(
-                      "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
-                      selectedDimensions.sem ? 'border-primary bg-primary/5' : 'border-border'
-                    )}
-                    onClick={() => handleDimensionToggle('sem')}
-                  >
-                    <Checkbox 
-                      checked={selectedDimensions.sem}
-                      onCheckedChange={() => handleDimensionToggle('sem')}
-                      className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                    />
-                    <span className="font-medium">SEM</span>
-                  </div>
-                  <div 
-                    className={cn(
-                      "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
-                      selectedDimensions.social ? 'border-primary bg-primary/5' : 'border-border'
-                    )}
-                    onClick={() => handleDimensionToggle('social')}
-                  >
-                    <Checkbox 
-                      checked={selectedDimensions.social}
-                      onCheckedChange={() => handleDimensionToggle('social')}
-                      className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                    />
-                    <span className="font-medium">Social</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Step 3: Value Dimensions - Applies to all selected channels */}
-            {modalStep === 3 && (
-              <div className="flex flex-col gap-4 pb-4">
-                {loadingAvailableDimensions ? (
-                  <div className="flex-1 flex items-center justify-center">
-                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                      <Loader2 className="h-8 w-8 animate-spin" />
-                      <span>Loading dimensions...</span>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="bg-muted/30 rounded-lg p-4">
-                      <p className="text-sm text-muted-foreground">
-                        Select which <span className="font-medium">value dimensions</span> (metrics) to include in this slide for <span className="font-medium">all selected channels</span>. These are the numeric metrics used for calculations and aggregations.
-                      </p>
-                    </div>
-                    
-                    <div className="flex-1 flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium">
-                          Available Value Dimensions (Metrics)
-                        </Label>
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleSelectAllDimensions}
-                          >
-                            Select All
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleDeselectAllDimensions}
-                          >
-                            Deselect All
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="border rounded-md overflow-y-auto max-h-[280px]">
-                        <div className="p-2 space-y-1">
-                          {availableDimensions.metasearch?.length > 0 ? (
-                            availableDimensions.metasearch.map(dim => {
-                              const isSelected = selectedValueDimensionIds.includes(dim.id);
-                              return (
-                                <div
-                                  key={dim.id}
-                                  className={cn(
-                                    "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                                    isSelected
-                                      ? "bg-primary/10"
-                                      : "hover:bg-muted/50"
-                                  )}
-                                  onClick={() => handleValueDimensionToggle(dim.id)}
-                                >
-                                  <Checkbox
-                                    checked={isSelected}
-                                    onCheckedChange={() => handleValueDimensionToggle(dim.id)}
-                                  />
-                                  <div className="flex-1">
-                                    <span className="text-sm">{dim.name}</span>
-                                    <span className="ml-2 text-xs text-muted-foreground">({dim.type})</span>
-                                  </div>
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <p className="text-center text-muted-foreground py-4">
-                              No value dimensions available
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Step 4: Dimension & Value Selection (Data Source) */}
-            {modalStep === 4 && (
-              <div className="flex gap-4 min-h-[350px] max-h-[400px] pb-4">
-                {/* Left: Channel tabs */}
-                <ChannelTabsList
-                  selectedChannels={selectedChannels}
-                  activeChannelTab={activeChannelTab}
-                  setActiveChannelTab={(channel) => {
-                    setActiveChannelTab(channel);
-                    setSearchQuery("");
-                  }}
-                  getChannelBadgeCount={(channel) => channelConfigs[channel]?.selectedValues?.length || 0}
-                />
-
-                {/* Right: Dimension selector */}
-                <div className="flex-1 flex flex-col gap-4">
-                  {activeChannelTab && (
-                    <>
-                      {loadingDimensions[activeChannelTab] ? (
-                        <div className="flex-1 flex items-center justify-center">
-                          <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                            <Loader2 className="h-8 w-8 animate-spin" />
-                            <span>Loading dimensions...</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div>
-                            <Label className="text-sm font-medium mb-2 block">
-                              Dimension
-                            </Label>
-                            <Select
-                              value={channelConfigs[activeChannelTab]?.dimensionId || ""}
-                              onValueChange={value => handleDimensionChange(activeChannelTab, value)}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Choose a dimension..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {dimensions[activeChannelTab]?.map(dim => (
-                                  <SelectItem key={dim.id} value={dim.id}>
-                                    {dim.name}
-                                  </SelectItem>
-                                ))}
-                                {(!dimensions[activeChannelTab] || dimensions[activeChannelTab].length === 0) && (
-                                  <div className="px-2 py-4 text-sm text-muted-foreground text-center">
-                                    No dimensions available
-                                  </div>
-                                )}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          {channelConfigs[activeChannelTab]?.dimensionId && (
-                            <DimensionValuesList
-                              values={dimensionValues[activeChannelTab] || []}
-                              selectedValues={channelConfigs[activeChannelTab]?.selectedValues || []}
-                              loading={loadingValues[activeChannelTab] || false}
-                              onValueToggle={(value) => handleValueToggle(activeChannelTab, value)}
-                              onSelectAll={() => handleSelectAllValues(activeChannelTab)}
-                              onDeselectAll={() => handleDeselectAllValues(activeChannelTab)}
-                            />
-                          )}
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Step 5: Breakdown Dimensions */}
-            {modalStep === 5 && (
-              <div className="flex gap-4 min-h-[350px] max-h-[400px] pb-4">
-                {/* Left: Channel tabs */}
-                <div className="w-48 border-r pr-4">
-                  <ScrollArea className="h-full">
-                    <div className="space-y-1">
-                      {selectedChannels.map(channel => {
-                        const breakdownCount = breakdownConfigs[channel]?.breakdownDimensionIds?.length || 0;
-                        return (
-                          <button
-                            key={channel}
-                            className={cn(
-                              "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
-                              activeChannelTab === channel
-                                ? "bg-primary text-primary-foreground"
-                                : "hover:bg-muted"
-                            )}
-                            onClick={() => setActiveChannelTab(channel)}
-                          >
-                            <span className="truncate capitalize">{channel}</span>
-                            {breakdownCount > 0 && (
-                              <span className="text-xs opacity-70">{breakdownCount}</span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </ScrollArea>
-                </div>
-
-                {/* Right: Breakdown dimension selector */}
-                <div className="flex-1 flex flex-col gap-4">
-                  {activeChannelTab && (
-                    <>
-                      <div className="bg-muted/30 rounded-lg p-4 mb-2">
-                        <p className="text-sm text-muted-foreground">
-                          Select dimensions to break down this report's data. Each selected dimension will create a separate breakdown table.
-                        </p>
-                      </div>
-                      
-                      <div>
-                        <Label className="text-sm font-medium mb-2 block">
-                          Breakdown Dimensions
-                        </Label>
-                        {loadingBreakdownDimensions[activeChannelTab] ? (
-                          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                            <Loader2 className="h-6 w-6 animate-spin mb-2" />
-                            <p className="text-sm">Loading dimensions...</p>
-                          </div>
-                        ) : (
-                          <div className="flex-1 border rounded-md overflow-y-auto" style={{ maxHeight: '250px' }}>
-                            <div className="p-2 space-y-1">
-                              {breakdownDimensions[activeChannelTab]?.length > 0 ? (
-                                breakdownDimensions[activeChannelTab].map(dim => {
-                                  const isSelected = breakdownConfigs[activeChannelTab]?.breakdownDimensionIds?.includes(dim.id) || false;
-                                  return (
-                                    <div
-                                      key={dim.id}
-                                      className={cn(
-                                        "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                                        isSelected
-                                          ? "bg-primary/10"
-                                          : "hover:bg-muted/50"
-                                      )}
-                                      onClick={() => handleBreakdownToggle(activeChannelTab, dim.id)}
-                                    >
-                                      <Checkbox
-                                        checked={isSelected}
-                                        onCheckedChange={() => handleBreakdownToggle(activeChannelTab, dim.id)}
-                                      />
-                                      <span className="text-sm">{dim.name}</span>
-                                    </div>
-                                  );
-                                })
-                              ) : (
-                                <p className="text-center text-muted-foreground py-4">
-                                  No breakdown dimensions available
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Step 6: Filters */}
-            {modalStep === 6 && (
-              <div className="flex gap-4 min-h-[350px] max-h-[400px] pb-4">
-                {/* Left: Channel tabs */}
-                <div className="w-48 border-r pr-4">
-                  <ScrollArea className="h-full">
-                    <div className="space-y-1">
-                      {selectedChannels.map(channel => {
-                        const filterCount = filterConfigs[channel]?.filterDimensionIds?.length || 0;
-                        return (
-                          <button
-                            key={channel}
-                            className={cn(
-                              "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
-                              activeChannelTab === channel
-                                ? "bg-primary text-primary-foreground"
-                                : "hover:bg-muted"
-                            )}
-                            onClick={() => setActiveChannelTab(channel)}
-                          >
-                            <span className="truncate capitalize">{channel}</span>
-                            {filterCount > 0 && (
-                              <span className="text-xs opacity-70">{filterCount}</span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </ScrollArea>
-                </div>
-
-                {/* Right: Filter dimension selector */}
-                <div className="flex-1 flex flex-col gap-4">
-                  {activeChannelTab && (
-                    <>
-                      <div className="bg-muted/30 rounded-lg p-4 mb-2">
-                        <p className="text-sm text-muted-foreground">
-                          Select dimensions to use as filters for this report. Each selected dimension will create a filter dropdown that appears before the date dropdowns on the slides page.
-                        </p>
-                      </div>
-                      
-                      <div>
-                        <Label className="text-sm font-medium mb-2 block">
-                          Filter Dimensions
-                        </Label>
-                        {loadingDimensions[activeChannelTab] ? (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Loading dimensions...
-                          </div>
-                        ) : (
-                          <ScrollArea className="h-[250px] border rounded-md">
-                            <div className="p-2 space-y-1">
-                              {dimensions[activeChannelTab]?.length > 0 ? (
-                                dimensions[activeChannelTab].map(dim => {
-                                  const isSelected = filterConfigs[activeChannelTab]?.filterDimensionIds?.includes(dim.id) || false;
-                                  return (
-                                    <div
-                                      key={dim.id}
-                                      className={cn(
-                                        "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                                        isSelected
-                                          ? "bg-primary/10"
-                                          : "hover:bg-muted/50"
-                                      )}
-                                      onClick={() => handleFilterDimensionToggle(activeChannelTab, dim.id)}
-                                    >
-                                      <Checkbox
-                                        checked={isSelected}
-                                        onCheckedChange={() => handleFilterDimensionToggle(activeChannelTab, dim.id)}
-                                      />
-                                      <span className="text-sm">{dim.name}</span>
-                                    </div>
-                                  );
-                                })
-                              ) : (
-                                <p className="text-center text-muted-foreground py-4">
-                                  No dimensions available
-                                </p>
-                              )}
-                            </div>
-                          </ScrollArea>
-                        )}
-                      </div>
-
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </ScrollArea>
-
-          {/* Footer Navigation */}
-          <div className="flex-shrink-0 flex items-center justify-between pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={modalStep === 1 ? () => handleModalClose(false) : handleBack}
-            >
-              <ChevronLeft className="h-4 w-4 mr-1" />
-              {modalStep === 1 ? "Cancel" : "Back"}
-            </Button>
-            <Button
-              onClick={handleNext}
-              disabled={modalStep === 2 && selectedChannels.length === 0}
-            >
-              {modalStep === 6 ? "Save" : "Next"}
-              {modalStep !== 6 && <ChevronRight className="h-4 w-4 ml-1" />}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <EditSourceModal
+        isOpen={isEditSourceOpen}
+        onOpenChange={handleModalClose}
+        modalStep={modalStep}
+        sinceMonth={sinceMonth}
+        setSinceMonth={setSinceMonth}
+        sinceYear={sinceYear}
+        setSinceYear={setSinceYear}
+        selectedDimensions={selectedDimensions}
+        handleDimensionToggle={handleDimensionToggle}
+        selectedChannels={selectedChannels}
+        selectedValueDimensionIds={selectedValueDimensionIds}
+        handleValueDimensionToggle={handleValueDimensionToggle}
+        handleSelectAllDimensions={handleSelectAllDimensions}
+        handleDeselectAllDimensions={handleDeselectAllDimensions}
+        availableDimensions={availableDimensions}
+        loadingAvailableDimensions={loadingAvailableDimensions}
+        activeChannelTab={activeChannelTab}
+        setActiveChannelTab={setActiveChannelTab}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        channelConfigs={channelConfigs}
+        dimensions={dimensions}
+        dimensionValues={dimensionValues}
+        loadingDimensions={loadingDimensions}
+        loadingValues={loadingValues}
+        handleDimensionChange={handleDimensionChange}
+        handleValueToggle={handleValueToggle}
+        handleSelectAllValues={handleSelectAllValues}
+        handleDeselectAllValues={handleDeselectAllValues}
+        breakdownDimensions={breakdownDimensions}
+        breakdownConfigs={breakdownConfigs}
+        loadingBreakdownDimensions={loadingBreakdownDimensions}
+        handleBreakdownToggle={handleBreakdownToggle}
+        filterConfigs={filterConfigs}
+        handleFilterDimensionToggle={handleFilterDimensionToggle}
+        handleNext={handleNext}
+        handleBack={handleBack}
+        handleModalClose={handleModalClose}
+      />
 
       {/* Data Browser Modal */}
       <SlideDataBrowser
@@ -5488,2048 +4018,206 @@ export default function SlideViewPage() {
           </div>
         )}
 
-        {/* Filters Row */}
-        <div className="flex items-end justify-end gap-6">
-          {/* View selector - Show when on overview tab */}
-          {selectedTab === "overview" && (
-            <div className="flex items-center gap-3">
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">View:</span>
-                <div className="flex items-center gap-2">
-                  <Select 
-                    value={selectedViewId === null ? 'master' : selectedViewId || 'master'} 
-                    onValueChange={(value) => {
-                      if (isReadOnlyMode) return; // Prevent changes in read-only mode
-                      const newViewId = value === 'master' ? null : (value === 'unsaved' ? 'unsaved' : value);
-                      setSelectedViewId(newViewId);
-                      // Immediately apply the view filters (unless it's Unsaved)
-                      if (newViewId !== 'unsaved') {
-                        handleApplyView(newViewId);
-                      }
-                    }}
-                    disabled={isReadOnlyMode}
-                  >
-                    <SelectTrigger className="w-[150px] text-sm bg-background">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableViews.map((view) => (
-                        <SelectItem key={view.id === null ? 'master' : view.id} value={view.id === null ? 'master' : view.id}>
-                          {view.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {!isReadOnlyMode && (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-10 px-3"
-                        onClick={() => setIsSaveViewDialogOpen(true)}
-                        title="Save current filters as a view"
-                      >
-                        <BookmarkPlus className="h-4 w-4" />
-                      </Button>
-                      {selectedViewId && selectedViewId !== 'unsaved' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-10 px-3 text-destructive hover:text-destructive"
-                          onClick={() => handleDeleteView(selectedViewId)}
-                          title="Delete this view"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+        <FiltersRow
+          selectedTab={selectedTab}
+          selectedViewId={selectedViewId}
+          setSelectedViewId={setSelectedViewId}
+          isReadOnlyMode={isReadOnlyMode}
+          availableViews={availableViews}
+          handleApplyView={handleApplyView}
+          handleDeleteView={handleDeleteView}
+          setIsSaveViewDialogOpen={setIsSaveViewDialogOpen}
+          filterValues={filterValues}
+          setFilterValues={setFilterValues}
+          filterDimensionValues={filterDimensionValues}
+          setFilterDimensionValues={setFilterDimensionValues}
+          setFilterDimensionNames={setFilterDimensionNames}
+          filterDimensionNames={filterDimensionNames}
+          dimensions={dimensions}
+          filterConfigs={filterConfigs}
+          slideReport={slideReport}
+          selectedYear={selectedYear}
+          setSelectedYear={setSelectedYear}
+          selectedMonth={selectedMonth}
+          setSelectedMonth={setSelectedMonth}
+          comparisonType={comparisonType}
+          setComparisonType={setComparisonType}
+          pendingFilterValues={pendingFilterValues}
+          setPendingFilterValues={setPendingFilterValues}
+          filterSearchTerms={filterSearchTerms}
+          setFilterSearchTerms={setFilterSearchTerms}
+          openFilterPopovers={openFilterPopovers}
+          setOpenFilterPopovers={setOpenFilterPopovers}
+          filterValuesLoading={filterValuesLoading}
+          setFilterValuesLoading={setFilterValuesLoading}
+          loadFilterDimensionValues={loadFilterDimensionValues}
+        />
 
-          {/* Channel Filter Dropdowns - Show when on channel tabs */}
-          {selectedTab !== "overview" && selectedTab !== "budget" && (() => {
-            const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
-            const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
-            const localFilterConfig = filterConfigs?.[currentChannel];
-            const filterDimIds = savedFilterConfigs?.filterDimensionIds || localFilterConfig?.filterDimensionIds || [];
-            
-            if (filterDimIds.length === 0) return null;
-            
-            return (
-              <div className="flex items-center gap-6">
-                {filterDimIds.map(filterDimId => {
-                  const filterDimName = filterDimensionNames[currentChannel]?.[filterDimId] 
-                                     || dimensions[currentChannel]?.find(d => d.id === filterDimId)?.name
-                                     || `Filter`;
-                  const filterValuesList = filterDimensionValues[currentChannel]?.[filterDimId] || [];
-                  const selectedFilterValues = filterValues[currentChannel]?.[filterDimId];
-                  // Check if filter is explicitly set (exists in filterValues) vs not set at all
-                  const isFilterSet = filterValues[currentChannel] && filterDimId in filterValues[currentChannel];
-                  const selectedValues = isFilterSet ? (selectedFilterValues || []) : filterValuesList;
-                  const pendingValues = pendingFilterValues[currentChannel]?.[filterDimId] ?? (isFilterSet ? (selectedFilterValues || []) : filterValuesList);
-                  // "All" means all values are selected, not when filter is not set
-                  const isAllSelected = isFilterSet ? selectedValues.length === filterValuesList.length : true;
-                  const hasValues = filterValuesList.length > 0;
-                  
-                  const popoverKey = `${currentChannel}-${filterDimId}`;
-                  const isPopoverOpen = openFilterPopovers[popoverKey] || false;
-                  
-                  return (
-                    <Popover 
-                      key={`filter-${popoverKey}`}
-                      open={isPopoverOpen}
-                      onOpenChange={async (open) => {
-                        setOpenFilterPopovers(prev => ({
-                          ...prev,
-                          [popoverKey]: open,
-                        }));
-                        if (isReadOnlyMode) return; // Prevent opening in read-only mode
-                        if (open) {
-                          // Initialize pending values based on current state
-                          const isFilterCurrentlySet = filterValues[currentChannel] && filterDimId in filterValues[currentChannel];
-                          if (isFilterCurrentlySet) {
-                            // Filter is set - use current selection (could be empty array)
-                            setPendingFilterValues(prev => ({
-                              ...prev,
-                              [currentChannel]: {
-                                ...prev[currentChannel],
-                                [filterDimId]: selectedFilterValues || [],
-                              },
-                            }));
-                          } else {
-                            // Filter not set - default to all selected
-                            setPendingFilterValues(prev => ({
-                              ...prev,
-                              [currentChannel]: {
-                                ...prev[currentChannel],
-                                [filterDimId]: [...filterValuesList],
-                              },
-                            }));
-                          }
-                          
-                          // If values aren't loaded yet, trigger loading immediately
-                          if (!hasValues && !filterValuesLoading[currentChannel]?.[filterDimId]) {
-                            setFilterValuesLoading(prev => ({
-                              ...prev,
-                              [currentChannel]: {
-                                ...prev[currentChannel],
-                                [filterDimId]: true,
-                              },
-                            }));
-                            
-                            const values = await loadFilterDimensionValues(currentChannel, filterDimId);
-                            if (values.length > 0) {
-                              setFilterDimensionValues(prev => ({
-                                ...prev,
-                                [currentChannel]: {
-                                  ...prev[currentChannel],
-                                  [filterDimId]: values,
-                                },
-                              }));
-                              
-                              // Get dimension name
-                              const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-                              const channelData = pivotData?.channels?.[currentChannel];
-                              const dimName = (channelData as any)?.dimensionMap?.[filterDimId] 
-                                || dimensions[currentChannel]?.find(d => d.id === filterDimId)?.name
-                                || filterDimId;
-                              
-                              setFilterDimensionNames(prev => ({
-                                ...prev,
-                                [currentChannel]: {
-                                  ...prev[currentChannel],
-                                  [filterDimId]: dimName,
-                                },
-                              }));
-                            }
-                            
-                            setFilterValuesLoading(prev => ({
-                              ...prev,
-                              [currentChannel]: {
-                                ...prev[currentChannel],
-                                [filterDimId]: false,
-                              },
-                            }));
-                          }
-                        } else {
-                          // Clear search term when closing
-                          const key = `${currentChannel}-${filterDimId}`;
-                          setFilterSearchTerms(prev => {
-                            const { [key]: _, ...rest } = prev;
-                            return rest;
-                          });
-                        }
-                      }}
-                    >
-                      <PopoverTrigger asChild>
-                        <div className="flex flex-col gap-1">
-                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{filterDimName}:</span>
-                          <Button variant="outline" className="h-9 justify-between min-w-[140px] px-4 pt-[20px] pb-[18px]">
-                            <span className="truncate">
-                              {isAllSelected 
-                                ? 'All'
-                                : selectedValues.length === 0
-                                  ? '0 selected'
-                                  : selectedValues.length === 1
-                                    ? selectedValues[0]
-                                    : `${selectedValues.length} selected`}
-                            </span>
-                            <ChevronRight className="h-4 w-4 opacity-50 rotate-90 ml-2" />
-                          </Button>
-                        </div>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[250px] p-0 bg-popover z-50" align="start">
-                        <div className="p-2">
-                          <div className="flex items-center justify-between mb-2">
-                            <Label className="text-sm font-medium">Filter</Label>
-                            <div className="flex gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-2 text-xs"
-                                onClick={() => {
-                                  setPendingFilterValues(prev => ({
-                                    ...prev,
-                                    [currentChannel]: {
-                                      ...prev[currentChannel],
-                                      [filterDimId]: [...filterValuesList],
-                                    },
-                                  }));
-                                }}
-                              >
-                                All
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-2 text-xs"
-                                onClick={() => {
-                                  setPendingFilterValues(prev => ({
-                                    ...prev,
-                                    [currentChannel]: {
-                                      ...prev[currentChannel],
-                                      [filterDimId]: [],
-                                    },
-                                  }));
-                                }}
-                              >
-                                Clear
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="mb-2 border-b pb-2">
-                            <div className="relative">
-                              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                              <Input
-                                placeholder="Type to search"
-                                value={filterSearchTerms[`${currentChannel}-${filterDimId}`] || ''}
-                                onChange={(e) => {
-                                  setFilterSearchTerms(prev => ({
-                                    ...prev,
-                                    [`${currentChannel}-${filterDimId}`]: e.target.value
-                                  }));
-                                }}
-                                className="pl-8 h-8"
-                              />
-                            </div>
-                          </div>
-                          <ScrollArea className="h-[200px]">
-                            <div className="space-y-1 p-1">
-                              {(() => {
-                                const isLoading = filterValuesLoading[currentChannel]?.[filterDimId];
-                                
-                                if (isLoading) {
-                                  return (
-                                    <div className="flex items-center justify-center py-8">
-                                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mr-2" />
-                                      <span className="text-sm text-muted-foreground">Loading values...</span>
-                                    </div>
-                                  );
-                                }
-                                
-                                if (!hasValues) {
-                                  return (
-                                    <div className="text-center py-4 text-muted-foreground text-sm">
-                                      Click "Refresh Data" to load filter values
-                                    </div>
-                                  );
-                                }
+        <ComparisonBanner
+          selectedTab={selectedTab}
+          comparisonType={comparisonType}
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+        />
 
-                                const searchTerm = filterSearchTerms[`${currentChannel}-${filterDimId}`] || '';
-                                const filteredList = searchTerm
-                                  ? filterValuesList.filter(v => 
-                                      v.toLowerCase().includes(searchTerm.toLowerCase())
-                                    )
-                                  : filterValuesList;
-                                
-                                return filteredList.map(value => {
-                                  const isSelected = pendingValues.includes(value);
-                                  return (
-                                    <div
-                                      key={value}
-                                      className="group flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent text-sm relative"
-                                      onClick={() => {
-                                        if (isReadOnlyMode) return; // Prevent changes in read-only mode
-                                        setPendingFilterValues(prev => {
-                                          const current = prev[currentChannel]?.[filterDimId] || [];
-                                          const newValues = isSelected
-                                            ? current.filter(v => v !== value)
-                                            : [...current, value];
-                                          return {
-                                            ...prev,
-                                            [currentChannel]: {
-                                              ...prev[currentChannel],
-                                              [filterDimId]: newValues,
-                                            },
-                                          };
-                                        });
-                                      }}
-                                    >
-                                      <Checkbox 
-                                        checked={isSelected} 
-                                        onCheckedChange={() => {}}
-                                        onClick={(e) => e.stopPropagation()}
-                                      />
-                                      <span className="truncate flex-1">{value}</span>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          if (!isReadOnlyMode) {
-                                            setPendingFilterValues(prev => ({
-                                              ...prev,
-                                              [currentChannel]: {
-                                                ...prev[currentChannel],
-                                                [filterDimId]: [value],
-                                              },
-                                            }));
-                                          }
-                                        }}
-                                      >
-                                        ONLY
-                                      </Button>
-                                    </div>
-                                  );
-                                });
-                              })()}
-                            </div>
-                          </ScrollArea>
-                          <div className="border-t p-2">
-                            <Button
-                              size="sm"
-                              className="w-full"
-                              onClick={() => {
-                                if (isReadOnlyMode) return; // Prevent changes in read-only mode
-                                // Apply the pending filter values
-                                setFilterValues(prev => ({
-                                  ...prev,
-                                  [currentChannel]: {
-                                    ...prev[currentChannel],
-                                    [filterDimId]: pendingValues,
-                                  },
-                                }));
-                                // Close the popover after applying
-                                setOpenFilterPopovers(prev => ({
-                                  ...prev,
-                                  [popoverKey]: false,
-                                }));
-                                // Clear search term when closing
-                                setFilterSearchTerms(prev => {
-                                  const { [popoverKey]: _, ...rest } = prev;
-                                  return rest;
-                                });
-                              }}
-                              disabled={isReadOnlyMode}
-                            >
-                              Apply
-                            </Button>
-                          </div>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  );
-                })}
-              </div>
-            );
-          })()}
+            <OverviewTab
+              slideReportId={slideReportId}
+              isSlideReportsLoading={isSlideReportsLoading}
+              slideReport={slideReport}
+              isLoadingData={isLoadingData}
+              isLoadingMonthlyData={isLoadingMonthlyData}
+              currentTotals={currentTotals}
+              breakdownTotals={breakdownTotals}
+              overviewChartData={overviewChartData}
+              chartTimeRange={chartTimeRange}
+              setChartTimeRange={setChartTimeRange}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              isReadOnlyMode={isReadOnlyMode}
+              setIsEditSourceOpen={setIsEditSourceOpen}
+              renderKPICards={renderKPICards}
+              renderKPICardsSkeleton={renderKPICardsSkeleton}
+              renderChartSkeleton={renderChartSkeleton}
+              renderTableSkeleton={renderTableSkeleton}
+              getOverviewComparisonMetrics={getOverviewComparisonMetrics}
+              filteredData={filteredData}
+              slideType={slideType}
+              KPI_CARDS={KPI_CARDS}
+            />
 
-          {/* Date Filters - Show on all tabs except Budget */}
-          {selectedTab !== "budget" && (
-            <div className="flex items-center gap-6">
-              {/* Year Filter */}
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Year:</span>
-                <Select value={selectedYear} onValueChange={setSelectedYear} disabled={isReadOnlyMode}>
-                  <SelectTrigger className="w-[130px] bg-background">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Years</SelectItem>
-                    <SelectItem value="2024">2024</SelectItem>
-                    <SelectItem value="2025">2025</SelectItem>
-                    <SelectItem value="2026">2026</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <ChannelTab
+              channel="metasearch"
+              isSlideReportsLoading={isSlideReportsLoading}
+              slideReportId={slideReportId}
+              slideReport={slideReport}
+              isLoadingData={isLoadingData}
+              breakdownTotals={breakdownTotals}
+              currentTotals={currentTotals}
+              channelChartData={channelChartData}
+              chartTimeRange={chartTimeRange}
+              setChartTimeRange={setChartTimeRange}
+              groupByDimension={groupByDimension}
+              breakdownByDimension={breakdownByDimension}
+              expandedRow={expandedRow}
+              setExpandedRow={setExpandedRow}
+              setGroupByDimension={setGroupByDimension}
+              setBreakdownByDimension={setBreakdownByDimension}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              filterValues={filterValues}
+              filterDimensionValues={filterDimensionValues}
+              breakdownDimensions={breakdownDimensions}
+              breakdownConfigs={breakdownConfigs}
+              renderKPICards={renderKPICards}
+              renderKPICardsSkeleton={renderKPICardsSkeleton}
+              getReportKPICards={getReportKPICards}
+              getChannelComparisonMetrics={getChannelComparisonMetrics}
+              setBreakdownTotals={setBreakdownTotals}
+              UnifiedBreakdownTable={UnifiedBreakdownTable}
+            />
 
-              {/* Month Filter */}
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Month:</span>
-                <Select value={selectedMonth} onValueChange={setSelectedMonth} disabled={isReadOnlyMode}>
-                  <SelectTrigger className="w-[140px] bg-background">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Months</SelectItem>
-                    <SelectItem value="January">January</SelectItem>
-                    <SelectItem value="February">February</SelectItem>
-                    <SelectItem value="March">March</SelectItem>
-                    <SelectItem value="April">April</SelectItem>
-                    <SelectItem value="May">May</SelectItem>
-                    <SelectItem value="June">June</SelectItem>
-                    <SelectItem value="July">July</SelectItem>
-                    <SelectItem value="August">August</SelectItem>
-                    <SelectItem value="September">September</SelectItem>
-                    <SelectItem value="October">October</SelectItem>
-                    <SelectItem value="November">November</SelectItem>
-                    <SelectItem value="December">December</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              {/* Comparison dropdown */}
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Compare:</span>
-                <Select value={comparisonType} onValueChange={setComparisonType} disabled={isReadOnlyMode}>
-                  <SelectTrigger className="w-[160px] bg-background">
-                    <SelectValue placeholder="No Comparison" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Comparison</SelectItem>
-                    <SelectItem value="previous_period">Previous Period</SelectItem>
-                    <SelectItem value="previous_year">Previous Year</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
-        </div>
+            <ChannelTab
+              channel="sem"
+              isSlideReportsLoading={isSlideReportsLoading}
+              slideReportId={slideReportId}
+              slideReport={slideReport}
+              isLoadingData={isLoadingData}
+              breakdownTotals={breakdownTotals}
+              currentTotals={currentTotals}
+              channelChartData={channelChartData}
+              chartTimeRange={chartTimeRange}
+              setChartTimeRange={setChartTimeRange}
+              groupByDimension={groupByDimension}
+              breakdownByDimension={breakdownByDimension}
+              expandedRow={expandedRow}
+              setExpandedRow={setExpandedRow}
+              setGroupByDimension={setGroupByDimension}
+              setBreakdownByDimension={setBreakdownByDimension}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              filterValues={filterValues}
+              filterDimensionValues={filterDimensionValues}
+              breakdownDimensions={breakdownDimensions}
+              breakdownConfigs={breakdownConfigs}
+              renderKPICards={renderKPICards}
+              renderKPICardsSkeleton={renderKPICardsSkeleton}
+              getReportKPICards={getReportKPICards}
+              getChannelComparisonMetrics={getChannelComparisonMetrics}
+              setBreakdownTotals={setBreakdownTotals}
+              UnifiedBreakdownTable={UnifiedBreakdownTable}
+            />
 
-        {/* Comparison info banner - Show on all tabs except Budget */}
-        {selectedTab !== "budget" && comparisonType !== "none" && (() => {
-          // Calculate previous period/year information
-          const getPreviousPeriodInfo = () => {
-            if (comparisonType === "previous_period") {
-              if (selectedMonth !== 'all' && selectedYear !== 'all') {
-                // Specific month selected - previous period is previous month
-                const monthIndex = MONTH_NAMES.indexOf(selectedMonth);
-                const year = parseInt(selectedYear);
-                const currentDate = new Date(year, monthIndex, 1);
-                const previousDate = new Date(year, monthIndex - 1, 1);
-                const previousMonth = MONTH_NAMES[previousDate.getMonth()];
-                const previousYear = previousDate.getFullYear();
-                return { month: previousMonth, year: previousYear };
-              } else if (selectedYear !== 'all') {
-                // Year selected but all months - previous period is previous year
-                const year = parseInt(selectedYear);
-                return { month: null, year: year - 1 };
-              }
-              // All years and all months - can't determine specific previous period
-              return { month: null, year: null };
-            } else if (comparisonType === "previous_year") {
-              if (selectedYear !== 'all') {
-                const year = parseInt(selectedYear);
-                return { month: selectedMonth !== 'all' ? selectedMonth : null, year: year - 1 };
-              }
-              return { month: null, year: null };
-            }
-            return { month: null, year: null };
-          };
+            <ChannelTab
+              channel="social"
+              isSlideReportsLoading={isSlideReportsLoading}
+              slideReportId={slideReportId}
+              slideReport={slideReport}
+              isLoadingData={isLoadingData}
+              breakdownTotals={breakdownTotals}
+              currentTotals={currentTotals}
+              channelChartData={channelChartData}
+              chartTimeRange={chartTimeRange}
+              setChartTimeRange={setChartTimeRange}
+              groupByDimension={groupByDimension}
+              breakdownByDimension={breakdownByDimension}
+              expandedRow={expandedRow}
+              setExpandedRow={setExpandedRow}
+              setGroupByDimension={setGroupByDimension}
+              setBreakdownByDimension={setBreakdownByDimension}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              filterValues={filterValues}
+              filterDimensionValues={filterDimensionValues}
+              breakdownDimensions={breakdownDimensions}
+              breakdownConfigs={breakdownConfigs}
+              renderKPICards={renderKPICards}
+              renderKPICardsSkeleton={renderKPICardsSkeleton}
+              getReportKPICards={getReportKPICards}
+              getChannelComparisonMetrics={getChannelComparisonMetrics}
+              setBreakdownTotals={setBreakdownTotals}
+              UnifiedBreakdownTable={UnifiedBreakdownTable}
+            />
 
-          const prevInfo = getPreviousPeriodInfo();
-          const currentPeriod = selectedYear !== 'all' 
-            ? `${selectedYear}${selectedMonth !== 'all' ? ` ${selectedMonth}` : ''}`
-            : (selectedMonth !== 'all' ? selectedMonth : 'Current Period');
-          
-          return (
-            <div className="mb-4 p-3 bg-muted rounded-lg text-sm">
-              {comparisonType === "previous_period" && (
-                <span>
-                  Comparing {currentPeriod} vs Previous Period
-                  {prevInfo.year !== null && (
-                    <span>
-                      {' '}({prevInfo.month ? `${prevInfo.month} ` : ''}{prevInfo.year})
-                    </span>
-                  )}
-                </span>
-              )}
-              {comparisonType === "previous_year" && (
-                <span>
-                  Comparing {currentPeriod} vs Previous Year
-                  {prevInfo.year !== null && (
-                    <span>
-                      {' '}({prevInfo.month ? `${prevInfo.month} ` : ''}{prevInfo.year})
-                    </span>
-                  )}
-                </span>
-              )}
-            </div>
-          );
-        })()}
-
-            {/* Overview Tab */}
-            <TabsContent value="overview" className="space-y-6">
-              {/* Show setup prompt when no report exists yet */}
-              {!slideReportId && !isSlideReportsLoading && (
-                <div className="flex flex-col items-center justify-center py-16 space-y-4">
-                  <div className="bg-primary/10 rounded-full p-4">
-                    <Settings2 className="h-8 w-8 text-primary" />
-                  </div>
-                  <h3 className="text-lg font-semibold">Configure Your Report</h3>
-                  <p className="text-muted-foreground text-center max-w-md">
-                    Set up your report by selecting channels, dimensions, and date range in the Edit Source wizard.
-                  </p>
-                  <Button onClick={() => setIsEditSourceOpen(true)} className="mt-2">
-                    <Settings2 className="h-4 w-4 mr-2" />
-                    Configure Report
-                  </Button>
-                </div>
-              )}
-
-              {/* Show skeletons when loading - only show if we don't have pivot_data yet or actively loading */}
-              {(isSlideReportsLoading || (slideReportId && (!slideReport?.pivot_data || isLoadingData))) ? (
-                renderKPICardsSkeleton()
-              ) : slideReportId && slideReport?.pivot_data && hasAnyData(currentTotals) && renderKPICards(
-                slideType === 'master-report' && Object.keys(currentTotals).length > 0
-                  ? (() => {
-                      // Prefer breakdownTotals if available (from UnifiedBreakdownTable) for consistency with channel tabs
-                      // This ensures KPI cards match the breakdown table when filters are applied
-                      const metasearchData = breakdownTotals.metasearch || currentTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-                      const semData = breakdownTotals.sem || currentTotals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-                      const socialData = breakdownTotals.social || currentTotals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-                      const totals = {
-                        impressions: (metasearchData.impressions || 0) + (semData.impressions || 0) + (socialData.impressions || 0),
-                        clicks: (metasearchData.clicks || 0) + (semData.clicks || 0) + (socialData.clicks || 0),
-                        cost: (metasearchData.cost || 0) + (semData.cost || 0) + (socialData.cost || 0),
-                        revenue: (metasearchData.revenue || 0) + (semData.revenue || 0) + (socialData.revenue || 0),
-                        bookings: (metasearchData.bookings || 0) + (semData.bookings || 0) + (socialData.bookings || 0),
-                      };
-                      const derived = calculateDerivedMetrics(totals);
-                      
-                      // Get comparison metrics from pivot_data overview
-                      const overviewCompMetrics = getOverviewComparisonMetrics();
-                      
-                      return [
-                        { label: "IMPRESSIONS", key: "impressions", value: derived.impressions, icon: Eye, color: "text-pink-600", comparison: overviewCompMetrics?.impressions },
-                        { label: "CLICKS", key: "clicks", value: derived.clicks, icon: MousePointer, color: "text-purple-600", comparison: overviewCompMetrics?.clicks },
-                        { label: "CTR", key: "ctr", value: derived.ctr, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.ctr },
-                        { label: "BOOKINGS", key: "bookings", value: derived.bookings, icon: ShoppingCart, color: "text-orange-600", comparison: overviewCompMetrics?.bookings },
-                        { label: "CONVERSION RATE", key: "conversionRate", value: derived.conversionRate, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.conversionRate },
-                        { label: "CPC", key: "cpc", value: derived.cpc, icon: DollarSign, color: "text-blue-600", format: "currency", comparison: overviewCompMetrics?.cpc },
-                        { label: "COST", key: "cost", value: derived.cost, icon: DollarSign, color: "text-blue-600", format: "currency", comparison: overviewCompMetrics?.cost },
-                        { label: "REVENUE", key: "revenue", value: derived.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency", comparison: overviewCompMetrics?.revenue },
-                        { label: "ROAS", key: "roas", value: derived.roas, icon: TrendingUp, color: "text-green-600", format: "roas", comparison: overviewCompMetrics?.roas },
-                        { label: "COST OF SALE", key: "costOfSale", value: derived.costOfSale, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.costOfSale },
-                      ];
-                    })()
-                  : KPI_CARDS,
-                getOverviewComparisonMetrics()
-              )}
-
-              {/* Monthly Results Chart */}
-              {(isSlideReportsLoading || (slideReportId && (isLoadingData || (!slideReport?.pivot_data && isLoadingMonthlyData)))) ? (
-                renderChartSkeleton()
-              ) : (
-                <Card>
-                  <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                    <CardTitle className="text-base font-medium">Revenue</CardTitle>
-                    <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as typeof chartTimeRange)} disabled={isReadOnlyMode}>
-                      <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-popover z-50">
-                        <SelectItem value="this_year">This Year</SelectItem>
-                        <SelectItem value="last_12_months">Last 12 Months</SelectItem>
-                        <SelectItem value="last_6_months">Last 6 Months</SelectItem>
-                        <SelectItem value="last_3_months">Last 3 Months</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </CardHeader>
-                  <CardContent>
-                  <div className="h-[250px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={overviewChartData}>
-                        <defs>
-                          <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.05}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                        <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
-                        <Tooltip 
-                          formatter={(value: number) => [`$${value.toLocaleString()}`, "Revenue"]}
-                          contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
-                        />
-                        <Area 
-                          type="monotone" 
-                          dataKey="total" 
-                          stroke="#8b5cf6" 
-                          strokeWidth={2}
-                          fill="url(#revenueGradient)" 
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-              )}
-
-              {/* Report Breakdown Table */}
-              {(isSlideReportsLoading || (slideReportId && (isLoadingData || (!slideReport?.pivot_data && isLoadingMonthlyData)))) ? (
-                renderTableSkeleton()
-              ) : (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base font-medium">
-                      <span className="font-semibold">Period:</span> {selectedYear === 'all' ? 'All Years (2024-2026)' : selectedYear}
-                      {selectedMonth !== 'all' ? ` - ${selectedMonth}` : ''}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Report</TableHead>
-                        <TableHead className="text-right">Impressions</TableHead>
-                        <TableHead className="text-right">Clicks</TableHead>
-                        <TableHead className="text-right">CTR</TableHead>
-                        <TableHead className="text-right">Bookings</TableHead>
-                        <TableHead className="text-right">Conv. Rate</TableHead>
-                        <TableHead className="text-right">CPC</TableHead>
-                        <TableHead className="text-right">Cost</TableHead>
-                        <TableHead className="text-right">Revenue</TableHead>
-                        <TableHead className="text-right">ROAS</TableHead>
-                        <TableHead className="text-right">Cost of Sale</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(() => {
-                        // Use filtered channel totals (respects dimension filters)
-                        // Prefer breakdownTotals if available (from UnifiedBreakdownTable) for consistency with channel tabs
-                        const channels = ['metasearch', 'sem', 'social'];
-                        const rows = channels.map(channel => {
-                          // Use breakdownTotals if available (more accurate when filters are applied via breakdown table)
-                          // Otherwise fall back to filteredData.channelTotals
-                          const channelKey = channel as 'metasearch' | 'sem' | 'social';
-                          const data = breakdownTotals[channelKey] || filteredData.channelTotals[channelKey] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-                          const derived = calculateDerivedMetrics(data);
-                          return {
-                            report: channel.charAt(0).toUpperCase() + channel.slice(1),
-                            ...derived,
-                          };
-                        });
-                        // Filter out rows where all metrics are zero
-                        const rowsWithData = rows.filter(row => 
-                          row.impressions > 0 || 
-                          row.clicks > 0 || 
-                          row.cost > 0 || 
-                          row.revenue > 0 || 
-                          row.bookings > 0
-                        );
-
-                        // Calculate totals only from rows with data
-                        const totals = rowsWithData.reduce((acc, row) => ({
-                          impressions: acc.impressions + row.impressions,
-                          clicks: acc.clicks + row.clicks,
-                          cost: acc.cost + row.cost,
-                          revenue: acc.revenue + row.revenue,
-                          bookings: acc.bookings + row.bookings,
-                        }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
-                        const totalDerived = calculateDerivedMetrics(totals);
-
-                        return (
-                          <>
-                            {rowsWithData.length === 0 ? (
-                              <TableRow>
-                                <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                                  No data available for the selected period
-                                </TableCell>
-                              </TableRow>
-                            ) : (
-                              <>
-                                {rowsWithData.map((row) => (
-                                  <TableRow key={row.report}>
-                                    <TableCell className="font-medium">{row.report}</TableCell>
-                                    <TableCell className="text-right">{formatNumber(row.impressions)}</TableCell>
-                                    <TableCell className="text-right">{formatNumber(row.clicks)}</TableCell>
-                                    <TableCell className="text-right">{row.ctr.toFixed(2)}%</TableCell>
-                                    <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">{row.conversionRate.toFixed(2)}%</TableCell>
-                                    <TableCell className="text-right">${row.cpc.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">{formatNumber(row.cost, 'currency')}</TableCell>
-                                    <TableCell className="text-right">{formatNumber(row.revenue, 'currency')}</TableCell>
-                                    <TableCell className="text-right">{row.roas.toFixed(1)}x</TableCell>
-                                    <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
-                                  </TableRow>
-                                ))}
-                                {/* Total Row - only show if there's at least one data row */}
-                                {rowsWithData.length > 0 && (
-                                  <TableRow className="bg-muted/50 font-semibold border-t-2">
-                                    <TableCell className="font-bold">Total</TableCell>
-                                    <TableCell className="text-right">{formatNumber(totalDerived.impressions)}</TableCell>
-                                    <TableCell className="text-right">{formatNumber(totalDerived.clicks)}</TableCell>
-                                    <TableCell className="text-right">{totalDerived.ctr.toFixed(2)}%</TableCell>
-                                    <TableCell className="text-right">{totalDerived.bookings.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">{totalDerived.conversionRate.toFixed(2)}%</TableCell>
-                                    <TableCell className="text-right">${totalDerived.cpc.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">{formatNumber(totalDerived.cost, 'currency')}</TableCell>
-                                    <TableCell className="text-right">{formatNumber(totalDerived.revenue, 'currency')}</TableCell>
-                                    <TableCell className="text-right">{totalDerived.roas.toFixed(1)}x</TableCell>
-                                    <TableCell className="text-right">{totalDerived.costOfSale.toFixed(2)}%</TableCell>
-                                  </TableRow>
-                                )}
-                              </>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-              )}
-            </TabsContent>
-
-            {/* Metasearch Tab */}
-            <TabsContent value="metasearch" className="space-y-6">
-              {isSlideReportsLoading || (slideReportId && (!slideReport?.pivot_data || isLoadingData)) ? (
-                renderKPICardsSkeleton()
-              ) : (
-                <>
-                  {(() => {
-                    // Log filter usage for debugging
-                    const channel = 'metasearch';
-                    const activeFilters = filterValues[channel] || {};
-                    // Use saved configuration from slideReport
-                    const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[channel];
-                    const savedBreakdownConfigs = slideReport?.configuration?.breakdownConfigs?.[channel];
-                    const filterConfigsForChannel = savedFilterConfigs?.filterDimensionIds || filterConfigs[channel]?.filterDimensionIds || [];
-                    const breakdownConfigsForChannel = savedBreakdownConfigs?.breakdownDimensionIds || breakdownConfigs[channel]?.breakdownDimensionIds || [];
-
-                    return null;
-                  })()}
-                  {renderKPICards(getReportKPICards(breakdownTotals.metasearch || currentTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('metasearch'))}
-              
-              {/* Monthly Revenue Chart */}
-              <Card>
-                <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                  <CardTitle className="text-base font-medium">Revenue</CardTitle>
-                  <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as typeof chartTimeRange)}>
-                    <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover z-50">
-                      <SelectItem value="this_year">This Year</SelectItem>
-                      <SelectItem value="last_12_months">Last 12 Months</SelectItem>
-                      <SelectItem value="last_6_months">Last 6 Months</SelectItem>
-                      <SelectItem value="last_3_months">Last 3 Months</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[200px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={channelChartData.metasearch}>
-                        <defs>
-                          <linearGradient id="metasearchGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.05}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
-                        <Tooltip 
-                          formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
-                          contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
-                        />
-                        <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} fill="url(#metasearchGradient)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Unified Breakdown Table */}
-              <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Breakdown Analysis</CardTitle></CardHeader>
-                <CardContent>
-                  {(() => {
-                    // Verify breakdown data exists - use saved configuration
-                    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-                    const channelData = pivotData?.channels?.metasearch;
-                    const breakdownData = channelData?.breakdowns || {};
-                    const savedBreakdownConfigs = slideReport?.configuration?.breakdownConfigs?.metasearch;
-                    const configuredBreakdowns = savedBreakdownConfigs?.breakdownDimensionIds || breakdownConfigs.metasearch?.breakdownDimensionIds || [];
-                    
-                    if (configuredBreakdowns.length === 0) {
-                      return (
-                        <div className="text-center py-8 text-muted-foreground">
-                          <p>No breakdown dimensions configured.</p>
-                          <p className="text-sm mt-2">Configure breakdown dimensions in Edit Source → Breakdown Dimensions step.</p>
-                        </div>
-                      );
-                    }
-                    
-                    return (
-                      <UnifiedBreakdownTable 
-                        groupBy={groupByDimension}
-                        breakdownBy={breakdownByDimension}
-                        expandedRow={expandedRow}
-                        onRowClick={setExpandedRow}
-                        onGroupByChange={setGroupByDimension}
-                        onBreakdownByChange={setBreakdownByDimension}
-                        pivotData={slideReport?.pivot_data}
-                        selectedChannel="metasearch"
-                        selectedYear={selectedYear}
-                        selectedMonth={selectedMonth}
-                        filterValues={filterValues}
-                        filterDimensionValues={filterDimensionValues}
-                        onTotalsChange={(totals) => setBreakdownTotals(prev => ({ ...prev, metasearch: totals }))}
-                        availableDimensions={[
-                          ...new Map([
-                            ...(breakdownDimensions.metasearch || []).filter(dim => 
-                              configuredBreakdowns.includes(dim.id)
-                            ),
-                          ].map(dim => [dim.id, dim])).values()
-                        ]}
-                      />
-                    );
-                  })()}
-                </CardContent>
-              </Card>
-                </>
-              )}
-            </TabsContent>
-
-            {/* SEM Tab */}
-            <TabsContent value="sem" className="space-y-6">
-              {isSlideReportsLoading || (slideReportId && (!slideReport?.pivot_data || isLoadingData)) ? (
-                renderKPICardsSkeleton()
-              ) : (
-                <>
-                  {renderKPICards(getReportKPICards(breakdownTotals.sem || currentTotals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('sem'))}
-                  
-                  {/* Monthly Revenue Chart */}
-              <Card>
-                <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                  <CardTitle className="text-base font-medium">Revenue</CardTitle>
-                  <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as typeof chartTimeRange)}>
-                    <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover z-50">
-                      <SelectItem value="this_year">This Year</SelectItem>
-                      <SelectItem value="last_12_months">Last 12 Months</SelectItem>
-                      <SelectItem value="last_6_months">Last 6 Months</SelectItem>
-                      <SelectItem value="last_3_months">Last 3 Months</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[200px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={channelChartData.sem}>
-                        <defs>
-                          <linearGradient id="semGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.05}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
-                        <Tooltip 
-                          formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
-                          contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
-                        />
-                        <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} fill="url(#semGradient)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Unified Breakdown Table */}
-              <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Breakdown Analysis</CardTitle></CardHeader>
-                <CardContent>
-                  <UnifiedBreakdownTable 
-                    groupBy={groupByDimension}
-                    breakdownBy={breakdownByDimension}
-                    expandedRow={expandedRow}
-                    onRowClick={setExpandedRow}
-                    onGroupByChange={setGroupByDimension}
-                    onBreakdownByChange={setBreakdownByDimension}
-                    pivotData={slideReport?.pivot_data}
-                    selectedChannel="sem"
-                    selectedYear={selectedYear}
-                    selectedMonth={selectedMonth}
-                    filterValues={filterValues}
-                    filterDimensionValues={filterDimensionValues}
-                    onTotalsChange={(totals) => setBreakdownTotals(prev => ({ ...prev, sem: totals }))}
-                    availableDimensions={[
-                      ...new Map([
-                        ...(breakdownDimensions.sem || []).filter(dim => {
-                          const savedBreakdownConfigs = slideReport?.configuration?.breakdownConfigs?.sem;
-                          const configuredBreakdowns = savedBreakdownConfigs?.breakdownDimensionIds || breakdownConfigs.sem?.breakdownDimensionIds || [];
-                          return configuredBreakdowns.includes(dim.id);
-                        }),
-                      ].map(dim => [dim.id, dim])).values()
-                    ]}
-                  />
-                </CardContent>
-              </Card>
-                </>
-              )}
-            </TabsContent>
-
-            {/* Social Tab */}
-            <TabsContent value="social" className="space-y-6">
-              {isSlideReportsLoading || (slideReportId && (!slideReport?.pivot_data || isLoadingData)) ? (
-                renderKPICardsSkeleton()
-              ) : (
-                <>
-                  {renderKPICards(getReportKPICards(breakdownTotals.social || currentTotals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }), getChannelComparisonMetrics('social'))}
-                  
-                  {/* Monthly Revenue Chart */}
-              <Card>
-                <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                  <CardTitle className="text-base font-medium">Revenue</CardTitle>
-                  <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as typeof chartTimeRange)}>
-                    <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover z-50">
-                      <SelectItem value="this_year">This Year</SelectItem>
-                      <SelectItem value="last_12_months">Last 12 Months</SelectItem>
-                      <SelectItem value="last_6_months">Last 6 Months</SelectItem>
-                      <SelectItem value="last_3_months">Last 3 Months</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[200px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={channelChartData.social}>
-                        <defs>
-                          <linearGradient id="socialGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.05}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
-                        <Tooltip 
-                          formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
-                          contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
-                        />
-                        <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} fill="url(#socialGradient)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Unified Breakdown Table */}
-              <Card>
-                <CardHeader><CardTitle className="text-base font-medium">Breakdown Analysis</CardTitle></CardHeader>
-                <CardContent>
-                  <UnifiedBreakdownTable 
-                    groupBy={groupByDimension}
-                    breakdownBy={breakdownByDimension}
-                    expandedRow={expandedRow}
-                    onRowClick={setExpandedRow}
-                    onGroupByChange={setGroupByDimension}
-                    onBreakdownByChange={setBreakdownByDimension}
-                    pivotData={slideReport?.pivot_data}
-                    selectedChannel="social"
-                    selectedYear={selectedYear}
-                    selectedMonth={selectedMonth}
-                    filterValues={filterValues}
-                    filterDimensionValues={filterDimensionValues}
-                    onTotalsChange={(totals) => setBreakdownTotals(prev => ({ ...prev, social: totals }))}
-                    availableDimensions={[
-                      ...new Map([
-                        ...(breakdownDimensions.social || []).filter(dim => {
-                          const savedBreakdownConfigs = slideReport?.configuration?.breakdownConfigs?.social;
-                          const configuredBreakdowns = savedBreakdownConfigs?.breakdownDimensionIds || breakdownConfigs.social?.breakdownDimensionIds || [];
-                          return configuredBreakdowns.includes(dim.id);
-                        }),
-                      ].map(dim => [dim.id, dim])).values()
-                    ]}
-                  />
-                </CardContent>
-              </Card>
-                </>
-              )}
-            </TabsContent>
-
-            {/* Budget Tab */}
-            <TabsContent value="budget" className="space-y-6">
-              {/* Budget Filters: Year and View */}
-              <div className="flex items-end justify-end gap-6">
-                {/* Year Filter */}
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Year:
-                  </span>
-                  <Select value={selectedYear} onValueChange={setSelectedYear}>
-                    <SelectTrigger className="w-[130px] bg-background">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Years</SelectItem>
-                      <SelectItem value="2024">2024</SelectItem>
-                      <SelectItem value="2025">2025</SelectItem>
-                      <SelectItem value="2026">2026</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* View selector */}
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">View:</span>
-                  <Select 
-                    value={selectedViewId === null ? 'master' : selectedViewId || 'master'} 
-                    onValueChange={(value) => {
-                      if (isReadOnlyMode) return;
-                      const newViewId = value === 'master' ? null : (value === 'unsaved' ? 'unsaved' : value);
-                      setSelectedViewId(newViewId);
-                      // Immediately apply the view filters (unless it's Unsaved)
-                      if (newViewId !== 'unsaved') {
-                        handleApplyView(newViewId);
-                      }
-                    }}
-                    disabled={isReadOnlyMode}
-                  >
-                    <SelectTrigger className="w-[150px] text-sm bg-background">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="master">Master</SelectItem>
-                      {views.map((view) => (
-                        <SelectItem key={view.id} value={view.id}>
-                          {view.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {isLoadingViewBudgets ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                  <span className="text-muted-foreground">Loading view budgets...</span>
-                </div>
-              ) : (
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle className="text-base font-medium">Monthly Budget Breakdown {selectedYear === 'all' ? '(All Years)' : `(${selectedYear})`}</CardTitle>
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          id="forecast-toggle"
-                          checked={forecastEnabled}
-                          onCheckedChange={setForecastEnabled}
-                          disabled={pnlModeEnabled}
-                        />
-                        <Label htmlFor="forecast-toggle" className="text-sm cursor-pointer">
-                          Forecast Mode
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          id="pnl-toggle"
-                          checked={pnlModeEnabled}
-                          onCheckedChange={setPnlModeEnabled}
-                          disabled={forecastEnabled}
-                        />
-                        <Label htmlFor="pnl-toggle" className="text-sm cursor-pointer">
-                          PnL Mode
-                        </Label>
-                      </div>
-                    </div>
-                  </CardHeader>
-                <CardContent>
-                  <Tabs defaultValue="overview" className="w-full">
-                    <TabsList className="mb-4">
-                      <TabsTrigger value="overview">Overview</TabsTrigger>
-                      <TabsTrigger value="metasearch">Metasearch</TabsTrigger>
-                      <TabsTrigger value="sem">SEM</TabsTrigger>
-                      <TabsTrigger value="social">Social</TabsTrigger>
-                    </TabsList>
-                    
-                    <TabsContent value="overview">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Month</TableHead>
-                            <TableHead className="text-right">Budget</TableHead>
-                            <TableHead className="text-right">Cost</TableHead>
-                            {pnlModeEnabled ? (
-                              <>
-                                <TableHead className="text-right">Revenue</TableHead>
-                                <TableHead className="text-right">Cost of Sale</TableHead>
-                                <TableHead className="text-right">Spender</TableHead>
-                                <TableHead className="text-right">Recurrent Fee</TableHead>
-                                <TableHead className="text-right">% Ad Spend</TableHead>
-                                <TableHead className="text-right">% Revenue</TableHead>
-                                <TableHead className="text-right">Profit</TableHead>
-                              </>
-                            ) : forecastEnabled ? (
-                              <>
-                                <TableHead className="text-right">CPC</TableHead>
-                                <TableHead className="text-right">Total Revenue</TableHead>
-                                <TableHead className="text-right">Revenue</TableHead>
-                                <TableHead className="text-right">Share</TableHead>
-                                <TableHead className="text-right">Est. Revenue</TableHead>
-                                <TableHead className="text-right">Est. Share</TableHead>
-                              </>
-                            ) : (
-                              <>
-                                <TableHead className="text-right">Difference</TableHead>
-                                <TableHead className="text-right">Revenue</TableHead>
-                                <TableHead className="text-right">ROAS</TableHead>
-                                <TableHead className="text-right">Cost of Sale</TableHead>
-                              </>
-                            )}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {budgetMonthlyData.map((row) => {
-                            const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-                            const totalBudgetRow = row.metasearchBudget + row.semBudget + row.socialBudget;
-                            const totalActualRow = row.metasearchActual + row.semActual + row.socialActual;
-                            const totalRevenueRow = row.metasearch + row.sem + row.social;
-                            
-                            // Get clicks from pivot_data.overview.monthly for CPC calculation
-                            const [monthName, year] = row.month.split(' ');
-                            const monthIndex = MONTH_NAMES.indexOf(monthName);
-                            const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-                            const monthlyMetrics = pivotData?.overview?.monthly?.[monthKey];
-                            const totalClicks = monthlyMetrics?.clicks || 0;
-                            const cpc = totalClicks > 0 ? totalActualRow / totalClicks : 0;
-                            
-                            // Calculate forecast metrics
-                            const roas = totalActualRow > 0 ? totalRevenueRow / totalActualRow : 0;
-                            const costOfSale = totalRevenueRow > 0 ? (totalActualRow / totalRevenueRow) * 100 : 0;
-                            const variance = totalBudgetRow - totalActualRow;
-                            
-                            // Forecast calculations (simplified - using actual revenue as total revenue)
-                            const totalRevenue = totalRevenueRow; // For now, use actual revenue as total
-                            const revenueShare = totalRevenue > 0 ? (totalRevenueRow / totalRevenue) * 100 : 0;
-                            const avgRoas = totalActualRow > 0 ? totalRevenueRow / totalActualRow : 1;
-                            const estRevenue = totalBudgetRow * avgRoas;
-                            const estRevenueShare = totalRevenue > 0 ? (estRevenue / totalRevenue) * 100 : 0;
-                            
-                            // PnL calculations (aggregate across all channels for overview)
-                            // For overview, use average of all channels
-                            const avgRecurrentFee = (pnlConfig.metasearch.recurrentFee + pnlConfig.sem.recurrentFee + pnlConfig.social.recurrentFee) / 3;
-                            const avgPercentCost = (pnlConfig.metasearch.percentCost + pnlConfig.sem.percentCost + pnlConfig.social.percentCost) / 3;
-                            const avgPercentRevenue = (pnlConfig.metasearch.percentRevenue + pnlConfig.sem.percentRevenue + pnlConfig.social.percentRevenue) / 3;
-                            const totalCostFee = totalActualRow * (avgPercentCost / 100);
-                            const totalRevenueFee = totalRevenueRow * (avgPercentRevenue / 100);
-                            // For overview, check if any channel has agency spender (use first non-client as default)
-                            const overviewSpender = pnlConfig.metasearch.spender === 'agency' || pnlConfig.sem.spender === 'agency' || pnlConfig.social.spender === 'agency' ? 'agency' : 'client';
-                            const profit = overviewSpender === 'agency'
-                              ? totalCostFee + totalRevenueFee + avgRecurrentFee - totalActualRow
-                              : totalCostFee + totalRevenueFee + avgRecurrentFee;
-                            
-                            const isEditing = editingBudget?.month === row.month && editingBudget?.channel === null;
-                            
-                            return (
-                              <TableRow key={row.month}>
-                                <TableCell className="font-medium">{row.month}</TableCell>
-                                <TableCell 
-                                  className="text-right cursor-pointer hover:bg-muted/50"
-                                  onClick={() => handleStartEditBudget(row.month, null, totalBudgetRow)}
-                                >
-                                  {isEditing ? (
-                                    <Input
-                                      type="number"
-                                      value={editBudgetValue}
-                                      onChange={(e) => setEditBudgetValue(e.target.value)}
-                                      onBlur={handleSaveBudget}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') handleSaveBudget();
-                                        if (e.key === 'Escape') handleCancelEditBudget();
-                                      }}
-                                      className="w-24 text-right"
-                                      autoFocus
-                                    />
-                                  ) : (
-                                    `$${formatNumber(totalBudgetRow)}`
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-right">${formatNumber(totalActualRow)}</TableCell>
-                                {pnlModeEnabled ? (
-                                  <>
-                                    <TableCell className="text-right">${formatNumber(totalRevenueRow)}</TableCell>
-                                    <TableCell className="text-right">{costOfSale.toFixed(2)}%</TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, null, 'spender', overviewSpender)}
-                                    >
-                                      {editingPnl?.month === row.month && editingPnl?.channel === null && editingPnl?.field === 'spender' ? (
-                                        <Select
-                                          value={editPnlValue}
-                                          onValueChange={(value) => {
-                                            setEditPnlValue(value);
-                                            handleSavePnl();
-                                          }}
-                                          onOpenChange={(open) => !open && handleCancelEditPnl()}
-                                        >
-                                          <SelectTrigger className="w-24 h-8">
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="client">Client</SelectItem>
-                                            <SelectItem value="agency">Agency</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      ) : (
-                                        overviewSpender === 'client' ? 'Client' : 'Agency'
-                                      )}
-                                    </TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, null, 'recurrentFee', avgRecurrentFee)}
-                                    >
-                                      {editingPnl?.month === row.month && editingPnl?.channel === null && editingPnl?.field === 'recurrentFee' ? (
-                                        <Input
-                                          type="number"
-                                          value={editPnlValue}
-                                          onChange={(e) => setEditPnlValue(e.target.value)}
-                                          onBlur={handleSavePnl}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleSavePnl();
-                                            if (e.key === 'Escape') handleCancelEditPnl();
-                                          }}
-                                          className="w-24 text-right"
-                                          autoFocus
-                                        />
-                                      ) : (
-                                        `$${formatNumber(avgRecurrentFee)}`
-                                      )}
-                                    </TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, null, 'percentCost', avgPercentCost)}
-                                    >
-                                      {editingPnl?.month === row.month && editingPnl?.channel === null && editingPnl?.field === 'percentCost' ? (
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          value={editPnlValue}
-                                          onChange={(e) => setEditPnlValue(e.target.value)}
-                                          onBlur={handleSavePnl}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleSavePnl();
-                                            if (e.key === 'Escape') handleCancelEditPnl();
-                                          }}
-                                          className="w-24 text-right"
-                                          autoFocus
-                                        />
-                                      ) : (
-                                        `${avgPercentCost.toFixed(2)}%`
-                                      )}
-                                    </TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, null, 'percentRevenue', avgPercentRevenue)}
-                                    >
-                                      {editingPnl?.month === row.month && editingPnl?.channel === null && editingPnl?.field === 'percentRevenue' ? (
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          value={editPnlValue}
-                                          onChange={(e) => setEditPnlValue(e.target.value)}
-                                          onBlur={handleSavePnl}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleSavePnl();
-                                            if (e.key === 'Escape') handleCancelEditPnl();
-                                          }}
-                                          className="w-24 text-right"
-                                          autoFocus
-                                        />
-                                      ) : (
-                                        `${avgPercentRevenue.toFixed(2)}%`
-                                      )}
-                                    </TableCell>
-                                    <TableCell className={`text-right font-medium ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      ${formatNumber(profit)}
-                                    </TableCell>
-                                  </>
-                                ) : forecastEnabled ? (
-                                  <>
-                                    <TableCell className="text-right">${formatNumber(cpc)}</TableCell>
-                                    <TableCell className="text-right">${formatNumber(totalRevenue)}</TableCell>
-                                    <TableCell className="text-right">${formatNumber(totalRevenueRow)}</TableCell>
-                                    <TableCell className="text-right">{revenueShare.toFixed(1)}%</TableCell>
-                                    <TableCell className="text-right">${formatNumber(estRevenue)}</TableCell>
-                                    <TableCell className="text-right">{estRevenueShare.toFixed(1)}%</TableCell>
-                                  </>
-                                ) : (
-                                  <>
-                                    <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      {variance >= 0 ? '+' : ''}${formatNumber(variance)}
-                                    </TableCell>
-                                    <TableCell className="text-right">${formatNumber(totalRevenueRow)}</TableCell>
-                                    <TableCell className="text-right">{roas.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">{costOfSale.toFixed(2)}%</TableCell>
-                                  </>
-                                )}
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </TabsContent>
-                    
-                    <TabsContent value="metasearch">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Month</TableHead>
-                            <TableHead className="text-right">Budget</TableHead>
-                            <TableHead className="text-right">Cost</TableHead>
-                            {pnlModeEnabled ? (
-                              <>
-                                <TableHead className="text-right">Revenue</TableHead>
-                                <TableHead className="text-right">Cost of Sale</TableHead>
-                                <TableHead className="text-right">Spender</TableHead>
-                                <TableHead className="text-right">Recurrent Fee</TableHead>
-                                <TableHead className="text-right">% Ad Spend</TableHead>
-                                <TableHead className="text-right">% Revenue</TableHead>
-                                <TableHead className="text-right">Profit</TableHead>
-                              </>
-                            ) : forecastEnabled ? (
-                              <>
-                                <TableHead className="text-right">CPC</TableHead>
-                                <TableHead className="text-right">Total Revenue</TableHead>
-                                <TableHead className="text-right">Revenue</TableHead>
-                                <TableHead className="text-right">Share</TableHead>
-                                <TableHead className="text-right">Est. Revenue</TableHead>
-                                <TableHead className="text-right">Est. Share</TableHead>
-                              </>
-                            ) : (
-                              <>
-                                <TableHead className="text-right">Difference</TableHead>
-                                <TableHead className="text-right">Revenue</TableHead>
-                                <TableHead className="text-right">ROAS</TableHead>
-                                <TableHead className="text-right">Cost of Sale</TableHead>
-                              </>
-                            )}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {budgetMonthlyData.map((row) => {
-                            const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-                            const [monthName, year] = row.month.split(' ');
-                            const monthIndex = MONTH_NAMES.indexOf(monthName);
-                            const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-                            const channelMetrics = pivotData?.channels?.metasearch?.monthly?.[monthKey];
-                            const clicks = channelMetrics?.clicks || 0;
-                            const cpc = clicks > 0 ? row.metasearchActual / clicks : 0;
-                            const roas = row.metasearchActual > 0 ? row.metasearch / row.metasearchActual : 0;
-                            const costOfSale = row.metasearch > 0 ? (row.metasearchActual / row.metasearch) * 100 : 0;
-                            const variance = row.metasearchBudget - row.metasearchActual;
-                            const totalRevenue = row.metasearch; // Use actual revenue as total for now
-                            const revenueShare = totalRevenue > 0 ? (row.metasearch / totalRevenue) * 100 : 0;
-                            const avgRoas = row.metasearchActual > 0 ? row.metasearch / row.metasearchActual : 1;
-                            const estRevenue = row.metasearchBudget * avgRoas;
-                            const estRevenueShare = totalRevenue > 0 ? (estRevenue / totalRevenue) * 100 : 0;
-                            
-                            const isEditing = editingBudget?.month === row.month && editingBudget?.channel === 'metasearch';
-                            
-                            // PnL calculations for metasearch
-                            const channelConfig = pnlConfig.metasearch;
-                            const costFee = row.metasearchActual * (channelConfig.percentCost / 100);
-                            const revenueFee = row.metasearch * (channelConfig.percentRevenue / 100);
-                            const profit = channelConfig.spender === 'agency'
-                              ? costFee + revenueFee + channelConfig.recurrentFee - row.metasearchActual
-                              : costFee + revenueFee + channelConfig.recurrentFee;
-                            
-                            const isEditingPnlMetasearch = editingPnl?.month === row.month && editingPnl?.channel === 'metasearch';
-                            
-                            return (
-                              <TableRow key={row.month}>
-                                <TableCell className="font-medium">{row.month}</TableCell>
-                                <TableCell 
-                                  className="text-right cursor-pointer hover:bg-muted/50"
-                                  onClick={() => handleStartEditBudget(row.month, 'metasearch', row.metasearchBudget)}
-                                >
-                                  {isEditing ? (
-                                    <Input
-                                      type="number"
-                                      value={editBudgetValue}
-                                      onChange={(e) => setEditBudgetValue(e.target.value)}
-                                      onBlur={handleSaveBudget}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') handleSaveBudget();
-                                        if (e.key === 'Escape') handleCancelEditBudget();
-                                      }}
-                                      className="w-24 text-right"
-                                      autoFocus
-                                    />
-                                  ) : (
-                                    `$${formatNumber(row.metasearchBudget)}`
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-right">${formatNumber(row.metasearchActual)}</TableCell>
-                                {pnlModeEnabled ? (
-                                  <>
-                                    <TableCell className="text-right">${formatNumber(row.metasearch)}</TableCell>
-                                    <TableCell className="text-right">{costOfSale.toFixed(2)}%</TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, 'metasearch', 'spender', channelConfig.spender)}
-                                    >
-                                      {isEditingPnlMetasearch && editingPnl?.field === 'spender' ? (
-                                        <Select
-                                          value={editPnlValue}
-                                          onValueChange={(value) => {
-                                            setEditPnlValue(value);
-                                            handleSavePnl();
-                                          }}
-                                          onOpenChange={(open) => !open && handleCancelEditPnl()}
-                                        >
-                                          <SelectTrigger className="w-24 h-8">
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="client">Client</SelectItem>
-                                            <SelectItem value="agency">Agency</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      ) : (
-                                        channelConfig.spender === 'client' ? 'Client' : 'Agency'
-                                      )}
-                                    </TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, 'metasearch', 'recurrentFee', channelConfig.recurrentFee)}
-                                    >
-                                      {isEditingPnlMetasearch && editingPnl?.field === 'recurrentFee' ? (
-                                        <Input
-                                          type="number"
-                                          value={editPnlValue}
-                                          onChange={(e) => setEditPnlValue(e.target.value)}
-                                          onBlur={handleSavePnl}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleSavePnl();
-                                            if (e.key === 'Escape') handleCancelEditPnl();
-                                          }}
-                                          className="w-24 text-right"
-                                          autoFocus
-                                        />
-                                      ) : (
-                                        `$${formatNumber(channelConfig.recurrentFee)}`
-                                      )}
-                                    </TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, 'metasearch', 'percentCost', channelConfig.percentCost)}
-                                    >
-                                      {isEditingPnlMetasearch && editingPnl?.field === 'percentCost' ? (
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          value={editPnlValue}
-                                          onChange={(e) => setEditPnlValue(e.target.value)}
-                                          onBlur={handleSavePnl}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleSavePnl();
-                                            if (e.key === 'Escape') handleCancelEditPnl();
-                                          }}
-                                          className="w-24 text-right"
-                                          autoFocus
-                                        />
-                                      ) : (
-                                        `${channelConfig.percentCost.toFixed(2)}%`
-                                      )}
-                                    </TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, 'metasearch', 'percentRevenue', channelConfig.percentRevenue)}
-                                    >
-                                      {isEditingPnlMetasearch && editingPnl?.field === 'percentRevenue' ? (
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          value={editPnlValue}
-                                          onChange={(e) => setEditPnlValue(e.target.value)}
-                                          onBlur={handleSavePnl}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleSavePnl();
-                                            if (e.key === 'Escape') handleCancelEditPnl();
-                                          }}
-                                          className="w-24 text-right"
-                                          autoFocus
-                                        />
-                                      ) : (
-                                        `${channelConfig.percentRevenue.toFixed(2)}%`
-                                      )}
-                                    </TableCell>
-                                    <TableCell className={`text-right font-medium ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      ${formatNumber(profit)}
-                                    </TableCell>
-                                  </>
-                                ) : forecastEnabled ? (
-                                  <>
-                                    <TableCell className="text-right">${formatNumber(cpc)}</TableCell>
-                                    <TableCell className="text-right">${formatNumber(totalRevenue)}</TableCell>
-                                    <TableCell className="text-right">${formatNumber(row.metasearch)}</TableCell>
-                                    <TableCell className="text-right">{revenueShare.toFixed(1)}%</TableCell>
-                                    <TableCell className="text-right">${formatNumber(estRevenue)}</TableCell>
-                                    <TableCell className="text-right">{estRevenueShare.toFixed(1)}%</TableCell>
-                                  </>
-                                ) : (
-                                  <>
-                                    <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      {variance >= 0 ? '+' : ''}${formatNumber(variance)}
-                                    </TableCell>
-                                    <TableCell className="text-right">${formatNumber(row.metasearch)}</TableCell>
-                                    <TableCell className="text-right">{roas.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">{costOfSale.toFixed(2)}%</TableCell>
-                                  </>
-                                )}
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </TabsContent>
-                    
-                    <TabsContent value="sem">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Month</TableHead>
-                            <TableHead className="text-right">Budget</TableHead>
-                            <TableHead className="text-right">Cost</TableHead>
-                            {pnlModeEnabled ? (
-                              <>
-                                <TableHead className="text-right">Revenue</TableHead>
-                                <TableHead className="text-right">Cost of Sale</TableHead>
-                                <TableHead className="text-right">Spender</TableHead>
-                                <TableHead className="text-right">Recurrent Fee</TableHead>
-                                <TableHead className="text-right">% Ad Spend</TableHead>
-                                <TableHead className="text-right">% Revenue</TableHead>
-                                <TableHead className="text-right">Profit</TableHead>
-                              </>
-                            ) : forecastEnabled ? (
-                              <>
-                                <TableHead className="text-right">CPC</TableHead>
-                                <TableHead className="text-right">Total Revenue</TableHead>
-                                <TableHead className="text-right">Revenue</TableHead>
-                                <TableHead className="text-right">Share</TableHead>
-                                <TableHead className="text-right">Est. Revenue</TableHead>
-                                <TableHead className="text-right">Est. Share</TableHead>
-                              </>
-                            ) : (
-                              <>
-                                <TableHead className="text-right">Difference</TableHead>
-                                <TableHead className="text-right">Revenue</TableHead>
-                                <TableHead className="text-right">ROAS</TableHead>
-                                <TableHead className="text-right">Cost of Sale</TableHead>
-                              </>
-                            )}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {budgetMonthlyData.map((row) => {
-                            const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-                            const [monthName, year] = row.month.split(' ');
-                            const monthIndex = MONTH_NAMES.indexOf(monthName);
-                            const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-                            const channelMetrics = pivotData?.channels?.sem?.monthly?.[monthKey];
-                            const clicks = channelMetrics?.clicks || 0;
-                            const cpc = clicks > 0 ? row.semActual / clicks : 0;
-                            const roas = row.semActual > 0 ? row.sem / row.semActual : 0;
-                            const costOfSale = row.sem > 0 ? (row.semActual / row.sem) * 100 : 0;
-                            const variance = row.semBudget - row.semActual;
-                            const totalRevenue = row.sem; // Use actual revenue as total for now
-                            const revenueShare = totalRevenue > 0 ? (row.sem / totalRevenue) * 100 : 0;
-                            const avgRoas = row.semActual > 0 ? row.sem / row.semActual : 1;
-                            const estRevenue = row.semBudget * avgRoas;
-                            const estRevenueShare = totalRevenue > 0 ? (estRevenue / totalRevenue) * 100 : 0;
-                            
-                            const isEditing = editingBudget?.month === row.month && editingBudget?.channel === 'sem';
-                            
-                            // PnL calculations for SEM
-                            const channelConfig = pnlConfig.sem;
-                            const costFee = row.semActual * (channelConfig.percentCost / 100);
-                            const revenueFee = row.sem * (channelConfig.percentRevenue / 100);
-                            const profit = channelConfig.spender === 'agency'
-                              ? costFee + revenueFee + channelConfig.recurrentFee - row.semActual
-                              : costFee + revenueFee + channelConfig.recurrentFee;
-                            
-                            const isEditingPnlSem = editingPnl?.month === row.month && editingPnl?.channel === 'sem';
-                            
-                            return (
-                              <TableRow key={row.month}>
-                                <TableCell className="font-medium">{row.month}</TableCell>
-                                <TableCell 
-                                  className="text-right cursor-pointer hover:bg-muted/50"
-                                  onClick={() => handleStartEditBudget(row.month, 'sem', row.semBudget)}
-                                >
-                                  {isEditing ? (
-                                    <Input
-                                      type="number"
-                                      value={editBudgetValue}
-                                      onChange={(e) => setEditBudgetValue(e.target.value)}
-                                      onBlur={handleSaveBudget}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') handleSaveBudget();
-                                        if (e.key === 'Escape') handleCancelEditBudget();
-                                      }}
-                                      className="w-24 text-right"
-                                      autoFocus
-                                    />
-                                  ) : (
-                                    `$${formatNumber(row.semBudget)}`
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-right">${formatNumber(row.semActual)}</TableCell>
-                                {pnlModeEnabled ? (
-                                  <>
-                                    <TableCell className="text-right">${formatNumber(row.sem)}</TableCell>
-                                    <TableCell className="text-right">{costOfSale.toFixed(2)}%</TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, 'sem', 'spender', channelConfig.spender)}
-                                    >
-                                      {isEditingPnlSem && editingPnl?.field === 'spender' ? (
-                                        <Select
-                                          value={editPnlValue}
-                                          onValueChange={(value) => {
-                                            setEditPnlValue(value);
-                                            handleSavePnl();
-                                          }}
-                                          onOpenChange={(open) => !open && handleCancelEditPnl()}
-                                        >
-                                          <SelectTrigger className="w-24 h-8">
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="client">Client</SelectItem>
-                                            <SelectItem value="agency">Agency</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      ) : (
-                                        channelConfig.spender === 'client' ? 'Client' : 'Agency'
-                                      )}
-                                    </TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, 'sem', 'recurrentFee', channelConfig.recurrentFee)}
-                                    >
-                                      {isEditingPnlSem && editingPnl?.field === 'recurrentFee' ? (
-                                        <Input
-                                          type="number"
-                                          value={editPnlValue}
-                                          onChange={(e) => setEditPnlValue(e.target.value)}
-                                          onBlur={handleSavePnl}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleSavePnl();
-                                            if (e.key === 'Escape') handleCancelEditPnl();
-                                          }}
-                                          className="w-24 text-right"
-                                          autoFocus
-                                        />
-                                      ) : (
-                                        `$${formatNumber(channelConfig.recurrentFee)}`
-                                      )}
-                                    </TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, 'sem', 'percentCost', channelConfig.percentCost)}
-                                    >
-                                      {isEditingPnlSem && editingPnl?.field === 'percentCost' ? (
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          value={editPnlValue}
-                                          onChange={(e) => setEditPnlValue(e.target.value)}
-                                          onBlur={handleSavePnl}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleSavePnl();
-                                            if (e.key === 'Escape') handleCancelEditPnl();
-                                          }}
-                                          className="w-24 text-right"
-                                          autoFocus
-                                        />
-                                      ) : (
-                                        `${channelConfig.percentCost.toFixed(2)}%`
-                                      )}
-                                    </TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, 'sem', 'percentRevenue', channelConfig.percentRevenue)}
-                                    >
-                                      {isEditingPnlSem && editingPnl?.field === 'percentRevenue' ? (
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          value={editPnlValue}
-                                          onChange={(e) => setEditPnlValue(e.target.value)}
-                                          onBlur={handleSavePnl}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleSavePnl();
-                                            if (e.key === 'Escape') handleCancelEditPnl();
-                                          }}
-                                          className="w-24 text-right"
-                                          autoFocus
-                                        />
-                                      ) : (
-                                        `${channelConfig.percentRevenue.toFixed(2)}%`
-                                      )}
-                                    </TableCell>
-                                    <TableCell className={`text-right font-medium ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      ${formatNumber(profit)}
-                                    </TableCell>
-                                  </>
-                                ) : forecastEnabled ? (
-                                  <>
-                                    <TableCell className="text-right">${formatNumber(cpc)}</TableCell>
-                                    <TableCell className="text-right">${formatNumber(totalRevenue)}</TableCell>
-                                    <TableCell className="text-right">${formatNumber(row.sem)}</TableCell>
-                                    <TableCell className="text-right">{revenueShare.toFixed(1)}%</TableCell>
-                                    <TableCell className="text-right">${formatNumber(estRevenue)}</TableCell>
-                                    <TableCell className="text-right">{estRevenueShare.toFixed(1)}%</TableCell>
-                                  </>
-                                ) : (
-                                  <>
-                                    <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      {variance >= 0 ? '+' : ''}${formatNumber(variance)}
-                                    </TableCell>
-                                    <TableCell className="text-right">${formatNumber(row.sem)}</TableCell>
-                                    <TableCell className="text-right">{roas.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">{costOfSale.toFixed(2)}%</TableCell>
-                                  </>
-                                )}
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </TabsContent>
-                    
-                    <TabsContent value="social">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Month</TableHead>
-                            <TableHead className="text-right">Budget</TableHead>
-                            <TableHead className="text-right">Cost</TableHead>
-                            {pnlModeEnabled ? (
-                              <>
-                                <TableHead className="text-right">Revenue</TableHead>
-                                <TableHead className="text-right">Cost of Sale</TableHead>
-                                <TableHead className="text-right">Spender</TableHead>
-                                <TableHead className="text-right">Recurrent Fee</TableHead>
-                                <TableHead className="text-right">% Ad Spend</TableHead>
-                                <TableHead className="text-right">% Revenue</TableHead>
-                                <TableHead className="text-right">Profit</TableHead>
-                              </>
-                            ) : forecastEnabled ? (
-                              <>
-                                <TableHead className="text-right">CPC</TableHead>
-                                <TableHead className="text-right">Total Revenue</TableHead>
-                                <TableHead className="text-right">Revenue</TableHead>
-                                <TableHead className="text-right">Share</TableHead>
-                                <TableHead className="text-right">Est. Revenue</TableHead>
-                                <TableHead className="text-right">Est. Share</TableHead>
-                              </>
-                            ) : (
-                              <>
-                                <TableHead className="text-right">Difference</TableHead>
-                                <TableHead className="text-right">Revenue</TableHead>
-                                <TableHead className="text-right">ROAS</TableHead>
-                                <TableHead className="text-right">Cost of Sale</TableHead>
-                              </>
-                            )}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {budgetMonthlyData.map((row) => {
-                            const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-                            const [monthName, year] = row.month.split(' ');
-                            const monthIndex = MONTH_NAMES.indexOf(monthName);
-                            const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-                            const channelMetrics = pivotData?.channels?.social?.monthly?.[monthKey];
-                            const clicks = channelMetrics?.clicks || 0;
-                            const cpc = clicks > 0 ? row.socialActual / clicks : 0;
-                            const roas = row.socialActual > 0 ? row.social / row.socialActual : 0;
-                            const costOfSale = row.social > 0 ? (row.socialActual / row.social) * 100 : 0;
-                            const variance = row.socialBudget - row.socialActual;
-                            const totalRevenue = row.social; // Use actual revenue as total for now
-                            const revenueShare = totalRevenue > 0 ? (row.social / totalRevenue) * 100 : 0;
-                            const avgRoas = row.socialActual > 0 ? row.social / row.socialActual : 1;
-                            const estRevenue = row.socialBudget * avgRoas;
-                            const estRevenueShare = totalRevenue > 0 ? (estRevenue / totalRevenue) * 100 : 0;
-                            
-                            const isEditing = editingBudget?.month === row.month && editingBudget?.channel === 'social';
-                            
-                            // PnL calculations for Social
-                            const channelConfig = pnlConfig.social;
-                            const costFee = row.socialActual * (channelConfig.percentCost / 100);
-                            const revenueFee = row.social * (channelConfig.percentRevenue / 100);
-                            const profit = channelConfig.spender === 'agency'
-                              ? costFee + revenueFee + channelConfig.recurrentFee - row.socialActual
-                              : costFee + revenueFee + channelConfig.recurrentFee;
-                            
-                            const isEditingPnlSocial = editingPnl?.month === row.month && editingPnl?.channel === 'social';
-                            
-                            return (
-                              <TableRow key={row.month}>
-                                <TableCell className="font-medium">{row.month}</TableCell>
-                                <TableCell 
-                                  className="text-right cursor-pointer hover:bg-muted/50"
-                                  onClick={() => handleStartEditBudget(row.month, 'social', row.socialBudget)}
-                                >
-                                  {isEditing ? (
-                                    <Input
-                                      type="number"
-                                      value={editBudgetValue}
-                                      onChange={(e) => setEditBudgetValue(e.target.value)}
-                                      onBlur={handleSaveBudget}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') handleSaveBudget();
-                                        if (e.key === 'Escape') handleCancelEditBudget();
-                                      }}
-                                      className="w-24 text-right"
-                                      autoFocus
-                                    />
-                                  ) : (
-                                    `$${formatNumber(row.socialBudget)}`
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-right">${formatNumber(row.socialActual)}</TableCell>
-                                {pnlModeEnabled ? (
-                                  <>
-                                    <TableCell className="text-right">${formatNumber(row.social)}</TableCell>
-                                    <TableCell className="text-right">{costOfSale.toFixed(2)}%</TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, 'social', 'spender', channelConfig.spender)}
-                                    >
-                                      {isEditingPnlSocial && editingPnl?.field === 'spender' ? (
-                                        <Select
-                                          value={editPnlValue}
-                                          onValueChange={(value) => {
-                                            setEditPnlValue(value);
-                                            handleSavePnl();
-                                          }}
-                                          onOpenChange={(open) => !open && handleCancelEditPnl()}
-                                        >
-                                          <SelectTrigger className="w-24 h-8">
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="client">Client</SelectItem>
-                                            <SelectItem value="agency">Agency</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      ) : (
-                                        channelConfig.spender === 'client' ? 'Client' : 'Agency'
-                                      )}
-                                    </TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, 'social', 'recurrentFee', channelConfig.recurrentFee)}
-                                    >
-                                      {isEditingPnlSocial && editingPnl?.field === 'recurrentFee' ? (
-                                        <Input
-                                          type="number"
-                                          value={editPnlValue}
-                                          onChange={(e) => setEditPnlValue(e.target.value)}
-                                          onBlur={handleSavePnl}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleSavePnl();
-                                            if (e.key === 'Escape') handleCancelEditPnl();
-                                          }}
-                                          className="w-24 text-right"
-                                          autoFocus
-                                        />
-                                      ) : (
-                                        `$${formatNumber(channelConfig.recurrentFee)}`
-                                      )}
-                                    </TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, 'social', 'percentCost', channelConfig.percentCost)}
-                                    >
-                                      {isEditingPnlSocial && editingPnl?.field === 'percentCost' ? (
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          value={editPnlValue}
-                                          onChange={(e) => setEditPnlValue(e.target.value)}
-                                          onBlur={handleSavePnl}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleSavePnl();
-                                            if (e.key === 'Escape') handleCancelEditPnl();
-                                          }}
-                                          className="w-24 text-right"
-                                          autoFocus
-                                        />
-                                      ) : (
-                                        `${channelConfig.percentCost.toFixed(2)}%`
-                                      )}
-                                    </TableCell>
-                                    <TableCell 
-                                      className="text-right cursor-pointer hover:bg-muted/50"
-                                      onClick={() => handleStartEditPnl(row.month, 'social', 'percentRevenue', channelConfig.percentRevenue)}
-                                    >
-                                      {isEditingPnlSocial && editingPnl?.field === 'percentRevenue' ? (
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          value={editPnlValue}
-                                          onChange={(e) => setEditPnlValue(e.target.value)}
-                                          onBlur={handleSavePnl}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleSavePnl();
-                                            if (e.key === 'Escape') handleCancelEditPnl();
-                                          }}
-                                          className="w-24 text-right"
-                                          autoFocus
-                                        />
-                                      ) : (
-                                        `${channelConfig.percentRevenue.toFixed(2)}%`
-                                      )}
-                                    </TableCell>
-                                    <TableCell className={`text-right font-medium ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      ${formatNumber(profit)}
-                                    </TableCell>
-                                  </>
-                                ) : forecastEnabled ? (
-                                  <>
-                                    <TableCell className="text-right">${formatNumber(cpc)}</TableCell>
-                                    <TableCell className="text-right">${formatNumber(totalRevenue)}</TableCell>
-                                    <TableCell className="text-right">${formatNumber(row.social)}</TableCell>
-                                    <TableCell className="text-right">{revenueShare.toFixed(1)}%</TableCell>
-                                    <TableCell className="text-right">${formatNumber(estRevenue)}</TableCell>
-                                    <TableCell className="text-right">{estRevenueShare.toFixed(1)}%</TableCell>
-                                  </>
-                                ) : (
-                                  <>
-                                    <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      {variance >= 0 ? '+' : ''}${formatNumber(variance)}
-                                    </TableCell>
-                                    <TableCell className="text-right">${formatNumber(row.social)}</TableCell>
-                                    <TableCell className="text-right">{roas.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">{costOfSale.toFixed(2)}%</TableCell>
-                                  </>
-                                )}
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </TabsContent>
-                  </Tabs>
-                </CardContent>
-              </Card>
-              )}
-            </TabsContent>
+            <BudgetTab
+              selectedYear={selectedYear}
+              setSelectedYear={setSelectedYear}
+              selectedViewId={selectedViewId}
+              setSelectedViewId={setSelectedViewId}
+              isReadOnlyMode={isReadOnlyMode}
+              views={views}
+              handleApplyView={handleApplyView}
+              isLoadingViewBudgets={isLoadingViewBudgets}
+              budgetMonthlyData={budgetMonthlyData}
+              slideReport={slideReport}
+              forecastEnabled={forecastEnabled}
+              setForecastEnabled={setForecastEnabled}
+              pnlModeEnabled={pnlModeEnabled}
+              setPnlModeEnabled={setPnlModeEnabled}
+              editingBudget={editingBudget}
+              editBudgetValue={editBudgetValue}
+              handleStartEditBudget={handleStartEditBudget}
+              handleSaveBudget={handleSaveBudget}
+              handleCancelEditBudget={handleCancelEditBudget}
+              setEditBudgetValue={setEditBudgetValue}
+              editingPnl={editingPnl}
+              editPnlValue={editPnlValue}
+              handleStartEditPnl={handleStartEditPnl}
+              handleSavePnl={handleSavePnl}
+              handleCancelEditPnl={handleCancelEditPnl}
+              setEditPnlValue={setEditPnlValue}
+              pnlConfig={pnlConfig}
+              setPnlConfig={setPnlConfig}
+            />
 
         </div>
 
-      {/* Refresh Data Modal */}
-      <Dialog open={isRefreshModalOpen} onOpenChange={(open) => !open && !refreshStep && setIsRefreshModalOpen(false)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-2">
-              <RefreshCw className={cn("h-5 w-5 text-primary", refreshStep > 0 && refreshStep < 6 && "animate-spin")} />
-              <DialogTitle>Refreshing Data</DialogTitle>
-            </div>
-            <DialogDescription>
-              Updating your report with the latest data...
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <RefreshStepIndicator
-              stepNumber={1}
-              status={refreshStepStatus[1]}
-              title="Verifying settings"
-              description="Checking configuration and data sources"
-            />
-            <RefreshStepIndicator
-              stepNumber={2}
-              status={refreshStepStatus[2]}
-              title="Computing pivot data"
-              description="Aggregating metrics by year, month, and channel"
-            />
-            <RefreshStepIndicator
-              stepNumber={3}
-              status={refreshStepStatus[3]}
-              title="Storing monthly data"
-              description="Saving data organized by Year → Month → Channel"
-            />
-            <RefreshStepIndicator
-              stepNumber={4}
-              status={refreshStepStatus[4]}
-              title="Processing breakdowns & filters"
-              description="Storing breakdown tables and filter configurations"
-            />
-            <RefreshStepIndicator
-              stepNumber={5}
-              status={refreshStepStatus[5]}
-              title="Updating interface"
-              description="Refreshing report with latest data"
-            />
-
-            {/* Error message */}
-            {refreshError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-700">{refreshError}</p>
-              </div>
-            )}
-
-            {/* All complete message */}
-            {refreshStepStatus[5] === 'complete' && (
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
-                <Check className="h-4 w-4 text-green-600" />
-                <p className="text-sm text-green-700 font-medium">Data refresh complete! Browse data in the Data tab.</p>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            {refreshError ? (
-              <Button onClick={() => setIsRefreshModalOpen(false)}>Close</Button>
-            ) : refreshStepStatus[5] === 'complete' ? (
-              <Button onClick={() => setIsRefreshModalOpen(false)} className="bg-green-600 hover:bg-green-700">
-                Done
-              </Button>
-            ) : null}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RefreshDataModal
+        isRefreshModalOpen={isRefreshModalOpen}
+        setIsRefreshModalOpen={setIsRefreshModalOpen}
+        refreshStep={refreshStep}
+        refreshStepStatus={refreshStepStatus}
+        refreshError={refreshError}
+      />
     </Tabs>
   );
 }
