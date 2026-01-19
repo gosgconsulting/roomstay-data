@@ -745,7 +745,7 @@ export function BookingTab({ accountId }: BookingTabProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Booking Data {filteredBookingData.length !== allBookingData.length && `(${filteredBookingData.length} of ${allBookingData.length})`}</CardTitle>
+          <CardTitle>Booking Data ({filteredBookingData.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
