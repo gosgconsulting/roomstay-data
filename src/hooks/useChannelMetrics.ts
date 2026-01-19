@@ -142,6 +142,15 @@ export function useChannelMetrics({
           if (filteredRows.length > 0) {
             const dimensionMap = (channelData as any).dimensionMap || {};
             const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+            
+            // Build metricNameToIdMap (same as breakdown table) - reverse mapping: name -> id
+            // This ensures we use "Cost" with capital C as the source of truth
+            const metricNameToIdMap: Record<string, string> = {};
+            Object.entries(dimensionMap as Record<string, string>).forEach(([dimensionId, dimensionName]) => {
+              if (dimensionName && typeof dimensionName === 'string') {
+                metricNameToIdMap[dimensionName] = dimensionId;
+              }
+            });
 
             const metrics: MetricData = {
               impressions: 0,
@@ -154,28 +163,19 @@ export function useChannelMetrics({
             filteredRows.forEach((row) => {
               const rowData = row.dimension_values || row;
 
-              // Helper to safely extract numeric value
-              const getMetricValue = (keys: string[]): number => {
-                for (const key of keys) {
-                  const value = rowData[key];
-                  if (value !== undefined && value !== null) {
-                    if (typeof value === 'number') {
-                      return isNaN(value) ? 0 : value;
-                    }
-                    const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
-                    if (!isNaN(parsed)) {
-                      return parsed;
-                    }
-                  }
-                }
-                return 0;
-              };
-
-              metrics.impressions += getMetricValue(getMetricKeys('impressions', nameToIdsMap));
-              metrics.clicks += getMetricValue(getMetricKeys('clicks', nameToIdsMap));
-              metrics.cost += getMetricValue(getMetricKeys('cost', nameToIdsMap));
-              metrics.revenue += getMetricValue(getMetricKeys('revenue', nameToIdsMap));
-              metrics.bookings += getMetricValue(getMetricKeys('bookings', nameToIdsMap));
+              // Use EXACT same extraction logic as UnifiedBreakdownTable for consistency
+              // This ensures we get the same values as the breakdown table
+              const impressionsValue = parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
+              const clicksValue = parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
+              const costValue = parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
+              const revenueValue = parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
+              const bookingsValue = parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
+              
+              metrics.impressions += impressionsValue;
+              metrics.clicks += clicksValue;
+              metrics.cost += costValue;
+              metrics.revenue += revenueValue;
+              metrics.bookings += bookingsValue;
             });
 
             channelTotals[channel] = metrics;
@@ -396,6 +396,15 @@ export function useChannelMetrics({
               const dimensionMap = (channelData as any).dimensionMap || {};
               const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
               
+              // Build metricNameToIdMap (same as breakdown table) - reverse mapping: name -> id
+              // This ensures we use "Cost" with capital C as the source of truth
+              const metricNameToIdMap: Record<string, string> = {};
+              Object.entries(dimensionMap as Record<string, string>).forEach(([dimensionId, dimensionName]) => {
+                if (dimensionName && typeof dimensionName === 'string') {
+                  metricNameToIdMap[dimensionName] = dimensionId;
+                }
+              });
+              
               const metrics: MetricData = {
                 impressions: 0,
                 clicks: 0,
@@ -407,27 +416,19 @@ export function useChannelMetrics({
               filteredRows.forEach((row) => {
                 const rowData = row.dimension_values || row;
                 
-                const getMetricValue = (keys: string[]): number => {
-                  for (const key of keys) {
-                    const value = rowData[key];
-                    if (value !== undefined && value !== null) {
-                      if (typeof value === 'number') {
-                        return isNaN(value) ? 0 : value;
-                      }
-                      const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
-                      if (!isNaN(parsed)) {
-                        return parsed;
-                      }
-                    }
-                  }
-                  return 0;
-                };
+                // Use EXACT same extraction logic as UnifiedBreakdownTable for consistency
+                // This ensures we get the same values as the breakdown table
+                const impressionsValue = parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
+                const clicksValue = parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
+                const costValue = parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
+                const revenueValue = parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
+                const bookingsValue = parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
                 
-                metrics.impressions += getMetricValue(getMetricKeys('impressions', nameToIdsMap));
-                metrics.clicks += getMetricValue(getMetricKeys('clicks', nameToIdsMap));
-                metrics.cost += getMetricValue(getMetricKeys('cost', nameToIdsMap));
-                metrics.revenue += getMetricValue(getMetricKeys('revenue', nameToIdsMap));
-                metrics.bookings += getMetricValue(getMetricKeys('bookings', nameToIdsMap));
+                metrics.impressions += impressionsValue;
+                metrics.clicks += clicksValue;
+                metrics.cost += costValue;
+                metrics.revenue += revenueValue;
+                metrics.bookings += bookingsValue;
               });
               
               channelTotals[channel] = metrics;

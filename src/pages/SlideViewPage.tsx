@@ -1040,11 +1040,9 @@ export default function SlideViewPage() {
         const shareAuth = sessionStorage.getItem(authKey);
         
         if (shareAuth === "true") {
-          console.log('[testing] SlideViewPage - Share access detected, allowing public access');
           setIsSharedAccess(true);
         } else {
           // No share auth found, redirect back to share link
-          console.log('[testing] SlideViewPage - No share auth found, redirecting to share link');
           navigate(`/${slug}`);
         }
       }
@@ -1294,9 +1292,6 @@ export default function SlideViewPage() {
     
     // When filters are active, generate filtered data for all months in the time range
     if (filteredData.hasFilters) {
-      console.log('[testing] Filtered monthlyData from hook:', filteredData.monthlyData);
-      console.log('[testing] Filtered monthlyData length:', filteredData.monthlyData.length);
-      
       // Generate all months in the chartTimeRange
       const monthsInRange = generateMonthsInTimeRange(chartTimeRange);
       
@@ -1370,8 +1365,6 @@ export default function SlideViewPage() {
         if (a.year !== b.year) return a.year - b.year;
         return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
       });
-      
-      console.log('[testing] Generated monthlyData for all months in range for overview chart:', allMonthlyData);
     } else if (pivotData?.channels) {
       // No filters - use pre-computed data (fast path)
       const monthlyMap = new Map<string, { year: number; month: string; metasearch: number; sem: number; social: number }>();
@@ -1501,8 +1494,6 @@ export default function SlideViewPage() {
           if (a.year !== b.year) return a.year - b.year;
           return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
         });
-        
-        console.log(`[testing] Generated monthlyData for all months in range for ${channel} chart:`, allMonthlyData);
       } else if (pivotData?.channels?.[channel]?.monthly) {
         // No filters - use pre-computed data (fast path)
         const channelData = pivotData.channels[channel];
@@ -3832,7 +3823,6 @@ export default function SlideViewPage() {
   // Get comparison data based on selection - use comparisonTotals from hook (same source of truth)
   const comparisonData = useMemo(() => {
     if (!comparisonTotals) {
-      console.log('[testing] No comparisonTotals available for comparisonData');
       return null;
     }
     
@@ -3867,6 +3857,7 @@ export default function SlideViewPage() {
   // Calculate current metrics from currentTotals
   const currentMetrics = useMemo(() => {
     const totals = currentTotals;
+    
     const overview = {
       impressions: (totals.metasearch?.impressions || 0) + (totals.sem?.impressions || 0) + (totals.social?.impressions || 0),
       clicks: (totals.metasearch?.clicks || 0) + (totals.sem?.clicks || 0) + (totals.social?.clicks || 0),
@@ -3874,13 +3865,16 @@ export default function SlideViewPage() {
       revenue: (totals.metasearch?.revenue || 0) + (totals.sem?.revenue || 0) + (totals.social?.revenue || 0),
       bookings: (totals.metasearch?.bookings || 0) + (totals.sem?.bookings || 0) + (totals.social?.bookings || 0),
     };
+    
+    const cpc = overview.clicks > 0 ? overview.cost / overview.clicks : 0;
+    
     return {
       impressions: overview.impressions,
       clicks: overview.clicks,
       bookings: overview.bookings,
       ctr: overview.impressions > 0 ? (overview.clicks / overview.impressions) * 100 : 0,
       conversionRate: overview.clicks > 0 ? (overview.bookings / overview.clicks) * 100 : 0,
-      cpc: overview.clicks > 0 ? overview.cost / overview.clicks : 0,
+      cpc,
       cost: overview.cost,
       revenue: overview.revenue,
       roas: overview.cost > 0 ? overview.revenue / overview.cost : 0,
@@ -4210,7 +4204,6 @@ export default function SlideViewPage() {
           .eq('user_id', user.id);
 
         if (error) {
-          console.error('[testing] Error fetching view budgets:', error);
           setViewBudgets([]);
         } else {
           const budgets = (data || []).map(b => ({
@@ -4219,14 +4212,6 @@ export default function SlideViewPage() {
             dimension_item: b.dimension_item,
             budget_data: (b.budget_data as Record<string, number>) || {},
           }));
-          console.log('[testing] Fetched view budgets:', {
-            count: budgets.length,
-            budgets: budgets.map(b => ({
-              item: b.dimension_item,
-              months: Object.keys(b.budget_data),
-              total: Object.values(b.budget_data).reduce((sum, val) => sum + Number(val), 0),
-            })),
-          });
           setViewBudgets(budgets);
         }
       } catch (err) {
@@ -4277,7 +4262,7 @@ export default function SlideViewPage() {
           const [year, month] = monthKey.split('-');
           const monthNum = parseInt(month);
           if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
-            console.warn('[testing] Invalid month in budget key:', monthKey);
+            console.warn('Invalid month in budget key:', monthKey);
             return;
           }
           const monthName = MONTH_NAMES[monthNum - 1];
@@ -4692,7 +4677,7 @@ export default function SlideViewPage() {
       setEditingBudget(null);
       setEditBudgetValue("");
     } catch (error) {
-      console.error('[testing] Error saving budget:', error);
+      console.error('Error saving budget:', error);
       toast({
         title: "Error",
         description: "Failed to save budget",

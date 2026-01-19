@@ -134,12 +134,19 @@ export function useFilteredSlideData({
         const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange);
         filteredRawRows[channel] = filteredRows;
 
-        console.log(`[testing] Channel ${channel}: ${rawDataRows.length} raw rows, ${filteredRows.length} filtered rows`);
-
         if (filteredRows.length > 0) {
           // Build dynamic metric mapping from dimensionMap
           const dimensionMap = (channelData as any).dimensionMap || {};
           const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+          
+          // Build metricNameToIdMap (same as breakdown table) - reverse mapping: name -> id
+          // This ensures we use "Cost" with capital C as the source of truth
+          const metricNameToIdMap: Record<string, string> = {};
+          Object.entries(dimensionMap as Record<string, string>).forEach(([dimensionId, dimensionName]) => {
+            if (dimensionName && typeof dimensionName === 'string') {
+              metricNameToIdMap[dimensionName] = dimensionId;
+            }
+          });
 
           // Manually aggregate metrics from filtered rows
           const metrics: MetricData = {
@@ -174,12 +181,19 @@ export function useFilteredSlideData({
               return 0;
             };
 
-            // Dynamically resolve metric keys using dimensionMap
-            metrics.impressions += getMetricValue(getMetricKeys('impressions', nameToIdsMap));
-            metrics.clicks += getMetricValue(getMetricKeys('clicks', nameToIdsMap));
-            metrics.cost += getMetricValue(getMetricKeys('cost', nameToIdsMap));
-            metrics.revenue += getMetricValue(getMetricKeys('revenue', nameToIdsMap));
-            metrics.bookings += getMetricValue(getMetricKeys('bookings', nameToIdsMap));
+            // Use EXACT same extraction logic as UnifiedBreakdownTable for consistency
+            // This ensures we get the same values as the breakdown table
+            const impressionsValue = parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
+            const clicksValue = parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
+            const costValue = parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
+            const revenueValue = parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
+            const bookingsValue = parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
+            
+            metrics.impressions += impressionsValue;
+            metrics.clicks += clicksValue;
+            metrics.cost += costValue;
+            metrics.revenue += revenueValue;
+            metrics.bookings += bookingsValue;
 
             // Also aggregate for monthly data
             let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
@@ -213,16 +227,14 @@ export function useFilteredSlideData({
                 }
                 entry[channel as 'metasearch' | 'sem' | 'social'] += revenue;
               } else {
-                console.log(`[testing] Invalid date value for row in channel ${channel}:`, dateValue);
+                console.log(`Invalid date value for row in channel ${channel}:`, dateValue);
               }
             } else {
               if (filteredRows.length <= 5) {
-                console.log(`[testing] No date value found for row in channel ${channel}, rowData keys:`, Object.keys(rowData), 'sample rowData:', rowData);
+                console.log(`No date value found for row in channel ${channel}, rowData keys:`, Object.keys(rowData), 'sample rowData:', rowData);
               }
             }
           });
-
-          console.log(`[testing] Channel ${channel} monthly aggregation: ${rowsWithDates} rows with dates, ${rowsWithRevenue} rows with revenue, total revenue: ${totalRevenue}, monthlyDataMap size: ${monthlyDataMap.size}`);
 
           channelTotals[channel] = metrics;
         } else {
@@ -259,14 +271,14 @@ export function useFilteredSlideData({
               };
             }
           } else {
-            channelTotals[channel] =
-              (channelData as any).current || {
-                impressions: 0,
-                clicks: 0,
-                cost: 0,
-                revenue: 0,
-                bookings: 0,
-              };
+            const currentData = (channelData as any).current || {
+              impressions: 0,
+              clicks: 0,
+              cost: 0,
+              revenue: 0,
+              bookings: 0,
+            };
+            channelTotals[channel] = currentData;
           }
         } else if (selectedYear !== 'all') {
           const yearNum = parseInt(selectedYear);
@@ -323,8 +335,6 @@ export function useFilteredSlideData({
         ? monthlyData.filter((m) => m.year === parseInt(selectedYear))
         : monthlyData;
 
-    console.log('[testing] Final monthlyData from useFilteredSlideData:', filteredMonthlyData);
-
     // Ensure all channels have totals (default to zeros if missing)
     const defaultMetrics: MetricData = {
       impressions: 0,
@@ -334,12 +344,14 @@ export function useFilteredSlideData({
       bookings: 0,
     };
 
+    const finalChannelTotals = {
+      metasearch: channelTotals.metasearch || defaultMetrics,
+      sem: channelTotals.sem || defaultMetrics,
+      social: channelTotals.social || defaultMetrics,
+    };
+
     return {
-      channelTotals: {
-        metasearch: channelTotals.metasearch || defaultMetrics,
-        sem: channelTotals.sem || defaultMetrics,
-        social: channelTotals.social || defaultMetrics,
-      },
+      channelTotals: finalChannelTotals,
       monthlyData: filteredMonthlyData,
       filteredRawRows,
     };
