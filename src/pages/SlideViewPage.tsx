@@ -1016,7 +1016,8 @@ export default function SlideViewPage() {
   }, [monthlyDataRecords, selectedYear, selectedMonth]);
 
   // Get channel metrics using hook
-  const { currentTotals: hookCurrentTotals, comparisonTotals: hookComparisonTotals } = useChannelMetrics({
+  // Get comparison totals from useChannelMetrics hook (handles comparison period filtering)
+  const { comparisonTotals: hookComparisonTotals } = useChannelMetrics({
     pivotData: slideReport?.pivot_data as SlideReportPivotData | null,
     selectedYear,
     selectedMonth,
@@ -1027,7 +1028,7 @@ export default function SlideViewPage() {
     comparisonType: comparisonType as 'none' | 'previous_period' | 'previous_year',
   });
 
-  // Get current totals - now uses unified filteredData hook (single source of truth)
+  // Get current totals - uses unified filteredData hook (single source of truth)
   const currentTotals = filteredData.channelTotals;
 
   // Helper function to check if any channel has non-zero data

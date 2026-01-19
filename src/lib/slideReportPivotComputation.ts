@@ -18,6 +18,7 @@ import {
 } from "@/types/slideReports";
 import { aggregateMetrics, parseDate } from "@/components/AISummaryPivotTable";
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, startOfYear, isWithinInterval } from "date-fns";
+import { calculateDerivedMetrics as calculateDerivedMetricsBase } from './slideViewHelpers';
 
 const BASE_METRICS = ["Impressions", "Clicks", "Cost", "Revenue", "Bookings"];
 
@@ -166,6 +167,7 @@ export function verifySettingsUsage(
 /**
  * Calculate derived metrics from base metrics
  */
+// Wrapper to convert DerivedMetrics to ChannelMetrics (same structure, different type name)
 function calculateDerivedMetrics(data: {
   impressions: number;
   clicks: number;
@@ -173,18 +175,7 @@ function calculateDerivedMetrics(data: {
   revenue: number;
   bookings: number;
 }): ChannelMetrics {
-  return {
-    impressions: data.impressions,
-    clicks: data.clicks,
-    cost: data.cost,
-    revenue: data.revenue,
-    bookings: data.bookings,
-    ctr: data.clicks > 0 && data.impressions > 0 ? (data.clicks / data.impressions) * 100 : 0,
-    conversionRate: data.clicks > 0 ? (data.bookings / data.clicks) * 100 : 0,
-    cpc: data.clicks > 0 ? data.cost / data.clicks : 0,
-    roas: data.cost > 0 ? data.revenue / data.cost : 0,
-    costOfSale: data.revenue > 0 ? (data.cost / data.revenue) * 100 : 0,
-  };
+  return calculateDerivedMetricsBase(data) as ChannelMetrics;
 }
 
 /**

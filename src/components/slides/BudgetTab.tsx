@@ -10,6 +10,7 @@ import { Loader2 } from "lucide-react";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { MONTH_NAMES } from "@/constants/slideViewConstants";
 import { formatNumber } from "@/lib/slideViewHelpers";
+import { calculateProfit } from "@/lib/budgetCalculations";
 
 interface View {
   id: string;
@@ -197,15 +198,10 @@ export function BudgetTab({
             const estRevenue = budgetRow * avgRoas;
             const estRevenueShare = totalRevenue > 0 ? (estRevenue / totalRevenue) * 100 : 0;
             
-            // PnL calculations
-            let profit = 0;
-            if (channelConfig) {
-              const costFee = actualRow * (channelConfig.percentCost / 100);
-              const revenueFee = revenueRow * (channelConfig.percentRevenue / 100);
-              profit = channelConfig.spender === 'agency'
-                ? costFee + revenueFee + channelConfig.recurrentFee - actualRow
-                : costFee + revenueFee + channelConfig.recurrentFee;
-            }
+            // PnL calculations - using centralized utility
+            const profit = channelConfig 
+              ? calculateProfit(actualRow, revenueRow, channelConfig)
+              : 0;
             
             return (
               <TableRow key={row.month}>

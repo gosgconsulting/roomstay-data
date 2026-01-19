@@ -189,7 +189,19 @@ export function FiltersRow({
                       ...prev,
                       [popoverKey]: open,
                     }));
-                    if (isReadOnlyMode) return; // Prevent opening in read-only mode
+                    
+                    // Clear search term when closing (must run even in read-only mode)
+                    if (!open) {
+                      const key = `${currentChannel}-${filterDimId}`;
+                      setFilterSearchTerms(prev => {
+                        const { [key]: _, ...rest } = prev;
+                        return rest;
+                      });
+                    }
+                    
+                    // Prevent opening logic in read-only mode
+                    if (isReadOnlyMode) return;
+                    
                     if (open) {
                       // Initialize pending values based on current state
                       const isFilterCurrentlySet = filterValues[currentChannel] && filterDimId in filterValues[currentChannel];
@@ -257,13 +269,6 @@ export function FiltersRow({
                               },
                             }));
                           }
-                        } else {
-                          // Clear search term when closing
-                          const key = `${currentChannel}-${filterDimId}`;
-                          setFilterSearchTerms(prev => {
-                            const { [key]: _, ...rest } = prev;
-                            return rest;
-                          });
                         }
                       }}
                     >

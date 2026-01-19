@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { supabase } from "@/integrations/supabase/client";
+import { calculateProfit } from "@/lib/budgetCalculations";
 
 type ForecastScenario = {
   id: string;
@@ -192,11 +193,21 @@ export default function ForecastScenarioPage() {
   }, [perService]);
 
   // Profit KPI: sum of fees (cost %, revenue %, recurrent, one-off) minus cost, for Agency-paid budgets
+  // Using centralized profit calculation utility
   const totalProfit = React.useMemo(() => {
     return perService.reduce((sum, svc) => {
       if (svc.budgetPayer === "agency") {
-        const profit =
-          svc.costFee + svc.revenueFee + svc.recurrentFee + svc.oneOffFee - svc.cost;
+        const profit = calculateProfit(
+          svc.cost,
+          svc.revenue,
+          {
+            spender: svc.budgetPayer,
+            recurrentFee: svc.recurrentFee,
+            percentCost: svc.percentCost,
+            percentRevenue: svc.percentRevenue,
+          },
+          svc.oneOffFee
+        );
         return sum + profit;
       }
       return sum;

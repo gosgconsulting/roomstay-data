@@ -376,3 +376,38 @@ export function calculateBudgetMonthlyData(
   }
   return [];
 }
+
+/**
+ * Calculate profit based on PnL configuration
+ * 
+ * @param actualCost - The actual cost spent
+ * @param revenue - The revenue generated
+ * @param config - PnL configuration with spender type and fee percentages
+ * @param oneOffFee - Optional one-off fee (defaults to 0)
+ * @returns Calculated profit
+ */
+export function calculateProfit(
+  actualCost: number,
+  revenue: number,
+  config: {
+    spender: 'client' | 'agency';
+    recurrentFee: number;
+    percentCost: number;
+    percentRevenue: number;
+  },
+  oneOffFee: number = 0
+): number {
+  const costFee = actualCost * (config.percentCost / 100);
+  const revenueFee = revenue * (config.percentRevenue / 100);
+  
+  if (config.spender === 'agency') {
+    // Agency spender: We pay the full cost (actualCost), but we get costFee as revenue from client
+    // Net cost we pay = actualCost - costFee (since we get costFee back from client)
+    // Profit = revenueFee + recurrentFee + oneOffFee - netCost = revenueFee + recurrentFee + oneOffFee - (actualCost - costFee)
+    // Which simplifies to: revenueFee + recurrentFee + oneOffFee - actualCost + costFee
+    return revenueFee + config.recurrentFee + oneOffFee - actualCost + costFee;
+  } else {
+    // Client spender: Client pays the cost, we only get fees
+    return costFee + revenueFee + config.recurrentFee + oneOffFee;
+  }
+}

@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Database, Calendar, BarChart3, TrendingUp, Layers, RefreshCw, Clock } from "lucide-react";
 import { SlideReportPivotData, ChannelMetrics } from "@/types/slideReports";
+import { calculateDerivedMetrics as calculateDerivedMetricsBase } from "@/lib/slideViewHelpers";
 
 interface Dimension {
   id: string;
@@ -52,15 +53,11 @@ const formatNumber = (value: number): string => {
   return value.toLocaleString("en-US", { maximumFractionDigits: 0 });
 };
 
-// Calculate derived metrics
-const calculateDerivedMetrics = (data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }): ChannelMetrics => ({
-  ...data,
-  ctr: data.clicks > 0 && data.impressions > 0 ? (data.clicks / data.impressions) * 100 : 0,
-  conversionRate: data.clicks > 0 ? (data.bookings / data.clicks) * 100 : 0,
-  cpc: data.clicks > 0 ? data.cost / data.clicks : 0,
-  roas: data.cost > 0 ? data.revenue / data.cost : 0,
-  costOfSale: data.revenue > 0 ? (data.cost / data.revenue) * 100 : 0,
-});
+// Use centralized calculateDerivedMetrics from slideViewHelpers
+// Convert DerivedMetrics to ChannelMetrics (same structure, different type name)
+const calculateDerivedMetrics = (data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }): ChannelMetrics => {
+  return calculateDerivedMetricsBase(data) as ChannelMetrics;
+};
 
 // Month names for display
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
