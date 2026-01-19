@@ -1606,13 +1606,33 @@ export default function SlideViewPage() {
 
   // CHANNEL_REPORT_IDS is defined outside the component (line 724)
   // Value dimension IDs state (for step 2 - applies to all channels)
-  // Pre-selected value dimensions for Brady Hotels based on actual report data
-  // Metasearch: Impressions, Clicks, Cost, Revenue, Bookings, CPC, Cost of sale, Impression Share
-  // SEM: Impressions, Clicks, Cost, Revenue, Bookings
-  // Social: Impressions, Clicks, Cost, Revenue, Bookings, Leads, CTR
   
-  // Hardcoded value dimension IDs that exist in each Brady Hotels report
-  const BRADY_METASEARCH_DIMENSIONS = [
+  // Available dimensions per channel (fetched from database) - VALUE types only
+  const [availableDimensions, setAvailableDimensions] = useState<Record<string, { id: string; name: string; type: string }[]>>({
+    metasearch: [],
+    sem: [],
+    social: [],
+  });
+  const [loadingAvailableDimensions, setLoadingAvailableDimensions] = useState(false);
+
+  // Dynamically extract all VALUE dimension IDs from availableDimensions
+  // Falls back to empty array if dimensions aren't loaded yet
+  const allAvailableValueDimensionIds = useMemo(() => {
+    const allIds = new Set<string>();
+    Object.values(availableDimensions).forEach(channelDims => {
+      channelDims.forEach(dim => {
+        // Only include VALUE type dimensions (number, currency, percentage)
+        if (['number', 'currency', 'percentage'].includes(dim.type)) {
+          allIds.add(dim.id);
+        }
+      });
+    });
+    return Array.from(allIds);
+  }, [availableDimensions]);
+
+  // Fallback hardcoded dimension IDs (only used if dimensions aren't loaded yet)
+  // These are kept as a last resort fallback for Brady Hotels reports
+  const FALLBACK_DIMENSION_IDS = [
     '89c229d9-8a6e-4d94-a0d2-a4b43b6f3fe1', // Impressions
     '1caad3eb-3d5e-405c-9df7-1c96971171c5', // Clicks
     'fb281b3f-c800-48f4-b34b-02d4f0244b07', // Cost
@@ -1621,44 +1641,18 @@ export default function SlideViewPage() {
     '8962dff5-bb0f-4ab1-ace7-e5dc5eb4fdcc', // CPC
     '3486d423-f75c-402e-8fb2-285b6e7e22ec', // Cost of sale
     'bfde7232-89ab-46ba-80ed-015a4d73bae5', // Impression Share
-  ];
-  
-  const BRADY_SEM_DIMENSIONS = [
-    '89c229d9-8a6e-4d94-a0d2-a4b43b6f3fe1', // Impressions
-    '1caad3eb-3d5e-405c-9df7-1c96971171c5', // Clicks
-    'fb281b3f-c800-48f4-b34b-02d4f0244b07', // Cost
-    '7f4cb2e9-52a3-4110-803a-58d2e7afacb5', // Revenue
-    '79aeb7f7-a9c6-43cd-bd05-ff7df81babf1', // Bookings
-  ];
-  
-  const BRADY_SOCIAL_DIMENSIONS = [
-    '89c229d9-8a6e-4d94-a0d2-a4b43b6f3fe1', // Impressions
-    '1caad3eb-3d5e-405c-9df7-1c96971171c5', // Clicks
-    'fb281b3f-c800-48f4-b34b-02d4f0244b07', // Cost
-    '7f4cb2e9-52a3-4110-803a-58d2e7afacb5', // Revenue
-    '79aeb7f7-a9c6-43cd-bd05-ff7df81babf1', // Bookings
     'bbe9b05b-7485-4eb3-a3cc-d04f05823f63', // Leads
     'ff046f06-10ee-4420-a02f-d4089e5f75a6', // CTR
   ];
-  
-  // Union of all hardcoded dimensions (unique IDs) - applies to all channels
-  const ALL_BRADY_DIMENSIONS = [
-    ...new Set([
-      ...BRADY_METASEARCH_DIMENSIONS,
-      ...BRADY_SEM_DIMENSIONS,
-      ...BRADY_SOCIAL_DIMENSIONS,
-    ])
-  ];
-  
-  const [selectedValueDimensionIds, setSelectedValueDimensionIds] = useState<string[]>(ALL_BRADY_DIMENSIONS);
 
-  // Available dimensions per channel (fetched from database) - VALUE types only
-  const [availableDimensions, setAvailableDimensions] = useState<Record<string, { id: string; name: string; type: string }[]>>({
-    metasearch: [],
-    sem: [],
-    social: [],
-  });
-  const [loadingAvailableDimensions, setLoadingAvailableDimensions] = useState(false);
+  // Use dynamic dimensions if available, otherwise fallback to hardcoded IDs
+  const defaultValueDimensionIds = useMemo(() => {
+    return allAvailableValueDimensionIds.length > 0 
+      ? allAvailableValueDimensionIds 
+      : FALLBACK_DIMENSION_IDS;
+  }, [allAvailableValueDimensionIds]);
+
+  const [selectedValueDimensionIds, setSelectedValueDimensionIds] = useState<string[]>([]);
 
   // Channel configuration state
   interface ChannelConfig {
@@ -2466,9 +2460,10 @@ export default function SlideViewPage() {
       // Auto-select dimensions that match the KPIs used in the slide
       // Only if no saved configuration exists (check if current selection is default/empty)
       const currentSelected = selectedValueDimensionIds;
+      const currentDefaultIds = defaultValueDimensionIds;
       const isDefaultOrEmpty = currentSelected.length === 0 || 
-        (currentSelected.length === ALL_BRADY_DIMENSIONS.length && 
-         currentSelected.every(id => ALL_BRADY_DIMENSIONS.includes(id)));
+        (currentSelected.length === currentDefaultIds.length && 
+         currentSelected.every(id => currentDefaultIds.includes(id)));
       
       if (isDefaultOrEmpty) {
         // Find dimension IDs that match the KPI names
@@ -2481,6 +2476,14 @@ export default function SlideViewPage() {
         
         if (kpiDimensionIds.length > 0) {
           setSelectedValueDimensionIds(kpiDimensionIds);
+        } else if (currentSelected.length === 0) {
+          // If no KPI matches found and nothing is selected, use all available VALUE dimensions
+          const allValueDimIds = dimensionList
+            .filter(dim => ['number', 'currency', 'percentage'].includes(dim.type))
+            .map(dim => dim.id);
+          if (allValueDimIds.length > 0) {
+            setSelectedValueDimensionIds(allValueDimIds);
+          }
         }
       }
     } catch (error) {
@@ -2930,8 +2933,8 @@ export default function SlideViewPage() {
         setSinceYear(slideReport.date_range.year);
       }
     } else {
-      // No saved config, reset to defaults
-      setSelectedValueDimensionIds(ALL_BRADY_DIMENSIONS);
+      // No saved config, reset to defaults (use dynamic dimensions if available)
+      setSelectedValueDimensionIds(defaultValueDimensionIds);
       setChannelConfigs({
         metasearch: { dimensionId: null, selectedValues: [] },
         sem: { dimensionId: null, selectedValues: [] },
