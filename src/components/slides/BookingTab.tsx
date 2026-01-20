@@ -18,7 +18,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Loader2, ChevronRight, Search } from "lucide-react";
-import { useEffect, useState, useMemo, Fragment } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/lib/auth";
 import { MONTH_NAMES } from "@/constants/slideViewConstants";
@@ -1447,7 +1447,7 @@ export function BookingTab({ accountId, selectedHotels: externalSelectedHotels, 
                           const showEllipsis = prevPage && page - prevPage > 1;
                           
                           return (
-                            <Fragment key={page}>
+                            <span key={page}>
                               {showEllipsis && (
                                 <PaginationItem key={`ellipsis-${page}`}>
                                   <PaginationEllipsis />
@@ -1462,7 +1462,7 @@ export function BookingTab({ accountId, selectedHotels: externalSelectedHotels, 
                                   {page}
                                 </PaginationLink>
                               </PaginationItem>
-                            </Fragment>
+                            </span>
                           );
                         })}
                       <PaginationItem>
