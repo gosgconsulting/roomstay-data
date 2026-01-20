@@ -182,7 +182,6 @@ export function BudgetTab({
             
             // Get clicks for CPC calculation
             let clicks = 0;
-            console.log('[budget] channel', channel);
             if (channel === 'overview') {
               const monthlyMetrics = pivotData?.overview?.monthly?.[monthKey];
               clicks = monthlyMetrics?.clicks || 0;
