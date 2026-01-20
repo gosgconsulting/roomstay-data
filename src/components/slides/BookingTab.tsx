@@ -20,12 +20,12 @@ import {
 import { Loader2, ChevronRight, Search } from "lucide-react";
 import { useEffect, useState, useMemo, Fragment } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { useUser } from "@/lib/auth";
 import { MONTH_NAMES } from "@/constants/slideViewConstants";
 import { isWithinInterval } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { getOrCreateStatusDimension, findDimensionDataRow, updateBookingStatus } from "@/lib/bookingStatus";
 
 interface BookingTabProps {
   accountId: string | undefined;
@@ -56,7 +56,8 @@ export function BookingTab({ accountId }: BookingTabProps) {
   const [dimensionNameToIdMap, setDimensionNameToIdMap] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
-  const [bookingStatuses, setBookingStatuses] = useState<Record<string, string>>({});
+  const [statusDimensionId, setStatusDimensionId] = useState<string | null>(null);
+  const [bookingReportId, setBookingReportId] = useState<string | null>(null);
 
   useEffect(() => {
     const loadBookingData = async () => {
@@ -85,69 +86,72 @@ export function BookingTab({ accountId }: BookingTabProps) {
           return;
         }
 
-        // Get data sources for the Booking report
-        const { data: dataSources, error: dsError } = await supabase
-          .from('data_sources')
-          .select('*')
-          .eq('report_id', bookingReport.id)
-          .order('created_at', { ascending: false });
+        setBookingReportId(bookingReport.id);
 
-        if (dsError) throw dsError;
+        // Load or create Status dimension first
+        let statusDimId: string | null = null;
+        if (bookingReport.id && userData.user.id) {
+          try {
+            statusDimId = await getOrCreateStatusDimension(
+              bookingReport.id,
+              userData.user.id,
+              accountId
+            );
+            setStatusDimensionId(statusDimId);
+          } catch (err) {
+            console.error("Error loading Status dimension:", err);
+          }
+        }
 
-        if (!dataSources || dataSources.length === 0) {
-          setError("No data sources found for the Booking report. Please add a data source first.");
+        // Fetch dimension_data directly - this is the canonical source with all updates including status
+        const allDimensionDataRows: any[] = [];
+        const batchSize = 1000;
+        let offset = 0;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from('dimension_data')
+            .select('id, dimension_values, row_number, data_source_id')
+            .eq('report_id', bookingReport.id)
+            .order('row_number', { ascending: true })
+            .range(offset, offset + batchSize - 1);
+
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+            allDimensionDataRows.push(...data);
+            offset += batchSize;
+            hasMore = data.length === batchSize;
+          } else {
+            hasMore = false;
+          }
+        }
+
+        if (allDimensionDataRows.length === 0) {
+          setError("No booking data found. Please sync your data sources first.");
           setIsLoading(false);
           return;
         }
 
-        // Load data from all data sources and build dimension name mapping
-        const allRows: BookingDataRow[] = [];
+        // Collect all dimension IDs from dimension_data rows
         const dimensionIdSet = new Set<string>();
-        const dimensionIdToNameMap: Record<string, string> = {};
-
-        // First pass: collect all dimension IDs from transformed rows and column mappings
-        for (const dataSource of dataSources) {
-          try {
-            const result = await fetchSourceData(
-              dataSource as any,
-              userData.user.id,
-              accountId
-            );
-
-            if (result.transformedRows && result.transformedRows.length > 0) {
-              // Extract dimension IDs from dimension_values in each row
-              result.transformedRows.forEach((row: any) => {
-                if (row.dimension_values) {
-                  Object.keys(row.dimension_values).forEach(dimId => {
-                    dimensionIdSet.add(dimId);
-                  });
-                }
-              });
-              
-              allRows.push(...result.transformedRows);
-            }
-
-            // Also check column mappings for dimension names
-            const columnMappings = (dataSource.column_mappings || []) as any[];
-            columnMappings.forEach((mapping: any) => {
-              if (mapping.dimensionId && mapping.dimensionId !== 'none' && mapping.dimensionId !== 'create_new') {
-                dimensionIdSet.add(mapping.dimensionId);
-                // If dimensionName is available in mapping, use it
-                if (mapping.dimensionName) {
-                  dimensionIdToNameMap[mapping.dimensionId] = mapping.dimensionName;
-                }
-              }
+        allDimensionDataRows.forEach((row: any) => {
+          if (row.dimension_values) {
+            Object.keys(row.dimension_values).forEach(dimId => {
+              dimensionIdSet.add(dimId);
             });
-          } catch (err) {
-            console.error(`Error loading data from source ${dataSource.name}:`, err);
-            // Continue with other sources even if one fails
           }
+        });
+
+        // Add Status dimension if it exists
+        if (statusDimId) {
+          dimensionIdSet.add(statusDimId);
         }
 
-        // Fetch dimension names from database for IDs not found in mappings
-        const dimensionIdsToFetch = Array.from(dimensionIdSet).filter(
-          id => !dimensionIdToNameMap[id]
-        );
+        // Fetch all dimension names from database
+        const dimensionIdsToFetch = Array.from(dimensionIdSet);
+        const dimensionIdToNameMap: Record<string, string> = {};
 
         if (dimensionIdsToFetch.length > 0) {
           const { data: dimensions, error: dimError } = await supabase
@@ -155,17 +159,50 @@ export function BookingTab({ accountId }: BookingTabProps) {
             .select('id, name')
             .in('id', dimensionIdsToFetch);
 
-          if (!dimError && dimensions) {
+          if (dimError) throw dimError;
+
+          if (dimensions) {
             dimensions.forEach((dim: any) => {
               dimensionIdToNameMap[dim.id] = dim.name;
             });
           }
+
+          // Ensure Status dimension is in the map
+          if (statusDimId && !dimensionIdToNameMap[statusDimId]) {
+            dimensionIdToNameMap[statusDimId] = 'Status';
+          }
         }
 
+        // Transform dimension_data rows to use dimension names as keys instead of IDs
+        const transformedRows = allDimensionDataRows.map((ddRow: any) => {
+          const transformedRow: BookingDataRow & { _originalRow?: any; _dimensionDataId?: string } = {};
+          const dimensionValues = ddRow.dimension_values as Record<string, any> || {};
+          
+          // Transform dimension IDs to dimension names
+          Object.entries(dimensionValues).forEach(([dimId, value]) => {
+            const dimName = dimensionIdToNameMap[dimId] || dimId;
+            transformedRow[dimName] = value;
+          });
+          
+          // Store original row data and dimension_data ID for status updates
+          transformedRow._originalRow = {
+            dimension_values: dimensionValues,
+            row_number: ddRow.row_number,
+            data_source_id: ddRow.data_source_id,
+          };
+          transformedRow._dimensionDataId = ddRow.id;
+          
+          return transformedRow;
+        });
+
         // Build column list from dimension names with Hotel first, then Booking Number
+        // Exclude Status and Channel columns (Status is shown separately, Channel is hidden)
         const allColumnNames = Array.from(dimensionIdSet)
           .map(dimId => dimensionIdToNameMap[dimId] || dimId)
-          .filter(colName => !colName.toLowerCase().includes('channel')); // Hide Channel column
+          .filter(colName => {
+            const colLower = colName.toLowerCase();
+            return !colLower.includes('channel') && colLower !== 'status';
+          });
         
         // Sort columns: Hotel first, then Booking Number, then rest alphabetically
         const columnNames = allColumnNames.sort((a, b) => {
@@ -184,18 +221,6 @@ export function BookingTab({ accountId }: BookingTabProps) {
           
           // Rest sorted alphabetically
           return a.localeCompare(b);
-        });
-
-        // Transform rows to use dimension names as keys instead of IDs
-        const transformedRows = allRows.map((row: any) => {
-          const transformedRow: BookingDataRow = {};
-          if (row.dimension_values) {
-            Object.entries(row.dimension_values).forEach(([dimId, value]) => {
-              const dimName = dimensionIdToNameMap[dimId] || dimId;
-              transformedRow[dimName] = value;
-            });
-          }
-          return transformedRow;
         });
 
         // Build reverse mapping (name to ID) for filtering
@@ -288,21 +313,6 @@ export function BookingTab({ accountId }: BookingTabProps) {
     });
   }, [columns]);
 
-  // Generate key from individual fields (used for loading statuses from DB)
-  const getBookingKeyFromFields = (hotel: string, bookingNumber: string, checkoutDate: string | Date): string => {
-    let checkoutDateStr = '';
-    if (checkoutDate) {
-      try {
-        const date = checkoutDate instanceof Date ? checkoutDate : new Date(checkoutDate);
-        if (!isNaN(date.getTime())) {
-          checkoutDateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
-        }
-      } catch {
-        // Invalid date, use empty string
-      }
-    }
-    return `${String(hotel).trim()}|||${String(bookingNumber).trim()}|||${checkoutDateStr}`;
-  };
 
   // Generate unique key for a booking row
   const getBookingKey = (row: BookingDataRow): string => {
@@ -329,46 +339,6 @@ export function BookingTab({ accountId }: BookingTabProps) {
     return `${hotel}|||${bookingNumber}|||${checkoutDateStr}`;
   };
 
-  // Load booking statuses from database
-  useEffect(() => {
-    const loadBookingStatuses = async () => {
-      if (!accountId) return;
-
-      try {
-        const { data, error } = await supabase
-          .from('booking_statuses')
-          .select('hotel, booking_number, checkout_date, status')
-          .eq('account_id', accountId);
-
-        if (error) {
-          // If table doesn't exist yet (migration not run), just log and continue
-          if (error.code === '42P01' || error.message?.includes('does not exist')) {
-            console.warn("Booking statuses table not found. Migration may need to be run.");
-            return;
-          }
-          throw error;
-        }
-
-        if (data) {
-          const statusMap: Record<string, string> = {};
-          data.forEach((status) => {
-            const key = getBookingKeyFromFields(
-              status.hotel,
-              status.booking_number,
-              status.checkout_date
-            );
-            statusMap[key] = status.status || '';
-          });
-          setBookingStatuses(statusMap);
-        }
-      } catch (err) {
-        console.error("Error loading booking statuses:", err);
-        // Don't block the component from rendering if status loading fails
-      }
-    };
-
-    loadBookingStatuses();
-  }, [accountId]);
 
   // Get initial status based on checkout date
   const getInitialStatus = (row: BookingDataRow): string => {
@@ -394,100 +364,351 @@ export function BookingTab({ accountId }: BookingTabProps) {
     }
   };
 
-  // Get status for a row (from DB or computed initial)
-  const getStatusForRow = (row: BookingDataRow): string => {
-    const key = getBookingKey(row);
-    if (key in bookingStatuses) {
-      const status = bookingStatuses[key];
-      return status || 'none'; // Return 'none' instead of empty string for Select component
+  // Get status for a row (from dimension_values or computed initial)
+  const getStatusForRow = (row: BookingDataRow, originalRow?: any): string => {
+    // First, try to get status from the transformed row's Status field (set during loading)
+    if (row['Status'] !== null && row['Status'] !== undefined && row['Status'] !== '') {
+      return row['Status'];
     }
+
+    // Second, try to get status from dimension_values if we have the original row data
+    if (originalRow?.dimension_values && statusDimensionId) {
+      const status = originalRow.dimension_values[statusDimensionId];
+      if (status !== null && status !== undefined && status !== '') {
+        return status;
+      }
+    }
+
+    // Fallback to computed initial status based on checkout date
     const initialStatus = getInitialStatus(row);
     return initialStatus || 'none'; // Return 'none' instead of empty string for Select component
   };
 
   // Handle status change
   const handleStatusChange = async (row: BookingDataRow, newStatus: string) => {
-    if (!accountId) return;
-
-    const hotel = String(row['Hotel'] || '').trim();
-    const bookingNumber = getBookingNumberColumn 
-      ? String(row[getBookingNumberColumn] || '').trim()
-      : '';
-    const checkoutDate = getCheckoutDateColumn
-      ? row[getCheckoutDateColumn]
-      : null;
-
-    if (!hotel || !bookingNumber || !checkoutDate) {
+    if (!accountId || !bookingReportId || !userData?.user) {
       toast({
         title: "Error",
-        description: "Missing required fields (Hotel, Booking Number, or Checkout Date)",
+        description: "Missing required context (account, report, or user)",
         variant: "destructive",
       });
       return;
     }
 
-    let checkoutDateObj: Date;
-    try {
-      checkoutDateObj = new Date(checkoutDate);
-      if (isNaN(checkoutDateObj.getTime())) {
-        throw new Error("Invalid checkout date");
+    // Get dimension_data row ID from the row if available
+    const dimensionDataRowId = (row as any)._dimensionDataId;
+    const originalRow = (row as any)._originalRow;
+
+    // Get dimension IDs for hotel, booking number, and checkout date
+    // Try multiple variations of names
+    const hotelDimensionId = dimensionNameToIdMap['Hotel'] || 
+      dimensionNameToIdMap['hotel'] ||
+      Object.entries(dimensionNameToIdMap).find(([name]) => name.toLowerCase() === 'hotel')?.[1];
+    
+    const bookingNumberDimensionId = getBookingNumberColumn 
+      ? dimensionNameToIdMap[getBookingNumberColumn] ||
+        Object.entries(dimensionNameToIdMap).find(([name]) => {
+          const nameLower = name.toLowerCase();
+          return nameLower.includes('booking') && 
+            (nameLower.includes('number') || nameLower.includes('#') || 
+             nameLower.includes('id') || nameLower.includes('no'));
+        })?.[1]
+      : Object.entries(dimensionNameToIdMap).find(([name]) => {
+          const nameLower = name.toLowerCase();
+          return nameLower.includes('booking') && 
+            (nameLower.includes('number') || nameLower.includes('#') || 
+             nameLower.includes('id') || nameLower.includes('no'));
+        })?.[1];
+
+    // Try multiple variations for checkout date - use let so we can update it if found later
+    let checkoutDateDimensionId = getCheckoutDateColumn
+      ? dimensionNameToIdMap[getCheckoutDateColumn] ||
+        Object.entries(dimensionNameToIdMap).find(([name]) => 
+          name.toLowerCase().includes('checkout')
+        )?.[1] ||
+        Object.entries(dimensionNameToIdMap).find(([name]) => 
+          name.toLowerCase().includes('check-out') || name.toLowerCase().includes('check out')
+        )?.[1] ||
+        Object.entries(dimensionNameToIdMap).find(([name]) => 
+          name.toLowerCase().includes('departure') || name.toLowerCase().includes('depart')
+        )?.[1]
+      : Object.entries(dimensionNameToIdMap).find(([name]) => 
+          name.toLowerCase().includes('checkout')
+        )?.[1] ||
+        Object.entries(dimensionNameToIdMap).find(([name]) => 
+          name.toLowerCase().includes('check-out') || name.toLowerCase().includes('check out')
+        )?.[1] ||
+        Object.entries(dimensionNameToIdMap).find(([name]) => 
+          name.toLowerCase().includes('departure') || name.toLowerCase().includes('depart')
+        )?.[1];
+
+    // Get values from original row's dimension_values (most reliable) or transformed row
+    let hotel = '';
+    let bookingNumber = '';
+    let checkoutDate: any = null;
+
+    if (originalRow?.dimension_values) {
+      // Use original dimension_values - this is the most reliable source
+      if (hotelDimensionId) {
+        hotel = String(originalRow.dimension_values[hotelDimensionId] || '').trim();
       }
-    } catch {
-      toast({
-        title: "Error",
-        description: "Invalid checkout date format",
-        variant: "destructive",
-      });
-      return;
+      if (bookingNumberDimensionId) {
+        bookingNumber = String(originalRow.dimension_values[bookingNumberDimensionId] || '').trim();
+      }
+      if (checkoutDateDimensionId) {
+        checkoutDate = originalRow.dimension_values[checkoutDateDimensionId];
+      }
+      
+      // If still missing, try to find by iterating through all dimension values
+      if (!hotel && hotelDimensionId) {
+        // Try alternative approach: find by dimension ID directly
+        const hotelValue = originalRow.dimension_values[hotelDimensionId];
+        if (hotelValue !== undefined && hotelValue !== null) {
+          hotel = String(hotelValue).trim();
+        }
+      }
+      if (!bookingNumber && bookingNumberDimensionId) {
+        const bookingValue = originalRow.dimension_values[bookingNumberDimensionId];
+        if (bookingValue !== undefined && bookingValue !== null) {
+          bookingNumber = String(bookingValue).trim();
+        }
+      }
+      if (!checkoutDate && checkoutDateDimensionId) {
+        const checkoutValue = originalRow.dimension_values[checkoutDateDimensionId];
+        if (checkoutValue !== undefined && checkoutValue !== null) {
+          checkoutDate = checkoutValue;
+        }
+      }
+    }
+    
+    // Fallback to transformed row if still missing
+    if (!hotel) {
+      hotel = String(row['Hotel'] || row['hotel'] || '').trim();
+    }
+    if (!bookingNumber) {
+      bookingNumber = getBookingNumberColumn 
+        ? String(row[getBookingNumberColumn] || '').trim()
+        : '';
+    }
+    if (!checkoutDate) {
+      checkoutDate = getCheckoutDateColumn
+        ? row[getCheckoutDateColumn]
+        : null;
+      
+      // Also try common variations
+      if (!checkoutDate) {
+        checkoutDate = row['Checkout Date'] || row['Checkout'] || row['checkout'] || 
+                      row['Check-out Date'] || row['Departure Date'] || row['Departure'];
+      }
     }
 
-    const checkoutDateStr = checkoutDateObj.toISOString().split('T')[0]; // YYYY-MM-DD format
-    const key = getBookingKey(row);
-
-    try {
-      // Upsert status to database
-      const { error } = await supabase
-        .from('booking_statuses')
-        .upsert({
-          account_id: accountId,
-          hotel,
-          booking_number: bookingNumber,
-          checkout_date: checkoutDateStr,
-          status: newStatus || '',
-        }, {
-          onConflict: 'account_id,hotel,booking_number,checkout_date'
-        });
-
-      if (error) {
-        // If table doesn't exist yet, show helpful message
-        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+    if (!dimensionDataRowId) {
+      // Fallback: try to find the row using dimension values
+      // Checkout date might be null/undefined/empty, but we need it for matching
+      // If it's truly missing, we can't proceed
+      const hasCheckoutDate = checkoutDate !== null && checkoutDate !== undefined && checkoutDate !== '';
+      
+      if (!hotel || !bookingNumber || !hasCheckoutDate) {
+        // Try one more time to find checkout date by searching all dimensions
+        if (!hasCheckoutDate && originalRow?.dimension_values) {
+          // Search through all dimension values to find any date-like value
+          for (const [dimId, value] of Object.entries(originalRow.dimension_values)) {
+            if (value && (typeof value === 'string' || value instanceof Date)) {
+              const dateStr = value instanceof Date ? value.toISOString() : String(value);
+              // Check if it looks like a date
+              if (dateStr.match(/\d{4}-\d{2}-\d{2}/) || dateStr.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
+                // Check if this dimension name suggests it's a checkout/departure date
+                const dimName = dimensionNameToIdMap[dimId] || 
+                  Object.entries(dimensionNameToIdMap).find(([_, id]) => id === dimId)?.[0];
+                if (dimName && (
+                  dimName.toLowerCase().includes('checkout') ||
+                  dimName.toLowerCase().includes('check-out') ||
+                  dimName.toLowerCase().includes('departure') ||
+                  dimName.toLowerCase().includes('depart') ||
+                  dimName.toLowerCase().includes('date')
+                )) {
+                  checkoutDate = value;
+                  // Update the dimension ID if we found it
+                  checkoutDateDimensionId = dimId;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        
+        const finalHasCheckoutDate = checkoutDate !== null && checkoutDate !== undefined && checkoutDate !== '';
+        
+        if (!hotel || !bookingNumber || !finalHasCheckoutDate) {
+          console.error('[BookingTab] Missing required fields:', {
+            hotel,
+            bookingNumber,
+            checkoutDate,
+            hasCheckoutDate: finalHasCheckoutDate,
+            hotelDimensionId,
+            bookingNumberDimensionId,
+            checkoutDateDimensionId,
+            getCheckoutDateColumn,
+            rowKeys: Object.keys(row),
+            originalRowKeys: originalRow ? Object.keys(originalRow) : null,
+            dimensionValues: originalRow?.dimension_values,
+            dimensionNameToIdMap,
+            allDimensionNames: Object.keys(dimensionNameToIdMap),
+          });
           toast({
-            title: "Database migration required",
-            description: "Please run the booking_statuses migration to enable status tracking.",
+            title: "Error",
+            description: `Missing required fields. Hotel: ${hotel ? '✓' : '✗'}, Booking: ${bookingNumber ? '✓' : '✗'}, Checkout: ${finalHasCheckoutDate ? '✓' : '✗'}`,
             variant: "destructive",
           });
           return;
         }
-        throw error;
       }
 
-      // Update local state
-      setBookingStatuses(prev => ({
-        ...prev,
-        [key]: newStatus || '',
-      }));
+      if (!hotelDimensionId || !bookingNumberDimensionId || !checkoutDateDimensionId) {
+        console.error('[BookingTab] Missing dimension IDs:', {
+          hotelDimensionId,
+          bookingNumberDimensionId,
+          checkoutDateDimensionId,
+          dimensionNameToIdMap,
+        });
+        toast({
+          title: "Error",
+          description: "Could not find required dimension IDs (Hotel, Booking Number, or Checkout Date)",
+          variant: "destructive",
+        });
+        return;
+      }
 
-      toast({
-        title: "Status updated",
-        description: "Booking status has been saved",
-      });
-    } catch (err) {
-      console.error("Error saving booking status:", err);
-      toast({
-        title: "Error",
-        description: err instanceof Error ? err.message : "Failed to save booking status",
-        variant: "destructive",
-      });
+      try {
+        // Find the dimension_data row
+        const dimensionDataRow = await findDimensionDataRow(
+          bookingReportId,
+          hotelDimensionId,
+          bookingNumberDimensionId,
+          checkoutDateDimensionId,
+          hotel,
+          bookingNumber,
+          checkoutDate
+        );
+
+        if (!dimensionDataRow) {
+          toast({
+            title: "Error",
+            description: "Could not find booking row in database",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Use the found row ID
+        const foundRowId = dimensionDataRow.id;
+
+        // Ensure status dimension exists
+        let currentStatusDimensionId = statusDimensionId;
+        if (!currentStatusDimensionId) {
+          currentStatusDimensionId = await getOrCreateStatusDimension(
+            bookingReportId,
+            userData.user.id,
+            accountId
+          );
+          setStatusDimensionId(currentStatusDimensionId);
+        }
+
+        // Update the status
+        await updateBookingStatus(
+          foundRowId,
+          currentStatusDimensionId,
+          newStatus || null
+        );
+
+        // Update local state
+        setAllBookingData(prev => prev.map(r => {
+          const rowKey = getBookingKey(r);
+          const currentKey = getBookingKey(row);
+          if (rowKey === currentKey) {
+            const updatedRow = { ...r };
+            if (updatedRow._originalRow) {
+              updatedRow._originalRow = {
+                ...updatedRow._originalRow,
+                dimension_values: {
+                  ...updatedRow._originalRow.dimension_values,
+                  [currentStatusDimensionId]: newStatus || null,
+                },
+              };
+            }
+            updatedRow['Status'] = newStatus || null;
+            updatedRow._dimensionDataId = foundRowId;
+            return updatedRow;
+          }
+          return r;
+        }));
+
+        toast({
+          title: "Status updated",
+          description: "Booking status has been saved",
+        });
+      } catch (err) {
+        console.error("Error saving booking status:", err);
+        toast({
+          title: "Error",
+          description: err instanceof Error ? err.message : "Failed to save booking status",
+          variant: "destructive",
+        });
+      }
+    } else {
+      // We have the dimension_data row ID, use it directly
+      try {
+        // Ensure status dimension exists
+        let currentStatusDimensionId = statusDimensionId;
+        if (!currentStatusDimensionId) {
+          currentStatusDimensionId = await getOrCreateStatusDimension(
+            bookingReportId,
+            userData.user.id,
+            accountId
+          );
+          setStatusDimensionId(currentStatusDimensionId);
+        }
+
+        // Update the status
+        await updateBookingStatus(
+          dimensionDataRowId,
+          currentStatusDimensionId,
+          newStatus || null
+        );
+
+        // Update local state
+        setAllBookingData(prev => prev.map(r => {
+          const rowKey = getBookingKey(r);
+          const currentKey = getBookingKey(row);
+          if (rowKey === currentKey) {
+            const updatedRow = { ...r };
+            if (updatedRow._originalRow) {
+              updatedRow._originalRow = {
+                ...updatedRow._originalRow,
+                dimension_values: {
+                  ...updatedRow._originalRow.dimension_values,
+                  [currentStatusDimensionId]: newStatus || null,
+                },
+              };
+            }
+            updatedRow['Status'] = newStatus || null;
+            return updatedRow;
+          }
+          return r;
+        }));
+
+        toast({
+          title: "Status updated",
+          description: "Booking status has been saved",
+        });
+      } catch (err) {
+        console.error("Error saving booking status:", err);
+        toast({
+          title: "Error",
+          description: err instanceof Error ? err.message : "Failed to save booking status",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -778,7 +999,8 @@ export function BookingTab({ accountId }: BookingTabProps) {
                   <TableBody>
                     {paginatedData.map((row, index) => {
                       try {
-                        const currentStatus = getStatusForRow(row);
+                        const originalRow = (row as any)._originalRow;
+                        const currentStatus = getStatusForRow(row, originalRow);
                         return (
                           <TableRow key={index}>
                             {columns.map((column) => (
