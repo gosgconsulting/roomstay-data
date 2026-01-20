@@ -2,10 +2,33 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const openRouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
+// Using anthropic/claude-3-haiku as it's fast, reliable, and cost-effective
+// Alternative options: 'openai/gpt-4o-mini', 'google/gemini-flash-1.5', 'meta-llama/llama-3.1-8b-instruct:free'
+const AI_MODEL = 'anthropic/claude-3-haiku';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// Base CORS headers - dynamically handle requested headers
+const getCorsHeaders = (req?: Request) => {
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE, PATCH',
+    'Access-Control-Max-Age': '86400',
+  };
+
+  // For preflight requests, echo back the requested headers
+  if (req) {
+    const requestedHeaders = req.headers.get('Access-Control-Request-Headers');
+    if (requestedHeaders) {
+      headers['Access-Control-Allow-Headers'] = requestedHeaders;
+    } else {
+      // Default headers if none requested
+      headers['Access-Control-Allow-Headers'] = 'authorization, x-client-info, apikey, content-type, x-supabase-client-info';
+    }
+  } else {
+    // For regular responses, include common headers
+    headers['Access-Control-Allow-Headers'] = 'authorization, x-client-info, apikey, content-type, x-supabase-client-info';
+  }
+
+  return headers;
 };
 
 interface ReportMetrics {
@@ -223,7 +246,8 @@ async function handleMinimalDataSummary(
   selectedYear: string | undefined,
   selectedMonth: string | undefined,
   comparisonType: 'previous_period' | 'previous_year' | 'both',
-  aiPrompt: string
+  aiPrompt: string,
+  corsHeaders: Record<string, string>
 ): Promise<Response> {
   const { view, period, metrics, comparison } = minimalData;
   
@@ -306,7 +330,7 @@ Focus on strategic insights, not just restating the numbers.`;
         'X-Title': 'AI Summary Generator'
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-exp:free',
+        model: AI_MODEL,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
@@ -345,9 +369,15 @@ Focus on strategic insights, not just restating the numbers.`;
 }
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { 
+      status: 204,
+      headers: getCorsHeaders(req) 
+    });
   }
+
+  const corsHeaders = getCorsHeaders();
 
   try {
     if (!openRouterApiKey) {
@@ -378,7 +408,7 @@ serve(async (req) => {
 
     // Handle minimal data path (from slide view)
     if (minimalData) {
-      return handleMinimalDataSummary(minimalData, selectedTab, selectedYear, selectedMonth, comparisonType, aiPrompt);
+      return handleMinimalDataSummary(minimalData, selectedTab, selectedYear, selectedMonth, comparisonType, aiPrompt, corsHeaders);
     }
 
     if (!pivotData) {
@@ -403,7 +433,7 @@ serve(async (req) => {
           'X-Title': 'AI Table Comments'
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.0-flash-exp:free',
+          model: AI_MODEL,
           messages: [
             { role: 'system', content: tableCommentPrompt },
             { role: 'user', content: aiPrompt }
@@ -639,7 +669,7 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
             'X-Title': 'AI Summary Generator'
           },
           body: JSON.stringify({
-            model: 'google/gemini-2.0-flash-exp:free',
+            model: AI_MODEL,
             messages: [
               { role: 'system', content: getSystemPrompt(tab.label, tab.key) },
               { role: 'user', content: `Please analyze the following ${tab.label} performance data and generate an executive summary.\n\n${dataContext}` }
@@ -706,7 +736,7 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
               'X-Title': 'AI Table Insights'
             },
             body: JSON.stringify({
-              model: 'google/gemini-2.0-flash-exp:free',
+              model: AI_MODEL,
               messages: [
                 { role: 'system', content: `You are a senior digital marketing strategist providing performance analysis. The data in the table is self-explanatory, so DO NOT simply restate the numbers. Instead, provide strategic insights about:
 
@@ -761,7 +791,7 @@ Use +/- signs when mentioning percentage changes. Focus on strategic implication
               'X-Title': 'AI Table Insights'
             },
             body: JSON.stringify({
-              model: 'google/gemini-2.0-flash-exp:free',
+              model: AI_MODEL,
               messages: [
                 { role: 'system', content: `You are a senior digital marketing strategist analyzing ${periodType} performance trends. The data in the table shows ${periodType} breakdowns - do NOT simply restate these numbers. Instead, provide strategic insights about:
 
@@ -849,7 +879,7 @@ Focus on the story the data tells about performance trajectory, not just restati
                   'X-Title': 'AI Table Insights'
                 },
                 body: JSON.stringify({
-                  model: 'google/gemini-2.0-flash-exp:free',
+                  model: AI_MODEL,
                   messages: [
                     { role: 'system', content: `You are a senior digital marketing strategist analyzing ${reportName} performance by ${dimensionName}. The data shows breakdown by ${dimensionName} - do NOT simply restate these numbers. Instead, provide strategic insights about:
 
