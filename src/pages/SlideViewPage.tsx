@@ -3792,6 +3792,12 @@ export default function SlideViewPage() {
       // Get current month row data to calculate channel portions
       const currentRow = budgetMonthlyData.find(r => r.month === editingBudget.month);
       
+      // Calculate total current budget across all hotels for this month
+      const totalCurrentBudget = existingBudgets.reduce((sum, budget) => {
+        const currentBudgetData = (budget.budget_data || {}) as Record<string, number>;
+        return sum + (currentBudgetData[monthKey] || 0);
+      }, 0);
+      
       // Update all hotel budgets for this view
       const updates = existingBudgets.map(budget => {
         const currentBudgetData = (budget.budget_data || {}) as Record<string, number>;
@@ -3801,14 +3807,29 @@ export default function SlideViewPage() {
         
         if (editingBudget.channel === null) {
           // Overview: set total budget (will be distributed evenly across channels)
-          newMonthBudget = newBudget;
+          // Distribute proportionally across hotels based on their current share
+          if (totalCurrentBudget > 0) {
+            const hotelProportion = currentMonthBudget / totalCurrentBudget;
+            newMonthBudget = newBudget * hotelProportion;
+          } else {
+            // If no current budget, distribute evenly
+            newMonthBudget = newBudget / existingBudgets.length;
+          }
         } else {
           // Channel-specific: calculate new total based on channel portion
           // Budgets are stored as total per hotel, distributed evenly (1/3 each channel)
-          // So if we're editing a channel's portion, we need to calculate the new total
-          const currentChannelPortion = currentMonthBudget / 3; // Each channel gets 1/3
-          const otherChannelsTotal = currentMonthBudget - currentChannelPortion;
-          newMonthBudget = newBudget * 3; // Multiply by 3 to get total (since each channel is 1/3)
+          // User enters the desired channel budget (already aggregated across all hotels)
+          // We need to calculate what each hotel should have proportionally
+          const desiredTotalBudget = newBudget * 3; // Total across all hotels for all channels
+          
+          if (totalCurrentBudget > 0) {
+            // Distribute proportionally based on each hotel's current share
+            const hotelProportion = currentMonthBudget / totalCurrentBudget;
+            newMonthBudget = desiredTotalBudget * hotelProportion;
+          } else {
+            // If no current budget, distribute evenly
+            newMonthBudget = desiredTotalBudget / existingBudgets.length;
+          }
         }
 
         return {
