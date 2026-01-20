@@ -58,6 +58,7 @@ export function BookingTab({ accountId }: BookingTabProps) {
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [statusDimensionId, setStatusDimensionId] = useState<string | null>(null);
   const [bookingReportId, setBookingReportId] = useState<string | null>(null);
+  const [availableYearsState, setAvailableYearsState] = useState<number[]>([currentYear]);
 
   useEffect(() => {
     const loadBookingData = async () => {
@@ -242,6 +243,137 @@ export function BookingTab({ accountId }: BookingTabProps) {
           });
           setHotelOptions(Array.from(hotels).sort());
         }
+
+        // Extract available years from checkout date column
+        // Try multiple ways to find checkout date column
+        const checkoutDateColumnName = columnNames.find(col => {
+          const colLower = col.toLowerCase();
+          return colLower.includes('checkout') || colLower.includes('check-out') || colLower.includes('departure');
+        });
+        
+        // Also find checkout date dimension ID for direct lookup
+        const checkoutDateDimensionId = Object.entries(dimensionIdToNameMap).find(([_, name]) => {
+          const nameLower = name?.toLowerCase() || '';
+          return nameLower.includes('checkout') || nameLower.includes('check-out') || nameLower.includes('departure');
+        })?.[0];
+        
+        console.log('[BookingTab] Extracting years:', {
+          checkoutDateColumnName,
+          checkoutDateDimensionId,
+          totalRows: transformedRows.length,
+          columnNames,
+        });
+        
+        const years = new Set<number>();
+        years.add(currentYear); // Always include current year
+        
+        // Extract years from transformed rows using column name
+        if (checkoutDateColumnName) {
+          transformedRows.forEach((row, index) => {
+            const dateValue = row[checkoutDateColumnName];
+            if (dateValue !== null && dateValue !== undefined && dateValue !== '') {
+              try {
+                // Try parsing as Date object or string
+                let date: Date;
+                if (dateValue instanceof Date) {
+                  date = dateValue;
+                } else if (typeof dateValue === 'string') {
+                  // Try ISO format first, then other formats
+                  if (dateValue.match(/^\d{4}-\d{2}-\d{2}/)) {
+                    date = new Date(dateValue);
+                  } else {
+                    date = new Date(dateValue);
+                  }
+                } else {
+                  date = new Date(dateValue);
+                }
+                
+                if (!isNaN(date.getTime())) {
+                  const year = date.getFullYear();
+                  years.add(year);
+                  if (index < 5) {
+                    console.log(`[BookingTab] Row ${index}: Found year ${year} from column ${checkoutDateColumnName}:`, dateValue, '->', date);
+                  }
+                } else {
+                  if (index < 5) {
+                    console.warn(`[BookingTab] Row ${index}: Invalid date from column:`, dateValue);
+                  }
+                }
+              } catch (err) {
+                if (index < 5) {
+                  console.warn(`[BookingTab] Row ${index}: Failed to parse date:`, dateValue, err);
+                }
+              }
+            }
+          });
+        }
+        
+        // Also try extracting from dimension_values directly (fallback and primary method)
+        if (checkoutDateDimensionId) {
+          transformedRows.forEach((row, index) => {
+            const originalRow = (row as any)._originalRow;
+            if (originalRow?.dimension_values) {
+              const dateValue = originalRow.dimension_values[checkoutDateDimensionId];
+              if (dateValue !== null && dateValue !== undefined && dateValue !== '') {
+                try {
+                  let date: Date;
+                  if (dateValue instanceof Date) {
+                    date = dateValue;
+                  } else if (typeof dateValue === 'string') {
+                    if (dateValue.match(/^\d{4}-\d{2}-\d{2}/)) {
+                      date = new Date(dateValue);
+                    } else {
+                      date = new Date(dateValue);
+                    }
+                  } else {
+                    date = new Date(dateValue);
+                  }
+                  
+                  if (!isNaN(date.getTime())) {
+                    const year = date.getFullYear();
+                    years.add(year);
+                    if (index < 5) {
+                      console.log(`[BookingTab] Row ${index}: Found year ${year} from dimension_values:`, dateValue, '->', date);
+                    }
+                  }
+                } catch (err) {
+                  if (index < 5) {
+                    console.warn(`[BookingTab] Row ${index}: Failed to parse date from dimension_values:`, dateValue, err);
+                  }
+                }
+              }
+            }
+          });
+        }
+        
+        // If still no years found, try all date-like columns
+        if (years.size <= 1) {
+          console.log('[BookingTab] Trying to find years from all date-like columns');
+          columnNames.forEach(colName => {
+            const colLower = colName.toLowerCase();
+            if (colLower.includes('date') || colLower.includes('checkout') || colLower.includes('departure')) {
+              transformedRows.slice(0, 10).forEach((row, index) => {
+                const dateValue = row[colName];
+                if (dateValue) {
+                  try {
+                    const date = new Date(dateValue);
+                    if (!isNaN(date.getTime())) {
+                      const year = date.getFullYear();
+                      years.add(year);
+                      console.log(`[BookingTab] Row ${index}: Found year ${year} from column ${colName}:`, dateValue);
+                    }
+                  } catch {
+                    // Ignore
+                  }
+                }
+              });
+            }
+          });
+        }
+        
+        const yearsArray = Array.from(years).sort((a, b) => b - a); // Descending order
+        console.log('[BookingTab] Extracted years:', yearsArray);
+        setAvailableYearsState(yearsArray.length > 0 ? yearsArray : [currentYear]);
 
         setColumns(columnNames);
         setAllBookingData(transformedRows);
@@ -716,42 +848,292 @@ export function BookingTab({ accountId }: BookingTabProps) {
   const filteredBookingData = useMemo(() => {
     let filtered = [...allBookingData];
 
+    console.log('[BookingTab] Filtering data:', {
+      totalRows: allBookingData.length,
+      selectedYear,
+      selectedMonth,
+      selectedHotels: selectedHotels.length,
+      checkoutDateColumn: getCheckoutDateColumn,
+      columns: columns.slice(0, 5), // Show first 5 columns for debugging
+    });
+
     // Filter by Hotels (multi-select)
     if (selectedHotels.length > 0) {
+      const beforeCount = filtered.length;
       filtered = filtered.filter(row => {
-        const hotelValue = row['Hotel'];
+        const hotelValue = row['Hotel'] || row['hotel'];
         if (hotelValue === undefined || hotelValue === null) return false;
         return selectedHotels.includes(String(hotelValue).trim());
       });
+      console.log('[BookingTab] Hotel filter:', { before: beforeCount, after: filtered.length });
     }
 
-    // Filter by Checkout Date (Year/Month) - always filter by selected year and month
-    const checkoutDateColumn = getCheckoutDateColumn;
+    // Filter by Checkout Date (Year/Month) - only filter if we can find checkout dates
+    // First, find checkout date column by searching all columns
+    let checkoutDateColumn: string | undefined = getCheckoutDateColumn;
     
-    if (checkoutDateColumn && selectedYear && selectedMonth) {
-      const monthNum = MONTH_NAMES.indexOf(selectedMonth);
-      const yearNum = parseInt(selectedYear);
-      const dateRange = {
-        start: new Date(yearNum, monthNum, 1),
-        end: new Date(yearNum, monthNum + 1, 0, 23, 59, 59),
-      };
-
-      filtered = filtered.filter(row => {
-        const dateValue = row[checkoutDateColumn];
-        if (!dateValue) return false;
-        
-        try {
-          const rowDate = new Date(dateValue);
-          if (isNaN(rowDate.getTime())) return false;
-          return isWithinInterval(rowDate, dateRange);
-        } catch {
-          return false;
-        }
+    // If not found, search through all columns for checkout-related names
+    if (!checkoutDateColumn) {
+      checkoutDateColumn = columns.find(col => {
+        const colLower = col.toLowerCase();
+        return colLower.includes('checkout') || 
+               colLower.includes('check-out') || 
+               colLower.includes('check out') ||
+               colLower.includes('departure');
       });
     }
+    
+    // Find checkout date dimension ID for reliable lookup
+    const checkoutDateDimensionId = Object.entries(dimensionNameToIdMap).find(([_, name]) => {
+      const nameLower = name?.toLowerCase() || '';
+      return nameLower.includes('checkout') || 
+             nameLower.includes('check-out') || 
+             nameLower.includes('check out') ||
+             nameLower.includes('departure');
+    })?.[1];
+    
+    // Find all possible checkout date column names
+    const checkoutDateColumnNames = [
+      checkoutDateColumn,
+      'Checkout Date',
+      'Checkout',
+      'checkout',
+      'Check-out Date',
+      'Check-out',
+      'Check Out Date',
+      'Departure Date',
+      'Departure',
+    ].filter(Boolean) as string[];
+    
+    console.log('[BookingTab] Looking for checkout date:', {
+      getCheckoutDateColumn,
+      foundCheckoutDateColumn: checkoutDateColumn,
+      checkoutDateDimensionId,
+      checkoutDateColumnNames,
+      allColumns: columns,
+    });
+    
+    // Check if we can find checkout dates in the data
+    let canFilterByDate = false;
+    // Sample a few rows to see if we can find checkout dates
+    for (let i = 0; i < Math.min(10, filtered.length); i++) {
+      const row = filtered[i];
+      let dateValue: any = null;
+      
+      // Try column name first
+      if (checkoutDateColumn) {
+        dateValue = row[checkoutDateColumn];
+      }
+      
+      // Try all possible column name variations
+      if (!dateValue) {
+        for (const colName of checkoutDateColumnNames) {
+          if (row[colName]) {
+            dateValue = row[colName];
+            break;
+          }
+        }
+      }
+      
+      // Try dimension_values
+      if (!dateValue && checkoutDateDimensionId) {
+        const originalRow = (row as any)._originalRow;
+        if (originalRow?.dimension_values) {
+          dateValue = originalRow.dimension_values[checkoutDateDimensionId];
+        }
+      }
+      
+      // Try searching all dimension_values for any date-like value
+      if (!dateValue) {
+        const originalRow = (row as any)._originalRow;
+        if (originalRow?.dimension_values) {
+          // Look for any dimension that might be a checkout date
+          // dimensionNameToIdMap maps name -> id
+          for (const [dimName, dimId] of Object.entries(dimensionNameToIdMap)) {
+            const dimNameLower = dimName.toLowerCase();
+            if ((dimNameLower.includes('checkout') || 
+                 dimNameLower.includes('check-out') || 
+                 dimNameLower.includes('check out') ||
+                 dimNameLower.includes('departure')) &&
+                originalRow.dimension_values[dimId]) {
+              dateValue = originalRow.dimension_values[dimId];
+              break;
+            }
+          }
+        }
+      }
+      
+      if (dateValue) {
+        canFilterByDate = true;
+        if (i < 3) {
+          console.log(`[BookingTab] Found checkout date in row ${i}:`, dateValue);
+        }
+        break;
+      }
+    }
+    
+    console.log('[BookingTab] Can filter by date:', canFilterByDate);
+    
+    if (selectedYear && selectedMonth && canFilterByDate) {
+      const monthNum = MONTH_NAMES.indexOf(selectedMonth);
+      const yearNum = parseInt(selectedYear);
+      
+      if (isNaN(monthNum) || isNaN(yearNum)) {
+        console.warn('[BookingTab] Invalid year/month for filtering:', { selectedYear, selectedMonth, monthNum, yearNum });
+      } else {
+        const dateRange = {
+          start: new Date(yearNum, monthNum, 1),
+          end: new Date(yearNum, monthNum + 1, 0, 23, 59, 59),
+        };
 
+        const beforeCount = filtered.length;
+        
+        console.log('[BookingTab] Date filter setup:', {
+          checkoutDateColumn,
+          checkoutDateDimensionId,
+          checkoutDateColumnNames,
+          dateRange: {
+            start: dateRange.start.toISOString(),
+            end: dateRange.end.toISOString(),
+          },
+        });
+        
+        let foundDatesCount = 0;
+        let matchedDatesCount = 0;
+        let missingDatesCount = 0;
+        let parseErrorCount = 0;
+        const sampleDates: string[] = [];
+        
+        // Try multiple ways to get the checkout date
+        filtered = filtered.filter((row, index) => {
+          let dateValue: any = null;
+          
+          // First try the found checkout date column
+          if (checkoutDateColumn) {
+            dateValue = row[checkoutDateColumn];
+          }
+          
+          // If not found, try common variations
+          if (!dateValue) {
+            for (const colName of checkoutDateColumnNames) {
+              if (row[colName]) {
+                dateValue = row[colName];
+                break;
+              }
+            }
+          }
+          
+          // If still not found, try to get from original row's dimension_values using dimension ID
+          if (!dateValue && checkoutDateDimensionId) {
+            const originalRow = (row as any)._originalRow;
+            if (originalRow?.dimension_values) {
+              dateValue = originalRow.dimension_values[checkoutDateDimensionId];
+            }
+          }
+          
+          // Last resort: search all dimension_values for checkout-related dimensions
+          if (!dateValue) {
+            const originalRow = (row as any)._originalRow;
+            if (originalRow?.dimension_values) {
+              // Search through all dimensions to find checkout date
+              // dimensionNameToIdMap maps name -> id, so we need to check if any name matches checkout
+              for (const [dimName, dimId] of Object.entries(dimensionNameToIdMap)) {
+                const dimNameLower = dimName.toLowerCase();
+                if ((dimNameLower.includes('checkout') || 
+                     dimNameLower.includes('check-out') || 
+                     dimNameLower.includes('check out') ||
+                     dimNameLower.includes('departure')) &&
+                    originalRow.dimension_values[dimId]) {
+                  dateValue = originalRow.dimension_values[dimId];
+                  break;
+                }
+              }
+            }
+          }
+          
+          if (!dateValue) {
+            missingDatesCount++;
+            if (index < 3) {
+              console.log(`[BookingTab] Row ${index}: No checkout date found`, {
+                rowKeys: Object.keys(row).slice(0, 10),
+                hasOriginalRow: !!(row as any)._originalRow,
+                dimensionValuesKeys: (row as any)._originalRow?.dimension_values ? Object.keys((row as any)._originalRow.dimension_values).slice(0, 10) : null,
+              });
+            }
+            return false; // Filter out rows without checkout date
+          }
+          
+          foundDatesCount++;
+          
+          try {
+            let rowDate: Date;
+            if (dateValue instanceof Date) {
+              rowDate = dateValue;
+            } else if (typeof dateValue === 'string') {
+              // Handle ISO format and other string formats
+              rowDate = new Date(dateValue);
+            } else {
+              rowDate = new Date(dateValue);
+            }
+            
+            if (isNaN(rowDate.getTime())) {
+              parseErrorCount++;
+              if (index < 3) {
+                console.warn(`[BookingTab] Row ${index}: Invalid date:`, dateValue);
+              }
+              return false;
+            }
+            
+            // Store sample dates for debugging
+            if (sampleDates.length < 5) {
+              sampleDates.push(`${rowDate.toISOString()} (${rowDate.getFullYear()}-${rowDate.getMonth() + 1})`);
+            }
+            
+            const isInRange = isWithinInterval(rowDate, dateRange);
+            if (isInRange) {
+              matchedDatesCount++;
+            } else {
+              if (index < 3) {
+                console.log(`[BookingTab] Row ${index}: Date out of range`, {
+                  rowDate: rowDate.toISOString(),
+                  dateRange: {
+                    start: dateRange.start.toISOString(),
+                    end: dateRange.end.toISOString(),
+                  },
+                  rowYear: rowDate.getFullYear(),
+                  rowMonth: rowDate.getMonth() + 1, // getMonth() is 0-indexed
+                  selectedYear: yearNum,
+                  selectedMonth: monthNum + 1, // monthNum is 0-indexed
+                });
+              }
+            }
+            return isInRange;
+          } catch (err) {
+            parseErrorCount++;
+            if (index < 3) {
+              console.warn(`[BookingTab] Row ${index}: Date parsing error:`, dateValue, err);
+            }
+            return false;
+          }
+        });
+        
+        console.log('[BookingTab] Date filter results:', { 
+          before: beforeCount, 
+          after: filtered.length,
+          foundDates: foundDatesCount,
+          matchedDates: matchedDatesCount,
+          missingDates: missingDatesCount,
+          parseErrors: parseErrorCount,
+          sampleDates,
+        });
+      }
+    } else if (selectedYear && selectedMonth && !canFilterByDate) {
+      console.warn('[BookingTab] Cannot filter by date - checkout date column not found in data');
+    }
+
+    console.log('[BookingTab] Final filtered count:', filtered.length);
     return filtered;
-  }, [allBookingData, selectedYear, selectedMonth, selectedHotels, columns, getCheckoutDateColumn]);
+  }, [allBookingData, selectedYear, selectedMonth, selectedHotels, columns, getCheckoutDateColumn, dimensionNameToIdMap]);
 
   // Paginate filtered data
   const paginatedData = useMemo(() => {
@@ -780,35 +1162,8 @@ export function BookingTab({ accountId }: BookingTabProps) {
     return String(value);
   };
 
-  // Get available years from checkout date data
-  const availableYears = useMemo(() => {
-    const years = new Set<number>();
-    const checkoutDateColumn = getCheckoutDateColumn;
-
-    // Always include current year to ensure it's always available
-    years.add(currentYear);
-
-    if (checkoutDateColumn && allBookingData.length > 0) {
-      allBookingData.forEach(row => {
-        const dateValue = row[checkoutDateColumn];
-        if (dateValue) {
-          try {
-            const date = new Date(dateValue);
-            if (!isNaN(date.getTime())) {
-              years.add(date.getFullYear());
-            }
-          } catch {
-            // Ignore invalid dates
-          }
-        }
-      });
-    }
-
-    const yearsArray = Array.from(years).sort((a, b) => b - a); // Descending order
-    
-    // If no years found in data, at least return current year
-    return yearsArray.length > 0 ? yearsArray : [currentYear];
-  }, [allBookingData, getCheckoutDateColumn, currentYear]);
+  // Use availableYears from state (computed during data loading)
+  const availableYears = availableYearsState;
 
   // Ensure selectedYear is valid when availableYears changes
   useEffect(() => {
@@ -915,23 +1270,28 @@ export function BookingTab({ accountId }: BookingTabProps) {
                     <div className="space-y-1 p-1">
                       {filteredHotels.map(hotel => {
                         const isSelected = pendingHotels.includes(hotel);
+                        const handleToggle = () => {
+                          const newHotels = isSelected
+                            ? pendingHotels.filter(h => h !== hotel)
+                            : [...pendingHotels, hotel];
+                          setPendingHotels(newHotels);
+                        };
                         return (
                           <div
                             key={hotel}
                             className="group flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent text-sm relative"
-                            onClick={() => {
-                              const newHotels = isSelected
-                                ? pendingHotels.filter(h => h !== hotel)
-                                : [...pendingHotels, hotel];
-                              setPendingHotels(newHotels);
-                            }}
+                            onClick={handleToggle}
                           >
                             <Checkbox 
                               checked={isSelected} 
-                              onCheckedChange={() => {}}
-                              onClick={(e) => e.stopPropagation()}
+                              onCheckedChange={handleToggle}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggle();
+                              }}
+                              className="pointer-events-auto"
                             />
-                            <span className="truncate flex-1">{hotel}</span>
+                            <span className="truncate flex-1" onClick={(e) => e.stopPropagation()}>{hotel}</span>
                             <Button
                               variant="outline"
                               size="sm"
