@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { AISummaryButton } from "./AISummaryButton";
+import { AISummaryDisplay } from "./AISummaryDisplay";
 
 interface Dimension {
   id: string;

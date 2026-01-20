@@ -8,6 +8,7 @@ import { Settings2, Eye, MousePointer, DollarSign, Percent, TrendingUp, Shopping
 import { SlideReport } from "@/types/slideReports";
 import { calculateDerivedMetrics, formatNumber } from "@/lib/slideViewHelpers";
 import { AISummaryButton } from "./AISummaryButton";
+import { AISummaryDisplay } from "./AISummaryDisplay";
 
 interface OverviewTabProps {
   slideReportId: string | null;

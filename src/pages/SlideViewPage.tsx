@@ -4269,6 +4269,7 @@ export default function SlideViewPage() {
               KPI_CARDS={KPI_CARDS}
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
               isAISummaryDisabled={!slideReport?.pivot_data || selectedYear === 'all' || selectedMonth === 'all'}
+              summaryText={summaries.find(s => s.tab === 'overview' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
             />
 
             <ChannelTab
@@ -4292,7 +4293,7 @@ export default function SlideViewPage() {
               selectedMonth={selectedMonth}
               filterValues={filterValues}
               filterDimensionValues={filterDimensionValues}
-              summaryText={summaries.find(s => s.tab === 'metasearch' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId || s.view_id === selectedViewId))?.summary_text}
+              summaryText={summaries.find(s => s.tab === 'metasearch' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
               breakdownDimensions={breakdownDimensions}
               breakdownConfigs={breakdownConfigs}
               renderKPICards={renderKPICards}
@@ -4336,7 +4337,7 @@ export default function SlideViewPage() {
               UnifiedBreakdownTable={UnifiedBreakdownTable}
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
               isAISummaryDisabled={!slideReport?.pivot_data || selectedYear === 'all' || selectedMonth === 'all'}
-              summaryText={summaries.find(s => s.tab === 'sem' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId || s.view_id === selectedViewId))?.summary_text}
+              summaryText={summaries.find(s => s.tab === 'sem' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
             />
 
             <ChannelTab
@@ -4370,6 +4371,7 @@ export default function SlideViewPage() {
               UnifiedBreakdownTable={UnifiedBreakdownTable}
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
               isAISummaryDisabled={!slideReport?.pivot_data || selectedYear === 'all' || selectedMonth === 'all'}
+              summaryText={summaries.find(s => s.tab === 'social' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
             />
 
             <BudgetTab
