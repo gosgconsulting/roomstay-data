@@ -67,17 +67,49 @@ export function useSaveSlideReportSummary() {
         user_id: session.user.id,
       };
 
-      // Use upsert to update if exists, insert if not
-      const { data, error } = await supabase
+      // Check if a summary already exists for this combination
+      // Handle NULL view_id by checking both NULL and the actual value
+      let existingQuery = supabase
         .from('slide_report_summaries')
-        .upsert(summaryData, {
-          onConflict: 'slide_report_id,tab,selected_year,selected_month,COALESCE(view_id, \'00000000-0000-0000-0000-000000000000\'::uuid)',
-        })
-        .select()
-        .single();
+        .select('id')
+        .eq('slide_report_id', params.slide_report_id)
+        .eq('tab', params.tab)
+        .eq('selected_year', params.selected_year)
+        .eq('selected_month', params.selected_month);
 
-      if (error) throw error;
-      return data as SlideReportSummary;
+      if (params.view_id) {
+        existingQuery = existingQuery.eq('view_id', params.view_id);
+      } else {
+        existingQuery = existingQuery.is('view_id', null);
+      }
+
+      const { data: existing } = await existingQuery.single();
+
+      let result;
+      if (existing) {
+        // Update existing record
+        const { data, error } = await supabase
+          .from('slide_report_summaries')
+          .update(summaryData)
+          .eq('id', existing.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        result = data;
+      } else {
+        // Insert new record
+        const { data, error } = await supabase
+          .from('slide_report_summaries')
+          .insert(summaryData)
+          .select()
+          .single();
+
+        if (error) throw error;
+        result = data;
+      }
+
+      return result as SlideReportSummary;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['slideReportSummaries', data.slide_report_id] });

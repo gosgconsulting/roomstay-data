@@ -44,11 +44,13 @@ export function SlideViewAISummaryModal({
   pivotData,
   availableViews,
   views,
+  slideReportId,
 }: SlideViewAISummaryModalProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   const [comparisonType, setComparisonType] = useState<ComparisonOption>("previous_year");
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
+  const saveSummaryMutation = useSaveSlideReportSummary();
 
   // Get the selected view
   const selectedView = useMemo(() => {
@@ -94,44 +96,59 @@ export function SlideViewAISummaryModal({
       let useAlgorithm = false;
       let aiSummary: string | null = null;
 
-      try {
-        const response = await fetch(
-          'https://zcxxwpwheevwavdcgfht.supabase.co/functions/v1/generate-ai-summary',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.access_token}`,
-              'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpjeHh3cHdoZWV2d2F2ZGNnZmh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE4Mzg1MjAsImV4cCI6MjA3NzQxNDUyMH0.zKmexYsPTkNWa65kjH5H6_aMosY9rHHj0lqg8j4T3Lc',
-            },
-            body: JSON.stringify({
-              minimalData: minimalData,
-              selectedTab: selectedTab,
-              selectedYear: selectedView ? selectedView.selected_year : selectedYear,
-              selectedMonth: selectedView ? selectedView.selected_month : selectedMonth,
-              comparisonType: comparisonType,
-              isTableComment: false,
-              aiPrompt: `Analyze the following ${selectedTab === 'overview' ? 'overview' : selectedTab.toUpperCase()} performance data for ${selectedView ? `${selectedView.selected_month} ${selectedView.selected_year}` : `${selectedMonth} ${selectedYear}`}${selectedView ? ` (View: ${selectedView.name})` : ''}. Provide a concise executive summary focusing on key metrics, trends, and actionable insights.`,
-            }),
-          }
-        );
+      // Log minimalData to debug comparison data
+      console.log('[AI Summary] Minimal data:', {
+        hasComparison: !!minimalData.comparison,
+        previousPeriod: minimalData.comparison?.previous_period,
+        previousYear: minimalData.comparison?.previous_year,
+        metrics: Object.keys(minimalData.metrics),
+        comparisonType,
+      });
+      
+      // Log pivotData to check if comparison data exists
+      if (pivotData) {
+        console.log('[AI Summary] PivotData comparison check:', {
+          hasOverview: !!pivotData.overview,
+          overviewPreviousPeriod: pivotData.overview?.previous_period,
+          overviewPreviousYear: pivotData.overview?.previous_year,
+          channelPreviousPeriod: pivotData.channels[selectedTab]?.previous_period,
+          channelPreviousYear: pivotData.channels[selectedTab]?.previous_year,
+        });
+      }
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("Error calling AI function:", response.status, errorText);
+      try {
+        // Use supabase.functions.invoke for proper authentication
+        const { data: result, error: invokeError } = await supabase.functions.invoke('generate-ai-summary', {
+          body: {
+            minimalData: minimalData,
+            selectedTab: selectedTab,
+            selectedYear: selectedView ? selectedView.selected_year : selectedYear,
+            selectedMonth: selectedView ? selectedView.selected_month : selectedMonth,
+            comparisonType: comparisonType,
+            isTableComment: false,
+            aiPrompt: `Analyze the following ${selectedTab === 'overview' ? 'overview' : selectedTab.toUpperCase()} performance data for ${selectedView ? `${selectedView.selected_month} ${selectedView.selected_year}` : `${selectedMonth} ${selectedYear}`}${selectedView ? ` (View: ${selectedView.name})` : ''}. Provide a concise executive summary focusing on key metrics, trends, and actionable insights.`,
+          },
+        });
+
+        if (invokeError) {
+          console.error("Error calling AI function:", invokeError);
+          const errorMessage = invokeError.message || invokeError.toString();
+          if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+            toast.error("Authentication error: Please refresh the page and try again");
+          } else {
+            toast.error(`API error: ${errorMessage}`);
+          }
+          useAlgorithm = true;
+        } else if (result?.error) {
+          console.error("AI function error:", result.error);
+          toast.error(`AI error: ${result.error}`);
           useAlgorithm = true;
         } else {
-          const result = await response.json();
-
-          if (result?.error) {
-            console.error("AI function error:", result.error);
-            useAlgorithm = true;
-          } else {
-            aiSummary = result.summary || result.executiveSummary || null;
-          }
+          aiSummary = result.summary || result.executiveSummary || null;
         }
       } catch (error) {
         console.error("Network error calling AI function, using algorithm fallback:", error);
+        toast.error(`Network error: ${error instanceof Error ? error.message : 'Unknown error'}`);
         useAlgorithm = true;
       }
 
