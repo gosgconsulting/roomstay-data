@@ -912,6 +912,7 @@ export default function SlideViewPage() {
     sem: {},
     social: {},
     'price-check': {},
+    'booking': {},
   });
 
   // Filter dimension values state (for dropdowns) - channel -> dimensionId -> values[]
@@ -2842,6 +2843,7 @@ export default function SlideViewPage() {
         sem: {},
         social: {},
         'price-check': {},
+        'booking': {},
       });
       return;
     }
@@ -2877,6 +2879,7 @@ export default function SlideViewPage() {
       sem: {},
       social: {},
       'price-check': {},
+      'booking': {},
     });
 
     toast({
@@ -4400,7 +4403,19 @@ export default function SlideViewPage() {
               setPnlConfig={setPnlConfig}
             />
 
-            <BookingTab accountId={accountId} />
+            <BookingTab 
+              accountId={accountId}
+              selectedHotels={filterValues['booking']?.['hotel'] || []}
+              onHotelsChange={(hotels) => {
+                setFilterValues(prev => ({
+                  ...prev,
+                  'booking': {
+                    ...prev['booking'],
+                    hotel: hotels,
+                  },
+                }));
+              }}
+            />
 
             <PriceCheckTab 
               accountId={accountId}

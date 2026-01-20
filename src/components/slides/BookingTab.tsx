@@ -29,13 +29,15 @@ import { getOrCreateStatusDimension, findDimensionDataRow, updateBookingStatus }
 
 interface BookingTabProps {
   accountId: string | undefined;
+  selectedHotels?: string[];
+  onHotelsChange?: (hotels: string[]) => void;
 }
 
 interface BookingDataRow {
   [key: string]: any;
 }
 
-export function BookingTab({ accountId }: BookingTabProps) {
+export function BookingTab({ accountId, selectedHotels: externalSelectedHotels, onHotelsChange }: BookingTabProps) {
   const { data: userData } = useUser();
   const [allBookingData, setAllBookingData] = useState<BookingDataRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -48,7 +50,12 @@ export function BookingTab({ accountId }: BookingTabProps) {
   
   const [selectedYear, setSelectedYear] = useState<string>(currentYear.toString());
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonth);
-  const [selectedHotels, setSelectedHotels] = useState<string[]>([]); // Empty array = all hotels
+  // Internal state if not controlled externally
+  const [internalSelectedHotels, setInternalSelectedHotels] = useState<string[]>([]); // Empty array = all hotels
+  
+  // Use external state if provided, otherwise use internal
+  const selectedHotels = externalSelectedHotels !== undefined ? externalSelectedHotels : internalSelectedHotels;
+  const setSelectedHotels = onHotelsChange || setInternalSelectedHotels;
   const [hotelOptions, setHotelOptions] = useState<string[]>([]);
   const [hotelFilterOpen, setHotelFilterOpen] = useState(false);
   const [pendingHotels, setPendingHotels] = useState<string[]>([]);
@@ -424,7 +431,8 @@ export function BookingTab({ accountId }: BookingTabProps) {
   }, [hotelOptions, hotelSearchTerm]);
 
   const handleApplyHotelFilter = () => {
-    setSelectedHotels(pendingHotels.length === hotelOptions.length ? [] : pendingHotels);
+    const newHotels = pendingHotels.length === hotelOptions.length ? [] : pendingHotels;
+    setSelectedHotels(newHotels);
     setHotelFilterOpen(false);
     setHotelSearchTerm('');
   };
