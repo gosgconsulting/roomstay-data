@@ -182,6 +182,7 @@ export function BudgetTab({
             
             // Get clicks for CPC calculation
             let clicks = 0;
+            console.log('[budget] channel', channel);
             if (channel === 'overview') {
               const monthlyMetrics = pivotData?.overview?.monthly?.[monthKey];
               clicks = monthlyMetrics?.clicks || 0;
@@ -207,8 +208,8 @@ export function BudgetTab({
               <TableRow key={row.month}>
                 <TableCell className="font-medium">{row.month}</TableCell>
                 <TableCell 
-                  className="text-right cursor-pointer hover:bg-muted/50"
-                  onClick={() => handleStartEditBudget(row.month, channel === 'overview' ? null : channel, budgetRow)}
+                  className={`text-right ${channel === 'overview' ? '' : 'cursor-pointer hover:bg-muted/50'}`}
+                  onClick={channel === 'overview' ? undefined : () => handleStartEditBudget(row.month, channel, budgetRow)}
                 >
                   {isEditing ? (
                     <Input
