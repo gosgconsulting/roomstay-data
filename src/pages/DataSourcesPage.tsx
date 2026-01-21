@@ -71,6 +71,7 @@ export default function DataSourcesPage() {
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [editingNameValue, setEditingNameValue] = useState<string>("");
   const [isCreatingBookingReport, setIsCreatingBookingReport] = useState(false);
+  const [isCreatingPriceCheckReport, setIsCreatingPriceCheckReport] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -272,6 +273,77 @@ export default function DataSourcesPage() {
       });
     } finally {
       setIsCreatingBookingReport(false);
+    }
+  };
+
+  const handleCreatePriceCheckReport = async () => {
+    if (!accountId) {
+      toast({
+        title: "Error",
+        description: "Account ID is required to create a report",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!session?.user) {
+      toast({
+        title: "Error",
+        description: "You must be signed in to create a report",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreatingPriceCheckReport(true);
+    try {
+      // Check if Price Check report already exists
+      const existingReport = reports.find(r => r.name === "Price Check");
+      if (existingReport) {
+        toast({
+          title: "Report already exists",
+          description: "A Price Check report already exists. Please select it from the list.",
+        });
+        setSelectedReportId(existingReport.id);
+        setShowReportSelectionModal(false);
+        setShowUnifiedDataSourceModal(true);
+        setIsCreatingPriceCheckReport(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('reports')
+        .insert({
+          name: "Price Check",
+          user_id: session.user.id,
+          account_id: accountId
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Refresh reports list
+      await loadReports();
+      
+      // Auto-select the newly created report
+      setSelectedReportId(data.id);
+      setShowReportSelectionModal(false);
+      setShowUnifiedDataSourceModal(true);
+
+      toast({
+        title: "Report created",
+        description: "Price Check report created successfully",
+      });
+    } catch (error) {
+      console.error("Error creating Price Check report:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create Price Check report",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingPriceCheckReport(false);
     }
   };
 
@@ -698,7 +770,7 @@ export default function DataSourcesPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="pt-2 border-t">
+            <div className="pt-2 border-t space-y-2">
               <Button
                 variant="outline"
                 className="w-full"
@@ -714,6 +786,24 @@ export default function DataSourcesPage() {
                   <>
                     <Plus className="h-4 w-4 mr-2" />
                     Create Booking Report
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleCreatePriceCheckReport}
+                disabled={isCreatingPriceCheckReport}
+              >
+                {isCreatingPriceCheckReport ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Creating Price Check Report...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Price Check Report
                   </>
                 )}
               </Button>
