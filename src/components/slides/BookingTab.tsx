@@ -1278,28 +1278,28 @@ export function BookingTab({ accountId, selectedHotels: externalSelectedHotels, 
                     <div className="space-y-1 p-1">
                       {filteredHotels.map(hotel => {
                         const isSelected = pendingHotels.includes(hotel);
-                        const handleToggle = () => {
-                          const newHotels = isSelected
-                            ? pendingHotels.filter(h => h !== hotel)
-                            : [...pendingHotels, hotel];
-                          setPendingHotels(newHotels);
-                        };
                         return (
                           <div
                             key={hotel}
                             className="group flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent text-sm relative"
-                            onClick={handleToggle}
+                            onClick={() => {
+                              const newHotels = isSelected
+                                ? pendingHotels.filter(h => h !== hotel)
+                                : [...pendingHotels, hotel];
+                              setPendingHotels(newHotels);
+                            }}
                           >
                             <Checkbox 
                               checked={isSelected} 
-                              onCheckedChange={handleToggle}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleToggle();
+                              onCheckedChange={(checked) => {
+                                const newHotels = checked
+                                  ? [...pendingHotels, hotel]
+                                  : pendingHotels.filter(h => h !== hotel);
+                                setPendingHotels(newHotels);
                               }}
-                              className="pointer-events-auto"
+                              onClick={(e) => e.stopPropagation()}
                             />
-                            <span className="truncate flex-1" onClick={(e) => e.stopPropagation()}>{hotel}</span>
+                            <span className="truncate flex-1">{hotel}</span>
                             <Button
                               variant="outline"
                               size="sm"

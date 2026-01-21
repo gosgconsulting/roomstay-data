@@ -7,7 +7,7 @@
  * @module PriceCheckChart
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -18,6 +18,7 @@ import {
   getDateRangeForTimeRange,
   filterByDateRange,
   groupByMonth,
+  type PriceCheckDataRow,
 } from '@/lib/priceCheckData';
 
 /**
@@ -37,6 +38,8 @@ interface PriceCheckChartProps {
   onTimeRangeChange: (range: ChartTimeRange) => void;
   /** Selected hotel filter(s) - array of hotel names, or empty array for all hotels */
   selectedHotels: string[];
+  /** Account ID for fetching data */
+  accountId?: string;
   /** Whether data is currently loading */
   isLoading?: boolean;
   /** Chart height in pixels (default: 200) */
@@ -78,15 +81,43 @@ export const PriceCheckChart = React.memo<PriceCheckChartProps>(
     chartTimeRange,
     onTimeRangeChange,
     selectedHotels,
-    isLoading = false,
+    accountId,
+    isLoading: externalIsLoading = false,
     height = 200,
   }) => {
+    const [priceCheckData, setPriceCheckData] = useState<PriceCheckDataRow[]>([]);
+    const [isLoadingData, setIsLoadingData] = useState(true);
+
+    // Load data from database
+    useEffect(() => {
+      const loadData = async () => {
+        if (!accountId) {
+          setIsLoadingData(false);
+          return;
+        }
+
+        setIsLoadingData(true);
+        try {
+          const data = await getAllPriceCheckData(accountId);
+          setPriceCheckData(data);
+        } catch (error) {
+          console.error('[PriceCheckChart] Error loading data:', error);
+          setPriceCheckData([]);
+        } finally {
+          setIsLoadingData(false);
+        }
+      };
+
+      loadData();
+    }, [accountId]);
+
     const chartData = useMemo(() => {
-      // Get all data
-      let data = getAllPriceCheckData();
+      if (!priceCheckData || priceCheckData.length === 0) {
+        return [];
+      }
 
       // Filter by hotel(s)
-      data = filterByHotel(selectedHotels);
+      let data = filterByHotel(priceCheckData, selectedHotels);
 
       // Filter by date range
       const dateRange = getDateRangeForTimeRange(chartTimeRange);
@@ -102,7 +133,9 @@ export const PriceCheckChart = React.memo<PriceCheckChartProps>(
         month: m.month,
         priceDiff: m.avgPriceDiff,
       }));
-    }, [chartTimeRange, selectedHotels]);
+    }, [priceCheckData, chartTimeRange, selectedHotels]);
+
+    const isLoading = externalIsLoading || isLoadingData;
 
     if (isLoading) {
       return <ChartSkeleton height={height} />;

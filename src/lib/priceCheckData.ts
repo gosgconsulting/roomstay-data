@@ -1,11 +1,11 @@
 /**
  * Price Check Data Module
  * 
- * Contains hardcoded price parity data from CSV source.
+ * Fetches price parity data from the database (Price Check report dimension_data).
  * Provides utility functions for filtering and processing the data.
  */
 
-import { PRICE_CHECK_DATA_RAW } from './priceCheckDataRaw';
+import { supabase } from "@/integrations/supabase/client";
 
 export interface PriceCheckDataRow {
   hotelName: string;
@@ -13,40 +13,220 @@ export interface PriceCheckDataRow {
   priceDiffPercent: number; // Parsed percentage value (e.g., 81.69 for "81.69%")
 }
 
-// Transform raw data to structured format
-const PRICE_CHECK_DATA: PriceCheckDataRow[] = PRICE_CHECK_DATA_RAW.map(row => ({
-  hotelName: row.hotel,
-  date: row.date,
-  priceDiffPercent: row.pct,
-}));
+// Cache for price check data
+let cachedData: PriceCheckDataRow[] | null = null;
+let cachedAccountId: string | null = null;
 
 /**
- * Get all price check data
+ * Find dimensions by name patterns (case-insensitive)
  */
-export function getAllPriceCheckData(): PriceCheckDataRow[] {
-  return PRICE_CHECK_DATA;
+function findDimensionByName(dimensions: any[], patterns: string[]): string | null {
+  for (const dim of dimensions) {
+    const name = (dim.name || '').toLowerCase();
+    for (const pattern of patterns) {
+      if (name.includes(pattern.toLowerCase())) {
+        return dim.id;
+      }
+    }
+  }
+  return null;
 }
 
 /**
- * Get unique hotel names from the data
+ * Parse percentage value from various formats
  */
-export function getUniqueHotels(): string[] {
+function parsePercentage(value: any): number {
+  if (typeof value === 'number') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    // Remove % sign and parse
+    const cleaned = value.replace('%', '').trim();
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
+/**
+ * Parse date value to YYYY-MM-DD format
+ */
+function parseDate(value: any): string | null {
+  if (!value) return null;
+  
+  try {
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return null;
+    return date.toISOString().split('T')[0];
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Load price check data from database
+ */
+export async function loadPriceCheckData(accountId: string): Promise<PriceCheckDataRow[]> {
+  // Return cached data if available for the same account
+  if (cachedData && cachedAccountId === accountId) {
+    return cachedData;
+  }
+
+  try {
+    // Find the Price Check report for this account
+    const { data: priceCheckReport, error: reportError } = await supabase
+      .from('reports')
+      .select('id')
+      .eq('account_id', accountId)
+      .eq('name', 'Price Check')
+      .maybeSingle();
+
+    if (reportError) {
+      console.error('[priceCheckData] Error finding Price Check report:', reportError);
+      return [];
+    }
+
+    if (!priceCheckReport) {
+      console.log('[priceCheckData] No Price Check report found for account:', accountId);
+      return [];
+    }
+
+    // Load dimensions for the account/report
+    const { data: dimensions, error: dimError } = await supabase
+      .from('dimensions')
+      .select('id, name, type')
+      .or(`account_id.eq.${accountId},report_id.eq.${priceCheckReport.id}`);
+
+    if (dimError) {
+      console.error('[priceCheckData] Error loading dimensions:', dimError);
+      return [];
+    }
+
+    if (!dimensions || dimensions.length === 0) {
+      console.log('[priceCheckData] No dimensions found');
+      return [];
+    }
+
+    // Try to identify relevant dimensions
+    const hotelDimensionId = findDimensionByName(dimensions, ['hotel', 'property', 'accommodation']);
+    const dateDimensionId = findDimensionByName(dimensions, ['date', 'checkout', 'check-out', 'check in', 'check-in']);
+    const priceDiffDimensionId = findDimensionByName(dimensions, ['price diff', 'price difference', 'price parity', 'pct', 'percentage', '%']);
+
+    if (!hotelDimensionId || !dateDimensionId || !priceDiffDimensionId) {
+      console.warn('[priceCheckData] Could not find all required dimensions:', {
+        hotel: hotelDimensionId,
+        date: dateDimensionId,
+        priceDiff: priceDiffDimensionId,
+        availableDimensions: dimensions.map(d => d.name)
+      });
+      return [];
+    }
+
+    // Fetch dimension_data in batches
+    const allRows: PriceCheckDataRow[] = [];
+    const batchSize = 1000;
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('dimension_data')
+        .select('dimension_values')
+        .eq('report_id', priceCheckReport.id)
+        .order('row_number', { ascending: true })
+        .range(offset, offset + batchSize - 1);
+
+      if (error) {
+        console.error('[priceCheckData] Error fetching dimension_data:', error);
+        break;
+      }
+
+      if (data && data.length > 0) {
+        // Transform dimension_data to PriceCheckDataRow format
+        for (const row of data) {
+          const dimensionValues = row.dimension_values as Record<string, any>;
+          
+          const hotelName = dimensionValues[hotelDimensionId];
+          const dateValue = dimensionValues[dateDimensionId];
+          const priceDiffValue = dimensionValues[priceDiffDimensionId];
+
+          if (!hotelName || !dateValue || priceDiffValue === undefined || priceDiffValue === null) {
+            continue; // Skip incomplete rows
+          }
+
+          const parsedDate = parseDate(dateValue);
+          if (!parsedDate) {
+            continue; // Skip rows with invalid dates
+          }
+
+          const parsedPriceDiff = parsePercentage(priceDiffValue);
+
+          allRows.push({
+            hotelName: String(hotelName),
+            date: parsedDate,
+            priceDiffPercent: parsedPriceDiff,
+          });
+        }
+
+        offset += batchSize;
+        hasMore = data.length === batchSize;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    // Cache the data
+    cachedData = allRows;
+    cachedAccountId = accountId;
+
+    return allRows;
+  } catch (error) {
+    console.error('[priceCheckData] Error loading price check data:', error);
+    return [];
+  }
+}
+
+/**
+ * Clear cached data (useful when data is updated)
+ */
+export function clearPriceCheckCache(): void {
+  cachedData = null;
+  cachedAccountId = null;
+}
+
+/**
+ * Get all price check data (async version that requires accountId)
+ */
+export async function getAllPriceCheckData(accountId?: string): Promise<PriceCheckDataRow[]> {
+  if (!accountId) {
+    console.warn('[priceCheckData] getAllPriceCheckData called without accountId');
+    return [];
+  }
+  return loadPriceCheckData(accountId);
+}
+
+/**
+ * Get unique hotel names from the data (async version)
+ */
+export async function getUniqueHotels(accountId?: string): Promise<string[]> {
+  const data = accountId ? await loadPriceCheckData(accountId) : [];
   const hotels = new Set<string>();
-  PRICE_CHECK_DATA.forEach(row => hotels.add(row.hotelName));
+  data.forEach(row => hotels.add(row.hotelName));
   return Array.from(hotels).sort();
 }
 
 /**
  * Filter data by hotel name(s)
+ * @param data - Data to filter
  * @param hotelNames - Hotel name(s) to filter by, or 'all'/'empty array' for all hotels
  */
-export function filterByHotel(hotelNames: string | string[]): PriceCheckDataRow[] {
+export function filterByHotel(data: PriceCheckDataRow[], hotelNames: string | string[]): PriceCheckDataRow[] {
   if (!hotelNames || hotelNames === 'all' || (Array.isArray(hotelNames) && hotelNames.length === 0)) {
-    return PRICE_CHECK_DATA;
+    return data;
   }
   
   const hotelsArray = Array.isArray(hotelNames) ? hotelNames : [hotelNames];
-  return PRICE_CHECK_DATA.filter(row => hotelsArray.includes(row.hotelName));
+  return data.filter(row => hotelsArray.includes(row.hotelName));
 }
 
 /**

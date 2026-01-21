@@ -19,6 +19,7 @@ import { getUniqueHotels } from "@/lib/priceCheckData";
 import { useState, useEffect, useMemo } from "react";
 import { ChevronRight, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
 
 interface PriceCheckTabProps {
   accountId?: string;
@@ -50,12 +51,34 @@ export function PriceCheckTab({
   const [open, setOpen] = useState(false);
   const [pendingHotels, setPendingHotels] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoadingHotels, setIsLoadingHotels] = useState(true);
 
-  // Load hotel options
+  // Load hotel options from database
   useEffect(() => {
-    const hotels = getUniqueHotels();
-    setHotelOptions(hotels);
-  }, []);
+    const loadHotels = async () => {
+      if (!accountId) {
+        setIsLoadingHotels(false);
+        return;
+      }
+
+      setIsLoadingHotels(true);
+      try {
+        const hotels = await getUniqueHotels(accountId);
+        setHotelOptions(hotels);
+      } catch (error) {
+        console.error("Error loading hotels:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load hotel options",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingHotels(false);
+      }
+    };
+
+    loadHotels();
+  }, [accountId]);
 
   // Initialize pending hotels when popover opens
   useEffect(() => {
@@ -168,7 +191,12 @@ export function PriceCheckTab({
                           >
                             <Checkbox 
                               checked={isSelected} 
-                              onCheckedChange={() => {}}
+                              onCheckedChange={(checked) => {
+                                const newHotels = checked
+                                  ? [...pendingHotels, hotel]
+                                  : pendingHotels.filter(h => h !== hotel);
+                                setPendingHotels(newHotels);
+                              }}
                               onClick={(e) => e.stopPropagation()}
                             />
                             <span className="truncate flex-1">{hotel}</span>
@@ -210,6 +238,7 @@ export function PriceCheckTab({
         chartTimeRange={chartTimeRange}
         onTimeRangeChange={setChartTimeRange}
         selectedHotels={selectedHotels}
+        accountId={accountId}
       />
     </TabsContent>
   );
