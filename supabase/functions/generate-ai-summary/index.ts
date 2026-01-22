@@ -1,10 +1,47 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const openRouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
-// Using anthropic/claude-3-haiku as it's fast, reliable, and cost-effective
-// Alternative options: 'openai/gpt-4o-mini', 'google/gemini-flash-1.5', 'meta-llama/llama-3.1-8b-instruct:free'
-const AI_MODEL = 'anthropic/claude-3-haiku';
+const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY') || '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';
+// Using Claude Haiku - cheapest model: $1 per million input tokens, $5 per million output tokens
+// Try latest model first, fallback to 3.5 if needed
+const AI_MODEL = 'claude-3-5-haiku-20241022'; // Valid model name for Anthropic API
+const MAX_COST_CENTS = 20; // Maximum cost per summary in cents ($0.20)
+
+// Anthropic pricing (per million tokens)
+const INPUT_COST_PER_MILLION = 1.0; // $1 per million input tokens
+const OUTPUT_COST_PER_MILLION = 5.0; // $5 per million output tokens
+
+/**
+ * Estimate token count (rough approximation: 1 token ≈ 4 characters)
+ * This is a conservative estimate - actual tokenization may vary
+ */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Calculate cost in cents based on input and output tokens
+ */
+function calculateCost(inputTokens: number, outputTokens: number): number {
+  const inputCost = (inputTokens / 1_000_000) * INPUT_COST_PER_MILLION * 100; // Convert to cents
+  const outputCost = (outputTokens / 1_000_000) * OUTPUT_COST_PER_MILLION * 100; // Convert to cents
+  return inputCost + outputCost;
+}
+
+/**
+ * Truncate text to fit within token budget
+ */
+function truncateToTokenLimit(text: string, maxTokens: number): string {
+  const estimatedTokens = estimateTokens(text);
+  if (estimatedTokens <= maxTokens) {
+    return text;
+  }
+  
+  // Truncate to fit within budget (conservative: use 90% of budget)
+  const targetTokens = Math.floor(maxTokens * 0.9);
+  const targetChars = targetTokens * 4;
+  return text.substring(0, targetChars) + '\n\n[Data truncated to fit cost budget]';
+}
 
 // Base CORS headers - dynamically handle requested headers
 const getCorsHeaders = (req?: Request) => {
@@ -321,28 +358,48 @@ Focus on strategic insights, not just restating the numbers.`;
   const userPrompt = aiPrompt || `Please analyze the following ${viewLabel} performance data for ${period.month} ${period.year} and generate an executive summary.\n\n${dataContext}`;
 
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    // Estimate tokens and apply cost cap
+    const systemTokens = estimateTokens(systemPrompt);
+    const userTokens = estimateTokens(userPrompt);
+    const totalInputTokens = systemTokens + userTokens;
+    
+    // Max output tokens (2000 tokens ≈ $0.01, leaving ~$0.19 for input)
+    const maxOutputTokens = 2000;
+    // Max input tokens to stay under cost cap (conservative: ~150K tokens ≈ $0.15)
+    const maxInputTokens = 150000;
+    
+    // Truncate if needed
+    let finalSystemPrompt = systemPrompt;
+    let finalUserPrompt = userPrompt;
+    
+    if (totalInputTokens > maxInputTokens) {
+      // Truncate user prompt (data context) to fit budget
+      const availableTokens = maxInputTokens - systemTokens;
+      finalUserPrompt = truncateToTokenLimit(userPrompt, availableTokens);
+      console.warn(`[Cost Cap] Truncated input from ${totalInputTokens} to ~${maxInputTokens} tokens`);
+    }
+    
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openRouterApiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://lovable.dev',
-        'X-Title': 'AI Summary Generator'
+        'x-api-key': anthropicApiKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: AI_MODEL,
+        max_tokens: maxOutputTokens,
+        temperature: 0.7,
+        system: finalSystemPrompt,
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_tokens: 1500,
-        temperature: 0.7
+          { role: 'user', content: finalUserPrompt }
+        ]
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenRouter API error:', response.status, errorText);
+      console.error('Anthropic API error:', response.status, errorText);
       return new Response(
         JSON.stringify({ error: `API error: ${response.status}` }),
         { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -350,12 +407,28 @@ Focus on strategic insights, not just restating the numbers.`;
     }
 
     const data = await response.json();
-    const summary = data.choices?.[0]?.message?.content || '';
+    const summary = data.content?.[0]?.text || '';
+    
+    // Calculate actual cost
+    const actualInputTokens = data.usage?.input_tokens || estimateTokens(finalSystemPrompt + finalUserPrompt);
+    const actualOutputTokens = data.usage?.output_tokens || estimateTokens(summary);
+    const actualCostCents = calculateCost(actualInputTokens, actualOutputTokens);
+    
+    console.log(`[Cost] Input: ${actualInputTokens} tokens ($${(actualInputTokens / 1_000_000 * INPUT_COST_PER_MILLION).toFixed(4)}), Output: ${actualOutputTokens} tokens ($${(actualOutputTokens / 1_000_000 * OUTPUT_COST_PER_MILLION).toFixed(4)}), Total: $${(actualCostCents / 100).toFixed(4)}`);
+    
+    if (actualCostCents > MAX_COST_CENTS) {
+      console.error(`[Cost Cap] Warning: Cost exceeded cap! Actual: $${(actualCostCents / 100).toFixed(4)}, Cap: $${(MAX_COST_CENTS / 100).toFixed(2)}`);
+    }
 
     return new Response(
       JSON.stringify({ 
         summary: summary,
-        executiveSummary: summary // For consistency with existing API
+        executiveSummary: summary, // For consistency with existing API
+        cost: {
+          inputTokens: actualInputTokens,
+          outputTokens: actualOutputTokens,
+          costCents: actualCostCents
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -380,10 +453,10 @@ serve(async (req) => {
   const corsHeaders = getCorsHeaders();
 
   try {
-    if (!openRouterApiKey) {
-      console.error('OPENROUTER_API_KEY is not configured');
+    if (!anthropicApiKey) {
+      console.error('ANTHROPIC_API_KEY is not configured');
       return new Response(
-        JSON.stringify({ error: 'OpenRouter API key not configured' }),
+        JSON.stringify({ error: 'Anthropic API key not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -424,28 +497,38 @@ serve(async (req) => {
       
       const tableCommentPrompt = `You are a concise marketing analyst. Analyze the provided data and give exactly 2-3 bullet points with brief, actionable insights. Keep each point to one sentence. Focus on patterns, top/bottom performers, and opportunities.`;
       
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      // Estimate tokens and apply cost cap
+      const systemTokens = estimateTokens(tableCommentPrompt);
+      const userTokens = estimateTokens(aiPrompt);
+      const maxInputTokens = 150000;
+      const maxOutputTokens = 500; // Shorter for table comments
+      
+      let finalUserPrompt = aiPrompt;
+      if (systemTokens + userTokens > maxInputTokens) {
+        finalUserPrompt = truncateToTokenLimit(aiPrompt, maxInputTokens - systemTokens);
+      }
+      
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${openRouterApiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://lovable.dev',
-          'X-Title': 'AI Table Comments'
+          'x-api-key': anthropicApiKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           model: AI_MODEL,
+          max_tokens: maxOutputTokens,
+          temperature: 0.5,
+          system: tableCommentPrompt,
           messages: [
-            { role: 'system', content: tableCommentPrompt },
-            { role: 'user', content: aiPrompt }
-          ],
-          max_tokens: 500,
-          temperature: 0.5
+            { role: 'user', content: finalUserPrompt }
+          ]
         }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('OpenRouter API error:', response.status, errorText);
+        console.error('Anthropic API error:', response.status, errorText);
         return new Response(
           JSON.stringify({ error: `API error: ${response.status}` }),
           { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -453,7 +536,13 @@ serve(async (req) => {
       }
 
       const data = await response.json();
-      const comment = data.choices?.[0]?.message?.content || '';
+      const comment = data.content?.[0]?.text || '';
+      
+      // Calculate cost
+      const actualInputTokens = data.usage?.input_tokens || estimateTokens(tableCommentPrompt + finalUserPrompt);
+      const actualOutputTokens = data.usage?.output_tokens || estimateTokens(comment);
+      const actualCostCents = calculateCost(actualInputTokens, actualOutputTokens);
+      console.log(`[Cost] Table comment - Input: ${actualInputTokens}, Output: ${actualOutputTokens}, Cost: $${(actualCostCents / 100).toFixed(4)}`);
       
       return new Response(
         JSON.stringify({ summary: comment }),
@@ -636,9 +725,15 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
     ];
 
     const executiveSummaries: Record<string, string> = {};
+    let totalCostCents = 0; // Track total cost across all API calls
 
     // Generate executive summary for each period
     for (const tab of tabs) {
+      // Check if we've exceeded cost cap
+      if (totalCostCents >= MAX_COST_CENTS) {
+        console.warn(`[Cost Cap] Stopping generation - total cost ($${(totalCostCents / 100).toFixed(4)}) exceeds cap ($${(MAX_COST_CENTS / 100).toFixed(2)})`);
+        break;
+      }
       const periodData = pivotDataTyped[tab.key] || [];
       if (periodData.length === 0) continue;
 
@@ -660,31 +755,58 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
       console.log(`Generating executive summary for ${tab.label}...`);
 
       try {
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        const systemPrompt = getSystemPrompt(tab.label, tab.key);
+        const userPrompt = `Please analyze the following ${tab.label} performance data and generate an executive summary.\n\n${dataContext}`;
+        
+        // Estimate tokens and apply cost cap (split budget across multiple tabs)
+        const systemTokens = estimateTokens(systemPrompt);
+        const userTokens = estimateTokens(userPrompt);
+        const maxInputTokens = 150000; // Conservative limit per tab
+        const maxOutputTokens = 2000; // Limit output per tab
+        
+        let finalUserPrompt = userPrompt;
+        if (systemTokens + userTokens > maxInputTokens) {
+          finalUserPrompt = truncateToTokenLimit(userPrompt, maxInputTokens - systemTokens);
+          console.warn(`[Cost Cap] Truncated ${tab.label} input from ${userTokens} to ~${maxInputTokens - systemTokens} tokens`);
+        }
+        
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${openRouterApiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://lovable.dev',
-            'X-Title': 'AI Summary Generator'
+            'x-api-key': anthropicApiKey,
+            'anthropic-version': '2023-06-01',
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({
             model: AI_MODEL,
+            max_tokens: maxOutputTokens,
+            temperature: 0.7,
+            system: systemPrompt,
             messages: [
-              { role: 'system', content: getSystemPrompt(tab.label, tab.key) },
-              { role: 'user', content: `Please analyze the following ${tab.label} performance data and generate an executive summary.\n\n${dataContext}` }
-            ],
-            max_tokens: 2500,
-            temperature: 0.7
+              { role: 'user', content: finalUserPrompt }
+            ]
           }),
         });
 
         if (response.ok) {
           const data = await response.json();
-          executiveSummaries[tab.key] = data.choices?.[0]?.message?.content || '';
+          executiveSummaries[tab.key] = data.content?.[0]?.text || '';
+          
+          // Calculate cost
+          const actualInputTokens = data.usage?.input_tokens || estimateTokens(systemPrompt + finalUserPrompt);
+          const actualOutputTokens = data.usage?.output_tokens || estimateTokens(executiveSummaries[tab.key]);
+          const actualCostCents = calculateCost(actualInputTokens, actualOutputTokens);
+          totalCostCents += actualCostCents;
+          console.log(`[Cost] ${tab.label} summary - Input: ${actualInputTokens}, Output: ${actualOutputTokens}, Cost: $${(actualCostCents / 100).toFixed(4)}, Total: $${(totalCostCents / 100).toFixed(4)}`);
+          
+          if (totalCostCents >= MAX_COST_CENTS) {
+            console.warn(`[Cost Cap] Reached cost cap after ${tab.label} summary`);
+          }
+          
           console.log(`Summary generated for ${tab.label}, length: ${executiveSummaries[tab.key].length}`);
         } else {
-          console.error(`Error generating summary for ${tab.label}:`, await response.text());
+          const errorText = await response.text();
+          console.error(`Error generating summary for ${tab.label}:`, errorText);
         }
       } catch (e) {
         console.error(`Error generating executive summary for ${tab.label}:`, e);
@@ -710,6 +832,12 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
 
     // Generate insights for summary table for each tab
     for (const tab of tabs) {
+      // Check cost cap before generating insights
+      if (totalCostCents >= MAX_COST_CENTS) {
+        console.warn(`[Cost Cap] Skipping table insights - cost cap reached`);
+        break;
+      }
+      
       const tabData = pivotDataTyped[tab.key] || [];
       if (tabData.length > 0) {
         const summaryContext = tabData.map(r => `${r.reportName}: ${selectedMetrics.map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
@@ -727,18 +855,7 @@ ${aiPrompt ? `\n## Additional Context from User\n${aiPrompt}` : ''}`;
         }
         
         try {
-          const insightResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${openRouterApiKey}`,
-              'Content-Type': 'application/json',
-              'HTTP-Referer': 'https://lovable.dev',
-              'X-Title': 'AI Table Insights'
-            },
-            body: JSON.stringify({
-              model: AI_MODEL,
-              messages: [
-                { role: 'system', content: `You are a senior digital marketing strategist providing performance analysis. The data in the table is self-explanatory, so DO NOT simply restate the numbers. Instead, provide strategic insights about:
+          const systemPrompt = `You are a senior digital marketing strategist providing performance analysis. The data in the table is self-explanatory, so DO NOT simply restate the numbers. Instead, provide strategic insights about:
 
 - WHY certain channels are performing better or worse
 - WHAT actions should be taken based on the performance patterns
@@ -755,17 +872,55 @@ Categories to use: "Channel Strategy", "Budget Optimization", "Performance Gap",
 ${comparisonType !== 'previous_year' ? 'Include month-over-month momentum analysis when comparison data is available.' : ''}
 ${comparisonType !== 'previous_period' ? 'Include year-over-year trend analysis when comparison data is available.' : ''}
 
-Use +/- signs when mentioning percentage changes. Focus on strategic implications, not just restating the data.` },
-                { role: 'user', content: `${tabLabels[tab.key]} performance by channel:\n${summaryContext}${comparisonContext}` }
-              ],
-              max_tokens: 600,
-              temperature: 0.6
+Use +/- signs when mentioning percentage changes. Focus on strategic implications, not just restating the data.`;
+          
+          const userContent = `${tabLabels[tab.key]} performance by channel:\n${summaryContext}${comparisonContext}`;
+          
+          // Apply cost cap (smaller budget for table insights)
+          const systemTokens = estimateTokens(systemPrompt);
+          const userTokens = estimateTokens(userContent);
+          const maxInputTokens = 50000; // Smaller limit for insights
+          const maxOutputTokens = 600;
+          
+          let finalUserContent = userContent;
+          if (systemTokens + userTokens > maxInputTokens) {
+            finalUserContent = truncateToTokenLimit(userContent, maxInputTokens - systemTokens);
+          }
+          
+          const insightResponse = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'x-api-key': anthropicApiKey,
+              'anthropic-version': '2023-06-01',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: AI_MODEL,
+              max_tokens: maxOutputTokens,
+              temperature: 0.6,
+              system: systemPrompt,
+              messages: [
+                { role: 'user', content: finalUserContent }
+              ]
             }),
           });
           
           if (insightResponse.ok) {
             const insightData = await insightResponse.json();
-            tableInsights.summary[tab.key] = insightData.choices?.[0]?.message?.content?.trim() || '';
+            tableInsights.summary[tab.key] = insightData.content?.[0]?.text?.trim() || '';
+            
+            // Log cost and track total
+            const actualInputTokens = insightData.usage?.input_tokens || estimateTokens(systemPrompt + finalUserContent);
+            const actualOutputTokens = insightData.usage?.output_tokens || estimateTokens(tableInsights.summary[tab.key]);
+            const actualCostCents = calculateCost(actualInputTokens, actualOutputTokens);
+            totalCostCents += actualCostCents;
+            console.log(`[Cost] ${tab.key} table insight - Input: ${actualInputTokens}, Output: ${actualOutputTokens}, Cost: $${(actualCostCents / 100).toFixed(4)}, Total: $${(totalCostCents / 100).toFixed(4)}`);
+            
+            if (totalCostCents >= MAX_COST_CENTS) {
+              console.warn(`[Cost Cap] Reached cost cap after ${tab.key} table insight`);
+            }
+          } else {
+            console.error(`Error generating summary insight for ${tab.key}:`, await insightResponse.text());
           }
         } catch (e) {
           console.error(`Error generating summary insight for ${tab.key}:`, e);
@@ -775,6 +930,12 @@ Use +/- signs when mentioning percentage changes. Focus on strategic implication
 
     // Generate insights for date breakdown for each tab
     for (const tab of tabs) {
+      // Check cost cap
+      if (totalCostCents >= MAX_COST_CENTS) {
+        console.warn(`[Cost Cap] Skipping date breakdown insights - cost cap reached`);
+        break;
+      }
+      
       const dateData = pivotDataTyped.combined_date_breakdown?.[tab.key] || [];
       if (dateData.length > 0) {
         const dateContext = dateData.slice(0, 8).map(r => `${r.dateGroup}: ${selectedMetrics.map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
@@ -782,18 +943,7 @@ Use +/- signs when mentioning percentage changes. Focus on strategic implication
         const periodType = tab.key === 'ytd' ? 'monthly' : 'weekly';
         
         try {
-          const insightResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${openRouterApiKey}`,
-              'Content-Type': 'application/json',
-              'HTTP-Referer': 'https://lovable.dev',
-              'X-Title': 'AI Table Insights'
-            },
-            body: JSON.stringify({
-              model: AI_MODEL,
-              messages: [
-                { role: 'system', content: `You are a senior digital marketing strategist analyzing ${periodType} performance trends. The data in the table shows ${periodType} breakdowns - do NOT simply restate these numbers. Instead, provide strategic insights about:
+          const systemPrompt = `You are a senior digital marketing strategist analyzing ${periodType} performance trends. The data in the table shows ${periodType} breakdowns - do NOT simply restate these numbers. Instead, provide strategic insights about:
 
 - TREND PATTERNS: Is performance accelerating, decelerating, or stabilizing? What does the trajectory suggest?
 - SEASONALITY: Are there patterns that align with typical hospitality/travel seasonality or market events?
@@ -807,17 +957,55 @@ Format each insight as:
 
 Categories to use: "Trend Analysis", "Pacing Alert", "Seasonality Pattern", "Momentum Shift", "Forecast Implication", "Week-over-Week Insight"
 
-Focus on the story the data tells about performance trajectory, not just restating the ${periodType} numbers.` },
-                { role: 'user', content: `${tabLabels[tab.key]} ${periodType} breakdown:\n${dateContext}` }
-              ],
-              max_tokens: 600,
-              temperature: 0.6
+Focus on the story the data tells about performance trajectory, not just restating the ${periodType} numbers.`;
+          
+          const userContent = `${tabLabels[tab.key]} ${periodType} breakdown:\n${dateContext}`;
+          
+          // Apply cost cap
+          const systemTokens = estimateTokens(systemPrompt);
+          const userTokens = estimateTokens(userContent);
+          const maxInputTokens = 50000;
+          const maxOutputTokens = 600;
+          
+          let finalUserContent = userContent;
+          if (systemTokens + userTokens > maxInputTokens) {
+            finalUserContent = truncateToTokenLimit(userContent, maxInputTokens - systemTokens);
+          }
+          
+          const insightResponse = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'x-api-key': anthropicApiKey,
+              'anthropic-version': '2023-06-01',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: AI_MODEL,
+              max_tokens: maxOutputTokens,
+              temperature: 0.6,
+              system: systemPrompt,
+              messages: [
+                { role: 'user', content: finalUserContent }
+              ]
             }),
           });
           
           if (insightResponse.ok) {
             const insightData = await insightResponse.json();
-            tableInsights.date_breakdown[tab.key] = insightData.choices?.[0]?.message?.content?.trim() || '';
+            tableInsights.date_breakdown[tab.key] = insightData.content?.[0]?.text?.trim() || '';
+            
+            // Log cost and track total
+            const actualInputTokens = insightData.usage?.input_tokens || estimateTokens(systemPrompt + finalUserContent);
+            const actualOutputTokens = insightData.usage?.output_tokens || estimateTokens(tableInsights.date_breakdown[tab.key]);
+            const actualCostCents = calculateCost(actualInputTokens, actualOutputTokens);
+            totalCostCents += actualCostCents;
+            console.log(`[Cost] ${tab.key} date breakdown insight - Input: ${actualInputTokens}, Output: ${actualOutputTokens}, Cost: $${(actualCostCents / 100).toFixed(4)}, Total: $${(totalCostCents / 100).toFixed(4)}`);
+            
+            if (totalCostCents >= MAX_COST_CENTS) {
+              console.warn(`[Cost Cap] Reached cost cap after ${tab.key} date breakdown insight`);
+            }
+          } else {
+            console.error(`Error generating date breakdown insight for ${tab.key}:`, await insightResponse.text());
           }
         } catch (e) {
           console.error(`Error generating date breakdown insight for ${tab.key}:`, e);
@@ -830,6 +1018,12 @@ Focus on the story the data tells about performance trajectory, not just restati
       const breakdownDimensionNames = (pivotDataTyped as any).breakdown_dimension_names || {};
       
       for (const [breakdownKey, breakdown] of Object.entries(pivotDataTyped.breakdown_data)) {
+        // Check cost cap before processing breakdowns
+        if (totalCostCents >= MAX_COST_CENTS) {
+          console.warn(`[Cost Cap] Skipping breakdown insights - cost cap reached`);
+          break;
+        }
+        
         tableInsights.breakdowns[breakdownKey] = {};
         
         // Parse the breakdown key - it can be "reportId_dimensionId" (new format) or just "reportId" (legacy)
@@ -850,6 +1044,10 @@ Focus on the story the data tells about performance trajectory, not just restati
            pivotDataTyped.comparison_previous_year?.breakdown_data?.[reportId]);
         
         for (const tab of tabs) {
+          // Check cost cap for each tab
+          if (totalCostCents >= MAX_COST_CENTS) {
+            break;
+          }
           const breakdownData = (breakdown as Record<string, BreakdownRow[]>)[tab.key] || [];
           if (breakdownData.length > 0) {
             const breakdownContext = breakdownData.slice(0, 8).map(r => `${r.groupValue}: ${selectedMetrics.map(m => `${m}=${formatMetricValue(m, r.metrics[m] || 0)}`).join(', ')}`).join('\n');
@@ -870,18 +1068,7 @@ Focus on the story the data tells about performance trajectory, not just restati
             }
             
             try {
-              const insightResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${openRouterApiKey}`,
-                  'Content-Type': 'application/json',
-                  'HTTP-Referer': 'https://lovable.dev',
-                  'X-Title': 'AI Table Insights'
-                },
-                body: JSON.stringify({
-                  model: AI_MODEL,
-                  messages: [
-                    { role: 'system', content: `You are a senior digital marketing strategist analyzing ${reportName} performance by ${dimensionName}. The data shows breakdown by ${dimensionName} - do NOT simply restate these numbers. Instead, provide strategic insights about:
+              const systemPrompt = `You are a senior digital marketing strategist analyzing ${reportName} performance by ${dimensionName}. The data shows breakdown by ${dimensionName} - do NOT simply restate these numbers. Instead, provide strategic insights about:
 
 - PORTFOLIO ANALYSIS: Which ${dimensionName.toLowerCase()}s are carrying the performance? Is there concentration risk?
 - EFFICIENCY GAPS: Where is budget being under or over-utilized relative to returns?
@@ -899,17 +1086,55 @@ Format each insight as:
 
 Categories to use: "Portfolio Optimization", "Investment Reallocation", "Efficiency Gap", "Scale Opportunity", "Underperformer Alert", "Market Signal"
 
-Focus on actionable strategy, not restating the breakdown numbers.` },
-                    { role: 'user', content: `${reportName} ${tabLabels[tab.key]} breakdown by ${dimensionName}:\n${breakdownContext}${compContext}` }
-                  ],
-                  max_tokens: 600,
-                  temperature: 0.6
+Focus on actionable strategy, not restating the breakdown numbers.`;
+              
+              const userContent = `${reportName} ${tabLabels[tab.key]} breakdown by ${dimensionName}:\n${breakdownContext}${compContext}`;
+              
+              // Apply cost cap
+              const systemTokens = estimateTokens(systemPrompt);
+              const userTokens = estimateTokens(userContent);
+              const maxInputTokens = 50000;
+              const maxOutputTokens = 600;
+              
+              let finalUserContent = userContent;
+              if (systemTokens + userTokens > maxInputTokens) {
+                finalUserContent = truncateToTokenLimit(userContent, maxInputTokens - systemTokens);
+              }
+              
+              const insightResponse = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                  'x-api-key': anthropicApiKey,
+                  'anthropic-version': '2023-06-01',
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  model: AI_MODEL,
+                  max_tokens: maxOutputTokens,
+                  temperature: 0.6,
+                  system: systemPrompt,
+                  messages: [
+                    { role: 'user', content: finalUserContent }
+                  ]
                 }),
               });
               
               if (insightResponse.ok) {
                 const insightData = await insightResponse.json();
-                tableInsights.breakdowns[breakdownKey][tab.key] = insightData.choices?.[0]?.message?.content?.trim() || '';
+                tableInsights.breakdowns[breakdownKey][tab.key] = insightData.content?.[0]?.text?.trim() || '';
+                
+                // Log cost and track total
+                const actualInputTokens = insightData.usage?.input_tokens || estimateTokens(systemPrompt + finalUserContent);
+                const actualOutputTokens = insightData.usage?.output_tokens || estimateTokens(tableInsights.breakdowns[breakdownKey][tab.key]);
+                const actualCostCents = calculateCost(actualInputTokens, actualOutputTokens);
+                totalCostCents += actualCostCents;
+                console.log(`[Cost] ${breakdownKey} ${tab.key} breakdown insight - Input: ${actualInputTokens}, Output: ${actualOutputTokens}, Cost: $${(actualCostCents / 100).toFixed(4)}, Total: $${(totalCostCents / 100).toFixed(4)}`);
+                
+                if (totalCostCents >= MAX_COST_CENTS) {
+                  console.warn(`[Cost Cap] Reached cost cap after ${breakdownKey} ${tab.key} breakdown insight`);
+                }
+              } else {
+                console.error(`Error generating breakdown insight for ${breakdownKey} ${tab.key}:`, await insightResponse.text());
               }
             } catch (e) {
               console.error(`Error generating breakdown insight for ${breakdownKey} ${tab.key}:`, e);
@@ -919,14 +1144,22 @@ Focus on actionable strategy, not restating the breakdown numbers.` },
       }
     }
 
-    console.log('All summaries and table insights generated');
+    console.log(`[Cost] Total cost for all summaries: $${(totalCostCents / 100).toFixed(4)} (cap: $${(MAX_COST_CENTS / 100).toFixed(2)})`);
+    
+    if (totalCostCents > MAX_COST_CENTS) {
+      console.warn(`[Cost Cap] WARNING: Total cost ($${(totalCostCents / 100).toFixed(4)}) exceeded cap ($${(MAX_COST_CENTS / 100).toFixed(2)})`);
+    }
 
     return new Response(
       JSON.stringify({ 
         summary: executiveSummaries.last_month || '', // Backwards compatibility
         executiveSummaries, // New: { last_month, mtd, ytd }
         tableInsights,
-        cardId
+        cardId,
+        totalCost: {
+          costCents: totalCostCents,
+          costDollars: (totalCostCents / 100).toFixed(4)
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

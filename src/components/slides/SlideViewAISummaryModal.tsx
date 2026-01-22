@@ -32,6 +32,8 @@ interface SlideViewAISummaryModalProps {
   availableViews: Array<{ id: string | null; name: string }>;
   views: SlideReportView[];
   slideReportId: string | null;
+  onApplyView?: (viewId: string | null) => void;
+  onApplyComparisonType?: (comparisonType: ComparisonOption) => void;
 }
 
 export function SlideViewAISummaryModal({
@@ -45,11 +47,14 @@ export function SlideViewAISummaryModal({
   availableViews,
   views,
   slideReportId,
+  onApplyView,
+  onApplyComparisonType,
 }: SlideViewAISummaryModalProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
-  const [comparisonType, setComparisonType] = useState<ComparisonOption>("previous_year");
+  const [comparisonType, setComparisonType] = useState<ComparisonOption>("none");
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const saveSummaryMutation = useSaveSlideReportSummary();
 
   // Get the selected view
@@ -80,6 +85,16 @@ export function SlideViewAISummaryModal({
   }, [pivotData, selectedTab, selectedView, initialMinimalData]);
 
   const handleGenerate = async () => {
+    if (currentStep !== 3) {
+      toast.error("Please complete all steps before generating");
+      return;
+    }
+
+    if (!selectedViewId) {
+      toast.error("Please select a view");
+      return;
+    }
+
     if (!minimalData) {
       toast.error("No data available for the selected period");
       return;
@@ -213,11 +228,33 @@ export function SlideViewAISummaryModal({
     }
   };
 
+  const handleNext = () => {
+    if (currentStep === 1) {
+      // Step 1: Validate view selected, apply view, move to step 2
+      if (!selectedViewId) {
+        toast.error("Please select a view");
+        return;
+      }
+      // Apply view to parent page
+      if (onApplyView) {
+        onApplyView(selectedViewId);
+      }
+      setCurrentStep(2);
+    } else if (currentStep === 2) {
+      // Step 2: Apply comparison type, move to step 3
+      if (onApplyComparisonType) {
+        onApplyComparisonType(comparisonType);
+      }
+      setCurrentStep(3);
+    }
+  };
+
   const handleClose = () => {
     setSummary(null);
     setIsGenerating(false);
-    setComparisonType("previous_year");
+    setComparisonType("none");
     setSelectedViewId(null);
+    setCurrentStep(1);
     onOpenChange(false);
   };
   
@@ -226,8 +263,9 @@ export function SlideViewAISummaryModal({
     if (!open) {
       setSummary(null);
       setIsGenerating(false);
-      setComparisonType("previous_year");
+      setComparisonType("none");
       setSelectedViewId(null);
+      setCurrentStep(1);
     }
   }, [open]);
 
@@ -258,100 +296,133 @@ export function SlideViewAISummaryModal({
         <div className="flex-1 flex flex-col gap-4 min-h-0">
           {!summary && !isGenerating ? (
             <>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Select View (Optional)</Label>
-                  <Select
-                    value={selectedViewId || "current"}
-                    onValueChange={(value) => setSelectedViewId(value === "current" ? null : value)}
-                    disabled={isGenerating}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a view" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="current">Current Filters</SelectItem>
-                      {availableViews.map((view) => (
-                        <SelectItem key={view.id || "master"} value={view.id || "master"}>
-                          {view.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              {/* Step 1: Select View */}
+              {currentStep === 1 && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Select View</Label>
+                    {availableViews.length === 0 ? (
+                      <div className="text-sm text-muted-foreground p-3 bg-muted rounded-md">
+                        No views available. Please create a view first.
+                      </div>
+                    ) : (
+                      <>
+                        <Select
+                          value={selectedViewId || ""}
+                          onValueChange={(value) => setSelectedViewId(value || null)}
+                          disabled={isGenerating}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a view" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableViews.map((view) => (
+                              <SelectItem key={view.id || "master"} value={view.id || "master"}>
+                                {view.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selectedView && (
+                          <p className="text-xs text-muted-foreground">
+                            Using view: {selectedView.name} ({selectedView.selected_month} {selectedView.selected_year})
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Select Comparison Type */}
+              {currentStep === 2 && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Comparison Type</Label>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={comparisonType === "none" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setComparisonType("none")}
+                        disabled={isGenerating}
+                      >
+                        None
+                      </Button>
+                      <Button
+                        variant={comparisonType === "previous_period" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setComparisonType("previous_period")}
+                        disabled={isGenerating}
+                      >
+                        vs Previous Period
+                      </Button>
+                      <Button
+                        variant={comparisonType === "previous_year" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setComparisonType("previous_year")}
+                        disabled={isGenerating}
+                      >
+                        vs Previous Year
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Ready to Generate */}
+              {currentStep === 3 && (
+                <div className="space-y-4">
                   {selectedView && (
-                    <p className="text-xs text-muted-foreground">
-                      Using view: {selectedView.name} ({selectedView.selected_month} {selectedView.selected_year})
-                    </p>
+                    <div className="text-xs text-muted-foreground p-3 bg-muted rounded-md">
+                      <p className="font-medium mb-1">View: {selectedView.name}</p>
+                      <p className="mb-2">{selectedView.selected_month} {selectedView.selected_year}</p>
+                      <p className="font-medium mb-1">Comparison: {comparisonType === "none" ? "None" : comparisonType === "previous_period" ? "Previous Period" : "Previous Year"}</p>
+                    </div>
+                  )}
+                  {minimalData && (
+                    <div className="text-xs text-muted-foreground p-3 bg-muted rounded-md">
+                      <p className="font-medium mb-1">Data Summary:</p>
+                      <ul className="list-disc list-inside space-y-1">
+                        {Object.entries(minimalData.metrics).map(([channel, metrics]) => (
+                          <li key={channel}>
+                            {channel === 'overview' ? 'Overview' : channel.toUpperCase()}: 
+                            {' '}
+                            {metrics.impressions.toLocaleString()} impressions, 
+                            {' '}
+                            ${metrics.revenue.toLocaleString()} revenue, 
+                            {' '}
+                            {metrics.bookings} bookings
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                 </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Comparison Type</Label>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={comparisonType === "previous_period" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setComparisonType("previous_period")}
-                      disabled={isGenerating}
-                    >
-                      vs Previous Period
-                    </Button>
-                    <Button
-                      variant={comparisonType === "previous_year" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setComparisonType("previous_year")}
-                      disabled={isGenerating}
-                    >
-                      vs Previous Year
-                    </Button>
-                    <Button
-                      variant={comparisonType === "both" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setComparisonType("both")}
-                      disabled={isGenerating}
-                    >
-                      Both
-                    </Button>
-                  </div>
-                </div>
-
-                {minimalData && (
-                  <div className="text-xs text-muted-foreground p-3 bg-muted rounded-md">
-                    <p className="font-medium mb-1">Data Summary:</p>
-                    <ul className="list-disc list-inside space-y-1">
-                      {Object.entries(minimalData.metrics).map(([channel, metrics]) => (
-                        <li key={channel}>
-                          {channel === 'overview' ? 'Overview' : channel.toUpperCase()}: 
-                          {' '}
-                          {metrics.impressions.toLocaleString()} impressions, 
-                          {' '}
-                          ${metrics.revenue.toLocaleString()} revenue, 
-                          {' '}
-                          {metrics.bookings} bookings
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
+              )}
 
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={handleClose} disabled={isGenerating}>
                   Cancel
                 </Button>
-                <Button onClick={handleGenerate} disabled={!canGenerate}>
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Generate Summary
-                    </>
-                  )}
-                </Button>
+                {currentStep < 3 ? (
+                  <Button onClick={handleNext} disabled={isGenerating || (currentStep === 1 && !selectedViewId) || (currentStep === 1 && availableViews.length === 0)}>
+                    Next
+                  </Button>
+                ) : (
+                  <Button onClick={handleGenerate} disabled={!canGenerate || !selectedViewId}>
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Generate Summary
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
             </>
           ) : isGenerating ? (
@@ -391,10 +462,10 @@ function buildDataContext(data: MinimalAIData, comparisonType: ComparisonOption)
     context += `  Cost of Sale: ${channelMetrics.costOfSale.toFixed(2)}%\n`;
   });
 
-  // Add comparison data if available
-  if (comparison) {
+  // Add comparison data if available and comparison type is not "none"
+  if (comparison && comparisonType !== "none") {
     context += "\n\nCOMPARISON DATA:\n";
-    if (comparison.previous_period && (comparisonType === "previous_period" || comparisonType === "both")) {
+    if (comparison.previous_period && comparisonType === "previous_period") {
       context += "\nPrevious Period:\n";
       context += `  Impressions: ${comparison.previous_period.impressions.toLocaleString()}\n`;
       context += `  Clicks: ${comparison.previous_period.clicks.toLocaleString()}\n`;
@@ -402,7 +473,7 @@ function buildDataContext(data: MinimalAIData, comparisonType: ComparisonOption)
       context += `  Revenue: $${comparison.previous_period.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`;
       context += `  Bookings: ${comparison.previous_period.bookings}\n`;
     }
-    if (comparison.previous_year && (comparisonType === "previous_year" || comparisonType === "both")) {
+    if (comparison.previous_year && comparisonType === "previous_year") {
       context += "\nPrevious Year:\n";
       context += `  Impressions: ${comparison.previous_year.impressions.toLocaleString()}\n`;
       context += `  Clicks: ${comparison.previous_year.clicks.toLocaleString()}\n`;

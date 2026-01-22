@@ -4961,6 +4961,8 @@ export default function SlideViewPage() {
           availableViews={availableViews}
           views={views}
           slideReportId={slideReportId}
+          onApplyView={handleApplyView}
+          onApplyComparisonType={(type) => setComparisonType(type)}
         />
       )}
     </Tabs>

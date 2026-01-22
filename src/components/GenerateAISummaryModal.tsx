@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Sparkles, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { format, startOfYear, eachMonthOfInterval } from "date-fns";
 
-export type ComparisonOption = "previous_period" | "previous_year" | "both";
+export type ComparisonOption = "none" | "previous_period" | "previous_year";
 
 interface GenerateAISummaryModalProps {
   open: boolean;
@@ -143,7 +143,7 @@ const GenerateAISummaryModal: React.FC<GenerateAISummaryModalProps> = ({
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedPeriod, setSelectedPeriod] = useState<string>("");
-  const [comparisonType, setComparisonType] = useState<ComparisonOption>("previous_year");
+  const [comparisonType, setComparisonType] = useState<ComparisonOption>("none");
   const [aiPrompt, setAiPrompt] = useState(initialAiPrompt || DEFAULT_AI_PROMPT);
 
   // Generate date period options
@@ -177,7 +177,7 @@ const GenerateAISummaryModal: React.FC<GenerateAISummaryModalProps> = ({
   const handleClose = () => {
     setStep(1);
     setSelectedPeriod("");
-    setComparisonType("previous_year");
+    setComparisonType("none");
     setAiPrompt(initialAiPrompt || DEFAULT_AI_PROMPT);
     onOpenChange(false);
   };
@@ -256,6 +256,18 @@ const GenerateAISummaryModal: React.FC<GenerateAISummaryModalProps> = ({
                 className="space-y-3"
               >
                 <div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors">
+                  <RadioGroupItem value="none" id="none" className="mt-0.5" />
+                  <div className="space-y-1">
+                    <Label htmlFor="none" className="font-medium cursor-pointer">
+                      No Comparison
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Analyze the selected period without any comparison data
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors">
                   <RadioGroupItem value="previous_period" id="previous_period" className="mt-0.5" />
                   <div className="space-y-1">
                     <Label htmlFor="previous_period" className="font-medium cursor-pointer">
@@ -275,18 +287,6 @@ const GenerateAISummaryModal: React.FC<GenerateAISummaryModalProps> = ({
                     </Label>
                     <p className="text-xs text-muted-foreground">
                       Compare each period to the same period last year (e.g., Nov 2025 vs Nov 2024)
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors">
-                  <RadioGroupItem value="both" id="both" className="mt-0.5" />
-                  <div className="space-y-1">
-                    <Label htmlFor="both" className="font-medium cursor-pointer">
-                      Both Comparisons
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Include analysis for both previous period and previous year comparisons
                     </p>
                   </div>
                 </div>

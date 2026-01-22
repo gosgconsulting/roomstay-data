@@ -695,8 +695,8 @@ export function generateBidManagementSummary(
 
   // Get comparison data and convert to ComparisonMetrics format
   let comparison: ComparisonMetrics | undefined = undefined;
-  if (minimalData.comparison) {
-    const comparisonData = comparisonType === 'previous_period' || comparisonType === 'both'
+  if (minimalData.comparison && comparisonType !== 'none') {
+    const comparisonData = comparisonType === 'previous_period'
       ? minimalData.comparison.previous_period
       : minimalData.comparison.previous_year;
     
