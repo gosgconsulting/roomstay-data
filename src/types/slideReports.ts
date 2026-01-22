@@ -46,6 +46,7 @@ export interface SlideReportView {
   comparison_type: 'none' | 'previous_period' | 'previous_year';
   chart_time_range?: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months' | null;
   price_check_chart_time_range?: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months' | null;
+  tab?: 'overview' | 'metasearch' | 'sem' | 'social' | null;
   filter_values: {
     [channel: string]: {
       [dimensionId: string]: string[];

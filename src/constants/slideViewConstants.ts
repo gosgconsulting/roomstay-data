@@ -29,6 +29,12 @@ export const BASE_METRICS = [
   'Bookings',
 ] as const;
 
+/**
+ * @deprecated This constant is legacy and should not be used for new code.
+ * Use getAccountReportIds() from @/lib/accountReportIds instead to get
+ * account-specific report IDs. This constant is kept for backward compatibility
+ * with existing code that hasn't been migrated yet.
+ */
 export const CHANNEL_REPORT_IDS: Record<string, string> = {
   metasearch: '2eff17d0-38de-4d5d-a15b-69ad13788c92',
   sem: '3b2a0e45-33be-4eec-911e-b955b951c84e',

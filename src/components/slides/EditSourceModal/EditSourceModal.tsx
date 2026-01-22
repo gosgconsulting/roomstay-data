@@ -71,6 +71,7 @@ interface EditSourceModalProps {
   handleNext: () => void;
   handleBack: () => void;
   handleModalClose: (open: boolean) => void;
+  availableChannels?: ('metasearch' | 'sem' | 'social')[];
 }
 
 export function EditSourceModal({
@@ -112,6 +113,7 @@ export function EditSourceModal({
   handleNext,
   handleBack,
   handleModalClose,
+  availableChannels = ['metasearch', 'sem', 'social'], // Default to all channels if not provided
 }: EditSourceModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -203,50 +205,64 @@ export function EditSourceModal({
           {/* Step 2: Channel Selection */}
           {modalStep === 2 && (
             <div className="space-y-4">
-              <div className="space-y-3">
-                <div 
-                  className={cn(
-                    "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
-                    selectedDimensions.metasearch ? 'border-primary bg-primary/5' : 'border-border'
-                  )}
-                  onClick={() => handleDimensionToggle('metasearch')}
-                >
-                  <Checkbox 
-                    checked={selectedDimensions.metasearch}
-                    onCheckedChange={() => handleDimensionToggle('metasearch')}
-                    className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                  />
-                  <span className="font-medium">Metasearch</span>
+              {availableChannels.length === 0 ? (
+                <div className="bg-muted/30 rounded-lg p-4">
+                  <p className="text-sm text-muted-foreground">
+                    No reports found for this account. Please create reports (Metasearch, SEM, or Social) before configuring the slide report.
+                  </p>
                 </div>
-                <div 
-                  className={cn(
-                    "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
-                    selectedDimensions.sem ? 'border-primary bg-primary/5' : 'border-border'
+              ) : (
+                <div className="space-y-3">
+                  {availableChannels.includes('metasearch') && (
+                    <div 
+                      className={cn(
+                        "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
+                        selectedDimensions.metasearch ? 'border-primary bg-primary/5' : 'border-border'
+                      )}
+                      onClick={() => handleDimensionToggle('metasearch')}
+                    >
+                      <Checkbox 
+                        checked={selectedDimensions.metasearch}
+                        onCheckedChange={() => handleDimensionToggle('metasearch')}
+                        className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                      />
+                      <span className="font-medium">Metasearch</span>
+                    </div>
                   )}
-                  onClick={() => handleDimensionToggle('sem')}
-                >
-                  <Checkbox 
-                    checked={selectedDimensions.sem}
-                    onCheckedChange={() => handleDimensionToggle('sem')}
-                    className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                  />
-                  <span className="font-medium">SEM</span>
-                </div>
-                <div 
-                  className={cn(
-                    "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
-                    selectedDimensions.social ? 'border-primary bg-primary/5' : 'border-border'
+                  {availableChannels.includes('sem') && (
+                    <div 
+                      className={cn(
+                        "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
+                        selectedDimensions.sem ? 'border-primary bg-primary/5' : 'border-border'
+                      )}
+                      onClick={() => handleDimensionToggle('sem')}
+                    >
+                      <Checkbox 
+                        checked={selectedDimensions.sem}
+                        onCheckedChange={() => handleDimensionToggle('sem')}
+                        className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                      />
+                      <span className="font-medium">SEM</span>
+                    </div>
                   )}
-                  onClick={() => handleDimensionToggle('social')}
-                >
-                  <Checkbox 
-                    checked={selectedDimensions.social}
-                    onCheckedChange={() => handleDimensionToggle('social')}
-                    className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                  />
-                  <span className="font-medium">Social</span>
+                  {availableChannels.includes('social') && (
+                    <div 
+                      className={cn(
+                        "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
+                        selectedDimensions.social ? 'border-primary bg-primary/5' : 'border-border'
+                      )}
+                      onClick={() => handleDimensionToggle('social')}
+                    >
+                      <Checkbox 
+                        checked={selectedDimensions.social}
+                        onCheckedChange={() => handleDimensionToggle('social')}
+                        className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                      />
+                      <span className="font-medium">Social</span>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
           )}
 

@@ -56,6 +56,7 @@ import { extractMinimalAIData } from "@/lib/extractMinimalAIData";
 import { isWithinInterval } from "date-fns";
 import { aggregateMetrics } from "@/components/AISummaryPivotTable";
 import { BASE_METRICS, CHANNEL_REPORT_IDS, MONTH_NAMES } from "@/constants/slideViewConstants";
+import { getAccountReportIds, type AccountReportIds } from "@/lib/accountReportIds";
 import {
   calculateDerivedMetrics,
   hasActiveFilters,
@@ -652,10 +653,12 @@ export default function SlideViewPage() {
     field: 'spender' | 'recurrentFee' | 'percentCost' | 'percentRevenue' 
   } | null>(null);
   const [editPnlValue, setEditPnlValue] = useState("");
+  // Initialize selectedDimensions based on available channels
+  // This will be updated when accountReportIds loads
   const [selectedDimensions, setSelectedDimensions] = useState({
-    metasearch: true,
-    sem: true,
-    social: true,
+    metasearch: false,
+    sem: false,
+    social: false,
   });
 
   // Determine slide type from URL
@@ -725,6 +728,103 @@ export default function SlideViewPage() {
   
   // Load summaries
   const { data: summaries = [] } = useSlideReportSummaries(slideReportId);
+
+  // Account-specific report IDs state
+  const [accountReportIds, setAccountReportIds] = useState<AccountReportIds>({
+    metasearch: null,
+    sem: null,
+    social: null,
+  });
+
+  // Load account-specific report IDs when accountId changes
+  useEffect(() => {
+    const loadAccountReportIds = async () => {
+      if (!accountId) {
+        setAccountReportIds({ metasearch: null, sem: null, social: null });
+        // Reset selected dimensions when account changes
+        setSelectedDimensions({ metasearch: false, sem: false, social: false });
+        return;
+      }
+
+      try {
+        // Clear cache to ensure fresh lookup
+        const { clearAccountReportIdsCache } = await import("@/lib/accountReportIds");
+        clearAccountReportIdsCache(accountId);
+        
+        const reportIds = await getAccountReportIds(accountId, false); // Don't use cache for fresh lookup
+        setAccountReportIds(reportIds);
+        console.log('[SlideViewPage] Loaded account-specific report IDs for account:', accountId, reportIds);
+        
+        // Log warning if any channel is missing
+        const missingChannels = Object.entries(reportIds)
+          .filter(([_, id]) => !id)
+          .map(([channel]) => channel);
+        if (missingChannels.length > 0) {
+          console.warn(`[SlideViewPage] Missing report IDs for channels: ${missingChannels.join(', ')}. Please ensure reports are created for these channels.`);
+        }
+        
+        // Initialize selectedDimensions based on available channels
+        // Only select channels that have report IDs
+        setSelectedDimensions(prev => {
+          // Only update if we haven't loaded from saved configuration yet
+          // This prevents overwriting saved selections
+          const hasSavedConfig = slideReport?.configuration?.selectedChannels;
+          if (hasSavedConfig) {
+            return prev; // Keep existing selection (will be filtered in loadOrCreateSlideReport)
+          }
+          
+          return {
+            metasearch: !!reportIds.metasearch,
+            sem: !!reportIds.sem,
+            social: !!reportIds.social,
+          };
+        });
+      } catch (error) {
+        console.error('[SlideViewPage] Error loading account report IDs:', error);
+        // Fallback to null if lookup fails
+        setAccountReportIds({ metasearch: null, sem: null, social: null });
+        setSelectedDimensions({ metasearch: false, sem: false, social: false });
+      }
+    };
+
+    loadAccountReportIds();
+  }, [accountId, slideReport?.configuration?.selectedChannels]);
+
+  // Helper function to get report ID for a channel (with fallback to stored report_ids)
+  const getReportIdForChannel = useCallback((channel: 'metasearch' | 'sem' | 'social'): string | null => {
+    // First, try to use stored report_ids from slideReport (if available)
+    // But validate that the stored ID actually belongs to this account
+    if (slideReport?.report_ids) {
+      const storedReportIds = slideReport.report_ids as Record<string, string>;
+      const storedId = storedReportIds[channel];
+      if (storedId) {
+        // Validate that this report ID belongs to the current account
+        // If accountReportIds has a value and it doesn't match, use the account-specific one
+        const accountSpecificId = accountReportIds[channel];
+        if (accountSpecificId && storedId !== accountSpecificId) {
+          console.warn(`[getReportIdForChannel] Stored report ID for ${channel} (${storedId}) doesn't match account-specific ID (${accountSpecificId}). Using account-specific ID.`);
+          return accountSpecificId;
+        }
+        return storedId;
+      }
+    }
+    
+    // Fallback to account-specific report IDs
+    const accountId = accountReportIds[channel];
+    if (!accountId) {
+      console.warn(`[getReportIdForChannel] No report ID found for channel ${channel} in account ${accountId}. Available account report IDs:`, accountReportIds);
+    }
+    return accountId;
+  }, [slideReport?.report_ids, accountReportIds]);
+
+  // Compute available channels based on account-specific report IDs
+  const availableChannels = useMemo(() => {
+    const channels: ('metasearch' | 'sem' | 'social')[] = [];
+    if (accountReportIds.metasearch) channels.push('metasearch');
+    if (accountReportIds.sem) channels.push('sem');
+    if (accountReportIds.social) channels.push('social');
+    return channels;
+  }, [accountReportIds]);
 
   // Check for share authentication when user is not authenticated (moved after slideReportId declaration)
   useEffect(() => {
@@ -1262,6 +1362,12 @@ export default function SlideViewPage() {
     const loadOrCreateSlideReport = async () => {
       if (!accountId || !user) return;
       
+      // Wait for account report IDs to be loaded before proceeding
+      if (!accountReportIds.sem && !accountReportIds.social && !accountReportIds.metasearch) {
+        // Account report IDs not loaded yet, wait for them
+        return;
+      }
+      
       // Wait for slideReports to finish loading before deciding to create
       if (isSlideReportsLoading) {
         return;
@@ -1279,10 +1385,21 @@ export default function SlideViewPage() {
             if (targetReport.configuration) {
               const config = targetReport.configuration;
               if (config.selectedChannels) {
+                // Filter selectedChannels to only include channels that have reports
+                const validChannels = config.selectedChannels.filter(channel => 
+                  availableChannels.includes(channel)
+                );
                 setSelectedDimensions({
-                  metasearch: config.selectedChannels.includes('metasearch'),
-                  sem: config.selectedChannels.includes('sem'),
-                  social: config.selectedChannels.includes('social'),
+                  metasearch: validChannels.includes('metasearch'),
+                  sem: validChannels.includes('sem'),
+                  social: validChannels.includes('social'),
+                });
+              } else {
+                // Initialize based on available channels
+                setSelectedDimensions({
+                  metasearch: availableChannels.includes('metasearch'),
+                  sem: availableChannels.includes('sem'),
+                  social: availableChannels.includes('social'),
                 });
               }
               if (config.selectedValueDimensionIds) {
@@ -1332,10 +1449,21 @@ export default function SlideViewPage() {
             if (masterReport.configuration) {
               const config = masterReport.configuration;
               if (config.selectedChannels) {
+                // Filter selectedChannels to only include channels that have reports
+                const validChannels = config.selectedChannels.filter(channel => 
+                  availableChannels.includes(channel)
+                );
                 setSelectedDimensions({
-                  metasearch: config.selectedChannels.includes('metasearch'),
-                  sem: config.selectedChannels.includes('sem'),
-                  social: config.selectedChannels.includes('social'),
+                  metasearch: validChannels.includes('metasearch'),
+                  sem: validChannels.includes('sem'),
+                  social: validChannels.includes('social'),
+                });
+              } else {
+                // Initialize based on available channels
+                setSelectedDimensions({
+                  metasearch: availableChannels.includes('metasearch'),
+                  sem: availableChannels.includes('sem'),
+                  social: availableChannels.includes('social'),
                 });
               }
               if (config.selectedValueDimensionIds) {
@@ -1379,11 +1507,11 @@ export default function SlideViewPage() {
             setSinceMonth('January');
             setSinceYear(currentYear);
             
-            // Set default configuration state
+            // Set default configuration state based on available channels
             setSelectedDimensions({
-              metasearch: true,
-              sem: true,
-              social: true,
+              metasearch: availableChannels.includes('metasearch'),
+              sem: availableChannels.includes('sem'),
+              social: availableChannels.includes('social'),
             });
             
             // Open the Edit Source modal for initial configuration
@@ -1404,10 +1532,21 @@ export default function SlideViewPage() {
           if (existingReport.configuration) {
             const config = existingReport.configuration;
             if (config.selectedChannels) {
+              // Filter selectedChannels to only include channels that have reports
+              const validChannels = config.selectedChannels.filter(channel => 
+                availableChannels.includes(channel)
+              );
               setSelectedDimensions({
-                metasearch: config.selectedChannels.includes('metasearch'),
-                sem: config.selectedChannels.includes('sem'),
-                social: config.selectedChannels.includes('social'),
+                metasearch: validChannels.includes('metasearch'),
+                sem: validChannels.includes('sem'),
+                social: validChannels.includes('social'),
+              });
+            } else {
+              // Initialize based on available channels
+              setSelectedDimensions({
+                metasearch: availableChannels.includes('metasearch'),
+                sem: availableChannels.includes('sem'),
+                social: availableChannels.includes('social'),
               });
             }
             if (config.selectedValueDimensionIds) {
@@ -1445,26 +1584,34 @@ export default function SlideViewPage() {
 
     loadOrCreateSlideReport();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, user?.id, slideReports, slideType, isSlideReportsLoading]);
+  }, [accountId, user?.id, slideReports, slideType, isSlideReportsLoading, accountReportIds, availableChannels]);
 
   // Keep local state in sync with slideReport.configuration
   useEffect(() => {
     if (slideReport?.configuration) {
       const config = slideReport.configuration;
-      // Sync filterConfigs
-      if (config.filterConfigs) {
-        setFilterConfigs(config.filterConfigs as any);
+      // Filter configs to only include channels that have reports
+      const filteredFilterConfigs: Record<string, FilterConfig> = {};
+      const filteredBreakdownConfigs: Record<string, BreakdownConfig> = {};
+      const filteredChannelConfigs: Record<string, ChannelConfig> = {};
+      
+      for (const channel of availableChannels) {
+        if (config.filterConfigs?.[channel]) {
+          filteredFilterConfigs[channel] = config.filterConfigs[channel];
+        }
+        if (config.breakdownConfigs?.[channel]) {
+          filteredBreakdownConfigs[channel] = config.breakdownConfigs[channel];
+        }
+        if (config.channelConfigs?.[channel]) {
+          filteredChannelConfigs[channel] = config.channelConfigs[channel];
+        }
       }
-      // Sync breakdownConfigs from saved settings
-      if (config.breakdownConfigs) {
-        setBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>);
-      }
-      // Sync channelConfigs
-      if (config.channelConfigs) {
-        setChannelConfigs(config.channelConfigs as any);
-      }
+      
+      setFilterConfigs(filteredFilterConfigs);
+      setBreakdownConfigs(filteredBreakdownConfigs);
+      setChannelConfigs(filteredChannelConfigs);
     }
-  }, [slideReport?.configuration]);
+  }, [slideReport?.configuration, availableChannels]);
 
   // Load filter dimension values and names from pivot_data (pre-computed) instead of loading from database
   useEffect(() => {
@@ -1472,9 +1619,14 @@ export default function SlideViewPage() {
       const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
       const config = slideReport?.configuration as SlideReportConfiguration | null;
       
-      if (!pivotData?.channels || !config?.filterConfigs) {
+      if (!pivotData?.channels || !config?.filterConfigs || availableChannels.length === 0) {
         return;
       }
+      
+      // Filter to only include channels that have reports
+      const validChannels = (config.selectedChannels || []).filter(channel => 
+        availableChannels.includes(channel)
+      );
       
       const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {
         metasearch: {},
@@ -1489,7 +1641,7 @@ export default function SlideViewPage() {
       
       let hasValues = false;
       
-      for (const channel of config.selectedChannels || []) {
+      for (const channel of validChannels) {
         const channelData = pivotData.channels[channel];
         const filterConfig = config.filterConfigs?.[channel];
         
@@ -1698,7 +1850,7 @@ export default function SlideViewPage() {
   const [sinceMonth, setSinceMonth] = useState<string>("January");
   const [sinceYear, setSinceYear] = useState<number>(2024);
 
-  // CHANNEL_REPORT_IDS is defined outside the component (line 724)
+  // Account-specific report IDs are loaded via getAccountReportIds and stored in accountReportIds state
   // Value dimension IDs state (for step 2 - applies to all channels)
   
   // Available dimensions per channel (fetched from database) - VALUE types only
@@ -1855,8 +2007,9 @@ export default function SlideViewPage() {
   const loadBreakdownDimensionsForChannel = async (channel: 'metasearch' | 'sem' | 'social') => {
     setLoadingBreakdownDimensions(prev => ({ ...prev, [channel]: true }));
     try {
-      const reportId = CHANNEL_REPORT_IDS[channel];
+      const reportId = getReportIdForChannel(channel);
       if (!reportId) {
+        console.warn(`[loadBreakdownDimensionsForChannel] No report ID for channel: ${channel}`);
         setBreakdownDimensions(prev => ({ ...prev, [channel]: [] }));
         return;
       }
@@ -1924,14 +2077,14 @@ export default function SlideViewPage() {
     }));
   }, []);
 
-  // Get selected channels
+  // Get selected channels - only include channels that are both selected AND have report IDs
   const selectedChannels = useMemo(() => {
     const channels: ('metasearch' | 'sem' | 'social')[] = [];
-    if (selectedDimensions.metasearch) channels.push('metasearch');
-    if (selectedDimensions.sem) channels.push('sem');
-    if (selectedDimensions.social) channels.push('social');
+    if (selectedDimensions.metasearch && accountReportIds.metasearch) channels.push('metasearch');
+    if (selectedDimensions.sem && accountReportIds.sem) channels.push('sem');
+    if (selectedDimensions.social && accountReportIds.social) channels.push('social');
     return channels;
-  }, [selectedDimensions]);
+  }, [selectedDimensions, accountReportIds]);
 
   // Reset modal to step 1 when opened
   useEffect(() => {
@@ -1941,6 +2094,16 @@ export default function SlideViewPage() {
       setSearchQuery("");
       // Reset dimension loading state to ensure clean reload
       setLoadingDimensions({
+        metasearch: false,
+        sem: false,
+        social: false,
+      });
+      // Cancel any ongoing dimension value loading
+      if (dimensionValueAbortControllerRef.current) {
+        dimensionValueAbortControllerRef.current.abort();
+        dimensionValueAbortControllerRef.current = null;
+      }
+      setLoadingValues({
         metasearch: false,
         sem: false,
         social: false,
@@ -1973,45 +2136,101 @@ export default function SlideViewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeChannelTab, modalStep, isEditSourceOpen]);
 
-  // Hardcoded TEXT dimension mappings per channel (from actual report data)
-  const CHANNEL_TEXT_DIMENSIONS: Record<string, Dimension[]> = {
-    metasearch: [
-      { id: '093ac487-dd90-4466-9972-ac51d110e91e', name: 'Hotel', type: 'text' },
-      { id: '970c0d99-7ec4-48db-893c-15957122b9cc', name: 'Channel', type: 'text' },
-      { id: '6955d48a-0425-48f6-b77a-31aa11dc8eb3', name: 'Device', type: 'text' },
-      { id: '6c553ea6-e3bb-4946-bb56-069d39a3c5c0', name: 'Link Type', type: 'text' },
-      { id: 'febc1239-37e9-47db-bccc-77763d95c598', name: 'Market', type: 'text' },
-    ],
-    sem: [
-      { id: '277ec940-a91b-4c95-b1e2-4a8fd5814d04', name: 'Account', type: 'text' },
-      { id: '745b7d51-76be-4042-bc88-790fc53de865', name: 'Campaign', type: 'text' },
-    ],
-    social: [
-      { id: '277ec940-a91b-4c95-b1e2-4a8fd5814d04', name: 'Account', type: 'text' },
-      { id: 'b864ad95-3b65-4610-a8ef-cba9cebabf5b', name: 'Ad Group', type: 'text' },
-      { id: '745b7d51-76be-4042-bc88-790fc53de865', name: 'Campaign', type: 'text' },
-    ],
+  // Expected dimension names per channel (used to filter dimensions from database)
+  const CHANNEL_DIMENSION_NAMES: Record<string, string[]> = {
+    metasearch: ['Hotel', 'Channel', 'Device', 'Link Type', 'Market'],
+    sem: ['Account', 'Campaign'],
+    social: ['Account', 'Ad Group', 'Campaign'],
   };
 
-  // Load dimensions for a channel from actual report data
-  // This is now synchronous since we use hardcoded dimensions
-  const loadDimensionsForChannel = async (channel: 'metasearch' | 'sem' | 'social') => {
+  // Ref to store loadValuesForDimension to avoid circular dependency
+  const loadValuesForDimensionRef = useRef<((channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => Promise<void>) | null>(null);
+  
+  // AbortController ref to cancel ongoing dimension value loading
+  const dimensionValueAbortControllerRef = useRef<AbortController | null>(null);
+
+  // Load dimensions for a channel from database (account-specific)
+  const loadDimensionsForChannel = useCallback(async (channel: 'metasearch' | 'sem' | 'social') => {
     setLoadingDimensions(prev => ({ ...prev, [channel]: true }));
     try {
-      // Use hardcoded dimensions from actual report data - set immediately
-      const channelDims = CHANNEL_TEXT_DIMENSIONS[channel] || [];
-      setDimensions(prev => ({ ...prev, [channel]: channelDims }));
+      // Get report ID for this channel
+      const reportId = getReportIdForChannel(channel);
+      if (!reportId) {
+        console.warn(`[loadDimensionsForChannel] No report ID for channel: ${channel}`);
+        setDimensions(prev => ({ ...prev, [channel]: [] }));
+        setLoadingDimensions(prev => ({ ...prev, [channel]: false }));
+        return;
+      }
+
+      // Get account ID from report
+      const { data: reportData, error: reportError } = await supabase
+        .from('reports')
+        .select('account_id')
+        .eq('id', reportId)
+        .maybeSingle();
+
+      if (reportError || !reportData?.account_id) {
+        console.error(`[loadDimensionsForChannel] Error fetching report or account ID for ${channel}:`, reportError);
+        setDimensions(prev => ({ ...prev, [channel]: [] }));
+        setLoadingDimensions(prev => ({ ...prev, [channel]: false }));
+        return;
+      }
+
+      const accountId = reportData.account_id;
+      const expectedNames = CHANNEL_DIMENSION_NAMES[channel] || [];
+
+      // Load account-specific dimensions matching the expected names
+      const { data: accountDims, error: dimError } = await supabase
+        .from('dimensions')
+        .select('id, name, type')
+        .eq('scope', 'account')
+        .eq('account_id', accountId)
+        .eq('type', 'text')
+        .in('name', expectedNames)
+        .order('name');
+
+      if (dimError) {
+        console.error(`[loadDimensionsForChannel] Error loading dimensions for ${channel}:`, dimError);
+        setDimensions(prev => ({ ...prev, [channel]: [] }));
+        setLoadingDimensions(prev => ({ ...prev, [channel]: false }));
+        return;
+      }
+
+      // Fallback to global dimensions if no account-specific dimensions found
+      let channelDims: Dimension[] = (accountDims || []) as Dimension[];
       
-      // Dimensions are now loaded - set loading to false immediately
-      // Value loading is handled separately with loadingValues state
+      if (channelDims.length === 0) {
+        console.warn(`[loadDimensionsForChannel] No account-specific dimensions found for ${channel}, trying global...`);
+        const { data: globalDims, error: globalError } = await supabase
+          .from('dimensions')
+          .select('id, name, type')
+          .eq('scope', 'global')
+          .eq('type', 'text')
+          .in('name', expectedNames)
+          .order('name');
+
+        if (!globalError && globalDims) {
+          channelDims = globalDims as Dimension[];
+        }
+      }
+
+      // Sort dimensions to match expected order
+      const sortedDims = expectedNames
+        .map(name => channelDims.find(d => d.name === name))
+        .filter((d): d is Dimension => d !== undefined);
+
+      console.log(`[loadDimensionsForChannel] Loaded ${sortedDims.length} dimensions for ${channel} (account: ${accountId}):`, 
+        sortedDims.map(d => ({ id: d.id, name: d.name })));
+
+      setDimensions(prev => ({ ...prev, [channel]: sortedDims }));
       setLoadingDimensions(prev => ({ ...prev, [channel]: false }));
       
       // Get the dimension ID to use
       let dimensionIdToLoad = channelConfigs[channel]?.dimensionId;
       
       // Auto-select first dimension (Hotel for metasearch, Account for others) if not already set
-      if (channelDims.length > 0 && !dimensionIdToLoad) {
-        const firstDimId = channelDims[0].id;
+      if (sortedDims.length > 0 && !dimensionIdToLoad) {
+        const firstDimId = sortedDims[0].id;
         dimensionIdToLoad = firstDimId;
         setChannelConfigs(prev => ({
           ...prev,
@@ -2023,23 +2242,32 @@ export default function SlideViewPage() {
       }
       
       // Load values for the dimension (use the determined ID directly, not from state)
-      if (dimensionIdToLoad) {
-        await loadValuesForDimension(channel, dimensionIdToLoad);
+      if (dimensionIdToLoad && loadValuesForDimensionRef.current) {
+        await loadValuesForDimensionRef.current(channel, dimensionIdToLoad);
       }
     } catch (err) {
-      console.error(`Error loading dimensions for ${channel}:`, err);
+      console.error(`[loadDimensionsForChannel] Error loading dimensions for ${channel}:`, err);
       setDimensions(prev => ({ ...prev, [channel]: [] }));
       setLoadingDimensions(prev => ({ ...prev, [channel]: false }));
     }
-  };
+  }, [getReportIdForChannel, channelConfigs]);
 
   // Dimension values cache
   const dimensionValuesCache = useDataLoadingCache<string[]>({ ttl: 10 * 60 * 1000 }); // 10 minutes cache
 
   // Load values for a dimension from stored pivot_data first, fallback to dimension_data table
   // Also uses cached/saved selected values from channelConfigs for instant display
-  // Now with caching to improve performance
+  // Now with caching, timeout, and cancellation to improve performance and prevent hanging
   const loadValuesForDimension = useCallback(async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
+    // Cancel any ongoing request for this channel
+    if (dimensionValueAbortControllerRef.current) {
+      dimensionValueAbortControllerRef.current.abort();
+    }
+    
+    // Create new AbortController for this request
+    const abortController = new AbortController();
+    dimensionValueAbortControllerRef.current = abortController;
+    
     // Check cache first
     const cacheKey = `${channel}-${dimensionId}`;
     const cached = dimensionValuesCache.get(cacheKey);
@@ -2131,44 +2359,127 @@ export default function SlideViewPage() {
       }
       
       // FALLBACK: Fetch from dimension_data table
-      const reportId = CHANNEL_REPORT_IDS[channel];
+      const reportId = getReportIdForChannel(channel);
       
       if (!reportId) {
         console.error(`[loadValuesForDimension] No report ID for channel: ${channel}`);
         if (cachedSelectedValues.length === 0) {
           setDimensionValues(prev => ({ ...prev, [channel]: [] }));
         }
+        setLoadingValues(prev => ({ ...prev, [channel]: false }));
         return;
       }
 
-      // Fetch unique values from dimension_data table using pagination to get ALL rows
+      // Fetch unique values from dimension_data table using pagination with timeout and limits
       const allDimData: any[] = [];
-      const batchSize = 1000;
+      const batchSize = 500; // Reduced from 1000 to prevent timeouts
+      const maxRows = 50000; // Maximum rows to fetch to prevent infinite loops
+      const timeoutMs = 30000; // 30 second timeout per batch
       let offset = 0;
       let hasMore = true;
+      let consecutiveErrors = 0;
+      const maxConsecutiveErrors = 3;
 
-      while (hasMore) {
-        const { data: batchData, error: dimError } = await supabase
-          .from('dimension_data')
-          .select('dimension_values')
-          .eq('report_id', reportId)
-          .range(offset, offset + batchSize - 1);
+      while (hasMore && allDimData.length < maxRows && !abortController.signal.aborted) {
+        try {
+          // Create timeout promise
+          const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((_, reject) => {
+            setTimeout(() => reject(new Error('Request timeout')), timeoutMs);
+          });
 
-        if (dimError) {
-          console.error(`[loadValuesForDimension] Error fetching batch for ${channel}:`, dimError);
-          if (cachedSelectedValues.length === 0) {
-            setDimensionValues(prev => ({ ...prev, [channel]: [] }));
+          // Race between query and timeout
+          const queryPromise = supabase
+            .from('dimension_data')
+            .select('dimension_values')
+            .eq('report_id', reportId)
+            .range(offset, offset + batchSize - 1);
+
+          let batchData: any[] | null = null;
+          let dimError: any = null;
+          
+          try {
+            const result = await Promise.race([
+              queryPromise,
+              timeoutPromise
+            ]);
+            batchData = result.data;
+            dimError = result.error;
+          } catch (timeoutErr: any) {
+            if (timeoutErr.message === 'Request timeout') {
+              throw timeoutErr;
+            }
+            throw timeoutErr;
           }
-          return;
-        }
 
-        if (batchData && batchData.length > 0) {
-          allDimData.push(...batchData);
-          offset += batchSize;
-          hasMore = batchData.length === batchSize;
-        } else {
-          hasMore = false;
+          if (abortController.signal.aborted) {
+            console.log(`[loadValuesForDimension] Request cancelled for ${channel}/${dimensionId}`);
+            return;
+          }
+
+          if (dimError) {
+            consecutiveErrors++;
+            console.error(`[loadValuesForDimension] Error fetching batch for ${channel} (attempt ${consecutiveErrors}/${maxConsecutiveErrors}):`, dimError);
+            
+            if (consecutiveErrors >= maxConsecutiveErrors) {
+              console.error(`[loadValuesForDimension] Too many consecutive errors, stopping fetch`);
+              break;
+            }
+            
+            // Wait before retrying (exponential backoff)
+            await new Promise(resolve => setTimeout(resolve, 1000 * consecutiveErrors));
+            continue;
+          }
+
+          consecutiveErrors = 0; // Reset on success
+
+          if (batchData && batchData.length > 0) {
+            allDimData.push(...batchData);
+            offset += batchSize;
+            hasMore = batchData.length === batchSize;
+            
+            // Log progress for large datasets
+            if (allDimData.length % 5000 === 0) {
+              console.log(`[loadValuesForDimension] Loaded ${allDimData.length} rows for ${channel}/${dimensionId}...`);
+            }
+          } else {
+            hasMore = false;
+          }
+        } catch (err: any) {
+          if (abortController.signal.aborted) {
+            console.log(`[loadValuesForDimension] Request cancelled for ${channel}/${dimensionId}`);
+            return;
+          }
+          
+          if (err.message === 'Request timeout') {
+            console.warn(`[loadValuesForDimension] Timeout fetching batch at offset ${offset} for ${channel}`);
+            consecutiveErrors++;
+            
+            if (consecutiveErrors >= maxConsecutiveErrors) {
+              console.error(`[loadValuesForDimension] Too many timeouts, stopping fetch`);
+              break;
+            }
+            
+            // Try smaller batch size on timeout
+            offset += Math.floor(batchSize / 2);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+          }
+          
+          console.error(`[loadValuesForDimension] Unexpected error:`, err);
+          consecutiveErrors++;
+          
+          if (consecutiveErrors >= maxConsecutiveErrors) {
+            break;
+          }
         }
+      }
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
+      if (allDimData.length >= maxRows) {
+        console.warn(`[loadValuesForDimension] Reached maximum row limit (${maxRows}) for ${channel}/${dimensionId}. Some values may be missing.`);
       }
 
       const dimData = allDimData;
@@ -2198,6 +2509,20 @@ export default function SlideViewPage() {
         }
       });
 
+      // Debug logging to help diagnose dimension value loading issues
+      if (valueSet.size === 0 && dimData.length > 0) {
+        const sampleRow = dimData[0];
+        const sampleKeys = Object.keys(sampleRow.dimension_values || {});
+        console.warn(`[loadValuesForDimension] No values found for dimension ${dimensionId} in ${channel}. Sample row keys:`, sampleKeys);
+        console.warn(`[loadValuesForDimension] Looking for dimension ID: ${dimensionId}`);
+        
+        // Try to find dimension by name as fallback
+        const dimInfo = dimensions[channel]?.find(d => d.id === dimensionId);
+        if (dimInfo) {
+          console.warn(`[loadValuesForDimension] Dimension name: ${dimInfo.name}. Checking if dimension_values uses name instead of ID...`);
+        }
+      }
+
       let values = Array.from(valueSet).sort();
       
       // For Metasearch Hotel dimension, filter to only Brady hotels (only for brady slide, not master-report)
@@ -2205,6 +2530,9 @@ export default function SlideViewPage() {
         values = values.filter(v => v.startsWith('Brady'));
       }
 
+      // Cache the results
+      dimensionValuesCache.set(cacheKey, values);
+      
       setDimensionValues(prev => ({ ...prev, [channel]: values }));
       
       // Auto-select all Brady values for metasearch Hotel (only for brady slide, not master-report)
@@ -2217,15 +2545,32 @@ export default function SlideViewPage() {
           },
         }));
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (abortController.signal.aborted) {
+        console.log(`[loadValuesForDimension] Request cancelled for ${channel}/${dimensionId}`);
+        return;
+      }
+      
       console.error(`[loadValuesForDimension] CATCH Error for ${channel}/${dimensionId}:`, err);
       if (cachedSelectedValues.length === 0) {
         setDimensionValues(prev => ({ ...prev, [channel]: [] }));
       }
     } finally {
-      setLoadingValues(prev => ({ ...prev, [channel]: false }));
+      // Only clear loading state if this request wasn't cancelled
+      if (!abortController.signal.aborted) {
+        setLoadingValues(prev => ({ ...prev, [channel]: false }));
+      }
+      // Clear abort controller if this was the current request
+      if (dimensionValueAbortControllerRef.current === abortController) {
+        dimensionValueAbortControllerRef.current = null;
+      }
     }
-  }, [slideReport?.pivot_data, channelConfigs, slideType, dimensions, dimensionValuesCache]);
+  }, [slideReport?.pivot_data, channelConfigs, slideType, dimensions, dimensionValuesCache, getReportIdForChannel]);
+
+  // Update ref when loadValuesForDimension changes
+  useEffect(() => {
+    loadValuesForDimensionRef.current = loadValuesForDimension;
+  }, [loadValuesForDimension]);
 
   // Load dimensions when entering step 3, 4, 5, or 6 (after Date and Channels steps)
   // Most loading is now done via preloadAllChannelData on step 2->3 transition
@@ -2410,7 +2755,7 @@ export default function SlideViewPage() {
     if (cached) {
       return cached;
     }
-    const reportId = CHANNEL_REPORT_IDS[channel];
+    const reportId = getReportIdForChannel(channel);
     if (!reportId) {
       console.warn(`[loadFilterDimensionValues] No report ID for channel: ${channel}`);
       return [];
@@ -2498,7 +2843,7 @@ export default function SlideViewPage() {
       console.error(`[loadFilterDimensionValues] Error loading filter values for ${channel}/${filterDimId}:`, error);
       return [];
     }
-  }, [slideReport?.pivot_data, filterValuesCache]);
+  }, [slideReport?.pivot_data, filterValuesCache, getReportIdForChannel]);
 
   // Filtered values based on search query
   const filteredValues = useMemo(() => {
@@ -2675,19 +3020,67 @@ export default function SlideViewPage() {
     setIsEditSourceOpen(false);
 
     try {
-      // Build configuration object with dimension mappings
+      // Filter selectedChannels to only include channels that have report IDs
+      const validSelectedChannels = selectedChannels.filter(channel => {
+        const hasReportId = !!accountReportIds[channel];
+        if (!hasReportId) {
+          console.warn(`[handleSave] Filtering out channel ${channel} - no report ID found for this account`);
+        }
+        return hasReportId;
+      });
+
+      // Validate that at least one channel is selected
+      if (validSelectedChannels.length === 0) {
+        toast({
+          title: "Error",
+          description: "Please select at least one channel that has a report configured for this account.",
+          variant: "destructive",
+        });
+        setIsEditSourceOpen(true); // Reopen modal so user can fix
+        return;
+      }
+
+      // Filter channel configs, breakdown configs, and filter configs to only include valid channels
+      const filteredChannelConfigs: Record<string, ChannelConfig> = {};
+      const filteredBreakdownConfigs: Record<string, BreakdownConfig> = {};
+      const filteredFilterConfigs: Record<string, FilterConfig> = {};
+
+      for (const channel of validSelectedChannels) {
+        if (channelConfigs[channel]) {
+          filteredChannelConfigs[channel] = channelConfigs[channel];
+        }
+        if (breakdownConfigs[channel]) {
+          filteredBreakdownConfigs[channel] = breakdownConfigs[channel];
+        }
+        if (filterConfigs[channel]) {
+          filteredFilterConfigs[channel] = filterConfigs[channel];
+        }
+      }
+
+      // Build configuration object with dimension mappings (only valid channels)
       const configuration: SlideReportConfiguration = {
-        selectedChannels: selectedChannels,
+        selectedChannels: validSelectedChannels,
         selectedValueDimensionIds: selectedValueDimensionIds,
-        channelConfigs: channelConfigs,
-        breakdownConfigs: breakdownConfigs,
-        filterConfigs: filterConfigs,
+        channelConfigs: filteredChannelConfigs,
+        breakdownConfigs: filteredBreakdownConfigs,
+        filterConfigs: filteredFilterConfigs,
       };
 
-      // Use actual report IDs from our mapping
+      // Use account-specific report IDs
       const reportIds: Record<string, string> = {};
-      for (const channel of selectedChannels) {
-        reportIds[channel] = CHANNEL_REPORT_IDS[channel];
+      for (const channel of validSelectedChannels) {
+        const reportId = accountReportIds[channel];
+        if (!reportId) {
+          // This shouldn't happen since we filtered above, but double-check
+          console.error(`[handleSave] No report ID found for channel ${channel} in account ${accountId}`);
+          toast({
+            title: "Error",
+            description: `No report found for ${channel} channel. Please ensure reports are set up for this account.`,
+            variant: "destructive",
+          });
+          return;
+        }
+        reportIds[channel] = reportId;
       }
 
       // Calculate date range using sinceMonth and sinceYear
@@ -2984,27 +3377,57 @@ export default function SlideViewPage() {
     }
 
     const config = slideReport.configuration;
+    
+    // Ensure we have available channels loaded before proceeding
+    if (availableChannels.length === 0) {
+      console.warn('[loadSavedConfigurationIntoModal] No available channels, skipping load');
+      return;
+    }
 
-    // Load basic configuration
+    // Filter selectedChannels to only include channels that have reports
+    const validSelectedChannels = (config.selectedChannels || []).filter(channel => 
+      availableChannels.includes(channel)
+    );
+
+    // Load basic configuration - filter to only include channels that have reports
     if (config.selectedChannels) {
       setSelectedDimensions({
-        metasearch: config.selectedChannels.includes('metasearch'),
-        sem: config.selectedChannels.includes('sem'),
-        social: config.selectedChannels.includes('social'),
+        metasearch: validSelectedChannels.includes('metasearch'),
+        sem: validSelectedChannels.includes('sem'),
+        social: validSelectedChannels.includes('social'),
+      });
+    } else {
+      // Initialize based on available channels if no saved config
+      setSelectedDimensions({
+        metasearch: availableChannels.includes('metasearch'),
+        sem: availableChannels.includes('sem'),
+        social: availableChannels.includes('social'),
       });
     }
     if (config.selectedValueDimensionIds) {
       setSelectedValueDimensionIds(config.selectedValueDimensionIds);
     }
-    if (config.channelConfigs) {
-      setChannelConfigs(config.channelConfigs as any);
+    
+    // Filter channel configs, breakdown configs, and filter configs to only include valid channels
+    const filteredChannelConfigs: Record<string, ChannelConfig> = {};
+    const filteredBreakdownConfigs: Record<string, BreakdownConfig> = {};
+    const filteredFilterConfigs: Record<string, FilterConfig> = {};
+    
+    for (const channel of validSelectedChannels) {
+      if (config.channelConfigs?.[channel]) {
+        filteredChannelConfigs[channel] = config.channelConfigs[channel];
+      }
+      if (config.breakdownConfigs?.[channel]) {
+        filteredBreakdownConfigs[channel] = config.breakdownConfigs[channel];
+      }
+      if (config.filterConfigs?.[channel]) {
+        filteredFilterConfigs[channel] = config.filterConfigs[channel];
+      }
     }
-    if (config.breakdownConfigs) {
-      setBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>);
-    }
-    if (config.filterConfigs) {
-      setFilterConfigs(config.filterConfigs as any);
-    }
+    
+    setChannelConfigs(filteredChannelConfigs);
+    setBreakdownConfigs(filteredBreakdownConfigs);
+    setFilterConfigs(filteredFilterConfigs);
     
     // Reload date range
     if (slideReport.date_range) {
@@ -3012,18 +3435,18 @@ export default function SlideViewPage() {
       setSinceYear(slideReport.date_range.year);
     }
 
-    // Load dimension values for each channel's selected dimension
-    for (const channel of config.selectedChannels || []) {
-      const channelConfig = config.channelConfigs?.[channel];
+    // Load dimension values for each channel's selected dimension (only valid channels)
+    for (const channel of validSelectedChannels) {
+      const channelConfig = filteredChannelConfigs[channel];
       if (channelConfig?.dimensionId) {
         await loadValuesForDimension(channel, channelConfig.dimensionId);
       }
     }
 
-    // Load filter dimension values for each channel using the helper function
+    // Load filter dimension values for each channel using the helper function (only valid channels)
     const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {};
-    for (const channel of config.selectedChannels || []) {
-      const filterConfig = config.filterConfigs?.[channel];
+    for (const channel of validSelectedChannels) {
+      const filterConfig = filteredFilterConfigs[channel];
       if (filterConfig?.filterDimensionIds && filterConfig.filterDimensionIds.length > 0) {
         updatedFilterDimensionValues[channel] = {};
         for (const filterDimId of filterConfig.filterDimensionIds) {
@@ -3035,8 +3458,8 @@ export default function SlideViewPage() {
     }
     setFilterDimensionValues(prev => ({ ...prev, ...updatedFilterDimensionValues }));
 
-    // Load breakdown dimensions for each channel
-    for (const channel of config.selectedChannels || []) {
+    // Load breakdown dimensions for each channel (only valid channels)
+    for (const channel of validSelectedChannels) {
       await loadBreakdownDimensionsForChannel(channel);
     }
   };
@@ -3047,13 +3470,18 @@ export default function SlideViewPage() {
     setSearchQuery("");
     
     // Reload from saved slideReport configuration instead of resetting to defaults
+    // But filter to only include channels that have reports
     if (slideReport?.configuration) {
       const config = slideReport.configuration;
       if (config.selectedChannels) {
+        // Filter to only include channels that have reports
+        const validChannels = config.selectedChannels.filter(channel => 
+          availableChannels.includes(channel)
+        );
         setSelectedDimensions({
-          metasearch: config.selectedChannels.includes('metasearch'),
-          sem: config.selectedChannels.includes('sem'),
-          social: config.selectedChannels.includes('social'),
+          metasearch: validChannels.includes('metasearch'),
+          sem: validChannels.includes('sem'),
+          social: validChannels.includes('social'),
         });
       }
       if (config.selectedValueDimensionIds) {
@@ -3074,23 +3502,28 @@ export default function SlideViewPage() {
         setSinceYear(slideReport.date_range.year);
       }
     } else {
-      // No saved config, reset to defaults (use dynamic dimensions if available)
+      // No saved config, reset to defaults based on available channels
       setSelectedValueDimensionIds(defaultValueDimensionIds);
-      setChannelConfigs({
-        metasearch: { dimensionId: null, selectedValues: [] },
-        sem: { dimensionId: null, selectedValues: [] },
-        social: { dimensionId: null, selectedValues: [] },
+      setSelectedDimensions({
+        metasearch: availableChannels.includes('metasearch'),
+        sem: availableChannels.includes('sem'),
+        social: availableChannels.includes('social'),
       });
-      setBreakdownConfigs({
-        metasearch: { breakdownDimensionIds: [] },
-        sem: { breakdownDimensionIds: [] },
-        social: { breakdownDimensionIds: [] },
-      });
-      setFilterConfigs({
-        metasearch: { filterDimensionIds: [] },
-        sem: { filterDimensionIds: [] },
-        social: { filterDimensionIds: [] },
-      });
+      
+      // Initialize configs only for available channels
+      const initialChannelConfigs: Record<string, ChannelConfig> = {};
+      const initialBreakdownConfigs: Record<string, BreakdownConfig> = {};
+      const initialFilterConfigs: Record<string, FilterConfig> = {};
+      
+      for (const channel of availableChannels) {
+        initialChannelConfigs[channel] = { dimensionId: null, selectedValues: [] };
+        initialBreakdownConfigs[channel] = { breakdownDimensionIds: [] };
+        initialFilterConfigs[channel] = { filterDimensionIds: [] };
+      }
+      
+      setChannelConfigs(initialChannelConfigs);
+      setBreakdownConfigs(initialBreakdownConfigs);
+      setFilterConfigs(initialFilterConfigs);
     }
   };
 
@@ -3160,16 +3593,80 @@ export default function SlideViewPage() {
       setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'in_progress' }));
       setRefreshStep(2);
 
-      // Step 2: Compute pivot data
+      // Step 2: Validate and update report IDs to use account-specific ones
       const config = latestReport.configuration as unknown as SlideReportConfiguration;
-      const reportIdsMap = latestReport.report_ids as unknown as Record<string, string>;
+      let reportIdsMap = latestReport.report_ids as unknown as Record<string, string>;
       const dateRange = latestReport.date_range as unknown as SlideReportDateRange;
+      
+      // Filter selectedChannels to only include channels that have reports
+      const validSelectedChannels = (config.selectedChannels || []).filter(channel => 
+        availableChannels.includes(channel)
+      );
+      
+      if (validSelectedChannels.length === 0) {
+        throw new Error("No valid channels found. Please configure at least one channel with a report in Edit Source.");
+      }
+      
+      // Validate report IDs are account-specific - update if they don't match
+      let needsUpdate = false;
+      const validatedReportIds: Record<string, string> = {};
+      
+      for (const channel of validSelectedChannels) {
+        const storedReportId = reportIdsMap[channel];
+        const accountSpecificId = accountReportIds[channel];
+        
+        if (accountSpecificId) {
+          // Use account-specific ID (preferred)
+          validatedReportIds[channel] = accountSpecificId;
+          if (storedReportId !== accountSpecificId) {
+            console.warn(`[Refresh Data] Report ID mismatch for ${channel}. Stored: ${storedReportId}, Account-specific: ${accountSpecificId}. Using account-specific.`);
+            needsUpdate = true;
+          }
+        } else if (storedReportId) {
+          // Fallback to stored ID if account-specific not found
+          validatedReportIds[channel] = storedReportId;
+          console.warn(`[Refresh Data] No account-specific report ID found for ${channel}, using stored ID: ${storedReportId}`);
+        } else {
+          console.error(`[Refresh Data] No report ID available for channel ${channel}`);
+          throw new Error(`No report found for ${channel} channel. Please configure it in Edit Source.`);
+        }
+      }
+      
+      // Update slide_report if report IDs changed
+      if (needsUpdate && Object.keys(validatedReportIds).length > 0) {
+        console.log('[Refresh Data] Updating slide_report with account-specific report IDs:', validatedReportIds);
+        const { error: updateError } = await supabase
+          .from('slide_reports')
+          .update({ report_ids: validatedReportIds })
+          .eq('id', slideReportId);
+        
+        if (updateError) {
+          console.warn('[Refresh Data] Failed to update report_ids:', updateError);
+        }
+      }
+      
+      reportIdsMap = validatedReportIds;
+      
+      // Create filtered config with only valid channels
+      const filteredConfig: SlideReportConfiguration = {
+        ...config,
+        selectedChannels: validSelectedChannels,
+        channelConfigs: Object.fromEntries(
+          validSelectedChannels.map(ch => [ch, config.channelConfigs?.[ch] || { dimensionId: null, selectedValues: [] }])
+        ),
+        breakdownConfigs: Object.fromEntries(
+          validSelectedChannels.map(ch => [ch, config.breakdownConfigs?.[ch] || { breakdownDimensionIds: [] }])
+        ),
+        filterConfigs: Object.fromEntries(
+          validSelectedChannels.map(ch => [ch, config.filterConfigs?.[ch] || { filterDimensionIds: [] }])
+        ),
+      };
       
       let pivotData: any;
       try {
         const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
 
-        pivotData = await computeSlideReportPivotData(reportIdsMap, config, dateRange);
+        pivotData = await computeSlideReportPivotData(reportIdsMap, filteredConfig, dateRange);
       } catch (pivotError: any) {
         // Supabase/Postgrest errors often come through as plain objects (not Error instances)
         // and would display as "[object Object]" without normalization.
@@ -3339,6 +3836,11 @@ export default function SlideViewPage() {
         }
       }
       
+      // Filter to only include channels that have reports
+      const validChannels = (config.selectedChannels || []).filter(channel => 
+        availableChannels.includes(channel)
+      );
+      
       // Force reload filter dimension values from the updated pivot data
       const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {
         metasearch: {},
@@ -3351,7 +3853,7 @@ export default function SlideViewPage() {
         social: {},
       };
       
-      for (const channel of config.selectedChannels || []) {
+      for (const channel of validChannels) {
         const channelData = typedPivotData.channels?.[channel];
         const channelFilterConfig = config.filterConfigs?.[channel];
         
@@ -3386,7 +3888,7 @@ export default function SlideViewPage() {
       await new Promise(resolve => setTimeout(resolve, 500));
       setIsRefreshModalOpen(false);
       
-      const totalChannels = config.selectedChannels?.length || 0;
+      const totalChannels = validSelectedChannels.length;
       
       toast({ 
         title: "Data refreshed", 
@@ -3962,6 +4464,7 @@ export default function SlideViewPage() {
         selectedDimensions={selectedDimensions}
         handleDimensionToggle={handleDimensionToggle}
         selectedChannels={selectedChannels}
+        availableChannels={availableChannels}
         selectedValueDimensionIds={selectedValueDimensionIds}
         handleValueDimensionToggle={handleValueDimensionToggle}
         handleSelectAllDimensions={handleSelectAllDimensions}

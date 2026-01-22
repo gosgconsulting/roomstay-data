@@ -62,11 +62,13 @@ export function SlideViewAISummaryModal({
   const minimalData = useMemo(() => {
     if (!pivotData) return initialMinimalData;
 
-    // If a view is selected, use view's year/month and filters
+    // If a view is selected, use view's tab, year/month and filters
     if (selectedView) {
+      // Use view's tab if available, otherwise fall back to current selectedTab
+      const tabToUse = selectedView.tab || selectedTab;
       return extractMinimalAIData(
         pivotData,
-        selectedTab,
+        tabToUse,
         selectedView.selected_year,
         selectedView.selected_month,
         selectedView.filter_values
@@ -116,17 +118,20 @@ export function SlideViewAISummaryModal({
         });
       }
 
+      // Determine which tab to use: view's tab if available, otherwise current tab
+      const tabToUse = selectedView?.tab || selectedTab;
+      
       try {
         // Use supabase.functions.invoke for proper authentication
         const { data: result, error: invokeError } = await supabase.functions.invoke('generate-ai-summary', {
           body: {
             minimalData: minimalData,
-            selectedTab: selectedTab,
+            selectedTab: tabToUse,
             selectedYear: selectedView ? selectedView.selected_year : selectedYear,
             selectedMonth: selectedView ? selectedView.selected_month : selectedMonth,
             comparisonType: comparisonType,
             isTableComment: false,
-            aiPrompt: `Analyze the following ${selectedTab === 'overview' ? 'overview' : selectedTab.toUpperCase()} performance data for ${selectedView ? `${selectedView.selected_month} ${selectedView.selected_year}` : `${selectedMonth} ${selectedYear}`}${selectedView ? ` (View: ${selectedView.name})` : ''}. Provide a concise executive summary focusing on key metrics, trends, and actionable insights.`,
+            aiPrompt: `Analyze the following ${tabToUse === 'overview' ? 'overview' : tabToUse.toUpperCase()} performance data for ${selectedView ? `${selectedView.selected_month} ${selectedView.selected_year}` : `${selectedMonth} ${selectedYear}`}${selectedView ? ` (View: ${selectedView.name})` : ''}. Provide a concise executive summary focusing on key metrics, trends, and actionable insights.`,
           },
         });
 
@@ -158,7 +163,9 @@ export function SlideViewAISummaryModal({
       
       if (useAlgorithm || !aiSummary) {
         console.log("[Bid Management] Using rule-based algorithm as fallback");
-        const algorithmResult = generateBidManagementSummary(minimalData, selectedTab, comparisonType);
+        // Use view's tab if available, otherwise use current tab
+        const tabToUse = selectedView?.tab || selectedTab;
+        const algorithmResult = generateBidManagementSummary(minimalData, tabToUse, comparisonType);
         finalSummary = algorithmResult.summary;
         summarySource = 'algorithm';
         toast.success("Bid Management Analysis generated!");
@@ -170,9 +177,12 @@ export function SlideViewAISummaryModal({
       // Save summary to database
       if (slideReportId && finalSummary) {
         try {
+          // Use view's tab if available, otherwise use current tab
+          const tabToUse = selectedView?.tab || selectedTab;
+          
           await saveSummaryMutation.mutateAsync({
             slide_report_id: slideReportId,
-            tab: selectedTab,
+            tab: tabToUse,
             selected_year: selectedView ? selectedView.selected_year : selectedYear,
             selected_month: selectedView ? selectedView.selected_month : selectedMonth,
             view_id: selectedView?.id || null,
@@ -229,13 +239,19 @@ export function SlideViewAISummaryModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            AI Summary - {selectedTab === 'overview' ? 'Overview' : selectedTab.charAt(0).toUpperCase() + selectedTab.slice(1)}
+            AI Summary - {(() => {
+              const tabToUse = selectedView?.tab || selectedTab;
+              return tabToUse === 'overview' ? 'Overview' : tabToUse.charAt(0).toUpperCase() + tabToUse.slice(1);
+            })()}
           </DialogTitle>
           <DialogDescription>
             {selectedView 
               ? `${selectedView.selected_month} ${selectedView.selected_year} (${selectedView.name})`
               : `${selectedMonth} ${selectedYear}`
-            } • {selectedTab === 'overview' ? 'All Channels' : selectedTab.toUpperCase()}
+            } • {(() => {
+              const tabToUse = selectedView?.tab || selectedTab;
+              return tabToUse === 'overview' ? 'All Channels' : tabToUse.toUpperCase();
+            })()}
           </DialogDescription>
         </DialogHeader>
 
