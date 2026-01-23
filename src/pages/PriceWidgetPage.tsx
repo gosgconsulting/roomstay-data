@@ -128,6 +128,17 @@ export default function PriceWidgetPage() {
     ? rawCurrencyCode 
     : "EUR";
 
+  // Watch check-in date for validation
+  const checkInDate = form.watch("check_in_date");
+  
+  // Calculate minimum check-out date (1 day after check-in)
+  const getMinCheckOutDate = () => {
+    if (!checkInDate) return "";
+    const checkIn = new Date(checkInDate);
+    checkIn.setDate(checkIn.getDate() + 1);
+    return checkIn.toISOString().split('T')[0];
+  };
+
   const formatPrice = (price: number, currency: string) => {
     // Validate currency code before formatting
     const validCurrency = currency && currency.length === 3 && /^[A-Z]{3}$/.test(currency)
@@ -449,7 +460,23 @@ export default function PriceWidgetPage() {
                         <FormField
                           control={form.control}
                           name="check_out_date"
-                          rules={{ required: "Check-out date is required" }}
+                          rules={{ 
+                            required: "Check-out date is required",
+                            validate: (value) => {
+                              if (!checkInDate) {
+                                return "Please select a check-in date first";
+                              }
+                              const checkIn = new Date(checkInDate);
+                              const checkOut = new Date(value);
+                              const minCheckOut = new Date(checkIn);
+                              minCheckOut.setDate(minCheckOut.getDate() + 1);
+                              
+                              if (checkOut <= checkIn) {
+                                return "Check-out date must be at least 1 day after check-in date";
+                              }
+                              return true;
+                            }
+                          }}
                           render={({ field }) => (
                             <FormItem className="flex-1">
                               <FormLabel className="text-xs text-muted-foreground">Check-out</FormLabel>
@@ -458,6 +485,7 @@ export default function PriceWidgetPage() {
                                   type="date"
                                   className="h-9 text-sm"
                                   required
+                                  min={getMinCheckOutDate()}
                                   {...field}
                                 />
                               </FormControl>
