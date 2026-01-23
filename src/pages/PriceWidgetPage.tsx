@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, LogOut, Plus, Info } from "lucide-react";
+import { ArrowLeft, LogOut, Plus, Info, Hotel, Calendar, Users, DollarSign } from "lucide-react";
 import { useForm } from "react-hook-form";
 import {
   Form,
@@ -56,6 +56,11 @@ interface PriceWidgetFormData {
   max_crawled_hotels?: number;
 }
 
+interface ProviderPrice {
+  name: string;
+  price: number;
+}
+
 export default function PriceWidgetPage() {
   const navigate = useNavigate();
   const { accountId } = useParams<{ accountId: string }>();
@@ -76,6 +81,27 @@ export default function PriceWidgetPage() {
     },
     mode: "onChange",
   });
+
+  // Watch currency code for dynamic price formatting
+  const currencyCode = form.watch("currency_code") || "EUR";
+
+  // Hardcoded provider prices for demo
+  const hardcodedProviders: ProviderPrice[] = [
+    { name: "Booking.com", price: 125.50 },
+    { name: "Agoda", price: 118.00 },
+    { name: "Expedia", price: 130.25 },
+    { name: "Hotels.com", price: 128.75 },
+    { name: "Trip.com", price: 122.00 },
+    { name: "Kayak", price: 127.50 },
+  ];
+
+  const formatPrice = (price: number, currency: string) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: 2,
+    }).format(price);
+  };
 
   useEffect(() => {
     checkAuth();
@@ -235,9 +261,8 @@ export default function PriceWidgetPage() {
         description: "Price widget created successfully.",
       });
       
+      // Reset form but stay on the same page to show results
       form.reset();
-      // Navigate back to list page after creation
-      navigate(`/tools/price-widget/${accountId}`);
     } catch (error) {
       console.error('Error creating widget:', error);
       toast({
@@ -271,13 +296,13 @@ export default function PriceWidgetPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate(`/tools/price-widget/${accountId}`)}
-              title="Back to widgets list"
+              onClick={() => navigate(`/?account=${accountId}`)}
+              title="Back to accounts"
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
               <div>
-                <h1 className="text-2xl font-bold">{account?.name} - Create Price Widget</h1>
+                <h1 className="text-2xl font-bold">{account?.name} - Price Widget</h1>
                 {account?.description && (
                   <p className="text-sm text-muted-foreground">{account.description}</p>
                 )}
@@ -300,225 +325,176 @@ export default function PriceWidgetPage() {
         </header>
         
         <main className="container mx-auto px-6 py-8">
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Create Price Widget</CardTitle>
-              <CardDescription>
-                Set up a new price widget to monitor hotel prices
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                  {/* Search Query */}
-                  <FormField
-                    control={form.control}
-                    name="search_query"
-                    rules={{ required: "Search query is required" }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          Search query (required)
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Enter the hotel name or search query</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="e.g., Wyndham Bangkok Queen Convention Centre Hotel"
-                            required
-                            {...field}
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)}>
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Hotel className="h-5 w-5" />
+                    <FormField
+                      control={form.control}
+                      name="search_query"
+                      rules={{ required: "Hotel name is required" }}
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormControl>
+                            <Input
+                              placeholder="Hotel name"
+                              className="text-xl font-bold"
+                              required
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage className="mt-1" />
+                        </FormItem>
+                      )}
+                    />
+                  </CardTitle>
+                  <CardDescription>Hotel price comparison</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Check-in / Check-out Dates */}
+                    <div className="flex items-center gap-3">
+                      <Calendar className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      <div className="flex-1 space-y-1">
+                        <div className="text-sm font-medium">Check-in / Check-out</div>
+                        <div className="flex gap-2">
+                          <FormField
+                            control={form.control}
+                            name="check_in_date"
+                            rules={{ required: "Check-in date is required" }}
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormLabel className="text-xs text-muted-foreground">Check-in</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="date"
+                                    className="h-8 text-sm"
+                                    required
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
                           />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Check-in Date */}
-                  <FormField
-                    control={form.control}
-                    name="check_in_date"
-                    rules={{ required: "Check-in date is required" }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          Check-in date (required)
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Select the check-in date for your search</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            type="date"
-                            required
-                            {...field}
+                          <FormField
+                            control={form.control}
+                            name="check_out_date"
+                            rules={{ required: "Check-out date is required" }}
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormLabel className="text-xs text-muted-foreground">Check-out</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="date"
+                                    className="h-8 text-sm"
+                                    required
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
                           />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                        </div>
+                      </div>
+                    </div>
 
-                  {/* Check-out Date */}
-                  <FormField
-                    control={form.control}
-                    name="check_out_date"
-                    rules={{ required: "Check-out date is required" }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          Check-out date (required)
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Select the check-out date for your search</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            type="date"
-                            required
-                            {...field}
+                    {/* Guests */}
+                    <div className="flex items-center gap-3">
+                      <Users className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      <div className="flex-1 space-y-1">
+                        <div className="text-sm font-medium">Guests</div>
+                        <div className="flex gap-2">
+                          <FormField
+                            control={form.control}
+                            name="number_of_adults"
+                            rules={{ 
+                              required: "Number of adults is required",
+                              min: { value: 1, message: "At least 1 adult is required" }
+                            }}
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormLabel className="text-xs text-muted-foreground">Adults</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    className="h-8 text-sm"
+                                    required
+                                    {...field}
+                                    onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
                           />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Number of Adults */}
-                  <FormField
-                    control={form.control}
-                    name="number_of_adults"
-                    rules={{ 
-                      required: "Number of adults is required",
-                      min: { value: 1, message: "At least 1 adult is required" }
-                    }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          Number of adults (required)
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Enter the number of adults for the booking</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min="1"
-                            required
-                            {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
+                          <FormField
+                            control={form.control}
+                            name="number_of_children"
+                            rules={{ 
+                              required: "Number of children is required",
+                              min: { value: 0, message: "Number of children cannot be negative" }
+                            }}
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormLabel className="text-xs text-muted-foreground">Children</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    className="h-8 text-sm"
+                                    required
+                                    {...field}
+                                    onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
                           />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                        </div>
+                      </div>
+                    </div>
 
-                  {/* Number of Children */}
-                  <FormField
-                    control={form.control}
-                    name="number_of_children"
-                    rules={{ 
-                      required: "Number of children is required",
-                      min: { value: 0, message: "Number of children cannot be negative" }
-                    }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          Number of children (required)
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Enter the number of children for the booking</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min="0"
-                            required
-                            {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                    {/* Currency */}
+                    <div className="flex items-center gap-3">
+                      <DollarSign className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      <div className="flex-1 space-y-1">
+                        <div className="text-sm font-medium">Currency</div>
+                        <FormField
+                          control={form.control}
+                          name="currency_code"
+                          rules={{ required: "Currency code is required" }}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  placeholder="EUR"
+                                  maxLength={3}
+                                  className="h-8 text-sm"
+                                  required
+                                  {...field}
+                                  onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+                  </div>
 
-                  {/* Currency Code */}
-                  <FormField
-                    control={form.control}
-                    name="currency_code"
-                    rules={{ required: "Currency code is required" }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          Currency code (required)
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Enter the currency code (e.g., EUR, USD, GBP)</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="EUR"
-                            maxLength={3}
-                            required
-                            {...field}
-                            onChange={(e) => field.onChange(e.target.value.toUpperCase())}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Max Crawled Hotels */}
+                  {/* Hidden Max Crawled Hotels field - keeping for form submission but not displaying */}
                   <FormField
                     control={form.control}
                     name="max_crawled_hotels"
                     render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          Max crawled hotels
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Maximum number of hotels to crawl for price comparison</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </FormLabel>
+                      <FormItem className="hidden">
                         <FormControl>
                           <Input
                             type="number"
@@ -528,12 +504,12 @@ export default function PriceWidgetPage() {
                             value={field.value || 50}
                           />
                         </FormControl>
-                        <FormMessage />
                       </FormItem>
                     )}
                   />
 
-                  <div className="flex justify-end gap-2">
+                  {/* Action Buttons - inside filter section */}
+                  <div className="flex justify-end gap-2 mt-6">
                     <Button
                       type="button"
                       variant="outline"
@@ -543,14 +519,58 @@ export default function PriceWidgetPage() {
                       Reset
                     </Button>
                     <Button type="submit" disabled={isCreating}>
-                      {isCreating ? "Creating..." : "Create Widget"}
+                      {isCreating ? "Running..." : "Run"}
                     </Button>
                   </div>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
 
+              {/* Provider Prices Card */}
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle>Provider Prices</CardTitle>
+                  <CardDescription>
+                    Price comparison across different booking platforms
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    // Sort providers by price (lowest first)
+                    const sortedProviders = [...hardcodedProviders].sort((a, b) => a.price - b.price);
+                    const lowestPrice = sortedProviders[0]?.price || 0;
+
+                    return (
+                      <div className="space-y-3">
+                        {sortedProviders.map((provider) => {
+                          const isLowest = provider.price === lowestPrice;
+                          return (
+                            <div
+                              key={provider.name}
+                              className={`p-4 border rounded-lg flex items-center justify-between ${
+                                isLowest ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800' : ''
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="font-medium">{provider.name}</div>
+                                {isLowest && (
+                                  <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded">
+                                    Best Price
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-lg font-semibold">
+                                {formatPrice(provider.price, currencyCode)}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+            </form>
+          </Form>
         </main>
       </div>
     </TooltipProvider>
