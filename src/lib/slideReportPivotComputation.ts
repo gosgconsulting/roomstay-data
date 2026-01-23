@@ -188,69 +188,105 @@ function calculateDerivedMetrics(data: {
 async function buildMetricNameToIdMap(reportId: string): Promise<Record<string, string>> {
   const nameToIdMap: Record<string, string> = {};
   
-  // STEP 1: Get the account_id for this report
-  const { data: reportData } = await supabase
-    .from('reports')
-    .select('account_id')
-    .eq('id', reportId)
-    .single();
-  
-  const accountId = reportData?.account_id;
-  
-  // STEP 2: Fetch account-level dimensions first (these are global and should be prioritized)
-  // This ensures base metrics like Revenue, Bookings are always mapped correctly
-  if (accountId) {
-    const { data: accountDimensions } = await supabase
-      .from('dimensions')
-      .select('id, name, type')
-      .eq('account_id', accountId)
-      .is('report_id', null); // Account-level dimensions have no report_id
+  try {
+    // STEP 1: Get the account_id for this report
+    console.log(`[testing] Building metric map for report ${reportId} - fetching report data`);
+    const { data: reportData, error: reportError } = await supabase
+      .from('reports')
+      .select('account_id')
+      .eq('id', reportId)
+      .single();
     
-    if (accountDimensions) {
-      accountDimensions.forEach(dim => {
-        nameToIdMap[dim.name] = dim.id;
-      });
-      console.log(`Loaded ${accountDimensions.length} account-level dimensions for report ${reportId}`);
+    if (reportError) {
+      console.error(`[testing] Failed to fetch report ${reportId}:`, reportError);
+      throw new Error(`Failed to fetch report account_id for ${reportId}: ${reportError.message}`);
     }
-  }
-  
-  // STEP 3: Sample a few rows to collect dimension IDs used in the data
-  // Reduced sample size to avoid potential timeout on large datasets
-  const { data: sampleRows } = await supabase
-    .from('dimension_data')
-    .select('dimension_values')
-    .eq('report_id', reportId)
-    .limit(20); // Reduced from 100 to 20 for faster sampling
+    
+    const accountId = reportData?.account_id;
+    console.log(`[testing] Report ${reportId} has account_id: ${accountId || 'null'}`);
+    
+    // STEP 2: Fetch account-level dimensions first (these are global and should be prioritized)
+    // This ensures base metrics like Revenue, Bookings are always mapped correctly
+    if (accountId) {
+      console.log(`[testing] Fetching account-level dimensions for account ${accountId}`);
+      const { data: accountDimensions, error: accountDimensionsError } = await supabase
+        .from('dimensions')
+        .select('id, name, type')
+        .eq('account_id', accountId)
+        .is('report_id', null); // Account-level dimensions have no report_id
+      
+      if (accountDimensionsError) {
+        console.error(`[testing] Failed to fetch account dimensions for account ${accountId}:`, accountDimensionsError);
+        throw new Error(`Failed to fetch account-level dimensions for account ${accountId}: ${accountDimensionsError.message}`);
+      }
+      
+      if (accountDimensions) {
+        accountDimensions.forEach(dim => {
+          nameToIdMap[dim.name] = dim.id;
+        });
+        console.log(`[testing] Loaded ${accountDimensions.length} account-level dimensions for report ${reportId}`);
+      }
+    }
+    
+    // STEP 3: Sample a few rows to collect dimension IDs used in the data
+    // Reduced sample size to avoid potential timeout on large datasets
+    console.log(`[testing] Sampling dimension_data rows for report ${reportId}`);
+    const { data: sampleRows, error: sampleRowsError } = await supabase
+      .from('dimension_data')
+      .select('dimension_values')
+      .eq('report_id', reportId)
+      .limit(20); // Reduced from 100 to 20 for faster sampling
 
-  if (!sampleRows || sampleRows.length === 0) {
-    console.warn(`No data found for report ${reportId}`);
-    return nameToIdMap; // Return account dimensions if we have them
-  }
+    if (sampleRowsError) {
+      console.error(`[testing] Failed to fetch sample rows for report ${reportId}:`, sampleRowsError);
+      throw new Error(`Failed to fetch sample dimension_data rows for report ${reportId}: ${sampleRowsError.message}`);
+    }
 
-  // Collect ALL unique dimension IDs from sampled rows
-  const allDimensionIds = new Set<string>();
-  sampleRows.forEach(row => {
-    const rowData = row.dimension_values as Record<string, any>;
-    Object.keys(rowData).forEach(id => allDimensionIds.add(id));
-  });
-  
-  const dimensionIds = Array.from(allDimensionIds);
+    if (!sampleRows || sampleRows.length === 0) {
+      console.warn(`[testing] No data found for report ${reportId}`);
+      return nameToIdMap; // Return account dimensions if we have them
+    }
 
-  // STEP 4: Fetch dimension info for all IDs found in the data
-  const { data: dimensions } = await supabase
-    .from('dimensions')
-    .select('id, name, type')
-    .in('id', dimensionIds);
+    console.log(`[testing] Found ${sampleRows.length} sample rows for report ${reportId}`);
 
-  if (dimensions) {
-    // Add dimensions from data (these override account dimensions if there's a name conflict)
-    dimensions.forEach(dim => {
-      nameToIdMap[dim.name] = dim.id;
+    // Collect ALL unique dimension IDs from sampled rows
+    const allDimensionIds = new Set<string>();
+    sampleRows.forEach(row => {
+      const rowData = row.dimension_values as Record<string, any>;
+      Object.keys(rowData).forEach(id => allDimensionIds.add(id));
     });
-  }
+    
+    const dimensionIds = Array.from(allDimensionIds);
+    console.log(`[testing] Found ${dimensionIds.length} unique dimension IDs in sample data`);
 
-  console.log(`Built metric map for report ${reportId}: ${Object.keys(nameToIdMap).length} dimensions (${Object.keys(nameToIdMap).slice(0, 8).join(', ')}...)`);
-  return nameToIdMap;
+    // STEP 4: Fetch dimension info for all IDs found in the data
+    if (dimensionIds.length > 0) {
+      console.log(`[testing] Fetching dimension info for ${dimensionIds.length} dimension IDs`);
+      const { data: dimensions, error: dimensionsError } = await supabase
+        .from('dimensions')
+        .select('id, name, type')
+        .in('id', dimensionIds);
+
+      if (dimensionsError) {
+        console.error(`[testing] Failed to fetch dimension info for report ${reportId}:`, dimensionsError);
+        throw new Error(`Failed to fetch dimension info for report ${reportId}: ${dimensionsError.message}`);
+      }
+
+      if (dimensions) {
+        // Add dimensions from data (these override account dimensions if there's a name conflict)
+        dimensions.forEach(dim => {
+          nameToIdMap[dim.name] = dim.id;
+        });
+        console.log(`[testing] Added ${dimensions.length} dimensions from data to metric map`);
+      }
+    }
+
+    console.log(`[testing] Built metric map for report ${reportId}: ${Object.keys(nameToIdMap).length} dimensions (${Object.keys(nameToIdMap).slice(0, 8).join(', ')}...)`);
+    return nameToIdMap;
+  } catch (error: any) {
+    console.error(`[testing] Error in buildMetricNameToIdMap for report ${reportId}:`, error);
+    throw error;
+  }
 }
 
 /**
@@ -591,6 +627,12 @@ export async function computeSlideReportPivotData(
   dateRange: { year: number; month: string; from: string; to: string },
   onProgress?: ProgressCallback
 ): Promise<SlideReportPivotData> {
+  console.log(`[testing] Starting pivot data computation`, {
+    channels: configuration.selectedChannels,
+    reportIds: Object.keys(reportIds),
+    dateRange: `${dateRange.from} to ${dateRange.to}`,
+  });
+  
   // Validate date range
   const fromDate = new Date(dateRange.from);
   const toDate = new Date(dateRange.to);
@@ -598,7 +640,7 @@ export async function computeSlideReportPivotData(
   
   // Check if date range is in the future
   if (fromDate > now || toDate > now) {
-    console.warn(`[pivot] Date range includes future dates. From: ${dateRange.from}, To: ${dateRange.to}, Now: ${now.toISOString()}`);
+    console.warn(`[testing] Date range includes future dates. From: ${dateRange.from}, To: ${dateRange.to}, Now: ${now.toISOString()}`);
   }
   
   // Check if date range is valid (from <= to)
@@ -610,11 +652,12 @@ export async function computeSlideReportPivotData(
   const fiveYearsAgo = new Date();
   fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
   if (toDate < fiveYearsAgo) {
-    console.warn(`[pivot] Date range is more than 5 years in the past. Data might not be available. From: ${dateRange.from}, To: ${dateRange.to}`);
+    console.warn(`[testing] Date range is more than 5 years in the past. Data might not be available. From: ${dateRange.from}, To: ${dateRange.to}`);
   }
   
   // Years to compute data for - covers past 3 years for historical comparison
   const YEARS_TO_COMPUTE = [2024, 2025, 2026];
+  console.log(`[testing] Computing data for years: ${YEARS_TO_COMPUTE.join(', ')}`);
   
   const pivotData: SlideReportPivotData = {
     overview: {
@@ -656,191 +699,231 @@ export async function computeSlideReportPivotData(
 
   // Compute data for each channel
   let channelIndex = 0;
+  const channelErrors: Array<{ channel: string; reportId: string; error: string }> = [];
+  
   for (const channel of configuration.selectedChannels) {
     const reportId = reportIds[channel];
-    if (!reportId) continue;
+    if (!reportId) {
+      console.warn(`[testing] Skipping channel ${channel} - no report ID found`);
+      continue;
+    }
 
-    onProgress?.(3, `Processing ${channel} data...`);
+    try {
+      console.log(`[testing] Starting processing for channel ${channel} (reportId: ${reportId})`);
+      onProgress?.(3, `Processing ${channel} data...`);
 
-    const channelConfig = configuration.channelConfigs[channel];
-    const dimensionFilter = channelConfig?.dimensionId && channelConfig.selectedValues.length > 0
-      ? {
-          dimensionId: channelConfig.dimensionId,
-          values: channelConfig.selectedValues,
+      const channelConfig = configuration.channelConfigs[channel];
+      const dimensionFilter = channelConfig?.dimensionId && channelConfig.selectedValues.length > 0
+        ? {
+            dimensionId: channelConfig.dimensionId,
+            values: channelConfig.selectedValues,
+          }
+        : undefined;
+
+      // Build metric name to ID mapping for this report
+      console.log(`[testing] Building metric map for channel ${channel}`);
+      const metricNameToIdMap = await buildMetricNameToIdMap(reportId);
+      console.log(`[testing] Metric map built for channel ${channel}: ${Object.keys(metricNameToIdMap).length} dimensions`);
+      
+      // Fetch dimension data
+      console.log(`[testing] Fetching dimension data for channel ${channel}`);
+      const rows = await fetchDimensionDataForReport(reportId);
+      console.log(`[testing] Fetched ${rows.length} rows for ${channel}, metric map keys: ${Object.keys(metricNameToIdMap).join(', ')}`);
+    
+      // Validate that we have data for the date range
+      if (rows.length === 0) {
+        console.warn(`[testing] No data found for ${channel} (reportId: ${reportId}). This channel will have zero metrics.`);
+      } else {
+        // Check if any rows fall within the date range (sample check)
+        const dateDimId = Object.entries(metricNameToIdMap).find(([name]) => 
+          name.toLowerCase() === 'date'
+        )?.[1];
+        
+        if (dateDimId) {
+          const sampleRows = rows.slice(0, Math.min(100, rows.length));
+          const rowsInRange = sampleRows.filter(row => {
+            const rowData = row.dimension_values || row;
+            const dateValue = rowData[dateDimId];
+            if (dateValue) {
+              const rowDate = new Date(dateValue);
+              return rowDate >= currentDateRange.start && rowDate <= currentDateRange.end;
+            }
+            return false;
+          });
+          
+          if (rowsInRange.length === 0 && sampleRows.length > 0) {
+            console.warn(`[testing] Warning: No data found in date range ${dateRange.from} to ${dateRange.to} for ${channel}. Check if date range matches available data.`);
+          }
         }
-      : undefined;
+      }
 
-    // Build metric name to ID mapping for this report
-    const metricNameToIdMap = await buildMetricNameToIdMap(reportId);
+      // Compute current period metrics
+      console.log(`[testing] Computing current period metrics for channel ${channel}`);
+      const currentMetrics = aggregateMetricsForDateRange(rows, currentDateRange, metricNameToIdMap, dimensionFilter);
+      const currentChannelMetrics = calculateDerivedMetrics(currentMetrics);
+
+      // Compute previous period (previous month)
+      console.log(`[testing] Computing previous period metrics for channel ${channel}`);
+      const prevMonthStart = new Date(currentDateRange.start);
+      prevMonthStart.setMonth(prevMonthStart.getMonth() - 1);
+      const prevMonthEnd = new Date(prevMonthStart);
+      prevMonthEnd.setMonth(prevMonthEnd.getMonth() + 1);
+      prevMonthEnd.setDate(0); // Last day of previous month
+      
+      const prevPeriodMetrics = aggregateMetricsForDateRange(
+        rows, 
+        { start: prevMonthStart, end: prevMonthEnd },
+        metricNameToIdMap,
+        dimensionFilter
+      );
+      const prevPeriodChannelMetrics = calculateDerivedMetrics(prevPeriodMetrics);
+
+      // Compute previous year (same month last year)
+      console.log(`[testing] Computing previous year metrics for channel ${channel}`);
+      const prevYearStart = new Date(currentDateRange.start);
+      prevYearStart.setFullYear(prevYearStart.getFullYear() - 1);
+      const prevYearEnd = new Date(currentDateRange.end);
+      prevYearEnd.setFullYear(prevYearEnd.getFullYear() - 1);
+      
+      const prevYearMetrics = aggregateMetricsForDateRange(
+        rows, 
+        { start: prevYearStart, end: prevYearEnd },
+        metricNameToIdMap,
+        dimensionFilter
+      );
+      const prevYearChannelMetrics = calculateDerivedMetrics(prevYearMetrics);
+
+      // Compute monthly metrics for ALL years
+      console.log(`[testing] Computing monthly metrics for channel ${channel} (years: ${YEARS_TO_COMPUTE.join(', ')})`);
+      const allMonthly = computeAllMonthlyMetrics(rows, YEARS_TO_COMPUTE, metricNameToIdMap, dimensionFilter);
+      console.log(`[testing] Computed ${Object.keys(allMonthly).length} monthly data points for channel ${channel}`);
+      
+      // Compute yearly totals
+      console.log(`[testing] Computing yearly totals for channel ${channel}`);
+      const yearly = computeYearlyMetrics(rows, YEARS_TO_COMPUTE, metricNameToIdMap, dimensionFilter);
+      console.log(`[testing] Computed yearly totals for channel ${channel}: ${Object.keys(yearly).length} years`);
+
+      // Compute breakdowns for each breakdown dimension - ALL TIME data
+      const breakdowns: Record<string, BreakdownRow[]> = {};
+      const breakdownConfig = configuration.breakdownConfigs?.[channel];
+      
+      // Get configured breakdown dimensions or use defaults
+      let breakdownDimensionIds = breakdownConfig?.breakdownDimensionIds || [];
+      
+      // If no breakdowns configured, auto-detect from data
+      if (breakdownDimensionIds.length === 0) {
+        console.log(`[testing] No breakdown dimensions configured for ${channel}, auto-detecting...`);
+        // Look for common breakdown dimensions in the metricNameToIdMap
+        const hotelId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'hotel')?.[1];
+        const campaignId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'campaign')?.[1];
+        const accountId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'account')?.[1];
+        const linkTypeId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'link type')?.[1];
+        
+        // Add available text/category dimensions as breakdowns
+        if (hotelId) breakdownDimensionIds.push(hotelId);
+        if (campaignId) breakdownDimensionIds.push(campaignId);
+        if (accountId && !hotelId) breakdownDimensionIds.push(accountId); // Account if no Hotel
+        if (linkTypeId && channel === 'metasearch') breakdownDimensionIds.push(linkTypeId);
+        
+        console.log(`[testing] Auto-detected breakdown dimensions for ${channel}:`, breakdownDimensionIds);
+      } else {
+        console.log(`[testing] Using configured breakdown dimensions for ${channel}:`, breakdownDimensionIds);
+      }
     
-    // Fetch dimension data
-    const rows = await fetchDimensionDataForReport(reportId);
-    console.log(`Fetched ${rows.length} rows for ${channel}, metric map keys: ${Object.keys(metricNameToIdMap).join(', ')}`);
+      // Compute ALL-TIME breakdowns
+      console.log(`[testing] Computing breakdowns for channel ${channel}`);
+      const breakdownDimNameMap: Record<string, string> = {}; // dimId -> dimName
+      if (breakdownDimensionIds.length > 0) {
+        for (const breakdownDimId of breakdownDimensionIds) {
+          try {
+            // Look up dimension name from dimensions table
+            const { data: dimInfo, error: dimInfoError } = await supabase
+              .from('dimensions')
+              .select('name')
+              .eq('id', breakdownDimId)
+              .single();
+            
+            if (dimInfoError) {
+              console.error(`[testing] Failed to fetch dimension info for ${breakdownDimId} in channel ${channel}:`, dimInfoError);
+              // Continue with dimension ID as name if lookup fails
+            }
+            
+            const breakdownDimName = dimInfo?.name || breakdownDimId;
+            breakdownDimNameMap[breakdownDimId] = breakdownDimName;
+            
+            breakdowns[breakdownDimName] = computeBreakdownAllTime(
+              rows,
+              breakdownDimId,
+              breakdownDimName,
+              metricNameToIdMap,
+              dimensionFilter
+            );
+            console.log(`[testing] Computed all-time breakdown for ${breakdownDimName}: ${breakdowns[breakdownDimName].length} rows`);
+          } catch (breakdownError: any) {
+            console.error(`[testing] Error computing breakdown for dimension ${breakdownDimId} in channel ${channel}:`, breakdownError);
+            // Continue with other breakdowns
+          }
+        }
+      }
     
-    // Validate that we have data for the date range
-    if (rows.length === 0) {
-      console.warn(`[pivot] No data found for ${channel} (reportId: ${reportId}). This channel will have zero metrics.`);
-    } else {
-      // Check if any rows fall within the date range (sample check)
+      // Compute MONTHLY breakdowns for each month in allMonthly
+      console.log(`[testing] Computing monthly breakdowns for channel ${channel}`);
+      const monthlyBreakdowns: Record<string, Record<string, BreakdownRow[]>> = {};
       const dateDimId = Object.entries(metricNameToIdMap).find(([name]) => 
         name.toLowerCase() === 'date'
       )?.[1];
       
-      if (dateDimId) {
-        const sampleRows = rows.slice(0, Math.min(100, rows.length));
-        const rowsInRange = sampleRows.filter(row => {
-          const rowData = row.dimension_values || row;
-          const dateValue = rowData[dateDimId];
-          if (dateValue) {
-            const rowDate = new Date(dateValue);
-            return rowDate >= currentDateRange.start && rowDate <= currentDateRange.end;
-          }
-          return false;
-        });
+      for (const monthKey of Object.keys(allMonthly)) {
+        const [year, month] = monthKey.split('-').map(Number);
+        const monthStart = new Date(year, month - 1, 1);
+        const monthEnd = new Date(year, month, 0, 23, 59, 59); // Last day of month
         
-        if (rowsInRange.length === 0 && sampleRows.length > 0) {
-          console.warn(`[pivot] Warning: No data found in date range ${dateRange.from} to ${dateRange.to} for ${channel}. Check if date range matches available data.`);
+        monthlyBreakdowns[monthKey] = {};
+        
+        for (const breakdownDimId of breakdownDimensionIds) {
+          const breakdownDimName = breakdownDimNameMap[breakdownDimId] || breakdownDimId;
+          monthlyBreakdowns[monthKey][breakdownDimName] = computeBreakdownForMonth(
+            rows,
+            breakdownDimId,
+            breakdownDimName,
+            metricNameToIdMap,
+            { start: monthStart, end: monthEnd },
+            dateDimId,
+            dimensionFilter
+          );
         }
       }
-    }
+      console.log(`[testing] Computed monthly breakdowns for ${Object.keys(monthlyBreakdowns).length} months for channel ${channel}`);
 
-    // Compute current period metrics
-    const currentMetrics = aggregateMetricsForDateRange(rows, currentDateRange, metricNameToIdMap, dimensionFilter);
-    const currentChannelMetrics = calculateDerivedMetrics(currentMetrics);
-
-    // Compute previous period (previous month)
-    const prevMonthStart = new Date(currentDateRange.start);
-    prevMonthStart.setMonth(prevMonthStart.getMonth() - 1);
-    const prevMonthEnd = new Date(prevMonthStart);
-    prevMonthEnd.setMonth(prevMonthEnd.getMonth() + 1);
-    prevMonthEnd.setDate(0); // Last day of previous month
-    
-    const prevPeriodMetrics = aggregateMetricsForDateRange(
-      rows, 
-      { start: prevMonthStart, end: prevMonthEnd },
-      metricNameToIdMap,
-      dimensionFilter
-    );
-    const prevPeriodChannelMetrics = calculateDerivedMetrics(prevPeriodMetrics);
-
-    // Compute previous year (same month last year)
-    const prevYearStart = new Date(currentDateRange.start);
-    prevYearStart.setFullYear(prevYearStart.getFullYear() - 1);
-    const prevYearEnd = new Date(currentDateRange.end);
-    prevYearEnd.setFullYear(prevYearEnd.getFullYear() - 1);
-    
-    const prevYearMetrics = aggregateMetricsForDateRange(
-      rows, 
-      { start: prevYearStart, end: prevYearEnd },
-      metricNameToIdMap,
-      dimensionFilter
-    );
-    const prevYearChannelMetrics = calculateDerivedMetrics(prevYearMetrics);
-
-    // Compute monthly metrics for ALL years
-    const allMonthly = computeAllMonthlyMetrics(rows, YEARS_TO_COMPUTE, metricNameToIdMap, dimensionFilter);
-    
-    // Compute yearly totals
-    const yearly = computeYearlyMetrics(rows, YEARS_TO_COMPUTE, metricNameToIdMap, dimensionFilter);
-
-    // Compute breakdowns for each breakdown dimension - ALL TIME data
-    const breakdowns: Record<string, BreakdownRow[]> = {};
-    const breakdownConfig = configuration.breakdownConfigs?.[channel];
-    
-    // Get configured breakdown dimensions or use defaults
-    let breakdownDimensionIds = breakdownConfig?.breakdownDimensionIds || [];
-    
-    // If no breakdowns configured, auto-detect from data
-    if (breakdownDimensionIds.length === 0) {
-      // Look for common breakdown dimensions in the metricNameToIdMap
-      const hotelId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'hotel')?.[1];
-      const campaignId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'campaign')?.[1];
-      const accountId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'account')?.[1];
-      const linkTypeId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'link type')?.[1];
+      // Compute unique filter values for each filter dimension (stored for instant filter dropdowns)
+      console.log(`[testing] Computing filter values for channel ${channel}`);
+      const filterUniqueValues: Record<string, { name: string; values: string[] }> = {};
+      const filterConfig = configuration.filterConfigs?.[channel];
+      const filterDimensionIds = filterConfig?.filterDimensionIds || [];
       
-      // Add available text/category dimensions as breakdowns
-      if (hotelId) breakdownDimensionIds.push(hotelId);
-      if (campaignId) breakdownDimensionIds.push(campaignId);
-      if (accountId && !hotelId) breakdownDimensionIds.push(accountId); // Account if no Hotel
-      if (linkTypeId && channel === 'metasearch') breakdownDimensionIds.push(linkTypeId);
-      
-      console.log(`Auto-detected breakdown dimensions for ${channel}:`, breakdownDimensionIds);
-    }
+      console.log(`[testing] Filter dimension IDs for ${channel}:`, filterDimensionIds);
     
-    // Compute ALL-TIME breakdowns
-    const breakdownDimNameMap: Record<string, string> = {}; // dimId -> dimName
-    if (breakdownDimensionIds.length > 0) {
-      for (const breakdownDimId of breakdownDimensionIds) {
-        // Look up dimension name from dimensions table
-        const { data: dimInfo } = await supabase
+      if (filterDimensionIds.length > 0) {
+        // Fetch dimension names for filter dimensions
+        console.log(`[testing] Fetching filter dimension info for channel ${channel}`);
+        const { data: filterDimInfo, error: filterDimInfoError } = await supabase
           .from('dimensions')
-          .select('name')
-          .eq('id', breakdownDimId)
-          .single();
+          .select('id, name')
+          .in('id', filterDimensionIds);
         
-        const breakdownDimName = dimInfo?.name || breakdownDimId;
-        breakdownDimNameMap[breakdownDimId] = breakdownDimName;
-        
-        breakdowns[breakdownDimName] = computeBreakdownAllTime(
-          rows,
-          breakdownDimId,
-          breakdownDimName,
-          metricNameToIdMap,
-          dimensionFilter
-        );
-        console.log(`Computed all-time breakdown for ${breakdownDimName}: ${breakdowns[breakdownDimName].length} rows`);
-      }
-    }
-    
-    // Compute MONTHLY breakdowns for each month in allMonthly
-    const monthlyBreakdowns: Record<string, Record<string, BreakdownRow[]>> = {};
-    const dateDimId = Object.entries(metricNameToIdMap).find(([name]) => 
-      name.toLowerCase() === 'date'
-    )?.[1];
-    
-    for (const monthKey of Object.keys(allMonthly)) {
-      const [year, month] = monthKey.split('-').map(Number);
-      const monthStart = new Date(year, month - 1, 1);
-      const monthEnd = new Date(year, month, 0, 23, 59, 59); // Last day of month
-      
-      monthlyBreakdowns[monthKey] = {};
-      
-      for (const breakdownDimId of breakdownDimensionIds) {
-        const breakdownDimName = breakdownDimNameMap[breakdownDimId] || breakdownDimId;
-        monthlyBreakdowns[monthKey][breakdownDimName] = computeBreakdownForMonth(
-          rows,
-          breakdownDimId,
-          breakdownDimName,
-          metricNameToIdMap,
-          { start: monthStart, end: monthEnd },
-          dateDimId,
-          dimensionFilter
-        );
-      }
-    }
-
-    // Compute unique filter values for each filter dimension (stored for instant filter dropdowns)
-    const filterUniqueValues: Record<string, { name: string; values: string[] }> = {};
-    const filterConfig = configuration.filterConfigs?.[channel];
-    const filterDimensionIds = filterConfig?.filterDimensionIds || [];
-    
-    console.log(`[pivot] Computing filter values for ${channel}: filterDimensionIds =`, filterDimensionIds);
-    
-    if (filterDimensionIds.length > 0) {
-      // Fetch dimension names for filter dimensions
-      const { data: filterDimInfo } = await supabase
-        .from('dimensions')
-        .select('id, name')
-        .in('id', filterDimensionIds);
-      
-      const filterDimNameMap: Record<string, string> = {};
-      if (filterDimInfo) {
-        for (const dim of filterDimInfo) {
-          filterDimNameMap[dim.id] = dim.name;
+        if (filterDimInfoError) {
+          console.error(`[testing] Failed to fetch filter dimension info for channel ${channel}:`, filterDimInfoError);
+          throw new Error(`Failed to fetch filter dimension info for channel ${channel}: ${filterDimInfoError.message}`);
         }
-      }
-      
-      console.log(`[pivot] Filter dimension name map:`, filterDimNameMap);
+        
+        const filterDimNameMap: Record<string, string> = {};
+        if (filterDimInfo) {
+          for (const dim of filterDimInfo) {
+            filterDimNameMap[dim.id] = dim.name;
+          }
+        }
+        
+        console.log(`[testing] Filter dimension name map for ${channel}:`, filterDimNameMap);
       
       // Extract unique values for each filter dimension from the rows
       for (const filterDimId of filterDimensionIds) {
@@ -871,13 +954,14 @@ export async function computeSlideReportPivotData(
           values: sortedValues,
         };
         
-        console.log(`[pivot] Computed ${sortedValues.length} unique filter values for ${filterDimNameMap[filterDimId] || filterDimId}:`, sortedValues.slice(0, 5));
+        console.log(`[testing] Computed ${sortedValues.length} unique filter values for ${filterDimNameMap[filterDimId] || filterDimId} in channel ${channel}:`, sortedValues.slice(0, 5));
       }
     } else {
-      console.log(`[pivot] No filter dimension IDs configured for ${channel}`);
+      console.log(`[testing] No filter dimension IDs configured for ${channel}`);
     }
 
     // Build dimension map (dimensionId -> dimensionName) for interpreting raw rows
+    console.log(`[testing] Building dimension map for channel ${channel}`);
     const dimensionMap: Record<string, string> = {};
     Object.entries(metricNameToIdMap).forEach(([name, id]) => {
       dimensionMap[id] = name;
@@ -891,53 +975,78 @@ export async function computeSlideReportPivotData(
       return { ...rowData };
     });
     
-    console.log(`Storing ${rawDataRows.length} raw data rows for ${channel} with ${Object.keys(dimensionMap).length} dimensions`);
+    console.log(`[testing] Storing ${rawDataRows.length} raw data rows for ${channel} with ${Object.keys(dimensionMap).length} dimensions`);
 
-    pivotData.channels[channel] = {
-      current: currentChannelMetrics,
-      previous_period: prevPeriodChannelMetrics,
-      previous_year: prevYearChannelMetrics,
-      monthly: allMonthly,
-      yearly,
-      breakdowns,
-      monthlyBreakdowns,
-      filterUniqueValues,
-      rawDataRows, // All raw rows for filtering
-      dimensionMap, // ID -> Name mapping for interpreting rows
-    };
+      pivotData.channels[channel] = {
+        current: currentChannelMetrics,
+        previous_period: prevPeriodChannelMetrics,
+        previous_year: prevYearChannelMetrics,
+        monthly: allMonthly,
+        yearly,
+        breakdowns,
+        monthlyBreakdowns,
+        filterUniqueValues,
+        rawDataRows, // All raw rows for filtering
+        dimensionMap, // ID -> Name mapping for interpreting rows
+      };
 
-    // Aggregate monthly data for overview
-    for (const [monthKey, metrics] of Object.entries(allMonthly)) {
-      if (!overviewMonthly[monthKey]) {
-        overviewMonthly[monthKey] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+      // Aggregate monthly data for overview
+      for (const [monthKey, metrics] of Object.entries(allMonthly)) {
+        if (!overviewMonthly[monthKey]) {
+          overviewMonthly[monthKey] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+        }
+        overviewMonthly[monthKey].impressions += metrics.impressions;
+        overviewMonthly[monthKey].clicks += metrics.clicks;
+        overviewMonthly[monthKey].cost += metrics.cost;
+        overviewMonthly[monthKey].revenue += metrics.revenue;
+        overviewMonthly[monthKey].bookings += metrics.bookings;
       }
-      overviewMonthly[monthKey].impressions += metrics.impressions;
-      overviewMonthly[monthKey].clicks += metrics.clicks;
-      overviewMonthly[monthKey].cost += metrics.cost;
-      overviewMonthly[monthKey].revenue += metrics.revenue;
-      overviewMonthly[monthKey].bookings += metrics.bookings;
-    }
 
-    // Aggregate yearly data for overview
-    for (const [yearKey, metrics] of Object.entries(yearly)) {
-      if (!overviewYearly[yearKey]) {
-        overviewYearly[yearKey] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+      // Aggregate yearly data for overview
+      for (const [yearKey, metrics] of Object.entries(yearly)) {
+        if (!overviewYearly[yearKey]) {
+          overviewYearly[yearKey] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+        }
+        overviewYearly[yearKey].impressions += metrics.impressions;
+        overviewYearly[yearKey].clicks += metrics.clicks;
+        overviewYearly[yearKey].cost += metrics.cost;
+        overviewYearly[yearKey].revenue += metrics.revenue;
+        overviewYearly[yearKey].bookings += metrics.bookings;
       }
-      overviewYearly[yearKey].impressions += metrics.impressions;
-      overviewYearly[yearKey].clicks += metrics.clicks;
-      overviewYearly[yearKey].cost += metrics.cost;
-      overviewYearly[yearKey].revenue += metrics.revenue;
-      overviewYearly[yearKey].bookings += metrics.bookings;
-    }
 
-    // Add to overview current totals
-    pivotData.overview.current.impressions += currentChannelMetrics.impressions;
-    pivotData.overview.current.clicks += currentChannelMetrics.clicks;
-    pivotData.overview.current.cost += currentChannelMetrics.cost;
-    pivotData.overview.current.revenue += currentChannelMetrics.revenue;
-    pivotData.overview.current.bookings += currentChannelMetrics.bookings;
-    
-    channelIndex++;
+      // Add to overview current totals
+      pivotData.overview.current.impressions += currentChannelMetrics.impressions;
+      pivotData.overview.current.clicks += currentChannelMetrics.clicks;
+      pivotData.overview.current.cost += currentChannelMetrics.cost;
+      pivotData.overview.current.revenue += currentChannelMetrics.revenue;
+      pivotData.overview.current.bookings += currentChannelMetrics.bookings;
+      
+      console.log(`[testing] Successfully completed processing for channel ${channel}`);
+      channelIndex++;
+    } catch (channelError: any) {
+      const errorMessage = channelError?.message || channelError?.error_description || channelError?.details || String(channelError);
+      console.error(`[testing] Error processing channel ${channel} (reportId: ${reportId}):`, {
+        error: channelError,
+        message: errorMessage,
+        stack: channelError?.stack,
+      });
+      
+      channelErrors.push({
+        channel,
+        reportId,
+        error: errorMessage,
+      });
+      
+      // Continue processing other channels
+      console.warn(`[testing] Continuing with other channels despite error in ${channel}`);
+    }
+  }
+  
+  // If any channels failed, throw a comprehensive error
+  if (channelErrors.length > 0) {
+    const errorSummary = channelErrors.map(e => `${e.channel} (${e.reportId}): ${e.error}`).join('; ');
+    console.error(`[testing] Failed to process ${channelErrors.length} channel(s):`, channelErrors);
+    throw new Error(`Failed to process ${channelErrors.length} channel(s): ${errorSummary}`);
   }
 
   // Finalize overview monthly data (calculate derived metrics)
@@ -1025,5 +1134,6 @@ export async function computeSlideReportPivotData(
     console.warn('[testing] QA Verification Warnings:', qaReport.warnings);
   }
 
+  console.log(`[testing] Pivot data computation completed successfully for ${Object.keys(pivotData.channels).length} channel(s)`);
   return pivotData;
 }

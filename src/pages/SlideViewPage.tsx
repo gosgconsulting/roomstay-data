@@ -3664,12 +3664,18 @@ export default function SlideViewPage() {
       
       let pivotData: any;
       try {
+        console.log(`[testing] Starting pivot data computation`, {
+          channels: filteredConfig.selectedChannels,
+          reportIds: Object.keys(reportIdsMap),
+          dateRange: `${dateRange.from} to ${dateRange.to}`,
+        });
+        
         const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
         type ProgressCallback = (step: number, message: string) => void;
         
         // Create progress callback to show real-time progress
         const onProgress: ProgressCallback = (step, message) => {
-          console.log(`[refresh] Progress step ${step}: ${message}`);
+          console.log(`[testing] Progress step ${step}: ${message}`);
           // Progress is shown via step 2 status
         };
         
@@ -3683,6 +3689,8 @@ export default function SlideViewPage() {
           computeSlideReportPivotData(reportIdsMap, filteredConfig, dateRange, onProgress),
           timeoutPromise
         ]);
+        
+        console.log(`[testing] Pivot data computation completed successfully`);
       } catch (pivotError: any) {
         // Supabase/Postgrest errors often come through as plain objects (not Error instances)
         // and would display as "[object Object]" without normalization.
@@ -3700,7 +3708,14 @@ export default function SlideViewPage() {
           }
         })();
 
-        console.error("[refresh] Step 2: Pivot computation error:", pivotError);
+        console.error("[testing] Step 2: Pivot computation error:", {
+          error: pivotError,
+          message: details,
+          stack: pivotError?.stack,
+          channels: filteredConfig.selectedChannels,
+          reportIds: Object.keys(reportIdsMap),
+          dateRange: `${dateRange.from} to ${dateRange.to}`,
+        });
 
         const friendly = (details || safeJson || "Unknown error").toString();
         throw new Error(`Pivot data computation failed: ${friendly}`);
