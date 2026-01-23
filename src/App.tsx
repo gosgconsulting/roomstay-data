@@ -21,7 +21,9 @@ import DimensionsPage from "./pages/DimensionsPage";
 import ForecastScenarioPage from "./pages/ForecastScenarioPage";
 import { ReportsSidebarDemo } from "./components/ReportsSidebarDemo";
 import DevPage from "./pages/DevPage";
+import PriceWidgetListPage from "./pages/PriceWidgetListPage";
 import PriceWidgetPage from "./pages/PriceWidgetPage";
+import PriceWidgetDetailPage from "./pages/PriceWidgetDetailPage";
 
 const queryClient = new QueryClient();
 
@@ -46,7 +48,9 @@ const App = () => (
           <Route path="/tools/forecasting" element={<ForecastingTool />} />
           <Route path="/tools/forecasting/scenario/:scenarioId" element={<ForecastScenarioPage />} />
           <Route path="/tools/forecasting/:accountId" element={<ForecastingDashboard />} />
-          <Route path="/tools/price-widget/:accountId" element={<PriceWidgetPage />} />
+          <Route path="/tools/price-widget/:accountId" element={<PriceWidgetListPage />} />
+          <Route path="/tools/price-widget/:accountId/create" element={<PriceWidgetPage />} />
+          <Route path="/tools/price-widget/:accountId/:widgetId" element={<PriceWidgetDetailPage />} />
           <Route path="/tools/report/:reportName" element={<AISummaryPage />} />
           {/* Legacy route support - redirect old UUID-based routes */}
           <Route path="/tools/report/:accountId/:summaryId" element={<AISummaryPage />} />

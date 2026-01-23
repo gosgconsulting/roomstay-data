@@ -62,7 +62,6 @@ export default function PriceWidgetPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [widgets, setWidgets] = useState<PriceWidget[]>([]);
   const [isCreating, setIsCreating] = useState(false);
 
   const form = useForm<PriceWidgetFormData>({
@@ -85,7 +84,6 @@ export default function PriceWidgetPage() {
   useEffect(() => {
     if (session && accountId) {
       loadAccount();
-      loadWidgets();
     }
   }, [session, accountId]);
 
@@ -149,35 +147,6 @@ export default function PriceWidgetPage() {
     }
   };
 
-  const loadWidgets = async () => {
-    if (!accountId) return;
-    
-    try {
-      // Note: This assumes a 'price_widgets' table exists in the database
-      // If it doesn't exist yet, we'll handle the error gracefully
-      const { data, error } = await supabase
-        .from('price_widgets')
-        .select('*')
-        .eq('account_id', accountId)
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        // Table might not exist yet, that's okay
-        if (error.code === 'PGRST116') {
-          console.log('[testing] price_widgets table does not exist yet');
-          setWidgets([]);
-          return;
-        }
-        throw error;
-      }
-      
-      setWidgets(data || []);
-    } catch (error) {
-      console.error('Error loading widgets:', error);
-      // Don't show error toast for missing table, just set empty array
-      setWidgets([]);
-    }
-  };
 
   const handleSignOut = async () => {
     try {
@@ -267,7 +236,8 @@ export default function PriceWidgetPage() {
       });
       
       form.reset();
-      loadWidgets();
+      // Navigate back to list page after creation
+      navigate(`/tools/price-widget/${accountId}`);
     } catch (error) {
       console.error('Error creating widget:', error);
       toast({
@@ -298,16 +268,16 @@ export default function PriceWidgetPage() {
         <header className="border-b">
           <div className="container mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => navigate(`/?account=${accountId}`)}
-                title="Back to accounts"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate(`/tools/price-widget/${accountId}`)}
+              title="Back to widgets list"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
               <div>
-                <h1 className="text-2xl font-bold">{account?.name} - Price Widget</h1>
+                <h1 className="text-2xl font-bold">{account?.name} - Create Price Widget</h1>
                 {account?.description && (
                   <p className="text-sm text-muted-foreground">{account.description}</p>
                 )}
@@ -581,32 +551,6 @@ export default function PriceWidgetPage() {
             </CardContent>
           </Card>
 
-          {/* Widgets List */}
-          {widgets.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Your Price Widgets</CardTitle>
-                <CardDescription>
-                  {widgets.length} widget{widgets.length !== 1 ? 's' : ''} configured
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {widgets.map((widget) => (
-                    <div
-                      key={widget.id}
-                      className="p-4 border rounded-lg space-y-2"
-                    >
-                      <div className="font-semibold">{widget.search_query}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {widget.check_in_date} to {widget.check_out_date} • {widget.number_of_adults} adults, {widget.number_of_children} children • {widget.currency_code}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </main>
       </div>
     </TooltipProvider>
