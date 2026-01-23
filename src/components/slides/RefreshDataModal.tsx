@@ -8,7 +8,7 @@ interface RefreshDataModalProps {
   isRefreshModalOpen: boolean;
   setIsRefreshModalOpen: (open: boolean) => void;
   refreshStep: number;
-  refreshStepStatus: Record<number, 'pending' | 'in_progress' | 'complete' | 'error'>;
+  refreshStepStatus: Record<number, 'pending' | 'loading' | 'complete' | 'error'>;
   refreshError: string | null;
 }
 

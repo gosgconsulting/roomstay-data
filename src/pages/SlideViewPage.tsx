@@ -1983,7 +1983,7 @@ export default function SlideViewPage() {
   // Refresh Data Modal state - 5 steps now
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
   const [refreshStep, setRefreshStep] = useState(0); // 0 = not started, 1-5 = steps
-  const [refreshStepStatus, setRefreshStepStatus] = useState<Record<number, 'pending' | 'in_progress' | 'complete' | 'error'>>({
+  const [refreshStepStatus, setRefreshStepStatus] = useState<Record<number, 'pending' | 'loading' | 'complete' | 'error'>>({
     1: 'pending',
     2: 'pending',
     3: 'pending',
@@ -3568,7 +3568,7 @@ export default function SlideViewPage() {
     setRefreshStep(1);
     setRefreshError(null);
     setRefreshStepStatus({
-      1: 'in_progress',
+      1: 'loading',
       2: 'pending',
       3: 'pending',
       4: 'pending',
@@ -3577,7 +3577,7 @@ export default function SlideViewPage() {
 
     try {
       // Step 1: Verify settings
-      setRefreshStepStatus(prev => ({ ...prev, 1: 'in_progress' }));
+      setRefreshStepStatus(prev => ({ ...prev, 1: 'loading' }));
       
       const { data: latestReport, error: fetchError } = await supabase
         .from("slide_reports")
@@ -3590,7 +3590,7 @@ export default function SlideViewPage() {
         throw new Error("Configuration or date range not found. Please save Edit Source settings first.");
       }
 
-      setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'in_progress' }));
+      setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'loading' }));
       setRefreshStep(2);
 
       // Step 2: Validate and update report IDs to use account-specific ones
@@ -3665,8 +3665,24 @@ export default function SlideViewPage() {
       let pivotData: any;
       try {
         const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
-
-        pivotData = await computeSlideReportPivotData(reportIdsMap, filteredConfig, dateRange);
+        type ProgressCallback = (step: number, message: string) => void;
+        
+        // Create progress callback to show real-time progress
+        const onProgress: ProgressCallback = (step, message) => {
+          console.log(`[refresh] Progress step ${step}: ${message}`);
+          // Progress is shown via step 2 status
+        };
+        
+        // Add timeout handling (5 minutes for large datasets)
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Pivot computation timed out after 5 minutes. Please try again or reduce the date range.')), 300000)
+        );
+        
+        // Race between computation and timeout
+        pivotData = await Promise.race([
+          computeSlideReportPivotData(reportIdsMap, filteredConfig, dateRange, onProgress),
+          timeoutPromise
+        ]);
       } catch (pivotError: any) {
         // Supabase/Postgrest errors often come through as plain objects (not Error instances)
         // and would display as "[object Object]" without normalization.
@@ -3696,7 +3712,7 @@ export default function SlideViewPage() {
         throw new Error('Pivot data computation returned invalid data');
       }
       
-      setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'in_progress' }));
+      setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'loading' }));
       setRefreshStep(3);
 
       // Step 3: Store monthly data in Supabase (organized by year/month)
@@ -3785,7 +3801,7 @@ export default function SlideViewPage() {
         }
       }
 
-      setRefreshStepStatus(prev => ({ ...prev, 3: 'complete', 4: 'in_progress' }));
+      setRefreshStepStatus(prev => ({ ...prev, 3: 'complete', 4: 'loading' }));
       setRefreshStep(4);
 
       // Step 4: Store breakdown and filter configurations
@@ -3804,7 +3820,7 @@ export default function SlideViewPage() {
       // They will be saved in step 5 along with the pivot_data
       // Here we ensure the pivot_data includes breakdown tables for each configured breakdown dimension
       
-      setRefreshStepStatus(prev => ({ ...prev, 4: 'complete', 5: 'in_progress' }));
+      setRefreshStepStatus(prev => ({ ...prev, 4: 'complete', 5: 'loading' }));
       setRefreshStep(5);
 
       // Step 5: Update slide report and refresh UI
@@ -3820,20 +3836,28 @@ export default function SlideViewPage() {
         throw new Error(`Failed to save pivot data: ${updateError.message}`);
       }
 
-      // Invalidate and refetch queries
+      // Invalidate and refetch queries to ensure UI updates with new data
       if (slideReportId) {
-        await queryClient.invalidateQueries({ 
+        // Invalidate first to mark queries as stale
+        queryClient.invalidateQueries({ 
           queryKey: ['slide_reports', 'detail', slideReportId] 
         });
+        
+        // Force refetch and wait for it to complete
         await queryClient.refetchQueries({ 
           queryKey: ['slide_reports', 'detail', slideReportId],
           type: 'active'
         });
+        
+        // Also invalidate list query
         if (accountId) {
-          await queryClient.invalidateQueries({ 
+          queryClient.invalidateQueries({ 
             queryKey: ['slide_reports', 'list', accountId] 
           });
         }
+        
+        // Small delay to ensure React has processed the query update
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
       
       // Filter to only include channels that have reports
@@ -3898,12 +3922,38 @@ export default function SlideViewPage() {
     } catch (error) {
       console.error("[refresh] Error:", error);
       const currentStep = refreshStep;
+      
+      // Determine error message based on error type
+      let errorMessage = "Failed to refresh data. Please try again.";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // Provide more helpful error messages for common issues
+        if (error.message.includes('timeout') || error.message.includes('timed out')) {
+          errorMessage = "The data refresh took too long. This might be due to a large dataset. Please try reducing the date range or contact support.";
+        } else if (error.message.includes('Pivot data computation')) {
+          errorMessage = `Data computation failed: ${error.message.replace('Pivot data computation failed: ', '')}`;
+        } else if (error.message.includes('No valid channels')) {
+          errorMessage = "No valid channels found. Please configure at least one channel with a report in Edit Source.";
+        } else if (error.message.includes('No report found')) {
+          errorMessage = error.message;
+        } else if (error.message.includes('Configuration') || error.message.includes('date range')) {
+          errorMessage = error.message;
+        }
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object') {
+        // Handle Supabase/Postgrest errors
+        const errorObj = error as any;
+        errorMessage = errorObj.message || errorObj.error_description || errorObj.details || JSON.stringify(error);
+      }
+      
       setRefreshStepStatus(prev => ({ ...prev, [currentStep]: 'error' }));
-      setRefreshError(error instanceof Error ? error.message : "Failed to refresh data");
+      setRefreshError(errorMessage);
       
       toast({
         title: "Refresh failed",
-        description: error instanceof Error ? error.message : "Failed to refresh data. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     }

@@ -591,6 +591,28 @@ export async function computeSlideReportPivotData(
   dateRange: { year: number; month: string; from: string; to: string },
   onProgress?: ProgressCallback
 ): Promise<SlideReportPivotData> {
+  // Validate date range
+  const fromDate = new Date(dateRange.from);
+  const toDate = new Date(dateRange.to);
+  const now = new Date();
+  
+  // Check if date range is in the future
+  if (fromDate > now || toDate > now) {
+    console.warn(`[pivot] Date range includes future dates. From: ${dateRange.from}, To: ${dateRange.to}, Now: ${now.toISOString()}`);
+  }
+  
+  // Check if date range is valid (from <= to)
+  if (fromDate > toDate) {
+    throw new Error(`Invalid date range: 'from' date (${dateRange.from}) is after 'to' date (${dateRange.to})`);
+  }
+  
+  // Check if date range is too far in the past (more than 5 years)
+  const fiveYearsAgo = new Date();
+  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+  if (toDate < fiveYearsAgo) {
+    console.warn(`[pivot] Date range is more than 5 years in the past. Data might not be available. From: ${dateRange.from}, To: ${dateRange.to}`);
+  }
+  
   // Years to compute data for - covers past 3 years for historical comparison
   const YEARS_TO_COMPUTE = [2024, 2025, 2026];
   
@@ -654,6 +676,33 @@ export async function computeSlideReportPivotData(
     // Fetch dimension data
     const rows = await fetchDimensionDataForReport(reportId);
     console.log(`Fetched ${rows.length} rows for ${channel}, metric map keys: ${Object.keys(metricNameToIdMap).join(', ')}`);
+    
+    // Validate that we have data for the date range
+    if (rows.length === 0) {
+      console.warn(`[pivot] No data found for ${channel} (reportId: ${reportId}). This channel will have zero metrics.`);
+    } else {
+      // Check if any rows fall within the date range (sample check)
+      const dateDimId = Object.entries(metricNameToIdMap).find(([name]) => 
+        name.toLowerCase() === 'date'
+      )?.[1];
+      
+      if (dateDimId) {
+        const sampleRows = rows.slice(0, Math.min(100, rows.length));
+        const rowsInRange = sampleRows.filter(row => {
+          const rowData = row.dimension_values || row;
+          const dateValue = rowData[dateDimId];
+          if (dateValue) {
+            const rowDate = new Date(dateValue);
+            return rowDate >= currentDateRange.start && rowDate <= currentDateRange.end;
+          }
+          return false;
+        });
+        
+        if (rowsInRange.length === 0 && sampleRows.length > 0) {
+          console.warn(`[pivot] Warning: No data found in date range ${dateRange.from} to ${dateRange.to} for ${channel}. Check if date range matches available data.`);
+        }
+      }
+    }
 
     // Compute current period metrics
     const currentMetrics = aggregateMetricsForDateRange(rows, currentDateRange, metricNameToIdMap, dimensionFilter);

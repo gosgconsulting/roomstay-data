@@ -308,10 +308,10 @@ async function handleMinimalDataSummary(
     dataContext += `  Cost of Sale: ${channelMetrics.costOfSale.toFixed(2)}%\n`;
   });
 
-  // Add comparison data if available
-  if (comparison) {
+  // Add comparison data if available and comparison type is not "none"
+  if (comparison && comparisonType !== "none") {
     dataContext += "\n\nCOMPARISON DATA:\n";
-    if (comparison.previous_period && (comparisonType === "previous_period" || comparisonType === "both")) {
+    if (comparison.previous_period && comparisonType === "previous_period") {
       const comp = comparison.previous_period;
       dataContext += "\nPrevious Period:\n";
       dataContext += `  Impressions: ${comp.impressions.toLocaleString()}\n`;
@@ -320,7 +320,7 @@ async function handleMinimalDataSummary(
       dataContext += `  Revenue: $${comp.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`;
       dataContext += `  Bookings: ${comp.bookings}\n`;
     }
-    if (comparison.previous_year && (comparisonType === "previous_year" || comparisonType === "both")) {
+    if (comparison.previous_year && comparisonType === "previous_year") {
       const comp = comparison.previous_year;
       dataContext += "\nPrevious Year (Same Period):\n";
       dataContext += `  Impressions: ${comp.impressions.toLocaleString()}\n`;
@@ -333,18 +333,48 @@ async function handleMinimalDataSummary(
 
   // Build system prompt optimized for single-view, single-month analysis
   const viewLabel = view === 'overview' ? 'Overview (All Channels)' : view.toUpperCase();
+  
+  // Build comparison instructions based on comparisonType
+  let comparisonInstructions = '';
+  if (comparisonType === 'none') {
+    comparisonInstructions = `## CRITICAL: NO COMPARISONS
+- DO NOT compare to previous periods or previous years
+- DO NOT mention "compared to", "vs", "versus", or any comparative language
+- Focus ONLY on the current period's absolute performance
+- Analyze the data in isolation without any historical context`;
+  } else if (comparison) {
+    const comparisonLabel = comparisonType === 'previous_period' 
+      ? 'previous period' 
+      : 'same period last year';
+    comparisonInstructions = `## COMPARISON REQUIREMENTS
+- Compare current performance against ${comparisonLabel}
+- When mentioning changes, ALWAYS include:
+  1. The percentage change (e.g., "+8%" or "-5%")
+  2. The absolute values for BOTH current and comparison periods
+  3. Format: "Metric changed by X% (currentValue vs comparisonValue)"
+  Examples:
+  - "Revenue increased by 8% ($200K vs $185K)"
+  - "ROAS improved by 6% (12.4x vs 11.7x)"
+  - "Bookings decreased by 3% (450 vs 464)"
+  - "CPC decreased by 5% ($2.10 vs $2.21)"
+- Use +/- signs for percentage changes
+- Always show both the percentage change AND the absolute values side-by-side`;
+  } else {
+    comparisonInstructions = '## NO COMPARISON DATA AVAILABLE\n- Focus on current performance metrics only\n- Do not attempt comparisons';
+  }
+  
   const systemPrompt = `You are an expert digital marketing analyst writing executive summaries for hotel and hospitality clients. 
 
 ## CONTEXT
 You are analyzing ${viewLabel} performance data for ${period.month} ${period.year}.
 
-${comparison ? `COMPARISON: ${comparisonType === 'both' ? 'Compare against both previous period and previous year' : comparisonType === 'previous_period' ? 'Compare against previous period' : 'Compare against same period last year'}` : 'No comparison data available.'}
+${comparisonInstructions}
 
 ## REQUIREMENTS
 1. Provide a concise executive summary (3-4 paragraphs, ~200-300 words)
 2. Focus on key performance indicators: Revenue, ROAS, Cost, Bookings, and efficiency metrics (CTR, Conversion Rate, CPC)
 3. ${view === 'overview' ? 'Compare performance across channels (Metasearch, SEM, Social) and identify which channel is most efficient' : `Analyze ${view.toUpperCase()} channel performance in detail`}
-4. ${comparison ? 'Include specific percentage changes when comparison data is available. Use +/- signs for changes.' : 'Focus on current performance without comparisons.'}
+4. ${comparisonType !== 'none' && comparison ? 'ALWAYS include both percentage changes AND absolute KPI values in the format: "Metric changed by X% (currentValue vs comparisonValue)". Never mention only percentage changes without the actual numbers.' : 'Include absolute KPI values for all key metrics. Do not make any comparisons.'}
 5. Provide 2-3 actionable recommendations
 6. Keep the tone professional and data-driven
 
@@ -564,6 +594,10 @@ serve(async (req) => {
 
     // Get comparison context based on user selection
     const getComparisonContext = (periodKey: string) => {
+      if (comparisonType === 'none') {
+        return 'NO COMPARISONS - Analyze current period performance only. Do not compare to any previous periods.';
+      }
+      
       const isLastMonth = periodKey === 'last_month';
       const isMTD = periodKey === 'mtd';
       
@@ -589,19 +623,8 @@ IMPORTANT: When showing changes, say "vs ${lastMonthName} ${previousYearLastMont
         }
         return `Compare ${currentYear} YTD vs ${currentYear - 1} YTD`;
       }
-      // 'both' - include both comparisons
-      if (isLastMonth) {
-        return `Compare ${lastMonthName} ${lastMonthYear} vs BOTH:
-- Previous Month: ${prevMonthName} ${prevMonthYear}
-- Same Month Last Year: ${lastMonthName} ${previousYearLastMonth}`;
-      } else if (isMTD) {
-        return `Compare ${currentMonth} ${currentYear} MTD vs BOTH:
-- Previous Month: same days in ${lastMonthName} ${lastMonthYear}
-- Same Month Last Year: ${currentMonth} ${currentYear - 1} MTD`;
-      }
-      return `Compare ${currentYear} YTD vs BOTH:
-- Previous Year Same Period: ${currentYear - 1} YTD
-- Full Previous Year: ${currentYear - 1}`;
+      // Should not reach here as 'both' is removed, but keeping for safety
+      return 'No comparison specified';
     };
 
     // System prompt for executive summaries - focused on single period analysis
@@ -629,36 +652,58 @@ Example: "With 18 days of data (60% of the month), current revenue stands at $18
 - You are analyzing: ${lastMonthName} ${lastMonthYear} (the current data period)
 - COMPARISON: ${comparisonContext}
 - ALWAYS refer to the current period as "${lastMonthName} ${lastMonthYear}"
-- Use the comparison data provided to show meaningful changes
+${comparisonType !== 'none' ? '- Use the comparison data provided to show meaningful changes' : '- DO NOT make any comparisons. Focus only on absolute performance metrics.'}
 ` : isMTD ? `
 ## IMPORTANT DATE CONTEXT FOR MTD
 - You are analyzing: ${currentMonth} ${currentYear} to date
 - COMPARISON: ${comparisonContext}
+${comparisonType !== 'none' ? '- Use comparison data to show changes' : '- DO NOT make any comparisons. Focus only on absolute performance metrics.'}
 ` : `
 ## IMPORTANT DATE CONTEXT FOR YTD  
 - You are analyzing: January - ${currentMonth} ${currentYear}
 - COMPARISON: ${comparisonContext}
+${comparisonType !== 'none' ? '- Use comparison data to show changes' : '- DO NOT make any comparisons. Focus only on absolute performance metrics.'}
 `;
 
       return `You are an expert digital marketing analyst writing executive summaries for hotel and hospitality clients. Write in flowing paragraphs with specific numbers inline.
 ${dateContext}
 ## CRITICAL FORMATTING RULES
 
-### 1. ALWAYS INCLUDE NUMBERS WITH SIGNS
-When mentioning any KPI, include the actual number with +/- signs for changes:
-- ✅ CORRECT: "Revenue reached $258K (+24.7%) with ROAS at 32x (+29.8%)"
-- ❌ WRONG: "Revenue grew significantly with improved ROAS"
+### 1. ALWAYS INCLUDE NUMBERS WITH ABSOLUTE VALUES
+${comparisonType !== 'none' 
+  ? `When mentioning any KPI change, ALWAYS include:
+  1. The percentage change with +/- sign
+  2. The absolute values for BOTH current and comparison periods
+  Format: "Metric changed by X% (currentValue vs comparisonValue)"
+  Examples:
+  - ✅ CORRECT: "Revenue increased by 8% ($200K vs $185K)"
+  - ✅ CORRECT: "ROAS improved by 6% (12.4x vs 11.7x)"
+  - ✅ CORRECT: "Bookings decreased by 3% (450 vs 464)"
+  - ❌ WRONG: "Revenue increased by 8%" (missing absolute values)
+  - ❌ WRONG: "Revenue reached $258K (+24.7%)" (missing comparison value)`
+  : `When mentioning any KPI, include the absolute value:
+  - ✅ CORRECT: "Revenue reached $258K with ROAS at 32x"
+  - ✅ CORRECT: "Bookings totaled 450 with a conversion rate of 3.8%"
+  - ❌ WRONG: "Revenue grew significantly" (missing actual numbers)
+  DO NOT mention any comparisons, changes, or trends relative to previous periods.`}
 
 ### 2. BOLD USAGE - BE SELECTIVE
 Only use **bold** for truly important summary phrases or key takeaways, NOT for every keyword:
-- ✅ CORRECT: "SEM was **the top performer this period** with revenue of $258K (+24.7%)"
+- ✅ CORRECT: "SEM was **the top performer this period** with revenue of $258K"
 - ❌ WRONG: "SEM showed **strong** **growth** with **improved** **performance**"
 Do NOT bold words like: growth, improvement, increase, decrease, strong, significant, etc.
 
 ### 3. COMPARISON FOCUS
-${comparisonType === 'both' ? 'Include insights from BOTH comparisons when data is available. Show changes vs previous period AND vs same period last year.' : 
-  comparisonType === 'previous_period' ? `Focus ONLY on sequential month-over-month changes. When you say "vs [period]" always use the PREVIOUS MONTH (e.g., ${lastMonthName} ${lastMonthYear} vs ${new Date(now.getFullYear(), now.getMonth() - 2, 1).toLocaleString('en-US', { month: 'long' })} ${new Date(now.getFullYear(), now.getMonth() - 2, 1).getFullYear()}). DO NOT mention the same month from last year.` :
-  `Focus ONLY on year-over-year changes. When you say "vs [period]" always use the SAME MONTH LAST YEAR (e.g., ${lastMonthName} ${lastMonthYear} vs ${lastMonthName} ${previousYearLastMonth}).`}
+${comparisonType === 'none' 
+  ? `## CRITICAL: NO COMPARISONS ALLOWED
+- DO NOT compare to previous periods or previous years
+- DO NOT mention "compared to", "vs", "versus", or any comparative language
+- DO NOT mention percentage changes or trends
+- Focus ONLY on the current period's absolute performance metrics
+- Analyze the data in isolation without any historical context`
+  : comparisonType === 'previous_period' 
+    ? `Focus ONLY on sequential month-over-month changes. When you say "vs [period]" always use the PREVIOUS MONTH (e.g., ${lastMonthName} ${lastMonthYear} vs ${new Date(now.getFullYear(), now.getMonth() - 2, 1).toLocaleString('en-US', { month: 'long' })} ${new Date(now.getFullYear(), now.getMonth() - 2, 1).getFullYear()}). DO NOT mention the same month from last year. ALWAYS include both percentage change AND absolute values in format: "Metric changed by X% (currentValue vs comparisonValue)".`
+    : `Focus ONLY on year-over-year changes. When you say "vs [period]" always use the SAME MONTH LAST YEAR (e.g., ${lastMonthName} ${lastMonthYear} vs ${lastMonthName} ${previousYearLastMonth}). ALWAYS include both percentage change AND absolute values in format: "Metric changed by X% (currentValue vs comparisonValue)".`}
 
 ### 4. CHANNEL SECTION FORMATTING
 For channel sections, use numbered format:

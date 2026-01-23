@@ -146,7 +146,9 @@ export function SlideViewAISummaryModal({
             selectedMonth: selectedView ? selectedView.selected_month : selectedMonth,
             comparisonType: comparisonType,
             isTableComment: false,
-            aiPrompt: `Analyze the following ${tabToUse === 'overview' ? 'overview' : tabToUse.toUpperCase()} performance data for ${selectedView ? `${selectedView.selected_month} ${selectedView.selected_year}` : `${selectedMonth} ${selectedYear}`}${selectedView ? ` (View: ${selectedView.name})` : ''}. Provide a concise executive summary focusing on key metrics, trends, and actionable insights.`,
+            aiPrompt: comparisonType === 'none' 
+              ? `Analyze the following ${tabToUse === 'overview' ? 'overview' : tabToUse.toUpperCase()} performance data for ${selectedView ? `${selectedView.selected_month} ${selectedView.selected_year}` : `${selectedMonth} ${selectedYear}`}${selectedView ? ` (View: ${selectedView.name})` : ''}. Provide a concise executive summary focusing on key metrics and trends. DO NOT make any comparisons to previous periods or years. Include absolute KPI values for all metrics.`
+              : `Analyze the following ${tabToUse === 'overview' ? 'overview' : tabToUse.toUpperCase()} performance data for ${selectedView ? `${selectedView.selected_month} ${selectedView.selected_year}` : `${selectedMonth} ${selectedYear}`}${selectedView ? ` (View: ${selectedView.name})` : ''}. Provide a concise executive summary focusing on key metrics, trends, and actionable insights. When mentioning changes, ALWAYS include both the percentage change AND the absolute values in the format: "Metric changed by X% (currentValue vs comparisonValue)". Example: "Revenue increased by 8% ($200K vs $185K)".`,
           },
         });
 
