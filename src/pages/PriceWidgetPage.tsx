@@ -61,6 +61,43 @@ interface ProviderPrice {
   price: number;
 }
 
+interface ApiProviderResponse {
+  source: string;
+  link?: string;
+  logo?: string;
+  rooms?: Array<{
+    name: string;
+    images?: string[];
+    link?: string;
+    num_guests?: number;
+    rate_per_night?: {
+      lowest?: string;
+      extracted_lowest?: number;
+      before_taxes_fees?: string;
+      extracted_before_taxes_fees?: number;
+    };
+    total_rate?: {
+      lowest?: string;
+      extracted_lowest?: number;
+      before_taxes_fees?: string;
+      extracted_before_taxes_fees?: number;
+    };
+  }>;
+  num_guests?: number;
+  rate_per_night?: {
+    lowest?: string;
+    extracted_lowest?: number;
+    before_taxes_fees?: string;
+    extracted_before_taxes_fees?: number;
+  };
+  total_rate?: {
+    lowest?: string;
+    extracted_lowest?: number;
+    before_taxes_fees?: string;
+    extracted_before_taxes_fees?: number;
+  };
+}
+
 export default function PriceWidgetPage() {
   const navigate = useNavigate();
   const { accountId } = useParams<{ accountId: string }>();
@@ -68,6 +105,7 @@ export default function PriceWidgetPage() {
   const [account, setAccount] = useState<Account | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [providerPrices, setProviderPrices] = useState<ProviderPrice[]>([]);
 
   const form = useForm<PriceWidgetFormData>({
     defaultValues: {
@@ -83,24 +121,33 @@ export default function PriceWidgetPage() {
   });
 
   // Watch currency code for dynamic price formatting
-  const currencyCode = form.watch("currency_code") || "EUR";
-
-  // Hardcoded provider prices for demo
-  const hardcodedProviders: ProviderPrice[] = [
-    { name: "Booking.com", price: 125.50 },
-    { name: "Agoda", price: 118.00 },
-    { name: "Expedia", price: 130.25 },
-    { name: "Hotels.com", price: 128.75 },
-    { name: "Trip.com", price: 122.00 },
-    { name: "Kayak", price: 127.50 },
-  ];
+  const rawCurrencyCode = form.watch("currency_code") || "EUR";
+  
+  // Validate currency code - must be exactly 3 uppercase letters
+  const currencyCode = rawCurrencyCode.length === 3 && /^[A-Z]{3}$/.test(rawCurrencyCode) 
+    ? rawCurrencyCode 
+    : "EUR";
 
   const formatPrice = (price: number, currency: string) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: 2,
-    }).format(price);
+    // Validate currency code before formatting
+    const validCurrency = currency && currency.length === 3 && /^[A-Z]{3}$/.test(currency)
+      ? currency
+      : "EUR";
+    
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: validCurrency,
+        minimumFractionDigits: 2,
+      }).format(price);
+    } catch (error) {
+      // Fallback to EUR if currency is invalid
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'EUR',
+        minimumFractionDigits: 2,
+      }).format(price);
+    }
   };
 
   useEffect(() => {
@@ -226,50 +273,64 @@ export default function PriceWidgetPage() {
     }
     
     setIsCreating(true);
+    setProviderPrices([]); // Clear previous results
+    
     try {
-      // Note: This assumes a 'price_widgets' table exists in the database
-      const { data: newWidget, error } = await supabase
-        .from('price_widgets')
-        .insert({
+      // Call Make.com webhook
+      const response = await fetch('https://hook.eu1.make.com/m9g9pttz3or89ixqjohtsh9rnsmgexfw', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'insomnia/12.3.0',
+          'x-make-apikey': 'sk_live_Q6WLsiTpKudy0zjilMW12iv1QNz8rity'
+        },
+        body: JSON.stringify({
           search_query: data.search_query,
           check_in_date: data.check_in_date,
           check_out_date: data.check_out_date,
           number_of_adults: data.number_of_adults,
           number_of_children: data.number_of_children,
           currency_code: data.currency_code,
-          max_crawled_hotels: data.max_crawled_hotels || 50,
-          account_id: accountId,
+          max_crawled_hotels: data.max_crawled_hotels || 50
         })
-        .select()
-        .single();
-      
-      if (error) {
-        // If table doesn't exist, inform user they need to create it
-        if (error.code === 'PGRST116') {
-          toast({
-            title: "Database Setup Required",
-            description: "The price_widgets table needs to be created in the database first.",
-            variant: "destructive",
-          });
-          return;
-        }
-        throw error;
-      }
-      
-      toast({
-        title: "Success",
-        description: "Price widget created successfully.",
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const apiData: ApiProviderResponse[] = await response.json();
       
-      // Reset form but stay on the same page to show results
-      form.reset();
+      // Transform API response to ProviderPrice format
+      const transformedProviders: ProviderPrice[] = apiData
+        .filter(provider => provider.total_rate?.extracted_lowest !== undefined)
+        .map(provider => ({
+          name: provider.source,
+          price: provider.total_rate!.extracted_lowest!
+        }));
+
+      setProviderPrices(transformedProviders);
+      
+      if (transformedProviders.length === 0) {
+        toast({
+          title: "No Results",
+          description: "No pricing data was returned from the API.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: `Found prices from ${transformedProviders.length} provider(s).`,
+        });
+      }
     } catch (error) {
-      console.error('Error creating widget:', error);
+      console.error('Error fetching prices:', error);
       toast({
         title: "Error",
-        description: "Failed to create price widget.",
+        description: "Failed to fetch price data. Please try again.",
         variant: "destructive",
       });
+      setProviderPrices([]);
     } finally {
       setIsCreating(false);
     }
@@ -540,39 +601,45 @@ export default function PriceWidgetPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {(() => {
-                    // Sort providers by price (lowest first)
-                    const sortedProviders = [...hardcodedProviders].sort((a, b) => a.price - b.price);
-                    const lowestPrice = sortedProviders[0]?.price || 0;
+                  {providerPrices.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p>No price data available. Fill out the form and click "Run" to fetch prices.</p>
+                    </div>
+                  ) : (
+                    (() => {
+                      // Sort providers by price (lowest first)
+                      const sortedProviders = [...providerPrices].sort((a, b) => a.price - b.price);
+                      const lowestPrice = sortedProviders[0]?.price || 0;
 
-                    return (
-                      <div className="space-y-3">
-                        {sortedProviders.map((provider) => {
-                          const isLowest = provider.price === lowestPrice;
-                          return (
-                            <div
-                              key={provider.name}
-                              className={`p-4 border rounded-lg flex items-center justify-between ${
-                                isLowest ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800' : ''
-                              }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="font-medium">{provider.name}</div>
-                                {isLowest && (
-                                  <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded">
-                                    Best Price
-                                  </span>
-                                )}
+                      return (
+                        <div className="space-y-3">
+                          {sortedProviders.map((provider) => {
+                            const isLowest = provider.price === lowestPrice;
+                            return (
+                              <div
+                                key={provider.name}
+                                className={`p-4 border rounded-lg flex items-center justify-between ${
+                                  isLowest ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800' : ''
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="font-medium">{provider.name}</div>
+                                  {isLowest && (
+                                    <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded">
+                                      Best Price
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-lg font-semibold">
+                                  {formatPrice(provider.price, currencyCode)}
+                                </div>
                               </div>
-                              <div className="text-lg font-semibold">
-                                {formatPrice(provider.price, currencyCode)}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
+                            );
+                          })}
+                        </div>
+                      );
+                    })()
+                  )}
                 </CardContent>
               </Card>
             </form>
