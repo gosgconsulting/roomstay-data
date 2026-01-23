@@ -331,161 +331,167 @@ export default function PriceWidgetPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Hotel className="h-5 w-5" />
-                    <FormField
-                      control={form.control}
-                      name="search_query"
-                      rules={{ required: "Hotel name is required" }}
-                      render={({ field }) => (
-                        <FormItem className="flex-1">
-                          <FormControl>
-                            <Input
-                              placeholder="Hotel name"
-                              className="text-xl font-bold"
-                              required
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage className="mt-1" />
-                        </FormItem>
-                      )}
-                    />
+                    Hotel price comparison
                   </CardTitle>
-                  <CardDescription>Hotel price comparison</CardDescription>
+                  <CardDescription>Compare prices across different booking platforms</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <CardContent className="space-y-6">
+                  {/* Hotel Name Input */}
+                  <FormField
+                    control={form.control}
+                    name="search_query"
+                    rules={{ required: "Hotel name is required" }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium">Hotel name</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter hotel name"
+                            className="h-10"
+                            required
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Form Fields Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Check-in / Check-out Dates */}
-                    <div className="flex items-center gap-3">
-                      <Calendar className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                      <div className="flex-1 space-y-1">
-                        <div className="text-sm font-medium">Check-in / Check-out</div>
-                        <div className="flex gap-2">
-                          <FormField
-                            control={form.control}
-                            name="check_in_date"
-                            rules={{ required: "Check-in date is required" }}
-                            render={({ field }) => (
-                              <FormItem className="flex-1">
-                                <FormLabel className="text-xs text-muted-foreground">Check-in</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    type="date"
-                                    className="h-8 text-sm"
-                                    required
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name="check_out_date"
-                            rules={{ required: "Check-out date is required" }}
-                            render={({ field }) => (
-                              <FormItem className="flex-1">
-                                <FormLabel className="text-xs text-muted-foreground">Check-out</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    type="date"
-                                    className="h-8 text-sm"
-                                    required
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        Check-in / Check-out
                       </div>
-                    </div>
-
-                    {/* Guests */}
-                    <div className="flex items-center gap-3">
-                      <Users className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                      <div className="flex-1 space-y-1">
-                        <div className="text-sm font-medium">Guests</div>
-                        <div className="flex gap-2">
-                          <FormField
-                            control={form.control}
-                            name="number_of_adults"
-                            rules={{ 
-                              required: "Number of adults is required",
-                              min: { value: 1, message: "At least 1 adult is required" }
-                            }}
-                            render={({ field }) => (
-                              <FormItem className="flex-1">
-                                <FormLabel className="text-xs text-muted-foreground">Adults</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    type="number"
-                                    min="1"
-                                    className="h-8 text-sm"
-                                    required
-                                    {...field}
-                                    onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name="number_of_children"
-                            rules={{ 
-                              required: "Number of children is required",
-                              min: { value: 0, message: "Number of children cannot be negative" }
-                            }}
-                            render={({ field }) => (
-                              <FormItem className="flex-1">
-                                <FormLabel className="text-xs text-muted-foreground">Children</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    className="h-8 text-sm"
-                                    required
-                                    {...field}
-                                    onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Currency */}
-                    <div className="flex items-center gap-3">
-                      <DollarSign className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                      <div className="flex-1 space-y-1">
-                        <div className="text-sm font-medium">Currency</div>
+                      <div className="flex gap-3">
                         <FormField
                           control={form.control}
-                          name="currency_code"
-                          rules={{ required: "Currency code is required" }}
+                          name="check_in_date"
+                          rules={{ required: "Check-in date is required" }}
                           render={({ field }) => (
-                            <FormItem>
+                            <FormItem className="flex-1">
+                              <FormLabel className="text-xs text-muted-foreground">Check-in</FormLabel>
                               <FormControl>
                                 <Input
-                                  placeholder="EUR"
-                                  maxLength={3}
-                                  className="h-8 text-sm"
+                                  type="date"
+                                  className="h-9 text-sm"
                                   required
                                   {...field}
-                                  onChange={(e) => field.onChange(e.target.value.toUpperCase())}
                                 />
                               </FormControl>
-                              <FormMessage />
+                              <FormMessage className="text-xs" />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="check_out_date"
+                          rules={{ required: "Check-out date is required" }}
+                          render={({ field }) => (
+                            <FormItem className="flex-1">
+                              <FormLabel className="text-xs text-muted-foreground">Check-out</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="date"
+                                  className="h-9 text-sm"
+                                  required
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage className="text-xs" />
                             </FormItem>
                           )}
                         />
                       </div>
+                    </div>
+
+                    {/* Guests */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        Guests
+                      </div>
+                      <div className="flex gap-3">
+                        <FormField
+                          control={form.control}
+                          name="number_of_adults"
+                          rules={{ 
+                            required: "Number of adults is required",
+                            min: { value: 1, message: "At least 1 adult is required" }
+                          }}
+                          render={({ field }) => (
+                            <FormItem className="flex-1">
+                              <FormLabel className="text-xs text-muted-foreground">Adults</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  className="h-9 text-sm"
+                                  required
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
+                                />
+                              </FormControl>
+                              <FormMessage className="text-xs" />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="number_of_children"
+                          rules={{ 
+                            required: "Number of children is required",
+                            min: { value: 0, message: "Number of children cannot be negative" }
+                          }}
+                          render={({ field }) => (
+                            <FormItem className="flex-1">
+                              <FormLabel className="text-xs text-muted-foreground">Children</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  className="h-9 text-sm"
+                                  required
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                                />
+                              </FormControl>
+                              <FormMessage className="text-xs" />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Currency */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                        Currency
+                      </div>
+                      <FormField
+                        control={form.control}
+                        name="currency_code"
+                        rules={{ required: "Currency code is required" }}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs text-muted-foreground">Currency Code</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="EUR"
+                                maxLength={3}
+                                className="h-9 text-sm"
+                                required
+                                {...field}
+                                onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                              />
+                            </FormControl>
+                            <FormMessage className="text-xs" />
+                          </FormItem>
+                        )}
+                      />
                     </div>
                   </div>
 
@@ -508,8 +514,8 @@ export default function PriceWidgetPage() {
                     )}
                   />
 
-                  {/* Action Buttons - inside filter section */}
-                  <div className="flex justify-end gap-2 mt-6">
+                  {/* Action Buttons */}
+                  <div className="flex justify-end gap-3 pt-4 border-t">
                     <Button
                       type="button"
                       variant="outline"
