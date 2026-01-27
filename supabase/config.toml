@@ -47,3 +47,9 @@ verify_jwt = false
 
 [functions.get-ai-summary-data]
 verify_jwt = false
+
+[functions.refresh-slide-report]
+verify_jwt = true
+
+[functions.refresh-slide-report-channel]
+verify_jwt = false
