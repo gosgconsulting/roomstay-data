@@ -39,11 +39,11 @@ const getCorsHeaders = (req?: Request) => {
       headers['Access-Control-Allow-Headers'] = requestedHeaders;
     } else {
       // Default headers if none requested
-      headers['Access-Control-Allow-Headers'] = 'authorization, x-client-info, apikey, content-type, x-supabase-client-info';
+      headers['Access-Control-Allow-Headers'] = 'authorization, x-client-info, apikey, content-type, x-supabase-client-info, x-api-key, api-key';
     }
   } else {
     // For regular responses, include common headers
-    headers['Access-Control-Allow-Headers'] = 'authorization, x-client-info, apikey, content-type, x-supabase-client-info';
+    headers['Access-Control-Allow-Headers'] = 'authorization, x-client-info, apikey, content-type, x-supabase-client-info, x-api-key, api-key';
   }
 
   return headers;
@@ -69,6 +69,50 @@ interface ErrorResponse {
   details?: any;
 }
 
+/**
+ * Validate API key from request headers
+ * Since verify_jwt=false in config.toml, we don't need Authorization header
+ * Validate our custom API key from x-api-key header
+ * Also allows service role key for internal calls
+ */
+function validateApiKey(req: Request): boolean {
+  // Get API key from environment variable
+  const expectedApiKey = Deno.env.get('REFRESH_SLIDE_REPORT_API_KEY');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  
+  // Get custom API key from headers (try both common header names)
+  const providedApiKey = req.headers.get('x-api-key') || 
+                         req.headers.get('api-key') ||
+                         req.headers.get('X-API-Key') ||
+                         req.headers.get('API-Key');
+  
+  // Check Authorization header for Bearer token (service role key for internal calls)
+  const authHeader = req.headers.get('authorization');
+  const bearerToken = authHeader?.startsWith('Bearer ') 
+    ? authHeader.substring(7) 
+    : null;
+  
+  // If no custom API key is configured, allow all requests (backward compatibility)
+  if (!expectedApiKey) {
+    console.warn('[refresh] REFRESH_SLIDE_REPORT_API_KEY not configured - allowing all requests');
+    return true;
+  }
+  
+  // When custom API key is configured, require it
+  // Allow if:
+  // 1. Service role key in Authorization header (for internal calls from channel function)
+  if (bearerToken && serviceRoleKey && bearerToken === serviceRoleKey) {
+    return true;
+  }
+  
+  // 2. Custom API key in x-api-key header
+  if (providedApiKey && providedApiKey === expectedApiKey) {
+    return true;
+  }
+  
+  return false;
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -77,6 +121,28 @@ Deno.serve(async (req) => {
   
   // Get CORS headers for this request
   const corsHeaders = getCorsHeaders(req);
+
+  // Validate API key (unless no API key is configured)
+  // Since verify_jwt=false, we don't need Authorization header
+  // Just validate custom API key from x-api-key header
+  if (!validateApiKey(req)) {
+    const expectedApiKey = Deno.env.get('REFRESH_SLIDE_REPORT_API_KEY');
+    const errorMessage = expectedApiKey
+      ? 'Unauthorized: Missing or invalid API key. Provide x-api-key header with your API key, or Authorization header with service role key for internal calls.'
+      : 'Unauthorized: Missing API key.';
+    
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: errorMessage,
+        step: 0,
+      } as ErrorResponse),
+      {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');

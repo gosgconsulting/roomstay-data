@@ -49,7 +49,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.refresh-slide-report]
-verify_jwt = true
+verify_jwt = false
 
 [functions.refresh-slide-report-channel]
 verify_jwt = false
