@@ -188,6 +188,7 @@ export function aggregateMetrics(
 
   const filteredRows = rows.filter((row) => {
     // Handle both flat row format and transformed row format (with dimension_values)
+    // Match frontend behavior exactly - no explicit null check
     const rowData = row.dimension_values || row;
     
     // Date filter - try multiple approaches to find the date value
@@ -203,7 +204,7 @@ export function aggregateMetrics(
     
     // Finally, search all values for a date pattern
     if (!dateValue) {
-      for (const [key, val] of Object.entries(rowData)) {
+      for (const [key, val] of Object.entries(rowData || {})) {
         if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
           dateValue = val;
           break;

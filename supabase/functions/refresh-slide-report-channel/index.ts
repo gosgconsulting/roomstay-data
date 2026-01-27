@@ -111,7 +111,9 @@ Deno.serve(async (req) => {
 
     console.log(`[channel-refresh] Processing channel ${channel} with reportId ${reportId}`);
 
-    // Parse date range
+    // Parse date range - match frontend behavior
+    // Frontend uses: new Date(dateRange.from) and new Date(dateRange.to) directly
+    // For inclusive end date, we'll adjust the comparison in isWithinInterval
     const fromDate = new Date(dateRange.from);
     const toDate = new Date(dateRange.to);
     
