@@ -155,6 +155,11 @@ export function calculateBudgetMonthlyData(
       ['metasearch', 'sem', 'social'].forEach((channel) => {
         const channelData = pivotData.channels[channel];
 
+        // Skip if channel data doesn't exist (channel might not have been processed)
+        if (!channelData) {
+          return;
+        }
+
         // Use filtered rows if filters are applied OR if a view is selected (view applies its own filters)
         if (hasFilters || !isMasterView) {
           // Get raw rows directly and filter by dimension filters only (not year filter)
