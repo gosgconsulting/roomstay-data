@@ -69,6 +69,13 @@ import {
   getMetricKeys,
   ensureMinimumChartData,
 } from "@/lib/slideViewHelpers";
+import {
+  prepareMonthlyRecords,
+  insertMonthlyRecordsBatched,
+  extractFilterDimensionValues,
+  calculateConfigCounts,
+  normalizeErrorMessage,
+} from "@/lib/slideRefreshHelpers";
 import type { RawDataRow, MetricData } from "@/types/slideView";
 
 // Unified breakdown table component with Group by / Breakdown by dropdowns
@@ -3741,95 +3748,21 @@ export default function SlideViewPage() {
         console.warn('[refresh] Error deleting old monthly data:', deleteError);
       }
 
-      // Prepare monthly data records
-      const monthlyRecords: Array<{
-        slide_report_id: string;
-        account_id: string | null;
-        year: number;
-        month: number;
-        channel: string;
-        metrics: any;
-        breakdowns: any;
-        row_count: number;
-        computed_at: string;
-      }> = [];
-
-      // Store overview monthly data
-      if (typedPivotData.overview?.monthly) {
-        Object.entries(typedPivotData.overview.monthly).forEach(([monthKey, metrics]) => {
-          const [year, month] = monthKey.split('-').map(Number);
-          monthlyRecords.push({
-            slide_report_id: slideReportId,
-            account_id: accountId || null,
-            year,
-            month,
-            channel: 'overview',
-            metrics,
-            breakdowns: {},
-            row_count: 1,
-            computed_at: new Date().toISOString(),
-          });
-        });
-      }
-
-      // Store channel-specific monthly data with breakdowns
-      if (typedPivotData.channels) {
-        Object.entries(typedPivotData.channels).forEach(([channel, channelData]) => {
-          // Store monthly metrics for each channel
-          if (channelData.monthly) {
-            Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
-              const [year, month] = monthKey.split('-').map(Number);
-              
-              // Get monthly breakdowns for this month if available
-              const monthlyBreakdowns = channelData.monthlyBreakdowns?.[monthKey] || {};
-              
-              monthlyRecords.push({
-                slide_report_id: slideReportId,
-                account_id: accountId || null,
-                year,
-                month,
-                channel,
-                metrics,
-                breakdowns: monthlyBreakdowns,
-                row_count: Object.keys(monthlyBreakdowns).reduce((count, key) => 
-                  count + ((monthlyBreakdowns as any)[key]?.length || 0), 0),
-                computed_at: new Date().toISOString(),
-              });
-            });
-          }
-        });
-      }
-
-      // Insert all monthly records in batches
-      if (monthlyRecords.length > 0) {
-        const batchSize = 100;
-        for (let i = 0; i < monthlyRecords.length; i += batchSize) {
-          const batch = monthlyRecords.slice(i, i + batchSize);
-          const { error: insertError } = await supabase
-            .from("slide_report_monthly_data")
-            .insert(batch);
-
-          if (insertError) {
-            console.error('[refresh] Error inserting monthly data batch:', insertError);
-            // Continue with other batches even if one fails
-          }
-        }
+      // Prepare monthly data records using optimized helper
+      const monthlyRecords = prepareMonthlyRecords(typedPivotData, slideReportId, accountId || null);
+      
+      // Insert in batches using optimized helper
+      const insertResult = await insertMonthlyRecordsBatched(monthlyRecords);
+      if (!insertResult.success && insertResult.errors.length > 0) {
+        console.warn('[refresh] Some batches failed to insert:', insertResult.errors);
       }
 
       setRefreshStepStatus(prev => ({ ...prev, 3: 'complete', 4: 'loading' }));
       setRefreshStep(4);
 
       // Step 4: Store breakdown and filter configurations
-      const breakdownConfigs = config.breakdownConfigs || {};
-      const filterConfigs = config.filterConfigs || {};
-      
-      // Log breakdown and filter configurations being stored
-      const breakdownCount = Object.values(breakdownConfigs).reduce(
-        (sum, cfg) => sum + ((cfg as any)?.breakdownDimensionIds?.length || 0), 0
-      );
-      const filterCount = Object.values(filterConfigs).reduce(
-        (sum, cfg) => sum + ((cfg as any)?.filterDimensionIds?.length || 0), 0
-      );
+      // Calculate config counts using optimized helper
+      const { breakdownCount, filterCount } = calculateConfigCounts(config);
       
       // The breakdown and filter configs are already part of the configuration
       // They will be saved in step 5 along with the pivot_data
@@ -3880,38 +3813,11 @@ export default function SlideViewPage() {
         availableChannels.includes(channel)
       );
       
-      // Force reload filter dimension values from the updated pivot data
-      const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {
-        metasearch: {},
-        sem: {},
-        social: {},
-      };
-      const updatedFilterDimensionNames: Record<string, Record<string, string>> = {
-        metasearch: {},
-        sem: {},
-        social: {},
-      };
+      // Extract filter dimension values using optimized helper
+      const { values: updatedFilterDimensionValues, names: updatedFilterDimensionNames } = 
+        extractFilterDimensionValues(typedPivotData, config, validChannels);
       
-      for (const channel of validChannels) {
-        const channelData = typedPivotData.channels?.[channel];
-        const channelFilterConfig = config.filterConfigs?.[channel];
-        
-        if (!channelData || !channelFilterConfig?.filterDimensionIds?.length) continue;
-        
-        const filterUniqueValues = (channelData as any).filterUniqueValues as Record<string, { name: string; values: string[] }> | undefined;
-        
-        if (filterUniqueValues) {
-          for (const filterDimId of channelFilterConfig.filterDimensionIds) {
-            const filterData = filterUniqueValues[filterDimId];
-            if (filterData) {
-              updatedFilterDimensionValues[channel][filterDimId] = filterData.values;
-              updatedFilterDimensionNames[channel][filterDimId] = filterData.name;
-            }
-          }
-        }
-      }
-      
-      // Update filter dimension values state
+      // Batch state updates together
       setFilterDimensionValues(prev => ({
         ...prev,
         ...updatedFilterDimensionValues,
@@ -3938,30 +3844,8 @@ export default function SlideViewPage() {
       console.error("[refresh] Error:", error);
       const currentStep = refreshStep;
       
-      // Determine error message based on error type
-      let errorMessage = "Failed to refresh data. Please try again.";
-      if (error instanceof Error) {
-        errorMessage = error.message;
-        
-        // Provide more helpful error messages for common issues
-        if (error.message.includes('timeout') || error.message.includes('timed out')) {
-          errorMessage = "The data refresh took too long. This might be due to a large dataset. Please try reducing the date range or contact support.";
-        } else if (error.message.includes('Pivot data computation')) {
-          errorMessage = `Data computation failed: ${error.message.replace('Pivot data computation failed: ', '')}`;
-        } else if (error.message.includes('No valid channels')) {
-          errorMessage = "No valid channels found. Please configure at least one channel with a report in Edit Source.";
-        } else if (error.message.includes('No report found')) {
-          errorMessage = error.message;
-        } else if (error.message.includes('Configuration') || error.message.includes('date range')) {
-          errorMessage = error.message;
-        }
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      } else if (error && typeof error === 'object') {
-        // Handle Supabase/Postgrest errors
-        const errorObj = error as any;
-        errorMessage = errorObj.message || errorObj.error_description || errorObj.details || JSON.stringify(error);
-      }
+      // Normalize error message using optimized helper
+      const errorMessage = normalizeErrorMessage(error);
       
       setRefreshStepStatus(prev => ({ ...prev, [currentStep]: 'error' }));
       setRefreshError(errorMessage);
