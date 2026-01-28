@@ -166,7 +166,7 @@ interface RequestBody {
   reportConfigs?: Record<string, any>;
   aiPrompt?: string;
   isTableComment?: boolean;
-  comparisonType?: 'previous_period' | 'previous_year' | 'both';
+  comparisonType?: 'none' | 'previous_period' | 'previous_year' | 'both';
 }
 
 const formatMetricValue = (metric: string, value: number): string => {
@@ -282,12 +282,66 @@ async function handleMinimalDataSummary(
   selectedTab: string | undefined,
   selectedYear: string | undefined,
   selectedMonth: string | undefined,
-  comparisonType: 'previous_period' | 'previous_year' | 'both',
+  comparisonType: 'none' | 'previous_period' | 'previous_year' | 'both',
   aiPrompt: string,
   corsHeaders: Record<string, string>
 ): Promise<Response> {
+  // Validate minimalData structure
+  if (!minimalData) {
+    console.error('[handleMinimalDataSummary] No minimalData provided');
+    return new Response(
+      JSON.stringify({ error: 'No performance data provided. Please ensure data is loaded.' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   const { view, period, metrics, comparison } = minimalData;
-  
+
+  // Validate that metrics exist and have data
+  if (!metrics || Object.keys(metrics).length === 0) {
+    console.error('[handleMinimalDataSummary] No metrics found in minimalData:', {
+      hasMetrics: !!metrics,
+      metricsKeys: metrics ? Object.keys(metrics) : [],
+      minimalDataKeys: Object.keys(minimalData),
+    });
+    return new Response(
+      JSON.stringify({ error: 'No metrics data available. Please ensure the selected period has performance data.' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Check if any channel has non-zero data
+  const hasData = Object.values(metrics).some(
+    (channelMetrics) => 
+      (channelMetrics.impressions && channelMetrics.impressions > 0) || 
+      (channelMetrics.revenue && channelMetrics.revenue > 0) || 
+      (channelMetrics.bookings && channelMetrics.bookings > 0)
+  );
+
+  if (!hasData) {
+    console.error('[handleMinimalDataSummary] All metrics are zero:', {
+      metrics: Object.entries(metrics).map(([channel, data]) => ({
+        channel,
+        impressions: data.impressions,
+        revenue: data.revenue,
+        bookings: data.bookings,
+      })),
+    });
+    return new Response(
+      JSON.stringify({ error: 'No performance data available for the selected period (all metrics are zero).' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  console.log('[handleMinimalDataSummary] Processing minimalData:', {
+    view,
+    period,
+    metricsCount: Object.keys(metrics).length,
+    channels: Object.keys(metrics),
+    hasComparison: !!comparison,
+    comparisonType,
+  });
+
   // Build data context string
   let dataContext = `Performance Data for ${period.month} ${period.year}\n`;
   dataContext += `View: ${view === 'overview' ? 'Overview (All Channels)' : view.toUpperCase()}\n\n`;
@@ -307,6 +361,8 @@ async function handleMinimalDataSummary(
     dataContext += `  ROAS: ${channelMetrics.roas.toFixed(2)}x\n`;
     dataContext += `  Cost of Sale: ${channelMetrics.costOfSale.toFixed(2)}%\n`;
   });
+
+  console.log('[handleMinimalDataSummary] Data context length:', dataContext.length, 'characters');
 
   // Add comparison data if available and comparison type is not "none"
   if (comparison && comparisonType !== "none") {
@@ -385,7 +441,16 @@ ${comparisonInstructions}
 
 Focus on strategic insights, not just restating the numbers.`;
 
-  const userPrompt = aiPrompt || `Please analyze the following ${viewLabel} performance data for ${period.month} ${period.year} and generate an executive summary.\n\n${dataContext}`;
+  // Always include the data context in the prompt, even if a custom aiPrompt is provided
+  // The data context contains the actual performance metrics that the AI needs to analyze
+  const basePrompt = aiPrompt || `Please analyze the following ${viewLabel} performance data for ${period.month} ${period.year} and generate an executive summary.`;
+  const userPrompt = `${basePrompt}\n\n${dataContext}`;
+
+  // Log the data context to verify it contains data
+  console.log('[handleMinimalDataSummary] Data context preview (first 500 chars):', dataContext.substring(0, 500));
+  console.log('[handleMinimalDataSummary] Data context total length:', dataContext.length, 'characters');
+  console.log('[handleMinimalDataSummary] User prompt length:', userPrompt.length, 'characters');
+  console.log('[handleMinimalDataSummary] Metrics included:', Object.keys(metrics).join(', '));
 
   try {
     // Estimate tokens and apply cost cap
@@ -506,12 +571,45 @@ serve(async (req) => {
       comparisonType = 'previous_year' 
     } = body;
 
-    console.log('Generating AI summary, isTableComment:', isTableComment, 'comparisonType:', comparisonType);
-    console.log('Has minimalData:', !!minimalData, 'Has pivotData:', !!pivotData);
+    console.log('[generate-ai-summary] Request received:', {
+      isTableComment,
+      comparisonType,
+      hasMinimalData: !!minimalData,
+      hasPivotData: !!pivotData,
+      selectedTab,
+      selectedYear,
+      selectedMonth,
+    });
 
     // Handle minimal data path (from slide view)
     if (minimalData) {
-      return handleMinimalDataSummary(minimalData, selectedTab, selectedYear, selectedMonth, comparisonType, aiPrompt, corsHeaders);
+      console.log('[generate-ai-summary] Processing minimalData path');
+      console.log('[generate-ai-summary] MinimalData structure:', {
+        hasView: !!minimalData.view,
+        hasPeriod: !!minimalData.period,
+        hasMetrics: !!minimalData.metrics,
+        metricsKeys: minimalData.metrics ? Object.keys(minimalData.metrics) : [],
+        hasComparison: !!minimalData.comparison,
+      });
+      
+      // Validate minimalData structure before processing
+      if (!minimalData.metrics || Object.keys(minimalData.metrics).length === 0) {
+        console.error('[generate-ai-summary] Invalid minimalData: no metrics found');
+        return new Response(
+          JSON.stringify({ error: 'No metrics data found in the provided data. Please ensure the selected period has performance data.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return handleMinimalDataSummary(
+        minimalData, 
+        selectedTab, 
+        selectedYear, 
+        selectedMonth, 
+        comparisonType as 'none' | 'previous_period' | 'previous_year' | 'both', 
+        aiPrompt, 
+        corsHeaders
+      );
     }
 
     if (!pivotData) {

@@ -4910,6 +4910,7 @@ export default function SlideViewPage() {
           availableViews={availableViews}
           views={views}
           slideReportId={slideReportId}
+          activeViewId={selectedViewId}
           onApplyView={handleApplyView}
           onApplyComparisonType={(type) => setComparisonType(type)}
         />

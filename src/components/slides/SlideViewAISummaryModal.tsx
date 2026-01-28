@@ -32,6 +32,7 @@ interface SlideViewAISummaryModalProps {
   availableViews: Array<{ id: string | null; name: string }>;
   views: SlideReportView[];
   slideReportId: string | null;
+  activeViewId?: string | null; // Current active view ID from parent
   onApplyView?: (viewId: string | null) => void;
   onApplyComparisonType?: (comparisonType: ComparisonOption) => void;
 }
@@ -47,6 +48,7 @@ export function SlideViewAISummaryModal({
   availableViews,
   views,
   slideReportId,
+  activeViewId,
   onApplyView,
   onApplyComparisonType,
 }: SlideViewAISummaryModalProps) {
@@ -56,6 +58,13 @@ export function SlideViewAISummaryModal({
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const saveSummaryMutation = useSaveSlideReportSummary();
+
+  // Auto-select the current active view when modal opens
+  useEffect(() => {
+    if (open && activeViewId !== undefined) {
+      setSelectedViewId(activeViewId);
+    }
+  }, [open, activeViewId]);
 
   // Get the selected view
   const selectedView = useMemo(() => {
@@ -100,6 +109,27 @@ export function SlideViewAISummaryModal({
       return;
     }
 
+    // Validate that minimalData has metrics with actual data
+    const hasMetrics = minimalData.metrics && Object.keys(minimalData.metrics).length > 0;
+    if (!hasMetrics) {
+      toast.error("No metrics data available for the selected period");
+      console.error('[AI Summary] No metrics found in minimalData:', minimalData);
+      return;
+    }
+
+    // Check if any channel has non-zero data
+    const hasData = Object.values(minimalData.metrics).some(
+      (channelMetrics) => 
+        channelMetrics.impressions > 0 || 
+        channelMetrics.revenue > 0 || 
+        channelMetrics.bookings > 0
+    );
+    if (!hasData) {
+      toast.error("No performance data available (all metrics are zero)");
+      console.error('[AI Summary] All metrics are zero:', minimalData);
+      return;
+    }
+
     setIsGenerating(true);
     setSummary(null);
 
@@ -115,10 +145,18 @@ export function SlideViewAISummaryModal({
 
       // Log minimalData to debug comparison data
       console.log('[AI Summary] Minimal data:', {
+        view: minimalData.view,
+        period: minimalData.period,
         hasComparison: !!minimalData.comparison,
         previousPeriod: minimalData.comparison?.previous_period,
         previousYear: minimalData.comparison?.previous_year,
         metrics: Object.keys(minimalData.metrics),
+        metricsData: Object.entries(minimalData.metrics).map(([channel, data]) => ({
+          channel,
+          impressions: data.impressions,
+          revenue: data.revenue,
+          bookings: data.bookings,
+        })),
         comparisonType,
       });
       
@@ -137,19 +175,37 @@ export function SlideViewAISummaryModal({
       const tabToUse = selectedView?.tab || selectedTab;
       
       try {
+        // Validate minimalData structure before sending
+        if (!minimalData.metrics || Object.keys(minimalData.metrics).length === 0) {
+          throw new Error('Invalid minimalData: no metrics found');
+        }
+
+        // Prepare the request body
+        // Note: AI function accepts "none" even though TypeScript type doesn't include it
+        const requestBody = {
+          minimalData: minimalData,
+          selectedTab: tabToUse,
+          selectedYear: selectedView ? selectedView.selected_year : selectedYear,
+          selectedMonth: selectedView ? selectedView.selected_month : selectedMonth,
+          comparisonType: comparisonType as 'none' | 'previous_period' | 'previous_year' | 'both',
+          isTableComment: false,
+          aiPrompt: comparisonType === 'none' 
+            ? `Analyze the following ${tabToUse === 'overview' ? 'overview' : tabToUse.toUpperCase()} performance data for ${selectedView ? `${selectedView.selected_month} ${selectedView.selected_year}` : `${selectedMonth} ${selectedYear}`}${selectedView ? ` (View: ${selectedView.name})` : ''}. Provide a concise executive summary focusing on key metrics and trends. DO NOT make any comparisons to previous periods or years. Include absolute KPI values for all metrics.`
+            : `Analyze the following ${tabToUse === 'overview' ? 'overview' : tabToUse.toUpperCase()} performance data for ${selectedView ? `${selectedView.selected_month} ${selectedView.selected_year}` : `${selectedMonth} ${selectedYear}`}${selectedView ? ` (View: ${selectedView.name})` : ''}. Provide a concise executive summary focusing on key metrics, trends, and actionable insights. When mentioning changes, ALWAYS include both the percentage change AND the absolute values in the format: "Metric changed by X% (currentValue vs comparisonValue)". Example: "Revenue increased by 8% ($200K vs $185K)".`,
+        };
+
+        console.log('[AI Summary] Sending request to AI function:', {
+          hasMinimalData: !!requestBody.minimalData,
+          metricsCount: Object.keys(requestBody.minimalData.metrics || {}).length,
+          selectedTab: requestBody.selectedTab,
+          selectedYear: requestBody.selectedYear,
+          selectedMonth: requestBody.selectedMonth,
+          comparisonType: requestBody.comparisonType,
+        });
+
         // Use supabase.functions.invoke for proper authentication
         const { data: result, error: invokeError } = await supabase.functions.invoke('generate-ai-summary', {
-          body: {
-            minimalData: minimalData,
-            selectedTab: tabToUse,
-            selectedYear: selectedView ? selectedView.selected_year : selectedYear,
-            selectedMonth: selectedView ? selectedView.selected_month : selectedMonth,
-            comparisonType: comparisonType,
-            isTableComment: false,
-            aiPrompt: comparisonType === 'none' 
-              ? `Analyze the following ${tabToUse === 'overview' ? 'overview' : tabToUse.toUpperCase()} performance data for ${selectedView ? `${selectedView.selected_month} ${selectedView.selected_year}` : `${selectedMonth} ${selectedYear}`}${selectedView ? ` (View: ${selectedView.name})` : ''}. Provide a concise executive summary focusing on key metrics and trends. DO NOT make any comparisons to previous periods or years. Include absolute KPI values for all metrics.`
-              : `Analyze the following ${tabToUse === 'overview' ? 'overview' : tabToUse.toUpperCase()} performance data for ${selectedView ? `${selectedView.selected_month} ${selectedView.selected_year}` : `${selectedMonth} ${selectedYear}`}${selectedView ? ` (View: ${selectedView.name})` : ''}. Provide a concise executive summary focusing on key metrics, trends, and actionable insights. When mentioning changes, ALWAYS include both the percentage change AND the absolute values in the format: "Metric changed by X% (currentValue vs comparisonValue)". Example: "Revenue increased by 8% ($200K vs $185K)".`,
-          },
+          body: requestBody,
         });
 
         if (invokeError) {
@@ -203,7 +259,7 @@ export function SlideViewAISummaryModal({
             selected_year: selectedView ? selectedView.selected_year : selectedYear,
             selected_month: selectedView ? selectedView.selected_month : selectedMonth,
             view_id: selectedView?.id || null,
-            comparison_type: comparisonType,
+            comparison_type: comparisonType === 'none' ? 'previous_period' : comparisonType as 'previous_period' | 'previous_year' | 'both',
             summary_text: finalSummary,
             source: summarySource,
           });
