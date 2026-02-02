@@ -29,7 +29,8 @@ export async function findReportByChannelName(
   }
 
   const variants = CHANNEL_NAME_VARIANTS[channelName] || [channelName];
-  
+  console.log(`[testing] findReportByChannelName: channel=${channelName}, accountId=${accountId}, variants=${JSON.stringify(variants)}`);
+
   try {
     // Query reports table for this account
     const { data: reports, error } = await supabase
@@ -44,8 +45,12 @@ export async function findReportByChannelName(
 
     if (!reports || reports.length === 0) {
       console.warn(`[accountReports] No reports found for account ${accountId}`);
+      console.log(`[testing] findReportByChannelName: no reports for account ${accountId}, channel=${channelName} -> null`);
       return null;
     }
+
+    const reportNames = reports.map((r: { id: string; name: string }) => r.name);
+    console.log(`[testing] findReportByChannelName: account ${accountId} has ${reports.length} report(s), names=${JSON.stringify(reportNames)}`);
 
     // Try to find a report that matches any of the channel name variants (case-insensitive)
     const matchingReport = reports.find(report => {
@@ -81,6 +86,7 @@ export async function findReportByChannelName(
     }
 
     console.warn(`[accountReports] ✗ No ${channelName} report found for account ${accountId}`);
+    console.log(`[testing] findReportByChannelName: no match for channel=${channelName}; tried variants and report names: ${JSON.stringify(reportNames)}`);
     return null;
   } catch (error) {
     console.error(`[accountReports] Error finding report for channel ${channelName}:`, error);
@@ -107,9 +113,11 @@ export async function getAccountReportIds(
     findReportByChannelName(supabase, accountId, 'social'),
   ]);
 
-  return {
+  const result = {
     metasearch: metasearchId,
     sem: semId,
     social: socialId,
   };
+  console.log(`[testing] getAccountReportIds: accountId=${accountId}, result=${JSON.stringify({ metasearch: result.metasearch ?? null, sem: result.sem ?? null, social: result.social ?? null })}`);
+  return result;
 }
