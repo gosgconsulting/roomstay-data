@@ -26,6 +26,12 @@ import {
 const BASE_METRICS = ['Impressions', 'Clicks', 'Cost', 'Revenue', 'Bookings'];
 const YEARS_TO_COMPUTE = [2024, 2025, 2026]; // TODO: make this dynamic based on the data available
 
+/** Max raw rows to include in channel response; above this we omit rawDataRows to avoid WORKER_LIMIT. Frontend uses pre-computed breakdowns when rawDataRows is empty. */
+const MAX_RAW_DATA_ROWS = 5000;
+
+/** Above this row count we skip monthlyBreakdowns (per-month per-breakdown) to avoid CPU time limit. Frontend falls back to all-time breakdowns when monthlyBreakdowns is empty. */
+const ROW_COUNT_CPU_GUARD = 10000;
+
 /**
  * Build metric name to dimension ID mapping for a report
  */
@@ -142,7 +148,7 @@ async function fetchDimensionDataForReport(
   reportId: string
 ): Promise<any[]> {
   const allRows: any[] = [];
-  const batchSize = 200; // Reduced from 500 to lower memory usage
+  const batchSize = 100; // Small batches to reduce peak memory and avoid WORKER_LIMIT
   let offset = 0;
   let hasMore = true;
   let retryCount = 0;
@@ -189,6 +195,183 @@ async function fetchDimensionDataForReport(
   }
 
   console.log(`[pivot] Fetched ${allRows.length} rows for report ${reportId}`);
+  return allRows;
+}
+
+/**
+ * Fetch dimension data filtered by date using DB-side RPC (no full table scan).
+ * When dateDimId is set, calls get_dimension_data_by_report_and_date; otherwise falls back to full fetch or in-memory filter.
+ * @param month - if provided, filters to that month; otherwise filters to entire year
+ */
+async function fetchDimensionDataFilteredByDateRpc(
+  supabase: ReturnType<typeof createClient>,
+  reportId: string,
+  dateDimId: string | undefined,
+  year: number,
+  month?: number
+): Promise<any[]> {
+  if (!dateDimId) {
+    console.warn(`[pivot] No date dimension for date filter; falling back to full fetch for report ${reportId}`);
+    return month != null
+      ? fetchDimensionDataForReportWithMonthFilter(supabase, reportId, undefined, year, month)
+      : fetchDimensionDataForReportWithYearFilter(supabase, reportId, undefined, year);
+  }
+  try {
+    const { data, error } = await supabase.rpc('get_dimension_data_by_report_and_date', {
+      p_report_id: reportId,
+      p_date_dim_id: dateDimId,
+      p_year: year,
+      p_month: month ?? null,
+      p_max_rows: 100000,
+    });
+    if (error) {
+      console.warn(`[pivot] RPC get_dimension_data_by_report_and_date failed (${error.message}), falling back to in-memory filter`);
+      return month != null
+        ? fetchDimensionDataForReportWithMonthFilter(supabase, reportId, dateDimId, year, month)
+        : fetchDimensionDataForReportWithYearFilter(supabase, reportId, dateDimId, year);
+    }
+    const raw = Array.isArray(data) ? data : [];
+    const rows = raw.map((r: any) => (r && r.dimension_values !== undefined ? r.dimension_values : r));
+    console.log(`[pivot] RPC returned ${rows.length} rows for report ${reportId} (year ${year}${month != null ? ` month ${month}` : ''})`);
+    return rows;
+  } catch (err: any) {
+    console.warn(`[pivot] RPC get_dimension_data_by_report_and_date threw:`, err?.message ?? err);
+    return month != null
+      ? fetchDimensionDataForReportWithMonthFilter(supabase, reportId, dateDimId, year, month)
+      : fetchDimensionDataForReportWithYearFilter(supabase, reportId, dateDimId, year);
+  }
+}
+
+/**
+ * Fetch dimension data for a report filtered to a single year.
+ * Prefers DB-side RPC when date dimension is known; otherwise streams and filters in memory.
+ */
+async function fetchDimensionDataForReportWithYearFilter(
+  supabase: ReturnType<typeof createClient>,
+  reportId: string,
+  dateDimId: string | undefined,
+  year: number
+): Promise<any[]> {
+  const allRows: any[] = [];
+  const batchSize = 100;
+  let offset = 0;
+  let hasMore = true;
+  let retryCount = 0;
+  const maxRetries = 3;
+
+  if (!dateDimId) {
+    console.warn(`[pivot] No date dimension for year filter; fetching all rows for report ${reportId}`);
+    return fetchDimensionDataForReport(supabase, reportId);
+  }
+
+  while (hasMore) {
+    try {
+      const { data, error } = await supabase
+        .from('dimension_data')
+        .select('dimension_values')
+        .eq('report_id', reportId)
+        .range(offset, offset + batchSize - 1);
+
+      if (error) {
+        if (error.message?.includes('timeout') && retryCount < maxRetries) {
+          retryCount++;
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        for (const row of data) {
+          const rowData = row.dimension_values || row;
+          const dateValue = rowData[dateDimId];
+          const rowDate = parseDate(dateValue);
+          if (rowDate && rowDate.getFullYear() === year) {
+            allRows.push(rowData);
+          }
+        }
+        offset += batchSize;
+        hasMore = data.length === batchSize;
+        retryCount = 0;
+        if (offset % 2000 === 0 && offset > 0) {
+          console.log(`[pivot] Year ${year}: scanned ${offset} rows, kept ${allRows.length} so far for report ${reportId}`);
+        }
+      } else {
+        hasMore = false;
+      }
+    } catch (err: any) {
+      console.error(`[pivot] Error fetching batch at offset ${offset} for year ${year}:`, err);
+      throw err;
+    }
+  }
+
+  console.log(`[pivot] Fetched ${allRows.length} rows for report ${reportId} (year ${year})`);
+  return allRows;
+}
+
+/**
+ * Fetch dimension data for a report filtered to a single month.
+ * Only keeps rows where date dimension is in that year-month (minimal memory and CPU per invocation).
+ */
+async function fetchDimensionDataForReportWithMonthFilter(
+  supabase: ReturnType<typeof createClient>,
+  reportId: string,
+  dateDimId: string | undefined,
+  year: number,
+  month: number
+): Promise<any[]> {
+  const allRows: any[] = [];
+  const batchSize = 100;
+  let offset = 0;
+  let hasMore = true;
+  let retryCount = 0;
+  const maxRetries = 3;
+
+  if (!dateDimId) {
+    console.warn(`[pivot] No date dimension for month filter; fetching all rows for report ${reportId}`);
+    return fetchDimensionDataForReport(supabase, reportId);
+  }
+
+  const monthZeroBased = month - 1;
+  while (hasMore) {
+    try {
+      const { data, error } = await supabase
+        .from('dimension_data')
+        .select('dimension_values')
+        .eq('report_id', reportId)
+        .range(offset, offset + batchSize - 1);
+
+      if (error) {
+        if (error.message?.includes('timeout') && retryCount < maxRetries) {
+          retryCount++;
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        for (const row of data) {
+          const rowData = row.dimension_values || row;
+          const dateValue = rowData[dateDimId];
+          const rowDate = parseDate(dateValue);
+          if (rowDate && rowDate.getFullYear() === year && rowDate.getMonth() === monthZeroBased) {
+            allRows.push(rowData);
+          }
+        }
+        offset += batchSize;
+        hasMore = data.length === batchSize;
+        retryCount = 0;
+      } else {
+        hasMore = false;
+      }
+    } catch (err: any) {
+      console.error(`[pivot] Error fetching batch at offset ${offset} for ${year}-${month}:`, err);
+      throw err;
+    }
+  }
+
+  console.log(`[pivot] Fetched ${allRows.length} rows for report ${reportId} (${year}-${String(month).padStart(2, '0')})`);
   return allRows;
 }
 
@@ -900,10 +1083,15 @@ export async function computeChannelPivotData(
     : undefined;
 
   const metricNameToIdMap = await buildMetricNameToIdMap(supabase, reportId);
-  console.log(`[channel-pivot] Metric map built for channel ${channel}: ${Object.keys(metricNameToIdMap).length} dimensions`);
-  
+  const dimensionNames = Object.keys(metricNameToIdMap);
+  const requiredMetrics = ['Impressions', 'Clicks', 'Cost', 'Revenue', 'Bookings', 'Date'];
+  const missingMetrics = requiredMetrics.filter((name) => !dimensionNames.some((n) => n.toLowerCase() === name.toLowerCase()));
+  console.log(`[channel-pivot] Metric map built for channel ${channel}: ${dimensionNames.length} dimensions`);
+  console.log(`[testing] channel-pivot: channel=${channel}, reportId=${reportId}, dimensionNames=${JSON.stringify(dimensionNames.slice(0, 25))}${dimensionNames.length > 25 ? '...' : ''}, missingRequiredMetrics=${JSON.stringify(missingMetrics)}`);
+
   const rows = await fetchDimensionDataForReport(supabase, reportId);
   console.log(`[channel-pivot] Fetched ${rows.length} rows for ${channel}`);
+  console.log(`[testing] channel-pivot: channel=${channel}, reportId=${reportId}, rowCount=${rows.length}`);
 
   if (rows.length === 0) {
     console.warn(`[channel-pivot] No data found for ${channel} (reportId: ${reportId}). This channel will have zero metrics.`);
@@ -939,10 +1127,18 @@ export async function computeChannelPivotData(
   );
   const prevYearChannelMetrics = calculateDerivedMetrics(prevYearMetrics);
 
-  const allMonthly = computeAllMonthlyMetrics(rows, YEARS_TO_COMPUTE, metricNameToIdMap, dimensionFilter);
+  // Limit to date range + 1 year back to reduce CPU (avoid computing 36 months when report range is narrow)
+  const rangeStart = new Date(currentDateRange.start);
+  rangeStart.setFullYear(rangeStart.getFullYear() - 1);
+  rangeStart.setDate(1);
+  const rangeEnd = new Date(currentDateRange.end);
+  const monthsInRange = eachMonthOfInterval({ start: rangeStart, end: rangeEnd });
+  const yearsInRange = [...new Set(monthsInRange.map((d) => d.getFullYear()))].sort((a, b) => a - b);
+
+  const allMonthly = computeAllMonthlyMetrics(rows, yearsInRange.length > 0 ? yearsInRange : YEARS_TO_COMPUTE, metricNameToIdMap, dimensionFilter);
   console.log(`[channel-pivot] Computed ${Object.keys(allMonthly).length} monthly data points for channel ${channel}`);
-  
-  const yearly = computeYearlyMetrics(rows, YEARS_TO_COMPUTE, metricNameToIdMap, dimensionFilter);
+
+  const yearly = computeYearlyMetrics(rows, yearsInRange.length > 0 ? yearsInRange : YEARS_TO_COMPUTE, metricNameToIdMap, dimensionFilter);
   console.log(`[channel-pivot] Computed yearly totals for channel ${channel}: ${Object.keys(yearly).length} years`);
 
   const breakdowns: Record<string, BreakdownRow[]> = {};
@@ -995,31 +1191,35 @@ export async function computeChannelPivotData(
   }
 
   const monthlyBreakdowns: Record<string, Record<string, BreakdownRow[]>> = {};
-  const dateDimId = Object.entries(metricNameToIdMap).find(([name]) => 
-    name.toLowerCase() === 'date'
-  )?.[1];
-  
-  for (const monthKey of Object.keys(allMonthly)) {
-    const [year, month] = monthKey.split('-').map(Number);
-    const monthStart = new Date(year, month - 1, 1);
-    const monthEnd = new Date(year, month, 0, 23, 59, 59);
-    
-    monthlyBreakdowns[monthKey] = {};
-    
-    for (const breakdownDimId of breakdownDimensionIds) {
-      const breakdownDimName = breakdownDimNameMap[breakdownDimId] || breakdownDimId;
-      monthlyBreakdowns[monthKey][breakdownDimName] = computeBreakdownForMonth(
-        rows,
-        breakdownDimId,
-        breakdownDimName,
-        metricNameToIdMap,
-        { start: monthStart, end: monthEnd },
-        dateDimId,
-        dimensionFilter
-      );
+  if (rows.length <= ROW_COUNT_CPU_GUARD) {
+    const dateDimId = Object.entries(metricNameToIdMap).find(([name]) =>
+      name.toLowerCase() === 'date'
+    )?.[1];
+
+    for (const monthKey of Object.keys(allMonthly)) {
+      const [year, month] = monthKey.split('-').map(Number);
+      const monthStart = new Date(year, month - 1, 1);
+      const monthEnd = new Date(year, month, 0, 23, 59, 59);
+
+      monthlyBreakdowns[monthKey] = {};
+
+      for (const breakdownDimId of breakdownDimensionIds) {
+        const breakdownDimName = breakdownDimNameMap[breakdownDimId] || breakdownDimId;
+        monthlyBreakdowns[monthKey][breakdownDimName] = computeBreakdownForMonth(
+          rows,
+          breakdownDimId,
+          breakdownDimName,
+          metricNameToIdMap,
+          { start: monthStart, end: monthEnd },
+          dateDimId,
+          dimensionFilter
+        );
+      }
     }
+    console.log(`[channel-pivot] Computed monthly breakdowns for ${Object.keys(monthlyBreakdowns).length} months for channel ${channel}`);
+  } else {
+    console.log(`[channel-pivot] Skipping monthlyBreakdowns for ${channel} (${rows.length} rows > ${ROW_COUNT_CPU_GUARD}) to stay within CPU time limit; frontend will use all-time breakdowns`);
   }
-  console.log(`[channel-pivot] Computed monthly breakdowns for ${Object.keys(monthlyBreakdowns).length} months for channel ${channel}`);
 
   const filterUniqueValues: Record<string, { name: string; values: string[] }> = {};
   const filterDimensionIds = filterConfig?.filterDimensionIds || [];
@@ -1071,13 +1271,18 @@ export async function computeChannelPivotData(
     dimensionMap[id] = name;
   });
 
-  // Store all raw data rows for filtering
-  const rawDataRows = rows.map(row => {
-    const rowData = row.dimension_values || row;
-    return { ...rowData };
-  });
-  
-  console.log(`[channel-pivot] Storing ${rawDataRows.length} raw data rows for ${channel} with ${Object.keys(dimensionMap).length} dimensions`);
+  // Store raw data rows only when under limit to avoid WORKER_LIMIT; frontend falls back to pre-computed breakdowns when empty
+  let rawDataRows: any[];
+  if (rows.length > MAX_RAW_DATA_ROWS) {
+    rawDataRows = [];
+    console.log(`[channel-pivot] Omitting rawDataRows for ${channel} (${rows.length} rows > ${MAX_RAW_DATA_ROWS}) to stay within compute limits; frontend will use pre-computed breakdowns`);
+  } else {
+    rawDataRows = rows.map(row => {
+      const rowData = row.dimension_values || row;
+      return { ...rowData };
+    });
+    console.log(`[channel-pivot] Storing ${rawDataRows.length} raw data rows for ${channel} with ${Object.keys(dimensionMap).length} dimensions`);
+  }
 
   const channelData: SlideReportPivotData['channels'][string] = {
     current: currentChannelMetrics,
@@ -1125,9 +1330,275 @@ export async function computeChannelPivotData(
   };
 
   console.log(`[channel-pivot] Successfully completed processing for channel ${channel}`);
-  
+
   return {
     channelData,
+    overviewContributions: {
+      monthly: overviewMonthly,
+      yearly: overviewYearly,
+      current: overviewCurrent,
+    },
+  };
+}
+
+/**
+ * Per-year slice: compute pivot data for a single year only (used to split load and avoid CPU timeout).
+ * Fetches only rows for that year, then computes monthly/yearly/breakdowns/monthlyBreakdowns for that year.
+ * Returns slice to be stored in slide_report_channel_year_data and merged by main refresh.
+ */
+export async function computeChannelPivotDataForYear(
+  supabase: ReturnType<typeof createClient>,
+  channel: string,
+  reportId: string,
+  year: number,
+  channelConfig: SlideReportConfiguration['channelConfigs'][string] | undefined,
+  breakdownConfig: SlideReportConfiguration['breakdownConfigs'][string] | undefined,
+  filterConfig: SlideReportConfiguration['filterConfigs'][string] | undefined
+): Promise<{
+  channelDataSlice: {
+    monthly: Record<string, ChannelMetrics>;
+    yearly: Record<string, ChannelMetrics>;
+    breakdowns: Record<string, BreakdownRow[]>;
+    monthlyBreakdowns: Record<string, Record<string, BreakdownRow[]>>;
+    filterUniqueValues: Record<string, { name: string; values: string[] }>;
+    dimensionMap: Record<string, string>;
+  };
+  overviewContributions: {
+    monthly: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
+    yearly: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
+    current: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number };
+  };
+}> {
+  console.log(`[channel-pivot] Starting per-year processing for channel ${channel} year ${year} (reportId: ${reportId})`);
+
+  const dimensionFilter = channelConfig?.dimensionId && channelConfig.selectedValues.length > 0
+    ? { dimensionId: channelConfig.dimensionId, values: channelConfig.selectedValues }
+    : undefined;
+
+  const metricNameToIdMap = await buildMetricNameToIdMap(supabase, reportId);
+  const dateDimId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'date')?.[1];
+
+  const rows = await fetchDimensionDataFilteredByDateRpc(supabase, reportId, dateDimId, year);
+  console.log(`[channel-pivot] Fetched ${rows.length} rows for ${channel} year ${year}`);
+
+  const yearStart = new Date(year, 0, 1);
+  const yearEnd = new Date(year, 11, 31, 23, 59, 59);
+  const allMonthly = computeMonthlyMetrics(rows, year, metricNameToIdMap, dimensionFilter);
+  const yearly = computeYearlyMetrics(rows, [year], metricNameToIdMap, dimensionFilter);
+
+  let breakdownDimensionIds = breakdownConfig?.breakdownDimensionIds || [];
+  if (breakdownDimensionIds.length === 0) {
+    const hotelId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'hotel')?.[1];
+    const campaignId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'campaign')?.[1];
+    const accountId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'account')?.[1];
+    const linkTypeId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'link type')?.[1];
+    if (hotelId) breakdownDimensionIds.push(hotelId);
+    if (campaignId) breakdownDimensionIds.push(campaignId);
+    if (accountId && !hotelId) breakdownDimensionIds.push(accountId);
+    if (linkTypeId && channel === 'metasearch') breakdownDimensionIds.push(linkTypeId);
+  }
+
+  const breakdowns: Record<string, BreakdownRow[]> = {};
+  const breakdownDimNameMap: Record<string, string> = {};
+  for (const breakdownDimId of breakdownDimensionIds) {
+    const { data: dimInfo } = await supabase.from('dimensions').select('name').eq('id', breakdownDimId).single();
+    const breakdownDimName = dimInfo?.name || breakdownDimId;
+    breakdownDimNameMap[breakdownDimId] = breakdownDimName;
+    breakdowns[breakdownDimName] = computeBreakdownAllTime(rows, breakdownDimId, breakdownDimName, metricNameToIdMap, dimensionFilter);
+  }
+
+  const monthlyBreakdowns: Record<string, Record<string, BreakdownRow[]>> = {};
+  const dateDimIdForMonth = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'date')?.[1];
+  for (const monthKey of Object.keys(allMonthly)) {
+    const [y, month] = monthKey.split('-').map(Number);
+    const monthStart = new Date(y, month - 1, 1);
+    const monthEnd = new Date(y, month, 0, 23, 59, 59);
+    monthlyBreakdowns[monthKey] = {};
+    for (const breakdownDimId of breakdownDimensionIds) {
+      const breakdownDimName = breakdownDimNameMap[breakdownDimId] || breakdownDimId;
+      monthlyBreakdowns[monthKey][breakdownDimName] = computeBreakdownForMonth(
+        rows, breakdownDimId, breakdownDimName, metricNameToIdMap,
+        { start: monthStart, end: monthEnd }, dateDimIdForMonth, dimensionFilter
+      );
+    }
+  }
+
+  const filterUniqueValues: Record<string, { name: string; values: string[] }> = {};
+  const filterDimensionIds = filterConfig?.filterDimensionIds || [];
+  if (filterDimensionIds.length > 0) {
+    const { data: filterDimInfo } = await supabase.from('dimensions').select('id, name').in('id', filterDimensionIds);
+    const filterDimNameMap: Record<string, string> = {};
+    if (filterDimInfo) for (const dim of filterDimInfo) filterDimNameMap[dim.id] = dim.name;
+    for (const filterDimId of filterDimensionIds) {
+      const uniqueValues = new Set<string>();
+      for (const row of rows) {
+        const value = row[filterDimId];
+        if (value !== undefined && value !== null && String(value).trim() !== '') uniqueValues.add(String(value).trim());
+      }
+      filterUniqueValues[filterDimId] = { name: filterDimNameMap[filterDimId] || filterDimId, values: Array.from(uniqueValues).sort() };
+    }
+  }
+
+  const dimensionMap: Record<string, string> = {};
+  Object.entries(metricNameToIdMap).forEach(([name, id]) => { dimensionMap[id] = name; });
+
+  const yearMetrics = yearly[String(year)];
+  const overviewCurrent = yearMetrics
+    ? { impressions: yearMetrics.impressions, clicks: yearMetrics.clicks, cost: yearMetrics.cost, revenue: yearMetrics.revenue, bookings: yearMetrics.bookings }
+    : { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+
+  const overviewMonthly: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
+  for (const [monthKey, metrics] of Object.entries(allMonthly)) {
+    overviewMonthly[monthKey] = {
+      impressions: metrics.impressions, clicks: metrics.clicks, cost: metrics.cost,
+      revenue: metrics.revenue, bookings: metrics.bookings,
+    };
+  }
+  const overviewYearly: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
+  for (const [yearKey, metrics] of Object.entries(yearly)) {
+    overviewYearly[yearKey] = {
+      impressions: metrics.impressions, clicks: metrics.clicks, cost: metrics.cost,
+      revenue: metrics.revenue, bookings: metrics.bookings,
+    };
+  }
+
+  console.log(`[channel-pivot] Per-year slice completed for channel ${channel} year ${year}`);
+  return {
+    channelDataSlice: {
+      monthly: allMonthly,
+      yearly,
+      breakdowns,
+      monthlyBreakdowns,
+      filterUniqueValues,
+      dimensionMap,
+    },
+    overviewContributions: {
+      monthly: overviewMonthly,
+      yearly: overviewYearly,
+      current: overviewCurrent,
+    },
+  };
+}
+
+/**
+ * Per-month slice: compute pivot data for a single month only (minimal load per invocation).
+ * Fetches only rows for that month, returns one month's monthly + monthlyBreakdowns + breakdowns.
+ */
+export async function computeChannelPivotDataForMonth(
+  supabase: ReturnType<typeof createClient>,
+  channel: string,
+  reportId: string,
+  year: number,
+  month: number,
+  channelConfig: SlideReportConfiguration['channelConfigs'][string] | undefined,
+  breakdownConfig: SlideReportConfiguration['breakdownConfigs'][string] | undefined,
+  filterConfig: SlideReportConfiguration['filterConfigs'][string] | undefined
+): Promise<{
+  channelDataSlice: {
+    monthly: Record<string, ChannelMetrics>;
+    yearly: Record<string, ChannelMetrics>;
+    breakdowns: Record<string, BreakdownRow[]>;
+    monthlyBreakdowns: Record<string, Record<string, BreakdownRow[]>>;
+    filterUniqueValues: Record<string, { name: string; values: string[] }>;
+    dimensionMap: Record<string, string>;
+  };
+  overviewContributions: {
+    monthly: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
+    yearly: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
+    current: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number };
+  };
+}> {
+  const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+  console.log(`[channel-pivot] Starting per-month processing for channel ${channel} ${monthKey} (reportId: ${reportId})`);
+
+  const dimensionFilter = channelConfig?.dimensionId && channelConfig.selectedValues.length > 0
+    ? { dimensionId: channelConfig.dimensionId, values: channelConfig.selectedValues }
+    : undefined;
+
+  const metricNameToIdMap = await buildMetricNameToIdMap(supabase, reportId);
+  const dateDimId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'date')?.[1];
+
+  const rows = await fetchDimensionDataFilteredByDateRpc(supabase, reportId, dateDimId, year, month);
+  console.log(`[channel-pivot] Fetched ${rows.length} rows for ${channel} ${monthKey}`);
+
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd = new Date(year, month, 0, 23, 59, 59);
+  const metricsForMonth = aggregateMetricsForDateRange(rows, { start: monthStart, end: monthEnd }, metricNameToIdMap, dimensionFilter);
+  const monthly: Record<string, ChannelMetrics> = { [monthKey]: calculateDerivedMetrics(metricsForMonth) };
+  const yearly: Record<string, ChannelMetrics> = { [String(year)]: calculateDerivedMetrics(metricsForMonth) };
+
+  let breakdownDimensionIds = breakdownConfig?.breakdownDimensionIds || [];
+  if (breakdownDimensionIds.length === 0) {
+    const hotelId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'hotel')?.[1];
+    const campaignId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'campaign')?.[1];
+    const accountId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'account')?.[1];
+    const linkTypeId = Object.entries(metricNameToIdMap).find(([name]) => name.toLowerCase() === 'link type')?.[1];
+    if (hotelId) breakdownDimensionIds.push(hotelId);
+    if (campaignId) breakdownDimensionIds.push(campaignId);
+    if (accountId && !hotelId) breakdownDimensionIds.push(accountId);
+    if (linkTypeId && channel === 'metasearch') breakdownDimensionIds.push(linkTypeId);
+  }
+
+  const breakdowns: Record<string, BreakdownRow[]> = {};
+  const monthlyBreakdowns: Record<string, Record<string, BreakdownRow[]>> = { [monthKey]: {} };
+  const dateDimIdForMonth = dateDimId;
+  for (const breakdownDimId of breakdownDimensionIds) {
+    const { data: dimInfo } = await supabase.from('dimensions').select('name').eq('id', breakdownDimId).single();
+    const breakdownDimName = dimInfo?.name || breakdownDimId;
+    const monthBreakdown = computeBreakdownForMonth(
+      rows, breakdownDimId, breakdownDimName, metricNameToIdMap,
+      { start: monthStart, end: monthEnd }, dateDimIdForMonth, dimensionFilter
+    );
+    breakdowns[breakdownDimName] = monthBreakdown;
+    monthlyBreakdowns[monthKey][breakdownDimName] = monthBreakdown;
+  }
+
+  const filterUniqueValues: Record<string, { name: string; values: string[] }> = {};
+  const filterDimensionIds = filterConfig?.filterDimensionIds || [];
+  if (filterDimensionIds.length > 0) {
+    const { data: filterDimInfo } = await supabase.from('dimensions').select('id, name').in('id', filterDimensionIds);
+    const filterDimNameMap: Record<string, string> = {};
+    if (filterDimInfo) for (const dim of filterDimInfo) filterDimNameMap[dim.id] = dim.name;
+    for (const filterDimId of filterDimensionIds) {
+      const uniqueValues = new Set<string>();
+      for (const row of rows) {
+        const value = row[filterDimId];
+        if (value !== undefined && value !== null && String(value).trim() !== '') uniqueValues.add(String(value).trim());
+      }
+      filterUniqueValues[filterDimId] = { name: filterDimNameMap[filterDimId] || filterDimId, values: Array.from(uniqueValues).sort() };
+    }
+  }
+
+  const dimensionMap: Record<string, string> = {};
+  Object.entries(metricNameToIdMap).forEach(([name, id]) => { dimensionMap[id] = name; });
+
+  const overviewMonthly: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {
+    [monthKey]: {
+      impressions: metricsForMonth.impressions, clicks: metricsForMonth.clicks, cost: metricsForMonth.cost,
+      revenue: metricsForMonth.revenue, bookings: metricsForMonth.bookings,
+    },
+  };
+  const overviewYearly: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {
+    [String(year)]: {
+      impressions: metricsForMonth.impressions, clicks: metricsForMonth.clicks, cost: metricsForMonth.cost,
+      revenue: metricsForMonth.revenue, bookings: metricsForMonth.bookings,
+    },
+  };
+  const overviewCurrent = {
+    impressions: metricsForMonth.impressions, clicks: metricsForMonth.clicks, cost: metricsForMonth.cost,
+    revenue: metricsForMonth.revenue, bookings: metricsForMonth.bookings,
+  };
+
+  console.log(`[channel-pivot] Per-month slice completed for channel ${channel} ${monthKey}`);
+  return {
+    channelDataSlice: {
+      monthly,
+      yearly,
+      breakdowns,
+      monthlyBreakdowns,
+      filterUniqueValues,
+      dimensionMap,
+    },
     overviewContributions: {
       monthly: overviewMonthly,
       yearly: overviewYearly,
