@@ -21,6 +21,8 @@ interface ChannelTabProps {
   isSlideReportsLoading: boolean;
   slideReportId: string | null;
   slideReport?: SlideReport | null;
+  /** Pivot data to use for breakdown table (e.g. effectivePivotData so view/dimension filters apply) */
+  pivotData?: SlideReportPivotData | null;
   isLoadingData: boolean;
   breakdownTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
   currentTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
@@ -55,6 +57,7 @@ export function ChannelTab({
   isSlideReportsLoading,
   slideReportId,
   slideReport,
+  pivotData: pivotDataProp,
   isLoadingData,
   breakdownTotals,
   currentTotals,
@@ -93,7 +96,7 @@ export function ChannelTab({
         <>
           {renderKPICards(
             getReportKPICards(
-              breakdownTotals[channel] || currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
+              currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
             ),
             getChannelComparisonMetrics(channel)
           )}
@@ -143,8 +146,8 @@ export function ChannelTab({
             <CardHeader><CardTitle className="text-base font-medium">Breakdown Analysis</CardTitle></CardHeader>
             <CardContent>
               {(() => {
-                // Verify breakdown data exists - use saved configuration
-                const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+                // Use effective pivot data (e.g. from parent) so view/dimension filters apply to the table
+                const pivotData = pivotDataProp ?? (slideReport?.pivot_data as SlideReportPivotData | null);
                 const channelData = pivotData?.channels?.[channel];
                 const savedBreakdownConfigs = slideReport?.configuration?.breakdownConfigs?.[channel];
                 const configuredBreakdowns = savedBreakdownConfigs?.breakdownDimensionIds || breakdownConfigs[channel]?.breakdownDimensionIds || [];
@@ -166,7 +169,7 @@ export function ChannelTab({
                     onRowClick={setExpandedRow}
                     onGroupByChange={setGroupByDimension}
                     onBreakdownByChange={setBreakdownByDimension}
-                    pivotData={slideReport?.pivot_data}
+                    pivotData={pivotData}
                     selectedChannel={channel}
                     selectedYear={selectedYear}
                     selectedMonth={selectedMonth}

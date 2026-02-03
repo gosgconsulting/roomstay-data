@@ -109,11 +109,10 @@ export function OverviewTab({
       ) : slideReportId && slideReport?.pivot_data && hasAnyData(currentTotals) && renderKPICards(
         slideType === 'master-report' && Object.keys(currentTotals).length > 0
           ? (() => {
-              // Prefer breakdownTotals if available (from UnifiedBreakdownTable) for consistency with channel tabs
-              // This ensures KPI cards match the breakdown table when filters are applied
-              const metasearchData = breakdownTotals.metasearch || currentTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-              const semData = breakdownTotals.sem || currentTotals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-              const socialData = breakdownTotals.social || currentTotals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+              // Use currentTotals (filtered) so view/dimension filters apply to KPI cards
+              const metasearchData = currentTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+              const semData = currentTotals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+              const socialData = currentTotals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
               const totals = {
                 impressions: (metasearchData.impressions || 0) + (semData.impressions || 0) + (socialData.impressions || 0),
                 clicks: (metasearchData.clicks || 0) + (semData.clicks || 0) + (socialData.clicks || 0),
@@ -223,14 +222,11 @@ export function OverviewTab({
               </TableHeader>
               <TableBody>
                 {(() => {
-                  // Use filtered channel totals (respects dimension filters)
-                  // Prefer breakdownTotals if available (from UnifiedBreakdownTable) for consistency with channel tabs
+                  // Use filtered channel totals so view/dimension filters apply to the table
                   const channels = ['metasearch', 'sem', 'social'];
                   const rows = channels.map(channel => {
-                    // Use breakdownTotals if available (more accurate when filters are applied via breakdown table)
-                    // Otherwise fall back to filteredData.channelTotals
                     const channelKey = channel as 'metasearch' | 'sem' | 'social';
-                    const data = breakdownTotals[channelKey] || filteredData.channelTotals[channelKey] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                    const data = filteredData.channelTotals[channelKey] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
                     const derived = calculateDerivedMetrics(data);
                     return {
                       report: channel.charAt(0).toUpperCase() + channel.slice(1),

@@ -4601,6 +4601,7 @@ export default function SlideViewPage() {
               isSlideReportsLoading={isSlideReportsLoading}
               slideReportId={slideReportId}
               slideReport={slideReport}
+              pivotData={effectivePivotData}
               isLoadingData={isLoadingData}
               breakdownTotals={breakdownTotals}
               currentTotals={currentTotals}
@@ -4635,6 +4636,7 @@ export default function SlideViewPage() {
               isSlideReportsLoading={isSlideReportsLoading}
               slideReportId={slideReportId}
               slideReport={slideReport}
+              pivotData={effectivePivotData}
               isLoadingData={isLoadingData}
               breakdownTotals={breakdownTotals}
               currentTotals={currentTotals}
@@ -4669,6 +4671,7 @@ export default function SlideViewPage() {
               isSlideReportsLoading={isSlideReportsLoading}
               slideReportId={slideReportId}
               slideReport={slideReport}
+              pivotData={effectivePivotData}
               isLoadingData={isLoadingData}
               breakdownTotals={breakdownTotals}
               currentTotals={currentTotals}
