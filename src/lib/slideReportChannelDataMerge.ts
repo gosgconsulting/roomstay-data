@@ -63,8 +63,19 @@ export function mergeChannelSlices(
   const first = slices[0];
   const monthly: Record<string, ChannelMetrics> = {};
   const yearly: Record<string, ChannelMetrics> = {};
+  const allMonthKeysForMonthly = new Set(slices.flatMap((s) => Object.keys(s.monthly || {})));
+  for (const monthKey of allMonthKeysForMonthly) {
+    const singleMonthSlice = slices.find(
+      (s) => s.monthly?.[monthKey] && Object.keys(s.monthly || {}).length === 1
+    );
+    if (singleMonthSlice?.monthly?.[monthKey]) {
+      monthly[monthKey] = singleMonthSlice.monthly[monthKey];
+    } else {
+      const fromAny = slices.find((s) => s.monthly?.[monthKey]);
+      if (fromAny?.monthly?.[monthKey]) monthly[monthKey] = fromAny.monthly[monthKey];
+    }
+  }
   for (const s of slices) {
-    if (s.monthly) Object.assign(monthly, s.monthly);
     if (s.yearly) Object.assign(yearly, s.yearly);
   }
   const breakdowns: Record<string, BreakdownRow[]> = {};
@@ -76,15 +87,22 @@ export function mergeChannelSlices(
   const allMonthKeys = new Set(slices.flatMap((s) => Object.keys(s.monthlyBreakdowns || {})));
   for (const monthKey of allMonthKeys) {
     monthlyBreakdowns[monthKey] = {};
+    const slicesWithMonth = slices.filter((s) => s.monthlyBreakdowns?.[monthKey]);
+    const singleMonthSlice = slicesWithMonth.find(
+      (s) => Object.keys(s.monthlyBreakdowns || {}).length === 1
+    );
     const dimNames = new Set(
-      slices.flatMap((s) => Object.keys((s.monthlyBreakdowns && s.monthlyBreakdowns[monthKey]) || {}))
+      slicesWithMonth.flatMap((s) => Object.keys(s.monthlyBreakdowns?.[monthKey] || {}))
     );
     for (const dimName of dimNames) {
-      const allRows = slices.flatMap(
-        (s) =>
-          (s.monthlyBreakdowns?.[monthKey]?.[dimName] || [])
-      );
-      monthlyBreakdowns[monthKey][dimName] = mergeBreakdownRows(allRows);
+      const rows =
+        singleMonthSlice != null
+          ? (singleMonthSlice.monthlyBreakdowns?.[monthKey]?.[dimName] || [])
+          : slicesWithMonth.flatMap(
+              (s) => (s.monthlyBreakdowns?.[monthKey]?.[dimName] || [])
+            );
+      monthlyBreakdowns[monthKey][dimName] =
+        rows.length > 0 ? mergeBreakdownRows(rows) : [];
     }
   }
   const fromDate = new Date(dateRange.from);
