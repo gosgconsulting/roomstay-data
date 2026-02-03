@@ -359,15 +359,15 @@ const UnifiedBreakdownTable = ({
       
       // Get raw data rows
       const rawDataRows = (channelData as any).rawDataRows || [];
+      const expandedDimensionMap = (channelData as any).dimensionMap || {};
       
-      // Apply filters if they exist
+      // Apply filters if they exist (pass dimensionMap so name-keyed data e.g. "Link Type" is matched)
       let filteredRows = rawDataRows;
       if (hasFilters && channel === selectedChannel) {
         const channelFilterValues = filterValues?.[channel] || {};
-        filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange);
+        filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange, expandedDimensionMap);
       } else if (dateRange) {
-        // Even without filters, apply date range if specified
-        filteredRows = filterRawDataRows(rawDataRows, {}, dateRange);
+        filteredRows = filterRawDataRows(rawDataRows, {}, dateRange, expandedDimensionMap);
       }
       
       // Filter to only rows where groupBy dimension matches expandedRow
@@ -422,6 +422,39 @@ const UnifiedBreakdownTable = ({
           allBreakdowns[breakdownValue].bookings += parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
         });
       });
+    }
+
+    // When no raw data (e.g. data from channel tables), use pre-computed breakdown for breakdownBy dimension so expanded rows show "Breakdown by" rows
+    if (Object.keys(allBreakdowns).length === 0 && pivotData?.channels) {
+      for (const channel of channelsToCheck) {
+        const channelData = pivotData.channels[channel];
+        if (!channelData) continue;
+        let breakdownData: any[] = [];
+        if (monthKey && (channelData as any).monthlyBreakdowns?.[monthKey]) {
+          breakdownData = (channelData as any).monthlyBreakdowns[monthKey][breakdownByName] || [];
+        } else if ((channelData as any).breakdowns) {
+          breakdownData = (channelData as any).breakdowns[breakdownByName] || [];
+        }
+        // Apply filter when the breakdownBy dimension has selected values (so expanded list respects view/dimension filter)
+        const breakdownFilterValues = selectedChannel && channel === selectedChannel ? (filterValues?.[channel]?.[breakdownByDimId] || null) : null;
+        if (breakdownFilterValues && Array.isArray(breakdownFilterValues) && breakdownFilterValues.length > 0) {
+          const allowedSet = new Set(breakdownFilterValues.map((v: string) => String(v).trim()));
+          breakdownData = breakdownData.filter((row: any) => {
+            const name = row.name ?? row[breakdownByName] ?? row[breakdownByName.toLowerCase().replace(/\s+/g, '_')];
+            return name != null && allowedSet.has(String(name).trim());
+          });
+        }
+        breakdownData.forEach((row: any) => {
+          const name = row.name ?? row[breakdownByName] ?? row[breakdownByName.toLowerCase().replace(/\s+/g, '_')] ?? 'Unknown';
+          if (!name || name === 'Unknown') return;
+          if (!allBreakdowns[name]) allBreakdowns[name] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+          allBreakdowns[name].impressions += row.impressions ?? 0;
+          allBreakdowns[name].clicks += row.clicks ?? 0;
+          allBreakdowns[name].cost += row.cost ?? 0;
+          allBreakdowns[name].revenue += row.revenue ?? 0;
+          allBreakdowns[name].bookings += row.bookings ?? 0;
+        });
+      }
     }
     
     return Object.entries(allBreakdowns)

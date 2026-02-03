@@ -202,27 +202,31 @@ export const getChannelsWithFilters = (
 };
 
 /**
- * Filter rawDataRows based on filterValues and optional dateRange
+ * Filter rawDataRows based on filterValues and optional dateRange.
+ * filterValues is dimensionId -> selectedValues[].
+ * If dimensionIdToName is provided, also tries rowData[dimensionName] when rowData[dimensionId] is missing
+ * so filtering works whether dimension_data uses id or name as key (e.g. "Link Type").
  */
 export const filterRawDataRows = (
   rawDataRows: RawDataRow[],
   filterValues: Record<string, string[]>,
-  dateRange?: { start: Date; end: Date }
+  dateRange?: { start: Date; end: Date },
+  dimensionIdToName?: Record<string, string>
 ): RawDataRow[] => {
   if (!rawDataRows || rawDataRows.length === 0) return [];
 
   return rawDataRows.filter((row) => {
     const rowData = row.dimension_values || row;
+    const rowDataRecord = rowData as Record<string, unknown>;
 
     // Apply date filter if provided
     if (dateRange) {
       let dateValue: unknown = null;
-      // Try to find date by common field names
       dateValue =
-        (rowData as Record<string, unknown>).Date ||
-        (rowData as Record<string, unknown>).date ||
-        (rowData as Record<string, unknown>).Day ||
-        (rowData as Record<string, unknown>).day;
+        rowDataRecord.Date ||
+        rowDataRecord.date ||
+        rowDataRecord.Day ||
+        rowDataRecord.day;
 
       // Search for date pattern
       if (!dateValue) {
@@ -252,7 +256,11 @@ export const filterRawDataRows = (
       // If filter is not set (undefined/null), skip (show all)
       if (!selectedValues) continue;
 
-      const rowValue = (rowData as Record<string, unknown>)[dimensionId];
+      // Try dimension ID first; then dimension name when data is keyed by name (e.g. "Link Type")
+      let rowValue: unknown = rowDataRecord[dimensionId];
+      if ((rowValue === undefined || rowValue === null) && dimensionIdToName?.[dimensionId]) {
+        rowValue = rowDataRecord[dimensionIdToName[dimensionId]];
+      }
       if (rowValue === undefined || rowValue === null) {
         return false; // Row doesn't have this dimension
       }
