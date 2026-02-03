@@ -144,7 +144,13 @@ export async function findDimensionDataRow(
     );
   });
 
-  return matchingRow || null;
+  if (!matchingRow) return null;
+  
+  // Cast to proper return type
+  return {
+    id: matchingRow.id,
+    dimension_values: matchingRow.dimension_values as Record<string, any>,
+  };
 }
 
 /**

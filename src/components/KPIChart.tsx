@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useTransition, useCallback } from "react";
+import { useState, useEffect, useMemo, useTransition, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -52,6 +52,8 @@ export function KPIChart({
   const [availableMetrics, setAvailableMetrics] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
+  // Ref to track if chart data is ready to be loaded - fixes "used before declaration" error
+  const [chartDataReady, setChartDataReady] = useState(false);
 
   // Load dimensions using the same hook as PerformanceTable for consistency
   const { dimensions, isLoadingDimensions, loadDimensions } = usePerformanceTableDimensions({
@@ -159,24 +161,25 @@ export function KPIChart({
     // Wait for all required data before processing
     if (!reportId || !accountId) {
       onLoadingComplete?.();
+      setChartDataReady(false);
       return;
     }
     
     if (!sourceData || isLoadingSource) {
       // Still loading source data
+      setChartDataReady(false);
       return;
     }
     
     if (!dimensions || dimensions.length === 0 || isLoadingDimensions) {
       // Still loading dimensions
+      setChartDataReady(false);
       return;
     }
     
-    // All data ready - process chart
-    startTransition(() => {
-      loadChartData();
-    });
-  }, [reportId, accountId, stableFilters, selectedMetric, sourceData, isLoadingSource, dimensions, isLoadingDimensions, loadChartData]);
+    // All data ready - set flag to trigger chart loading
+    setChartDataReady(true);
+  }, [reportId, accountId, stableFilters, selectedMetric, sourceData, isLoadingSource, dimensions, isLoadingDimensions, onLoadingComplete]);
 
   // Keep selectedMetric in sync if parent changes initialMetric
   useEffect(() => {
@@ -575,6 +578,15 @@ export function KPIChart({
       onLoadingComplete?.();
     }
   }, [reportId, accountId, sourceData, dimensions, stableFilters, selectedMetric, onLoadingComplete]);
+
+  // Effect to trigger loadChartData when all data is ready
+  useEffect(() => {
+    if (chartDataReady) {
+      startTransition(() => {
+        loadChartData();
+      });
+    }
+  }, [chartDataReady, loadChartData, startTransition]);
 
      const formatTooltipValue = (value: number, name: string) => {
      // Clean the metric name for formatting (remove _previous suffix)

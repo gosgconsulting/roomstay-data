@@ -254,6 +254,47 @@ export type Database = {
           },
         ]
       }
+      booking_statuses: {
+        Row: {
+          account_id: string
+          booking_number: string
+          checkout_date: string
+          created_at: string
+          hotel: string
+          id: string
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          booking_number: string
+          checkout_date: string
+          created_at?: string
+          hotel: string
+          id?: string
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          booking_number?: string
+          checkout_date?: string
+          created_at?: string
+          hotel?: string
+          id?: string
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_statuses_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       budgets: {
         Row: {
           account_id: string | null
@@ -304,6 +345,13 @@ export type Database = {
             columns: ["report_id"]
             isOneToOne: false
             referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budgets_view_id_fkey"
+            columns: ["view_id"]
+            isOneToOne: false
+            referencedRelation: "slide_report_views"
             referencedColumns: ["id"]
           },
         ]
@@ -1226,8 +1274,10 @@ export type Database = {
           id: string
           password_hash: string
           report_ids: string[]
+          slide_report_id: string | null
           slug: string
           updated_at: string
+          view_id: string | null
         }
         Insert: {
           account_id?: string | null
@@ -1237,8 +1287,10 @@ export type Database = {
           id?: string
           password_hash: string
           report_ids?: string[]
+          slide_report_id?: string | null
           slug: string
           updated_at?: string
+          view_id?: string | null
         }
         Update: {
           account_id?: string | null
@@ -1248,8 +1300,10 @@ export type Database = {
           id?: string
           password_hash?: string
           report_ids?: string[]
+          slide_report_id?: string | null
           slug?: string
           updated_at?: string
+          view_id?: string | null
         }
         Relationships: [
           {
@@ -1257,6 +1311,20 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "share_links_slide_report_id_fkey"
+            columns: ["slide_report_id"]
+            isOneToOne: false
+            referencedRelation: "slide_reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "share_links_view_id_fkey"
+            columns: ["view_id"]
+            isOneToOne: false
+            referencedRelation: "slide_report_views"
             referencedColumns: ["id"]
           },
         ]
@@ -1292,6 +1360,85 @@ export type Database = {
             columns: ["data_source_id"]
             isOneToOne: false
             referencedRelation: "data_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      slide_report_channel_month_data: {
+        Row: {
+          channel: string
+          created_at: string
+          data: Json
+          id: string
+          month: number
+          slide_report_id: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          data?: Json
+          id?: string
+          month: number
+          slide_report_id: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          data?: Json
+          id?: string
+          month?: number
+          slide_report_id?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slide_report_channel_month_data_slide_report_id_fkey"
+            columns: ["slide_report_id"]
+            isOneToOne: false
+            referencedRelation: "slide_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      slide_report_channel_year_data: {
+        Row: {
+          channel: string
+          created_at: string
+          data: Json
+          id: string
+          slide_report_id: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          data?: Json
+          id?: string
+          slide_report_id: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          data?: Json
+          id?: string
+          slide_report_id?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slide_report_channel_year_data_slide_report_id_fkey"
+            columns: ["slide_report_id"]
+            isOneToOne: false
+            referencedRelation: "slide_reports"
             referencedColumns: ["id"]
           },
         ]
@@ -1349,6 +1496,139 @@ export type Database = {
           },
           {
             foreignKeyName: "slide_report_monthly_data_slide_report_id_fkey"
+            columns: ["slide_report_id"]
+            isOneToOne: false
+            referencedRelation: "slide_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      slide_report_summaries: {
+        Row: {
+          account_id: string | null
+          comparison_type: string
+          created_at: string
+          id: string
+          selected_month: string
+          selected_year: string
+          slide_report_id: string
+          source: string
+          summary_text: string
+          tab: string
+          updated_at: string
+          user_id: string
+          view_id: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          comparison_type: string
+          created_at?: string
+          id?: string
+          selected_month: string
+          selected_year: string
+          slide_report_id: string
+          source?: string
+          summary_text: string
+          tab: string
+          updated_at?: string
+          user_id: string
+          view_id?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          comparison_type?: string
+          created_at?: string
+          id?: string
+          selected_month?: string
+          selected_year?: string
+          slide_report_id?: string
+          source?: string
+          summary_text?: string
+          tab?: string
+          updated_at?: string
+          user_id?: string
+          view_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slide_report_summaries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "slide_report_summaries_slide_report_id_fkey"
+            columns: ["slide_report_id"]
+            isOneToOne: false
+            referencedRelation: "slide_reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "slide_report_summaries_view_id_fkey"
+            columns: ["view_id"]
+            isOneToOne: false
+            referencedRelation: "slide_report_views"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      slide_report_views: {
+        Row: {
+          account_id: string | null
+          chart_time_range: string | null
+          comparison_type: string
+          created_at: string
+          filter_values: Json
+          id: string
+          name: string
+          price_check_chart_time_range: string | null
+          selected_month: string
+          selected_year: string
+          slide_report_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          chart_time_range?: string | null
+          comparison_type: string
+          created_at?: string
+          filter_values?: Json
+          id?: string
+          name: string
+          price_check_chart_time_range?: string | null
+          selected_month: string
+          selected_year: string
+          slide_report_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          chart_time_range?: string | null
+          comparison_type?: string
+          created_at?: string
+          filter_values?: Json
+          id?: string
+          name?: string
+          price_check_chart_time_range?: string | null
+          selected_month?: string
+          selected_year?: string
+          slide_report_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slide_report_views_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "slide_report_views_slide_report_id_fkey"
             columns: ["slide_report_id"]
             isOneToOne: false
             referencedRelation: "slide_reports"
@@ -1503,6 +1783,16 @@ export type Database = {
           group_key: string
           row_count: number
         }[]
+      }
+      get_dimension_data_by_report_and_date: {
+        Args: {
+          p_date_dim_id: string
+          p_max_rows?: number
+          p_month?: number
+          p_report_id: string
+          p_year: number
+        }
+        Returns: Json[]
       }
       get_monthly_data_stats: {
         Args: { p_report_id: string }

@@ -128,11 +128,11 @@ export function extractMinimalAIData(
 
             filteredRows.forEach((row) => {
               const rowData = row.dimension_values || row;
-              const impressionsValue = parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
-              const clicksValue = parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
-              const costValue = parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
-              const revenueValue = parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
-              const bookingsValue = parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
+              const impressionsValue = parseFloat(String(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0)) || 0;
+              const clicksValue = parseFloat(String(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0)) || 0;
+              const costValue = parseFloat(String(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0)) || 0;
+              const revenueValue = parseFloat(String(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0)) || 0;
+              const bookingsValue = parseFloat(String(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0)) || 0;
               
               channelMetrics.impressions += impressionsValue;
               channelMetrics.clicks += clicksValue;
@@ -244,11 +244,11 @@ export function extractMinimalAIData(
 
           filteredRows.forEach((row) => {
             const rowData = row.dimension_values || row;
-            const impressionsValue = parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
-            const clicksValue = parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
-            const costValue = parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
-            const revenueValue = parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
-            const bookingsValue = parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
+            const impressionsValue = parseFloat(String(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0)) || 0;
+            const clicksValue = parseFloat(String(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0)) || 0;
+            const costValue = parseFloat(String(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0)) || 0;
+            const revenueValue = parseFloat(String(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0)) || 0;
+            const bookingsValue = parseFloat(String(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0)) || 0;
             
             channelMetrics.impressions += impressionsValue;
             channelMetrics.clicks += clicksValue;

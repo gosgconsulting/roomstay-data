@@ -72,6 +72,7 @@ export function FiltersRow({
   filterValues,
   setFilterValues,
   filterDimensionValues,
+  setFilterDimensionValues,
   setFilterDimensionNames,
   filterDimensionNames,
   dimensions,
