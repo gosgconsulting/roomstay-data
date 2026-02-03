@@ -31,6 +31,7 @@ import { useKPICards, useReportKPICards } from "@/hooks/useKPICards";
 import { useOverviewChartData, useAllChannelChartData } from "@/hooks/useChartData";
 import { useBudgetData, useBudgetMonthlyData } from "@/hooks/useBudgetData";
 import { calculateReportBreakdown, calculateReportTotal } from "@/lib/metricsCalculations";
+import { normalizeBudgetValue, type ChannelBudgets } from "@/lib/budgetCalculations";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange, BreakdownRow, ChannelMetrics } from "@/types/slideReports";
@@ -4135,7 +4136,7 @@ export default function SlideViewPage() {
     id: string;
     dimension_name: string;
     dimension_item: string;
-    budget_data: Record<string, number>;
+    budget_data: Record<string, number | ChannelBudgets>;
   }>>([]);
   const [isLoadingViewBudgets, setIsLoadingViewBudgets] = useState(false);
 
@@ -4160,7 +4161,7 @@ export default function SlideViewPage() {
             id: b.id,
             dimension_name: b.dimension_name,
             dimension_item: b.dimension_item,
-            budget_data: (b.budget_data as Record<string, number>) || {},
+            budget_data: (b.budget_data as Record<string, number | ChannelBudgets>) || {},
           }));
           setViewBudgets(budgets);
         }
@@ -4246,43 +4247,77 @@ export default function SlideViewPage() {
       // Get current month row data to calculate channel portions
       const currentRow = budgetMonthlyData.find(r => r.month === editingBudget.month);
       
-      // Calculate total current budget across all hotels for this month
-      const totalCurrentBudget = existingBudgets.reduce((sum, budget) => {
-        const currentBudgetData = (budget.budget_data || {}) as Record<string, number>;
-        return sum + (currentBudgetData[monthKey] || 0);
+      // Calculate total current budget for the specific channel across all hotels
+      const totalCurrentChannelBudget = existingBudgets.reduce((sum, budget) => {
+        const currentBudgetData = (budget.budget_data || {}) as Record<string, number | ChannelBudgets>;
+        const monthData = currentBudgetData[monthKey];
+        const channelBudgets = normalizeBudgetValue(monthData);
+        
+        if (editingBudget.channel === null) {
+          // Overview: sum all channels
+          return sum + channelBudgets.metasearch + channelBudgets.sem + channelBudgets.social;
+        } else {
+          // Specific channel: sum only that channel
+          return sum + channelBudgets[editingBudget.channel as keyof ChannelBudgets];
+        }
       }, 0);
       
       // Update all hotel budgets for this view
       const updates = existingBudgets.map(budget => {
-        const currentBudgetData = (budget.budget_data || {}) as Record<string, number>;
-        const currentMonthBudget = currentBudgetData[monthKey] || 0;
+        const currentBudgetData = (budget.budget_data || {}) as Record<string, number | ChannelBudgets>;
+        const monthData = currentBudgetData[monthKey];
+        const currentChannelBudgets = normalizeBudgetValue(monthData);
         
-        let newMonthBudget = currentMonthBudget;
+        let newChannelBudgets: ChannelBudgets;
         
         if (editingBudget.channel === null) {
-          // Overview: set total budget (will be distributed evenly across channels)
-          // Distribute proportionally across hotels based on their current share
-          if (totalCurrentBudget > 0) {
-            const hotelProportion = currentMonthBudget / totalCurrentBudget;
-            newMonthBudget = newBudget * hotelProportion;
+          // Overview: distribute new total budget across all channels proportionally
+          const currentTotal = currentChannelBudgets.metasearch + currentChannelBudgets.sem + currentChannelBudgets.social;
+          
+          if (totalCurrentChannelBudget > 0) {
+            // Distribute proportionally based on this hotel's current share
+            const hotelProportion = currentTotal / totalCurrentChannelBudget;
+            const hotelBudget = newBudget * hotelProportion;
+            
+            // Distribute hotel budget evenly across three channels
+            const perChannel = hotelBudget / 3;
+            newChannelBudgets = {
+              metasearch: perChannel,
+              sem: perChannel,
+              social: perChannel,
+            };
           } else {
-            // If no current budget, distribute evenly
-            newMonthBudget = newBudget / existingBudgets.length;
+            // If no current budget, distribute evenly across hotels and channels
+            const hotelBudget = newBudget / existingBudgets.length;
+            const perChannel = hotelBudget / 3;
+            newChannelBudgets = {
+              metasearch: perChannel,
+              sem: perChannel,
+              social: perChannel,
+            };
           }
         } else {
-          // Channel-specific: calculate new total based on channel portion
-          // Budgets are stored as total per hotel, distributed evenly (1/3 each channel)
-          // User enters the desired channel budget (already aggregated across all hotels)
-          // We need to calculate what each hotel should have proportionally
-          const desiredTotalBudget = newBudget * 3; // Total across all hotels for all channels
+          // Channel-specific: update only the specific channel, preserve others
+          const currentChannelValue = currentChannelBudgets[editingBudget.channel as keyof ChannelBudgets];
           
-          if (totalCurrentBudget > 0) {
-            // Distribute proportionally based on each hotel's current share
-            const hotelProportion = currentMonthBudget / totalCurrentBudget;
-            newMonthBudget = desiredTotalBudget * hotelProportion;
+          if (totalCurrentChannelBudget > 0) {
+            // Distribute proportionally based on this hotel's current share of this channel
+            const hotelProportion = currentChannelValue / totalCurrentChannelBudget;
+            const hotelChannelBudget = newBudget * hotelProportion;
+            
+            // Update only the specific channel
+            newChannelBudgets = {
+              ...currentChannelBudgets,
+              [editingBudget.channel]: hotelChannelBudget,
+            };
           } else {
-            // If no current budget, distribute evenly
-            newMonthBudget = desiredTotalBudget / existingBudgets.length;
+            // If no current budget for this channel, distribute evenly across hotels
+            const hotelChannelBudget = newBudget / existingBudgets.length;
+            
+            newChannelBudgets = {
+              ...currentChannelBudgets,
+              [editingBudget.channel]: hotelChannelBudget,
+            };
           }
         }
 
@@ -4290,7 +4325,7 @@ export default function SlideViewPage() {
           id: budget.id,
           budget_data: {
             ...currentBudgetData,
-            [monthKey]: newMonthBudget,
+            [monthKey]: newChannelBudgets,
           },
         };
       });
@@ -4321,7 +4356,7 @@ export default function SlideViewPage() {
             id: b.id,
             dimension_name: b.dimension_name,
             dimension_item: b.dimension_item,
-            budget_data: b.budget_data as Record<string, number>,
+            budget_data: b.budget_data as Record<string, number | ChannelBudgets>,
           })));
         }
       }

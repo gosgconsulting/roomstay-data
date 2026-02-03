@@ -20,12 +20,41 @@ export type BudgetMonthlyRow = {
   social: number;
 };
 
+export type ChannelBudgets = {
+  metasearch: number;
+  sem: number;
+  social: number;
+};
+
 export type ViewBudget = {
   id: string;
   dimension_name: string;
   dimension_item: string;
-  budget_data: Record<string, number>;
+  budget_data: Record<string, number | ChannelBudgets>; // Support both legacy (number) and new (ChannelBudgets) formats
 };
+
+/**
+ * Normalizes budget value to channel-specific structure
+ * Supports both legacy flat format and new channel-specific format
+ */
+export function normalizeBudgetValue(value: number | ChannelBudgets | null | undefined): ChannelBudgets {
+  if (!value) {
+    return { metasearch: 0, sem: 0, social: 0 };
+  }
+  
+  if (typeof value === 'number') {
+    // Legacy format: divide by 3 (old assumption was equal distribution)
+    const perChannel = value / 3;
+    return { metasearch: perChannel, sem: perChannel, social: perChannel };
+  }
+  
+  // New format: return as-is with defaults for missing channels
+  return {
+    metasearch: value.metasearch || 0,
+    sem: value.sem || 0,
+    social: value.social || 0,
+  };
+}
 
 /**
  * Calculate budget data from pivot data or view budgets
@@ -333,16 +362,13 @@ export function calculateBudgetMonthlyData(
         }
 
         // Aggregate budgets - budgets are stored per hotel (dimension_item)
-        // Since we don't have channel info in budgets, we'll distribute evenly across channels
-        // or you can adjust this based on your actual budget structure
-        const budgetAmount = Number(amount) || 0;
-
-        // For now, distribute budget evenly across all three channels
-        // In the future, you might want to store channel info in the budget or use dimension_name
-        const budgetPerChannel = budgetAmount / 3;
-        monthlyDataMap[yearMonthKey].metasearchBudget += budgetPerChannel;
-        monthlyDataMap[yearMonthKey].semBudget += budgetPerChannel;
-        monthlyDataMap[yearMonthKey].socialBudget += budgetPerChannel;
+        // Support both legacy flat format and new channel-specific format
+        const channelBudgets = normalizeBudgetValue(amount);
+        
+        // Add channel-specific budgets
+        monthlyDataMap[yearMonthKey].metasearchBudget += channelBudgets.metasearch;
+        monthlyDataMap[yearMonthKey].semBudget += channelBudgets.sem;
+        monthlyDataMap[yearMonthKey].socialBudget += channelBudgets.social;
         });
       });
     }
