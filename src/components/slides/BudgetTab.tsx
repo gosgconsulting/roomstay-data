@@ -48,6 +48,8 @@ interface BudgetTabProps {
   isLoadingViewBudgets: boolean;
   budgetMonthlyData: BudgetMonthlyRow[];
   slideReport?: SlideReport | null;
+  /** Single source of truth: use when provided (e.g. effectivePivotData from slide_report_channel_* tables). Falls back to slideReport.pivot_data. */
+  pivotData?: SlideReportPivotData | null;
   forecastEnabled: boolean;
   setForecastEnabled: (enabled: boolean) => void;
   pnlModeEnabled: boolean;
@@ -79,6 +81,7 @@ export function BudgetTab({
   isLoadingViewBudgets,
   budgetMonthlyData,
   slideReport,
+  pivotData: pivotDataProp,
   forecastEnabled,
   setForecastEnabled,
   pnlModeEnabled,
@@ -137,7 +140,7 @@ export function BudgetTab({
         </TableHeader>
         <TableBody>
           {budgetMonthlyData.map((row) => {
-            const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+            const pivotData = pivotDataProp ?? (slideReport?.pivot_data as SlideReportPivotData | null);
             const [monthName, year] = row.month.split(' ');
             const monthIndex = MONTH_NAMES.indexOf(monthName);
             const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;

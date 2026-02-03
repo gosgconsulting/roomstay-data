@@ -4709,6 +4709,7 @@ export default function SlideViewPage() {
               isLoadingViewBudgets={isLoadingViewBudgets}
               budgetMonthlyData={budgetMonthlyData}
               slideReport={slideReport}
+              pivotData={effectivePivotData}
               forecastEnabled={forecastEnabled}
               setForecastEnabled={setForecastEnabled}
               pnlModeEnabled={pnlModeEnabled}

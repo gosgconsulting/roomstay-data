@@ -33,6 +33,46 @@ export type ViewBudget = {
   budget_data: Record<string, number | ChannelBudgets>; // Support both legacy (number) and new (ChannelBudgets) formats
 };
 
+type BreakdownRowLike = {
+  name?: string;
+  [k: string]: unknown;
+  cost?: number;
+  revenue?: number;
+};
+
+/**
+ * Sum cost and revenue from breakdown rows that match the filter (first matching dimension).
+ * Used when rawDataRows is empty but view/filters are applied.
+ */
+function sumCostRevenueFromBreakdowns(
+  breakdowns: Record<string, BreakdownRowLike[]> | undefined,
+  dimensionMap: Record<string, string>,
+  channelFilterValues: Record<string, string[]>
+): { cost: number; revenue: number } {
+  if (!breakdowns || !dimensionMap || !channelFilterValues) return { cost: 0, revenue: 0 };
+  for (const [dimensionId, selectedValues] of Object.entries(channelFilterValues)) {
+    if (!selectedValues?.length) continue;
+    const dimensionName = dimensionMap[dimensionId];
+    if (!dimensionName || !breakdowns[dimensionName]) continue;
+    const rows = breakdowns[dimensionName];
+    const selectedSet = new Set(selectedValues.map((v) => String(v).trim()));
+    const matching = rows.filter((row) => {
+      const value = row.name ?? row[dimensionName] ?? row[dimensionName.toLowerCase().replace(/\s+/g, '_')];
+      return value != null && selectedSet.has(String(value).trim());
+    });
+    if (matching.length > 0) {
+      let cost = 0;
+      let revenue = 0;
+      matching.forEach((row) => {
+        cost += Number(row.cost) || 0;
+        revenue += Number(row.revenue) || 0;
+      });
+      return { cost, revenue };
+    }
+  }
+  return { cost: 0, revenue: 0 };
+}
+
 /**
  * Normalizes budget value to channel-specific structure
  * Supports both legacy flat format and new channel-specific format
@@ -192,18 +232,10 @@ export function calculateBudgetMonthlyData(
         // Use filtered rows if filters are applied OR if a view is selected (view applies its own filters)
         if (hasFilters || !isMasterView) {
           // Get raw rows directly and filter by dimension filters only (not year filter)
-          // Year filtering will be applied at the end for display purposes
           const rawDataRows = (channelData as any).rawDataRows || [];
-          
-          // Get filter values for this channel (view filters or dimension filters, but not year)
           const channelFilterValues = filterValues?.[channel] || {};
-          
-          // Filter rows by dimension filters only (no dateRange/year filter)
-          // This ensures we aggregate ALL months, then filter by year at the end
           const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, undefined);
 
-          // Build metricNameToIdMap (same as breakdown table) - reverse mapping: name -> id
-          // This ensures we use "Cost" and "Revenue" with capital letters as the source of truth
           const dimensionMap = (channelData as any).dimensionMap || {};
           const metricNameToIdMap: Record<string, string> = {};
           Object.entries(dimensionMap as Record<string, string>).forEach(
@@ -214,7 +246,91 @@ export function calculateBudgetMonthlyData(
             }
           );
 
-          // Aggregate by month from filtered rows
+          // When no raw rows (e.g. data from table merge), derive per-month from monthlyBreakdowns so View shows data
+          if (filteredRows.length === 0) {
+            const monthlyBreakdowns = (channelData as any).monthlyBreakdowns as Record<string, Record<string, BreakdownRowLike[]>> | undefined;
+            const allTimeBreakdowns = (channelData as any).breakdowns as Record<string, BreakdownRowLike[]> | undefined;
+            if (monthlyBreakdowns && Object.keys(monthlyBreakdowns).length > 0) {
+              Object.entries(monthlyBreakdowns).forEach(([monthKey, breakdownsByDim]) => {
+                const [year, month] = monthKey.split('-');
+                const monthNum = parseInt(month, 10);
+                if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) return;
+                const monthName = MONTH_NAMES[monthNum - 1];
+                const yearMonthKey = `${monthName} ${year}`;
+                if (!monthlyDataMap[yearMonthKey]) {
+                  monthlyDataMap[yearMonthKey] = {
+                    month: yearMonthKey,
+                    metasearchBudget: 0,
+                    semBudget: 0,
+                    socialBudget: 0,
+                    metasearchActual: 0,
+                    semActual: 0,
+                    socialActual: 0,
+                    metasearch: 0,
+                    sem: 0,
+                    social: 0,
+                  };
+                }
+                const { cost, revenue } = sumCostRevenueFromBreakdowns(
+                  breakdownsByDim,
+                  dimensionMap as Record<string, string>,
+                  channelFilterValues
+                );
+                if (channel === 'metasearch') {
+                  monthlyDataMap[yearMonthKey].metasearchActual += cost;
+                  monthlyDataMap[yearMonthKey].metasearch += revenue;
+                } else if (channel === 'sem') {
+                  monthlyDataMap[yearMonthKey].semActual += cost;
+                  monthlyDataMap[yearMonthKey].sem += revenue;
+                } else if (channel === 'social') {
+                  monthlyDataMap[yearMonthKey].socialActual += cost;
+                  monthlyDataMap[yearMonthKey].social += revenue;
+                }
+              });
+            } else if (allTimeBreakdowns && Object.keys(channelFilterValues).length > 0) {
+              // No monthly breakdowns: use all-time breakdowns and spread across months that have channel data
+              const { cost, revenue } = sumCostRevenueFromBreakdowns(
+                allTimeBreakdowns,
+                dimensionMap as Record<string, string>,
+                channelFilterValues
+              );
+              if ((cost > 0 || revenue > 0) && channelData?.monthly) {
+                const monthKeys = Object.keys(channelData.monthly);
+                monthKeys.forEach((monthKey) => {
+                  const [y, m] = monthKey.split('-');
+                  const monthName = MONTH_NAMES[parseInt(m, 10) - 1];
+                  const yearMonthKey = `${monthName} ${y}`;
+                  if (!monthlyDataMap[yearMonthKey]) {
+                    monthlyDataMap[yearMonthKey] = {
+                      month: yearMonthKey,
+                      metasearchBudget: 0,
+                      semBudget: 0,
+                      socialBudget: 0,
+                      metasearchActual: 0,
+                      semActual: 0,
+                      socialActual: 0,
+                      metasearch: 0,
+                      sem: 0,
+                      social: 0,
+                    };
+                  }
+                  const perMonth = monthKeys.length;
+                  if (channel === 'metasearch') {
+                    monthlyDataMap[yearMonthKey].metasearchActual += cost / perMonth;
+                    monthlyDataMap[yearMonthKey].metasearch += revenue / perMonth;
+                  } else if (channel === 'sem') {
+                    monthlyDataMap[yearMonthKey].semActual += cost / perMonth;
+                    monthlyDataMap[yearMonthKey].sem += revenue / perMonth;
+                  } else if (channel === 'social') {
+                    monthlyDataMap[yearMonthKey].socialActual += cost / perMonth;
+                    monthlyDataMap[yearMonthKey].social += revenue / perMonth;
+                  }
+                });
+              }
+            }
+          }
+
+          // Aggregate by month from filtered rows (when we have raw rows)
           filteredRows.forEach((row: RawDataRow) => {
             const rowData = row.dimension_values || row;
 
