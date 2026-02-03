@@ -171,12 +171,15 @@ export const insertDataInBatches = async (
       
       while (!batchSuccess && retryCount < maxRetries) {
         try {
-          const { error: insertError } = await supabase
+          const { error: upsertError } = await supabase
             .from('dimension_data')
-            .insert(batch);
+            .upsert(batch, {
+              onConflict: 'report_id,data_source_id,row_number',
+              ignoreDuplicates: false,
+            });
 
-          if (insertError) {
-            throw insertError;
+          if (upsertError) {
+            throw upsertError;
           }
           
           batchSuccess = true;
