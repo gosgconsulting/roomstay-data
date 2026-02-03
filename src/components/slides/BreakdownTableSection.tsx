@@ -625,107 +625,120 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
               <TableHead className="text-right">Revenue</TableHead>
               <TableHead className="text-right">ROAS</TableHead>
               <TableHead className="text-right">Cost of Sale</TableHead>
+              <TableHead className="text-right">Net GP</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {groupedData.map((group) => (
-              <React.Fragment key={group.groupValue}>
-                <TableRow
-                  className="hover:bg-muted/50 cursor-pointer"
-                  onClick={() =>
-                    onRowClick(expandedRow === group.groupValue ? null : group.groupValue)
-                  }
-                >
-                  <TableCell className="w-8">
-                    <ChevronRight
-                      className={cn(
-                        'h-4 w-4 transition-transform',
-                        expandedRow === group.groupValue && 'rotate-90'
-                      )}
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium">{group.groupValue}</TableCell>
-                  <TableCell className="text-right">
-                    {formatNumber(group.metrics.impressions)}
-                  </TableCell>
-                  <TableCell className="text-right">{formatNumber(group.metrics.clicks)}</TableCell>
-                  <TableCell className="text-right">{group.metrics.ctr.toFixed(2)}%</TableCell>
-                  <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
-                  <TableCell className="text-right">
-                    {group.metrics.conversionRate.toFixed(2)}%
-                  </TableCell>
-                  <TableCell className="text-right">
-                    $
-                    {group.metrics.cpc < 0.01
-                      ? group.metrics.cpc.toFixed(4)
-                      : group.metrics.cpc.toFixed(2)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatNumber(group.metrics.cost, 'currency')}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatNumber(group.metrics.revenue, 'currency')}
-                  </TableCell>
-                  <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
-                  <TableCell className="text-right">
-                    {group.metrics.costOfSale < 0.01
-                      ? group.metrics.costOfSale.toFixed(4)
-                      : group.metrics.costOfSale.toFixed(2)}
-                    %
-                  </TableCell>
-                </TableRow>
-                {/* Expanded breakdown rows */}
-                {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
-                  <>
-                    {getExpandedBreakdownData.map((item) => (
-                      <TableRow key={`${group.groupValue}-${item.value}`} className="bg-muted/30">
-                        <TableCell></TableCell>
-                        <TableCell className="pl-8 text-muted-foreground">
-                          <span className="text-xs uppercase mr-2">{breakdownByDim?.name}:</span>
-                          {item.value}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {formatNumber(item.metrics.impressions)}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {formatNumber(item.metrics.clicks)}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {item.metrics.ctr.toFixed(2)}%
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {item.metrics.bookings.toFixed(2)}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {item.metrics.conversionRate.toFixed(2)}%
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          $
-                          {item.metrics.cpc < 0.01
-                            ? item.metrics.cpc.toFixed(4)
-                            : item.metrics.cpc.toFixed(2)}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {formatNumber(item.metrics.cost, 'currency')}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {formatNumber(item.metrics.revenue, 'currency')}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {item.metrics.roas.toFixed(1)}x
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {item.metrics.costOfSale < 0.01
-                            ? item.metrics.costOfSale.toFixed(4)
-                            : item.metrics.costOfSale.toFixed(2)}
-                          %
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </>
-                )}
-              </React.Fragment>
-            ))}
+            {groupedData.map((group) => {
+              const netGp = group.metrics.revenue * 0.15 - group.metrics.cost;
+
+              return (
+                <React.Fragment key={group.groupValue}>
+                  <TableRow
+                    className="hover:bg-muted/50 cursor-pointer"
+                    onClick={() =>
+                      onRowClick(expandedRow === group.groupValue ? null : group.groupValue)
+                    }
+                  >
+                    <TableCell className="w-8">
+                      <ChevronRight
+                        className={cn(
+                          'h-4 w-4 transition-transform',
+                          expandedRow === group.groupValue && 'rotate-90'
+                        )}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">{group.groupValue}</TableCell>
+                    <TableCell className="text-right">
+                      {formatNumber(group.metrics.impressions)}
+                    </TableCell>
+                    <TableCell className="text-right">{formatNumber(group.metrics.clicks)}</TableCell>
+                    <TableCell className="text-right">{group.metrics.ctr.toFixed(2)}%</TableCell>
+                    <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">
+                      {group.metrics.conversionRate.toFixed(2)}%
+                    </TableCell>
+                    <TableCell className="text-right">
+                      $
+                      {group.metrics.cpc < 0.01
+                        ? group.metrics.cpc.toFixed(4)
+                        : group.metrics.cpc.toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatNumber(group.metrics.cost, 'currency')}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatNumber(group.metrics.revenue, 'currency')}
+                    </TableCell>
+                    <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
+                    <TableCell className="text-right">
+                      {group.metrics.costOfSale < 0.01
+                        ? group.metrics.costOfSale.toFixed(4)
+                        : group.metrics.costOfSale.toFixed(2)}
+                      %
+                    </TableCell>
+                    <TableCell className="text-right">{formatNumber(netGp, 'currency')}</TableCell>
+                  </TableRow>
+                  {/* Expanded breakdown rows */}
+                  {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
+                    <>
+                      {getExpandedBreakdownData.map((item) => {
+                        const netGpExpanded = item.metrics.revenue * 0.15 - item.metrics.cost;
+
+                        return (
+                          <TableRow key={`${group.groupValue}-${item.value}`} className="bg-muted/30">
+                            <TableCell></TableCell>
+                            <TableCell className="pl-8 text-muted-foreground">
+                              <span className="text-xs uppercase mr-2">{breakdownByDim?.name}:</span>
+                              {item.value}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {formatNumber(item.metrics.impressions)}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {formatNumber(item.metrics.clicks)}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {item.metrics.ctr.toFixed(2)}%
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {item.metrics.bookings.toFixed(2)}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {item.metrics.conversionRate.toFixed(2)}%
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              $
+                              {item.metrics.cpc < 0.01
+                                ? item.metrics.cpc.toFixed(4)
+                                : item.metrics.cpc.toFixed(2)}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {formatNumber(item.metrics.cost, 'currency')}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {formatNumber(item.metrics.revenue, 'currency')}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {item.metrics.roas.toFixed(1)}x
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {item.metrics.costOfSale < 0.01
+                                ? item.metrics.costOfSale.toFixed(4)
+                                : item.metrics.costOfSale.toFixed(2)}
+                              %
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {formatNumber(netGpExpanded, 'currency')}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </>
+                  )}
+                </React.Fragment>
+              );
+            })}
             {/* Totals Row */}
             <TableRow className="bg-muted/50 font-semibold border-t-2">
               <TableCell></TableCell>
@@ -752,6 +765,9 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
                   ? totalMetrics.costOfSale.toFixed(4)
                   : totalMetrics.costOfSale.toFixed(2)}
                 %
+              </TableCell>
+              <TableCell className="text-right">
+                {formatNumber(totalMetrics.revenue * 0.15 - totalMetrics.cost, 'currency')}
               </TableCell>
             </TableRow>
           </TableBody>
