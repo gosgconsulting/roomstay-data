@@ -52,6 +52,7 @@ import { RefreshDataModal } from "@/components/slides/RefreshDataModal";
 import { AISummaryButton } from "@/components/slides/AISummaryButton";
 import { SlideViewAISummaryModal } from "@/components/slides/SlideViewAISummaryModal";
 import { useSlideReportSummaries, useGetSummaryForTab } from "@/hooks/useSlideReportSummaries";
+import { useSlideReportChannelData } from "@/hooks/useSlideReportChannelData";
 import { extractMinimalAIData } from "@/lib/extractMinimalAIData";
 import { isWithinInterval } from "date-fns";
 import { aggregateMetrics } from "@/components/AISummaryPivotTable";
@@ -721,8 +722,21 @@ export default function SlideViewPage() {
   // Slide report state - moved before filteredMonthlyData so it's available
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
   const { data: slideReport } = useSlideReport(slideReportId);
+  const { data: channelDataFromTables } = useSlideReportChannelData(
+    slideReportId,
+    slideReport?.date_range ?? null
+  );
   const { data: slideReports, isLoading: isSlideReportsLoading } = useSlideReports(accountId || null);
   const queryClient = useQueryClient();
+
+  // Prefer channel data from slide_report_channel_month_data / year_data when available (e.g. after incremental refresh)
+  const effectivePivotData = useMemo((): SlideReportPivotData | null => {
+    const base = slideReport?.pivot_data as SlideReportPivotData | null;
+    if (!base) return null;
+    const fromTables = channelDataFromTables ?? null;
+    if (!fromTables || Object.keys(fromTables).length === 0) return base;
+    return { ...base, channels: { ...base.channels, ...fromTables } };
+  }, [slideReport?.pivot_data, channelDataFromTables]);
   const createSlideReport = useCreateSlideReport();
   const updateSlideReport = useUpdateSlideReport();
   const refreshSlideReportData = useRefreshSlideReportData();
@@ -1037,9 +1051,9 @@ export default function SlideViewPage() {
     social: {},
   });
 
-  // Single source of truth for all filtered data
+  // Single source of truth for all filtered data (uses channel data from tables when available)
   const filteredData = useFilteredSlideData({
-    pivotData: slideReport?.pivot_data as SlideReportPivotData | null,
+    pivotData: effectivePivotData,
     filterValues,
     filterDimensionValues,
     selectedYear,
@@ -1051,19 +1065,19 @@ export default function SlideViewPage() {
 
   // Extract minimal data for AI summary (only for report tabs)
   const minimalAIData = useMemo(() => {
-    if (!slideReport?.pivot_data || selectedYear === 'all' || selectedMonth === 'all') {
+    if (!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all') {
       return null;
     }
     if (selectedTab !== 'overview' && selectedTab !== 'metasearch' && selectedTab !== 'sem' && selectedTab !== 'social') {
       return null;
     }
     return extractMinimalAIData(
-      slideReport.pivot_data,
+      effectivePivotData,
       selectedTab as 'overview' | 'metasearch' | 'sem' | 'social',
       selectedYear,
       selectedMonth
     );
-  }, [slideReport?.pivot_data, selectedTab, selectedYear, selectedMonth]);
+  }, [effectivePivotData, selectedTab, selectedYear, selectedMonth]);
 
   // Filter monthly data - now uses unified filteredData hook
   // Fallback to dynamicMonthlyData for master-report if no pivot data
@@ -1154,7 +1168,7 @@ export default function SlideViewPage() {
 
   // Chart data helpers - using hooks
   const overviewChartData = useOverviewChartData(
-    slideReport?.pivot_data as SlideReportPivotData | null,
+    effectivePivotData,
     filterValues,
     filteredData.channelsWithFilters,
     chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'
@@ -1162,7 +1176,7 @@ export default function SlideViewPage() {
 
   // Channel-specific chart data (for individual channel tabs) - using hook
   const channelChartData = useAllChannelChartData(
-    slideReport?.pivot_data as SlideReportPivotData | null,
+    effectivePivotData,
     filterValues,
     filteredData.channelsWithFilters,
     chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'
@@ -1219,7 +1233,7 @@ export default function SlideViewPage() {
   // Get channel metrics using hook
   // Get comparison totals from useChannelMetrics hook (handles comparison period filtering)
   const { comparisonTotals: hookComparisonTotals } = useChannelMetrics({
-    pivotData: slideReport?.pivot_data as SlideReportPivotData | null,
+    pivotData: effectivePivotData,
     selectedYear,
     selectedMonth,
     filterValues,
@@ -1253,11 +1267,9 @@ export default function SlideViewPage() {
     
     if (comparisonType === 'none') return null;
     
-    const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-    if (!pivotData?.channels) return null;
-    
+    if (!effectivePivotData?.channels) return null;
     const channelTotals: Record<string, any> = {};
-    for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+    for (const [channel, channelData] of Object.entries(effectivePivotData.channels)) {
       if (comparisonType === 'previous_period' && (channelData as any).previous_period) {
         channelTotals[channel] = (channelData as any).previous_period;
       } else if (comparisonType === 'previous_year' && (channelData as any).previous_year) {
@@ -1267,12 +1279,12 @@ export default function SlideViewPage() {
       }
     }
     return channelTotals;
-  }, [comparisonType, slideReport?.pivot_data, hookComparisonTotals]);
+  }, [comparisonType, effectivePivotData, hookComparisonTotals]);
 
-  // Load data from stored pivot_data when slideReport changes
+  // Load data from stored pivot_data when slideReport changes (uses channel data from tables when available)
   useEffect(() => {
-    if (slideReport?.pivot_data && slideType === 'master-report') {
-      const pivotData = slideReport.pivot_data;
+    if (effectivePivotData && slideType === 'master-report') {
+      const pivotData = effectivePivotData;
       
       // Build monthly data with per-channel breakdown
       const monthlyDataMap: Record<string, any> = {};
@@ -1363,7 +1375,7 @@ export default function SlideViewPage() {
         }
       }
     }
-  }, [slideReport?.pivot_data, slideType]);
+  }, [effectivePivotData, slideType]);
 
   useEffect(() => {
     const loadOrCreateSlideReport = async () => {
@@ -1623,7 +1635,7 @@ export default function SlideViewPage() {
   // Load filter dimension values and names from pivot_data (pre-computed) instead of loading from database
   useEffect(() => {
     const loadFilterValuesFromPivotData = async () => {
-      const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+      const pivotData = effectivePivotData;
       const config = slideReport?.configuration as SlideReportConfiguration | null;
       
       if (!pivotData?.channels || !config?.filterConfigs || availableChannels.length === 0) {
@@ -1704,7 +1716,7 @@ export default function SlideViewPage() {
 
     loadFilterValuesFromPivotData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slideReport?.pivot_data, slideReport?.configuration?.filterConfigs]);
+  }, [effectivePivotData, slideReport?.configuration?.filterConfigs]);
 
   // Load filter dimension values when switching to a channel tab that has filters
   useEffect(() => {
@@ -1730,9 +1742,8 @@ export default function SlideViewPage() {
         return;
       }
       
-      // First, try to get values from pivot_data (pre-computed)
-      const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-      const channelData = pivotData?.channels?.[currentChannel];
+      // First, try to get values from pivot_data (pre-computed; uses channel data from tables when available)
+      const channelData = effectivePivotData?.channels?.[currentChannel];
       const filterUniqueValues = (channelData as any)?.filterUniqueValues as Record<string, { name: string; values: string[] }> | undefined;
       
       const newValues: Record<string, string[]> = {};
@@ -1837,7 +1848,7 @@ export default function SlideViewPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTab, slideReport?.pivot_data, slideReport?.configuration?.filterConfigs]);
+  }, [selectedTab, effectivePivotData, slideReport?.configuration?.filterConfigs]);
 
   // Open modal if ?edit=true in URL
   useEffect(() => {
@@ -2298,8 +2309,7 @@ export default function SlideViewPage() {
     
     try {
       // SECOND: Check if we have raw data rows stored in pivot_data (most comprehensive - all dimension values)
-      const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-      const channelData = pivotData?.channels?.[channel];
+      const channelData = effectivePivotData?.channels?.[channel];
       
       // Try rawDataRows first - this contains ALL rows with ALL dimension values
       if (channelData?.rawDataRows && channelData.rawDataRows.length > 0) {
@@ -2572,7 +2582,7 @@ export default function SlideViewPage() {
         dimensionValueAbortControllerRef.current = null;
       }
     }
-  }, [slideReport?.pivot_data, channelConfigs, slideType, dimensions, dimensionValuesCache, getReportIdForChannel]);
+  }, [effectivePivotData, channelConfigs, slideType, dimensions, dimensionValuesCache, getReportIdForChannel]);
 
   // Update ref when loadValuesForDimension changes
   useEffect(() => {
@@ -2770,8 +2780,7 @@ export default function SlideViewPage() {
 
     try {
       // FASTEST PATH: Use rawDataRows if available (already in memory, no DB query needed)
-      const pivotData = slideReport?.pivot_data as SlideReportPivotData | null;
-      const channelData = pivotData?.channels?.[channel];
+      const channelData = effectivePivotData?.channels?.[channel];
       const rawDataRows = (channelData as any)?.rawDataRows as any[] | undefined;
       
       if (rawDataRows && rawDataRows.length > 0) {
@@ -2850,7 +2859,7 @@ export default function SlideViewPage() {
       console.error(`[loadFilterDimensionValues] Error loading filter values for ${channel}/${filterDimId}:`, error);
       return [];
     }
-  }, [slideReport?.pivot_data, filterValuesCache, getReportIdForChannel]);
+  }, [effectivePivotData, filterValuesCache, getReportIdForChannel]);
 
   // Filtered values based on search query
   const filteredValues = useMemo(() => {
@@ -3790,6 +3799,9 @@ export default function SlideViewPage() {
         queryClient.invalidateQueries({ 
           queryKey: ['slide_reports', 'detail', slideReportId] 
         });
+        queryClient.invalidateQueries({ 
+          queryKey: ['slide_report_channel_data', slideReportId] 
+        });
         
         // Force refetch and wait for it to complete
         await queryClient.refetchQueries({ 
@@ -4177,7 +4189,7 @@ export default function SlideViewPage() {
 
   // Calculate budget totals from pivot_data.budget or view budgets - using hook
   const budgetData = useBudgetData(
-    slideReport?.pivot_data as SlideReportPivotData | null,
+    effectivePivotData,
     selectedViewId,
     viewBudgets as Array<{ id: string; dimension_name: string; dimension_item: string; budget_data: Record<string, number> }>,
     selectedYear
@@ -4185,7 +4197,7 @@ export default function SlideViewPage() {
 
   // Budget monthly data for tables (full structure with all fields) - using hook
   const budgetMonthlyData = useBudgetMonthlyData(
-    slideReport?.pivot_data as SlideReportPivotData | null,
+    effectivePivotData,
     selectedViewId,
     viewBudgets as Array<{ id: string; dimension_name: string; dimension_item: string; budget_data: Record<string, number> }>,
     selectedYear,
@@ -4449,7 +4461,7 @@ export default function SlideViewPage() {
         open={isDataModalOpen}
         onOpenChange={setIsDataModalOpen}
         pivotData={useMemo(() => {
-          const rawPivotData = slideReport?.pivot_data as SlideReportPivotData | null;
+          const rawPivotData = effectivePivotData;
           if (!rawPivotData || !rawPivotData.channels) return rawPivotData;
 
           // Create a deep copy to avoid mutating the original
@@ -4584,7 +4596,7 @@ export default function SlideViewPage() {
           });
 
           return transformedPivotData;
-        }, [slideReport?.pivot_data])}
+        }, [effectivePivotData])}
         lastRefreshedAt={slideReport?.last_refreshed_at}
         configuration={slideReport?.configuration as SlideReportConfiguration | null}
         reportIds={slideReport?.report_ids as Record<string, string> | null}
@@ -4720,7 +4732,7 @@ export default function SlideViewPage() {
               slideType={slideType}
               KPI_CARDS={KPI_CARDS}
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
-              isAISummaryDisabled={!slideReport?.pivot_data || selectedYear === 'all' || selectedMonth === 'all'}
+              isAISummaryDisabled={!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all'}
               summaryText={summaries.find(s => s.tab === 'overview' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
             />
 
@@ -4755,7 +4767,7 @@ export default function SlideViewPage() {
               setBreakdownTotals={setBreakdownTotals}
               UnifiedBreakdownTable={UnifiedBreakdownTable}
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
-              isAISummaryDisabled={!slideReport?.pivot_data || selectedYear === 'all' || selectedMonth === 'all'}
+              isAISummaryDisabled={!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all'}
             />
 
             <ChannelTab
@@ -4788,7 +4800,7 @@ export default function SlideViewPage() {
               setBreakdownTotals={setBreakdownTotals}
               UnifiedBreakdownTable={UnifiedBreakdownTable}
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
-              isAISummaryDisabled={!slideReport?.pivot_data || selectedYear === 'all' || selectedMonth === 'all'}
+              isAISummaryDisabled={!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all'}
               summaryText={summaries.find(s => s.tab === 'sem' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
             />
 
@@ -4822,7 +4834,7 @@ export default function SlideViewPage() {
               setBreakdownTotals={setBreakdownTotals}
               UnifiedBreakdownTable={UnifiedBreakdownTable}
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
-              isAISummaryDisabled={!slideReport?.pivot_data || selectedYear === 'all' || selectedMonth === 'all'}
+              isAISummaryDisabled={!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all'}
               summaryText={summaries.find(s => s.tab === 'social' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
             />
 
@@ -4906,7 +4918,7 @@ export default function SlideViewPage() {
           selectedTab={selectedTab as 'overview' | 'metasearch' | 'sem' | 'social'}
           selectedYear={selectedYear}
           selectedMonth={selectedMonth}
-          pivotData={slideReport?.pivot_data as SlideReportPivotData | null}
+          pivotData={effectivePivotData}
           availableViews={availableViews}
           views={views}
           slideReportId={slideReportId}
