@@ -18,6 +18,55 @@ import {
 import type { SlideReportPivotData } from '@/types/slideReports';
 import type { MetricData, MonthlyDataPoint, RawDataRow } from '@/types/slideView';
 
+type BreakdownRowLike = { name?: string; [k: string]: any; impressions: number; clicks: number; cost: number; revenue: number; bookings: number };
+
+function sumBreakdownRows(rows: BreakdownRowLike[]): MetricData {
+  const base: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+  rows.forEach((row) => {
+    base.impressions += Number(row.impressions) || 0;
+    base.clicks += Number(row.clicks) || 0;
+    base.cost += Number(row.cost) || 0;
+    base.revenue += Number(row.revenue) || 0;
+    base.bookings += Number(row.bookings) || 0;
+  });
+  return base;
+}
+
+/**
+ * When rawDataRows is empty but the channel has active filters (e.g. View filter),
+ * derive channel totals from breakdown rows so the view still filters data.
+ * Uses the first filter dimension that has a matching breakdown. Respects selected month when monthlyBreakdowns exist.
+ */
+function aggregateChannelTotalsFromBreakdowns(
+  channelData: SlideReportPivotData['channels'][string],
+  channelFilterValues: Record<string, string[]>,
+  monthKey: string | null
+): MetricData | null {
+  const dimensionMap = (channelData as any).dimensionMap as Record<string, string> | undefined;
+  if (!dimensionMap || !channelFilterValues || Object.keys(channelFilterValues).length === 0) return null;
+
+  const monthlyBreakdowns = (channelData as any).monthlyBreakdowns as Record<string, Record<string, BreakdownRowLike[]>> | undefined;
+  const allTimeBreakdowns = (channelData as any).breakdowns as Record<string, BreakdownRowLike[]> | undefined;
+  const breakdowns = (monthKey && monthlyBreakdowns?.[monthKey]) ? monthlyBreakdowns[monthKey] : allTimeBreakdowns;
+  if (!breakdowns) return null;
+
+  for (const [dimensionId, selectedValues] of Object.entries(channelFilterValues)) {
+    if (!selectedValues?.length) continue;
+    const dimensionName = dimensionMap[dimensionId];
+    if (!dimensionName || !breakdowns[dimensionName]) continue;
+
+    const rows = breakdowns[dimensionName];
+    const selectedSet = new Set(selectedValues.map((v) => String(v).trim()));
+    const matching = rows.filter((row) => {
+      const value = row.name ?? row[dimensionName] ?? row[dimensionName.toLowerCase().replace(/\s+/g, '_')];
+      return value != null && selectedSet.has(String(value).trim());
+    });
+
+    if (matching.length > 0) return sumBreakdownRows(matching);
+  }
+  return null;
+}
+
 export interface UseFilteredSlideDataParams {
   pivotData: SlideReportPivotData | null;
   filterValues: Record<string, Record<string, string[]>>;
@@ -95,6 +144,13 @@ export function useFilteredSlideData({
   const channelsWithFilters = useMemo(() => {
     return getChannelsWithFilters(filterValues, filterDimensionValues);
   }, [filterValues, filterDimensionValues]);
+
+  // Month key for breakdown fallback when a single month is selected (e.g. "2025-02")
+  const monthKeyForBreakdowns = useMemo(() => {
+    if (selectedMonth === 'all' || selectedYear === 'all') return null;
+    const monthNum = MONTH_NAMES.indexOf(selectedMonth) + 1;
+    return `${selectedYear}-${String(monthNum).padStart(2, '0')}`;
+  }, [selectedYear, selectedMonth]);
 
   // Calculate all filtered data in a single memoized computation
   const filteredData = useMemo(() => {
@@ -246,6 +302,21 @@ export function useFilteredSlideData({
             bookings: 0,
           };
         }
+      } else if (hasChannelFilters && rawDataRows.length === 0) {
+        // No raw rows (e.g. data from table merge) — derive totals from breakdowns so View filter still applies
+        const totalsFromBreakdowns = aggregateChannelTotalsFromBreakdowns(channelData as any, channelFilterValues, monthKeyForBreakdowns);
+        if (totalsFromBreakdowns) {
+          channelTotals[channel] = totalsFromBreakdowns;
+        } else {
+          channelTotals[channel] = {
+            impressions: 0,
+            clicks: 0,
+            cost: 0,
+            revenue: 0,
+            bookings: 0,
+          };
+        }
+        filteredRawRows[channel] = [];
       } else {
         // This channel has no filters - use pre-computed data (fast path)
         filteredRawRows[channel] = rawDataRows; // Store all rows for consistency
@@ -363,6 +434,7 @@ export function useFilteredSlideData({
     selectedMonth,
     dateRange,
     channelsWithFilters,
+    monthKeyForBreakdowns,
   ]);
 
   // Helper method to get filtered rows for a channel

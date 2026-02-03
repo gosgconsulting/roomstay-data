@@ -730,13 +730,28 @@ export default function SlideViewPage() {
   const { data: slideReports, isLoading: isSlideReportsLoading } = useSlideReports(accountId || null);
   const queryClient = useQueryClient();
 
-  // Prefer channel data from slide_report_channel_month_data / year_data when available (e.g. after incremental refresh)
+  // Prefer channel data from slide_report_channel_month_data / year_data when available (e.g. after incremental refresh).
+  // Preserve rawDataRows (and dimensionMap/filterUniqueValues) from base so View/dimension filters still work.
   const effectivePivotData = useMemo((): SlideReportPivotData | null => {
     const base = slideReport?.pivot_data as SlideReportPivotData | null;
     if (!base) return null;
     const fromTables = channelDataFromTables ?? null;
     if (!fromTables || Object.keys(fromTables).length === 0) return base;
-    return { ...base, channels: { ...base.channels, ...fromTables } };
+    const channels: SlideReportPivotData['channels'] = { ...base.channels };
+    for (const [ch, tableChannel] of Object.entries(fromTables)) {
+      const baseChannel = base.channels?.[ch];
+      channels[ch] = {
+        ...tableChannel,
+        rawDataRows: baseChannel?.rawDataRows ?? tableChannel.rawDataRows ?? [],
+        dimensionMap: (baseChannel?.dimensionMap && Object.keys(baseChannel.dimensionMap).length > 0)
+          ? baseChannel.dimensionMap
+          : (tableChannel.dimensionMap || {}),
+        filterUniqueValues: (baseChannel?.filterUniqueValues && Object.keys(baseChannel.filterUniqueValues).length > 0)
+          ? baseChannel.filterUniqueValues
+          : (tableChannel.filterUniqueValues || {}),
+      };
+    }
+    return { ...base, channels };
   }, [slideReport?.pivot_data, channelDataFromTables]);
   const createSlideReport = useCreateSlideReport();
   const updateSlideReport = useUpdateSlideReport();
