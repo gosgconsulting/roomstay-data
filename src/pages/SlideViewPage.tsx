@@ -70,7 +70,6 @@ import {
   buildMetricNameToIdsMap,
   getMetricKeys,
   ensureMinimumChartData,
-  getGrossProfit,
 } from "@/lib/slideViewHelpers";
 import {
   prepareMonthlyRecords,
@@ -269,7 +268,7 @@ const UnifiedBreakdownTable = ({
             return groupValue != null && allowedSet.has(String(groupValue).trim());
           });
         }
-
+        
         breakdownData.forEach((row: any) => {
           const groupValue = row.name || row[groupByName.toLowerCase().replace(/\s+/g, '_')] || 'Unknown';
           if (!allBreakdowns[groupValue]) {
@@ -281,25 +280,6 @@ const UnifiedBreakdownTable = ({
           allBreakdowns[groupValue].revenue += row.revenue || 0;
           allBreakdowns[groupValue].bookings += row.bookings || 0;
         });
-
-        // Ensure every selected filter value for groupBy dimension appears in the table (e.g. Wildlife retreat with no data in this month)
-        if (groupByFilterValues && Array.isArray(groupByFilterValues) && groupByFilterValues.length > 0) {
-          for (const value of groupByFilterValues) {
-            const trimmed = String(value).trim();
-            if (trimmed && !allBreakdowns[trimmed]) {
-              allBreakdowns[trimmed] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-            }
-          }
-        } else if (monthKey) {
-          // When viewing a specific month, ensure all values from the filter dropdown (e.g. Hotel) appear in the table with zeros if missing
-          const allDimensionValues = filterDimensionValues?.[channel]?.[groupByDimId] || [];
-          for (const value of allDimensionValues) {
-            const trimmed = String(value).trim();
-            if (trimmed && !allBreakdowns[trimmed]) {
-              allBreakdowns[trimmed] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-            }
-          }
-        }
       }
     }
 
@@ -600,83 +580,59 @@ const UnifiedBreakdownTable = ({
             <TableHead className="text-right">Revenue</TableHead>
             <TableHead className="text-right">ROAS</TableHead>
             <TableHead className="text-right">Cost of Sale</TableHead>
-            <TableHead className="text-right">Gross Profit</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {groupedData.map((group) => {
-            const channelForGp =
-              selectedChannel && selectedChannel !== 'overview' ? selectedChannel : undefined;
-            const netGp = getGrossProfit(group.metrics.revenue, group.metrics.cost, {
-              channel: channelForGp,
-              linkType: groupByDim?.name === 'Link Type' ? group.groupValue : undefined,
-            });
-
-            return (
-              <React.Fragment key={group.groupValue}>
-                <TableRow 
-                  className="hover:bg-muted/50 cursor-pointer"
-                  onClick={() => onRowClick(expandedRow === group.groupValue ? null : group.groupValue)}
-                >
-                  <TableCell className="w-8">
-                    <ChevronRight className={cn(
-                      "h-4 w-4 transition-transform",
-                      expandedRow === group.groupValue && "rotate-90"
-                    )} />
-                  </TableCell>
-                  <TableCell className="font-medium">{group.groupValue}</TableCell>
-                  <TableCell className="text-right">{formatNumber(group.metrics.impressions)}</TableCell>
-                  <TableCell className="text-right">{formatNumber(group.metrics.clicks)}</TableCell>
-                  <TableCell className="text-right">{group.metrics.ctr.toFixed(2)}%</TableCell>
-                  <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
-                  <TableCell className="text-right">{group.metrics.conversionRate.toFixed(2)}%</TableCell>
-                  <TableCell className="text-right">${group.metrics.cpc < 0.01 ? group.metrics.cpc.toFixed(4) : group.metrics.cpc.toFixed(2)}</TableCell>
-                  <TableCell className="text-right">{formatNumber(group.metrics.cost, 'currency')}</TableCell>
-                  <TableCell className="text-right">{formatNumber(group.metrics.revenue, 'currency')}</TableCell>
-                  <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
-                  <TableCell className="text-right">{group.metrics.costOfSale < 0.01 ? group.metrics.costOfSale.toFixed(4) : group.metrics.costOfSale.toFixed(2)}%</TableCell>
-                  <TableCell className="text-right">{formatNumber(netGp, 'currency')}</TableCell>
-                </TableRow>
-                {/* Expanded breakdown rows */}
-                {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
-                  <>
-                    {getExpandedBreakdownData.map((item) => {
-                      const netGpExpanded = getGrossProfit(
-                        item.metrics.revenue,
-                        item.metrics.cost,
-                        {
-                          channel: channelForGp,
-                          linkType:
-                            breakdownByDim?.name === 'Link Type' ? item.value : undefined,
-                        }
-                      );
-
-                      return (
-                        <TableRow key={`${group.groupValue}-${item.value}`} className="bg-muted/30">
-                          <TableCell></TableCell>
-                          <TableCell className="pl-8 text-muted-foreground">
-                            <span className="text-xs uppercase mr-2">{breakdownByDim?.name}:</span>
-                            {item.value}
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.impressions)}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.clicks)}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{item.metrics.ctr.toFixed(2)}%</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{item.metrics.bookings.toFixed(2)}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{item.metrics.conversionRate.toFixed(2)}%</TableCell>
-                          <TableCell className="text-right text-muted-foreground">${item.metrics.cpc < 0.01 ? item.metrics.cpc.toFixed(4) : item.metrics.cpc.toFixed(2)}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.cost, 'currency')}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.revenue, 'currency')}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{item.metrics.roas.toFixed(1)}x</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{item.metrics.costOfSale < 0.01 ? item.metrics.costOfSale.toFixed(4) : item.metrics.costOfSale.toFixed(2)}%</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{formatNumber(netGpExpanded, 'currency')}</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </>
-                )}
-              </React.Fragment>
-            );
-          })}
+          {groupedData.map((group) => (
+            <React.Fragment key={group.groupValue}>
+              <TableRow 
+                className="hover:bg-muted/50 cursor-pointer"
+                onClick={() => onRowClick(expandedRow === group.groupValue ? null : group.groupValue)}
+              >
+                <TableCell className="w-8">
+                  <ChevronRight className={cn(
+                    "h-4 w-4 transition-transform",
+                    expandedRow === group.groupValue && "rotate-90"
+                  )} />
+                </TableCell>
+                <TableCell className="font-medium">{group.groupValue}</TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.impressions)}</TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.clicks)}</TableCell>
+                <TableCell className="text-right">{group.metrics.ctr.toFixed(2)}%</TableCell>
+                <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
+                <TableCell className="text-right">{group.metrics.conversionRate.toFixed(2)}%</TableCell>
+                <TableCell className="text-right">${group.metrics.cpc < 0.01 ? group.metrics.cpc.toFixed(4) : group.metrics.cpc.toFixed(2)}</TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.cost, 'currency')}</TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.revenue, 'currency')}</TableCell>
+                <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
+                <TableCell className="text-right">{group.metrics.costOfSale < 0.01 ? group.metrics.costOfSale.toFixed(4) : group.metrics.costOfSale.toFixed(2)}%</TableCell>
+              </TableRow>
+              {/* Expanded breakdown rows */}
+              {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
+                <>
+                  {getExpandedBreakdownData.map((item) => (
+                    <TableRow key={`${group.groupValue}-${item.value}`} className="bg-muted/30">
+                      <TableCell></TableCell>
+                      <TableCell className="pl-8 text-muted-foreground">
+                        <span className="text-xs uppercase mr-2">{breakdownByDim?.name}:</span>
+                        {item.value}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.impressions)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.clicks)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{item.metrics.ctr.toFixed(2)}%</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{item.metrics.bookings.toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{item.metrics.conversionRate.toFixed(2)}%</TableCell>
+                      <TableCell className="text-right text-muted-foreground">${item.metrics.cpc < 0.01 ? item.metrics.cpc.toFixed(4) : item.metrics.cpc.toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.cost, 'currency')}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.revenue, 'currency')}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{item.metrics.roas.toFixed(1)}x</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{item.metrics.costOfSale < 0.01 ? item.metrics.costOfSale.toFixed(4) : item.metrics.costOfSale.toFixed(2)}%</TableCell>
+                    </TableRow>
+                  ))}
+                </>
+              )}
+            </React.Fragment>
+          ))}
           {/* Totals Row */}
           <TableRow className="bg-muted/50 font-semibold border-t-2">
             <TableCell></TableCell>
@@ -691,23 +647,6 @@ const UnifiedBreakdownTable = ({
             <TableCell className="text-right">{formatNumber(totalMetrics.revenue, 'currency')}</TableCell>
             <TableCell className="text-right">{totalMetrics.roas.toFixed(1)}x</TableCell>
             <TableCell className="text-right">{totalMetrics.costOfSale < 0.01 ? totalMetrics.costOfSale.toFixed(4) : totalMetrics.costOfSale.toFixed(2)}%</TableCell>
-            <TableCell className="text-right">
-              {formatNumber(
-                groupedData.reduce(
-                  (sum, g) =>
-                    sum +
-                    getGrossProfit(g.metrics.revenue, g.metrics.cost, {
-                      channel:
-                        selectedChannel && selectedChannel !== 'overview'
-                          ? selectedChannel
-                          : undefined,
-                      linkType: groupByDim?.name === 'Link Type' ? g.groupValue : undefined,
-                    }),
-                  0
-                ),
-                'currency'
-              )}
-            </TableCell>
           </TableRow>
         </TableBody>
       </Table>
@@ -2123,10 +2062,9 @@ export default function SlideViewPage() {
     social: false,
   });
 
-  // Refresh Data Modal state - 0 = choose mode, 1-5 = steps
+  // Refresh Data Modal state - 5 steps now
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
-  const [refreshStep, setRefreshStep] = useState(0);
-  const [refreshMode, setRefreshMode] = useState<'full' | 'current_month' | null>(null);
+  const [refreshStep, setRefreshStep] = useState(0); // 0 = not started, 1-5 = steps
   const [refreshStepStatus, setRefreshStepStatus] = useState<Record<number, 'pending' | 'loading' | 'complete' | 'error'>>({
     1: 'pending',
     2: 'pending',
@@ -3363,27 +3301,60 @@ export default function SlideViewPage() {
   // Apply a saved view
   const handleApplyView = useCallback((viewId: string | null) => {
     isApplyingViewRef.current = true; // Mark that we're applying a view
-
+    
     if (!viewId || viewId === 'unsaved') {
       // Master view - reset to defaults; keep Year and Month as-is
       setComparisonType('none');
       setChartTimeRange('last_6_months');
       setPriceCheckChartTimeRange('last_6_months');
-      setFilterValues({ metasearch: {}, sem: {}, social: {}, 'price-check': {}, 'booking': {} });
-    } else {
-      const view = views.find(v => v.id === viewId);
-      if (view) {
-        setSelectedYear(view.selected_year);
-        setSelectedMonth(view.selected_month);
-        setComparisonType(view.comparison_type);
-        setChartTimeRange((view.chart_time_range || 'last_6_months') as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months');
-        setPriceCheckChartTimeRange((view.price_check_chart_time_range || 'last_6_months') as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months');
-        setFilterValues(view.filter_values ?? { metasearch: {}, sem: {}, social: {}, 'price-check': {}, 'booking': {} });
-      }
+      setFilterValues({
+        metasearch: {},
+        sem: {},
+        social: {},
+        'price-check': {},
+        'booking': {},
+      });
+      return;
     }
 
-    isApplyingViewRef.current = false;
+    const view = views.find(v => v.id === viewId);
+    if (!view) {
+      toast({
+        title: "Error",
+        description: "View not found.",
+        variant: "destructive",
+      });
+      isApplyingViewRef.current = false;
+      return;
+    }
+    
+    // Apply view settings; do not change Year or Month — user keeps current filters
+    setComparisonType(view.comparison_type);
+    if (view.chart_time_range) {
+      setChartTimeRange(view.chart_time_range);
+    } else {
+      setChartTimeRange('last_6_months'); // Default
+    }
+    if (view.price_check_chart_time_range) {
+      setPriceCheckChartTimeRange(view.price_check_chart_time_range);
+    } else {
+      setPriceCheckChartTimeRange('last_6_months'); // Default
+    }
+    // Apply filter values - this will filter the data on all tabs including Overview
+    setFilterValues(view.filter_values || {
+      metasearch: {},
+      sem: {},
+      social: {},
+      'price-check': {},
+      'booking': {},
+    });
+
+    toast({
+      title: "View applied",
+      description: `View "${view.name}" has been applied.`,
+    });
   }, [views]);
+
   // Delete a saved view
   const handleDeleteView = useCallback(async (viewId: string) => {
     if (!viewId) {
@@ -3433,7 +3404,6 @@ export default function SlideViewPage() {
           sem: {},
           social: {},
           'price-check': {},
-          'booking': {},
         });
       }
     }
@@ -3634,8 +3604,9 @@ export default function SlideViewPage() {
     // Note: onOpen/onClose callbacks in useEditSourceModal handle the rest
   };
 
-  // Open Refresh Data modal and show choice step (full range vs current month)
-  const handleRefreshDataWithModal = () => {
+  // Handle Refresh Data with step-by-step modal
+  const handleRefreshDataWithModal = async () => {
+    // Step 1: Verify Edit Source settings are saved before proceeding
     if (!slideReportId) {
       toast({
         title: "No configuration",
@@ -3644,6 +3615,8 @@ export default function SlideViewPage() {
       });
       return;
     }
+
+    // Verify configuration exists and is valid
     if (!slideReport?.configuration) {
       toast({
         title: "Configuration missing",
@@ -3652,6 +3625,7 @@ export default function SlideViewPage() {
       });
       return;
     }
+
     if (!slideReport?.date_range) {
       toast({
         title: "Date range missing",
@@ -3660,21 +3634,18 @@ export default function SlideViewPage() {
       });
       return;
     }
+
+    // Open modal and reset state - now with 5 clear steps
     setIsRefreshModalOpen(true);
-    setRefreshStep(0);
-    setRefreshMode(null);
-    setRefreshError(null);
-    setRefreshStepStatus({ 1: 'pending', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'pending' });
-  };
-
-  // Run the actual refresh after user has chosen full range or current month only
-  const runRefreshWithMode = useCallback(async (mode: 'full' | 'current_month') => {
-    if (!slideReportId || !slideReport?.configuration || !slideReport?.date_range) return;
-
-    setRefreshMode(mode);
     setRefreshStep(1);
-    setRefreshStepStatus(prev => ({ ...prev, 1: 'loading', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'pending' }));
     setRefreshError(null);
+    setRefreshStepStatus({
+      1: 'loading',
+      2: 'pending',
+      3: 'pending',
+      4: 'pending',
+      5: 'pending',
+    });
 
     const config = slideReport.configuration as SlideReportConfiguration;
     const validChannels = (config.selectedChannels || []).filter(channel =>
@@ -3682,6 +3653,7 @@ export default function SlideViewPage() {
     );
 
     try {
+      setRefreshStepStatus(prev => ({ ...prev, 1: 'loading' }));
       const { data: latestReport, error: fetchError } = await supabase
         .from("slide_reports")
         .select("*")
@@ -3698,22 +3670,18 @@ export default function SlideViewPage() {
       setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'loading' }));
       setRefreshStep(2);
 
+      const now = new Date();
+      // When user has a specific month selected, refresh that month so cached data (e.g. after dedupe) updates
+      const useSelectedMonth = selectedMonth && selectedMonth !== 'all' && selectedYear && selectedYear !== 'all';
+      const refreshYear = useSelectedMonth ? parseInt(selectedYear, 10) : now.getFullYear();
+      const refreshMonth = useSelectedMonth ? MONTH_NAMES.indexOf(selectedMonth) + 1 : now.getMonth() + 1;
+
       const headers: Record<string, string> = {};
       const apiKey = import.meta.env.VITE_REFRESH_SLIDE_REPORT_API_KEY;
       if (apiKey) headers['x-api-key'] = apiKey;
 
-      const body = mode === 'full'
-        ? { slideReportId }
-        : (() => {
-            const now = new Date();
-            const useSelected = selectedMonth && selectedMonth !== 'all' && selectedYear && selectedYear !== 'all';
-            const year = useSelected ? parseInt(selectedYear, 10) : now.getFullYear();
-            const month = useSelected ? MONTH_NAMES.indexOf(selectedMonth) + 1 : now.getMonth() + 1;
-            return { slideReportId, year, month };
-          })();
-
       const { data: result, error: invokeError } = await supabase.functions.invoke('refresh-slide-report', {
-        body,
+        body: { slideReportId, year: refreshYear, month: refreshMonth },
         headers: Object.keys(headers).length > 0 ? headers : undefined,
       });
 
@@ -3732,31 +3700,16 @@ export default function SlideViewPage() {
         queryKey: ['slide_reports', 'detail', slideReportId],
         type: 'active',
       });
-      const updatedReport = queryClient.getQueryData<SlideReport>(['slide_reports', 'detail', slideReportId]);
-      const dateRange = updatedReport?.date_range ?? slideReport?.date_range ?? null;
-      await queryClient.refetchQueries({
-        queryKey: ['slide_report_channel_data', slideReportId, dateRange?.from, dateRange?.to],
-        type: 'active',
-      });
       if (accountId) {
         queryClient.invalidateQueries({ queryKey: ['slide_reports', 'list', accountId] });
       }
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      const channelDataFromTables = queryClient.getQueryData<SlideReportPivotData['channels']>(
-        ['slide_report_channel_data', slideReportId, dateRange?.from, dateRange?.to]
-      );
-      const basePivot = updatedReport?.pivot_data as SlideReportPivotData | null;
-      const pivotDataForExtract: SlideReportPivotData = {
-        channels: {
-          ...(basePivot?.channels ?? {}),
-          ...(channelDataFromTables ?? {}),
-        },
-      };
-      if (pivotDataForExtract.channels && Object.keys(pivotDataForExtract.channels).length > 0 && updatedReport?.configuration) {
+      const updatedReport = queryClient.getQueryData<SlideReport>(['slide_reports', 'detail', slideReportId]);
+      if (updatedReport?.pivot_data && updatedReport.configuration) {
         const { values: updatedFilterDimensionValues, names: updatedFilterDimensionNames } =
           extractFilterDimensionValues(
-            pivotDataForExtract,
+            updatedReport.pivot_data as SlideReportPivotData,
             updatedReport.configuration as SlideReportConfiguration,
             validChannels
           );
@@ -3768,35 +3721,28 @@ export default function SlideViewPage() {
       await new Promise(resolve => setTimeout(resolve, 500));
       setIsRefreshModalOpen(false);
 
-      if (mode === 'full') {
-        const sinceLabel = slideReport?.date_range
-          ? `${slideReport.date_range.month} ${slideReport.date_range.year}`
-          : 'report start';
-        toast({
-          title: "Data refreshed",
-          description: `Refreshed all months from ${sinceLabel} to Present for ${validChannels.length} channel(s).`,
-        });
-      } else {
-        const monthLabel = body && 'month' in body && 'year' in body
-          ? `${MONTH_NAMES[(body.month as number) - 1]} ${body.year}`
-          : 'selected month';
-        toast({
-          title: "Data refreshed",
-          description: `Refreshed ${monthLabel} for ${validChannels.length} channel(s).`,
-        });
-      }
+      const monthName = new Date(refreshYear, refreshMonth - 1).toLocaleString('default', { month: 'long' });
+      toast({
+        title: "Data refreshed",
+        description: `Refreshed ${monthName} ${refreshYear} for ${validChannels.length} channel(s).`,
+      });
     } catch (error) {
       console.error("[refresh] Error:", error);
+      const currentStep = refreshStep;
+      
+      // Normalize error message using optimized helper
       const errorMessage = normalizeErrorMessage(error);
-      setRefreshStepStatus(prev => ({ ...prev, 1: prev[1] === 'loading' ? 'error' : prev[1], 2: 'error' }));
+      
+      setRefreshStepStatus(prev => ({ ...prev, [currentStep]: 'error' }));
       setRefreshError(errorMessage);
+      
       toast({
         title: "Refresh failed",
         description: errorMessage,
         variant: "destructive",
       });
     }
-  }, [slideReportId, slideReport?.configuration, slideReport?.date_range, selectedYear, selectedMonth, accountId, queryClient]);
+  };
 
   // Get comparison data based on selection - use comparisonTotals from hook (same source of truth)
   const comparisonData = useMemo(() => {
@@ -4604,7 +4550,7 @@ export default function SlideViewPage() {
           <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg text-sm flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-blue-700 dark:text-blue-300 font-medium">
-                ≡ƒöÆ Viewing shared view - Filters are locked
+                🔒 Viewing shared view - Filters are locked
               </span>
             </div>
             <Button
@@ -4871,19 +4817,8 @@ export default function SlideViewPage() {
         isRefreshModalOpen={isRefreshModalOpen}
         setIsRefreshModalOpen={setIsRefreshModalOpen}
         refreshStep={refreshStep}
-        refreshMode={refreshMode}
         refreshStepStatus={refreshStepStatus}
         refreshError={refreshError}
-        sinceLabel={slideReport?.date_range ? `${slideReport.date_range.month} ${slideReport.date_range.year}` : null}
-        onChooseRefreshMode={runRefreshWithMode}
-        currentMonthLabel={
-          selectedMonth && selectedMonth !== 'all' && selectedYear && selectedYear !== 'all'
-            ? `${selectedMonth} ${selectedYear}`
-            : (() => {
-                const now = new Date();
-                return `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
-              })()
-        }
       />
 
       {/* AI Summary Modal */}

@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { calculateDerivedMetrics, formatNumber, filterRawDataRows, getGrossProfit } from '@/lib/slideViewHelpers';
+import { calculateDerivedMetrics, formatNumber, filterRawDataRows } from '@/lib/slideViewHelpers';
 import { MONTH_NAMES } from '@/constants/slideViewConstants';
 import type { SlideReportPivotData } from '@/types/slideReports';
 
@@ -267,24 +267,6 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
             breakdownData = channelData.breakdowns[groupByName] || [];
           }
 
-          // When filters are active, filter breakdown rows by groupBy dimension so view/dimension filter applies
-          const groupByFilterValues =
-            hasFilters &&
-            channel === selectedChannel &&
-            (filterValues?.[channel] || {})[groupByDimId];
-          if (
-            groupByFilterValues &&
-            Array.isArray(groupByFilterValues) &&
-            groupByFilterValues.length > 0
-          ) {
-            const allowedSet = new Set(groupByFilterValues.map((v: string) => String(v).trim()));
-            breakdownData = breakdownData.filter((row: any) => {
-              const groupValue =
-                row.name ?? row[groupByName] ?? row[groupByName.toLowerCase().replace(/\s+/g, '_')];
-              return groupValue != null && allowedSet.has(String(groupValue).trim());
-            });
-          }
-
           breakdownData.forEach((row: any) => {
             const groupValue =
               row.name || row[groupByName.toLowerCase().replace(/\s+/g, '_')] || 'Unknown';
@@ -303,41 +285,6 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
             allBreakdowns[groupValue].revenue += row.revenue || 0;
             allBreakdowns[groupValue].bookings += row.bookings || 0;
           });
-
-          // Ensure every selected filter value for groupBy dimension appears in the table (e.g. Wildlife retreat with no data in this month)
-          if (
-            groupByFilterValues &&
-            Array.isArray(groupByFilterValues) &&
-            groupByFilterValues.length > 0
-          ) {
-            for (const value of groupByFilterValues) {
-              const trimmed = String(value).trim();
-              if (trimmed && !allBreakdowns[trimmed]) {
-                allBreakdowns[trimmed] = {
-                  impressions: 0,
-                  clicks: 0,
-                  cost: 0,
-                  revenue: 0,
-                  bookings: 0,
-                };
-              }
-            }
-          } else if (monthKey) {
-            // When viewing a specific month, ensure all values from the filter dropdown appear in the table with zeros if missing
-            const allDimensionValues = filterDimensionValues?.[channel]?.[groupByDimId] || [];
-            for (const value of allDimensionValues) {
-              const trimmed = String(value).trim();
-              if (trimmed && !allBreakdowns[trimmed]) {
-                allBreakdowns[trimmed] = {
-                  impressions: 0,
-                  clicks: 0,
-                  cost: 0,
-                  revenue: 0,
-                  bookings: 0,
-                };
-              }
-            }
-          }
         }
       }
 
@@ -678,133 +625,107 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
               <TableHead className="text-right">Revenue</TableHead>
               <TableHead className="text-right">ROAS</TableHead>
               <TableHead className="text-right">Cost of Sale</TableHead>
-              <TableHead className="text-right">Gross Profit</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {groupedData.map((group) => {
-              const channelForGp =
-                selectedChannel && selectedChannel !== 'overview' ? selectedChannel : undefined;
-              const netGp = getGrossProfit(group.metrics.revenue, group.metrics.cost, {
-                channel: channelForGp,
-                linkType: groupByDim?.name === 'Link Type' ? group.groupValue : undefined,
-              });
-
-              return (
-                <React.Fragment key={group.groupValue}>
-                  <TableRow
-                    className="hover:bg-muted/50 cursor-pointer"
-                    onClick={() =>
-                      onRowClick(expandedRow === group.groupValue ? null : group.groupValue)
-                    }
-                  >
-                    <TableCell className="w-8">
-                      <ChevronRight
-                        className={cn(
-                          'h-4 w-4 transition-transform',
-                          expandedRow === group.groupValue && 'rotate-90'
-                        )}
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">{group.groupValue}</TableCell>
-                    <TableCell className="text-right">
-                      {formatNumber(group.metrics.impressions)}
-                    </TableCell>
-                    <TableCell className="text-right">{formatNumber(group.metrics.clicks)}</TableCell>
-                    <TableCell className="text-right">{group.metrics.ctr.toFixed(2)}%</TableCell>
-                    <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">
-                      {group.metrics.conversionRate.toFixed(2)}%
-                    </TableCell>
-                    <TableCell className="text-right">
-                      $
-                      {group.metrics.cpc < 0.01
-                        ? group.metrics.cpc.toFixed(4)
-                        : group.metrics.cpc.toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatNumber(group.metrics.cost, 'currency')}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatNumber(group.metrics.revenue, 'currency')}
-                    </TableCell>
-                    <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
-                    <TableCell className="text-right">
-                      {group.metrics.costOfSale < 0.01
-                        ? group.metrics.costOfSale.toFixed(4)
-                        : group.metrics.costOfSale.toFixed(2)}
-                      %
-                    </TableCell>
-                    <TableCell className="text-right">{formatNumber(netGp, 'currency')}</TableCell>
-                  </TableRow>
-                  {/* Expanded breakdown rows */}
-                  {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
-                    <>
-                      {getExpandedBreakdownData.map((item) => {
-                        const netGpExpanded = getGrossProfit(
-                          item.metrics.revenue,
-                          item.metrics.cost,
-                          {
-                            channel: channelForGp,
-                            linkType:
-                              breakdownByDim?.name === 'Link Type' ? item.value : undefined,
-                          }
-                        );
-
-                        return (
-                          <TableRow key={`${group.groupValue}-${item.value}`} className="bg-muted/30">
-                            <TableCell></TableCell>
-                            <TableCell className="pl-8 text-muted-foreground">
-                              <span className="text-xs uppercase mr-2">{breakdownByDim?.name}:</span>
-                              {item.value}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {formatNumber(item.metrics.impressions)}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {formatNumber(item.metrics.clicks)}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {item.metrics.ctr.toFixed(2)}%
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {item.metrics.bookings.toFixed(2)}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {item.metrics.conversionRate.toFixed(2)}%
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              $
-                              {item.metrics.cpc < 0.01
-                                ? item.metrics.cpc.toFixed(4)
-                                : item.metrics.cpc.toFixed(2)}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {formatNumber(item.metrics.cost, 'currency')}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {formatNumber(item.metrics.revenue, 'currency')}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {item.metrics.roas.toFixed(1)}x
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {item.metrics.costOfSale < 0.01
-                                ? item.metrics.costOfSale.toFixed(4)
-                                : item.metrics.costOfSale.toFixed(2)}
-                              %
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {formatNumber(netGpExpanded, 'currency')}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </>
-                  )}
-                </React.Fragment>
-              );
-            })}
+            {groupedData.map((group) => (
+              <React.Fragment key={group.groupValue}>
+                <TableRow
+                  className="hover:bg-muted/50 cursor-pointer"
+                  onClick={() =>
+                    onRowClick(expandedRow === group.groupValue ? null : group.groupValue)
+                  }
+                >
+                  <TableCell className="w-8">
+                    <ChevronRight
+                      className={cn(
+                        'h-4 w-4 transition-transform',
+                        expandedRow === group.groupValue && 'rotate-90'
+                      )}
+                    />
+                  </TableCell>
+                  <TableCell className="font-medium">{group.groupValue}</TableCell>
+                  <TableCell className="text-right">
+                    {formatNumber(group.metrics.impressions)}
+                  </TableCell>
+                  <TableCell className="text-right">{formatNumber(group.metrics.clicks)}</TableCell>
+                  <TableCell className="text-right">{group.metrics.ctr.toFixed(2)}%</TableCell>
+                  <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
+                  <TableCell className="text-right">
+                    {group.metrics.conversionRate.toFixed(2)}%
+                  </TableCell>
+                  <TableCell className="text-right">
+                    $
+                    {group.metrics.cpc < 0.01
+                      ? group.metrics.cpc.toFixed(4)
+                      : group.metrics.cpc.toFixed(2)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatNumber(group.metrics.cost, 'currency')}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatNumber(group.metrics.revenue, 'currency')}
+                  </TableCell>
+                  <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
+                  <TableCell className="text-right">
+                    {group.metrics.costOfSale < 0.01
+                      ? group.metrics.costOfSale.toFixed(4)
+                      : group.metrics.costOfSale.toFixed(2)}
+                    %
+                  </TableCell>
+                </TableRow>
+                {/* Expanded breakdown rows */}
+                {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
+                  <>
+                    {getExpandedBreakdownData.map((item) => (
+                      <TableRow key={`${group.groupValue}-${item.value}`} className="bg-muted/30">
+                        <TableCell></TableCell>
+                        <TableCell className="pl-8 text-muted-foreground">
+                          <span className="text-xs uppercase mr-2">{breakdownByDim?.name}:</span>
+                          {item.value}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {formatNumber(item.metrics.impressions)}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {formatNumber(item.metrics.clicks)}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {item.metrics.ctr.toFixed(2)}%
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {item.metrics.bookings.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {item.metrics.conversionRate.toFixed(2)}%
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          $
+                          {item.metrics.cpc < 0.01
+                            ? item.metrics.cpc.toFixed(4)
+                            : item.metrics.cpc.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {formatNumber(item.metrics.cost, 'currency')}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {formatNumber(item.metrics.revenue, 'currency')}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {item.metrics.roas.toFixed(1)}x
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {item.metrics.costOfSale < 0.01
+                            ? item.metrics.costOfSale.toFixed(4)
+                            : item.metrics.costOfSale.toFixed(2)}
+                          %
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </>
+                )}
+              </React.Fragment>
+            ))}
             {/* Totals Row */}
             <TableRow className="bg-muted/50 font-semibold border-t-2">
               <TableCell></TableCell>
@@ -831,24 +752,6 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
                   ? totalMetrics.costOfSale.toFixed(4)
                   : totalMetrics.costOfSale.toFixed(2)}
                 %
-              </TableCell>
-              <TableCell className="text-right">
-                {formatNumber(
-                  groupedData.reduce(
-                    (sum, g) =>
-                      sum +
-                      getGrossProfit(g.metrics.revenue, g.metrics.cost, {
-                        channel:
-                          selectedChannel && selectedChannel !== 'overview'
-                            ? selectedChannel
-                            : undefined,
-                        linkType:
-                          groupByDim?.name === 'Link Type' ? g.groupValue : undefined,
-                      }),
-                    0
-                  ),
-                  'currency'
-                )}
               </TableCell>
             </TableRow>
           </TableBody>

@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Database, Calendar, BarChart3, TrendingUp, Layers, RefreshCw, Clock } from "lucide-react";
 import { SlideReportPivotData, ChannelMetrics } from "@/types/slideReports";
-import { calculateDerivedMetrics as calculateDerivedMetricsBase, getGrossProfit } from "@/lib/slideViewHelpers";
+import { calculateDerivedMetrics as calculateDerivedMetricsBase } from "@/lib/slideViewHelpers";
 
 interface Dimension {
   id: string;
@@ -31,7 +31,7 @@ const formatMetricValue = (value: number | undefined, metricName: string): strin
   
   const normalized = metricName.toLowerCase().replace(/\s+/g, '');
   
-  if (normalized.includes('netgp') || (normalized.includes('cost') && !normalized.includes('costofsale')) || normalized.includes('revenue') || normalized.includes('cpc')) {
+  if (normalized.includes('cost') && !normalized.includes('costofsale') || normalized.includes('revenue') || normalized.includes('cpc')) {
     return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   
@@ -64,7 +64,7 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 const FULL_MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 // Metrics to display in tables
-const METRICS = ['impressions', 'clicks', 'ctr', 'bookings', 'conversionRate', 'cpc', 'cost', 'revenue', 'roas', 'costOfSale', 'netGp'];
+const METRICS = ['impressions', 'clicks', 'ctr', 'bookings', 'conversionRate', 'cpc', 'cost', 'revenue', 'roas', 'costOfSale'];
 const METRIC_LABELS: Record<string, string> = {
   impressions: 'Impressions',
   clicks: 'Clicks',
@@ -76,25 +76,6 @@ const METRIC_LABELS: Record<string, string> = {
   revenue: 'Revenue',
   roas: 'ROAS',
   costOfSale: 'Cost of Sale',
-  netGp: 'Gross Profit',
-};
-
-const getMetricValue = (
-  row: Record<string, any> | null | undefined,
-  metric: string,
-  context?: { channel?: 'metasearch' | 'sem' | 'social'; linkType?: string }
-): number | undefined => {
-  if (!row) return undefined;
-  if (metric === 'netGp') {
-    const revenue = Number((row as any).revenue) || 0;
-    const cost = Number((row as any).cost) || 0;
-    const linkType = context?.linkType ?? (row as any)['Link Type'];
-    return getGrossProfit(revenue, cost, {
-      channel: context?.channel,
-      linkType: linkType != null ? String(linkType) : undefined,
-    });
-  }
-  return (row as any)[metric];
 };
 
 export function SlideDataPivotTable({
@@ -367,12 +348,7 @@ export function SlideDataPivotTable({
                             <TableCell className="font-medium capitalize">{channel}</TableCell>
                             {METRICS.map(metric => (
                               <TableCell key={metric} className="text-right">
-                                {formatMetricValue(
-                                  getMetricValue((data.current as any) || null, metric, {
-                                    channel: channel as 'metasearch' | 'sem' | 'social',
-                                  }),
-                                  metric
-                                )}
+                                {formatMetricValue((data.current as any)?.[metric], metric)}
                               </TableCell>
                             ))}
                           </TableRow>
@@ -418,14 +394,7 @@ export function SlideDataPivotTable({
                               {METRIC_LABELS[metric]}
                             </p>
                             <p className="text-lg font-semibold">
-                              {formatMetricValue(
-                                getMetricValue(
-                                  (channelMetrics[selectedChannel].current as any) || null,
-                                  metric,
-                                  { channel: selectedChannel }
-                                ),
-                                metric
-                              )}
+                              {formatMetricValue((channelMetrics[selectedChannel].current as any)?.[metric], metric)}
                             </p>
                           </div>
                         ))}
@@ -437,14 +406,7 @@ export function SlideDataPivotTable({
                               {METRIC_LABELS[metric]}
                             </p>
                             <p className="text-lg font-semibold">
-                              {formatMetricValue(
-                                getMetricValue(
-                                  (channelMetrics[selectedChannel].current as any) || null,
-                                  metric,
-                                  { channel: selectedChannel }
-                                ),
-                                metric
-                              )}
+                              {formatMetricValue((channelMetrics[selectedChannel].current as any)?.[metric], metric)}
                             </p>
                           </div>
                         ))}
@@ -472,12 +434,7 @@ export function SlideDataPivotTable({
                                       <TableCell className="font-medium">{year}</TableCell>
                                       {METRICS.map(metric => (
                                         <TableCell key={metric} className="text-right">
-                                          {formatMetricValue(
-                                            getMetricValue(metrics as any, metric, {
-                                              channel: selectedChannel,
-                                            }),
-                                            metric
-                                          )}
+                                          {formatMetricValue((metrics as any)?.[metric], metric)}
                                         </TableCell>
                                       ))}
                                     </TableRow>
@@ -525,7 +482,7 @@ export function SlideDataPivotTable({
                               <TableCell className="font-medium text-primary">All Channels</TableCell>
                               {METRICS.map(metric => (
                                 <TableCell key={metric} className="text-right">
-                                  {formatMetricValue(getMetricValue(row.overview as any, metric), metric)}
+                                  {formatMetricValue((row.overview as any)?.[metric], metric)}
                                 </TableCell>
                               ))}
                             </TableRow>
@@ -540,12 +497,7 @@ export function SlideDataPivotTable({
                               <TableCell className="capitalize">{channel}</TableCell>
                               {METRICS.map(metric => (
                                 <TableCell key={metric} className="text-right">
-                                  {formatMetricValue(
-                                    getMetricValue(metrics as any, metric, {
-                                      channel: channel as 'metasearch' | 'sem' | 'social',
-                                    }),
-                                    metric
-                                  )}
+                                  {formatMetricValue((metrics as any)?.[metric], metric)}
                                 </TableCell>
                               ))}
                             </TableRow>
@@ -583,7 +535,7 @@ export function SlideDataPivotTable({
                               <TableCell className="font-medium">{row.year}</TableCell>
                               {METRICS.map(metric => (
                                 <TableCell key={metric} className="text-right">
-                                  {formatMetricValue(getMetricValue(row.overview as any, metric), metric)}
+                                  {formatMetricValue((row.overview as any)?.[metric], metric)}
                                 </TableCell>
                               ))}
                             </TableRow>
@@ -616,12 +568,7 @@ export function SlideDataPivotTable({
                               <TableCell className="capitalize">{channel}</TableCell>
                               {METRICS.map(metric => (
                                 <TableCell key={metric} className="text-right">
-                                  {formatMetricValue(
-                                    getMetricValue(metrics as any, metric, {
-                                      channel: channel as 'metasearch' | 'sem' | 'social',
-                                    }),
-                                    metric
-                                  )}
+                                  {formatMetricValue((metrics as any)?.[metric], metric)}
                                 </TableCell>
                               ))}
                             </TableRow>

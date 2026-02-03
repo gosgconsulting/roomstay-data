@@ -1520,9 +1520,6 @@ export async function computeChannelPivotDataForMonth(
 
   const rows = await fetchDimensionDataFilteredByDateRpc(supabase, reportId, dateDimId, year, month);
   console.log(`[channel-pivot] Fetched ${rows.length} rows for ${channel} ${monthKey}`);
-  if (rows.length === 0) {
-    console.warn(`[channel-pivot] No dimension_data rows for ${channel} ${monthKey} (reportId=${reportId}, dateDimId=${dateDimId ?? 'none'}). Check that dimension_data has rows for this report and that the date dimension value casts to date for this month.`);
-  }
 
   const monthStart = new Date(year, month - 1, 1);
   const monthEnd = new Date(year, month, 0, 23, 59, 59);
