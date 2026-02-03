@@ -3257,9 +3257,7 @@ export default function SlideViewPage() {
     isApplyingViewRef.current = true; // Mark that we're applying a view
     
     if (!viewId || viewId === 'unsaved') {
-      // Master view - reset to defaults (but keep selectedYear)
-      // Don't reset selectedYear - let user keep their year filter
-      setSelectedMonth(currentMonthName);
+      // Master view - reset to defaults; keep Year and Month as-is
       setComparisonType('none');
       setChartTimeRange('last_6_months');
       setPriceCheckChartTimeRange('last_6_months');
@@ -3284,9 +3282,7 @@ export default function SlideViewPage() {
       return;
     }
     
-    // Apply view settings immediately (but keep selectedYear - don't reset it)
-    // Don't reset selectedYear - let user keep their year filter
-    setSelectedMonth(view.selected_month);
+    // Apply view settings; do not change Year or Month — user keeps current filters
     setComparisonType(view.comparison_type);
     if (view.chart_time_range) {
       setChartTimeRange(view.chart_time_range);
@@ -3311,7 +3307,7 @@ export default function SlideViewPage() {
       title: "View applied",
       description: `View "${view.name}" has been applied.`,
     });
-  }, [views, currentMonthName]);
+  }, [views]);
 
   // Delete a saved view
   const handleDeleteView = useCallback(async (viewId: string) => {
@@ -3345,9 +3341,7 @@ export default function SlideViewPage() {
       const view = views.find(v => v.id === selectedViewId);
       if (view) {
         isApplyingViewRef.current = true;
-        // Apply view settings (but keep selectedYear - don't reset it)
-        // Don't reset selectedYear - let user keep their year filter
-        setSelectedMonth(view.selected_month);
+        // Apply view settings; do not change Year or Month
         setComparisonType(view.comparison_type);
         if (view.chart_time_range) {
           setChartTimeRange(view.chart_time_range);
