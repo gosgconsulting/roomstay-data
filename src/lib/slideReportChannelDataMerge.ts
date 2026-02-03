@@ -47,8 +47,11 @@ export function mergeChannelSlices(
   dateRange: { from: string; to: string }
 ): SlideReportPivotData['channels'][string] {
   if (slices.length === 0) {
+    const zero = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
     return {
-      current: calculateDerivedMetrics({ impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }) as ChannelMetrics,
+      current: calculateDerivedMetrics(zero) as ChannelMetrics,
+      previous_period: calculateDerivedMetrics(zero) as ChannelMetrics,
+      previous_year: calculateDerivedMetrics(zero) as ChannelMetrics,
       monthly: {},
       yearly: {},
       breakdowns: {},

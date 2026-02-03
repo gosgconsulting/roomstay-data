@@ -388,8 +388,8 @@ export function useChannelMetrics({
           const rawDataRows = (channelData as any).rawDataRows || [];
           
           if (rawDataRows.length > 0) {
-            // Filter rows by comparison period date range and dimension filters
-            const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, comparisonDateRange);
+            const dimensionMap = (channelData as any).dimensionMap || {};
+            const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, comparisonDateRange, dimensionMap);
             
             if (filteredRows.length > 0) {
               // Build metric mapping and aggregate
@@ -479,7 +479,32 @@ export function useChannelMetrics({
       return channelTotals as ChannelMetrics;
     }
 
-    // No filters - use pre-computed data (fast path)
+    // No filters but we have a comparison date range (selected year/month) - compute from monthly data
+    // so comparison period matches the user's selection (e.g. Previous Period = previous month)
+    if (comparisonDateRange) {
+      const channelTotals: Record<string, MetricData> = {};
+      for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+        const monthly = (channelData as any).monthly || {};
+        const base: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+        for (const [monthKey, m] of Object.entries(monthly)) {
+          const [y, mo] = monthKey.split('-').map(Number);
+          const monthStart = new Date(y, mo - 1, 1);
+          const monthEnd = new Date(y, mo, 0, 23, 59, 59);
+          if (monthStart >= comparisonDateRange.start && monthEnd <= comparisonDateRange.end) {
+            const metrics = m as MetricData;
+            base.impressions += metrics.impressions ?? 0;
+            base.clicks += metrics.clicks ?? 0;
+            base.cost += metrics.cost ?? 0;
+            base.revenue += metrics.revenue ?? 0;
+            base.bookings += metrics.bookings ?? 0;
+          }
+        }
+        channelTotals[channel] = base;
+      }
+      return channelTotals as ChannelMetrics;
+    }
+
+    // Fallback: use pre-computed previous_period/previous_year from channel data (e.g. when selectedYear is 'all')
     const channelTotals: Record<string, MetricData> = {};
     for (const [channel, channelData] of Object.entries(pivotData.channels)) {
       if (comparisonType === 'previous_period' && (channelData as any).previous_period) {
