@@ -6,6 +6,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import type { AccountReportIds } from './types.ts';
 
+// Type for report record from database
+interface ReportRecord {
+  id: string;
+  name: string;
+}
+
 /**
  * Channel name to possible report name variations
  */
@@ -33,7 +39,7 @@ export async function findReportByChannelName(
 
   try {
     // Query reports table for this account
-    const { data: reports, error } = await supabase
+    const { data: reportsData, error } = await supabase
       .from('reports')
       .select('id, name')
       .eq('account_id', accountId);
@@ -43,13 +49,15 @@ export async function findReportByChannelName(
       return null;
     }
 
-    if (!reports || reports.length === 0) {
+    const reports = (reportsData || []) as ReportRecord[];
+
+    if (reports.length === 0) {
       console.warn(`[accountReports] No reports found for account ${accountId}`);
       console.log(`[testing] findReportByChannelName: no reports for account ${accountId}, channel=${channelName} -> null`);
       return null;
     }
 
-    const reportNames = reports.map((r: { id: string; name: string }) => r.name);
+    const reportNames = reports.map((r) => r.name);
     console.log(`[testing] findReportByChannelName: account ${accountId} has ${reports.length} report(s), names=${JSON.stringify(reportNames)}`);
 
     // Try to find a report that matches any of the channel name variants (case-insensitive)

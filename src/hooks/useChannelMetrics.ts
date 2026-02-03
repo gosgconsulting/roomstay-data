@@ -165,11 +165,11 @@ export function useChannelMetrics({
 
               // Use EXACT same extraction logic as UnifiedBreakdownTable for consistency
               // This ensures we get the same values as the breakdown table
-              const impressionsValue = parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
-              const clicksValue = parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
-              const costValue = parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
-              const revenueValue = parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
-              const bookingsValue = parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
+              const impressionsValue = parseFloat(String(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0)) || 0;
+              const clicksValue = parseFloat(String(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0)) || 0;
+              const costValue = parseFloat(String(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0)) || 0;
+              const revenueValue = parseFloat(String(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0)) || 0;
+              const bookingsValue = parseFloat(String(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0)) || 0;
               
               metrics.impressions += impressionsValue;
               metrics.clicks += clicksValue;
@@ -247,7 +247,7 @@ export function useChannelMetrics({
         }
       }
 
-      return channelTotals as ChannelMetrics;
+      return channelTotals as unknown as ChannelMetrics;
     }
 
     // No filters applied - use pre-computed aggregated data (fast path)
@@ -273,7 +273,7 @@ export function useChannelMetrics({
               bookings: 0,
             };
           }
-          return channelTotals as ChannelMetrics;
+          return channelTotals as unknown as ChannelMetrics;
         }
       }
 
@@ -289,7 +289,7 @@ export function useChannelMetrics({
             bookings: 0,
           };
         }
-        return channelTotals as ChannelMetrics;
+        return channelTotals as unknown as ChannelMetrics;
       }
 
       // Use current totals for all years (fastest - pre-computed)
@@ -303,7 +303,7 @@ export function useChannelMetrics({
             bookings: 0,
           };
       }
-      return channelTotals as ChannelMetrics;
+      return channelTotals as unknown as ChannelMetrics;
     }
 
     // Fallback to dynamic data or zeros
@@ -418,11 +418,11 @@ export function useChannelMetrics({
                 
                 // Use EXACT same extraction logic as UnifiedBreakdownTable for consistency
                 // This ensures we get the same values as the breakdown table
-                const impressionsValue = parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
-                const clicksValue = parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
-                const costValue = parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
-                const revenueValue = parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
-                const bookingsValue = parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
+                const impressionsValue = parseFloat(String(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0)) || 0;
+                const clicksValue = parseFloat(String(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0)) || 0;
+                const costValue = parseFloat(String(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0)) || 0;
+                const revenueValue = parseFloat(String(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0)) || 0;
+                const bookingsValue = parseFloat(String(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0)) || 0;
                 
                 metrics.impressions += impressionsValue;
                 metrics.clicks += clicksValue;
@@ -476,7 +476,7 @@ export function useChannelMetrics({
         }
       }
       
-      return channelTotals as ChannelMetrics;
+      return channelTotals as unknown as ChannelMetrics;
     }
 
     // No filters but we have a comparison date range (selected year/month) - compute from monthly data
@@ -501,7 +501,7 @@ export function useChannelMetrics({
         }
         channelTotals[channel] = base;
       }
-      return channelTotals as ChannelMetrics;
+      return channelTotals as unknown as ChannelMetrics;
     }
 
     // Fallback: use pre-computed previous_period/previous_year from channel data (e.g. when selectedYear is 'all')
@@ -521,7 +521,7 @@ export function useChannelMetrics({
         };
       }
     }
-    return channelTotals as ChannelMetrics;
+    return channelTotals as unknown as ChannelMetrics;
   }, [comparisonType, pivotData, filterValues, filterDimensionValues, selectedYear, selectedMonth]);
 
   return {

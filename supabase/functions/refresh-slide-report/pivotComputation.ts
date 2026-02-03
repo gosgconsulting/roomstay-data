@@ -24,6 +24,26 @@ import {
 } from './utils.ts';
 
 const BASE_METRICS = ['Impressions', 'Clicks', 'Cost', 'Revenue', 'Bookings'];
+const YEARS_TO_COMPUTE = [2024, 2025, 2026];
+
+// Type interfaces for Supabase query results
+interface ReportRecord {
+  account_id: string | null;
+}
+
+interface DimensionRecord {
+  id: string;
+  name: string;
+  type?: string;
+}
+
+interface DimensionDataRecord {
+  dimension_values: Record<string, any>;
+}
+
+interface DimensionNameRecord {
+  name: string;
+}
 
 /**
  * Build metric name to dimension ID mapping for a report
@@ -48,7 +68,8 @@ async function buildMetricNameToIdMap(
       throw new Error(`Failed to fetch report account_id for ${reportId}: ${reportError.message}`);
     }
     
-    const accountId = reportData?.account_id;
+    const typedReportData = reportData as ReportRecord | null;
+    const accountId = typedReportData?.account_id;
     console.log(`[pivot] Report ${reportId} has account_id: ${accountId || 'null'}`);
     
     // STEP 2: Fetch account-level dimensions first
@@ -66,10 +87,11 @@ async function buildMetricNameToIdMap(
       }
       
       if (accountDimensions) {
-        accountDimensions.forEach(dim => {
+        const typedDimensions = accountDimensions as DimensionRecord[];
+        typedDimensions.forEach(dim => {
           nameToIdMap[dim.name] = dim.id;
         });
-        console.log(`[pivot] Loaded ${accountDimensions.length} account-level dimensions for report ${reportId}`);
+        console.log(`[pivot] Loaded ${typedDimensions.length} account-level dimensions for report ${reportId}`);
       }
     }
     
@@ -86,16 +108,17 @@ async function buildMetricNameToIdMap(
       throw new Error(`Failed to fetch sample dimension_data rows for report ${reportId}: ${sampleRowsError.message}`);
     }
 
-    if (!sampleRows || sampleRows.length === 0) {
+    const typedSampleRows = (sampleRows || []) as DimensionDataRecord[];
+    if (typedSampleRows.length === 0) {
       console.warn(`[pivot] No data found for report ${reportId}`);
       return nameToIdMap;
     }
 
-    console.log(`[pivot] Found ${sampleRows.length} sample rows for report ${reportId}`);
+    console.log(`[pivot] Found ${typedSampleRows.length} sample rows for report ${reportId}`);
 
     // Collect ALL unique dimension IDs from sampled rows
     const allDimensionIds = new Set<string>();
-    sampleRows.forEach(row => {
+    typedSampleRows.forEach(row => {
       const rowData = row.dimension_values as Record<string, any>;
       Object.keys(rowData).forEach(id => allDimensionIds.add(id));
     });
@@ -117,10 +140,11 @@ async function buildMetricNameToIdMap(
       }
 
       if (dimensions) {
-        dimensions.forEach(dim => {
+        const typedDimensions = dimensions as DimensionRecord[];
+        typedDimensions.forEach(dim => {
           nameToIdMap[dim.name] = dim.id;
         });
-        console.log(`[pivot] Added ${dimensions.length} dimensions from data to metric map`);
+        console.log(`[pivot] Added ${typedDimensions.length} dimensions from data to metric map`);
       }
     }
 
@@ -167,7 +191,8 @@ async function fetchDimensionDataForReport(
 
       if (data && data.length > 0) {
         // Extract dimension_values directly to avoid extra object nesting
-        for (const row of data) {
+        const typedData = data as DimensionDataRecord[];
+        for (const row of typedData) {
           allRows.push(row.dimension_values || row);
         }
         offset += batchSize;
@@ -646,7 +671,8 @@ export async function computeSlideReportPivotData(
               console.error(`[pivot] Failed to fetch dimension info for ${breakdownDimId} in channel ${channel}:`, dimInfoError);
             }
             
-            const breakdownDimName = dimInfo?.name || breakdownDimId;
+            const typedDimInfo = dimInfo as DimensionNameRecord | null;
+            const breakdownDimName = typedDimInfo?.name || breakdownDimId;
             breakdownDimNameMap[breakdownDimId] = breakdownDimName;
             
             breakdowns[breakdownDimName] = computeBreakdownAllTime(
@@ -707,7 +733,8 @@ export async function computeSlideReportPivotData(
         
         const filterDimNameMap: Record<string, string> = {};
         if (filterDimInfo) {
-          for (const dim of filterDimInfo) {
+          const typedFilterDimInfo = filterDimInfo as DimensionRecord[];
+          for (const dim of typedFilterDimInfo) {
             filterDimNameMap[dim.id] = dim.name;
           }
         }
@@ -977,7 +1004,8 @@ export async function computeChannelPivotData(
           console.error(`[channel-pivot] Failed to fetch dimension info for ${breakdownDimId} in channel ${channel}:`, dimInfoError);
         }
         
-        const breakdownDimName = dimInfo?.name || breakdownDimId;
+        const typedDimInfo = dimInfo as DimensionNameRecord | null;
+        const breakdownDimName = typedDimInfo?.name || breakdownDimId;
         breakdownDimNameMap[breakdownDimId] = breakdownDimName;
         
         breakdowns[breakdownDimName] = computeBreakdownAllTime(
@@ -1037,7 +1065,8 @@ export async function computeChannelPivotData(
     
     const filterDimNameMap: Record<string, string> = {};
     if (filterDimInfo) {
-      for (const dim of filterDimInfo) {
+      const typedFilterDimInfo = filterDimInfo as DimensionRecord[];
+      for (const dim of typedFilterDimInfo) {
         filterDimNameMap[dim.id] = dim.name;
       }
     }

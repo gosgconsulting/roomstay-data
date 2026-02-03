@@ -144,12 +144,12 @@ export default function PriceWidgetDetailPage() {
     }
     
     try {
-      const { data, error } = await supabase
-        .from('price_widgets')
+      const { data, error } = await (supabase
+        .from('price_widgets' as any)
         .select('*')
         .eq('id', widgetId)
         .eq('account_id', accountId)
-        .single();
+        .single());
       
       if (error) {
         if (error.code === 'PGRST116') {
@@ -174,7 +174,7 @@ export default function PriceWidgetDetailPage() {
         return;
       }
       
-      setWidget(data);
+      setWidget(data as unknown as PriceWidget);
       setIsLoading(false);
     } catch (error) {
       console.error('Error loading widget:', error);
