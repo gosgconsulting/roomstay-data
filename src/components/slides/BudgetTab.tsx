@@ -113,7 +113,7 @@ export function BudgetTab({
               <>
                 <TableHead className="text-right">Revenue</TableHead>
                 <TableHead className="text-right">Cost of Sale</TableHead>
-                <TableHead className="text-right">Net GP</TableHead>
+                <TableHead className="text-right">Gross Profit</TableHead>
                 <TableHead className="text-right">Spender</TableHead>
                 <TableHead className="text-right">Recurrent Fee</TableHead>
                 <TableHead className="text-right">% Ad Spend</TableHead>
@@ -135,7 +135,7 @@ export function BudgetTab({
                 <TableHead className="text-right">Revenue</TableHead>
                 <TableHead className="text-right">ROAS</TableHead>
                 <TableHead className="text-right">Cost of Sale</TableHead>
-                <TableHead className="text-right">Net GP</TableHead>
+                <TableHead className="text-right">Gross Profit</TableHead>
               </>
             )}
           </TableRow>

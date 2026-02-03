@@ -42,6 +42,25 @@ export const calculateDerivedMetrics = (
 };
 
 /**
+ * Gross Profit = (Revenue * rate) - Cost.
+ * Metasearch + Link Type "Google Organic" uses 3%; otherwise 15%.
+ *
+ * @param revenue - Revenue amount
+ * @param cost - Cost amount
+ * @param options - Optional channel and link type for conditional rate (Metasearch + Google Organic → 3%)
+ * @returns Gross profit number
+ */
+export function getGrossProfit(
+  revenue: number,
+  cost: number,
+  options?: { channel?: 'metasearch' | 'sem' | 'social'; linkType?: string }
+): number {
+  const rate =
+    options?.channel === 'metasearch' && options?.linkType === 'Google Organic' ? 0.03 : 0.15;
+  return revenue * rate - cost;
+}
+
+/**
  * Check if filters are actually applied (not "All" selected)
  * @deprecated Use hasActiveFiltersForChannel for channel-specific checks or hasAnyActiveFilters for multi-channel checks
  */

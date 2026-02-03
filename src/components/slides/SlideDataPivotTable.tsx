@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Database, Calendar, BarChart3, TrendingUp, Layers, RefreshCw, Clock } from "lucide-react";
 import { SlideReportPivotData, ChannelMetrics } from "@/types/slideReports";
-import { calculateDerivedMetrics as calculateDerivedMetricsBase } from "@/lib/slideViewHelpers";
+import { calculateDerivedMetrics as calculateDerivedMetricsBase, getGrossProfit } from "@/lib/slideViewHelpers";
 
 interface Dimension {
   id: string;
@@ -76,15 +76,23 @@ const METRIC_LABELS: Record<string, string> = {
   revenue: 'Revenue',
   roas: 'ROAS',
   costOfSale: 'Cost of Sale',
-  netGp: 'Net GP',
+  netGp: 'Gross Profit',
 };
 
-const getMetricValue = (row: Record<string, any> | null | undefined, metric: string): number | undefined => {
+const getMetricValue = (
+  row: Record<string, any> | null | undefined,
+  metric: string,
+  context?: { channel?: 'metasearch' | 'sem' | 'social'; linkType?: string }
+): number | undefined => {
   if (!row) return undefined;
   if (metric === 'netGp') {
     const revenue = Number((row as any).revenue) || 0;
     const cost = Number((row as any).cost) || 0;
-    return revenue * 0.15 - cost;
+    const linkType = context?.linkType ?? (row as any)['Link Type'];
+    return getGrossProfit(revenue, cost, {
+      channel: context?.channel,
+      linkType: linkType != null ? String(linkType) : undefined,
+    });
   }
   return (row as any)[metric];
 };
@@ -359,7 +367,12 @@ export function SlideDataPivotTable({
                             <TableCell className="font-medium capitalize">{channel}</TableCell>
                             {METRICS.map(metric => (
                               <TableCell key={metric} className="text-right">
-                                {formatMetricValue(getMetricValue((data.current as any) || null, metric), metric)}
+                                {formatMetricValue(
+                                  getMetricValue((data.current as any) || null, metric, {
+                                    channel: channel as 'metasearch' | 'sem' | 'social',
+                                  }),
+                                  metric
+                                )}
                               </TableCell>
                             ))}
                           </TableRow>
@@ -406,7 +419,11 @@ export function SlideDataPivotTable({
                             </p>
                             <p className="text-lg font-semibold">
                               {formatMetricValue(
-                                getMetricValue((channelMetrics[selectedChannel].current as any) || null, metric),
+                                getMetricValue(
+                                  (channelMetrics[selectedChannel].current as any) || null,
+                                  metric,
+                                  { channel: selectedChannel }
+                                ),
                                 metric
                               )}
                             </p>
@@ -421,7 +438,11 @@ export function SlideDataPivotTable({
                             </p>
                             <p className="text-lg font-semibold">
                               {formatMetricValue(
-                                getMetricValue((channelMetrics[selectedChannel].current as any) || null, metric),
+                                getMetricValue(
+                                  (channelMetrics[selectedChannel].current as any) || null,
+                                  metric,
+                                  { channel: selectedChannel }
+                                ),
                                 metric
                               )}
                             </p>
@@ -451,7 +472,12 @@ export function SlideDataPivotTable({
                                       <TableCell className="font-medium">{year}</TableCell>
                                       {METRICS.map(metric => (
                                         <TableCell key={metric} className="text-right">
-                                          {formatMetricValue(getMetricValue(metrics as any, metric), metric)}
+                                          {formatMetricValue(
+                                            getMetricValue(metrics as any, metric, {
+                                              channel: selectedChannel,
+                                            }),
+                                            metric
+                                          )}
                                         </TableCell>
                                       ))}
                                     </TableRow>
@@ -514,7 +540,12 @@ export function SlideDataPivotTable({
                               <TableCell className="capitalize">{channel}</TableCell>
                               {METRICS.map(metric => (
                                 <TableCell key={metric} className="text-right">
-                                  {formatMetricValue(getMetricValue(metrics as any, metric), metric)}
+                                  {formatMetricValue(
+                                    getMetricValue(metrics as any, metric, {
+                                      channel: channel as 'metasearch' | 'sem' | 'social',
+                                    }),
+                                    metric
+                                  )}
                                 </TableCell>
                               ))}
                             </TableRow>
@@ -585,7 +616,12 @@ export function SlideDataPivotTable({
                               <TableCell className="capitalize">{channel}</TableCell>
                               {METRICS.map(metric => (
                                 <TableCell key={metric} className="text-right">
-                                  {formatMetricValue(getMetricValue(metrics as any, metric), metric)}
+                                  {formatMetricValue(
+                                    getMetricValue(metrics as any, metric, {
+                                      channel: channel as 'metasearch' | 'sem' | 'social',
+                                    }),
+                                    metric
+                                  )}
                                 </TableCell>
                               ))}
                             </TableRow>

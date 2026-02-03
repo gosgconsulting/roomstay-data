@@ -18,6 +18,7 @@ import {
 import { SlideReportPivotData, SlideReportConfiguration, BreakdownRow, ChannelMetrics } from "@/types/slideReports";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
+import { getGrossProfit } from "@/lib/slideViewHelpers";
 
 interface SlideDataBrowserProps {
   open: boolean;
@@ -67,7 +68,7 @@ function ChannelMetricsTable({
   metrics: ChannelMetrics; 
   title: string;
 }) {
-  const netGp = (metrics.revenue || 0) * 0.15 - (metrics.cost || 0);
+  const netGp = getGrossProfit(metrics.revenue || 0, metrics.cost || 0);
 
   return (
     <div className="border rounded-lg overflow-hidden">
@@ -123,7 +124,7 @@ function ChannelMetricsTable({
             <TableCell className="text-right">{formatNumber(metrics.costOfSale, 'percentage')}</TableCell>
           </TableRow>
           <TableRow>
-            <TableCell>Net GP</TableCell>
+            <TableCell>Gross Profit</TableCell>
             <TableCell className="text-right">{formatNumber(netGp, 'currency')}</TableCell>
           </TableRow>
         </TableBody>
@@ -136,11 +137,13 @@ function ChannelMetricsTable({
 function BreakdownTable({ 
   data, 
   breakdownName,
-  title 
+  title,
+  channel,
 }: { 
   data: BreakdownRow[]; 
   breakdownName: string;
   title: string;
+  channel?: 'metasearch' | 'sem' | 'social';
 }) {
   if (!data || data.length === 0) {
     return (
@@ -156,6 +159,7 @@ function BreakdownTable({
     key => !['impressions', 'clicks', 'cost', 'revenue', 'bookings', 'ctr', 'conversionRate', 'cpc', 'roas', 'costOfSale'].includes(key)
   );
   const dimensionKey = dimensionKeys[0] || 'name';
+  const isLinkTypeBreakdown = breakdownName === 'Link Type';
 
   return (
     <div className="border rounded-lg overflow-hidden">
@@ -173,19 +177,28 @@ function BreakdownTable({
               <TableHead className="text-right sticky top-0 bg-background">Cost</TableHead>
               <TableHead className="text-right sticky top-0 bg-background">Revenue</TableHead>
               <TableHead className="text-right sticky top-0 bg-background">Bookings</TableHead>
+              <TableHead className="text-right sticky top-0 bg-background">Gross Profit</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map((row, idx) => (
-              <TableRow key={idx}>
-                <TableCell className="font-medium">{row[dimensionKey] || `Row ${idx + 1}`}</TableCell>
-                <TableCell className="text-right">{formatNumber(row.impressions)}</TableCell>
-                <TableCell className="text-right">{formatNumber(row.clicks)}</TableCell>
-                <TableCell className="text-right">{formatNumber(row.cost, 'currency')}</TableCell>
-                <TableCell className="text-right">{formatNumber(row.revenue, 'currency')}</TableCell>
-                <TableCell className="text-right">{formatNumber(row.bookings)}</TableCell>
-              </TableRow>
-            ))}
+            {data.map((row, idx) => {
+              const linkType = isLinkTypeBreakdown ? (row['Link Type'] ?? row[dimensionKey]) : undefined;
+              const netGp = getGrossProfit(row.revenue ?? 0, row.cost ?? 0, {
+                channel: channel,
+                linkType: linkType != null ? String(linkType) : undefined,
+              });
+              return (
+                <TableRow key={idx}>
+                  <TableCell className="font-medium">{row[dimensionKey] || `Row ${idx + 1}`}</TableCell>
+                  <TableCell className="text-right">{formatNumber(row.impressions)}</TableCell>
+                  <TableCell className="text-right">{formatNumber(row.clicks)}</TableCell>
+                  <TableCell className="text-right">{formatNumber(row.cost, 'currency')}</TableCell>
+                  <TableCell className="text-right">{formatNumber(row.revenue, 'currency')}</TableCell>
+                  <TableCell className="text-right">{formatNumber(row.bookings)}</TableCell>
+                  <TableCell className="text-right">{formatNumber(netGp, 'currency')}</TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </ScrollArea>
@@ -641,6 +654,7 @@ export function SlideDataBrowser({
           data={breakdownData || []} 
           breakdownName={selectedBreakdown}
           title={`${selectedBreakdown} - ${selectedChannel?.charAt(0).toUpperCase()}${selectedChannel?.slice(1)} - ${MONTH_NAMES[parseInt(selectedMonth!) - 1]} ${selectedYear}`}
+          channel={selectedChannel as 'metasearch' | 'sem' | 'social' | undefined}
         />
       );
     }

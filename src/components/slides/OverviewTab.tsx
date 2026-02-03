@@ -218,7 +218,7 @@ export function OverviewTab({
                   <TableHead className="text-right">Revenue</TableHead>
                   <TableHead className="text-right">ROAS</TableHead>
                   <TableHead className="text-right">Cost of Sale</TableHead>
-                  <TableHead className="text-right">Net GP</TableHead>
+                  <TableHead className="text-right">Gross Profit</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
