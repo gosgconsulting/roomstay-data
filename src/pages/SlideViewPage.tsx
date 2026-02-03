@@ -33,7 +33,7 @@ import { useBudgetData, useBudgetMonthlyData } from "@/hooks/useBudgetData";
 import { calculateReportBreakdown, calculateReportTotal } from "@/lib/metricsCalculations";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
-import { SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange, BreakdownRow, ChannelMetrics } from "@/types/slideReports";
+import { SlideReport, SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange, BreakdownRow, ChannelMetrics } from "@/types/slideReports";
 import { useUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { SlideDataBrowser } from "@/components/slides/SlideDataBrowser";
@@ -3591,267 +3591,83 @@ export default function SlideViewPage() {
       5: 'pending',
     });
 
+    const config = slideReport.configuration as SlideReportConfiguration;
+    const validChannels = (config.selectedChannels || []).filter(channel =>
+      availableChannels.includes(channel)
+    );
+
     try {
-      // Step 1: Verify settings
       setRefreshStepStatus(prev => ({ ...prev, 1: 'loading' }));
-      
       const { data: latestReport, error: fetchError } = await supabase
         .from("slide_reports")
         .select("*")
         .eq("id", slideReportId)
         .single();
-
       if (fetchError) throw fetchError;
       if (!latestReport?.configuration || !latestReport?.date_range) {
         throw new Error("Configuration or date range not found. Please save Edit Source settings first.");
+      }
+      if (validChannels.length === 0) {
+        throw new Error("No valid channels found. Please configure at least one channel with a report in Edit Source.");
       }
 
       setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'loading' }));
       setRefreshStep(2);
 
-      // Step 2: Validate and update report IDs to use account-specific ones
-      const config = latestReport.configuration as unknown as SlideReportConfiguration;
-      let reportIdsMap = latestReport.report_ids as unknown as Record<string, string>;
-      const dateRange = latestReport.date_range as unknown as SlideReportDateRange;
-      
-      // Filter selectedChannels to only include channels that have reports
-      const validSelectedChannels = (config.selectedChannels || []).filter(channel => 
-        availableChannels.includes(channel)
-      );
-      
-      if (validSelectedChannels.length === 0) {
-        throw new Error("No valid channels found. Please configure at least one channel with a report in Edit Source.");
-      }
-      
-      // Validate report IDs are account-specific - update if they don't match
-      let needsUpdate = false;
-      const validatedReportIds: Record<string, string> = {};
-      
-      for (const channel of validSelectedChannels) {
-        const storedReportId = reportIdsMap[channel];
-        const accountSpecificId = accountReportIds[channel];
-        
-        if (accountSpecificId) {
-          // Use account-specific ID (preferred)
-          validatedReportIds[channel] = accountSpecificId;
-          if (storedReportId !== accountSpecificId) {
-            console.warn(`[Refresh Data] Report ID mismatch for ${channel}. Stored: ${storedReportId}, Account-specific: ${accountSpecificId}. Using account-specific.`);
-            needsUpdate = true;
-          }
-        } else if (storedReportId) {
-          // Fallback to stored ID if account-specific not found
-          validatedReportIds[channel] = storedReportId;
-          console.warn(`[Refresh Data] No account-specific report ID found for ${channel}, using stored ID: ${storedReportId}`);
-        } else {
-          console.error(`[Refresh Data] No report ID available for channel ${channel}`);
-          throw new Error(`No report found for ${channel} channel. Please configure it in Edit Source.`);
-        }
-      }
-      
-      // Update slide_report if report IDs changed
-      if (needsUpdate && Object.keys(validatedReportIds).length > 0) {
-        console.log('[Refresh Data] Updating slide_report with account-specific report IDs:', validatedReportIds);
-        const { error: updateError } = await supabase
-          .from('slide_reports')
-          .update({ report_ids: validatedReportIds })
-          .eq('id', slideReportId);
-        
-        if (updateError) {
-          console.warn('[Refresh Data] Failed to update report_ids:', updateError);
-        }
-      }
-      
-      reportIdsMap = validatedReportIds;
-      
-      // Create filtered config with only valid channels
-      const filteredConfig: SlideReportConfiguration = {
-        ...config,
-        selectedChannels: validSelectedChannels,
-        channelConfigs: Object.fromEntries(
-          validSelectedChannels.map(ch => [ch, config.channelConfigs?.[ch] || { dimensionId: null, selectedValues: [] }])
-        ),
-        breakdownConfigs: Object.fromEntries(
-          validSelectedChannels.map(ch => [ch, config.breakdownConfigs?.[ch] || { breakdownDimensionIds: [] }])
-        ),
-        filterConfigs: Object.fromEntries(
-          validSelectedChannels.map(ch => [ch, config.filterConfigs?.[ch] || { filterDimensionIds: [] }])
-        ),
-      };
-      
-      let pivotData: any;
-      try {
-        console.log(`[testing] Starting pivot data computation`, {
-          channels: filteredConfig.selectedChannels,
-          reportIds: Object.keys(reportIdsMap),
-          dateRange: `${dateRange.from} to ${dateRange.to}`,
-        });
-        
-        const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
-        type ProgressCallback = (step: number, message: string) => void;
-        
-        // Create progress callback to show real-time progress
-        const onProgress: ProgressCallback = (step, message) => {
-          console.log(`[testing] Progress step ${step}: ${message}`);
-          // Progress is shown via step 2 status
-        };
-        
-        // Add timeout handling (5 minutes for large datasets)
-        const timeoutPromise = new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Pivot computation timed out after 5 minutes. Please try again or reduce the date range.')), 300000)
-        );
-        
-        // Race between computation and timeout
-        pivotData = await Promise.race([
-          computeSlideReportPivotData(reportIdsMap, filteredConfig, dateRange, onProgress),
-          timeoutPromise
-        ]);
-        
-        console.log(`[testing] Pivot data computation completed successfully`);
-      } catch (pivotError: any) {
-        // Supabase/Postgrest errors often come through as plain objects (not Error instances)
-        // and would display as "[object Object]" without normalization.
-        const details =
-          pivotError?.message ||
-          pivotError?.error_description ||
-          pivotError?.details ||
-          (typeof pivotError === "string" ? pivotError : "");
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
 
-        const safeJson = (() => {
-          try {
-            return JSON.stringify(pivotError);
-          } catch {
-            return "";
-          }
-        })();
+      const headers: Record<string, string> = {};
+      const apiKey = import.meta.env.VITE_REFRESH_SLIDE_REPORT_API_KEY;
+      if (apiKey) headers['x-api-key'] = apiKey;
 
-        console.error("[testing] Step 2: Pivot computation error:", {
-          error: pivotError,
-          message: details,
-          stack: pivotError?.stack,
-          channels: filteredConfig.selectedChannels,
-          reportIds: Object.keys(reportIdsMap),
-          dateRange: `${dateRange.from} to ${dateRange.to}`,
-        });
+      const { data: result, error: invokeError } = await supabase.functions.invoke('refresh-slide-report', {
+        body: { slideReportId, year: currentYear, month: currentMonth },
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
+      });
 
-        const friendly = (details || safeJson || "Unknown error").toString();
-        throw new Error(`Pivot data computation failed: ${friendly}`);
-      }
-      
-      const typedPivotData = pivotData as SlideReportPivotData;
-      
-      if (!typedPivotData || !typedPivotData.channels) {
-        throw new Error('Pivot data computation returned invalid data');
-      }
-      
-      setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'loading' }));
-      setRefreshStep(3);
-
-      // Step 3: Store monthly data in Supabase (organized by year/month)
-      // First, delete existing monthly data for this slide report
-      const { error: deleteError } = await supabase
-        .from("slide_report_monthly_data")
-        .delete()
-        .eq("slide_report_id", slideReportId);
-
-      if (deleteError) {
-        console.warn('[refresh] Error deleting old monthly data:', deleteError);
+      if (invokeError) throw invokeError;
+      const response = result as { success?: boolean; error?: string; summary?: string } | null;
+      if (response && response.success === false) {
+        throw new Error(response.error || 'Refresh failed');
       }
 
-      // Prepare monthly data records using optimized helper
-      const monthlyRecords = prepareMonthlyRecords(typedPivotData, slideReportId, accountId || null);
-      
-      // Insert in batches using optimized helper
-      const insertResult = await insertMonthlyRecordsBatched(monthlyRecords);
-      if (!insertResult.success && insertResult.errors.length > 0) {
-        console.warn('[refresh] Some batches failed to insert:', insertResult.errors);
-      }
-
-      setRefreshStepStatus(prev => ({ ...prev, 3: 'complete', 4: 'loading' }));
-      setRefreshStep(4);
-
-      // Step 4: Store breakdown and filter configurations
-      // Calculate config counts using optimized helper
-      const { breakdownCount, filterCount } = calculateConfigCounts(config);
-      
-      // The breakdown and filter configs are already part of the configuration
-      // They will be saved in step 5 along with the pivot_data
-      // Here we ensure the pivot_data includes breakdown tables for each configured breakdown dimension
-      
-      setRefreshStepStatus(prev => ({ ...prev, 4: 'complete', 5: 'loading' }));
+      setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'complete', 4: 'complete', 5: 'loading' }));
       setRefreshStep(5);
 
-      // Step 5: Update slide report and refresh UI
-      const { error: updateError } = await supabase
-        .from("slide_reports")
-        .update({
-          pivot_data: typedPivotData as any,
-          last_refreshed_at: new Date().toISOString(),
-        })
-        .eq("id", slideReportId);
+      queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
+      queryClient.invalidateQueries({ queryKey: ['slide_report_channel_data', slideReportId] });
+      await queryClient.refetchQueries({
+        queryKey: ['slide_reports', 'detail', slideReportId],
+        type: 'active',
+      });
+      if (accountId) {
+        queryClient.invalidateQueries({ queryKey: ['slide_reports', 'list', accountId] });
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-      if (updateError) {
-        throw new Error(`Failed to save pivot data: ${updateError.message}`);
+      const updatedReport = queryClient.getQueryData<SlideReport>(['slide_reports', 'detail', slideReportId]);
+      if (updatedReport?.pivot_data && updatedReport.configuration) {
+        const { values: updatedFilterDimensionValues, names: updatedFilterDimensionNames } =
+          extractFilterDimensionValues(
+            updatedReport.pivot_data as SlideReportPivotData,
+            updatedReport.configuration as SlideReportConfiguration,
+            validChannels
+          );
+        setFilterDimensionValues(prev => ({ ...prev, ...updatedFilterDimensionValues }));
+        setFilterDimensionNames(prev => ({ ...prev, ...updatedFilterDimensionNames }));
       }
 
-      // Invalidate and refetch queries to ensure UI updates with new data
-      if (slideReportId) {
-        // Invalidate first to mark queries as stale
-        queryClient.invalidateQueries({ 
-          queryKey: ['slide_reports', 'detail', slideReportId] 
-        });
-        queryClient.invalidateQueries({ 
-          queryKey: ['slide_report_channel_data', slideReportId] 
-        });
-        
-        // Force refetch and wait for it to complete
-        await queryClient.refetchQueries({ 
-          queryKey: ['slide_reports', 'detail', slideReportId],
-          type: 'active'
-        });
-        
-        // Also invalidate list query
-        if (accountId) {
-          queryClient.invalidateQueries({ 
-            queryKey: ['slide_reports', 'list', accountId] 
-          });
-        }
-        
-        // Small delay to ensure React has processed the query update
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      
-      // Filter to only include channels that have reports
-      const validChannels = (config.selectedChannels || []).filter(channel => 
-        availableChannels.includes(channel)
-      );
-      
-      // Extract filter dimension values using optimized helper
-      const { values: updatedFilterDimensionValues, names: updatedFilterDimensionNames } = 
-        extractFilterDimensionValues(typedPivotData, config, validChannels);
-      
-      // Batch state updates together
-      setFilterDimensionValues(prev => ({
-        ...prev,
-        ...updatedFilterDimensionValues,
-      }));
-      setFilterDimensionNames(prev => ({
-        ...prev,
-        ...updatedFilterDimensionNames,
-      }));
-      
       setRefreshStepStatus(prev => ({ ...prev, 5: 'complete' }));
-      
-      // Wait a moment then close modal
       await new Promise(resolve => setTimeout(resolve, 500));
       setIsRefreshModalOpen(false);
-      
-      const totalChannels = validSelectedChannels.length;
-      
-      toast({ 
-        title: "Data refreshed", 
-        description: `Stored ${monthlyRecords.length} monthly records with ${breakdownCount} breakdown(s) and ${filterCount} filter(s).` 
+
+      const monthName = new Date(currentYear, currentMonth - 1).toLocaleString('default', { month: 'long' });
+      toast({
+        title: "Data refreshed",
+        description: `Refreshed ${monthName} ${currentYear} for ${validChannels.length} channel(s).`,
       });
-      
     } catch (error) {
       console.error("[refresh] Error:", error);
       const currentStep = refreshStep;

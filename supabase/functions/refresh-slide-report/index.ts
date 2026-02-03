@@ -79,46 +79,46 @@ interface ErrorResponse {
 }
 
 /**
- * Validate API key from request headers
- * Since verify_jwt=false in config.toml, we don't need Authorization header
- * Validate our custom API key from x-api-key header
- * Also allows service role key for internal calls
+ * Validate request: allow x-api-key header OR valid auth (Bearer = service role key or user JWT from frontend).
+ * When REFRESH_SLIDE_REPORT_API_KEY is set, requires one of: x-api-key, Bearer service role, or Bearer user JWT.
  */
-function validateApiKey(req: Request): boolean {
-  // Get API key from environment variable
+async function validateRequestAuth(req: Request): Promise<boolean> {
   const expectedApiKey = Deno.env.get('REFRESH_SLIDE_REPORT_API_KEY');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  
-  // Get custom API key from headers (try both common header names)
-  const providedApiKey = req.headers.get('x-api-key') || 
-                         req.headers.get('api-key') ||
-                         req.headers.get('X-API-Key') ||
-                         req.headers.get('API-Key');
-  
-  // Check Authorization header for Bearer token (service role key for internal calls)
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+
+  const providedApiKey =
+    req.headers.get('x-api-key') ||
+    req.headers.get('api-key') ||
+    req.headers.get('X-API-Key') ||
+    req.headers.get('API-Key');
+
   const authHeader = req.headers.get('authorization');
-  const bearerToken = authHeader?.startsWith('Bearer ') 
-    ? authHeader.substring(7) 
-    : null;
-  
-  // If no custom API key is configured, allow all requests (backward compatibility)
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+
   if (!expectedApiKey) {
     console.warn('[refresh] REFRESH_SLIDE_REPORT_API_KEY not configured - allowing all requests');
     return true;
   }
-  
-  // When custom API key is configured, require it
-  // Allow if:
-  // 1. Service role key in Authorization header (for internal calls from channel function)
-  if (bearerToken && serviceRoleKey && bearerToken === serviceRoleKey) {
-    return true;
+
+  if (providedApiKey && providedApiKey === expectedApiKey) return true;
+  if (bearerToken && serviceRoleKey && bearerToken === serviceRoleKey) return true;
+
+  if (bearerToken && supabaseUrl && anonKey) {
+    try {
+      const authClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: `Bearer ${bearerToken}` } },
+      });
+      const { data: { user }, error } = await authClient.auth.getUser(bearerToken);
+      if (!error && user) {
+        return true;
+      }
+    } catch (_) {
+      // ignore
+    }
   }
-  
-  // 2. Custom API key in x-api-key header
-  if (providedApiKey && providedApiKey === expectedApiKey) {
-    return true;
-  }
-  
+
   return false;
 }
 
@@ -131,15 +131,12 @@ Deno.serve(async (req) => {
   // Get CORS headers for this request
   const corsHeaders = getCorsHeaders(req);
 
-  // Validate API key (unless no API key is configured)
-  // Since verify_jwt=false, we don't need Authorization header
-  // Just validate custom API key from x-api-key header
-  if (!validateApiKey(req)) {
+  if (!(await validateRequestAuth(req))) {
     const expectedApiKey = Deno.env.get('REFRESH_SLIDE_REPORT_API_KEY');
     const errorMessage = expectedApiKey
-      ? 'Unauthorized: Missing or invalid API key. Provide x-api-key header with your API key, or Authorization header with service role key for internal calls.'
+      ? 'Unauthorized: Provide x-api-key header with your API key, or Authorization: Bearer with your session (frontend) or service role key (internal).'
       : 'Unauthorized: Missing API key.';
-    
+
     return new Response(
       JSON.stringify({
         success: false,
