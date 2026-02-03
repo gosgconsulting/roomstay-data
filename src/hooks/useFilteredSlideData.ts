@@ -35,12 +35,14 @@ function sumBreakdownRows(rows: BreakdownRowLike[]): MetricData {
 /**
  * When rawDataRows is empty but the channel has active filters (e.g. View filter),
  * derive channel totals from breakdown rows so the view still filters data.
- * Uses the first filter dimension that has a matching breakdown. Respects selected month when monthlyBreakdowns exist.
+ * Prefers the groupBy dimension when provided so KPI matches the breakdown table (SEM/Social).
+ * Respects selected month when monthlyBreakdowns exist.
  */
 function aggregateChannelTotalsFromBreakdowns(
   channelData: SlideReportPivotData['channels'][string],
   channelFilterValues: Record<string, string[]>,
-  monthKey: string | null
+  monthKey: string | null,
+  preferDimensionId?: string | null
 ): MetricData | null {
   const dimensionMap = (channelData as any).dimensionMap as Record<string, string> | undefined;
   if (!dimensionMap || !channelFilterValues || Object.keys(channelFilterValues).length === 0) return null;
@@ -50,19 +52,28 @@ function aggregateChannelTotalsFromBreakdowns(
   const breakdowns = (monthKey && monthlyBreakdowns?.[monthKey]) ? monthlyBreakdowns[monthKey] : allTimeBreakdowns;
   if (!breakdowns) return null;
 
-  for (const [dimensionId, selectedValues] of Object.entries(channelFilterValues)) {
-    if (!selectedValues?.length) continue;
+  const tryDimension = (dimensionId: string, selectedValues: string[]): MetricData | null => {
+    if (!selectedValues?.length) return null;
     const dimensionName = dimensionMap[dimensionId];
-    if (!dimensionName || !breakdowns[dimensionName]) continue;
-
+    if (!dimensionName || !breakdowns[dimensionName]) return null;
     const rows = breakdowns[dimensionName];
     const selectedSet = new Set(selectedValues.map((v) => String(v).trim()));
     const matching = rows.filter((row) => {
       const value = row.name ?? row[dimensionName] ?? row[dimensionName.toLowerCase().replace(/\s+/g, '_')];
       return value != null && selectedSet.has(String(value).trim());
     });
+    return matching.length > 0 ? sumBreakdownRows(matching) : null;
+  };
 
-    if (matching.length > 0) return sumBreakdownRows(matching);
+  if (preferDimensionId && channelFilterValues[preferDimensionId]) {
+    const preferred = tryDimension(preferDimensionId, channelFilterValues[preferDimensionId]);
+    if (preferred) return preferred;
+  }
+
+  for (const [dimensionId, selectedValues] of Object.entries(channelFilterValues)) {
+    if (dimensionId === preferDimensionId) continue;
+    const result = tryDimension(dimensionId, selectedValues);
+    if (result) return result;
   }
   return null;
 }
@@ -76,6 +87,8 @@ export interface UseFilteredSlideDataParams {
   selectedTab?: string;
   slideType?: string;
   dynamicChannelTotals?: Record<string, MetricData>;
+  /** When set, KPI totals from breakdowns use this dimension first so KPI matches the table (SEM/Social). */
+  groupByDimensionId?: string | null;
 }
 
 export interface FilteredSlideData {
@@ -115,6 +128,7 @@ export function useFilteredSlideData({
   selectedTab,
   slideType,
   dynamicChannelTotals,
+  groupByDimensionId,
 }: UseFilteredSlideDataParams): FilteredSlideData {
   // Build date range based on selected year/month
   const dateRange = useMemo<{ start: Date; end: Date } | undefined>(() => {
@@ -239,11 +253,11 @@ export function useFilteredSlideData({
 
             // Use EXACT same extraction logic as UnifiedBreakdownTable for consistency
             // This ensures we get the same values as the breakdown table
-            const impressionsValue = parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
-            const clicksValue = parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
-            const costValue = parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
-            const revenueValue = parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
-            const bookingsValue = parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
+            const impressionsValue = parseFloat(String(rowData[metricNameToIdMap['Impressions']] ?? rowData['Impressions'] ?? 0)) || 0;
+            const clicksValue = parseFloat(String(rowData[metricNameToIdMap['Clicks']] ?? rowData['Clicks'] ?? 0)) || 0;
+            const costValue = parseFloat(String(rowData[metricNameToIdMap['Cost']] ?? rowData['Cost'] ?? 0)) || 0;
+            const revenueValue = parseFloat(String(rowData[metricNameToIdMap['Revenue']] ?? rowData['Revenue'] ?? 0)) || 0;
+            const bookingsValue = parseFloat(String(rowData[metricNameToIdMap['Bookings']] ?? rowData['Bookings'] ?? 0)) || 0;
             
             metrics.impressions += impressionsValue;
             metrics.clicks += clicksValue;
@@ -303,8 +317,9 @@ export function useFilteredSlideData({
           };
         }
       } else if (hasChannelFilters && rawDataRows.length === 0) {
-        // No raw rows (e.g. data from table merge) — derive totals from breakdowns so View filter still applies
-        const totalsFromBreakdowns = aggregateChannelTotalsFromBreakdowns(channelData as any, channelFilterValues, monthKeyForBreakdowns);
+        // No raw rows (e.g. data from table merge) — derive totals from breakdowns so View filter still applies.
+        // Prefer groupBy dimension so KPI matches breakdown table (SEM/Social).
+        const totalsFromBreakdowns = aggregateChannelTotalsFromBreakdowns(channelData as any, channelFilterValues, monthKeyForBreakdowns, groupByDimensionId);
         if (totalsFromBreakdowns) {
           channelTotals[channel] = totalsFromBreakdowns;
         } else {
@@ -435,6 +450,7 @@ export function useFilteredSlideData({
     dateRange,
     channelsWithFilters,
     monthKeyForBreakdowns,
+    groupByDimensionId,
   ]);
 
   // Helper method to get filtered rows for a channel

@@ -672,6 +672,9 @@ export default function SlideViewPage() {
   const [comparisonType, setComparisonType] = useState("none");
   const [chartTimeRange, setChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
   const [priceCheckChartTimeRange, setPriceCheckChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
+  // Breakdown table dimensions (declared early so useFilteredSlideData can prefer groupBy for KPI = table total)
+  const [groupByDimension, setGroupByDimension] = useState<string>('hotel');
+  const [breakdownByDimension, setBreakdownByDimension] = useState<string>('link_type');
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null); // Selected view ID (null = Master, 'unsaved' = Unsaved)
   const [isSaveViewDialogOpen, setIsSaveViewDialogOpen] = useState(false);
   const [isSaveOrUpdateViewDialogOpen, setIsSaveOrUpdateViewDialogOpen] = useState(false);
@@ -1110,7 +1113,8 @@ export default function SlideViewPage() {
     social: {},
   });
 
-  // Single source of truth for all filtered data (uses channel data from tables when available)
+  // Single source of truth for all filtered data (uses channel data from tables when available).
+  // Pass groupByDimension so KPI uses same breakdown dimension as table (SEM/Social/overview all match).
   const filteredData = useFilteredSlideData({
     pivotData: effectivePivotData,
     filterValues,
@@ -1120,6 +1124,7 @@ export default function SlideViewPage() {
     selectedTab,
     slideType,
     dynamicChannelTotals,
+    groupByDimensionId: groupByDimension,
   });
 
   // Extract minimal data for AI summary (only for report tabs)
@@ -2139,10 +2144,8 @@ export default function SlideViewPage() {
     }
   };
 
-  // Combined breakdown table state
-  const [groupByDimension, setGroupByDimension] = useState<string>('hotel');
-  const [breakdownByDimension, setBreakdownByDimension] = useState<string>('link_type');
-  
+  // Breakdown table state is declared earlier (groupByDimension, breakdownByDimension) so useFilteredSlideData can use it for KPI.
+
   // Store breakdown totals from Breakdown Analysis table for KPI synchronization
   const [breakdownTotals, setBreakdownTotals] = useState<Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>>({});
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
