@@ -259,6 +259,16 @@ const UnifiedBreakdownTable = ({
           breakdownData = channelData.breakdowns[groupByName] || [];
         }
         
+        // When filters are active, filter breakdown rows by groupBy dimension so view/dimension filter applies
+        const groupByFilterValues = hasFilters && channel === selectedChannel && (filterValues?.[channel] || {})[groupByDimId];
+        if (groupByFilterValues && Array.isArray(groupByFilterValues) && groupByFilterValues.length > 0) {
+          const allowedSet = new Set(groupByFilterValues.map((v: string) => String(v).trim()));
+          breakdownData = breakdownData.filter((row: any) => {
+            const groupValue = row.name ?? row[groupByName] ?? row[groupByName.toLowerCase().replace(/\s+/g, '_')];
+            return groupValue != null && allowedSet.has(String(groupValue).trim());
+          });
+        }
+        
         breakdownData.forEach((row: any) => {
           const groupValue = row.name || row[groupByName.toLowerCase().replace(/\s+/g, '_')] || 'Unknown';
           if (!allBreakdowns[groupValue]) {
