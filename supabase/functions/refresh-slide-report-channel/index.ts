@@ -10,7 +10,7 @@ import type {
   SlideReportConfiguration,
   SlideReportDateRange,
 } from './types.ts';
-import { computeChannelPivotData } from './pivotComputation.ts';
+import { computeChannelPivotData, computeChannelPivotDataForYear, computeChannelPivotDataForMonth } from './pivotComputation.ts';
 
 // Base CORS headers - dynamically handle requested headers
 const getCorsHeaders = (req?: Request) => {
@@ -40,6 +40,10 @@ const getCorsHeaders = (req?: Request) => {
 interface RequestBody {
   channel: string;
   reportId: string;
+  /** When set with month, compute only this month (store in slide_report_channel_month_data). */
+  year?: number;
+  /** When set with year, compute only this month (store in slide_report_channel_month_data). */
+  month?: number;
   channelConfig?: SlideReportConfiguration['channelConfigs'][string];
   breakdownConfig?: SlideReportConfiguration['breakdownConfigs'][string];
   filterConfig?: SlideReportConfiguration['filterConfigs'][string];
@@ -49,7 +53,13 @@ interface RequestBody {
 interface SuccessResponse {
   success: true;
   channel: string;
+  /** Set when year was requested (per-year or per-month slice). */
+  year?: number;
+  /** Set when month was requested (per-month slice). */
+  month?: number;
   channelData: any;
+  /** Per-year or per-month slice for storage; only set when year (or year+month) was requested. */
+  channelDataSlice?: any;
   overviewContributions: {
     monthly: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
     yearly: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
@@ -94,7 +104,7 @@ Deno.serve(async (req) => {
 
     // Parse request body
     const body: RequestBody = await req.json();
-    const { channel, reportId, channelConfig, breakdownConfig, filterConfig, dateRange } = body;
+    const { channel, reportId, year, month, channelConfig, breakdownConfig, filterConfig, dateRange } = body;
 
     if (!channel || !reportId || !dateRange) {
       return new Response(
@@ -109,20 +119,71 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[channel-refresh] Processing channel ${channel} with reportId ${reportId}`);
+    const yearInt = year != null && Number.isInteger(year) ? year : (year != null ? parseInt(String(year), 10) : null);
+    const monthInt = month != null && Number.isInteger(month) && month >= 1 && month <= 12
+      ? month
+      : (month != null ? (() => { const m = parseInt(String(month), 10); return m >= 1 && m <= 12 ? m : null; })() : null);
 
-    // Parse date range - match frontend behavior
-    // Frontend uses: new Date(dateRange.from) and new Date(dateRange.to) directly
-    // For inclusive end date, we'll adjust the comparison in isWithinInterval
+    console.log(`[channel-refresh] Processing channel ${channel} with reportId ${reportId}${yearInt != null ? ` year=${yearInt}` : ''}${monthInt != null ? ` month=${monthInt}` : ''}`);
+    console.log(`[testing] channel function invoked: channel=${channel}, reportId=${reportId}, year=${yearInt ?? 'full'}, month=${monthInt ?? 'full'}, dateRange=${JSON.stringify(dateRange)}`);
+
+    if (yearInt != null && monthInt != null) {
+      // Per-month: fetch and compute only that month (minimal load)
+      const result = await computeChannelPivotDataForMonth(
+        supabase,
+        channel,
+        reportId,
+        yearInt,
+        monthInt,
+        channelConfig,
+        breakdownConfig,
+        filterConfig
+      );
+      console.log(`[channel-refresh] Successfully processed channel ${channel} ${yearInt}-${String(monthInt).padStart(2, '0')}`);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          channel,
+          year: yearInt,
+          month: monthInt,
+          channelData: result.channelDataSlice,
+          channelDataSlice: result.channelDataSlice,
+          overviewContributions: result.overviewContributions,
+        } as SuccessResponse),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (yearInt != null) {
+      // Per-year: fetch and compute only that year (split load, reduce CPU per invocation)
+      const result = await computeChannelPivotDataForYear(
+        supabase,
+        channel,
+        reportId,
+        yearInt,
+        channelConfig,
+        breakdownConfig,
+        filterConfig
+      );
+      console.log(`[channel-refresh] Successfully processed channel ${channel} year ${yearInt}`);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          channel,
+          year: yearInt,
+          channelData: result.channelDataSlice,
+          channelDataSlice: result.channelDataSlice,
+          overviewContributions: result.overviewContributions,
+        } as SuccessResponse),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Full load: all years (original behavior)
     const fromDate = new Date(dateRange.from);
     const toDate = new Date(dateRange.to);
-    
-    const currentDateRange = {
-      start: fromDate,
-      end: toDate,
-    };
+    const currentDateRange = { start: fromDate, end: toDate };
 
-    // Compute channel pivot data
     const result = await computeChannelPivotData(
       supabase,
       channel,
@@ -134,6 +195,8 @@ Deno.serve(async (req) => {
     );
 
     console.log(`[channel-refresh] Successfully processed channel ${channel}`);
+    const rowCount = result.channelData?.rawDataRows?.length ?? 0;
+    console.log(`[testing] channel function success: channel=${channel}, reportId=${reportId}, rawDataRows=${rowCount}, current.revenue=${result.channelData?.current?.revenue ?? 'n/a'}`);
 
     return new Response(
       JSON.stringify({
@@ -151,7 +214,8 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('[channel-refresh] Unexpected error:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
-    
+    console.log(`[testing] channel function FAILED: error=${errorMessage} (channel/reportId unknown in catch - see main refresh [testing] logs for which channel was being processed)`);
+
     return new Response(
       JSON.stringify({
         success: false,
