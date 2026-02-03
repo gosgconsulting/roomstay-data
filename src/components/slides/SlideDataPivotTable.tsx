@@ -31,7 +31,7 @@ const formatMetricValue = (value: number | undefined, metricName: string): strin
   
   const normalized = metricName.toLowerCase().replace(/\s+/g, '');
   
-  if (normalized.includes('cost') && !normalized.includes('costofsale') || normalized.includes('revenue') || normalized.includes('cpc')) {
+  if (normalized.includes('netgp') || (normalized.includes('cost') && !normalized.includes('costofsale')) || normalized.includes('revenue') || normalized.includes('cpc')) {
     return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   
@@ -64,7 +64,7 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 const FULL_MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 // Metrics to display in tables
-const METRICS = ['impressions', 'clicks', 'ctr', 'bookings', 'conversionRate', 'cpc', 'cost', 'revenue', 'roas', 'costOfSale'];
+const METRICS = ['impressions', 'clicks', 'ctr', 'bookings', 'conversionRate', 'cpc', 'cost', 'revenue', 'roas', 'costOfSale', 'netGp'];
 const METRIC_LABELS: Record<string, string> = {
   impressions: 'Impressions',
   clicks: 'Clicks',
@@ -76,6 +76,17 @@ const METRIC_LABELS: Record<string, string> = {
   revenue: 'Revenue',
   roas: 'ROAS',
   costOfSale: 'Cost of Sale',
+  netGp: 'Net GP',
+};
+
+const getMetricValue = (row: Record<string, any> | null | undefined, metric: string): number | undefined => {
+  if (!row) return undefined;
+  if (metric === 'netGp') {
+    const revenue = Number((row as any).revenue) || 0;
+    const cost = Number((row as any).cost) || 0;
+    return revenue * 0.15 - cost;
+  }
+  return (row as any)[metric];
 };
 
 export function SlideDataPivotTable({
@@ -348,7 +359,7 @@ export function SlideDataPivotTable({
                             <TableCell className="font-medium capitalize">{channel}</TableCell>
                             {METRICS.map(metric => (
                               <TableCell key={metric} className="text-right">
-                                {formatMetricValue((data.current as any)?.[metric], metric)}
+                                {formatMetricValue(getMetricValue((data.current as any) || null, metric), metric)}
                               </TableCell>
                             ))}
                           </TableRow>
@@ -394,7 +405,10 @@ export function SlideDataPivotTable({
                               {METRIC_LABELS[metric]}
                             </p>
                             <p className="text-lg font-semibold">
-                              {formatMetricValue((channelMetrics[selectedChannel].current as any)?.[metric], metric)}
+                              {formatMetricValue(
+                                getMetricValue((channelMetrics[selectedChannel].current as any) || null, metric),
+                                metric
+                              )}
                             </p>
                           </div>
                         ))}
@@ -406,7 +420,10 @@ export function SlideDataPivotTable({
                               {METRIC_LABELS[metric]}
                             </p>
                             <p className="text-lg font-semibold">
-                              {formatMetricValue((channelMetrics[selectedChannel].current as any)?.[metric], metric)}
+                              {formatMetricValue(
+                                getMetricValue((channelMetrics[selectedChannel].current as any) || null, metric),
+                                metric
+                              )}
                             </p>
                           </div>
                         ))}
@@ -434,7 +451,7 @@ export function SlideDataPivotTable({
                                       <TableCell className="font-medium">{year}</TableCell>
                                       {METRICS.map(metric => (
                                         <TableCell key={metric} className="text-right">
-                                          {formatMetricValue((metrics as any)?.[metric], metric)}
+                                          {formatMetricValue(getMetricValue(metrics as any, metric), metric)}
                                         </TableCell>
                                       ))}
                                     </TableRow>
@@ -482,7 +499,7 @@ export function SlideDataPivotTable({
                               <TableCell className="font-medium text-primary">All Channels</TableCell>
                               {METRICS.map(metric => (
                                 <TableCell key={metric} className="text-right">
-                                  {formatMetricValue((row.overview as any)?.[metric], metric)}
+                                  {formatMetricValue(getMetricValue(row.overview as any, metric), metric)}
                                 </TableCell>
                               ))}
                             </TableRow>
@@ -497,7 +514,7 @@ export function SlideDataPivotTable({
                               <TableCell className="capitalize">{channel}</TableCell>
                               {METRICS.map(metric => (
                                 <TableCell key={metric} className="text-right">
-                                  {formatMetricValue((metrics as any)?.[metric], metric)}
+                                  {formatMetricValue(getMetricValue(metrics as any, metric), metric)}
                                 </TableCell>
                               ))}
                             </TableRow>
@@ -535,7 +552,7 @@ export function SlideDataPivotTable({
                               <TableCell className="font-medium">{row.year}</TableCell>
                               {METRICS.map(metric => (
                                 <TableCell key={metric} className="text-right">
-                                  {formatMetricValue((row.overview as any)?.[metric], metric)}
+                                  {formatMetricValue(getMetricValue(row.overview as any, metric), metric)}
                                 </TableCell>
                               ))}
                             </TableRow>
@@ -568,7 +585,7 @@ export function SlideDataPivotTable({
                               <TableCell className="capitalize">{channel}</TableCell>
                               {METRICS.map(metric => (
                                 <TableCell key={metric} className="text-right">
-                                  {formatMetricValue((metrics as any)?.[metric], metric)}
+                                  {formatMetricValue(getMetricValue(metrics as any, metric), metric)}
                                 </TableCell>
                               ))}
                             </TableRow>

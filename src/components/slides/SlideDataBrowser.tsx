@@ -67,6 +67,8 @@ function ChannelMetricsTable({
   metrics: ChannelMetrics; 
   title: string;
 }) {
+  const netGp = (metrics.revenue || 0) * 0.15 - (metrics.cost || 0);
+
   return (
     <div className="border rounded-lg overflow-hidden">
       <div className="bg-muted/50 px-4 py-2 border-b">
@@ -119,6 +121,10 @@ function ChannelMetricsTable({
           <TableRow>
             <TableCell>Cost of Sale</TableCell>
             <TableCell className="text-right">{formatNumber(metrics.costOfSale, 'percentage')}</TableCell>
+          </TableRow>
+          <TableRow>
+            <TableCell>Net GP</TableCell>
+            <TableCell className="text-right">{formatNumber(netGp, 'currency')}</TableCell>
           </TableRow>
         </TableBody>
       </Table>

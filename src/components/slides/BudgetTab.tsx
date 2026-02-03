@@ -113,6 +113,7 @@ export function BudgetTab({
               <>
                 <TableHead className="text-right">Revenue</TableHead>
                 <TableHead className="text-right">Cost of Sale</TableHead>
+                <TableHead className="text-right">Net GP</TableHead>
                 <TableHead className="text-right">Spender</TableHead>
                 <TableHead className="text-right">Recurrent Fee</TableHead>
                 <TableHead className="text-right">% Ad Spend</TableHead>
@@ -134,6 +135,7 @@ export function BudgetTab({
                 <TableHead className="text-right">Revenue</TableHead>
                 <TableHead className="text-right">ROAS</TableHead>
                 <TableHead className="text-right">Cost of Sale</TableHead>
+                <TableHead className="text-right">Net GP</TableHead>
               </>
             )}
           </TableRow>
@@ -181,6 +183,7 @@ export function BudgetTab({
             
             const roas = actualRow > 0 ? revenueRow / actualRow : 0;
             const costOfSale = revenueRow > 0 ? (actualRow / revenueRow) * 100 : 0;
+            const netGp = revenueRow * 0.15 - actualRow;
             const variance = budgetRow - actualRow;
             
             // Get clicks for CPC calculation
@@ -235,6 +238,7 @@ export function BudgetTab({
                   <>
                     <TableCell className="text-right">${formatNumber(revenueRow)}</TableCell>
                     <TableCell className="text-right">{costOfSale.toFixed(2)}%</TableCell>
+                    <TableCell className="text-right">{formatNumber(netGp, 'currency')}</TableCell>
                     <TableCell 
                       className="text-right cursor-pointer hover:bg-muted/50"
                       onClick={() => channelConfig && handleStartEditPnl(row.month, channel === 'overview' ? null : channel, 'spender', channelConfig.spender)}
@@ -346,6 +350,7 @@ export function BudgetTab({
                     <TableCell className="text-right">${formatNumber(revenueRow)}</TableCell>
                     <TableCell className="text-right">{roas.toFixed(2)}</TableCell>
                     <TableCell className="text-right">{costOfSale.toFixed(2)}%</TableCell>
+                    <TableCell className="text-right">{formatNumber(netGp, 'currency')}</TableCell>
                   </>
                 )}
               </TableRow>
