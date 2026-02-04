@@ -641,8 +641,18 @@ Deno.serve(async (req) => {
   }
 
   let breakdowns: DisplayDataResponse['breakdowns'] | undefined;
-  if (group_by_dimension_id && hasFilters) {
-    const firstCh = channelsWithFilters[0];
+  // When year/month are selected but no dimension filters, compute breakdowns from raw rows
+  // so the table matches channel_totals (KPIs). Cached pivot_data.breakdowns are not date-scoped.
+  const hasDateSelection = selected_year !== 'all';
+  const computeBreakdownsFromRaw =
+    group_by_dimension_id && (hasFilters || hasDateSelection);
+  if (computeBreakdownsFromRaw) {
+    const channelsForBreakdownList = breakdownChannel && ['metasearch', 'sem', 'social'].includes(breakdownChannel)
+      ? [breakdownChannel]
+      : hasFilters
+        ? channelsWithFilters
+        : channels;
+    const firstCh = channelsForBreakdownList[0];
     const firstDimMap = (channelsData[firstCh]?.dimensionMap as Record<string, string>) || {};
     const groupByDimName = firstDimMap[group_by_dimension_id] || group_by_dimension_id;
     const breakdownByDimId = breakdown_by_dimension_id ?? null;
@@ -671,13 +681,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // When breakdown_channel is set (e.g. Metasearch tab), use only that channel so expanded matches the tab's scope
-    const channelsForBreakdown =
-      breakdownChannel && ['metasearch', 'sem', 'social'].includes(breakdownChannel)
-        ? [breakdownChannel]
-        : channelsWithFilters;
-
-    for (const ch of channelsForBreakdown) {
+    for (const ch of channelsForBreakdownList) {
       const fv = filter_values[ch] || {};
       const dimMap = (channelsData[ch]?.dimensionMap as Record<string, string>) || {};
       let queryB = supabase
@@ -744,7 +748,7 @@ Deno.serve(async (req) => {
       }
     }
     const sorted = Array.from(uniqueByName.values()).sort((a, b) => b.revenue - a.revenue);
-    const groupByHasFilter = channelsWithFilters.some((ch) => {
+    const groupByHasFilter = hasFilters && channelsWithFilters.some((ch) => {
       const fv = filter_values[ch] || {};
       const sel = fv[group_by_dimension_id];
       return sel && sel.length > 0;
@@ -755,8 +759,8 @@ Deno.serve(async (req) => {
     const expanded: Record<string, BreakdownRow[]> = {};
     if (breakdownByDimId && breakdownByDimName && Object.keys(byGroupAllChannels).length > 0) {
       // Use dimension map from the channel that contributed to byGroupAllChannels (avoids wrong map when breakdown_channel is set)
-      const channelForExpanded = channelsForBreakdown[0];
-      const firstDimMapForBreakdown = (channelForExpanded && channelsData[channelForExpanded]?.dimensionMap as Record<string, string>) || (channelsData[channelsWithFilters[0]]?.dimensionMap as Record<string, string>) || {};
+      const channelForExpanded = channelsForBreakdownList[0];
+      const firstDimMapForBreakdown = (channelForExpanded && channelsData[channelForExpanded]?.dimensionMap as Record<string, string>) || (channelsData[channelsForBreakdownList[0]]?.dimensionMap as Record<string, string>) || {};
       const normalizedGroupValue = (v: string) => String(v).trim().toLowerCase();
       for (const [groupValue, groupRows] of Object.entries(byGroupAllChannels)) {
         if (groupByHasFilter && groupValue === 'Unknown') continue;
