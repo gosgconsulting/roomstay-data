@@ -568,6 +568,39 @@ export function mergeChannelYearSlices(
       prevYearBase.bookings += base.bookings;
     }
   }
+
+  // Merge filterUniqueValues across all slices (union of values per dimension) so filter
+  // dropdowns show all options from every month, not just the first slice.
+  let filterUniqueValues: ChannelDataSlice['filterUniqueValues'] = first.filterUniqueValues;
+  const allDimIds = new Set<string>();
+  for (const s of slices) {
+    if (s?.filterUniqueValues && typeof s.filterUniqueValues === 'object') {
+      for (const dimId of Object.keys(s.filterUniqueValues)) {
+        allDimIds.add(dimId);
+      }
+    }
+  }
+  if (allDimIds.size > 0) {
+    const merged: NonNullable<ChannelDataSlice['filterUniqueValues']> = {};
+    for (const dimId of allDimIds) {
+      const valueSet = new Set<string>();
+      let name: string = dimId;
+      for (const s of slices) {
+        const entry = s?.filterUniqueValues?.[dimId];
+        if (entry) {
+          if (name === dimId && entry.name) name = entry.name; // use name from first slice that has this dimension
+          if (Array.isArray(entry.values)) {
+            for (const v of entry.values) {
+              if (v != null && String(v).trim() !== '') valueSet.add(String(v).trim());
+            }
+          }
+        }
+      }
+      merged[dimId] = { name, values: Array.from(valueSet).sort() };
+    }
+    filterUniqueValues = merged;
+  }
+
   return {
     current: calculateDerivedMetrics(currentBase),
     previous_period: calculateDerivedMetrics(prevPeriodBase),
@@ -576,7 +609,7 @@ export function mergeChannelYearSlices(
     yearly,
     breakdowns,
     monthlyBreakdowns,
-    filterUniqueValues: first.filterUniqueValues,
+    filterUniqueValues,
     dimensionMap: first.dimensionMap,
     rawDataRows: [],
   };
