@@ -25,6 +25,10 @@ import { calculateDerivedMetrics, formatNumber, filterRawDataRows } from '@/lib/
 import { MONTH_NAMES } from '@/constants/slideViewConstants';
 import type { SlideReportPivotData } from '@/types/slideReports';
 
+// Hardcoded KPI
+const GROSS_PROFIT_RATE = 0.15;
+const calculateGrossProfit = (revenue: number, cost: number) => revenue * GROSS_PROFIT_RATE - cost;
+
 interface Dimension {
   id: string;
   name: string;
@@ -623,6 +627,7 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
               <TableHead className="text-right">CPC</TableHead>
               <TableHead className="text-right">Cost</TableHead>
               <TableHead className="text-right">Revenue</TableHead>
+              <TableHead className="text-right">Gross Profit</TableHead>
               <TableHead className="text-right">ROAS</TableHead>
               <TableHead className="text-right">Cost of Sale</TableHead>
             </TableRow>
@@ -665,6 +670,12 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
                   </TableCell>
                   <TableCell className="text-right">
                     {formatNumber(group.metrics.revenue, 'currency')}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatNumber(
+                      calculateGrossProfit(group.metrics.revenue, group.metrics.cost),
+                      'currency'
+                    )}
                   </TableCell>
                   <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
                   <TableCell className="text-right">
@@ -712,6 +723,12 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
                           {formatNumber(item.metrics.revenue, 'currency')}
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">
+                          {formatNumber(
+                            calculateGrossProfit(item.metrics.revenue, item.metrics.cost),
+                            'currency'
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
                           {item.metrics.roas.toFixed(1)}x
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">
@@ -745,6 +762,12 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
               </TableCell>
               <TableCell className="text-right">
                 {formatNumber(totalMetrics.revenue, 'currency')}
+              </TableCell>
+              <TableCell className="text-right">
+                {formatNumber(
+                  calculateGrossProfit(totalMetrics.revenue, totalMetrics.cost),
+                  'currency'
+                )}
               </TableCell>
               <TableCell className="text-right">{totalMetrics.roas.toFixed(1)}x</TableCell>
               <TableCell className="text-right">
