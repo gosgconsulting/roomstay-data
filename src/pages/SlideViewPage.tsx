@@ -331,8 +331,26 @@ const UnifiedBreakdownTable = ({
   // Get breakdown data for expanded row (also uses month-specific data)
   // This should show breakdown data ONLY for the expanded parent row value
   const getExpandedBreakdownData = useMemo(() => {
-    if (!expandedRow || !pivotData?.channels || !breakdownBy) return [];
-    
+    if (!expandedRow || !breakdownBy) return [];
+
+    if (displayDataFromApi && apiBreakdowns?.expanded) {
+      const expandedRows = apiBreakdowns.expanded[expandedRow];
+      if (expandedRows?.length) {
+        return expandedRows.map((row) => {
+          const cleanData = {
+            impressions: Number(row.impressions) || 0,
+            clicks: Number(row.clicks) || 0,
+            cost: Number(row.cost) || 0,
+            revenue: Number(row.revenue) || 0,
+            bookings: Number(row.bookings) || 0,
+          };
+          return { value: row.name, metrics: calculateDerivedMetrics(cleanData) };
+        });
+      }
+      return [];
+    }
+
+    if (!pivotData?.channels) return [];
     const groupByDim = availableDimensions.find(d => d.id === groupBy);
     const groupByDimId = groupByDim?.id || groupBy;
     const groupByName = groupByDim?.name || groupBy;
@@ -483,7 +501,7 @@ const UnifiedBreakdownTable = ({
         value,
         metrics: calculateDerivedMetrics(data),
       }));
-  }, [expandedRow, pivotData, breakdownBy, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear, groupBy]);
+  }, [expandedRow, breakdownBy, displayDataFromApi, apiBreakdowns, pivotData, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear, groupBy]);
 
   // Calculate totals - use rawData to ensure we're summing base metrics only
   // Then recalculate derived metrics (CPC, ROAS, Cost of Sale) from the aggregated totals
@@ -1143,6 +1161,7 @@ export default function SlideViewPage() {
     slideType,
     dynamicChannelTotals,
     groupByDimensionId: groupByDimension,
+    breakdownByDimensionId: breakdownByDimension,
     slideReportId,
     comparisonType,
     chartTimeRange,

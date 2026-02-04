@@ -613,7 +613,10 @@ Deno.serve(async (req) => {
     const firstCh = channelsWithFilters[0];
     const firstDimMap = (channelsData[firstCh]?.dimensionMap as Record<string, string>) || {};
     const groupByDimName = firstDimMap[group_by_dimension_id] || group_by_dimension_id;
+    const breakdownByDimId = breakdown_by_dimension_id ?? null;
+    const breakdownByDimName = breakdownByDimId ? (firstDimMap[breakdownByDimId] || breakdownByDimId) : null;
     const rows: BreakdownRow[] = [];
+    const byGroupAllChannels: Record<string, Record<string, unknown>[]> = {};
     const yearNumB = selected_year !== 'all' ? parseInt(selected_year, 10) : null;
     const monthNumB = selected_month !== 'all' ? MONTH_NAMES.indexOf(selected_month) + 1 : null;
     let dateRangeB: { start: Date; end: Date } | undefined;
@@ -661,6 +664,12 @@ Deno.serve(async (req) => {
         if (!byGroup[key]) byGroup[key] = [];
         byGroup[key].push(rec);
       }
+      if (breakdownByDimId != null) {
+        for (const [k, arr] of Object.entries(byGroup)) {
+          if (!byGroupAllChannels[k]) byGroupAllChannels[k] = [];
+          byGroupAllChannels[k].push(...arr);
+        }
+      }
       for (const [name, groupRows] of Object.entries(byGroup)) {
         const agg = aggregateFromRows(
           groupRows.map((r) => ({ dimension_values: r, ...r })) as Record<string, unknown>[],
@@ -692,7 +701,41 @@ Deno.serve(async (req) => {
       }
     }
     const sorted = Array.from(uniqueByName.values()).sort((a, b) => b.revenue - a.revenue);
-    breakdowns = { groupBy: groupByDimName, rows: sorted.map((r) => ({ ...r, ...calculateDerivedMetrics(r) })) };
+    const breakdownRows = sorted.map((r) => ({ ...r, ...calculateDerivedMetrics(r) }));
+
+    const expanded: Record<string, BreakdownRow[]> = {};
+    if (breakdownByDimId && breakdownByDimName && Object.keys(byGroupAllChannels).length > 0) {
+      const firstDimMapForBreakdown = (channelsData[channelsWithFilters[0]]?.dimensionMap as Record<string, string>) || {};
+      for (const [groupValue, groupRows] of Object.entries(byGroupAllChannels)) {
+        const byBreakdown: Record<string, Record<string, unknown>[]> = {};
+        for (const rec of groupRows) {
+          const val = rec[breakdownByDimId] ?? rec[breakdownByDimName];
+          const key = val != null && String(val).trim() !== '' ? String(val).trim() : 'Unknown';
+          if (!byBreakdown[key]) byBreakdown[key] = [];
+          byBreakdown[key].push(rec);
+        }
+        const expandedRows: BreakdownRow[] = [];
+        for (const [breakdownName, breakdownRowsForName] of Object.entries(byBreakdown)) {
+          if (breakdownName === 'Unknown') continue;
+          const agg = aggregateFromRows(
+            breakdownRowsForName.map((r) => ({ dimension_values: r, ...r })) as Record<string, unknown>[],
+            firstDimMapForBreakdown
+          );
+          const derived = calculateDerivedMetrics(agg);
+          expandedRows.push({
+            name: breakdownName,
+            impressions: agg.impressions,
+            clicks: agg.clicks,
+            cost: agg.cost,
+            revenue: agg.revenue,
+            bookings: agg.bookings,
+            ...derived,
+          });
+        }
+        expanded[groupValue] = expandedRows.sort((a, b) => b.revenue - a.revenue);
+      }
+    }
+    breakdowns = { groupBy: groupByDimName, rows: breakdownRows, expanded: Object.keys(expanded).length > 0 ? expanded : undefined };
   } else if (group_by_dimension_id && !hasFilters) {
     const ch = channels[0];
     const data = channelsData[ch];

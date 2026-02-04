@@ -17,6 +17,8 @@ export interface UseSlideReportDisplayDataParams extends UseFilteredSlideDataPar
   comparisonType?: string;
   /** Chart time range (e.g. last_6_months). When set, API returns monthly_data for this range. */
   chartTimeRange?: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months' | null;
+  /** Breakdown-by dimension id for expanded rows (so API returns expanded[groupValue] per account). */
+  breakdownByDimensionId?: string | null;
 }
 
 const queryKeyPrefix = ['slide-report-display-data'] as const;
@@ -29,6 +31,7 @@ function buildQueryKey(
   selectedMonth: string,
   chartTimeRange: string | null,
   groupByDimensionId: string | null,
+  breakdownByDimensionId: string | null,
   comparisonType: string
 ): readonly unknown[] {
   return [
@@ -39,6 +42,7 @@ function buildQueryKey(
     selectedMonth,
     chartTimeRange,
     groupByDimensionId,
+    breakdownByDimensionId,
     comparisonType,
   ];
 }
@@ -50,6 +54,7 @@ function buildTotalsQueryKey(
   selectedYear: string,
   selectedMonth: string,
   groupByDimensionId: string | null,
+  breakdownByDimensionId: string | null,
   comparisonType: string
 ): readonly unknown[] {
   return [
@@ -59,6 +64,7 @@ function buildTotalsQueryKey(
     selectedYear,
     selectedMonth,
     groupByDimensionId,
+    breakdownByDimensionId,
     comparisonType,
   ];
 }
@@ -153,6 +159,7 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
   const useApi = slideType === 'master-report' && !!slideReportId;
   const comparisonType = params.comparisonType ?? 'none';
   const chartTimeRange = params.chartTimeRange ?? null;
+  const breakdownByDimensionId = params.breakdownByDimensionId ?? null;
 
   const queryKey = useMemo(
     () =>
@@ -163,9 +170,10 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
         selectedMonth,
         chartTimeRange,
         groupByDimensionId ?? null,
+        breakdownByDimensionId,
         comparisonType
       ),
-    [slideReportId, filterValues, selectedYear, selectedMonth, chartTimeRange, groupByDimensionId, comparisonType]
+    [slideReportId, filterValues, selectedYear, selectedMonth, chartTimeRange, groupByDimensionId, breakdownByDimensionId, comparisonType]
   );
 
   const totalsQueryKey = useMemo(
@@ -176,9 +184,10 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
         selectedYear,
         selectedMonth,
         groupByDimensionId ?? null,
+        breakdownByDimensionId,
         comparisonType
       ),
-    [slideReportId, filterValues, selectedYear, selectedMonth, groupByDimensionId, comparisonType]
+    [slideReportId, filterValues, selectedYear, selectedMonth, groupByDimensionId, breakdownByDimensionId, comparisonType]
   );
 
   const needsTotalsForSelectedPeriod = Boolean(useApi && slideReportId && chartTimeRange);
@@ -193,6 +202,7 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
         selected_month: selectedMonth,
         chart_time_range: chartTimeRange ?? undefined,
         group_by_dimension_id: groupByDimensionId ?? null,
+        breakdown_by_dimension_id: breakdownByDimensionId ?? undefined,
         channels: ['metasearch', 'sem', 'social'],
         comparison_type: comparisonType as 'none' | 'previous_period' | 'previous_year',
       }),
@@ -210,6 +220,7 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
         selected_month: selectedMonth,
         chart_time_range: undefined,
         group_by_dimension_id: groupByDimensionId ?? null,
+        breakdown_by_dimension_id: breakdownByDimensionId ?? undefined,
         channels: ['metasearch', 'sem', 'social'],
         comparison_type: comparisonType as 'none' | 'previous_period' | 'previous_year',
       }),
