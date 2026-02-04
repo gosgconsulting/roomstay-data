@@ -661,7 +661,11 @@ const UnifiedBreakdownTable = ({
                         <span className="text-xs uppercase mr-2">{breakdownByDim?.name}:</span>
                         {item.value}
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.impressions)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {item.metrics.impressions < group.metrics.impressions || item.metrics.impressions === 0 ?
+                          formatNumber(item.metrics.impressions) :
+                          formatNumber(group.metrics.impressions)}
+                      </TableCell>
                       <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.clicks)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.ctr.toFixed(2)}%</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.bookings.toFixed(2)}</TableCell>
