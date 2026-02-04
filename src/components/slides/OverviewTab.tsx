@@ -10,6 +10,8 @@ import { calculateDerivedMetrics, formatNumber } from "@/lib/slideViewHelpers";
 import { AISummaryButton } from "./AISummaryButton";
 import { AISummaryDisplay } from "./AISummaryDisplay";
 
+const GROSS_PROFIT_RATE = 0.15;
+
 interface OverviewTabProps {
   slideReportId: string | null;
   isSlideReportsLoading: boolean;
@@ -218,6 +220,7 @@ export function OverviewTab({
                   <TableHead className="text-right">Revenue</TableHead>
                   <TableHead className="text-right">ROAS</TableHead>
                   <TableHead className="text-right">Cost of Sale</TableHead>
+                  <TableHead className="text-right">Gross Profit</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -256,7 +259,7 @@ export function OverviewTab({
                     <>
                       {rowsWithData.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                          <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                             No data available for the selected period
                           </TableCell>
                         </TableRow>
@@ -275,6 +278,9 @@ export function OverviewTab({
                               <TableCell className="text-right">{formatNumber(row.revenue, 'currency')}</TableCell>
                               <TableCell className="text-right">{row.roas.toFixed(1)}x</TableCell>
                               <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
+                              <TableCell className="text-right">
+                                {formatNumber(row.revenue * GROSS_PROFIT_RATE - row.cost, 'currency')}
+                              </TableCell>
                             </TableRow>
                           ))}
                           {/* Total Row - only show if there's at least one data row */}
@@ -291,6 +297,12 @@ export function OverviewTab({
                               <TableCell className="text-right">{formatNumber(totalDerived.revenue, 'currency')}</TableCell>
                               <TableCell className="text-right">{totalDerived.roas.toFixed(1)}x</TableCell>
                               <TableCell className="text-right">{totalDerived.costOfSale.toFixed(2)}%</TableCell>
+                              <TableCell className="text-right">
+                                {formatNumber(
+                                  totalDerived.revenue * GROSS_PROFIT_RATE - totalDerived.cost,
+                                  'currency'
+                                )}
+                              </TableCell>
                             </TableRow>
                           )}
                         </>

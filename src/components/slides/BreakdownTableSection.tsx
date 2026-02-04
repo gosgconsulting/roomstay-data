@@ -627,9 +627,9 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
               <TableHead className="text-right">CPC</TableHead>
               <TableHead className="text-right">Cost</TableHead>
               <TableHead className="text-right">Revenue</TableHead>
-              <TableHead className="text-right">Gross Profit</TableHead>
               <TableHead className="text-right">ROAS</TableHead>
               <TableHead className="text-right">Cost of Sale</TableHead>
+              <TableHead className="text-right">Gross Profit</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -671,18 +671,18 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
                   <TableCell className="text-right">
                     {formatNumber(group.metrics.revenue, 'currency')}
                   </TableCell>
-                  <TableCell className="text-right">
-                    {formatNumber(
-                      calculateGrossProfit(group.metrics.revenue, group.metrics.cost),
-                      'currency'
-                    )}
-                  </TableCell>
                   <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
                   <TableCell className="text-right">
                     {group.metrics.costOfSale < 0.01
                       ? group.metrics.costOfSale.toFixed(4)
                       : group.metrics.costOfSale.toFixed(2)}
                     %
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatNumber(
+                      calculateGrossProfit(group.metrics.revenue, group.metrics.cost),
+                      'currency'
+                    )}
                   </TableCell>
                 </TableRow>
                 {/* Expanded breakdown rows */}
@@ -723,12 +723,6 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
                           {formatNumber(item.metrics.revenue, 'currency')}
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">
-                          {formatNumber(
-                            calculateGrossProfit(item.metrics.revenue, item.metrics.cost),
-                            'currency'
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
                           {item.metrics.roas.toFixed(1)}x
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">
@@ -736,6 +730,12 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
                             ? item.metrics.costOfSale.toFixed(4)
                             : item.metrics.costOfSale.toFixed(2)}
                           %
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {formatNumber(
+                            calculateGrossProfit(item.metrics.revenue, item.metrics.cost),
+                            'currency'
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -763,18 +763,18 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
               <TableCell className="text-right">
                 {formatNumber(totalMetrics.revenue, 'currency')}
               </TableCell>
-              <TableCell className="text-right">
-                {formatNumber(
-                  calculateGrossProfit(totalMetrics.revenue, totalMetrics.cost),
-                  'currency'
-                )}
-              </TableCell>
               <TableCell className="text-right">{totalMetrics.roas.toFixed(1)}x</TableCell>
               <TableCell className="text-right">
                 {totalMetrics.costOfSale < 0.01
                   ? totalMetrics.costOfSale.toFixed(4)
                   : totalMetrics.costOfSale.toFixed(2)}
                 %
+              </TableCell>
+              <TableCell className="text-right">
+                {formatNumber(
+                  calculateGrossProfit(totalMetrics.revenue, totalMetrics.cost),
+                  'currency'
+                )}
               </TableCell>
             </TableRow>
           </TableBody>
