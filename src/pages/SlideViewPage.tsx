@@ -150,7 +150,14 @@ const UnifiedBreakdownTable = ({
   // Applies filterValues if they are set. When displayDataFromApi and apiBreakdowns are set, use API data (no heavy calc).
   const groupedData = useMemo(() => {
     if (displayDataFromApi && apiBreakdowns?.rows?.length) {
-      return apiBreakdowns.rows.map((row) => {
+      const groupByDimId = availableDimensions.find(d => d.id === groupBy)?.id;
+      const groupByHasFilter = groupByDimId && selectedChannel && selectedChannel !== 'overview'
+        ? (filterValues?.[selectedChannel]?.[groupByDimId]?.length ?? 0) > 0
+        : false;
+      const rows = groupByHasFilter
+        ? apiBreakdowns.rows.filter((row) => row.name != null && String(row.name).trim() !== '' && String(row.name).trim().toLowerCase() !== 'unknown')
+        : apiBreakdowns.rows;
+      return rows.map((row) => {
         const cleanData = {
           impressions: Number(row.impressions) || 0,
           clicks: Number(row.clicks) || 0,

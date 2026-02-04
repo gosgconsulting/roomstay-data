@@ -12,6 +12,15 @@ import type { FilteredSlideData, UseFilteredSlideDataParams } from '@/hooks/useF
 import type { MetricData, MonthlyDataPoint, RawDataRow } from '@/types/slideView';
 import type { GetSlideReportDisplayDataRequest, GetSlideReportDisplayDataResponse } from '@/types/slideReportDisplayApi';
 
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** Convert UI month name (e.g. "January") to API month number 1-12; null for 'all' or unknown. */
+function monthNameToNumber(monthName: string): number | null {
+  if (!monthName || monthName === 'all') return null;
+  const i = MONTH_NAMES.findIndex((m) => m.toLowerCase() === String(monthName).trim().toLowerCase());
+  return i >= 0 ? i + 1 : null;
+}
+
 export interface UseSlideReportDisplayDataParams extends UseFilteredSlideDataParams {
   slideReportId: string | null;
   comparisonType?: string;
@@ -32,6 +41,7 @@ function buildQueryKey(
   chartTimeRange: string | null,
   groupByDimensionId: string | null,
   breakdownByDimensionId: string | null,
+  breakdownChannel: string | null,
   comparisonType: string
 ): readonly unknown[] {
   return [
@@ -43,6 +53,7 @@ function buildQueryKey(
     chartTimeRange,
     groupByDimensionId,
     breakdownByDimensionId,
+    breakdownChannel,
     comparisonType,
   ];
 }
@@ -55,6 +66,7 @@ function buildTotalsQueryKey(
   selectedMonth: string,
   groupByDimensionId: string | null,
   breakdownByDimensionId: string | null,
+  breakdownChannel: string | null,
   comparisonType: string
 ): readonly unknown[] {
   return [
@@ -65,6 +77,7 @@ function buildTotalsQueryKey(
     selectedMonth,
     groupByDimensionId,
     breakdownByDimensionId,
+    breakdownChannel,
     comparisonType,
   ];
 }
@@ -160,6 +173,8 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
   const comparisonType = params.comparisonType ?? 'none';
   const chartTimeRange = params.chartTimeRange ?? null;
   const breakdownByDimensionId = params.breakdownByDimensionId ?? null;
+  const breakdownChannel =
+    selectedTab === 'metasearch' || selectedTab === 'sem' || selectedTab === 'social' ? selectedTab : null;
 
   const queryKey = useMemo(
     () =>
@@ -171,9 +186,10 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
         chartTimeRange,
         groupByDimensionId ?? null,
         breakdownByDimensionId,
+        breakdownChannel,
         comparisonType
       ),
-    [slideReportId, filterValues, selectedYear, selectedMonth, chartTimeRange, groupByDimensionId, breakdownByDimensionId, comparisonType]
+    [slideReportId, filterValues, selectedYear, selectedMonth, chartTimeRange, groupByDimensionId, breakdownByDimensionId, breakdownChannel, comparisonType]
   );
 
   const totalsQueryKey = useMemo(
@@ -185,9 +201,10 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
         selectedMonth,
         groupByDimensionId ?? null,
         breakdownByDimensionId,
+        breakdownChannel,
         comparisonType
       ),
-    [slideReportId, filterValues, selectedYear, selectedMonth, groupByDimensionId, breakdownByDimensionId, comparisonType]
+    [slideReportId, filterValues, selectedYear, selectedMonth, groupByDimensionId, breakdownByDimensionId, breakdownChannel, comparisonType]
   );
 
   const needsTotalsForSelectedPeriod = Boolean(useApi && slideReportId && chartTimeRange);
@@ -203,6 +220,7 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
         chart_time_range: chartTimeRange ?? undefined,
         group_by_dimension_id: groupByDimensionId ?? null,
         breakdown_by_dimension_id: breakdownByDimensionId ?? undefined,
+        breakdown_channel: breakdownChannel ?? undefined,
         channels: ['metasearch', 'sem', 'social'],
         comparison_type: comparisonType as 'none' | 'previous_period' | 'previous_year',
       }),
@@ -221,6 +239,7 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
         chart_time_range: undefined,
         group_by_dimension_id: groupByDimensionId ?? null,
         breakdown_by_dimension_id: breakdownByDimensionId ?? undefined,
+        breakdown_channel: breakdownChannel ?? undefined,
         channels: ['metasearch', 'sem', 'social'],
         comparison_type: comparisonType as 'none' | 'previous_period' | 'previous_year',
       }),
@@ -245,8 +264,15 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
   return useMemo(() => {
     if (useApi && apiData && !apiError && !isFetching) {
       const mapped = mapResponseToFilteredShape(apiData);
+      const totalsPeriodMatches = (res: GetSlideReportDisplayDataResponse) => {
+        const yearMatch = res.selected_year == null || res.selected_year === selectedYear;
+        const monthNum = monthNameToNumber(selectedMonth);
+        const monthMatch =
+          res.selected_month == null || (monthNum != null && res.selected_month === monthNum);
+        return yearMatch && monthMatch;
+      };
       const channelTotals =
-        needsTotalsForSelectedPeriod && apiTotalsData?.channel_totals
+        needsTotalsForSelectedPeriod && apiTotalsData?.channel_totals && totalsPeriodMatches(apiTotalsData)
           ? {
               metasearch: {
                 impressions: apiTotalsData.channel_totals.metasearch?.impressions ?? 0,
@@ -275,7 +301,14 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
         const c = channelTotals[channel as keyof typeof channelTotals];
         return c ?? { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
       };
-      const apiBreakdowns = needsTotalsForSelectedPeriod && apiTotalsData?.breakdowns != null ? apiTotalsData.breakdowns : apiData.breakdowns;
+      // Only use breakdowns when response period matches current selection (avoids showing another month's data, e.g. Jan showing Feb's 98085)
+      const totalsBreakdowns =
+        needsTotalsForSelectedPeriod && apiTotalsData?.breakdowns != null && totalsPeriodMatches(apiTotalsData)
+          ? apiTotalsData.breakdowns
+          : undefined;
+      const mainBreakdowns =
+        apiData.breakdowns != null && totalsPeriodMatches(apiData) ? apiData.breakdowns : undefined;
+      const apiBreakdowns = totalsBreakdowns ?? mainBreakdowns;
       return {
         ...mapped,
         channelTotals,
@@ -305,5 +338,5 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
       apiMonthlyChannelMetrics?: GetSlideReportDisplayDataResponse['monthly_channel_metrics'];
       isLoadingDisplayData: boolean;
     };
-  }, [useApi, apiData, apiTotalsData, apiError, isFetching, fallback, isLoadingDisplayData, needsTotalsForSelectedPeriod]);
+  }, [useApi, apiData, apiTotalsData, apiError, isFetching, fallback, isLoadingDisplayData, needsTotalsForSelectedPeriod, selectedYear, selectedMonth]);
 }

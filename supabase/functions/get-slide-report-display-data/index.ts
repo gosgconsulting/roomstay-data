@@ -20,6 +20,8 @@ interface RequestBody {
   chart_time_range?: ChartTimeRange | null;
   group_by_dimension_id?: string | null;
   breakdown_by_dimension_id?: string | null;
+  /** When set, breakdown (rows + expanded) uses only this channel's data (e.g. Metasearch tab = single hotel scope). */
+  breakdown_channel?: 'metasearch' | 'sem' | 'social' | null;
   channels?: ('metasearch' | 'sem' | 'social')[];
   comparison_type?: 'none' | 'previous_period' | 'previous_year';
 }
@@ -72,6 +74,9 @@ interface DisplayDataResponse {
   /** Per-month per-channel cost and revenue for budget tab when using API. */
   monthly_channel_metrics?: MonthlyChannelMetrics[];
   breakdowns?: { groupBy: string; rows: BreakdownRow[]; expanded?: Record<string, BreakdownRow[]> };
+  /** Period the breakdowns/channel_totals apply to (so frontend can reject stale data). selected_month is 1-12. */
+  selected_year?: string;
+  selected_month?: number;
   comparison_totals?: Record<string, MetricData> | null;
   has_filters: boolean;
   channels_with_filters: string[];
@@ -248,6 +253,32 @@ function hasChannelFilters(filterValues: Record<string, string[] | undefined>): 
   return false;
 }
 
+/** Get dimension value from a row, trying dimension id, name, and case-insensitive key match. */
+function getDimensionValueFromRow(
+  rec: Record<string, unknown>,
+  dimId: string,
+  dimName: string,
+  dimensionMap?: Record<string, string>
+): unknown {
+  let val = rec[dimId] ?? rec[dimName];
+  if (val != null && String(val).trim() !== '') return val;
+  const nameLower = (dimName || '').toLowerCase();
+  for (const [k, v] of Object.entries(rec)) {
+    if (v == null) continue;
+    if (k === dimId || k === dimName) return v;
+    if (nameLower && String(k).toLowerCase() === nameLower) return v;
+  }
+  if (dimensionMap) {
+    for (const [id, name] of Object.entries(dimensionMap)) {
+      if (id === dimId || name === dimName) {
+        const x = rec[id] ?? rec[name];
+        if (x != null && String(x).trim() !== '') return x;
+      }
+    }
+  }
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -296,6 +327,7 @@ Deno.serve(async (req) => {
     chart_time_range: chartTimeRange,
     group_by_dimension_id,
     breakdown_by_dimension_id,
+    breakdown_channel: breakdownChannel = null,
     channels = ['metasearch', 'sem', 'social'],
     comparison_type = 'none',
   } = body;
@@ -618,7 +650,12 @@ Deno.serve(async (req) => {
     const rows: BreakdownRow[] = [];
     const byGroupAllChannels: Record<string, Record<string, unknown>[]> = {};
     const yearNumB = selected_year !== 'all' ? parseInt(selected_year, 10) : null;
-    const monthNumB = selected_month !== 'all' ? MONTH_NAMES.indexOf(selected_month) + 1 : null;
+    // Normalize month so "January"/"january" etc. always map to 1 (avoids wrong month or no filter)
+    const normalizedMonth =
+      selected_month !== 'all' && selected_month
+        ? MONTH_NAMES.find((m) => m.toLowerCase() === String(selected_month).trim().toLowerCase())
+        : null;
+    const monthNumB = normalizedMonth != null ? MONTH_NAMES.indexOf(normalizedMonth) + 1 : null;
     let dateRangeB: { start: Date; end: Date } | undefined;
     if (yearNumB != null && !isNaN(yearNumB)) {
       if (monthNumB != null && monthNumB >= 1 && monthNumB <= 12) {
@@ -634,7 +671,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    for (const ch of channelsWithFilters) {
+    // When breakdown_channel is set (e.g. Metasearch tab), use only that channel so expanded matches the tab's scope
+    const channelsForBreakdown =
+      breakdownChannel && ['metasearch', 'sem', 'social'].includes(breakdownChannel)
+        ? [breakdownChannel]
+        : channelsWithFilters;
+
+    for (const ch of channelsForBreakdown) {
       const fv = filter_values[ch] || {};
       const dimMap = (channelsData[ch]?.dimensionMap as Record<string, string>) || {};
       let queryB = supabase
@@ -659,7 +702,7 @@ Deno.serve(async (req) => {
       for (const row of filtered) {
         const r = (row as { dimension_values?: Record<string, unknown> }).dimension_values || row;
         const rec = r as Record<string, unknown>;
-        const val = rec[group_by_dimension_id] ?? rec[groupByDimName];
+        const val = getDimensionValueFromRow(rec, group_by_dimension_id, groupByDimName, dimMap);
         const key = val != null && String(val).trim() !== '' ? String(val).trim() : 'Unknown';
         if (!byGroup[key]) byGroup[key] = [];
         byGroup[key].push(rec);
@@ -701,15 +744,32 @@ Deno.serve(async (req) => {
       }
     }
     const sorted = Array.from(uniqueByName.values()).sort((a, b) => b.revenue - a.revenue);
-    const breakdownRows = sorted.map((r) => ({ ...r, ...calculateDerivedMetrics(r) }));
+    const groupByHasFilter = channelsWithFilters.some((ch) => {
+      const fv = filter_values[ch] || {};
+      const sel = fv[group_by_dimension_id];
+      return sel && sel.length > 0;
+    });
+    const sortedFiltered = groupByHasFilter ? sorted.filter((r) => r.name !== 'Unknown') : sorted;
+    const breakdownRows = sortedFiltered.map((r) => ({ ...r, ...calculateDerivedMetrics(r) }));
 
     const expanded: Record<string, BreakdownRow[]> = {};
     if (breakdownByDimId && breakdownByDimName && Object.keys(byGroupAllChannels).length > 0) {
-      const firstDimMapForBreakdown = (channelsData[channelsWithFilters[0]]?.dimensionMap as Record<string, string>) || {};
+      // Use dimension map from the channel that contributed to byGroupAllChannels (avoids wrong map when breakdown_channel is set)
+      const channelForExpanded = channelsForBreakdown[0];
+      const firstDimMapForBreakdown = (channelForExpanded && channelsData[channelForExpanded]?.dimensionMap as Record<string, string>) || (channelsData[channelsWithFilters[0]]?.dimensionMap as Record<string, string>) || {};
+      const normalizedGroupValue = (v: string) => String(v).trim().toLowerCase();
       for (const [groupValue, groupRows] of Object.entries(byGroupAllChannels)) {
+        if (groupByHasFilter && groupValue === 'Unknown') continue;
+        // Defensive: only include rows that actually belong to this group (fixes same breakdown for all hotels)
+        const targetGroupNorm = normalizedGroupValue(groupValue);
+        const rowsForThisGroup = groupRows.filter((rec) => {
+          const rowGroupVal = getDimensionValueFromRow(rec as Record<string, unknown>, group_by_dimension_id, groupByDimName, firstDimMapForBreakdown);
+          const key = rowGroupVal != null && String(rowGroupVal).trim() !== '' ? normalizedGroupValue(String(rowGroupVal)) : 'unknown';
+          return key === targetGroupNorm;
+        });
         const byBreakdown: Record<string, Record<string, unknown>[]> = {};
-        for (const rec of groupRows) {
-          const val = rec[breakdownByDimId] ?? rec[breakdownByDimName];
+        for (const rec of rowsForThisGroup) {
+          const val = getDimensionValueFromRow(rec as Record<string, unknown>, breakdownByDimId, breakdownByDimName, firstDimMapForBreakdown);
           const key = val != null && String(val).trim() !== '' ? String(val).trim() : 'Unknown';
           if (!byBreakdown[key]) byBreakdown[key] = [];
           byBreakdown[key].push(rec);
@@ -765,11 +825,22 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Return selected_month as 1-12 to avoid misuse (case/typos); undefined when 'all'
+  const responseMonthNum =
+    selected_month !== 'all' && selected_month
+      ? (() => {
+          const m = MONTH_NAMES.find((n) => n.toLowerCase() === String(selected_month).trim().toLowerCase());
+          return m != null ? MONTH_NAMES.indexOf(m) + 1 : undefined;
+        })()
+      : undefined;
+
   const response: DisplayDataResponse = {
     channel_totals: channelTotals,
     monthly_data: monthlyData,
     monthly_channel_metrics: monthlyChannelMetrics.length ? monthlyChannelMetrics : undefined,
     breakdowns,
+    selected_year: selected_year,
+    selected_month: responseMonthNum,
     comparison_totals: comparisonTotals ?? undefined,
     has_filters: hasFilters,
     channels_with_filters: channelsWithFilters,

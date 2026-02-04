@@ -16,6 +16,8 @@ export interface GetSlideReportDisplayDataRequest {
   chart_time_range?: ChartTimeRangeApi | null;
   group_by_dimension_id?: string | null;
   breakdown_by_dimension_id?: string | null;
+  /** When set, breakdown uses only this channel's data (e.g. Metasearch tab = single-hotel scope). */
+  breakdown_channel?: 'metasearch' | 'sem' | 'social' | null;
   channels?: ('metasearch' | 'sem' | 'social')[];
   comparison_type?: 'none' | 'previous_period' | 'previous_year';
 }
@@ -50,6 +52,9 @@ export interface GetSlideReportDisplayDataResponse {
     rows: DisplayDataBreakdownRow[];
     expanded?: Record<string, DisplayDataBreakdownRow[]>;
   };
+  /** Period the breakdowns/channel_totals apply to (match to selectedYear/selectedMonth to avoid stale breakdown). selected_month is 1-12. */
+  selected_year?: string;
+  selected_month?: number;
   comparison_totals?: Record<string, MetricData & { cpc?: number; roas?: number; costOfSale?: number }> | null;
   has_filters: boolean;
   channels_with_filters: string[];
