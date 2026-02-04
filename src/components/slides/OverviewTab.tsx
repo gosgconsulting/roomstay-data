@@ -206,112 +206,114 @@ export function OverviewTab({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Report</TableHead>
-                  <TableHead className="text-right">Impressions</TableHead>
-                  <TableHead className="text-right">Clicks</TableHead>
-                  <TableHead className="text-right">CTR</TableHead>
-                  <TableHead className="text-right">Bookings</TableHead>
-                  <TableHead className="text-right">Conv. Rate</TableHead>
-                  <TableHead className="text-right">CPC</TableHead>
-                  <TableHead className="text-right">Cost</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">ROAS</TableHead>
-                  <TableHead className="text-right">Cost of Sale</TableHead>
-                  <TableHead className="text-right">Gross Profit</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(() => {
-                  // Use filtered channel totals so view/dimension filters apply to the table
-                  const channels = ['metasearch', 'sem', 'social'];
-                  const rows = channels.map(channel => {
-                    const channelKey = channel as 'metasearch' | 'sem' | 'social';
-                    const data = filteredData.channelTotals[channelKey] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-                    const derived = calculateDerivedMetrics(data);
-                    return {
-                      report: channel.charAt(0).toUpperCase() + channel.slice(1),
-                      ...derived,
-                    };
-                  });
-                  // Filter out rows where all metrics are zero
-                  const rowsWithData = rows.filter(row => 
-                    row.impressions > 0 || 
-                    row.clicks > 0 || 
-                    row.cost > 0 || 
-                    row.revenue > 0 || 
-                    row.bookings > 0
-                  );
+            <div className="w-full overflow-x-auto">
+              <Table className="min-w-max">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Report</TableHead>
+                    <TableHead className="text-right">Impressions</TableHead>
+                    <TableHead className="text-right">Clicks</TableHead>
+                    <TableHead className="text-right">CTR</TableHead>
+                    <TableHead className="text-right">Bookings</TableHead>
+                    <TableHead className="text-right">Conv. Rate</TableHead>
+                    <TableHead className="text-right">CPC</TableHead>
+                    <TableHead className="text-right">Cost</TableHead>
+                    <TableHead className="text-right">Revenue</TableHead>
+                    <TableHead className="text-right">ROAS</TableHead>
+                    <TableHead className="text-right">Cost of Sale</TableHead>
+                    <TableHead className="text-right">Gross Profit</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(() => {
+                    // Use filtered channel totals so view/dimension filters apply to the table
+                    const channels = ['metasearch', 'sem', 'social'];
+                    const rows = channels.map(channel => {
+                      const channelKey = channel as 'metasearch' | 'sem' | 'social';
+                      const data = filteredData.channelTotals[channelKey] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                      const derived = calculateDerivedMetrics(data);
+                      return {
+                        report: channel.charAt(0).toUpperCase() + channel.slice(1),
+                        ...derived,
+                      };
+                    });
+                    // Filter out rows where all metrics are zero
+                    const rowsWithData = rows.filter(row => 
+                      row.impressions > 0 || 
+                      row.clicks > 0 || 
+                      row.cost > 0 || 
+                      row.revenue > 0 || 
+                      row.bookings > 0
+                    );
 
-                  // Calculate totals only from rows with data
-                  const totals = rowsWithData.reduce((acc, row) => ({
-                    impressions: acc.impressions + row.impressions,
-                    clicks: acc.clicks + row.clicks,
-                    cost: acc.cost + row.cost,
-                    revenue: acc.revenue + row.revenue,
-                    bookings: acc.bookings + row.bookings,
-                  }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
-                  const totalDerived = calculateDerivedMetrics(totals);
+                    // Calculate totals only from rows with data
+                    const totals = rowsWithData.reduce((acc, row) => ({
+                      impressions: acc.impressions + row.impressions,
+                      clicks: acc.clicks + row.clicks,
+                      cost: acc.cost + row.cost,
+                      revenue: acc.revenue + row.revenue,
+                      bookings: acc.bookings + row.bookings,
+                    }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
+                    const totalDerived = calculateDerivedMetrics(totals);
 
-                  return (
-                    <>
-                      {rowsWithData.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
-                            No data available for the selected period
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        <>
-                          {rowsWithData.map((row) => (
-                            <TableRow key={row.report}>
-                              <TableCell className="font-medium">{row.report}</TableCell>
-                              <TableCell className="text-right">{formatNumber(row.impressions)}</TableCell>
-                              <TableCell className="text-right">{formatNumber(row.clicks)}</TableCell>
-                              <TableCell className="text-right">{row.ctr.toFixed(2)}%</TableCell>
-                              <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
-                              <TableCell className="text-right">{row.conversionRate.toFixed(2)}%</TableCell>
-                              <TableCell className="text-right">${row.cpc.toFixed(2)}</TableCell>
-                              <TableCell className="text-right">{formatNumber(row.cost, 'currency')}</TableCell>
-                              <TableCell className="text-right">{formatNumber(row.revenue, 'currency')}</TableCell>
-                              <TableCell className="text-right">{row.roas.toFixed(1)}x</TableCell>
-                              <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
-                              <TableCell className="text-right">
-                                {formatNumber(row.revenue * GROSS_PROFIT_RATE - row.cost, 'currency')}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                          {/* Total Row - only show if there's at least one data row */}
-                          {rowsWithData.length > 0 && (
-                            <TableRow className="bg-muted/50 font-semibold border-t-2">
-                              <TableCell className="font-bold">Total</TableCell>
-                              <TableCell className="text-right">{formatNumber(totalDerived.impressions)}</TableCell>
-                              <TableCell className="text-right">{formatNumber(totalDerived.clicks)}</TableCell>
-                              <TableCell className="text-right">{totalDerived.ctr.toFixed(2)}%</TableCell>
-                              <TableCell className="text-right">{totalDerived.bookings.toFixed(2)}</TableCell>
-                              <TableCell className="text-right">{totalDerived.conversionRate.toFixed(2)}%</TableCell>
-                              <TableCell className="text-right">${totalDerived.cpc.toFixed(2)}</TableCell>
-                              <TableCell className="text-right">{formatNumber(totalDerived.cost, 'currency')}</TableCell>
-                              <TableCell className="text-right">{formatNumber(totalDerived.revenue, 'currency')}</TableCell>
-                              <TableCell className="text-right">{totalDerived.roas.toFixed(1)}x</TableCell>
-                              <TableCell className="text-right">{totalDerived.costOfSale.toFixed(2)}%</TableCell>
-                              <TableCell className="text-right">
-                                {formatNumber(
-                                  totalDerived.revenue * GROSS_PROFIT_RATE - totalDerived.cost,
-                                  'currency'
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </>
-                      )}
-                    </>
-                  );
-                })()}
-              </TableBody>
-            </Table>
+                    return (
+                      <>
+                        {rowsWithData.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                              No data available for the selected period
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          <>
+                            {rowsWithData.map((row) => (
+                              <TableRow key={row.report}>
+                                <TableCell className="font-medium">{row.report}</TableCell>
+                                <TableCell className="text-right">{formatNumber(row.impressions)}</TableCell>
+                                <TableCell className="text-right">{formatNumber(row.clicks)}</TableCell>
+                                <TableCell className="text-right">{row.ctr.toFixed(2)}%</TableCell>
+                                <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
+                                <TableCell className="text-right">{row.conversionRate.toFixed(2)}%</TableCell>
+                                <TableCell className="text-right">${row.cpc.toFixed(2)}</TableCell>
+                                <TableCell className="text-right">{formatNumber(row.cost, 'currency')}</TableCell>
+                                <TableCell className="text-right">{formatNumber(row.revenue, 'currency')}</TableCell>
+                                <TableCell className="text-right">{row.roas.toFixed(1)}x</TableCell>
+                                <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
+                                <TableCell className="text-right">
+                                  {formatNumber(row.revenue * GROSS_PROFIT_RATE - row.cost, 'currency')}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {/* Total Row - only show if there's at least one data row */}
+                            {rowsWithData.length > 0 && (
+                              <TableRow className="bg-muted/50 font-semibold border-t-2">
+                                <TableCell className="font-bold">Total</TableCell>
+                                <TableCell className="text-right">{formatNumber(totalDerived.impressions)}</TableCell>
+                                <TableCell className="text-right">{formatNumber(totalDerived.clicks)}</TableCell>
+                                <TableCell className="text-right">{totalDerived.ctr.toFixed(2)}%</TableCell>
+                                <TableCell className="text-right">{totalDerived.bookings.toFixed(2)}</TableCell>
+                                <TableCell className="text-right">{totalDerived.conversionRate.toFixed(2)}%</TableCell>
+                                <TableCell className="text-right">${totalDerived.cpc.toFixed(2)}</TableCell>
+                                <TableCell className="text-right">{formatNumber(totalDerived.cost, 'currency')}</TableCell>
+                                <TableCell className="text-right">{formatNumber(totalDerived.revenue, 'currency')}</TableCell>
+                                <TableCell className="text-right">{totalDerived.roas.toFixed(1)}x</TableCell>
+                                <TableCell className="text-right">{totalDerived.costOfSale.toFixed(2)}%</TableCell>
+                                <TableCell className="text-right">
+                                  {formatNumber(
+                                    totalDerived.revenue * GROSS_PROFIT_RATE - totalDerived.cost,
+                                    'currency'
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}
