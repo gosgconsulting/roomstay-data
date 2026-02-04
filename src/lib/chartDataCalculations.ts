@@ -332,16 +332,18 @@ export function processChannelChartData(
       if (a.year !== b.year) return a.year - b.year;
       return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
     });
-  } else if (channelData.monthly) {
-    // No filters - use pre-computed data (fast path)
-    Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
-      const [year, monthNum] = monthKey.split('-').map(Number);
-      const month = MONTH_NAMES[monthNum - 1];
-      allMonthlyData.push({ year, month, revenue: metrics.revenue || 0 });
-    });
-    allMonthlyData.sort((a, b) => {
-      if (a.year !== b.year) return a.year - b.year;
-      return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
+  } else {
+    // No filters - fill all months in chart time range (zeros for months with no data)
+    const monthsInRange = generateMonthsInTimeRange(chartTimeRange);
+    const monthly = (channelData as any).monthly as Record<string, { revenue?: number }> | undefined;
+    allMonthlyData = monthsInRange.map(({ year, month }) => {
+      const monthIndex = MONTH_NAMES.indexOf(month);
+      const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+      return {
+        year,
+        month,
+        revenue: monthly?.[monthKey]?.revenue ?? 0,
+      };
     });
   }
 

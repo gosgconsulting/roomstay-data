@@ -81,6 +81,8 @@ import {
 } from "@/lib/slideRefreshHelpers";
 import type { RawDataRow, MetricData } from "@/types/slideView";
 
+const GROSS_PROFIT_RATE = 0.15;
+
 // Unified breakdown table component with Group by / Breakdown by dropdowns
 // Uses data from pivot_data.channels[channel].monthlyBreakdowns for month-specific data
 const UnifiedBreakdownTable = ({ 
@@ -624,6 +626,7 @@ const UnifiedBreakdownTable = ({
             <TableHead className="text-right">Revenue</TableHead>
             <TableHead className="text-right">ROAS</TableHead>
             <TableHead className="text-right">Cost of Sale</TableHead>
+            <TableHead className="text-right">Gross Profit</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -650,6 +653,7 @@ const UnifiedBreakdownTable = ({
                 <TableCell className="text-right">{formatNumber(group.metrics.revenue, 'currency')}</TableCell>
                 <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
                 <TableCell className="text-right">{group.metrics.costOfSale < 0.01 ? group.metrics.costOfSale.toFixed(4) : group.metrics.costOfSale.toFixed(2)}%</TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.revenue * GROSS_PROFIT_RATE - group.metrics.cost, 'currency')}</TableCell>
               </TableRow>
               {/* Expanded breakdown rows */}
               {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
@@ -675,6 +679,7 @@ const UnifiedBreakdownTable = ({
                       <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.revenue, 'currency')}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.roas.toFixed(1)}x</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.costOfSale < 0.01 ? item.metrics.costOfSale.toFixed(4) : item.metrics.costOfSale.toFixed(2)}%</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.revenue * GROSS_PROFIT_RATE - item.metrics.cost, 'currency')}</TableCell>
                     </TableRow>
                   ))}
                 </>
@@ -695,6 +700,7 @@ const UnifiedBreakdownTable = ({
             <TableCell className="text-right">{formatNumber(totalMetrics.revenue, 'currency')}</TableCell>
             <TableCell className="text-right">{totalMetrics.roas.toFixed(1)}x</TableCell>
             <TableCell className="text-right">{totalMetrics.costOfSale < 0.01 ? totalMetrics.costOfSale.toFixed(4) : totalMetrics.costOfSale.toFixed(2)}%</TableCell>
+            <TableCell className="text-right">{formatNumber(totalMetrics.revenue * GROSS_PROFIT_RATE - totalMetrics.cost, 'currency')}</TableCell>
           </TableRow>
         </TableBody>
       </Table>
