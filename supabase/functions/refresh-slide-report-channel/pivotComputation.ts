@@ -1589,6 +1589,11 @@ export async function computeChannelPivotDataForMonth(
     revenue: metricsForMonth.revenue, bookings: metricsForMonth.bookings,
   };
 
+  const rawDataRows = rows.length <= MAX_RAW_DATA_ROWS ? rows.map((row) => ({ ...row })) : undefined;
+  if (rawDataRows) {
+    console.log(`[channel-pivot] Including ${rawDataRows.length} raw data rows for ${channel} ${monthKey} (for slide_report_channel_raw_rows)`);
+  }
+
   console.log(`[channel-pivot] Per-month slice completed for channel ${channel} ${monthKey}`);
   return {
     channelDataSlice: {
@@ -1604,5 +1609,7 @@ export async function computeChannelPivotDataForMonth(
       yearly: overviewYearly,
       current: overviewCurrent,
     },
+    rawDataRows,
+    dimensionMap,
   };
 }

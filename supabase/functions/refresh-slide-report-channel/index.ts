@@ -140,16 +140,21 @@ Deno.serve(async (req) => {
         filterConfig
       );
       console.log(`[channel-refresh] Successfully processed channel ${channel} ${yearInt}-${String(monthInt).padStart(2, '0')}`);
+      const responsePayload: SuccessResponse = {
+        success: true,
+        channel,
+        year: yearInt,
+        month: monthInt,
+        channelData: result.channelDataSlice,
+        channelDataSlice: result.channelDataSlice,
+        overviewContributions: result.overviewContributions,
+      };
+      if ((result as any).rawDataRows) {
+        (responsePayload as any).rawDataRows = (result as any).rawDataRows;
+        (responsePayload as any).dimension_map = (result as any).dimensionMap ?? result.channelDataSlice.dimensionMap;
+      }
       return new Response(
-        JSON.stringify({
-          success: true,
-          channel,
-          year: yearInt,
-          month: monthInt,
-          channelData: result.channelDataSlice,
-          channelDataSlice: result.channelDataSlice,
-          overviewContributions: result.overviewContributions,
-        } as SuccessResponse),
+        JSON.stringify(responsePayload),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

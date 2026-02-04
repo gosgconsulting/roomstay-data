@@ -7,10 +7,71 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent as TabsContentInner } from "@/components/ui/tabs";
 import { Loader2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { MONTH_NAMES } from "@/constants/slideViewConstants";
+
+/** Derive display label and pivot key from row.month (handles "August 2025" or "2025-08"). */
+function getMonthDisplayAndKey(rowMonth: string): { display: string; key: string } {
+  const trimmed = rowMonth.trim();
+  const parts = trimmed.split(' ');
+  if (parts.length >= 2 && isNaN(parseInt(parts[0], 10))) {
+    const monthName = parts[0];
+    const year = parts[1];
+    const monthIndex = MONTH_NAMES.indexOf(monthName);
+    const key = monthIndex >= 0 ? `${year}-${String(monthIndex + 1).padStart(2, '0')}` : trimmed;
+    return { display: `${monthName} ${year}`, key };
+  }
+  const [y, m] = trimmed.split('-');
+  const monthNum = parseInt(m, 10);
+  if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12 && y?.length >= 4) {
+    const monthName = MONTH_NAMES[monthNum - 1];
+    return { display: `${monthName} ${y}`, key: `${y}-${String(monthNum).padStart(2, '0')}` };
+  }
+  return { display: trimmed, key: trimmed };
+}
 import { formatNumber } from "@/lib/slideViewHelpers";
 import { calculateProfit } from "@/lib/budgetCalculations";
+
+function BudgetTabSkeleton() {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <Skeleton className="h-5 w-48" />
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-5 w-20" />
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="metasearch">Metasearch</TabsTrigger>
+            <TabsTrigger value="sem">SEM</TabsTrigger>
+            <TabsTrigger value="social">Social</TabsTrigger>
+          </TabsList>
+          <div className="space-y-2">
+            <div className="flex gap-4">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="flex gap-4 py-1">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-20" />
+              </div>
+            ))}
+          </div>
+        </Tabs>
+      </CardContent>
+    </Card>
+  );
+}
 
 interface View {
   id: string;
@@ -46,6 +107,8 @@ interface BudgetTabProps {
   views: View[];
   handleApplyView: (viewId: string | null) => void;
   isLoadingViewBudgets: boolean;
+  /** True while display-data API is in flight (avoids glitch when budget data arrives late). */
+  isLoadingDisplayData?: boolean;
   budgetMonthlyData: BudgetMonthlyRow[];
   slideReport?: SlideReport | null;
   /** Single source of truth: use when provided (e.g. effectivePivotData from slide_report_channel_* tables). Falls back to slideReport.pivot_data. */
@@ -79,6 +142,7 @@ export function BudgetTab({
   views,
   handleApplyView,
   isLoadingViewBudgets,
+  isLoadingDisplayData = false,
   budgetMonthlyData,
   slideReport,
   pivotData: pivotDataProp,
@@ -141,9 +205,7 @@ export function BudgetTab({
         <TableBody>
           {budgetMonthlyData.map((row) => {
             const pivotData = pivotDataProp ?? (slideReport?.pivot_data as SlideReportPivotData | null);
-            const [monthName, year] = row.month.split(' ');
-            const monthIndex = MONTH_NAMES.indexOf(monthName);
-            const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+            const { display: monthDisplay, key: monthKey } = getMonthDisplayAndKey(row.month);
             
             let budgetRow: number;
             let actualRow: number;
@@ -207,8 +269,8 @@ export function BudgetTab({
               : 0;
             
             return (
-              <TableRow key={row.month}>
-                <TableCell className="font-medium">{row.month}</TableCell>
+              <TableRow key={monthKey}>
+                <TableCell className="font-medium">{monthDisplay}</TableCell>
                 <TableCell 
                   className={`text-right ${channel === 'overview' ? '' : 'cursor-pointer hover:bg-muted/50'}`}
                   onClick={channel === 'overview' ? undefined : () => handleStartEditBudget(row.month, channel, budgetRow)}
@@ -409,11 +471,8 @@ export function BudgetTab({
         </div>
       </div>
 
-      {isLoadingViewBudgets ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin mr-2" />
-          <span className="text-muted-foreground">Loading view budgets...</span>
-        </div>
+      {isLoadingViewBudgets || isLoadingDisplayData ? (
+        <BudgetTabSkeleton />
       ) : (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">

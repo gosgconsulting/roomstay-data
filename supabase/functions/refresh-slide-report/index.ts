@@ -506,6 +506,29 @@ Deno.serve(async (req) => {
             if (upsertError) {
               console.warn(`[refresh] Failed to upsert slide_report_channel_month_data for ${channel}:`, upsertError);
             }
+            const rawDataRows = channelResult.rawDataRows;
+            const dimensionMap = channelResult.dimension_map ?? channelResult.channelDataSlice?.dimensionMap ?? channelResult.channelData?.dimensionMap;
+            if (Array.isArray(rawDataRows) && rawDataRows.length > 0 && dimensionMap && typeof dimensionMap === 'object') {
+              const { error: rawUpsertError } = await supabase
+                .from('slide_report_channel_raw_rows')
+                .upsert(
+                  {
+                    slide_report_id: slideReportId,
+                    channel,
+                    year: requestedYearSingle,
+                    month: requestedMonthSingle,
+                    rows: rawDataRows,
+                    dimension_map: dimensionMap,
+                    updated_at: new Date().toISOString(),
+                  },
+                  { onConflict: 'slide_report_id,channel,year,month' }
+                );
+              if (rawUpsertError) {
+                console.warn(`[refresh] Failed to upsert slide_report_channel_raw_rows for ${channel}:`, rawUpsertError);
+              } else {
+                console.log(`[refresh] Upserted ${rawDataRows.length} raw rows for ${channel} ${requestedYearSingle}-${String(requestedMonthSingle).padStart(2, '0')}`);
+              }
+            }
             console.log(`[refresh] Successfully processed channel ${channel} for ${requestedYearSingle}-${String(requestedMonthSingle).padStart(2, '0')}`);
           } catch (channelError: any) {
             const errorMessage = channelError?.message || channelError?.error_description || channelError?.details || String(channelError);

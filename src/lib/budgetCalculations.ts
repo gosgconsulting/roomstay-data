@@ -74,6 +74,27 @@ function sumCostRevenueFromBreakdowns(
 }
 
 /**
+ * Normalize month key to "MonthName Year" (e.g. "2025-08" -> "August 2025", "August 2025" -> "August 2025").
+ * Ensures budget data from API (MonthName Year) and view budgets (YYYY-MM) merge into one row per month.
+ */
+function normalizeMonthKeyToNameYear(monthKey: string): string {
+  if (!monthKey || typeof monthKey !== 'string') return monthKey;
+  const trimmed = monthKey.trim();
+  // Already "MonthName Year" (has a space and month name is not a number)
+  const parts = trimmed.split(' ');
+  if (parts.length >= 2 && parts[0].length > 0 && isNaN(parseInt(parts[0], 10))) {
+    return `${parts[0]} ${parts[1]}`;
+  }
+  // "YYYY-MM" or "Y-M" format
+  const [y, m] = trimmed.split('-');
+  const monthNum = parseInt(m, 10);
+  if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12 && y?.length >= 4) {
+    return `${MONTH_NAMES[monthNum - 1]} ${y}`;
+  }
+  return trimmed;
+}
+
+/**
  * Normalizes budget value to channel-specific structure
  * Supports both legacy flat format and new channel-specific format
  */
@@ -196,8 +217,17 @@ export function calculateBudgetData(
   return [];
 }
 
+export type ApiMonthlyChannelMetrics = Array<{
+  year: number;
+  month: string;
+  metasearch: { cost: number; revenue: number };
+  sem: { cost: number; revenue: number };
+  social: { cost: number; revenue: number };
+}>;
+
 /**
- * Calculate budget monthly data for tables (full structure with all fields)
+ * Calculate budget monthly data for tables (full structure with all fields).
+ * When apiMonthlyChannelMetrics is provided (display data from API), build actuals from it instead of getFilteredRowsForChannel.
  */
 export function calculateBudgetMonthlyData(
   pivotData: SlideReportPivotData | null,
@@ -206,13 +236,126 @@ export function calculateBudgetMonthlyData(
   selectedYear: string,
   hasFilters: boolean,
   getFilteredRowsForChannel: (channel: string) => RawDataRow[],
-  filterValues?: Record<string, Record<string, string[]>>
+  filterValues?: Record<string, Record<string, string[]>>,
+  apiMonthlyChannelMetrics?: ApiMonthlyChannelMetrics
 ): BudgetMonthlyRow[] {
-  // Process channel data for both Master View (no view selected) and custom views
-  // Master View: process all channel data without budget data
-  // Custom View: process channel data + add budget data from viewBudgets
   const isMasterView = !selectedViewId || viewBudgets.length === 0;
-  
+
+  if (apiMonthlyChannelMetrics && apiMonthlyChannelMetrics.length > 0) {
+    const monthlyDataMap: Record<string, BudgetMonthlyRow> = {};
+    for (const row of apiMonthlyChannelMetrics) {
+      const yearMonthKey = `${row.month} ${row.year}`;
+      monthlyDataMap[yearMonthKey] = {
+        month: yearMonthKey,
+        metasearchBudget: 0,
+        semBudget: 0,
+        socialBudget: 0,
+        metasearchActual: row.metasearch.cost,
+        semActual: row.sem.cost,
+        socialActual: row.social.cost,
+        metasearch: row.metasearch.revenue,
+        sem: row.sem.revenue,
+        social: row.social.revenue,
+      };
+    }
+    if (selectedViewId && viewBudgets.length > 0) {
+      for (const viewBudget of viewBudgets) {
+        const budgetData = viewBudget.budget_data || {};
+        for (const [monthKey, value] of Object.entries(budgetData)) {
+          // Normalize key: view budgets use "YYYY-MM", API path uses "MonthName Year"
+          const yearMonthKey = normalizeMonthKeyToNameYear(monthKey);
+          if (!monthlyDataMap[yearMonthKey]) {
+            monthlyDataMap[yearMonthKey] = {
+              month: yearMonthKey,
+              metasearchBudget: 0,
+              semBudget: 0,
+              socialBudget: 0,
+              metasearchActual: 0,
+              semActual: 0,
+              socialActual: 0,
+              metasearch: 0,
+              sem: 0,
+              social: 0,
+            };
+          }
+          const normalized = normalizeBudgetValue(value);
+          monthlyDataMap[yearMonthKey].metasearchBudget += normalized.metasearch;
+          monthlyDataMap[yearMonthKey].semBudget += normalized.sem;
+          monthlyDataMap[yearMonthKey].socialBudget += normalized.social;
+        }
+      }
+    }
+    // Merge budget from pivot_data.budget.monthly when on Master view so Budget column is populated
+    if (isMasterView && pivotData?.budget?.monthly) {
+      for (const row of pivotData.budget.monthly) {
+        const yearMonthKey = normalizeMonthKeyToNameYear(row.month);
+        if (!monthlyDataMap[yearMonthKey]) {
+          monthlyDataMap[yearMonthKey] = {
+            month: yearMonthKey,
+            metasearchBudget: 0,
+            semBudget: 0,
+            socialBudget: 0,
+            metasearchActual: 0,
+            semActual: 0,
+            socialActual: 0,
+            metasearch: 0,
+            sem: 0,
+            social: 0,
+          };
+        }
+        const fromPivot = row as BudgetMonthlyRow;
+        monthlyDataMap[yearMonthKey].metasearchBudget = fromPivot.metasearchBudget ?? 0;
+        monthlyDataMap[yearMonthKey].semBudget = fromPivot.semBudget ?? 0;
+        monthlyDataMap[yearMonthKey].socialBudget = fromPivot.socialBudget ?? 0;
+      }
+    }
+    let result = Object.values(monthlyDataMap).sort((a, b) => {
+      const [monthA, yearA] = a.month.split(' ');
+      const [monthB, yearB] = b.month.split(' ');
+      const yA = parseInt(yearA, 10);
+      const yB = parseInt(yearB, 10);
+      if (yA !== yB) return yA - yB;
+      return MONTH_NAMES.indexOf(monthA) - MONTH_NAMES.indexOf(monthB);
+    });
+    // Apply year filter and ensure all 12 months so user can set budget for future months
+    if (selectedYear !== 'all') {
+      const y = parseInt(selectedYear, 10);
+      if (!isNaN(y)) {
+        result = result.filter((row) => {
+          const normalized = normalizeMonthKeyToNameYear(row.month);
+          const parts = normalized.split(' ');
+          const rowYear = parts.length >= 2 ? parts[1] : (row.month.split('-')[0] || '');
+          return parseInt(rowYear, 10) === y;
+        });
+        // Ensure all 12 months: fill missing months with empty rows
+        const dataMap = new Map<string, BudgetMonthlyRow>();
+        result.forEach((row) => {
+          const normalized = normalizeMonthKeyToNameYear(row.month);
+          const [monthName] = normalized.split(' ');
+          if (monthName) dataMap.set(monthName, row);
+        });
+        result = MONTH_NAMES.map((monthName) => {
+          const yearMonthKey = `${monthName} ${y}`;
+          const existing = dataMap.get(monthName);
+          if (existing) return { ...existing, month: yearMonthKey };
+          return {
+            month: yearMonthKey,
+            metasearchBudget: 0,
+            semBudget: 0,
+            socialBudget: 0,
+            metasearchActual: 0,
+            semActual: 0,
+            socialActual: 0,
+            metasearch: 0,
+            sem: 0,
+            social: 0,
+          };
+        });
+      }
+    }
+    return result;
+  }
+
   if (isMasterView || (selectedViewId && viewBudgets.length > 0)) {
     const monthlyDataMap: Record<string, BudgetMonthlyRow> = {};
 

@@ -7,6 +7,7 @@ import {
   calculateBudgetData,
   calculateBudgetMonthlyData,
   type ViewBudget,
+  type ApiMonthlyChannelMetrics,
 } from '@/lib/budgetCalculations';
 import type { SlideReportPivotData } from '@/types/slideReports';
 import type { RawDataRow } from '@/types/slideView';
@@ -26,7 +27,8 @@ export function useBudgetData(
 }
 
 /**
- * Hook for budget monthly data (full structure with all fields)
+ * Hook for budget monthly data (full structure with all fields).
+ * When apiMonthlyChannelMetrics is provided (e.g. from display-data API), actuals are built from it.
  */
 export function useBudgetMonthlyData(
   pivotData: SlideReportPivotData | null,
@@ -35,7 +37,8 @@ export function useBudgetMonthlyData(
   selectedYear: string,
   hasFilters: boolean,
   getFilteredRowsForChannel: (channel: string) => RawDataRow[],
-  filterValues?: Record<string, Record<string, string[]>>
+  filterValues?: Record<string, Record<string, string[]>>,
+  apiMonthlyChannelMetrics?: ApiMonthlyChannelMetrics
 ) {
   return useMemo(() => {
     return calculateBudgetMonthlyData(
@@ -45,7 +48,8 @@ export function useBudgetMonthlyData(
       selectedYear,
       hasFilters,
       getFilteredRowsForChannel,
-      filterValues
+      filterValues,
+      apiMonthlyChannelMetrics
     );
   }, [
     pivotData,
@@ -55,5 +59,6 @@ export function useBudgetMonthlyData(
     hasFilters,
     getFilteredRowsForChannel,
     filterValues,
+    apiMonthlyChannelMetrics,
   ]);
 }

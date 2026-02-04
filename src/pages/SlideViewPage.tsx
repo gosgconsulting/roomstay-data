@@ -22,13 +22,14 @@ import { cn } from "@/lib/utils";
 import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
 import { useSlideReportViews, useCreateSlideReportView, useUpdateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
 import { useChannelMetrics } from "@/hooks/useChannelMetrics";
-import { useFilteredSlideData } from "@/hooks/useFilteredSlideData";
+import { useSlideReportDisplayData } from "@/hooks/useSlideReportDisplayData";
 import { useEditSourceModal } from "@/hooks/useEditSourceModal";
 import { useDataLoadingCache } from "@/hooks/useDataLoadingCache";
 import { useOverviewMetrics } from "@/hooks/useOverviewMetrics";
 import { useComparisonMetrics, useChannelComparisonMetrics } from "@/hooks/useComparisonMetrics";
 import { useKPICards, useReportKPICards } from "@/hooks/useKPICards";
 import { useOverviewChartData, useAllChannelChartData } from "@/hooks/useChartData";
+import { buildOverviewChartDataFromMonthlyData, buildChannelChartDataFromMonthlyData } from "@/lib/chartDataCalculations";
 import { useBudgetData, useBudgetMonthlyData } from "@/hooks/useBudgetData";
 import { calculateReportBreakdown, calculateReportTotal } from "@/lib/metricsCalculations";
 import { normalizeBudgetValue, type ChannelBudgets } from "@/lib/budgetCalculations";
@@ -97,6 +98,8 @@ const UnifiedBreakdownTable = ({
   filterValues,
   filterDimensionValues,
   onTotalsChange,
+  displayDataFromApi,
+  apiBreakdowns,
 }: {
   groupBy: string;
   breakdownBy: string;
@@ -112,6 +115,9 @@ const UnifiedBreakdownTable = ({
   filterValues?: Record<string, Record<string, string[]>>;
   filterDimensionValues?: Record<string, Record<string, string[]>>;
   onTotalsChange?: (totals: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => void;
+  /** When set, use pre-computed breakdowns from display-data API instead of computing from raw rows. */
+  displayDataFromApi?: boolean;
+  apiBreakdowns?: { groupBy: string; rows: Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number; cpc?: number; roas?: number; costOfSale?: number }>; expanded?: Record<string, Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>> };
 }) => {
   // Auto-select defaults when dimensions are available
   useEffect(() => {
@@ -141,8 +147,21 @@ const UnifiedBreakdownTable = ({
   }, [selectedYear, selectedMonth]);
 
   // Get breakdown data from pivotData based on selected dimension and month
-  // Applies filterValues if they are set
+  // Applies filterValues if they are set. When displayDataFromApi and apiBreakdowns are set, use API data (no heavy calc).
   const groupedData = useMemo(() => {
+    if (displayDataFromApi && apiBreakdowns?.rows?.length) {
+      return apiBreakdowns.rows.map((row) => {
+        const cleanData = {
+          impressions: Number(row.impressions) || 0,
+          clicks: Number(row.clicks) || 0,
+          cost: Number(row.cost) || 0,
+          revenue: Number(row.revenue) || 0,
+          bookings: Number(row.bookings) || 0,
+        };
+        const metrics = calculateDerivedMetrics(cleanData);
+        return { groupValue: row.name, metrics, rawData: cleanData };
+      });
+    }
     if (!pivotData?.channels) return [];
     
     const groupByDim = availableDimensions.find(d => d.id === groupBy);
@@ -307,7 +326,7 @@ const UnifiedBreakdownTable = ({
       });
     
     return result;
-  }, [pivotData, groupBy, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear]);
+  }, [displayDataFromApi, apiBreakdowns, pivotData, groupBy, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear]);
 
   // Get breakdown data for expanded row (also uses month-specific data)
   // This should show breakdown data ONLY for the expanded parent row value
@@ -1113,9 +1132,8 @@ export default function SlideViewPage() {
     social: {},
   });
 
-  // Single source of truth for all filtered data (uses channel data from tables when available).
-  // Pass groupByDimension so KPI uses same breakdown dimension as table (SEM/Social/overview all match).
-  const filteredData = useFilteredSlideData({
+  // Single source of truth for all filtered data. Uses display-data API for master-report when available.
+  const filteredData = useSlideReportDisplayData({
     pivotData: effectivePivotData,
     filterValues,
     filterDimensionValues,
@@ -1125,7 +1143,13 @@ export default function SlideViewPage() {
     slideType,
     dynamicChannelTotals,
     groupByDimensionId: groupByDimension,
+    slideReportId,
+    comparisonType,
+    chartTimeRange,
   });
+
+  // Combined loading: show skeleton when slide data is loading OR display-data API is in flight (avoids glitch when data arrives late)
+  const isLoadingSlideContent = isLoadingData || (filteredData.isLoadingDisplayData ?? false);
 
   // Extract minimal data for AI summary (only for report tabs)
   const minimalAIData = useMemo(() => {
@@ -1245,6 +1269,22 @@ export default function SlideViewPage() {
     filteredData.channelsWithFilters,
     chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'
   );
+
+  // Use filtered monthly_data for Revenue charts when available so all tabs (Overview + Metasearch/SEM/Social) show the same filtered data (e.g. when a view is selected). Falls back to pivot-based chart when monthlyData is empty.
+  const chartTimeRangeTyped = chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
+  const effectiveOverviewChartData = useMemo(() => {
+    if (filteredData.monthlyData?.length > 0) {
+      return buildOverviewChartDataFromMonthlyData(filteredData.monthlyData, chartTimeRangeTyped);
+    }
+    return overviewChartData;
+  }, [filteredData.monthlyData, chartTimeRangeTyped, overviewChartData]);
+
+  const effectiveChannelChartData = useMemo(() => {
+    if (filteredData.monthlyData?.length > 0) {
+      return buildChannelChartDataFromMonthlyData(filteredData.monthlyData, chartTimeRangeTyped);
+    }
+    return channelChartData;
+  }, [filteredData.monthlyData, chartTimeRangeTyped, channelChartData]);
 
   // Get channel totals from monthly_data table (same source as SlideDataBrowser)
   // This is the correct source of truth for the data
@@ -4069,7 +4109,7 @@ export default function SlideViewPage() {
     selectedYear
   );
 
-  // Budget monthly data for tables (full structure with all fields) - using hook
+  // Budget monthly data for tables (full structure with all fields). When display data is from API, use apiMonthlyChannelMetrics.
   const budgetMonthlyData = useBudgetMonthlyData(
     effectivePivotData,
     selectedViewId,
@@ -4077,7 +4117,8 @@ export default function SlideViewPage() {
     selectedYear,
     filteredData.hasFilters,
     filteredData.getFilteredRowsForChannel,
-    filterValues
+    filterValues,
+    filteredData.displayDataFromApi ? filteredData.apiMonthlyChannelMetrics : undefined
   );
 
   const totalBudget = budgetData.reduce((sum, m) => sum + m.budget, 0);
@@ -4620,11 +4661,11 @@ export default function SlideViewPage() {
               slideReportId={slideReportId}
               isSlideReportsLoading={isSlideReportsLoading}
               slideReport={slideReport}
-              isLoadingData={isLoadingData}
+              isLoadingData={isLoadingSlideContent}
               isLoadingMonthlyData={isLoadingMonthlyData}
               currentTotals={currentTotals}
               breakdownTotals={breakdownTotals}
-              overviewChartData={overviewChartData}
+              overviewChartData={effectiveOverviewChartData}
               chartTimeRange={chartTimeRange}
               setChartTimeRange={setChartTimeRange}
               selectedYear={selectedYear}
@@ -4650,10 +4691,10 @@ export default function SlideViewPage() {
               slideReportId={slideReportId}
               slideReport={slideReport}
               pivotData={effectivePivotData}
-              isLoadingData={isLoadingData}
+              isLoadingData={isLoadingSlideContent}
               breakdownTotals={breakdownTotals}
               currentTotals={currentTotals}
-              channelChartData={channelChartData}
+              channelChartData={effectiveChannelChartData}
               chartTimeRange={chartTimeRange}
               setChartTimeRange={setChartTimeRange}
               groupByDimension={groupByDimension}
@@ -4677,6 +4718,8 @@ export default function SlideViewPage() {
               UnifiedBreakdownTable={UnifiedBreakdownTable}
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
               isAISummaryDisabled={!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all'}
+              displayDataFromApi={filteredData.displayDataFromApi}
+              apiBreakdowns={filteredData.apiBreakdowns}
             />
 
             <ChannelTab
@@ -4685,10 +4728,10 @@ export default function SlideViewPage() {
               slideReportId={slideReportId}
               slideReport={slideReport}
               pivotData={effectivePivotData}
-              isLoadingData={isLoadingData}
+              isLoadingData={isLoadingSlideContent}
               breakdownTotals={breakdownTotals}
               currentTotals={currentTotals}
-              channelChartData={channelChartData}
+              channelChartData={effectiveChannelChartData}
               chartTimeRange={chartTimeRange}
               setChartTimeRange={setChartTimeRange}
               groupByDimension={groupByDimension}
@@ -4712,6 +4755,8 @@ export default function SlideViewPage() {
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
               isAISummaryDisabled={!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all'}
               summaryText={summaries.find(s => s.tab === 'sem' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
+              displayDataFromApi={filteredData.displayDataFromApi}
+              apiBreakdowns={filteredData.apiBreakdowns}
             />
 
             <ChannelTab
@@ -4720,10 +4765,10 @@ export default function SlideViewPage() {
               slideReportId={slideReportId}
               slideReport={slideReport}
               pivotData={effectivePivotData}
-              isLoadingData={isLoadingData}
+              isLoadingData={isLoadingSlideContent}
               breakdownTotals={breakdownTotals}
               currentTotals={currentTotals}
-              channelChartData={channelChartData}
+              channelChartData={effectiveChannelChartData}
               chartTimeRange={chartTimeRange}
               setChartTimeRange={setChartTimeRange}
               groupByDimension={groupByDimension}
@@ -4747,6 +4792,8 @@ export default function SlideViewPage() {
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
               isAISummaryDisabled={!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all'}
               summaryText={summaries.find(s => s.tab === 'social' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
+              displayDataFromApi={filteredData.displayDataFromApi}
+              apiBreakdowns={filteredData.apiBreakdowns}
             />
 
             <BudgetTab
@@ -4758,6 +4805,7 @@ export default function SlideViewPage() {
               views={views}
               handleApplyView={handleApplyView}
               isLoadingViewBudgets={isLoadingViewBudgets}
+              isLoadingDisplayData={filteredData.isLoadingDisplayData ?? false}
               budgetMonthlyData={budgetMonthlyData}
               slideReport={slideReport}
               pivotData={effectivePivotData}

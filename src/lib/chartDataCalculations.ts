@@ -10,7 +10,7 @@ import {
   ensureMinimumChartData,
 } from './slideViewHelpers';
 import type { SlideReportPivotData } from '@/types/slideReports';
-import type { RawDataRow } from '@/types/slideView';
+import type { RawDataRow, MonthlyDataPoint } from '@/types/slideView';
 
 export type ChartTimeRange =
   | 'this_year'
@@ -356,4 +356,71 @@ export function processChannelChartData(
     month: `${m.month.slice(0, 3)} ${m.year.toString().slice(-2)}`,
     revenue: m.revenue,
   }));
+}
+
+/**
+ * Build overview chart data from API monthly_data (e.g. when display data is from API and a view is selected).
+ * Always outputs the full chart time range (e.g. 6 months for "last_6_months") with zeros for months without data,
+ * so the chart never shows only 1 month when year/month filters are applied.
+ */
+export function buildOverviewChartDataFromMonthlyData(
+  monthlyData: MonthlyDataPoint[],
+  chartTimeRange: ChartTimeRange
+): Array<{ label: string; month: string; year: number; total: number }> {
+  const monthsInRange = generateMonthsInTimeRange(chartTimeRange);
+  if (!monthsInRange.length) return [];
+
+  const dataByKey = new Map<string, { metasearch: number; sem: number; social: number }>();
+  for (const m of monthlyData ?? []) {
+    const key = `${m.year}-${m.month}`;
+    dataByKey.set(key, {
+      metasearch: m.metasearch ?? 0,
+      sem: m.sem ?? 0,
+      social: m.social ?? 0,
+    });
+  }
+
+  return monthsInRange.map(({ year, month }) => {
+    const key = `${year}-${month}`;
+    const data = dataByKey.get(key) ?? { metasearch: 0, sem: 0, social: 0 };
+    const total = data.metasearch + data.sem + data.social;
+    return {
+      label: `${month.slice(0, 3)} ${year.toString().slice(-2)}`,
+      month,
+      year,
+      total,
+    };
+  });
+}
+
+/**
+ * Build per-channel chart data from API monthly_data.
+ * Always outputs the full chart time range (e.g. 6 months) with zeros for months without data.
+ */
+export function buildChannelChartDataFromMonthlyData(
+  monthlyData: MonthlyDataPoint[],
+  chartTimeRange: ChartTimeRange
+): Record<'metasearch' | 'sem' | 'social', Array<{ month: string; revenue: number }>> {
+  const channels: ('metasearch' | 'sem' | 'social')[] = ['metasearch', 'sem', 'social'];
+  const result = { metasearch: [] as Array<{ month: string; revenue: number }>, sem: [], social: [] };
+
+  const monthsInRange = generateMonthsInTimeRange(chartTimeRange);
+  if (!monthsInRange.length) return result;
+
+  const dataByChannelAndKey = new Map<string, number>();
+  for (const m of monthlyData ?? []) {
+    const key = `${m.year}-${m.month}`;
+    for (const ch of channels) {
+      const rev = (m as Record<string, number>)[ch] ?? 0;
+      dataByChannelAndKey.set(`${ch}-${key}`, rev);
+    }
+  }
+
+  for (const ch of channels) {
+    result[ch] = monthsInRange.map(({ year, month }) => ({
+      month: `${month.slice(0, 3)} ${year.toString().slice(-2)}`,
+      revenue: dataByChannelAndKey.get(`${ch}-${year}-${month}`) ?? 0,
+    }));
+  }
+  return result;
 }

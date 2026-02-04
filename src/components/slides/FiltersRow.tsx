@@ -168,7 +168,8 @@ export function FiltersRow({
         const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
         const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
         const localFilterConfig = filterConfigs?.[currentChannel];
-        const filterDimIds = savedFilterConfigs?.filterDimensionIds || localFilterConfig?.filterDimensionIds || [];
+        const rawFilterDimIds = savedFilterConfigs?.filterDimensionIds || localFilterConfig?.filterDimensionIds || [];
+        const filterDimIds = [...new Set(rawFilterDimIds)];
         
         if (filterDimIds.length === 0) return null;
         
@@ -183,10 +184,26 @@ export function FiltersRow({
               // Check if filter is explicitly set (exists in filterValues) vs not set at all
               const isFilterSet = filterValues[currentChannel] && filterDimId in filterValues[currentChannel];
               const selectedValues = isFilterSet ? (selectedFilterValues || []) : filterValuesList;
-              const pendingValues = pendingFilterValues[currentChannel]?.[filterDimId] ?? (isFilterSet ? (selectedFilterValues || []) : filterValuesList);
+              // Dedupe by normalized key (trim + lowercase) so "Account 1" and "Account 1 " or "account 1" count as one
+              function uniqueByNormalized(arr: string[]): string[] {
+                const seen = new Set<string>();
+                const result: string[] = [];
+                for (const v of arr) {
+                  const key = String(v).trim().toLowerCase();
+                  if (key && !seen.has(key)) {
+                    seen.add(key);
+                    result.push(String(v).trim());
+                  }
+                }
+                return result;
+              }
+              const uniqueSelected = uniqueByNormalized(selectedValues);
+              const uniqueFilterList = uniqueByNormalized(filterValuesList);
+              const pendingValues = pendingFilterValues[currentChannel]?.[filterDimId] ?? (isFilterSet ? (selectedFilterValues || []) : uniqueFilterList);
+              const uniquePending = uniqueByNormalized(pendingValues);
               // "All" means all values are selected, not when filter is not set
-              const isAllSelected = isFilterSet ? selectedValues.length === filterValuesList.length : true;
-              const hasValues = filterValuesList.length > 0;
+              const isAllSelected = isFilterSet ? uniqueSelected.length === uniqueFilterList.length : true;
+              const hasValues = uniqueFilterList.length > 0;
               
               const popoverKey = `${currentChannel}-${filterDimId}`;
               const isPopoverOpen = openFilterPopovers[popoverKey] || false;
@@ -217,21 +234,21 @@ export function FiltersRow({
                       // Initialize pending values based on current state
                       const isFilterCurrentlySet = filterValues[currentChannel] && filterDimId in filterValues[currentChannel];
                       if (isFilterCurrentlySet) {
-                        // Filter is set - use current selection (could be empty array)
+                        // Filter is set - use current selection deduplicated (avoid "2 selected" when only 1 unique)
                         setPendingFilterValues(prev => ({
                           ...prev,
                           [currentChannel]: {
                             ...prev[currentChannel],
-                            [filterDimId]: selectedFilterValues || [],
+                            [filterDimId]: uniqueByNormalized(selectedFilterValues || []),
                           },
                         }));
                       } else {
-                        // Filter not set - default to all selected
+                        // Filter not set - default to all selected (dedupe in case list has duplicates)
                         setPendingFilterValues(prev => ({
                           ...prev,
                           [currentChannel]: {
                             ...prev[currentChannel],
-                            [filterDimId]: [...filterValuesList],
+                            [filterDimId]: [...uniqueFilterList],
                           },
                         }));
                       }
@@ -248,11 +265,20 @@ export function FiltersRow({
                           
                           const values = await loadFilterDimensionValues(currentChannel, filterDimId);
                           if (values.length > 0) {
+                            const seen = new Set<string>();
+                            const uniqueValues: string[] = [];
+                            for (const v of values) {
+                              const key = String(v).trim().toLowerCase();
+                              if (key && !seen.has(key)) {
+                                seen.add(key);
+                                uniqueValues.push(String(v).trim());
+                              }
+                            }
                             setFilterDimensionValues(prev => ({
                               ...prev,
                               [currentChannel]: {
                                 ...prev[currentChannel],
-                                [filterDimId]: values,
+                                [filterDimId]: uniqueValues,
                               },
                             }));
                               
@@ -290,11 +316,11 @@ export function FiltersRow({
                             <span className="truncate">
                               {isAllSelected 
                                 ? 'All'
-                                : selectedValues.length === 0
+                                : uniqueSelected.length === 0
                                   ? '0 selected'
-                                  : selectedValues.length === 1
-                                    ? selectedValues[0]
-                                    : `${selectedValues.length} selected`}
+                                  : uniqueSelected.length === 1
+                                    ? uniqueSelected[0]
+                                    : `${uniqueSelected.length} selected`}
                             </span>
                             <ChevronRight className="h-4 w-4 opacity-50 rotate-90 ml-2" />
                           </Button>
@@ -314,7 +340,7 @@ export function FiltersRow({
                                     ...prev,
                                     [currentChannel]: {
                                       ...prev[currentChannel],
-                                      [filterDimId]: [...filterValuesList],
+                                      [filterDimId]: [...uniqueFilterList],
                                     },
                                   }));
                                 }}
@@ -379,13 +405,13 @@ export function FiltersRow({
 
                                 const searchTerm = filterSearchTerms[`${currentChannel}-${filterDimId}`] || '';
                                 const filteredList = searchTerm
-                                  ? filterValuesList.filter(v => 
+                                  ? uniqueFilterList.filter(v => 
                                       v.toLowerCase().includes(searchTerm.toLowerCase())
                                     )
-                                  : filterValuesList;
+                                  : uniqueFilterList;
                                 
                                 return filteredList.map(value => {
-                                  const isSelected = pendingValues.includes(value);
+                                  const isSelected = uniquePending.includes(value);
                                   return (
                                     <div
                                       key={value}
@@ -394,9 +420,12 @@ export function FiltersRow({
                                         if (isReadOnlyMode) return; // Prevent changes in read-only mode
                                         setPendingFilterValues(prev => {
                                           const current = prev[currentChannel]?.[filterDimId] || [];
+                                          const currentUnique = [...new Set(current)];
                                           const newValues = isSelected
-                                            ? current.filter(v => v !== value)
-                                            : [...current, value];
+                                            ? currentUnique.filter(v => v !== value)
+                                            : currentUnique.includes(value)
+                                              ? currentUnique
+                                              : [...currentUnique, value];
                                           return {
                                             ...prev,
                                             [currentChannel]: {
@@ -449,7 +478,7 @@ export function FiltersRow({
                                   ...prev,
                                   [currentChannel]: {
                                     ...prev[currentChannel],
-                                    [filterDimId]: pendingValues,
+                                    [filterDimId]: uniqueByNormalized(pendingValues),
                                   },
                                 }));
                                 // Close the popover after applying

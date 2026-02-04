@@ -50,6 +50,9 @@ interface ChannelTabProps {
   onAISummaryClick?: () => void;
   isAISummaryDisabled?: boolean;
   summaryText?: string | null;
+  /** When true, breakdown table uses apiBreakdowns instead of computing from raw rows. */
+  displayDataFromApi?: boolean;
+  apiBreakdowns?: { groupBy: string; rows: Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number; cpc?: number; roas?: number; costOfSale?: number }>; expanded?: Record<string, Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>> };
 }
 
 export function ChannelTab({
@@ -85,6 +88,8 @@ export function ChannelTab({
   onAISummaryClick,
   isAISummaryDisabled,
   summaryText,
+  displayDataFromApi,
+  apiBreakdowns,
 }: ChannelTabProps) {
   const gradientId = `${channel}Gradient`;
   
@@ -176,6 +181,8 @@ export function ChannelTab({
                     filterValues={filterValues}
                     filterDimensionValues={filterDimensionValues}
                     onTotalsChange={(totals) => setBreakdownTotals(prev => ({ ...prev, [channel]: totals }))}
+                    displayDataFromApi={displayDataFromApi}
+                    apiBreakdowns={apiBreakdowns}
                     availableDimensions={[
                       ...new Map([
                         ...(breakdownDimensions[channel] || []).filter(dim => 
