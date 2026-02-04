@@ -82,6 +82,8 @@ import {
 import type { RawDataRow, MetricData } from "@/types/slideView";
 
 const GROSS_PROFIT_RATE = 0.15;
+/** Gross profit for Metasearch + Link Type = Google Organic: Revenue * 3% */
+const GROSS_PROFIT_RATE_GOOGLE_ORGANIC = 0.03;
 
 // Unified breakdown table component with Group by / Breakdown by dropdowns
 // Uses data from pivot_data.channels[channel].monthlyBreakdowns for month-specific data
@@ -679,7 +681,16 @@ const UnifiedBreakdownTable = ({
                       <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.revenue, 'currency')}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.roas.toFixed(1)}x</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.costOfSale < 0.01 ? item.metrics.costOfSale.toFixed(4) : item.metrics.costOfSale.toFixed(2)}%</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.revenue * GROSS_PROFIT_RATE - item.metrics.cost, 'currency')}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {formatNumber(
+                          (selectedChannel === 'metasearch' &&
+                            (breakdownByDim?.name ?? '').trim().toLowerCase() === 'link type' &&
+                            (item.value ?? '').trim().toLowerCase() === 'google organic')
+                            ? item.metrics.revenue * GROSS_PROFIT_RATE_GOOGLE_ORGANIC
+                            : item.metrics.revenue * GROSS_PROFIT_RATE - item.metrics.cost,
+                          'currency'
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </>
@@ -840,15 +851,21 @@ export default function SlideViewPage() {
     const channels: SlideReportPivotData['channels'] = { ...base.channels };
     for (const [ch, tableChannel] of Object.entries(fromTables)) {
       const baseChannel = base.channels?.[ch];
+      // Prefer table channel's filterUniqueValues when present (merged from all slices = full union);
+      // otherwise fall back to base so filter dropdowns show all options e.g. all hotels.
+      const tableFilterValues = tableChannel.filterUniqueValues && Object.keys(tableChannel.filterUniqueValues).length > 0
+        ? tableChannel.filterUniqueValues
+        : undefined;
+      const baseFilterValues = baseChannel?.filterUniqueValues && Object.keys(baseChannel.filterUniqueValues).length > 0
+        ? baseChannel.filterUniqueValues
+        : undefined;
       channels[ch] = {
         ...tableChannel,
         rawDataRows: baseChannel?.rawDataRows ?? tableChannel.rawDataRows ?? [],
         dimensionMap: (baseChannel?.dimensionMap && Object.keys(baseChannel.dimensionMap).length > 0)
           ? baseChannel.dimensionMap
           : (tableChannel.dimensionMap || {}),
-        filterUniqueValues: (baseChannel?.filterUniqueValues && Object.keys(baseChannel.filterUniqueValues).length > 0)
-          ? baseChannel.filterUniqueValues
-          : (tableChannel.filterUniqueValues || {}),
+        filterUniqueValues: tableFilterValues ?? baseFilterValues ?? {},
       };
     }
     return { ...base, channels };
