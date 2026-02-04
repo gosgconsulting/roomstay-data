@@ -3741,24 +3741,41 @@ export default function SlideViewPage() {
       setRefreshStep(2);
 
       const now = new Date();
-      // When user has a specific month selected, refresh that month so cached data (e.g. after dedupe) updates
+      // End of range: selected month/year if set, otherwise current month/year
       const useSelectedMonth = selectedMonth && selectedMonth !== 'all' && selectedYear && selectedYear !== 'all';
-      const refreshYear = useSelectedMonth ? parseInt(selectedYear, 10) : now.getFullYear();
-      const refreshMonth = useSelectedMonth ? MONTH_NAMES.indexOf(selectedMonth) + 1 : now.getMonth() + 1;
+      const endYear = useSelectedMonth ? parseInt(selectedYear, 10) : now.getFullYear();
+      const endMonth = useSelectedMonth ? MONTH_NAMES.indexOf(selectedMonth) + 1 : now.getMonth() + 1;
+
+      // Build list of months from sinceMonth/sinceYear through end (inclusive)
+      const startMonthNum = MONTH_NAMES.indexOf(sinceMonth) + 1; // 1-12
+      const monthsToRefresh: { year: number; month: number }[] = [];
+      for (let y = sinceYear; y <= endYear; y++) {
+        const mStart = y === sinceYear ? startMonthNum : 1;
+        const mEnd = y === endYear ? endMonth : 12;
+        for (let m = mStart; m <= mEnd; m++) {
+          monthsToRefresh.push({ year: y, month: m });
+        }
+      }
+
+      if (monthsToRefresh.length === 0) {
+        throw new Error('No months to refresh for the selected date range.');
+      }
 
       const headers: Record<string, string> = {};
       const apiKey = import.meta.env.VITE_REFRESH_SLIDE_REPORT_API_KEY;
       if (apiKey) headers['x-api-key'] = apiKey;
 
-      const { data: result, error: invokeError } = await supabase.functions.invoke('refresh-slide-report', {
-        body: { slideReportId, year: refreshYear, month: refreshMonth },
-        headers: Object.keys(headers).length > 0 ? headers : undefined,
-      });
+      for (const { year: refreshYear, month: refreshMonth } of monthsToRefresh) {
+        const { data: result, error: invokeError } = await supabase.functions.invoke('refresh-slide-report', {
+          body: { slideReportId, year: refreshYear, month: refreshMonth },
+          headers: Object.keys(headers).length > 0 ? headers : undefined,
+        });
 
-      if (invokeError) throw invokeError;
-      const response = result as { success?: boolean; error?: string; summary?: string } | null;
-      if (response && response.success === false) {
-        throw new Error(response.error || 'Refresh failed');
+        if (invokeError) throw invokeError;
+        const response = result as { success?: boolean; error?: string; summary?: string } | null;
+        if (response && response.success === false) {
+          throw new Error(response.error || 'Refresh failed');
+        }
       }
 
       setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'complete', 4: 'complete', 5: 'loading' }));
@@ -3791,10 +3808,15 @@ export default function SlideViewPage() {
       await new Promise(resolve => setTimeout(resolve, 500));
       setIsRefreshModalOpen(false);
 
-      const monthName = new Date(refreshYear, refreshMonth - 1).toLocaleString('default', { month: 'long' });
+      const first = monthsToRefresh[0];
+      const last = monthsToRefresh[monthsToRefresh.length - 1];
+      const rangeLabel =
+        monthsToRefresh.length === 1
+          ? `${new Date(first.year, first.month - 1).toLocaleString('default', { month: 'long' })} ${first.year}`
+          : `${new Date(first.year, first.month - 1).toLocaleString('default', { month: 'long' })} ${first.year} – ${new Date(last.year, last.month - 1).toLocaleString('default', { month: 'long' })} ${last.year}`;
       toast({
         title: "Data refreshed",
-        description: `Refreshed ${monthName} ${refreshYear} for ${validChannels.length} channel(s).`,
+        description: `Refreshed ${monthsToRefresh.length} month(s) (${rangeLabel}) for ${validChannels.length} channel(s).`,
       });
     } catch (error) {
       console.error("[refresh] Error:", error);
