@@ -28,6 +28,7 @@ import { useOverviewMetrics } from "@/hooks/useOverviewMetrics";
 import { useComparisonMetrics, useChannelComparisonMetrics } from "@/hooks/useComparisonMetrics";
 import { useKPICards, useReportKPICards } from "@/hooks/useKPICards";
 import { useOverviewChartData, useAllChannelChartData } from "@/hooks/useChartData";
+import { useChannelChartDataFromTable } from "@/hooks/useChannelChartDataFromTable";
 import { buildOverviewChartDataFromMonthlyData, buildChannelChartDataFromMonthlyData } from "@/lib/chartDataCalculations";
 import { useBudgetData, useBudgetMonthlyData } from "@/hooks/useBudgetData";
 import { calculateReportBreakdown, calculateReportTotal } from "@/lib/metricsCalculations";
@@ -1191,8 +1192,10 @@ export default function SlideViewPage() {
     chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'
   );
 
-  // Use filtered monthly_data for Revenue charts when available so all tabs (Overview + Metasearch/SEM/Social) show the same filtered data (e.g. when a view is selected). Falls back to pivot-based chart when monthlyData is empty.
+  // Channel Revenue chart: prefer data from slide_report_channel_month_data (no edge function); fallback to display-data monthlyData or pivot.
   const chartTimeRangeTyped = chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
+  const { data: channelChartDataFromTable } = useChannelChartDataFromTable(slideReportId, chartTimeRangeTyped);
+
   const effectiveOverviewChartData = useMemo(() => {
     if (filteredData.monthlyData?.length > 0) {
       return buildOverviewChartDataFromMonthlyData(filteredData.monthlyData, chartTimeRangeTyped);
@@ -1201,11 +1204,14 @@ export default function SlideViewPage() {
   }, [filteredData.monthlyData, chartTimeRangeTyped, overviewChartData]);
 
   const effectiveChannelChartData = useMemo(() => {
+    if (channelChartDataFromTable && (channelChartDataFromTable.metasearch?.length > 0 || channelChartDataFromTable.sem?.length > 0 || channelChartDataFromTable.social?.length > 0)) {
+      return channelChartDataFromTable;
+    }
     if (filteredData.monthlyData?.length > 0) {
       return buildChannelChartDataFromMonthlyData(filteredData.monthlyData, chartTimeRangeTyped);
     }
     return channelChartData;
-  }, [filteredData.monthlyData, chartTimeRangeTyped, channelChartData]);
+  }, [channelChartDataFromTable, filteredData.monthlyData, chartTimeRangeTyped, channelChartData]);
 
   // Get channel totals from monthly_data table (same source as SlideDataBrowser)
   // This is the correct source of truth for the data
