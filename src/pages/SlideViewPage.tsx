@@ -154,6 +154,7 @@ const UnifiedBreakdownTable = ({
 
   // Get breakdown data from pivotData based on selected dimension and month
   // Applies filterValues if they are set. When displayDataFromApi and apiBreakdowns are set, use API data (no heavy calc).
+  // When group-by is e.g. Link Type and breakdown-by is Hotel, row totals must respect the Hotel filter: recompute from filtered expanded rows.
   const groupedData = useMemo(() => {
     if (displayDataFromApi && apiBreakdowns?.rows?.length) {
       const groupByDimId = availableDimensions.find(d => d.id === groupBy)?.id;
@@ -168,14 +169,46 @@ const UnifiedBreakdownTable = ({
         if (allowedSet && !allowedSet.has(String(row.name).trim())) return false;
         return true;
       });
+
+      // When a breakdown-by filter is active (e.g. Hotel), recompute each group row from filtered expanded data
+      // so that row totals and table total match the selected hotels (e.g. Metasearch Jan 2026, group by Link Type, 4 hotels).
+      const breakdownByDimId = availableDimensions.find(d => d.id === breakdownBy)?.id;
+      const breakdownFilterValues = breakdownByDimId && selectedChannel && selectedChannel !== 'overview'
+        ? filterValues?.[selectedChannel]?.[breakdownByDimId]
+        : undefined;
+      const breakdownAllowedSet = breakdownFilterValues?.length
+        ? new Set(breakdownFilterValues.map((v: string) => String(v).trim()))
+        : null;
+      const useFilteredExpandedForTotals = Boolean(
+        breakdownAllowedSet && apiBreakdowns.expanded && Object.keys(apiBreakdowns.expanded).length > 0
+      );
+
       return rows.map((row) => {
-        const cleanData = {
-          impressions: Number(row.impressions) || 0,
-          clicks: Number(row.clicks) || 0,
-          cost: Number(row.cost) || 0,
-          revenue: Number(row.revenue) || 0,
-          bookings: Number(row.bookings) || 0,
-        };
+        let cleanData: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number };
+        if (useFilteredExpandedForTotals && apiBreakdowns.expanded?.[row.name]) {
+          const expandedRows = apiBreakdowns.expanded[row.name].filter(
+            (r: { name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) =>
+              r.name != null && breakdownAllowedSet!.has(String(r.name).trim())
+          );
+          cleanData = expandedRows.reduce(
+            (acc, r) => ({
+              impressions: acc.impressions + (Number(r.impressions) || 0),
+              clicks: acc.clicks + (Number(r.clicks) || 0),
+              cost: acc.cost + (Number(r.cost) || 0),
+              revenue: acc.revenue + (Number(r.revenue) || 0),
+              bookings: acc.bookings + (Number(r.bookings) || 0),
+            }),
+            { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
+          );
+        } else {
+          cleanData = {
+            impressions: Number(row.impressions) || 0,
+            clicks: Number(row.clicks) || 0,
+            cost: Number(row.cost) || 0,
+            revenue: Number(row.revenue) || 0,
+            bookings: Number(row.bookings) || 0,
+          };
+        }
         const metrics = calculateDerivedMetrics(cleanData);
         return { groupValue: row.name, metrics, rawData: cleanData };
       });
@@ -344,7 +377,7 @@ const UnifiedBreakdownTable = ({
       });
     
     return result;
-  }, [displayDataFromApi, apiBreakdowns, pivotData, groupBy, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear]);
+  }, [displayDataFromApi, apiBreakdowns, pivotData, groupBy, breakdownBy, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear]);
 
   // Get breakdown data for expanded row (also uses month-specific data)
   // This should show breakdown data ONLY for the expanded parent row value
