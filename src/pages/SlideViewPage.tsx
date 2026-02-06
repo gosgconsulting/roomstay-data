@@ -19,10 +19,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
-import { useSlideReportViews, useCreateSlideReportView, useUpdateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
+import { useSlideReportPage } from "@/hooks/useSlideReportPage";
+import { isMetasearchJan2026, getJan2026BreakdownRowsForTable } from "@/hooks/useMetasearchJan2026RawRows";
 import { useChannelMetrics } from "@/hooks/useChannelMetrics";
-import { useSlideReportDisplayData } from "@/hooks/useSlideReportDisplayData";
 import { useEditSourceModal } from "@/hooks/useEditSourceModal";
 import { useDataLoadingCache } from "@/hooks/useDataLoadingCache";
 import { useOverviewMetrics } from "@/hooks/useOverviewMetrics";
@@ -53,13 +52,12 @@ import { PriceCheckTab } from "@/components/slides/PriceCheckTab";
 import { RefreshDataModal } from "@/components/slides/RefreshDataModal";
 import { AISummaryButton } from "@/components/slides/AISummaryButton";
 import { SlideViewAISummaryModal } from "@/components/slides/SlideViewAISummaryModal";
-import { useSlideReportSummaries, useGetSummaryForTab } from "@/hooks/useSlideReportSummaries";
-import { useSlideReportChannelData } from "@/hooks/useSlideReportChannelData";
+import { useGetSummaryForTab } from "@/hooks/useSlideReportSummaries";
 import { extractMinimalAIData } from "@/lib/extractMinimalAIData";
 import { isWithinInterval } from "date-fns";
 import { aggregateMetrics } from "@/components/AISummaryPivotTable";
 import { BASE_METRICS, CHANNEL_REPORT_IDS, MONTH_NAMES } from "@/constants/slideViewConstants";
-import { getAccountReportIds, type AccountReportIds } from "@/lib/accountReportIds";
+import type { AccountReportIds } from "@/lib/accountReportIds";
 import {
   calculateDerivedMetrics,
   hasActiveFilters,
@@ -104,6 +102,7 @@ const UnifiedBreakdownTable = ({
   onTotalsChange,
   displayDataFromApi,
   apiBreakdowns,
+  suppressExpandedBreakdown,
 }: {
   groupBy: string;
   breakdownBy: string;
@@ -122,6 +121,8 @@ const UnifiedBreakdownTable = ({
   /** When set, use pre-computed breakdowns from display-data API instead of computing from raw rows. */
   displayDataFromApi?: boolean;
   apiBreakdowns?: { groupBy: string; rows: Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number; cpc?: number; roas?: number; costOfSale?: number }>; expanded?: Record<string, Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>> };
+  /** When true, do not show expanded sub-rows (e.g. to avoid wrong API expanded data for Metasearch Jan 2026). */
+  suppressExpandedBreakdown?: boolean;
 }) => {
   // Auto-select defaults when dimensions are available
   useEffect(() => {
@@ -343,6 +344,7 @@ const UnifiedBreakdownTable = ({
   // This should show breakdown data ONLY for the expanded parent row value
   const getExpandedBreakdownData = useMemo(() => {
     if (!expandedRow || !breakdownBy) return [];
+    if (suppressExpandedBreakdown) return [];
 
     if (displayDataFromApi && apiBreakdowns?.expanded) {
       const expandedRows = apiBreakdowns.expanded[expandedRow];
@@ -383,7 +385,8 @@ const UnifiedBreakdownTable = ({
       : false;
     
     const allBreakdowns: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
-    
+    let hadRawDataRows = false;
+
     for (const channel of channelsToCheck) {
       const channelData = pivotData.channels[channel];
       if (!channelData) continue;
@@ -407,6 +410,7 @@ const UnifiedBreakdownTable = ({
       
       // Get raw data rows
       const rawDataRows = (channelData as any).rawDataRows || [];
+      if (rawDataRows.length > 0) hadRawDataRows = true;
       const expandedDimensionMap = (channelData as any).dimensionMap || {};
       
       // Apply filters if they exist (pass dimensionMap so name-keyed data e.g. "Link Type" is matched)
@@ -472,8 +476,11 @@ const UnifiedBreakdownTable = ({
       });
     }
 
-    // When no raw data (e.g. data from channel tables), use pre-computed breakdown for breakdownBy dimension so expanded rows show "Breakdown by" rows
-    if (Object.keys(allBreakdowns).length === 0 && pivotData?.channels) {
+    // Only use pre-computed breakdown when there were NO rawDataRows (e.g. data from channel month table only).
+    // If we had rawDataRows but they don't have the breakdown dimension for this expanded group (e.g. Jan 2026
+    // override has hotel-only rows), do NOT show report-level breakdown under each hotel — that would show
+    // wrong totals (same Paid/Google Organic for every hotel).
+    if (Object.keys(allBreakdowns).length === 0 && pivotData?.channels && !hadRawDataRows) {
       for (const channel of channelsToCheck) {
         const channelData = pivotData.channels[channel];
         if (!channelData) continue;
@@ -512,7 +519,7 @@ const UnifiedBreakdownTable = ({
         value,
         metrics: calculateDerivedMetrics(data),
       }));
-  }, [expandedRow, breakdownBy, displayDataFromApi, apiBreakdowns, pivotData, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear, groupBy]);
+  }, [expandedRow, breakdownBy, suppressExpandedBreakdown, displayDataFromApi, apiBreakdowns, pivotData, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear, groupBy]);
 
   // Calculate totals - use rawData to ensure we're summing base metrics only
   // Then recalculate derived metrics (CPC, ROAS, Cost of Sale) from the aggregated totals
@@ -741,6 +748,24 @@ export default function SlideViewPage() {
   const [groupByDimension, setGroupByDimension] = useState<string>('hotel');
   const [breakdownByDimension, setBreakdownByDimension] = useState<string>('link_type');
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null); // Selected view ID (null = Master, 'unsaved' = Unsaved)
+  // Filter state (declared early for useSlideReportPage)
+  const [filterValues, setFilterValues] = useState({
+    metasearch: {},
+    sem: {},
+    social: {},
+    'price-check': {},
+    'booking': {},
+  } as Record<string, Record<string, string[]>>);
+  const [filterDimensionValues, setFilterDimensionValues] = useState({
+    metasearch: {},
+    sem: {},
+    social: {},
+  } as Record<string, Record<string, string[]>>);
+  const [filterValuesLoading, setFilterValuesLoading] = useState({
+    metasearch: {},
+    sem: {},
+    social: {},
+  } as Record<string, Record<string, boolean>>);
   const [isSaveViewDialogOpen, setIsSaveViewDialogOpen] = useState(false);
   const [isSaveOrUpdateViewDialogOpen, setIsSaveOrUpdateViewDialogOpen] = useState(false);
   const isApplyingViewRef = useRef(false); // Track when we're applying a view to avoid triggering "Unsaved"
@@ -831,154 +856,74 @@ export default function SlideViewPage() {
   // Check for share authentication when user is not authenticated
   const [isSharedAccess, setIsSharedAccess] = useState(false);
 
-  // Slide report state - moved before filteredMonthlyData so it's available
-  const [slideReportId, setSlideReportId] = useState<string | null>(null);
-  const { data: slideReport } = useSlideReport(slideReportId);
-  const { data: channelDataFromTables } = useSlideReportChannelData(
+  // Single hook for report page: report data, display data, views, summaries, mutations, account IDs, budgets, monthly data
+  const reportPage = useSlideReportPage({
+    accountId,
+    user,
+    slideType,
+    searchParams,
+    filterValues,
+    filterDimensionValues,
+    selectedYear,
+    selectedMonth,
+    selectedTab,
+    comparisonType,
+    chartTimeRange,
+    groupByDimensionId: groupByDimension,
+    breakdownByDimensionId: breakdownByDimension,
+    selectedViewId,
+    dynamicChannelTotals,
+  });
+  const {
     slideReportId,
-    slideReport?.date_range ?? null
-  );
-  const { data: slideReports, isLoading: isSlideReportsLoading } = useSlideReports(accountId || null);
+    setSlideReportId,
+    slideReport,
+    effectivePivotData,
+    filteredData,
+    views,
+    summaries,
+    monthlyDataRecords,
+    viewBudgets,
+    accountReportIds,
+    getReportIdForChannel,
+    availableChannels,
+    isSlideReportsLoading,
+    isLoadingViews,
+    isLoadingViewBudgets,
+    isLoadingMonthlyData,
+    needEditSourceForMasterReport,
+    createSlideReport,
+    updateSlideReport,
+    refreshSlideReportData,
+    createView,
+    updateView,
+    deleteView,
+  } = reportPage;
   const queryClient = useQueryClient();
 
-  // Prefer channel data from slide_report_channel_month_data / year_data when available (e.g. after incremental refresh).
-  // Preserve rawDataRows (and dimensionMap/filterUniqueValues) from base so View/dimension filters still work.
-  const effectivePivotData = useMemo((): SlideReportPivotData | null => {
-    const base = slideReport?.pivot_data as SlideReportPivotData | null;
-    if (!base) return null;
-    const fromTables = channelDataFromTables ?? null;
-    if (!fromTables || Object.keys(fromTables).length === 0) return base;
-    const channels: SlideReportPivotData['channels'] = { ...base.channels };
-    for (const [ch, tableChannel] of Object.entries(fromTables)) {
-      const baseChannel = base.channels?.[ch];
-      // Prefer table channel's filterUniqueValues when present (merged from all slices = full union);
-      // otherwise fall back to base so filter dropdowns show all options e.g. all hotels.
-      const tableFilterValues = tableChannel.filterUniqueValues && Object.keys(tableChannel.filterUniqueValues).length > 0
-        ? tableChannel.filterUniqueValues
-        : undefined;
-      const baseFilterValues = baseChannel?.filterUniqueValues && Object.keys(baseChannel.filterUniqueValues).length > 0
-        ? baseChannel.filterUniqueValues
-        : undefined;
-      channels[ch] = {
-        ...tableChannel,
-        rawDataRows: baseChannel?.rawDataRows ?? tableChannel.rawDataRows ?? [],
-        dimensionMap: (baseChannel?.dimensionMap && Object.keys(baseChannel.dimensionMap).length > 0)
-          ? baseChannel.dimensionMap
-          : (tableChannel.dimensionMap || {}),
-        filterUniqueValues: tableFilterValues ?? baseFilterValues ?? {},
-      };
-    }
-    return { ...base, channels };
-  }, [slideReport?.pivot_data, channelDataFromTables]);
-  const createSlideReport = useCreateSlideReport();
-  const updateSlideReport = useUpdateSlideReport();
-  const refreshSlideReportData = useRefreshSlideReportData();
-  
-  // Views management
-  const { data: views = [], isLoading: isLoadingViews } = useSlideReportViews(slideReportId);
-  const createView = useCreateSlideReportView();
-  const updateView = useUpdateSlideReportView();
-  const deleteView = useDeleteSlideReportView();
-  
-  // Load summaries
-  const { data: summaries = [] } = useSlideReportSummaries(slideReportId);
-
-  // Account-specific report IDs state
-  const [accountReportIds, setAccountReportIds] = useState<AccountReportIds>({
-    metasearch: null,
-    sem: null,
-    social: null,
-  });
-
-  // Load account-specific report IDs when accountId changes
+  // Open Edit Source when master-report and no Master Report exists (once)
+  const hasOpenedEditSourceForMasterRef = useRef(false);
   useEffect(() => {
-    const loadAccountReportIds = async () => {
-      if (!accountId) {
-        setAccountReportIds({ metasearch: null, sem: null, social: null });
-        // Reset selected dimensions when account changes
-        setSelectedDimensions({ metasearch: false, sem: false, social: false });
-        return;
-      }
-
-      try {
-        // Clear cache to ensure fresh lookup
-        const { clearAccountReportIdsCache } = await import("@/lib/accountReportIds");
-        clearAccountReportIdsCache(accountId);
-        
-        const reportIds = await getAccountReportIds(accountId, false); // Don't use cache for fresh lookup
-        setAccountReportIds(reportIds);
-        console.log('[SlideViewPage] Loaded account-specific report IDs for account:', accountId, reportIds);
-        
-        // Log warning if any channel is missing
-        const missingChannels = Object.entries(reportIds)
-          .filter(([_, id]) => !id)
-          .map(([channel]) => channel);
-        if (missingChannels.length > 0) {
-          console.warn(`[SlideViewPage] Missing report IDs for channels: ${missingChannels.join(', ')}. Please ensure reports are created for these channels.`);
-        }
-        
-        // Initialize selectedDimensions based on available channels
-        // Only select channels that have report IDs
-        setSelectedDimensions(prev => {
-          // Only update if we haven't loaded from saved configuration yet
-          // This prevents overwriting saved selections
-          const hasSavedConfig = slideReport?.configuration?.selectedChannels;
-          if (hasSavedConfig) {
-            return prev; // Keep existing selection (will be filtered in loadOrCreateSlideReport)
-          }
-          
-          return {
-            metasearch: !!reportIds.metasearch,
-            sem: !!reportIds.sem,
-            social: !!reportIds.social,
-          };
-        });
-      } catch (error) {
-        console.error('[SlideViewPage] Error loading account report IDs:', error);
-        // Fallback to null if lookup fails
-        setAccountReportIds({ metasearch: null, sem: null, social: null });
-        setSelectedDimensions({ metasearch: false, sem: false, social: false });
-      }
-    };
-
-    loadAccountReportIds();
-  }, [accountId, slideReport?.configuration?.selectedChannels]);
-
-  // Helper function to get report ID for a channel (with fallback to stored report_ids)
-  const getReportIdForChannel = useCallback((channel: 'metasearch' | 'sem' | 'social'): string | null => {
-    // First, try to use stored report_ids from slideReport (if available)
-    // But validate that the stored ID actually belongs to this account
-    if (slideReport?.report_ids) {
-      const storedReportIds = slideReport.report_ids as Record<string, string>;
-      const storedId = storedReportIds[channel];
-      if (storedId) {
-        // Validate that this report ID belongs to the current account
-        // If accountReportIds has a value and it doesn't match, use the account-specific one
-        const accountSpecificId = accountReportIds[channel];
-        if (accountSpecificId && storedId !== accountSpecificId) {
-          console.warn(`[getReportIdForChannel] Stored report ID for ${channel} (${storedId}) doesn't match account-specific ID (${accountSpecificId}). Using account-specific ID.`);
-          return accountSpecificId;
-        }
-        return storedId;
-      }
+    if (needEditSourceForMasterReport && !hasOpenedEditSourceForMasterRef.current) {
+      setIsEditSourceOpen(true);
+      hasOpenedEditSourceForMasterRef.current = true;
     }
-    
-    // Fallback to account-specific report IDs
-    const accountId = accountReportIds[channel];
+  }, [needEditSourceForMasterReport]);
+
+  // Sync selectedDimensions from accountReportIds when no saved config yet
+  useEffect(() => {
     if (!accountId) {
-      console.warn(`[getReportIdForChannel] No report ID found for channel ${channel} in account ${accountId}. Available account report IDs:`, accountReportIds);
+      setSelectedDimensions({ metasearch: false, sem: false, social: false });
+      return;
     }
-    return accountId;
-  }, [slideReport?.report_ids, accountReportIds]);
-
-  // Compute available channels based on account-specific report IDs
-  const availableChannels = useMemo(() => {
-    const channels: ('metasearch' | 'sem' | 'social')[] = [];
-    if (accountReportIds.metasearch) channels.push('metasearch');
-    if (accountReportIds.sem) channels.push('sem');
-    if (accountReportIds.social) channels.push('social');
-    return channels;
-  }, [accountReportIds]);
+    const hasSavedConfig = slideReport?.configuration?.selectedChannels;
+    if (hasSavedConfig) return;
+    setSelectedDimensions({
+      metasearch: !!accountReportIds.metasearch,
+      sem: !!accountReportIds.sem,
+      social: !!accountReportIds.social,
+    });
+  }, [accountId, accountReportIds.metasearch, accountReportIds.sem, accountReportIds.social, slideReport?.configuration?.selectedChannels]);
 
   // Check for share authentication when user is not authenticated (moved after slideReportId declaration)
   useEffect(() => {
@@ -1105,101 +1050,9 @@ export default function SlideViewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, views.length, isReadOnlyMode, slideReportId]);
 
-  // Monthly data from database (same source as SlideDataBrowser)
-  const [monthlyDataRecords, setMonthlyDataRecords] = useState<Array<{
-    id: string;
-    slide_report_id: string;
-    year: number;
-    month: number;
-    channel: string;
-    metrics: ChannelMetrics;
-    breakdowns: Record<string, BreakdownRow[]>;
-    row_count: number;
-    computed_at: string;
-  }>>([]);
-  const [isLoadingMonthlyData, setIsLoadingMonthlyData] = useState(false);
+  // monthlyDataRecords, isLoadingMonthlyData from reportPage
 
-  // Fetch monthly data from database (same as SlideDataBrowser)
-  useEffect(() => {
-    if (!slideReportId) return;
-
-    let cancelled = false;
-    const fetchMonthlyData = async () => {
-      setIsLoadingMonthlyData(true);
-      try {
-        const { data, error } = await supabase
-          .from('slide_report_monthly_data')
-          .select('*')
-          .eq('slide_report_id', slideReportId)
-          .order('year', { ascending: false })
-          .order('month', { ascending: true });
-
-        if (cancelled) return;
-
-        if (error) {
-          console.error('Error fetching monthly data:', error);
-        } else {
-          setMonthlyDataRecords((data as any[]) || []);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          console.error('Error:', err);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoadingMonthlyData(false);
-        }
-      }
-    };
-
-    fetchMonthlyData();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [slideReportId]);
-
-  // Filter values state for slides page (channel -> dimensionId -> selected value)
-  // Moved here so it's available for useMemo hooks
-  const [filterValues, setFilterValues] = useState<Record<string, Record<string, string[]>>>({
-    metasearch: {},
-    sem: {},
-    social: {},
-    'price-check': {},
-    'booking': {},
-  });
-
-  // Filter dimension values state (for dropdowns) - channel -> dimensionId -> values[]
-  // Moved here so it's available for useMemo hooks
-  const [filterDimensionValues, setFilterDimensionValues] = useState<Record<string, Record<string, string[]>>>({
-    metasearch: {},
-    sem: {},
-    social: {},
-  });
-  
-  // Track loading state for filter values per dimension
-  const [filterValuesLoading, setFilterValuesLoading] = useState<Record<string, Record<string, boolean>>>({
-    metasearch: {},
-    sem: {},
-    social: {},
-  });
-
-  // Single source of truth for all filtered data. Uses display-data API for master-report when available.
-  const filteredData = useSlideReportDisplayData({
-    pivotData: effectivePivotData,
-    filterValues,
-    filterDimensionValues,
-    selectedYear,
-    selectedMonth,
-    selectedTab,
-    slideType,
-    dynamicChannelTotals,
-    groupByDimensionId: groupByDimension,
-    breakdownByDimensionId: breakdownByDimension,
-    slideReportId,
-    comparisonType,
-    chartTimeRange,
-  });
+  // filteredData comes from reportPage (useSlideReportPage)
 
   // Combined loading: show skeleton when slide data is loading OR display-data API is in flight (avoids glitch when data arrives late)
   const isLoadingSlideContent = isLoadingData || (filteredData.isLoadingDisplayData ?? false);
@@ -1534,243 +1387,15 @@ export default function SlideViewPage() {
     }
   }, [effectivePivotData, slideType]);
 
+  // Keep local state in sync with slideReport.configuration (and date range when report first loads)
+  const lastSyncedSlideReportIdRef = useRef<string | null>(null);
   useEffect(() => {
-    const loadOrCreateSlideReport = async () => {
-      if (!accountId || !user) return;
-      
-      // Wait for account report IDs to be loaded before proceeding
-      if (!accountReportIds.sem && !accountReportIds.social && !accountReportIds.metasearch) {
-        // Account report IDs not loaded yet, wait for them
-        return;
-      }
-      
-      // Wait for slideReports to finish loading before deciding to create
-      if (isSlideReportsLoading) {
-        return;
-      }
-
-      try {
-        // Check if a specific reportId is passed via URL parameter
-        const urlReportId = searchParams.get('reportId');
-        if (urlReportId) {
-          // Load the specific report from URL
-          const targetReport = slideReports?.find(r => r.id === urlReportId && r.is_active);
-          if (targetReport) {
-            setSlideReportId(targetReport.id);
-            // Load configuration from the target report
-            if (targetReport.configuration) {
-              const config = targetReport.configuration;
-              if (config.selectedChannels) {
-                // Filter selectedChannels to only include channels that have reports
-                const validChannels = config.selectedChannels.filter(channel => 
-                  availableChannels.includes(channel)
-                );
-                setSelectedDimensions({
-                  metasearch: validChannels.includes('metasearch'),
-                  sem: validChannels.includes('sem'),
-                  social: validChannels.includes('social'),
-                });
-              } else {
-                // Initialize based on available channels
-                setSelectedDimensions({
-                  metasearch: availableChannels.includes('metasearch'),
-                  sem: availableChannels.includes('sem'),
-                  social: availableChannels.includes('social'),
-                });
-              }
-              if (config.selectedValueDimensionIds) {
-                setSelectedValueDimensionIds(config.selectedValueDimensionIds);
-              }
-              if (config.channelConfigs) {
-                setChannelConfigs(config.channelConfigs);
-              }
-              if (config.breakdownConfigs) {
-                setBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>);
-              }
-              if (config.filterConfigs) {
-                setFilterConfigs(config.filterConfigs as any);
-              }
-            }
-            // Load date range - always default to current year/month for the UI filter
-            // The stored date_range is used for Edit Source modal, not for the active filter
-            const currentYear = new Date().getFullYear();
-            const currentMonth = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][new Date().getMonth()];
-            setSelectedYear(currentYear.toString());
-            setSelectedMonth(currentMonth);
-            
-            // Load sinceMonth/sinceYear for Edit Source modal from stored settings
-            if (targetReport.date_range) {
-              setSinceMonth(targetReport.date_range.month || 'January');
-              setSinceYear(targetReport.date_range.year);
-            } else {
-              setSinceMonth('January');
-              setSinceYear(currentYear);
-            }
-            return;
-          }
-        }
-
-        // For master-report, look for the FIRST (oldest) Master Report to avoid duplicates
-        if (slideType === 'master-report') {
-          // Find all Master Reports and use the oldest one (first created)
-          const masterReports = (slideReports || [])
-            .filter(r => r.name === 'Master Report' && r.is_active)
-            .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-          
-          const masterReport = masterReports[0]; // Use the oldest one
-          
-          if (masterReport) {
-            setSlideReportId(masterReport.id);
-            // Load configuration from existing report
-            if (masterReport.configuration) {
-              const config = masterReport.configuration;
-              if (config.selectedChannels) {
-                // Filter selectedChannels to only include channels that have reports
-                const validChannels = config.selectedChannels.filter(channel => 
-                  availableChannels.includes(channel)
-                );
-                setSelectedDimensions({
-                  metasearch: validChannels.includes('metasearch'),
-                  sem: validChannels.includes('sem'),
-                  social: validChannels.includes('social'),
-                });
-              } else {
-                // Initialize based on available channels
-                setSelectedDimensions({
-                  metasearch: availableChannels.includes('metasearch'),
-                  sem: availableChannels.includes('sem'),
-                  social: availableChannels.includes('social'),
-                });
-              }
-              if (config.selectedValueDimensionIds) {
-                setSelectedValueDimensionIds(config.selectedValueDimensionIds);
-              }
-              if (config.channelConfigs) {
-                setChannelConfigs(config.channelConfigs);
-              }
-              if (config.breakdownConfigs) {
-                setBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>);
-              }
-              if (config.filterConfigs) {
-                setFilterConfigs(config.filterConfigs as any);
-              }
-            }
-            // Load date range - always default to current year/month for the UI filter
-            const currentYear = new Date().getFullYear();
-            const currentMonth = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][new Date().getMonth()];
-            setSelectedYear(currentYear.toString());
-            setSelectedMonth(currentMonth);
-            
-            // Load sinceMonth/sinceYear for Edit Source modal from stored settings
-            if (masterReport.date_range) {
-              setSinceMonth(masterReport.date_range.month || 'January');
-              setSinceYear(masterReport.date_range.year);
-            } else {
-              setSinceMonth('January');
-              setSinceYear(currentYear);
-            }
-            
-            // Log if there are duplicates that should be cleaned up
-            if (masterReports.length > 1) {
-              console.warn(`[loadOrCreateSlideReport] Found ${masterReports.length} Master Reports for this account. Using oldest one: ${masterReport.id}`);
-            }
-          } else {
-            // No Master Report exists - instead of creating automatically,
-            // open the Edit Source wizard so user can configure first
-            const currentYear = new Date().getFullYear();
-            setSelectedYear(currentYear.toString());
-            setSelectedMonth('January');
-            setSinceMonth('January');
-            setSinceYear(currentYear);
-            
-            // Set default configuration state based on available channels
-            setSelectedDimensions({
-              metasearch: availableChannels.includes('metasearch'),
-              sem: availableChannels.includes('sem'),
-              social: availableChannels.includes('social'),
-            });
-            
-            // Open the Edit Source modal for initial configuration
-            // The report will be created when user saves the configuration
-            setIsEditSourceOpen(true);
-          }
-          return;
-        }
-        
-        // For brady or regular slides, use existing logic
-        // Try to find existing slide report for this account
-        // For now, we'll use the first active one or create a new one
-        const existingReport = slideReports?.find(r => r.is_active);
-        
-        if (existingReport) {
-          setSlideReportId(existingReport.id);
-          // Load configuration from existing report
-          if (existingReport.configuration) {
-            const config = existingReport.configuration;
-            if (config.selectedChannels) {
-              // Filter selectedChannels to only include channels that have reports
-              const validChannels = config.selectedChannels.filter(channel => 
-                availableChannels.includes(channel)
-              );
-              setSelectedDimensions({
-                metasearch: validChannels.includes('metasearch'),
-                sem: validChannels.includes('sem'),
-                social: validChannels.includes('social'),
-              });
-            } else {
-              // Initialize based on available channels
-              setSelectedDimensions({
-                metasearch: availableChannels.includes('metasearch'),
-                sem: availableChannels.includes('sem'),
-                social: availableChannels.includes('social'),
-              });
-            }
-            if (config.selectedValueDimensionIds) {
-              setSelectedValueDimensionIds(config.selectedValueDimensionIds);
-            }
-            if (config.channelConfigs) {
-              setChannelConfigs(config.channelConfigs);
-            }
-            if (config.breakdownConfigs) {
-              setBreakdownConfigs(config.breakdownConfigs as Record<string, BreakdownConfig>);
-            }
-            if (config.filterConfigs) {
-              setFilterConfigs(config.filterConfigs);
-            }
-          }
-          // Load date range - always default to current year/month for the UI filter
-          const currentYear = new Date().getFullYear();
-          const currentMonth = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][new Date().getMonth()];
-          setSelectedYear(currentYear.toString());
-          setSelectedMonth(currentMonth);
-          
-          // Load sinceMonth/sinceYear for Edit Source modal from stored settings
-          if (existingReport.date_range) {
-            setSinceMonth(existingReport.date_range.month || 'January');
-            setSinceYear(existingReport.date_range.year);
-          } else {
-            setSinceMonth('January');
-            setSinceYear(currentYear);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading slide report:', error);
-      }
-    };
-
-    loadOrCreateSlideReport();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, user?.id, slideReports, slideType, isSlideReportsLoading, accountReportIds, availableChannels]);
-
-  // Keep local state in sync with slideReport.configuration
-  useEffect(() => {
-    if (slideReport?.configuration) {
-      const config = slideReport.configuration;
-      // Filter configs to only include channels that have reports
+    if (!slideReport || !slideReportId) return;
+    const config = slideReport.configuration;
+    if (config) {
       const filteredFilterConfigs: Record<string, FilterConfig> = {};
       const filteredBreakdownConfigs: Record<string, BreakdownConfig> = {};
       const filteredChannelConfigs: Record<string, ChannelConfig> = {};
-      
       for (const channel of availableChannels) {
         if (config.filterConfigs?.[channel]) {
           filteredFilterConfigs[channel] = config.filterConfigs[channel];
@@ -1782,12 +1407,37 @@ export default function SlideViewPage() {
           filteredChannelConfigs[channel] = config.channelConfigs[channel];
         }
       }
-      
       setFilterConfigs(filteredFilterConfigs);
       setBreakdownConfigs(filteredBreakdownConfigs);
       setChannelConfigs(filteredChannelConfigs);
+      if (config.selectedChannels) {
+        const validChannels = config.selectedChannels.filter(channel => availableChannels.includes(channel));
+        setSelectedDimensions({
+          metasearch: validChannels.includes('metasearch'),
+          sem: validChannels.includes('sem'),
+          social: validChannels.includes('social'),
+        });
+      }
+      if (config.selectedValueDimensionIds) {
+        setSelectedValueDimensionIds(config.selectedValueDimensionIds);
+      }
     }
-  }, [slideReport?.configuration, availableChannels]);
+    const isNewReport = lastSyncedSlideReportIdRef.current !== slideReportId;
+    if (isNewReport) {
+      lastSyncedSlideReportIdRef.current = slideReportId;
+      const currentYear = new Date().getFullYear();
+      const currentMonth = MONTH_NAMES[new Date().getMonth()];
+      setSelectedYear(currentYear.toString());
+      setSelectedMonth(currentMonth);
+      if (slideReport.date_range) {
+        setSinceMonth(slideReport.date_range.month || 'January');
+        setSinceYear(slideReport.date_range.year);
+      } else {
+        setSinceMonth('January');
+        setSinceYear(currentYear);
+      }
+    }
+  }, [slideReport, slideReportId, availableChannels]);
 
   // Load filter dimension values and names from pivot_data (pre-computed) instead of loading from database
   useEffect(() => {
@@ -4131,50 +3781,26 @@ export default function SlideViewPage() {
     return calculateReportTotal(currentTotals);
   }, [currentTotals]);
 
-  // State for view-based budgets
-  const [viewBudgets, setViewBudgets] = useState<Array<{
-    id: string;
-    dimension_name: string;
-    dimension_item: string;
-    budget_data: Record<string, number | ChannelBudgets>;
-  }>>([]);
-  const [isLoadingViewBudgets, setIsLoadingViewBudgets] = useState(false);
+  // For Metasearch Jan 2026 use hardcoded breakdown (by Hotel or by Link Type) and expanded rows from dimension_data.
+  const apiBreakdownsForBreakdownTable = useMemo(() => {
+    const api = filteredData.apiBreakdowns;
+    const isJan2026 = isMetasearchJan2026(selectedTab, selectedYear, selectedMonth);
+    if (isJan2026) {
+      const fallback = getJan2026BreakdownRowsForTable(groupByDimension);
+      return { groupBy: fallback.groupBy, rows: fallback.rows, expanded: fallback.expanded };
+    }
+    return api ?? undefined;
+  }, [filteredData.apiBreakdowns, selectedTab, selectedYear, selectedMonth, groupByDimension]);
 
-  // Fetch budgets filtered by view
-  useEffect(() => {
-    if (!selectedViewId || !accountId || !user) return;
+  // When using Jan 2026 fallback rows, table must treat them as API data so it uses apiBreakdowns.rows.
+  const displayDataFromApiForBreakdownTable = useMemo(
+    () =>
+      filteredData.displayDataFromApi ||
+      (isMetasearchJan2026(selectedTab, selectedYear, selectedMonth) && !!apiBreakdownsForBreakdownTable?.rows?.length),
+    [filteredData.displayDataFromApi, selectedTab, selectedYear, selectedMonth, apiBreakdownsForBreakdownTable?.rows?.length]
+  );
 
-    const fetchViewBudgets = async () => {
-      setIsLoadingViewBudgets(true);
-      try {
-        const { data, error } = await supabase
-          .from('budgets')
-          .select('*')
-          .eq('view_id', selectedViewId)
-          .eq('account_id', accountId)
-          .eq('user_id', user.id);
-
-        if (error) {
-          setViewBudgets([]);
-        } else {
-          const budgets = (data || []).map(b => ({
-            id: b.id,
-            dimension_name: b.dimension_name,
-            dimension_item: b.dimension_item,
-            budget_data: (b.budget_data as Record<string, number | ChannelBudgets>) || {},
-          }));
-          setViewBudgets(budgets);
-        }
-      } catch (err) {
-        console.error('Error:', err);
-        setViewBudgets([]);
-      } finally {
-        setIsLoadingViewBudgets(false);
-      }
-    };
-
-    fetchViewBudgets();
-  }, [selectedViewId, accountId, user]);
+  // viewBudgets, isLoadingViewBudgets from reportPage (useSlideReportPage)
 
   // Calculate budget totals from pivot_data.budget or view budgets - using hook
   const budgetData = useBudgetData(
@@ -4343,23 +3969,9 @@ export default function SlideViewPage() {
         }
       }
 
-      // Refresh view budgets
-      if (selectedViewId) {
-        const { data: refreshedBudgets } = await supabase
-          .from('budgets')
-          .select('*')
-          .eq('view_id', selectedViewId)
-          .eq('account_id', accountId)
-          .eq('user_id', user.id);
-
-        if (refreshedBudgets) {
-          setViewBudgets(refreshedBudgets.map(b => ({
-            id: b.id,
-            dimension_name: b.dimension_name,
-            dimension_item: b.dimension_item,
-            budget_data: b.budget_data as Record<string, number | ChannelBudgets>,
-          })));
-        }
+      // Refresh view budgets (invalidate so useSlideReportPage refetches)
+      if (selectedViewId && accountId && user?.id) {
+        await queryClient.invalidateQueries({ queryKey: ['viewBudgets', selectedViewId, accountId, user.id] });
       }
 
       toast({
@@ -4793,8 +4405,9 @@ export default function SlideViewPage() {
               UnifiedBreakdownTable={UnifiedBreakdownTable}
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
               isAISummaryDisabled={!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all'}
-              displayDataFromApi={filteredData.displayDataFromApi}
-              apiBreakdowns={filteredData.apiBreakdowns}
+              displayDataFromApi={displayDataFromApiForBreakdownTable}
+              apiBreakdowns={apiBreakdownsForBreakdownTable}
+              suppressExpandedBreakdown={false}
             />
 
             <ChannelTab
@@ -4830,8 +4443,9 @@ export default function SlideViewPage() {
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
               isAISummaryDisabled={!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all'}
               summaryText={summaries.find(s => s.tab === 'sem' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
-              displayDataFromApi={filteredData.displayDataFromApi}
-              apiBreakdowns={filteredData.apiBreakdowns}
+              displayDataFromApi={displayDataFromApiForBreakdownTable}
+              apiBreakdowns={apiBreakdownsForBreakdownTable}
+              suppressExpandedBreakdown={false}
             />
 
             <ChannelTab
@@ -4867,8 +4481,9 @@ export default function SlideViewPage() {
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
               isAISummaryDisabled={!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all'}
               summaryText={summaries.find(s => s.tab === 'social' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
-              displayDataFromApi={filteredData.displayDataFromApi}
-              apiBreakdowns={filteredData.apiBreakdowns}
+              displayDataFromApi={displayDataFromApiForBreakdownTable}
+              apiBreakdowns={apiBreakdownsForBreakdownTable}
+              suppressExpandedBreakdown={false}
             />
 
             <BudgetTab

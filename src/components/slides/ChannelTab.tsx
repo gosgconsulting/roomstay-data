@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
+import { JAN_2026_BREAKDOWN_DIMENSIONS } from "@/hooks/useMetasearchJan2026RawRows";
 import { AISummaryButton } from "./AISummaryButton";
 import { AISummaryDisplay } from "./AISummaryDisplay";
 
@@ -53,6 +54,8 @@ interface ChannelTabProps {
   /** When true, breakdown table uses apiBreakdowns instead of computing from raw rows. */
   displayDataFromApi?: boolean;
   apiBreakdowns?: { groupBy: string; rows: Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number; cpc?: number; roas?: number; costOfSale?: number }>; expanded?: Record<string, Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>> };
+  /** When true, do not show expanded sub-rows in the breakdown table (e.g. Metasearch Jan 2026). */
+  suppressExpandedBreakdown?: boolean;
 }
 
 export function ChannelTab({
@@ -90,6 +93,7 @@ export function ChannelTab({
   summaryText,
   displayDataFromApi,
   apiBreakdowns,
+  suppressExpandedBreakdown,
 }: ChannelTabProps) {
   const gradientId = `${channel}Gradient`;
   
@@ -156,8 +160,10 @@ export function ChannelTab({
                 const channelData = pivotData?.channels?.[channel];
                 const savedBreakdownConfigs = slideReport?.configuration?.breakdownConfigs?.[channel];
                 const configuredBreakdowns = savedBreakdownConfigs?.breakdownDimensionIds || breakdownConfigs[channel]?.breakdownDimensionIds || [];
-                
-                if (configuredBreakdowns.length === 0) {
+                const hasJan2026Override = channel === 'metasearch' && !!displayDataFromApi && !!apiBreakdowns?.rows?.length;
+                const useJan2026FallbackDimensions = configuredBreakdowns.length === 0 && hasJan2026Override;
+
+                if (configuredBreakdowns.length === 0 && !hasJan2026Override) {
                   return (
                     <div className="text-center py-8 text-muted-foreground">
                       <p>No breakdown dimensions configured.</p>
@@ -165,9 +171,19 @@ export function ChannelTab({
                     </div>
                   );
                 }
-                
+
+                const availableDimensionsList = useJan2026FallbackDimensions
+                  ? JAN_2026_BREAKDOWN_DIMENSIONS
+                  : [
+                      ...new Map([
+                        ...(breakdownDimensions[channel] || []).filter(dim =>
+                          configuredBreakdowns.includes(dim.id)
+                        ),
+                      ].map(dim => [dim.id, dim])).values()
+                    ];
+
                 return (
-                  <UnifiedBreakdownTable 
+                  <UnifiedBreakdownTable
                     groupBy={groupByDimension}
                     breakdownBy={breakdownByDimension}
                     expandedRow={expandedRow}
@@ -183,13 +199,8 @@ export function ChannelTab({
                     onTotalsChange={(totals) => setBreakdownTotals(prev => ({ ...prev, [channel]: totals }))}
                     displayDataFromApi={displayDataFromApi}
                     apiBreakdowns={apiBreakdowns}
-                    availableDimensions={[
-                      ...new Map([
-                        ...(breakdownDimensions[channel] || []).filter(dim => 
-                          configuredBreakdowns.includes(dim.id)
-                        ),
-                      ].map(dim => [dim.id, dim])).values()
-                    ]}
+                    suppressExpandedBreakdown={suppressExpandedBreakdown}
+                    availableDimensions={availableDimensionsList}
                   />
                 );
               })()}
