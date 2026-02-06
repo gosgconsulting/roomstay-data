@@ -156,12 +156,17 @@ const UnifiedBreakdownTable = ({
   const groupedData = useMemo(() => {
     if (displayDataFromApi && apiBreakdowns?.rows?.length) {
       const groupByDimId = availableDimensions.find(d => d.id === groupBy)?.id;
-      const groupByHasFilter = groupByDimId && selectedChannel && selectedChannel !== 'overview'
-        ? (filterValues?.[selectedChannel]?.[groupByDimId]?.length ?? 0) > 0
-        : false;
-      const rows = groupByHasFilter
-        ? apiBreakdowns.rows.filter((row) => row.name != null && String(row.name).trim() !== '' && String(row.name).trim().toLowerCase() !== 'unknown')
-        : apiBreakdowns.rows;
+      const groupByFilterValues = groupByDimId && selectedChannel && selectedChannel !== 'overview'
+        ? filterValues?.[selectedChannel]?.[groupByDimId]
+        : undefined;
+      const allowedSet = groupByFilterValues?.length
+        ? new Set(groupByFilterValues.map((v: string) => String(v).trim()))
+        : null;
+      const rows = apiBreakdowns.rows.filter((row) => {
+        if (row.name == null || String(row.name).trim() === '' || String(row.name).trim().toLowerCase() === 'unknown') return false;
+        if (allowedSet && !allowedSet.has(String(row.name).trim())) return false;
+        return true;
+      });
       return rows.map((row) => {
         const cleanData = {
           impressions: Number(row.impressions) || 0,
@@ -347,7 +352,17 @@ const UnifiedBreakdownTable = ({
     if (suppressExpandedBreakdown) return [];
 
     if (displayDataFromApi && apiBreakdowns?.expanded) {
-      const expandedRows = apiBreakdowns.expanded[expandedRow];
+      let expandedRows = apiBreakdowns.expanded[expandedRow];
+      const breakdownByDimId = availableDimensions.find(d => d.id === breakdownBy)?.id;
+      const breakdownFilterValues = breakdownByDimId && selectedChannel && selectedChannel !== 'overview'
+        ? filterValues?.[selectedChannel]?.[breakdownByDimId]
+        : undefined;
+      const breakdownAllowedSet = breakdownFilterValues?.length
+        ? new Set(breakdownFilterValues.map((v: string) => String(v).trim()))
+        : null;
+      if (expandedRows?.length && breakdownAllowedSet) {
+        expandedRows = expandedRows.filter((row) => row.name != null && breakdownAllowedSet.has(String(row.name).trim()));
+      }
       if (expandedRows?.length) {
         return expandedRows.map((row) => {
           const cleanData = {
