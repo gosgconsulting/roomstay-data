@@ -1192,9 +1192,9 @@ export default function SlideViewPage() {
     chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'
   );
 
-  // Channel Revenue chart: prefer data from slide_report_channel_month_data (no edge function); fallback to display-data monthlyData or pivot.
+  // Channel Revenue chart: prefer data from slide_report_channel_month_data (no edge function); applies filterValues via monthlyBreakdowns.
   const chartTimeRangeTyped = chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
-  const { data: channelChartDataFromTable } = useChannelChartDataFromTable(slideReportId, chartTimeRangeTyped);
+  const { data: channelChartDataFromTable } = useChannelChartDataFromTable(slideReportId, chartTimeRangeTyped, filterValues);
 
   const effectiveOverviewChartData = useMemo(() => {
     if (filteredData.monthlyData?.length > 0) {
