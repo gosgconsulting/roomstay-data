@@ -29,7 +29,7 @@ import { useComparisonMetrics, useChannelComparisonMetrics } from "@/hooks/useCo
 import { useKPICards, useReportKPICards } from "@/hooks/useKPICards";
 import { useOverviewChartData, useAllChannelChartData } from "@/hooks/useChartData";
 import { useChannelChartDataFromTable } from "@/hooks/useChannelChartDataFromTable";
-import { buildOverviewChartDataFromMonthlyData, buildChannelChartDataFromMonthlyData } from "@/lib/chartDataCalculations";
+import { buildOverviewChartDataFromMonthlyData, buildOverviewChartDataFromChannelChartData, buildChannelChartDataFromMonthlyData } from "@/lib/chartDataCalculations";
 import { useBudgetData, useBudgetMonthlyData } from "@/hooks/useBudgetData";
 import { calculateReportBreakdown, calculateReportTotal } from "@/lib/metricsCalculations";
 import { normalizeBudgetValue, type ChannelBudgets } from "@/lib/budgetCalculations";
@@ -1196,12 +1196,16 @@ export default function SlideViewPage() {
   const chartTimeRangeTyped = chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
   const { data: channelChartDataFromTable } = useChannelChartDataFromTable(slideReportId, chartTimeRangeTyped, filterValues);
 
+  // Overview Revenue chart: prefer slide_report_channel_month_data (filterValues applied when View changes)
   const effectiveOverviewChartData = useMemo(() => {
+    if (channelChartDataFromTable && (channelChartDataFromTable.metasearch?.length > 0 || channelChartDataFromTable.sem?.length > 0 || channelChartDataFromTable.social?.length > 0)) {
+      return buildOverviewChartDataFromChannelChartData(channelChartDataFromTable);
+    }
     if (filteredData.monthlyData?.length > 0) {
       return buildOverviewChartDataFromMonthlyData(filteredData.monthlyData, chartTimeRangeTyped);
     }
     return overviewChartData;
-  }, [filteredData.monthlyData, chartTimeRangeTyped, overviewChartData]);
+  }, [channelChartDataFromTable, filteredData.monthlyData, chartTimeRangeTyped, overviewChartData]);
 
   const effectiveChannelChartData = useMemo(() => {
     if (channelChartDataFromTable && (channelChartDataFromTable.metasearch?.length > 0 || channelChartDataFromTable.sem?.length > 0 || channelChartDataFromTable.social?.length > 0)) {

@@ -426,3 +426,29 @@ export function buildChannelChartDataFromMonthlyData(
   }
   return result;
 }
+
+/**
+ * Build overview chart data (single revenue series) from per-channel chart data.
+ * Used so the Overview tab Revenue chart can use slide_report_channel_month_data
+ * with the same filterValues as the View (dimension filters).
+ *
+ * @param channelChartData - Per-channel arrays of { month, revenue } (same length and order)
+ * @returns Array of { label, total } for AreaChart
+ */
+export function buildOverviewChartDataFromChannelChartData(
+  channelChartData: Record<'metasearch' | 'sem' | 'social', Array<{ month: string; revenue: number }>> | null
+): Array<{ label: string; total: number }> {
+  if (!channelChartData) return [];
+  const metasearch = channelChartData.metasearch ?? [];
+  const sem = channelChartData.sem ?? [];
+  const social = channelChartData.social ?? [];
+  const len = Math.max(metasearch.length, sem.length, social.length);
+  if (len === 0) return [];
+  const result: Array<{ label: string; total: number }> = [];
+  for (let i = 0; i < len; i++) {
+    const label = metasearch[i]?.month ?? sem[i]?.month ?? social[i]?.month ?? '';
+    const total = (metasearch[i]?.revenue ?? 0) + (sem[i]?.revenue ?? 0) + (social[i]?.revenue ?? 0);
+    result.push({ label, total });
+  }
+  return result;
+}
