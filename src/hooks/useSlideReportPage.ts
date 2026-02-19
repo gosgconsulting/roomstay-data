@@ -14,7 +14,7 @@ import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideRe
 import { useSlideReportViews, useCreateSlideReportView, useUpdateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
 import { useSlideReportChannelData } from "@/hooks/useSlideReportChannelData";
 import { useSlideReportDisplayData } from "@/hooks/useSlideReportDisplayData";
-import { useSlideReportSummaries } from "@/hooks/useSlideReportSummaries";
+import { useSlideReportSummaries, type SlideReportSummary } from "@/hooks/useSlideReportSummaries";
 import { getAccountReportIds, clearAccountReportIdsCache, type AccountReportIds } from "@/lib/accountReportIds";
 import type { SlideReport, SlideReportPivotData, SlideReportDateRange, SlideReportView } from "@/types/slideReports";
 import type { ChannelMetrics } from "@/types/slideReports";
@@ -65,7 +65,7 @@ export interface UseSlideReportPageReturn {
   effectivePivotData: SlideReportPivotData | null;
   filteredData: ReturnType<typeof useSlideReportDisplayData>;
   views: SlideReportView[];
-  summaries: Array<unknown>;
+  summaries: SlideReportSummary[];
   monthlyDataRecords: MonthlyDataRecord[];
   viewBudgets: ViewBudgetItem[];
   accountReportIds: AccountReportIds;

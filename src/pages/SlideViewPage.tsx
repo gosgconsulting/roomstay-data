@@ -53,7 +53,7 @@ import { PriceCheckTab } from "@/components/slides/PriceCheckTab";
 import { RefreshDataModal } from "@/components/slides/RefreshDataModal";
 import { AISummaryButton } from "@/components/slides/AISummaryButton";
 import { SlideViewAISummaryModal } from "@/components/slides/SlideViewAISummaryModal";
-import { useGetSummaryForTab } from "@/hooks/useSlideReportSummaries";
+import { useGetSummaryForTab, type SlideReportSummary } from "@/hooks/useSlideReportSummaries";
 import { extractMinimalAIData } from "@/lib/extractMinimalAIData";
 import { isWithinInterval } from "date-fns";
 import { aggregateMetrics } from "@/components/AISummaryPivotTable";
@@ -792,6 +792,7 @@ export default function SlideViewPage() {
   const [selectedTab, setSelectedTab] = useState("overview");
   const [comparisonType, setComparisonType] = useState("none");
   const [chartTimeRange, setChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
+  const [revenueType, setRevenueType] = useState<'booking_date' | 'checkin_date'>('booking_date');
   const [priceCheckChartTimeRange, setPriceCheckChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
   // Breakdown table dimensions (declared early so useFilteredSlideData can prefer groupBy for KPI = table total)
   const [groupByDimension, setGroupByDimension] = useState<string>('hotel');
@@ -4427,7 +4428,9 @@ export default function SlideViewPage() {
               KPI_CARDS={KPI_CARDS}
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
               isAISummaryDisabled={!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all'}
-              summaryText={summaries.find(s => s.tab === 'overview' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
+              summaryText={(summaries as SlideReportSummary[]).find(s => s.tab === 'overview' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
+              revenueType={revenueType}
+              setRevenueType={setRevenueType}
             />
 
             <ChannelTab
@@ -4452,7 +4455,7 @@ export default function SlideViewPage() {
               selectedMonth={selectedMonth}
               filterValues={filterValues}
               filterDimensionValues={filterDimensionValues}
-              summaryText={summaries.find(s => s.tab === 'metasearch' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
+              summaryText={(summaries as SlideReportSummary[]).find(s => s.tab === 'metasearch' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
               breakdownDimensions={breakdownDimensions}
               breakdownConfigs={breakdownConfigs}
               renderKPICards={renderKPICards}
@@ -4500,7 +4503,7 @@ export default function SlideViewPage() {
               UnifiedBreakdownTable={UnifiedBreakdownTable}
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
               isAISummaryDisabled={!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all'}
-              summaryText={summaries.find(s => s.tab === 'sem' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
+              summaryText={(summaries as SlideReportSummary[]).find(s => s.tab === 'sem' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
               displayDataFromApi={displayDataFromApiForBreakdownTable}
               apiBreakdowns={apiBreakdownsForBreakdownTable}
               suppressExpandedBreakdown={false}
@@ -4538,7 +4541,7 @@ export default function SlideViewPage() {
               UnifiedBreakdownTable={UnifiedBreakdownTable}
               onAISummaryClick={() => setIsAISummaryModalOpen(true)}
               isAISummaryDisabled={!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all'}
-              summaryText={summaries.find(s => s.tab === 'social' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
+              summaryText={(summaries as SlideReportSummary[]).find(s => s.tab === 'social' && s.selected_year === selectedYear && s.selected_month === selectedMonth && (!selectedViewId ? !s.view_id : s.view_id === selectedViewId))?.summary_text}
               displayDataFromApi={displayDataFromApiForBreakdownTable}
               apiBreakdowns={apiBreakdownsForBreakdownTable}
               suppressExpandedBreakdown={false}

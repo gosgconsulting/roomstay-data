@@ -12,6 +12,8 @@ import { AISummaryDisplay } from "./AISummaryDisplay";
 
 const GROSS_PROFIT_RATE = 0.15;
 
+export type RevenueType = 'booking_date' | 'checkin_date';
+
 interface OverviewTabProps {
   slideReportId: string | null;
   isSlideReportsLoading: boolean;
@@ -47,6 +49,8 @@ interface OverviewTabProps {
   onAISummaryClick?: () => void;
   isAISummaryDisabled?: boolean;
   summaryText?: string | null;
+  revenueType?: RevenueType;
+  setRevenueType?: (type: RevenueType) => void;
 }
 
 const hasAnyData = (totals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>): boolean => {
@@ -85,6 +89,8 @@ export function OverviewTab({
   onAISummaryClick,
   isAISummaryDisabled,
   summaryText,
+  revenueType = 'booking_date',
+  setRevenueType,
 }: OverviewTabProps) {
   return (
     <TabsContent value="overview" className="space-y-6">
@@ -102,6 +108,28 @@ export function OverviewTab({
             <Settings2 className="h-4 w-4 mr-2" />
             Configure Report
           </Button>
+        </div>
+      )}
+
+      {/* Revenue Type selector row - only in Overview tab */}
+      {slideReportId && (
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">REVENUE TYPE:</span>
+            <Select
+              value={revenueType}
+              onValueChange={(v) => setRevenueType?.(v as RevenueType)}
+              disabled={isReadOnlyMode || !setRevenueType}
+            >
+              <SelectTrigger className="w-[220px] h-8 text-sm bg-background">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                <SelectItem value="booking_date">Booking Date (When customer booked)</SelectItem>
+                <SelectItem value="checkin_date">Check-in Date (When guest stays)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       )}
 
