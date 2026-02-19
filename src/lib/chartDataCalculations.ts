@@ -413,7 +413,7 @@ export function buildChannelChartDataFromMonthlyData(
   for (const m of monthlyData ?? []) {
     const key = `${m.year}-${m.month}`;
     for (const ch of channels) {
-      const rev = (m as Record<string, number>)[ch] ?? 0;
+      const rev = (m as unknown as Record<string, number>)[ch] ?? 0;
       dataByChannelAndKey.set(`${ch}-${key}`, rev);
     }
   }

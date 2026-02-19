@@ -1405,6 +1405,50 @@ export type Database = {
           },
         ]
       }
+      slide_report_channel_raw_rows: {
+        Row: {
+          channel: string
+          created_at: string
+          dimension_map: Json
+          id: string
+          month: number
+          rows: Json
+          slide_report_id: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          dimension_map?: Json
+          id?: string
+          month: number
+          rows?: Json
+          slide_report_id: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          dimension_map?: Json
+          id?: string
+          month?: number
+          rows?: Json
+          slide_report_id?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slide_report_channel_raw_rows_slide_report_id_fkey"
+            columns: ["slide_report_id"]
+            isOneToOne: false
+            referencedRelation: "slide_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       slide_report_channel_year_data: {
         Row: {
           channel: string
