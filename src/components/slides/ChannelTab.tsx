@@ -209,7 +209,12 @@ export function ChannelTab({
 
           {/* AI Summary Display - After last report component */}
           {summaryText && (
-            <AISummaryDisplay summary={summaryText} title={`AI Summary - ${channel.charAt(0).toUpperCase() + channel.slice(1)}`} />
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">
+                {`AI Summary - ${channel.charAt(0).toUpperCase() + channel.slice(1)}`}
+              </h4>
+              <AISummaryDisplay value={summaryText} />
+            </div>
           )}
 
           {/* AI Summary Button - After last report component */}

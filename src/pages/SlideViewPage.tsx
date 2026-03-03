@@ -3258,4 +3258,4 @@ export default function SlideViewPage() {
     
     for (const channel of channels) {
       const filterDimIds = configs[channel]?.filterDimensionIds || [];
-      for (const dimId of filterDimIds)
+      if (!updatedFilterDimensionValues[channel]) {

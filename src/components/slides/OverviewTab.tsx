@@ -330,7 +330,7 @@ export function OverviewTab({
             />
           </CardHeader>
           <CardContent>
-            <AISummaryDisplay text={summaryText} />
+            <AISummaryDisplay value={summaryText ?? ""} />
           </CardContent>
         </Card>
       )}
