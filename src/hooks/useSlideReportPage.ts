@@ -37,6 +37,10 @@ export interface UseSlideReportPageParams {
   breakdownByDimensionId: string;
   selectedViewId: string | null;
   dynamicChannelTotals?: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
+  /** Master Report display currency (AUD/USD). */
+  displayCurrency?: 'AUD' | 'USD';
+  /** AUD per 1 USD. */
+  audPerUsd?: number;
 }
 
 export interface ViewBudgetItem {
@@ -101,6 +105,8 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     breakdownByDimensionId,
     selectedViewId,
     dynamicChannelTotals,
+    displayCurrency,
+    audPerUsd,
   } = params;
 
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
@@ -219,6 +225,8 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     slideReportId,
     comparisonType,
     chartTimeRange,
+    displayCurrency: params.displayCurrency,
+    audPerUsd: params.audPerUsd,
   });
 
   const { data: views = [], isLoading: isLoadingViews } = useSlideReportViews(slideReportId);

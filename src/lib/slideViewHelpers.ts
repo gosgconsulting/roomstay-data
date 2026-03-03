@@ -357,14 +357,21 @@ export const calculatePercentChange = (
 /**
  * Format number based on type (currency, percent, roas, etc.)
  */
-export const formatNumber = (value: number, type?: string): string => {
+export const formatNumber = (
+  value: number,
+  type?: string,
+  currency?: 'USD' | 'AUD'
+): string => {
   if (value === undefined || value === null || isNaN(value)) return '-';
 
   if (type === 'currency') {
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('master_report_currency') : null;
+    const effectiveCurrency: 'USD' | 'AUD' = currency ?? (stored === 'AUD' || stored === 'USD' ? stored : 'USD');
+
     // Match SlideDataBrowser: currency with 0 decimal places
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
+      currency: effectiveCurrency,
       maximumFractionDigits: 0,
     }).format(value);
   }

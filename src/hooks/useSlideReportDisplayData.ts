@@ -10,9 +10,163 @@ import { supabase } from '@/integrations/supabase/client';
 import { useFilteredSlideData } from '@/hooks/useFilteredSlideData';
 import type { FilteredSlideData, UseFilteredSlideDataParams } from '@/hooks/useFilteredSlideData';
 import type { MetricData, MonthlyDataPoint, RawDataRow } from '@/types/slideView';
-import type { GetSlideReportDisplayDataRequest, GetSlideReportDisplayDataResponse } from '@/types/slideReportDisplayApi';
+import type {
+  DisplayDataBreakdownRow,
+  GetSlideReportDisplayDataRequest,
+  GetSlideReportDisplayDataResponse,
+} from '@/types/slideReportDisplayApi';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+type CurrencyCode = 'AUD' | 'USD';
+
+type ChannelKey = 'metasearch' | 'sem' | 'social';
+
+function getChannelBaseCurrency(channel: string): CurrencyCode {
+  // Per requirement: all reports are AUD except Metasearch which is USD.
+  if (channel === 'metasearch') return 'USD';
+  return 'AUD';
+}
+
+function convertAmount(value: number, from: CurrencyCode, to: CurrencyCode, audPerUsd: number): number {
+  if (!isFinite(value)) return 0;
+  if (from === to) return value;
+  if (!isFinite(audPerUsd) || audPerUsd <= 0) return value;
+
+  if (from === 'USD' && to === 'AUD') return value * audPerUsd;
+  if (from === 'AUD' && to === 'USD') return value / audPerUsd;
+  return value;
+}
+
+function convertMetricData(
+  channel: ChannelKey,
+  m: MetricData & { cpc?: number; roas?: number; costOfSale?: number },
+  to: CurrencyCode,
+  audPerUsd: number
+): MetricData & { cpc?: number; roas?: number; costOfSale?: number } {
+  const from = getChannelBaseCurrency(channel);
+  const factorConvertedCost = convertAmount(1, from, to, audPerUsd);
+  const factor = from === to ? 1 : factorConvertedCost;
+
+  return {
+    ...m,
+    cost: convertAmount(m.cost ?? 0, from, to, audPerUsd),
+    revenue: convertAmount(m.revenue ?? 0, from, to, audPerUsd),
+    cpc: m.cpc == null ? undefined : m.cpc * factor,
+    // roas and costOfSale are ratios/percentages; they don't change with currency conversion.
+    roas: m.roas,
+    costOfSale: m.costOfSale,
+  };
+}
+
+function convertBreakdownRow(
+  channel: ChannelKey,
+  row: DisplayDataBreakdownRow,
+  to: CurrencyCode,
+  audPerUsd: number
+): DisplayDataBreakdownRow {
+  const from = getChannelBaseCurrency(channel);
+  const factorConvertedCost = convertAmount(1, from, to, audPerUsd);
+  const factor = from === to ? 1 : factorConvertedCost;
+
+  return {
+    ...row,
+    cost: convertAmount(row.cost ?? 0, from, to, audPerUsd),
+    revenue: convertAmount(row.revenue ?? 0, from, to, audPerUsd),
+    cpc: row.cpc == null ? undefined : row.cpc * factor,
+    roas: row.roas,
+    costOfSale: row.costOfSale,
+  };
+}
+
+function convertRevenuePointByChannel(
+  channel: ChannelKey,
+  value: number,
+  to: CurrencyCode,
+  audPerUsd: number
+): number {
+  const from = getChannelBaseCurrency(channel);
+  return convertAmount(value ?? 0, from, to, audPerUsd);
+}
+
+function convertApiResponse(
+  res: GetSlideReportDisplayDataResponse,
+  to: CurrencyCode,
+  audPerUsd: number,
+  breakdownChannel?: ChannelKey | null
+): GetSlideReportDisplayDataResponse {
+  const channelTotals = { ...res.channel_totals };
+  (['metasearch', 'sem', 'social'] as const).forEach((ch) => {
+    const current = channelTotals[ch];
+    if (current) {
+      channelTotals[ch] = convertMetricData(ch, current, to, audPerUsd);
+    }
+  });
+
+  const comparisonTotals = res.comparison_totals
+    ? (() => {
+        const out: typeof res.comparison_totals = { ...res.comparison_totals };
+        (['metasearch', 'sem', 'social'] as const).forEach((ch) => {
+          const current = out?.[ch];
+          if (current) {
+            out[ch] = convertMetricData(ch, current, to, audPerUsd);
+          }
+        });
+        return out;
+      })()
+    : res.comparison_totals;
+
+  const monthlyData: MonthlyDataPoint[] = (res.monthly_data || []).map((m) => ({
+    ...m,
+    metasearch: convertRevenuePointByChannel('metasearch', m.metasearch ?? 0, to, audPerUsd),
+    sem: convertRevenuePointByChannel('sem', m.sem ?? 0, to, audPerUsd),
+    social: convertRevenuePointByChannel('social', m.social ?? 0, to, audPerUsd),
+  }));
+
+  const monthly_channel_metrics = res.monthly_channel_metrics
+    ? res.monthly_channel_metrics.map((p) => ({
+        ...p,
+        metasearch: {
+          cost: convertRevenuePointByChannel('metasearch', p.metasearch?.cost ?? 0, to, audPerUsd),
+          revenue: convertRevenuePointByChannel('metasearch', p.metasearch?.revenue ?? 0, to, audPerUsd),
+        },
+        sem: {
+          cost: convertRevenuePointByChannel('sem', p.sem?.cost ?? 0, to, audPerUsd),
+          revenue: convertRevenuePointByChannel('sem', p.sem?.revenue ?? 0, to, audPerUsd),
+        },
+        social: {
+          cost: convertRevenuePointByChannel('social', p.social?.cost ?? 0, to, audPerUsd),
+          revenue: convertRevenuePointByChannel('social', p.social?.revenue ?? 0, to, audPerUsd),
+        },
+      }))
+    : res.monthly_channel_metrics;
+
+  // breakdowns are returned for a *single* breakdown_channel, so convert using the channel selected in the UI.
+  const breakdowns = res.breakdowns
+    ? (() => {
+        const inferredChannel: ChannelKey = breakdownChannel ?? 'sem';
+        const rows = (res.breakdowns?.rows || []).map((r) => convertBreakdownRow(inferredChannel, r, to, audPerUsd));
+        const expanded = res.breakdowns?.expanded
+          ? Object.fromEntries(
+              Object.entries(res.breakdowns.expanded).map(([k, v]) => [
+                k,
+                (v || []).map((r) => convertBreakdownRow(inferredChannel, r, to, audPerUsd)),
+              ])
+            )
+          : res.breakdowns?.expanded;
+        return { ...res.breakdowns, rows, expanded };
+      })()
+    : res.breakdowns;
+
+  return {
+    ...res,
+    channel_totals: channelTotals,
+    comparison_totals: comparisonTotals,
+    monthly_data: monthlyData,
+    monthly_channel_metrics,
+    breakdowns,
+  };
+}
 
 /** Convert UI month name (e.g. "January") to API month number 1-12; null for 'all' or unknown. */
 function monthNameToNumber(monthName: string): number | null {
@@ -28,6 +182,10 @@ export interface UseSlideReportDisplayDataParams extends UseFilteredSlideDataPar
   chartTimeRange?: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months' | null;
   /** Breakdown-by dimension id for expanded rows (so API returns expanded[groupValue] per account). */
   breakdownByDimensionId?: string | null;
+  /** Display currency for Master Report (default handled by caller). */
+  displayCurrency?: CurrencyCode;
+  /** AUD per 1 USD. Used to convert USD<->AUD. */
+  audPerUsd?: number;
 }
 
 const queryKeyPrefix = ['slide-report-display-data'] as const;
@@ -169,6 +327,9 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
     groupByDimensionId,
   } = params;
 
+  const displayCurrency: CurrencyCode = params.displayCurrency ?? 'USD';
+  const audPerUsd = params.audPerUsd ?? 1;
+
   const useApi = slideType === 'master-report' && !!slideReportId;
   const comparisonType = params.comparisonType ?? 'none';
   const chartTimeRange = params.chartTimeRange ?? null;
@@ -263,7 +424,12 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
 
   return useMemo(() => {
     if (useApi && apiData && !apiError && !isFetching) {
-      const mapped = mapResponseToFilteredShape(apiData);
+      const convertedApiData = convertApiResponse(apiData, displayCurrency, audPerUsd, breakdownChannel as ChannelKey | null);
+      const convertedTotalsData = apiTotalsData
+        ? convertApiResponse(apiTotalsData, displayCurrency, audPerUsd, breakdownChannel as ChannelKey | null)
+        : apiTotalsData;
+
+      const mapped = mapResponseToFilteredShape(convertedApiData);
       const totalsPeriodMatches = (res: GetSlideReportDisplayDataResponse) => {
         const yearMatch = res.selected_year == null || res.selected_year === selectedYear;
         const monthNum = monthNameToNumber(selectedMonth);
@@ -272,28 +438,28 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
         return yearMatch && monthMatch;
       };
       const channelTotals =
-        needsTotalsForSelectedPeriod && apiTotalsData?.channel_totals && totalsPeriodMatches(apiTotalsData)
+        needsTotalsForSelectedPeriod && convertedTotalsData?.channel_totals && totalsPeriodMatches(convertedTotalsData)
           ? {
               metasearch: {
-                impressions: apiTotalsData.channel_totals.metasearch?.impressions ?? 0,
-                clicks: apiTotalsData.channel_totals.metasearch?.clicks ?? 0,
-                cost: apiTotalsData.channel_totals.metasearch?.cost ?? 0,
-                revenue: apiTotalsData.channel_totals.metasearch?.revenue ?? 0,
-                bookings: apiTotalsData.channel_totals.metasearch?.bookings ?? 0,
+                impressions: convertedTotalsData.channel_totals.metasearch?.impressions ?? 0,
+                clicks: convertedTotalsData.channel_totals.metasearch?.clicks ?? 0,
+                cost: convertedTotalsData.channel_totals.metasearch?.cost ?? 0,
+                revenue: convertedTotalsData.channel_totals.metasearch?.revenue ?? 0,
+                bookings: convertedTotalsData.channel_totals.metasearch?.bookings ?? 0,
               },
               sem: {
-                impressions: apiTotalsData.channel_totals.sem?.impressions ?? 0,
-                clicks: apiTotalsData.channel_totals.sem?.clicks ?? 0,
-                cost: apiTotalsData.channel_totals.sem?.cost ?? 0,
-                revenue: apiTotalsData.channel_totals.sem?.revenue ?? 0,
-                bookings: apiTotalsData.channel_totals.sem?.bookings ?? 0,
+                impressions: convertedTotalsData.channel_totals.sem?.impressions ?? 0,
+                clicks: convertedTotalsData.channel_totals.sem?.clicks ?? 0,
+                cost: convertedTotalsData.channel_totals.sem?.cost ?? 0,
+                revenue: convertedTotalsData.channel_totals.sem?.revenue ?? 0,
+                bookings: convertedTotalsData.channel_totals.sem?.bookings ?? 0,
               },
               social: {
-                impressions: apiTotalsData.channel_totals.social?.impressions ?? 0,
-                clicks: apiTotalsData.channel_totals.social?.clicks ?? 0,
-                cost: apiTotalsData.channel_totals.social?.cost ?? 0,
-                revenue: apiTotalsData.channel_totals.social?.revenue ?? 0,
-                bookings: apiTotalsData.channel_totals.social?.bookings ?? 0,
+                impressions: convertedTotalsData.channel_totals.social?.impressions ?? 0,
+                clicks: convertedTotalsData.channel_totals.social?.clicks ?? 0,
+                cost: convertedTotalsData.channel_totals.social?.cost ?? 0,
+                revenue: convertedTotalsData.channel_totals.social?.revenue ?? 0,
+                bookings: convertedTotalsData.channel_totals.social?.bookings ?? 0,
               },
             }
           : mapped.channelTotals;
@@ -303,11 +469,11 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
       };
       // Only use breakdowns when response period matches current selection (avoids showing another month's data, e.g. Jan showing Feb's 98085)
       const totalsBreakdowns =
-        needsTotalsForSelectedPeriod && apiTotalsData?.breakdowns != null && totalsPeriodMatches(apiTotalsData)
-          ? apiTotalsData.breakdowns
+        needsTotalsForSelectedPeriod && convertedTotalsData?.breakdowns != null && totalsPeriodMatches(convertedTotalsData)
+          ? convertedTotalsData.breakdowns
           : undefined;
       const mainBreakdowns =
-        apiData.breakdowns != null && totalsPeriodMatches(apiData) ? apiData.breakdowns : undefined;
+        convertedApiData.breakdowns != null && totalsPeriodMatches(convertedApiData) ? convertedApiData.breakdowns : undefined;
       const apiBreakdowns = totalsBreakdowns ?? mainBreakdowns;
       return {
         ...mapped,
@@ -317,7 +483,7 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
         dateRange: fallback.dateRange,
         displayDataFromApi: true,
         apiBreakdowns,
-        apiMonthlyChannelMetrics: apiData.monthly_channel_metrics,
+        apiMonthlyChannelMetrics: convertedApiData.monthly_channel_metrics,
         isLoadingDisplayData: false,
       } as FilteredSlideData & {
         displayDataFromApi: boolean;
@@ -326,6 +492,51 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
         isLoadingDisplayData: boolean;
       };
     }
+
+    // Fallback: if master-report and caller provided currency settings, convert channel totals + monthly data.
+    const shouldConvertFallback = slideType === 'master-report' && (params.displayCurrency != null || params.audPerUsd != null);
+    if (shouldConvertFallback) {
+      const convertedChannelTotals = {
+        metasearch: {
+          ...fallback.channelTotals.metasearch,
+          cost: convertAmount(fallback.channelTotals.metasearch.cost, 'USD', displayCurrency, audPerUsd),
+          revenue: convertAmount(fallback.channelTotals.metasearch.revenue, 'USD', displayCurrency, audPerUsd),
+        },
+        sem: {
+          ...fallback.channelTotals.sem,
+          cost: convertAmount(fallback.channelTotals.sem.cost, 'AUD', displayCurrency, audPerUsd),
+          revenue: convertAmount(fallback.channelTotals.sem.revenue, 'AUD', displayCurrency, audPerUsd),
+        },
+        social: {
+          ...fallback.channelTotals.social,
+          cost: convertAmount(fallback.channelTotals.social.cost, 'AUD', displayCurrency, audPerUsd),
+          revenue: convertAmount(fallback.channelTotals.social.revenue, 'AUD', displayCurrency, audPerUsd),
+        },
+      };
+
+      const convertedMonthlyData = (fallback.monthlyData || []).map((m) => ({
+        ...m,
+        metasearch: convertAmount(m.metasearch ?? 0, 'USD', displayCurrency, audPerUsd),
+        sem: convertAmount(m.sem ?? 0, 'AUD', displayCurrency, audPerUsd),
+        social: convertAmount(m.social ?? 0, 'AUD', displayCurrency, audPerUsd),
+      }));
+
+      return {
+        ...fallback,
+        channelTotals: convertedChannelTotals,
+        monthlyData: convertedMonthlyData,
+        displayDataFromApi: false,
+        apiBreakdowns: undefined,
+        apiMonthlyChannelMetrics: undefined,
+        isLoadingDisplayData,
+      } as FilteredSlideData & {
+        displayDataFromApi: boolean;
+        apiBreakdowns?: GetSlideReportDisplayDataResponse['breakdowns'];
+        apiMonthlyChannelMetrics?: GetSlideReportDisplayDataResponse['monthly_channel_metrics'];
+        isLoadingDisplayData: boolean;
+      };
+    }
+
     return {
       ...fallback,
       displayDataFromApi: false,
@@ -338,5 +549,5 @@ export function useSlideReportDisplayData(params: UseSlideReportDisplayDataParam
       apiMonthlyChannelMetrics?: GetSlideReportDisplayDataResponse['monthly_channel_metrics'];
       isLoadingDisplayData: boolean;
     };
-  }, [useApi, apiData, apiTotalsData, apiError, isFetching, fallback, isLoadingDisplayData, needsTotalsForSelectedPeriod, selectedYear, selectedMonth]);
+  }, [useApi, apiData, apiTotalsData, apiError, isFetching, fallback, isLoadingDisplayData, needsTotalsForSelectedPeriod, selectedYear, selectedMonth, displayCurrency, audPerUsd, slideType, params.displayCurrency, params.audPerUsd]);
 }
