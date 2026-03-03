@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Share2, Database, Settings2, RefreshCw, Loader2 } from "lucide-react";
+import { ArrowLeft, Share2, RefreshCw, Loader2 } from "lucide-react";
 import { SlideReport } from "@/types/slideReports";
 
 type CurrencyCode = 'AUD' | 'USD';
@@ -12,17 +12,12 @@ interface SlideViewHeaderProps {
   navigate: (path: string) => void;
   accountId: string;
   setIsShareModalOpen: (open: boolean) => void;
-  setIsDataModalOpen: (open: boolean) => void;
-  setIsEditSourceOpen: (open: boolean) => void;
   handleRefreshDataWithModal: () => void;
   isRefreshModalOpen: boolean;
   slideReport?: SlideReport | null;
   // Currency switcher (Master Report only)
   displayCurrency?: CurrencyCode;
   onDisplayCurrencyChange?: (currency: CurrencyCode) => void;
-  audPerUsd?: number | null;
-  isFxLoading?: boolean;
-  onRefreshFxRate?: () => void;
 }
 
 export function SlideViewHeader({
@@ -31,16 +26,11 @@ export function SlideViewHeader({
   navigate,
   accountId,
   setIsShareModalOpen,
-  setIsDataModalOpen,
-  setIsEditSourceOpen,
   handleRefreshDataWithModal,
   isRefreshModalOpen,
   slideReport,
   displayCurrency,
   onDisplayCurrencyChange,
-  audPerUsd,
-  isFxLoading,
-  onRefreshFxRate,
 }: SlideViewHeaderProps) {
   const showCurrencySwitcher = slideReport?.name === 'Master Report';
 
@@ -68,8 +58,7 @@ export function SlideViewHeader({
         </div>
         <div className="flex items-center gap-2">
           {showCurrencySwitcher && displayCurrency && onDisplayCurrencyChange && (
-            <div className="flex items-center gap-2 mr-2">
-              <span className="text-xs text-muted-foreground">Currency</span>
+            <div className="flex items-center mr-2">
               <Select value={displayCurrency} onValueChange={(v) => onDisplayCurrencyChange(v as CurrencyCode)}>
                 <SelectTrigger className="h-8 w-[88px]">
                   <SelectValue />
@@ -79,23 +68,6 @@ export function SlideViewHeader({
                   <SelectItem value="USD">USD</SelectItem>
                 </SelectContent>
               </Select>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <span>
-                  1 USD = {typeof audPerUsd === 'number' && isFinite(audPerUsd) ? audPerUsd.toFixed(4) : '-'} AUD
-                </span>
-                {onRefreshFxRate && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={onRefreshFxRate}
-                    disabled={!!isFxLoading}
-                    title="Refresh exchange rate"
-                  >
-                    <RefreshCw className={`h-3.5 w-3.5 ${isFxLoading ? 'animate-spin' : ''}`} />
-                  </Button>
-                )}
-              </div>
             </div>
           )}
 
@@ -107,14 +79,6 @@ export function SlideViewHeader({
           <Button variant="outline" size="sm" onClick={() => setIsShareModalOpen(true)}>
             <Share2 className="h-4 w-4 mr-2" />
             Share
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setIsDataModalOpen(true)}>
-            <Database className="h-4 w-4 mr-2" />
-            Data
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setIsEditSourceOpen(true)}>
-            <Settings2 className="h-4 w-4 mr-2" />
-            Edit Source
           </Button>
           {/* Only show Refresh Data button for master reports (not child reports) */}
           {!slideReport?.configuration?.isChildReport && (

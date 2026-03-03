@@ -12,8 +12,6 @@ import { AISummaryDisplay } from "./AISummaryDisplay";
 
 const GROSS_PROFIT_RATE = 0.15;
 
-export type RevenueType = 'booking_date' | 'checkin_date';
-
 interface OverviewTabProps {
   slideReportId: string | null;
   isSlideReportsLoading: boolean;
@@ -49,8 +47,6 @@ interface OverviewTabProps {
   onAISummaryClick?: () => void;
   isAISummaryDisabled?: boolean;
   summaryText?: string | null;
-  revenueType?: RevenueType;
-  setRevenueType?: (type: RevenueType) => void;
 }
 
 const hasAnyData = (totals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>): boolean => {
@@ -89,8 +85,6 @@ export function OverviewTab({
   onAISummaryClick,
   isAISummaryDisabled,
   summaryText,
-  revenueType = 'booking_date',
-  setRevenueType,
 }: OverviewTabProps) {
   return (
     <TabsContent value="overview" className="space-y-6">
@@ -108,28 +102,6 @@ export function OverviewTab({
             <Settings2 className="h-4 w-4 mr-2" />
             Configure Report
           </Button>
-        </div>
-      )}
-
-      {/* Revenue Type selector row - only in Overview tab */}
-      {slideReportId && (
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">REVENUE TYPE:</span>
-            <Select
-              value={revenueType}
-              onValueChange={(v) => setRevenueType?.(v as RevenueType)}
-              disabled={isReadOnlyMode || !setRevenueType}
-            >
-              <SelectTrigger className="w-[220px] h-8 text-sm bg-background">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-popover z-50">
-                <SelectItem value="booking_date">Booking Date (When customer booked)</SelectItem>
-                <SelectItem value="checkin_date">Check-in Date (When guest stays)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </div>
       )}
 
@@ -198,22 +170,26 @@ export function OverviewTab({
                   <defs>
                     <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.05}/>
+                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
+                  <XAxis dataKey="label" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
+                  <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" tickFormatter={(v) => `${v}`} />
                   <Tooltip 
-                    formatter={(value: number) => [`$${value.toLocaleString()}`, "Revenue"]}
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--background))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '6px'
+                    }}
+                    formatter={(value: any) => [formatNumber(value as number, 'currency'), 'Revenue']}
                   />
                   <Area 
                     type="monotone" 
                     dataKey="total" 
                     stroke="#8b5cf6" 
                     strokeWidth={2}
-                    fill="url(#revenueGradient)" 
+                    fill="url(#revenueGradient)"
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -222,16 +198,13 @@ export function OverviewTab({
         </Card>
       )}
 
-      {/* Report Breakdown Table */}
-      {(isSlideReportsLoading || (slideReportId && (isLoadingData || (!slideReport?.pivot_data && isLoadingMonthlyData)))) ? (
+      {/* Breakdown Table */}
+      {(isSlideReportsLoading || (slideReportId && isLoadingData)) ? (
         renderTableSkeleton()
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base font-medium">
-              <span className="font-semibold">Period:</span> {selectedYear === 'all' ? 'All Years (2024-2026)' : selectedYear}
-              {selectedMonth !== 'all' ? ` - ${selectedMonth}` : ''}
-            </CardTitle>
+            <CardTitle className="text-base font-medium">Channel Performance</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="w-full overflow-x-auto">
@@ -346,19 +319,20 @@ export function OverviewTab({
         </Card>
       )}
 
-      {/* AI Summary Display - After last report component */}
-      {summaryText && (
-        <AISummaryDisplay summary={summaryText} title="AI Summary" />
-      )}
-
-      {/* AI Summary Button - After last report component */}
-      {onAISummaryClick && (
-        <div className="flex justify-end">
-          <AISummaryButton
-            onClick={onAISummaryClick}
-            disabled={isAISummaryDisabled}
-          />
-        </div>
+      {/* AI Summary */}
+      {slideReportId && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base font-medium">AI Summary</CardTitle>
+            <AISummaryButton
+              onClick={onAISummaryClick}
+              disabled={isAISummaryDisabled}
+            />
+          </CardHeader>
+          <CardContent>
+            <AISummaryDisplay text={summaryText} />
+          </CardContent>
+        </Card>
       )}
     </TabsContent>
   );
