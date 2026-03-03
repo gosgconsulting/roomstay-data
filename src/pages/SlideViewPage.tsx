@@ -2926,7 +2926,9 @@ export default function SlideViewPage() {
     if (!accountId || !user) {
       console.error('Cannot save: missing accountId or user');
       setIsEditSourceOpen(false);
-      resetModalState();
+      setModalStep(1);
+      setActiveChannelTab(null);
+      setSearchQuery("");
       return;
     }
 
@@ -3257,4 +3259,610 @@ export default function SlideViewPage() {
     const loadPromises: Promise<void>[] = [];
     
     for (const channel of channels) {
-      const filterDimIds
+      const filterDimIds = configs[channel]?.filterDimensionIds || [];
+      for (const dimId of filterDimIds) {
+        loadPromises.push(
+          loadFilterDimensionValues(channel, dimId).then(values => {
+            if (!updatedFilterDimensionValues[channel]) {
+              updatedFilterDimensionValues[channel] = {};
+            }
+            updatedFilterDimensionValues[channel][dimId] = values;
+          })
+        );
+      }
+    }
+    
+    await Promise.all(loadPromises);
+    
+    if (Object.keys(updatedFilterDimensionValues).length > 0) {
+      setFilterDimensionValues(prev => {
+        const merged = { ...prev };
+        for (const [ch, dims] of Object.entries(updatedFilterDimensionValues)) {
+          merged[ch] = { ...merged[ch], ...dims };
+        }
+        return merged;
+      });
+    }
+  };
+
+  // =================== HOOKS & DERIVED DATA ===================
+
+  // Overview metrics (sum of all channels)
+  const overviewMetrics = useOverviewMetrics(currentTotals as any);
+
+  // KPI cards for overview
+  const KPI_CARDS = useKPICards(overviewMetrics);
+
+  // Report KPI cards generator for individual channels
+  const getReportKPICards = useReportKPICards();
+
+  // Comparison metrics for overview
+  const overviewComparisonMetrics = useComparisonMetrics(
+    comparisonTotals as any,
+    comparisonType as 'none' | 'previous_period' | 'previous_year'
+  );
+
+  const getOverviewComparisonMetrics = useCallback(() => {
+    return overviewComparisonMetrics;
+  }, [overviewComparisonMetrics]);
+
+  const getChannelComparisonMetrics = useCallback((channel: 'metasearch' | 'sem' | 'social') => {
+    if (!comparisonTotals || comparisonType === 'none') return null;
+    const channelData = comparisonTotals[channel];
+    if (!channelData) return null;
+    const derived = calculateDerivedMetrics(channelData);
+    return { ...derived, label: comparisonType === 'previous_period' ? 'vs Previous Period' : 'vs Previous Year' };
+  }, [comparisonTotals, comparisonType]);
+
+  // Budget data
+  const budgetMonthlyData = useBudgetMonthlyData(
+    effectivePivotData,
+    selectedViewId,
+    viewBudgets,
+    selectedYear,
+    false,
+    () => [],
+    filterValues,
+    filteredData.apiMonthlyChannelMetrics
+  );
+
+  // Budget editing handlers
+  const handleStartEditBudget = useCallback((month: string, channel: string | null, currentBudget: number) => {
+    setEditingBudget({ month, channel });
+    setEditBudgetValue(String(currentBudget || 0));
+  }, []);
+
+  const handleSaveBudget = useCallback(async () => {
+    if (!editingBudget || !slideReportId || !user) return;
+    const value = parseFloat(editBudgetValue) || 0;
+    // Save budget to database
+    try {
+      const { error } = await supabase
+        .from('budgets')
+        .upsert({
+          user_id: user.id,
+          report_id: slideReportId,
+          view_id: selectedViewId,
+          account_id: accountId || null,
+          dimension_name: editingBudget.channel || 'overview',
+          dimension_item: editingBudget.month,
+          budget_data: { amount: value },
+        }, { onConflict: 'user_id,report_id,view_id,dimension_name,dimension_item' });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['slide_report_views', 'budgets'] });
+    } catch (err) {
+      console.error('Error saving budget:', err);
+    }
+    setEditingBudget(null);
+    setEditBudgetValue("");
+  }, [editingBudget, editBudgetValue, slideReportId, user, selectedViewId, accountId, queryClient]);
+
+  const handleCancelEditBudget = useCallback(() => {
+    setEditingBudget(null);
+    setEditBudgetValue("");
+  }, []);
+
+  // PnL editing handlers
+  const handleStartEditPnl = useCallback((month: string, channel: string | null, field: 'spender' | 'recurrentFee' | 'percentCost' | 'percentRevenue', currentValue: string | number) => {
+    setEditingPnl({ month, channel, field });
+    setEditPnlValue(String(currentValue));
+  }, []);
+
+  const handleSavePnl = useCallback(() => {
+    if (!editingPnl) return;
+    const { channel, field } = editingPnl;
+    if (channel) {
+      setPnlConfig(prev => ({
+        ...prev,
+        [channel]: {
+          ...prev[channel],
+          [field]: field === 'spender' ? editPnlValue : parseFloat(editPnlValue) || 0,
+        },
+      }));
+    }
+    setEditingPnl(null);
+    setEditPnlValue("");
+  }, [editingPnl, editPnlValue]);
+
+  const handleCancelEditPnl = useCallback(() => {
+    setEditingPnl(null);
+    setEditPnlValue("");
+  }, []);
+
+  // Refresh data modal handler
+  const handleRefreshDataWithModal = useCallback(async () => {
+    if (!slideReportId || !slideReport) {
+      toast({
+        title: "No Report",
+        description: "Please configure your report first by clicking Edit Source.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsRefreshModalOpen(true);
+    setRefreshStep(1);
+    setRefreshStepStatus({ 1: 'loading', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'pending' });
+    setRefreshError(null);
+
+    try {
+      // Step 1: Verify settings
+      setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'loading' }));
+      setRefreshStep(2);
+
+      // Step 2-4: Refresh data via edge function
+      await refreshSlideReportData.mutateAsync(slideReportId);
+      setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'complete', 4: 'complete', 5: 'loading' }));
+      setRefreshStep(5);
+
+      // Step 5: Done
+      setRefreshStepStatus(prev => ({ ...prev, 5: 'complete' }));
+      
+      // Invalidate queries to reload data
+      queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
+      queryClient.invalidateQueries({ queryKey: ['slide_report_channel_month_data'] });
+      queryClient.invalidateQueries({ queryKey: ['slide_report_display_data'] });
+      
+      toast({
+        title: "Data Refreshed",
+        description: "Your report data has been updated successfully.",
+      });
+    } catch (error: any) {
+      console.error('Error refreshing data:', error);
+      const errorMsg = error?.message || 'An unexpected error occurred';
+      setRefreshError(errorMsg);
+      setRefreshStepStatus(prev => {
+        const updated = { ...prev };
+        for (const key of Object.keys(updated)) {
+          if (updated[Number(key)] === 'loading') {
+            updated[Number(key)] = 'error';
+          }
+        }
+        return updated;
+      });
+    }
+  }, [slideReportId, slideReport, refreshSlideReportData, queryClient]);
+
+  // AI Summary modal handler
+  const handleAISummaryClick = useCallback(() => {
+    setIsAISummaryModalOpen(true);
+  }, []);
+
+  // Get summary for current tab
+  const currentSummary = useGetSummaryForTab(
+    slideReportId,
+    selectedTab as 'overview' | 'metasearch' | 'sem' | 'social',
+    selectedYear,
+    selectedMonth,
+    selectedViewId
+  );
+
+  // Modal close handler
+  const handleModalClose = useCallback((open: boolean) => {
+    if (!open) {
+      setIsEditSourceOpen(false);
+    }
+  }, []);
+
+  // Render helpers
+  const renderKPICards = useCallback((cards: any[], comparisonMetrics?: any) => {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-3">
+        {cards.map((card: any) => {
+          const Icon = card.icon;
+          let displayValue = '';
+          if (card.format === 'percent') {
+            displayValue = `${(card.value * 100).toFixed(1)}%`;
+          } else if (card.format === 'currency') {
+            displayValue = `$${formatNumber(card.value)}`;
+          } else if (card.format === 'roas') {
+            displayValue = card.value.toFixed(2);
+          } else {
+            displayValue = formatNumber(card.value);
+          }
+          
+          // Calculate comparison
+          let changePercent: number | null = null;
+          if (comparisonMetrics && card.key in comparisonMetrics) {
+            const prevValue = comparisonMetrics[card.key];
+            if (prevValue > 0) {
+              changePercent = calculatePercentChange(card.value, prevValue);
+            }
+          }
+          
+          return (
+            <Card key={card.key} className="p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Icon className={cn("h-3.5 w-3.5", card.color)} />
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{card.label}</span>
+              </div>
+              <div className="text-lg font-bold">{displayValue}</div>
+              {changePercent !== null && (
+                <div className={cn("text-xs flex items-center gap-0.5", changePercent >= 0 ? "text-green-600" : "text-red-600")}>
+                  {changePercent >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                  {Math.abs(changePercent).toFixed(1)}%
+                </div>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+    );
+  }, []);
+
+  const renderKPICardsSkeleton = useCallback(() => {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-3">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <Card key={i} className="p-3">
+            <Skeleton className="h-3 w-16 mb-2" />
+            <Skeleton className="h-6 w-20" />
+          </Card>
+        ))}
+      </div>
+    );
+  }, []);
+
+  const renderChartSkeleton = useCallback(() => {
+    return (
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-5 w-40" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-[300px] w-full" />
+        </CardContent>
+      </Card>
+    );
+  }, []);
+
+  const renderTableSkeleton = useCallback(() => {
+    return (
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-5 w-48" />
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }, []);
+
+  // =================== RETURN JSX ===================
+  
+  if (!accountId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-muted-foreground">No account selected.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
+        {/* Header with tabs and controls */}
+        <SlideViewHeader
+          selectedTab={selectedTab}
+          setSelectedTab={setSelectedTab}
+          navigate={navigate}
+          accountId={accountId}
+          setIsShareModalOpen={setIsShareModalOpen}
+          setIsDataModalOpen={setIsDataModalOpen}
+          setIsEditSourceOpen={setIsEditSourceOpen}
+          handleRefreshDataWithModal={handleRefreshDataWithModal}
+          isRefreshModalOpen={isRefreshModalOpen}
+          slideReport={slideReport}
+          displayCurrency={slideType === 'master-report' ? displayCurrency : undefined}
+          onDisplayCurrencyChange={slideType === 'master-report' ? setDisplayCurrency : undefined}
+          audPerUsd={slideType === 'master-report' ? audPerUsd : undefined}
+          isFxLoading={isFxLoading}
+          onRefreshFxRate={() => refetchFxRate()}
+        />
+
+        {/* Filters Row */}
+        <FiltersRow
+          selectedTab={selectedTab}
+          selectedViewId={selectedViewId}
+          setSelectedViewId={setSelectedViewId}
+          isReadOnlyMode={isReadOnlyMode}
+          availableViews={availableViews}
+          handleApplyView={handleApplyView}
+          handleDeleteView={handleDeleteView}
+          setIsSaveViewDialogOpen={setIsSaveViewDialogOpen}
+          setIsSaveOrUpdateViewDialogOpen={setIsSaveOrUpdateViewDialogOpen}
+          filterValues={filterValues}
+          setFilterValues={setFilterValues}
+          filterDimensionValues={filterDimensionValues}
+          setFilterDimensionValues={setFilterDimensionValues}
+          filterDimensionNames={filterDimensionNames}
+          setFilterDimensionNames={setFilterDimensionNames}
+          dimensions={dimensions}
+          filterConfigs={filterConfigs}
+          slideReport={slideReport}
+          selectedYear={selectedYear}
+          setSelectedYear={setSelectedYear}
+          selectedMonth={selectedMonth}
+          setSelectedMonth={setSelectedMonth}
+          comparisonType={comparisonType}
+          setComparisonType={setComparisonType}
+          pendingFilterValues={pendingFilterValues}
+          setPendingFilterValues={setPendingFilterValues}
+          filterSearchTerms={filterSearchTerms}
+          setFilterSearchTerms={setFilterSearchTerms}
+          openFilterPopovers={openFilterPopovers}
+          setOpenFilterPopovers={setOpenFilterPopovers}
+          filterValuesLoading={filterValuesLoading}
+          setFilterValuesLoading={setFilterValuesLoading}
+          loadFilterDimensionValues={loadFilterDimensionValues}
+        />
+
+        {/* Comparison Banner */}
+        <ComparisonBanner
+          selectedTab={selectedTab}
+          comparisonType={comparisonType}
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+        />
+
+        <div className="p-6">
+          {/* Overview Tab */}
+          <OverviewTab
+            slideReportId={slideReportId}
+            isSlideReportsLoading={isSlideReportsLoading}
+            slideReport={slideReport}
+            isLoadingData={isLoadingSlideContent}
+            isLoadingMonthlyData={isLoadingMonthlyData}
+            currentTotals={currentTotals}
+            breakdownTotals={breakdownTotals}
+            overviewChartData={effectiveOverviewChartData}
+            chartTimeRange={chartTimeRange}
+            setChartTimeRange={setChartTimeRange}
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
+            isReadOnlyMode={isReadOnlyMode}
+            setIsEditSourceOpen={setIsEditSourceOpen}
+            renderKPICards={renderKPICards}
+            renderKPICardsSkeleton={renderKPICardsSkeleton}
+            renderChartSkeleton={renderChartSkeleton}
+            renderTableSkeleton={renderTableSkeleton}
+            getOverviewComparisonMetrics={getOverviewComparisonMetrics}
+            filteredData={filteredData}
+            slideType={slideType}
+            KPI_CARDS={KPI_CARDS}
+            onAISummaryClick={handleAISummaryClick}
+            isAISummaryDisabled={!minimalAIData}
+            summaryText={currentSummary?.summary_text || null}
+            revenueType={revenueType}
+            setRevenueType={setRevenueType}
+          />
+
+          {/* Channel Tabs */}
+          {(['metasearch', 'sem', 'social'] as const).map(channel => (
+            <ChannelTab
+              key={channel}
+              channel={channel}
+              isSlideReportsLoading={isSlideReportsLoading}
+              slideReportId={slideReportId}
+              slideReport={slideReport}
+              pivotData={effectivePivotData}
+              isLoadingData={isLoadingSlideContent}
+              breakdownTotals={breakdownTotals}
+              currentTotals={currentTotals}
+              channelChartData={effectiveChannelChartData}
+              chartTimeRange={chartTimeRange}
+              setChartTimeRange={setChartTimeRange}
+              groupByDimension={groupByDimension}
+              breakdownByDimension={breakdownByDimension}
+              expandedRow={expandedRow}
+              setExpandedRow={setExpandedRow}
+              setGroupByDimension={setGroupByDimension}
+              setBreakdownByDimension={setBreakdownByDimension}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              filterValues={filterValues}
+              filterDimensionValues={filterDimensionValues}
+              breakdownDimensions={breakdownDimensions}
+              breakdownConfigs={breakdownConfigs}
+              renderKPICards={renderKPICards}
+              renderKPICardsSkeleton={renderKPICardsSkeleton}
+              getReportKPICards={getReportKPICards}
+              getChannelComparisonMetrics={getChannelComparisonMetrics}
+              setBreakdownTotals={setBreakdownTotals}
+              UnifiedBreakdownTable={UnifiedBreakdownTable}
+              onAISummaryClick={handleAISummaryClick}
+              isAISummaryDisabled={!minimalAIData}
+              summaryText={currentSummary?.summary_text || null}
+            />
+          ))}
+
+          {/* Budget Tab */}
+          <TabsContent value="budget">
+            <BudgetTab
+              selectedYear={selectedYear}
+              setSelectedYear={setSelectedYear}
+              selectedViewId={selectedViewId}
+              setSelectedViewId={setSelectedViewId}
+              isReadOnlyMode={isReadOnlyMode}
+              views={views as any[]}
+              handleApplyView={handleApplyView}
+              isLoadingViewBudgets={isLoadingViewBudgets}
+              isLoadingDisplayData={filteredData.isLoadingDisplayData}
+              budgetMonthlyData={budgetMonthlyData}
+              slideReport={slideReport}
+              pivotData={effectivePivotData}
+              forecastEnabled={forecastEnabled}
+              setForecastEnabled={setForecastEnabled}
+              pnlModeEnabled={pnlModeEnabled}
+              setPnlModeEnabled={setPnlModeEnabled}
+              editingBudget={editingBudget}
+              editBudgetValue={editBudgetValue}
+              handleStartEditBudget={handleStartEditBudget}
+              handleSaveBudget={handleSaveBudget}
+              handleCancelEditBudget={handleCancelEditBudget}
+              setEditBudgetValue={setEditBudgetValue}
+              editingPnl={editingPnl}
+              editPnlValue={editPnlValue}
+              handleStartEditPnl={handleStartEditPnl}
+              handleSavePnl={handleSavePnl}
+              handleCancelEditPnl={handleCancelEditPnl}
+              setEditPnlValue={setEditPnlValue}
+              pnlConfig={pnlConfig}
+              setPnlConfig={setPnlConfig}
+            />
+          </TabsContent>
+
+          {/* Booking Tab */}
+          <TabsContent value="booking">
+            <BookingTab accountId={accountId} />
+          </TabsContent>
+
+          {/* Price Check Tab */}
+          <TabsContent value="price-check">
+            <PriceCheckTab
+              accountId={accountId}
+              chartTimeRange={priceCheckChartTimeRange}
+              onChartTimeRangeChange={setPriceCheckChartTimeRange}
+            />
+          </TabsContent>
+        </div>
+      </Tabs>
+
+      {/* Edit Source Modal */}
+      <EditSourceModal
+        isOpen={isEditSourceOpen}
+        onOpenChange={handleModalClose}
+        modalStep={modalStep as any}
+        sinceMonth={sinceMonth}
+        setSinceMonth={setSinceMonth}
+        sinceYear={sinceYear}
+        setSinceYear={setSinceYear}
+        selectedDimensions={selectedDimensions}
+        handleDimensionToggle={handleDimensionToggle}
+        selectedChannels={selectedChannels}
+        selectedValueDimensionIds={selectedValueDimensionIds}
+        handleValueDimensionToggle={handleValueDimensionToggle}
+        handleSelectAllDimensions={handleSelectAllDimensions}
+        handleDeselectAllDimensions={handleDeselectAllDimensions}
+        availableDimensions={availableDimensions}
+        loadingAvailableDimensions={loadingAvailableDimensions}
+        activeChannelTab={activeChannelTab}
+        setActiveChannelTab={setActiveChannelTab}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        channelConfigs={channelConfigs}
+        dimensions={dimensions}
+        dimensionValues={dimensionValues}
+        loadingDimensions={loadingDimensions}
+        loadingValues={loadingValues}
+        handleDimensionChange={handleDimensionChange}
+        handleValueToggle={handleValueToggle}
+        handleSelectAllValues={handleSelectAllValues}
+        handleDeselectAllValues={handleDeselectAllValues}
+        breakdownDimensions={breakdownDimensions}
+        breakdownConfigs={breakdownConfigs}
+        loadingBreakdownDimensions={loadingBreakdownDimensions}
+        handleBreakdownToggle={handleBreakdownToggle}
+        filterConfigs={filterConfigs}
+        handleFilterDimensionToggle={handleFilterDimensionToggle}
+        handleNext={handleNext}
+        handleBack={handleBack}
+        handleModalClose={handleModalClose}
+        availableChannels={availableChannels as ('metasearch' | 'sem' | 'social')[]}
+      />
+
+      {/* Refresh Data Modal */}
+      <RefreshDataModal
+        isRefreshModalOpen={isRefreshModalOpen}
+        setIsRefreshModalOpen={setIsRefreshModalOpen}
+        refreshStep={refreshStep}
+        refreshStepStatus={refreshStepStatus}
+        refreshError={refreshError}
+      />
+
+      {/* Data Browser Modal */}
+      <SlideDataBrowser
+        open={isDataModalOpen}
+        onOpenChange={setIsDataModalOpen}
+        pivotData={effectivePivotData}
+        lastRefreshedAt={slideReport?.updated_at}
+        configuration={slideReport?.configuration as any}
+        reportIds={slideReport?.report_ids as any}
+        slideReportId={slideReportId}
+      />
+
+      {/* Share Modal */}
+      <ShareModal
+        reportId={slideReportId || ''}
+        reportName={slideReport?.name || 'Report'}
+        open={isShareModalOpen}
+        onOpenChange={setIsShareModalOpen}
+        accountId={accountId}
+        slideReportId={slideReportId}
+        availableViews={availableViews.filter(v => v.id !== null) as Array<{ id: string; name: string }>}
+        currentFilterValues={filterValues}
+      />
+
+      {/* AI Summary Modal */}
+      <SlideViewAISummaryModal
+        open={isAISummaryModalOpen}
+        onOpenChange={setIsAISummaryModalOpen}
+        minimalData={minimalAIData}
+        selectedTab={selectedTab as 'overview' | 'metasearch' | 'sem' | 'social'}
+        selectedYear={selectedYear}
+        selectedMonth={selectedMonth}
+        pivotData={effectivePivotData}
+        availableViews={availableViews}
+        views={views as any[]}
+        slideReportId={slideReportId}
+        activeViewId={selectedViewId}
+        onApplyView={handleApplyView}
+        onApplyComparisonType={(type) => setComparisonType(type)}
+      />
+
+      {/* Save View Dialog */}
+      <SaveViewDialog
+        open={isSaveViewDialogOpen}
+        onOpenChange={setIsSaveViewDialogOpen}
+        onSave={handleSaveView}
+      />
+
+      {/* Save or Update View Dialog */}
+      <SaveOrUpdateViewDialog
+        open={isSaveOrUpdateViewDialogOpen}
+        onOpenChange={setIsSaveOrUpdateViewDialogOpen}
+        onSaveNew={() => {
+          setIsSaveOrUpdateViewDialogOpen(false);
+          setIsSaveViewDialogOpen(true);
+        }}
+        onUpdate={handleUpdateView}
+        availableViews={views.filter(v => v.id).map(v => ({ id: v.id!, name: v.name })) as Array<{ id: string; name: string }>}
+        currentViewId={selectedViewId}
+      />
+    </div>
+  );
+}
