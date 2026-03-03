@@ -461,6 +461,7 @@ export type Database = {
           column_mappings: Json | null
           created_at: string
           csv_url: string | null
+          currency: string
           google_sheets_url: string | null
           header_row: number
           id: string
@@ -479,6 +480,7 @@ export type Database = {
           column_mappings?: Json | null
           created_at?: string
           csv_url?: string | null
+          currency?: string
           google_sheets_url?: string | null
           header_row?: number
           id?: string
@@ -497,6 +499,7 @@ export type Database = {
           column_mappings?: Json | null
           created_at?: string
           csv_url?: string | null
+          currency?: string
           google_sheets_url?: string | null
           header_row?: number
           id?: string

@@ -37,6 +37,7 @@ interface DataSource {
   column_mappings: any[] | null;
   report_id?: string;
   report_name?: string;
+  currency?: string | null;
   last_synced_at?: string | null;
   sync_frequency?: string | null;
   sync_time?: string | null;
@@ -526,6 +527,7 @@ export default function DataSourcesPage() {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Report</TableHead>
+                      <TableHead>Currency</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Source</TableHead>
                       <TableHead>Last Synced</TableHead>
@@ -535,6 +537,10 @@ export default function DataSourcesPage() {
                   <TableBody>
                     {dataSources.map((dataSource) => {
                       const sourceUrl = getSourceUrl(dataSource);
+                      const currency =
+                        dataSource.currency ??
+                        ((dataSource.report_name || '').toLowerCase() === 'metasearch' ? 'USD' : 'AUD');
+
                       return (
                         <TableRow key={dataSource.id}>
                           <TableCell className="font-medium">
@@ -594,6 +600,7 @@ export default function DataSourcesPage() {
                             )}
                           </TableCell>
                           <TableCell>{dataSource.report_name || 'Unknown'}</TableCell>
+                          <TableCell>{currency}</TableCell>
                           <TableCell>
                             <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium">
                               {dataSource.source_type === 'csv_url' ? 'CSV URL' : 'Google Sheets'}
