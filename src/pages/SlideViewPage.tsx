@@ -86,7 +86,7 @@ const GROSS_PROFIT_RATE_GOOGLE_ORGANIC = 0.03;
 
 // Unified breakdown table component with Group by / Breakdown by dropdowns
 // Uses data from pivot_data.channels[channel].monthlyBreakdowns for month-specific data
-const UnifiedBreakdownTable = ({ 
+const UnifiedBreakdownTable = ({
   groupBy,
   breakdownBy,
   expandedRow,
@@ -214,39 +214,39 @@ const UnifiedBreakdownTable = ({
       });
     }
     if (!pivotData?.channels) return [];
-    
+
     const groupByDim = availableDimensions.find(d => d.id === groupBy);
     const groupByName = groupByDim?.name || groupBy;
     const groupByDimId = groupByDim?.id || groupBy;
-    
+
     // Check if filters are actually applied for the selected channel using centralized function
     const hasFilters = selectedChannel && selectedChannel !== 'overview' && filterValues?.[selectedChannel]
       ? hasActiveFiltersForChannel(
-          filterValues[selectedChannel],
-          filterDimensionValues?.[selectedChannel]
-        )
+        filterValues[selectedChannel],
+        filterDimensionValues?.[selectedChannel]
+      )
       : false;
-    
+
     // Collect breakdown data from all channels (or specific channel if selected)
     const allBreakdowns: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
-    
-    const channelsToCheck = selectedChannel && selectedChannel !== 'overview' 
-      ? [selectedChannel] 
+
+    const channelsToCheck = selectedChannel && selectedChannel !== 'overview'
+      ? [selectedChannel]
       : Object.keys(pivotData.channels);
-    
+
     for (const channel of channelsToCheck) {
       const channelData = pivotData.channels[channel];
       if (!channelData) continue;
-      
+
       const rawDataRows = (channelData as any).rawDataRows || [];
-      
+
       // Always use rawDataRows when available for consistency and completeness
       // This ensures we use the dynamic dimension resolution and get all data
       if (rawDataRows.length > 0) {
-        const channelFilterValues = hasFilters && channel === selectedChannel 
+        const channelFilterValues = hasFilters && channel === selectedChannel
           ? (filterValues?.[channel] || {})
           : {};
-        
+
         // Build date range if month/year is selected
         let dateRange: { start: Date; end: Date } | undefined;
         if (monthKey) {
@@ -263,17 +263,17 @@ const UnifiedBreakdownTable = ({
             end: new Date(yearNum, 11, 31, 23, 59, 59),
           };
         }
-        
+
         // Filter rows (applies date range and any filters)
         const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange);
-        
+
         // Group by breakdown dimension and aggregate metrics
         const groupedRows: Record<string, any[]> = {};
         filteredRows.forEach((row) => {
           const rowData = row.dimension_values || row;
           const groupValue = rowData[groupByDimId] || rowData[groupByName] || 'Unknown';
           const normalizedGroupValue = String(groupValue).trim();
-          
+
           if (normalizedGroupValue && normalizedGroupValue !== 'Unknown') {
             if (!groupedRows[normalizedGroupValue]) {
               groupedRows[normalizedGroupValue] = [];
@@ -281,7 +281,7 @@ const UnifiedBreakdownTable = ({
             groupedRows[normalizedGroupValue].push(row);
           }
         });
-        
+
         // Build metricNameToIdMap from dimensionMap (reverse mapping: name -> id)
         // This matches the exact structure used in slideReportPivotComputation.ts
         const dimensionMap = (channelData as any).dimensionMap || {};
@@ -291,16 +291,16 @@ const UnifiedBreakdownTable = ({
             metricNameToIdMap[dimensionName] = dimensionId;
           }
         });
-        
+
         // Aggregate metrics for each group
         Object.entries(groupedRows).forEach(([groupValue, groupRows]) => {
           if (!allBreakdowns[groupValue]) {
             allBreakdowns[groupValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
           }
-          
+
           groupRows.forEach((row) => {
             const rowData = row.dimension_values || row;
-            
+
             // Use EXACT same extraction logic as computeBreakdownAllTime/computeBreakdownForMonth
             // This ensures we get the same values as the pre-computed breakdowns
             const impressionsValue = parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
@@ -308,7 +308,7 @@ const UnifiedBreakdownTable = ({
             const costValue = parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
             const revenueValue = parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
             const bookingsValue = parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
-            
+
             allBreakdowns[groupValue].impressions += impressionsValue;
             allBreakdowns[groupValue].clicks += clicksValue;
             allBreakdowns[groupValue].cost += costValue;
@@ -320,7 +320,7 @@ const UnifiedBreakdownTable = ({
         // Fallback: No rawDataRows available - use pre-computed breakdown data
         // Use monthlyBreakdowns if a specific month is selected, otherwise use aggregated breakdowns
         let breakdownData: any[] = [];
-        
+
         if (monthKey && channelData.monthlyBreakdowns?.[monthKey]) {
           // Use month-specific breakdown data
           breakdownData = channelData.monthlyBreakdowns[monthKey][groupByName] || [];
@@ -328,7 +328,7 @@ const UnifiedBreakdownTable = ({
           // Fall back to aggregated breakdowns
           breakdownData = channelData.breakdowns[groupByName] || [];
         }
-        
+
         // When filters are active, filter breakdown rows by groupBy dimension so view/dimension filter applies
         const groupByFilterValues = hasFilters && channel === selectedChannel && (filterValues?.[channel] || {})[groupByDimId];
         if (groupByFilterValues && Array.isArray(groupByFilterValues) && groupByFilterValues.length > 0) {
@@ -338,7 +338,7 @@ const UnifiedBreakdownTable = ({
             return groupValue != null && allowedSet.has(String(groupValue).trim());
           });
         }
-        
+
         breakdownData.forEach((row: any) => {
           const groupValue = row.name || row[groupByName.toLowerCase().replace(/\s+/g, '_')] || 'Unknown';
           if (!allBreakdowns[groupValue]) {
@@ -366,16 +366,16 @@ const UnifiedBreakdownTable = ({
           revenue: Number(data.revenue) || 0,
           bookings: Number(data.bookings) || 0,
         };
-        
+
         const metrics = calculateDerivedMetrics(cleanData);
-        
+
         return {
           groupValue,
           metrics,
           rawData: cleanData,
         };
       });
-    
+
     return result;
   }, [displayDataFromApi, apiBreakdowns, pivotData, groupBy, breakdownBy, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear]);
 
@@ -416,30 +416,30 @@ const UnifiedBreakdownTable = ({
     const groupByDim = availableDimensions.find(d => d.id === groupBy);
     const groupByDimId = groupByDim?.id || groupBy;
     const groupByName = groupByDim?.name || groupBy;
-    
+
     const breakdownByDim = availableDimensions.find(d => d.id === breakdownBy);
     const breakdownByName = breakdownByDim?.name || breakdownBy;
     const breakdownByDimId = breakdownByDim?.id || breakdownBy;
-    
-    const channelsToCheck = selectedChannel && selectedChannel !== 'overview' 
-      ? [selectedChannel] 
+
+    const channelsToCheck = selectedChannel && selectedChannel !== 'overview'
+      ? [selectedChannel]
       : Object.keys(pivotData.channels);
-    
+
     // Check if filters are actually applied using centralized function
     const hasFilters = selectedChannel && selectedChannel !== 'overview' && filterValues?.[selectedChannel]
       ? hasActiveFiltersForChannel(
-          filterValues[selectedChannel],
-          filterDimensionValues?.[selectedChannel]
-        )
+        filterValues[selectedChannel],
+        filterDimensionValues?.[selectedChannel]
+      )
       : false;
-    
+
     const allBreakdowns: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
     let hadRawDataRows = false;
 
     for (const channel of channelsToCheck) {
       const channelData = pivotData.channels[channel];
       if (!channelData) continue;
-      
+
       // Build date range if month is selected
       let dateRange: { start: Date; end: Date } | undefined;
       if (monthKey) {
@@ -456,12 +456,12 @@ const UnifiedBreakdownTable = ({
           end: new Date(yearNum, 11, 31, 23, 59, 59),
         };
       }
-      
+
       // Get raw data rows
       const rawDataRows = (channelData as any).rawDataRows || [];
       if (rawDataRows.length > 0) hadRawDataRows = true;
       const expandedDimensionMap = (channelData as any).dimensionMap || {};
-      
+
       // Apply filters if they exist (pass dimensionMap so name-keyed data e.g. "Link Type" is matched)
       let filteredRows = rawDataRows;
       if (hasFilters && channel === selectedChannel) {
@@ -470,7 +470,7 @@ const UnifiedBreakdownTable = ({
       } else if (dateRange) {
         filteredRows = filterRawDataRows(rawDataRows, {}, dateRange, expandedDimensionMap);
       }
-      
+
       // Filter to only rows where groupBy dimension matches expandedRow
       const rowsForExpandedRow = filteredRows.filter((row) => {
         const rowData = row.dimension_values || row;
@@ -479,14 +479,14 @@ const UnifiedBreakdownTable = ({
         const normalizedExpandedRow = String(expandedRow).trim();
         return normalizedRowGroupValue === normalizedExpandedRow;
       });
-      
+
       // Group by breakdownBy dimension
       const groupedRows: Record<string, any[]> = {};
       rowsForExpandedRow.forEach((row) => {
         const rowData = row.dimension_values || row;
         const breakdownValue = rowData[breakdownByDimId] || rowData[breakdownByName] || 'Unknown';
         const normalizedBreakdownValue = String(breakdownValue).trim();
-        
+
         if (normalizedBreakdownValue && normalizedBreakdownValue !== 'Unknown') {
           if (!groupedRows[normalizedBreakdownValue]) {
             groupedRows[normalizedBreakdownValue] = [];
@@ -494,13 +494,13 @@ const UnifiedBreakdownTable = ({
           groupedRows[normalizedBreakdownValue].push(row);
         }
       });
-      
+
       // Aggregate metrics for each breakdown value
       Object.entries(groupedRows).forEach(([breakdownValue, groupRows]) => {
         if (!allBreakdowns[breakdownValue]) {
           allBreakdowns[breakdownValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
         }
-        
+
         // Build metricNameToIdMap from dimensionMap (reverse mapping: name -> id)
         // This matches the exact structure used in slideReportPivotComputation.ts
         const dimensionMap = (channelData as any).dimensionMap || {};
@@ -510,10 +510,10 @@ const UnifiedBreakdownTable = ({
             metricNameToIdMap[dimensionName] = dimensionId;
           }
         });
-        
+
         groupRows.forEach((row) => {
           const rowData = row.dimension_values || row;
-          
+
           // Use EXACT same extraction logic as computeBreakdownAllTime/computeBreakdownForMonth
           // This ensures we get the same values as the pre-computed breakdowns
           allBreakdowns[breakdownValue].impressions += parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
@@ -560,7 +560,7 @@ const UnifiedBreakdownTable = ({
         });
       }
     }
-    
+
     return Object.entries(allBreakdowns)
       .filter(([value]) => value && value !== 'Unknown')
       .sort(([, a], [, b]) => b.revenue - a.revenue)
@@ -580,14 +580,14 @@ const UnifiedBreakdownTable = ({
     bookings: acc.bookings + (group.rawData?.bookings || group.metrics.bookings || 0),
   }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
   const totalMetrics = calculateDerivedMetrics(totals);
-  
+
   // Expose totals to parent component for KPI cards synchronization
   useEffect(() => {
     if (onTotalsChange && selectedChannel) {
       onTotalsChange(totals);
     }
   }, [totals, onTotalsChange, selectedChannel]);
-  
+
   const groupByDim = availableDimensions.find(d => d.id === groupBy);
   const breakdownByDim = availableDimensions.find(d => d.id === breakdownBy);
 
@@ -690,7 +690,7 @@ const UnifiedBreakdownTable = ({
         <TableBody>
           {groupedData.map((group) => (
             <React.Fragment key={group.groupValue}>
-              <TableRow 
+              <TableRow
                 className="hover:bg-muted/50 cursor-pointer"
                 onClick={() => onRowClick(expandedRow === group.groupValue ? null : group.groupValue)}
               >
@@ -786,7 +786,7 @@ export default function SlideViewPage() {
   const currentDate = new Date();
   const currentMonthName = MONTH_NAMES[currentDate.getMonth()];
   const currentYearStr = currentDate.getFullYear().toString();
-  
+
   const [selectedYear, setSelectedYear] = useState(currentYearStr); // Default to current year
   const [selectedMonth, setSelectedMonth] = useState(currentMonthName); // Default to current month
   const [selectedTab, setSelectedTab] = useState("overview");
@@ -827,24 +827,24 @@ export default function SlideViewPage() {
   const [pnlModeEnabled, setPnlModeEnabled] = useState(false); // PnL mode for budget table
   const [editingBudget, setEditingBudget] = useState<{ month: string; channel: string | null } | null>(null); // { month: "November 2025", channel: "metasearch" | "sem" | "social" | null for overview }
   const [editBudgetValue, setEditBudgetValue] = useState("");
-  
+
   // PnL configuration state - editable per channel
-  const [pnlConfig, setPnlConfig] = useState<Record<string, { 
-    recurrentFee: number; 
-    percentCost: number; 
-    percentRevenue: number; 
-    spender: 'client' | 'agency' 
+  const [pnlConfig, setPnlConfig] = useState<Record<string, {
+    recurrentFee: number;
+    percentCost: number;
+    percentRevenue: number;
+    spender: 'client' | 'agency'
   }>>({
     metasearch: { recurrentFee: 1600, percentCost: 0, percentRevenue: 0, spender: 'client' },
     sem: { recurrentFee: 2000, percentCost: 0, percentRevenue: 5, spender: 'client' },
     social: { recurrentFee: 1800, percentCost: 0, percentRevenue: 0, spender: 'client' },
   });
-  
+
   // Editing state for PnL fields
-  const [editingPnl, setEditingPnl] = useState<{ 
-    month: string; 
-    channel: string | null; 
-    field: 'spender' | 'recurrentFee' | 'percentCost' | 'percentRevenue' 
+  const [editingPnl, setEditingPnl] = useState<{
+    month: string;
+    channel: string | null;
+    field: 'spender' | 'recurrentFee' | 'percentCost' | 'percentRevenue'
   } | null>(null);
   const [editPnlValue, setEditPnlValue] = useState("");
   // Initialize selectedDimensions based on available channels
@@ -856,8 +856,8 @@ export default function SlideViewPage() {
   });
 
   // Determine slide type from URL
-  const slideType = location.pathname.includes('/master-report') ? 'master-report' : 
-                    location.pathname.includes('/brady') ? 'brady' : 'default';
+  const slideType = location.pathname.includes('/master-report') ? 'master-report' :
+    location.pathname.includes('/brady') ? 'brady' : 'default';
 
   // Master Report currency settings
   const [displayCurrency, setDisplayCurrency] = useState<'AUD' | 'USD'>('AUD');
@@ -901,7 +901,7 @@ export default function SlideViewPage() {
   const fetchSlideReportData = useCallback(async () => {
     // TODO: Uncomment this when we have the edge function working
     // if (slideType !== 'master-report') return;
-    
+
     // setIsLoadingData(true);
     // try {
     //   const { data, error } = await supabase.functions.invoke('get-slide-report-data', {
@@ -1014,15 +1014,15 @@ export default function SlideViewPage() {
       // Check if we're accessing via a share link
       const isShared = searchParams.get('shared') === 'true';
       const slug = searchParams.get('slug');
-      
+
       if (isShared && slug) {
         // Check if share authentication exists in sessionStorage
         const authKey = `share_auth_${slug}`;
         const shareAuth = sessionStorage.getItem(authKey);
-        
+
         if (shareAuth === "true") {
           setIsSharedAccess(true);
-          
+
           // Load filters from share link if available
           const filtersKey = `share_filters_${slug}`;
           const storedFilters = sessionStorage.getItem(filtersKey);
@@ -1036,11 +1036,11 @@ export default function SlideViewPage() {
               console.error('[testing] Error parsing share link filters:', error);
             }
           }
-          
+
           // Load slide_report_id and account_id from share link if available
           const storedSlideReportId = sessionStorage.getItem(`share_slide_report_id_${slug}`);
           const storedAccountId = sessionStorage.getItem(`share_account_id_${slug}`);
-          
+
           if (storedSlideReportId && storedAccountId) {
             // Set slide report ID if not already set
             if (!slideReportId) {
@@ -1066,11 +1066,11 @@ export default function SlideViewPage() {
   useEffect(() => {
     const isShared = searchParams.get('shared') === 'true';
     const slug = searchParams.get('slug');
-    
+
     // If accessing via share link, enable read-only mode
     if (isShared && slug) {
       setIsReadOnlyMode(true);
-      
+
       // Load filters from share link if not already loaded
       const filtersKey = `share_filters_${slug}`;
       const storedFilters = sessionStorage.getItem(filtersKey);
@@ -1082,7 +1082,7 @@ export default function SlideViewPage() {
           console.error('[testing] Error parsing share link filters:', error);
         }
       }
-      
+
       // Legacy: Check for view_id from share link (backward compatibility)
       const shareViewId = sessionStorage.getItem(`share_view_id_${slideReportId}`);
       if (shareViewId && views.length > 0) {
@@ -1096,12 +1096,12 @@ export default function SlideViewPage() {
       }
       return;
     }
-    
+
     // Regular view handling (not from share link)
     const urlViewId = searchParams.get('viewId');
     const shareViewId = sessionStorage.getItem(`share_view_id_${slideReportId}`);
     const viewIdToUse = urlViewId || shareViewId;
-    
+
     if (viewIdToUse && views.length > 0 && !isReadOnlyMode) {
       // Check if viewId exists in views
       const view = views.find(v => v.id === viewIdToUse);
@@ -1110,7 +1110,7 @@ export default function SlideViewPage() {
         setIsReadOnlyMode(true);
         setSelectedViewId(viewIdToUse);
         handleApplyView(viewIdToUse);
-        
+
         // Clear the session storage after using it
         if (shareViewId) {
           sessionStorage.removeItem(`share_view_id_${slideReportId}`);
@@ -1163,12 +1163,12 @@ export default function SlideViewPage() {
     if (filteredData.monthlyData.length > 0) {
       return filteredData.monthlyData;
     }
-    
+
     // Fallback to dynamicMonthlyData for master-report
-    const sourceData = slideType === 'master-report' && dynamicMonthlyData.length > 0 
-      ? dynamicMonthlyData 
+    const sourceData = slideType === 'master-report' && dynamicMonthlyData.length > 0
+      ? dynamicMonthlyData
       : [];
-    
+
     if (selectedYear === 'all') {
       return sourceData;
     }
@@ -1181,10 +1181,10 @@ export default function SlideViewPage() {
   ): { year: number; month: string }[] => {
     const now = new Date();
     const months: { year: number; month: string }[] = [];
-    
+
     let startDate: Date;
     let endDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    
+
     if (timeRange === 'this_year') {
       startDate = new Date(now.getFullYear(), 0, 1);
     } else if (timeRange === 'last_12_months') {
@@ -1196,7 +1196,7 @@ export default function SlideViewPage() {
     } else {
       return [];
     }
-    
+
     // Generate all months from startDate to endDate (inclusive)
     const current = new Date(startDate);
     while (current <= endDate) {
@@ -1207,7 +1207,7 @@ export default function SlideViewPage() {
       // Move to next month
       current.setMonth(current.getMonth() + 1);
     }
-    
+
     return months;
   }, []);
 
@@ -1217,7 +1217,7 @@ export default function SlideViewPage() {
     timeRange: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'
   ): T[] => {
     const now = new Date();
-    
+
     if (timeRange === 'this_year') {
       return data.filter(m => m.year === now.getFullYear());
     } else if (timeRange === 'last_12_months') {
@@ -1239,7 +1239,7 @@ export default function SlideViewPage() {
         return monthDate >= cutoffDate;
       });
     }
-    
+
     return data;
   }, []);
 
@@ -1305,12 +1305,12 @@ export default function SlideViewPage() {
 
     // Filter records based on selected year/month
     let filteredRecords = monthlyDataRecords;
-    
+
     if (selectedYear !== 'all') {
       const yearNum = parseInt(selectedYear);
       filteredRecords = filteredRecords.filter(r => r.year === yearNum);
     }
-    
+
     if (selectedMonth !== 'all') {
       const monthNum = MONTH_NAMES.indexOf(selectedMonth) + 1;
       filteredRecords = filteredRecords.filter(r => r.month === monthNum);
@@ -1350,11 +1350,11 @@ export default function SlideViewPage() {
 
   // Helper function to check if any channel has non-zero data
   const hasAnyData = (totals: typeof currentTotals): boolean => {
-    return Object.values(totals).some(channel => 
-      channel.impressions > 0 || 
-      channel.clicks > 0 || 
-      channel.cost > 0 || 
-      channel.revenue > 0 || 
+    return Object.values(totals).some(channel =>
+      channel.impressions > 0 ||
+      channel.clicks > 0 ||
+      channel.cost > 0 ||
+      channel.revenue > 0 ||
       channel.bookings > 0
     );
   };
@@ -1366,9 +1366,9 @@ export default function SlideViewPage() {
     if (hookComparisonTotals) {
       return hookComparisonTotals;
     }
-    
+
     if (comparisonType === 'none') return null;
-    
+
     if (!effectivePivotData?.channels) return null;
     const channelTotals: Record<string, any> = {};
     for (const [channel, channelData] of Object.entries(effectivePivotData.channels)) {
@@ -1387,11 +1387,11 @@ export default function SlideViewPage() {
   useEffect(() => {
     if (effectivePivotData && slideType === 'master-report') {
       const pivotData = effectivePivotData;
-      
+
       // Build monthly data with per-channel breakdown
       const monthlyDataMap: Record<string, any> = {};
       const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-      
+
       // First, load overview monthly data as base
       if (pivotData.overview?.monthly) {
         Object.entries(pivotData.overview.monthly).forEach(([key, metrics]: [string, any]) => {
@@ -1411,7 +1411,7 @@ export default function SlideViewPage() {
           };
         });
       }
-      
+
       // Then, load channel-specific monthly data from channels[channel].monthly
       if (pivotData.channels) {
         for (const [channel, channelData] of Object.entries(pivotData.channels)) {
@@ -1440,17 +1440,17 @@ export default function SlideViewPage() {
           }
         }
       }
-      
+
       // Convert to array and sort
       const monthlyRevenue = Object.values(monthlyDataMap).sort((a, b) => {
         if (a.year !== b.year) return a.year - b.year;
         return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
       });
-      
+
       if (monthlyRevenue.length > 0) {
         setDynamicMonthlyData(monthlyRevenue);
       }
-      
+
       // Load channel totals from current metrics
       if (pivotData.channels) {
         const channelTotals: Record<string, any> = {};
@@ -1460,7 +1460,7 @@ export default function SlideViewPage() {
         if (Object.keys(channelTotals).length > 0) {
           setDynamicChannelTotals(channelTotals);
         }
-        
+
         // Load yearly totals
         const yearlyTotals: Record<number, Record<string, any>> = {};
         for (const year of [2024, 2025, 2026]) {
@@ -1536,16 +1536,16 @@ export default function SlideViewPage() {
     const loadFilterValuesFromPivotData = async () => {
       const pivotData = effectivePivotData;
       const config = slideReport?.configuration as SlideReportConfiguration | null;
-      
+
       if (!pivotData?.channels || !config?.filterConfigs || availableChannels.length === 0) {
         return;
       }
-      
+
       // Filter to only include channels that have reports
-      const validChannels = (config.selectedChannels || []).filter(channel => 
+      const validChannels = (config.selectedChannels || []).filter(channel =>
         availableChannels.includes(channel)
       );
-      
+
       const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {
         metasearch: {},
         sem: {},
@@ -1556,18 +1556,18 @@ export default function SlideViewPage() {
         sem: {},
         social: {},
       };
-      
+
       let hasValues = false;
-      
+
       for (const channel of validChannels) {
         const channelData = pivotData.channels[channel];
         const filterConfig = config.filterConfigs?.[channel];
-        
+
         if (!channelData || !filterConfig?.filterDimensionIds?.length) continue;
-        
+
         // Check if we have pre-computed filter values in pivot_data
         const filterUniqueValues = (channelData as any).filterUniqueValues as Record<string, { name: string; values: string[] }> | undefined;
-        
+
         if (filterUniqueValues) {
           // Use pre-computed values from pivot_data (fast path - no DB query needed)
           for (const filterDimId of filterConfig.filterDimensionIds) {
@@ -1587,7 +1587,7 @@ export default function SlideViewPage() {
               hasValues = true;
             }
           }
-          
+
           // Fetch dimension names for fallback path
           const uniqueIds = [...new Set(filterConfig.filterDimensionIds)];
           if (uniqueIds.length > 0) {
@@ -1595,7 +1595,7 @@ export default function SlideViewPage() {
               .from('dimensions')
               .select('id, name')
               .in('id', uniqueIds);
-            
+
             if (dimensionInfo) {
               for (const dim of dimensionInfo) {
                 updatedFilterDimensionNames[channel][dim.id] = dim.name;
@@ -1604,7 +1604,7 @@ export default function SlideViewPage() {
           }
         }
       }
-      
+
       if (hasValues) {
         setFilterDimensionValues(prev => ({ ...prev, ...updatedFilterDimensionValues }));
       }
@@ -1620,41 +1620,41 @@ export default function SlideViewPage() {
   // Load filter dimension values when switching to a channel tab that has filters
   useEffect(() => {
     let cancelled = false;
-    
+
     const loadValuesForCurrentTab = async () => {
       if (selectedTab === 'overview' || selectedTab === 'budget') return;
       if (cancelled) return;
-      
+
       const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
       const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
       const localFilterConfig = filterConfigs?.[currentChannel];
       const filterDimIds = savedFilterConfigs?.filterDimensionIds || localFilterConfig?.filterDimensionIds || [];
-      
+
       if (filterDimIds.length === 0) return;
-      
+
       // Check if values are already loaded
-      const hasAllValues = filterDimIds.every(id => 
+      const hasAllValues = filterDimIds.every(id =>
         filterDimensionValues[currentChannel]?.[id]?.length > 0
       );
-      
+
       if (hasAllValues) {
         return;
       }
-      
+
       // First, try to get values from pivot_data (pre-computed; uses channel data from tables when available)
       const channelData = effectivePivotData?.channels?.[currentChannel];
       const filterUniqueValues = (channelData as any)?.filterUniqueValues as Record<string, { name: string; values: string[] }> | undefined;
-      
+
       const newValues: Record<string, string[]> = {};
       const newNames: Record<string, string> = {};
       const missingDimIds: string[] = [];
-      
+
       // Also check rawDataRows as a fast fallback (in-memory, no DB query)
       const rawDataRows = (channelData as any)?.rawDataRows as any[] | undefined;
-      
+
       for (const filterDimId of filterDimIds) {
         if (filterDimensionValues[currentChannel]?.[filterDimId]?.length > 0) continue;
-        
+
         // FASTEST: Check pre-computed filterUniqueValues from pivot_data first
         if (filterUniqueValues?.[filterDimId]) {
           newValues[filterDimId] = filterUniqueValues[filterDimId].values;
@@ -1673,7 +1673,7 @@ export default function SlideViewPage() {
           if (sortedValues.length > 0) {
             newValues[filterDimId] = sortedValues;
             // Try to get dimension name from dimensionMap or dimensions list
-            const dimName = (channelData as any)?.dimensionMap?.[filterDimId] 
+            const dimName = (channelData as any)?.dimensionMap?.[filterDimId]
               || dimensions[currentChannel]?.find(d => d.id === filterDimId)?.name
               || filterDimId;
             newNames[filterDimId] = dimName;
@@ -1684,7 +1684,7 @@ export default function SlideViewPage() {
           missingDimIds.push(filterDimId);
         }
       }
-      
+
       // SLOW: Fallback to database only if needed (load in parallel for speed)
       if (missingDimIds.length > 0 && !cancelled) {
         // Set loading state
@@ -1696,7 +1696,7 @@ export default function SlideViewPage() {
           });
           return updated;
         });
-        
+
         const loadPromises = missingDimIds.map(filterDimId =>
           loadFilterDimensionValues(currentChannel, filterDimId).then(values => {
             if (cancelled) return;
@@ -1715,12 +1715,12 @@ export default function SlideViewPage() {
             }
           })
         );
-        
+
         await Promise.all(loadPromises);
       }
-      
+
       if (cancelled) return;
-      
+
       if (Object.keys(newValues).length > 0) {
         setFilterDimensionValues(prev => ({
           ...prev,
@@ -1769,7 +1769,7 @@ export default function SlideViewPage() {
 
   // Account-specific report IDs are loaded via getAccountReportIds and stored in accountReportIds state
   // Value dimension IDs state (for step 2 - applies to all channels)
-  
+
   // Available dimensions per channel (fetched from database) - VALUE types only
   const [availableDimensions, setAvailableDimensions] = useState<Record<string, { id: string; name: string; type: string }[]>>({
     metasearch: [],
@@ -1810,8 +1810,8 @@ export default function SlideViewPage() {
 
   // Use dynamic dimensions if available, otherwise fallback to hardcoded IDs
   const defaultValueDimensionIds = useMemo(() => {
-    return allAvailableValueDimensionIds.length > 0 
-      ? allAvailableValueDimensionIds 
+    return allAvailableValueDimensionIds.length > 0
+      ? allAvailableValueDimensionIds
       : FALLBACK_DIMENSION_IDS;
   }, [allAvailableValueDimensionIds]);
 
@@ -2039,7 +2039,7 @@ export default function SlideViewPage() {
     if (modalStep === 4 && activeChannelTab && isEditSourceOpen) {
       const config = channelConfigs[activeChannelTab];
       const dimensionId = config?.dimensionId;
-      
+
       // Only load if we don't already have values (they should be preloaded from step 2)
       const existingValues = dimensionValues[activeChannelTab] || [];
       if (dimensionId && existingValues.length === 0 && !loadingValues[activeChannelTab]) {
@@ -2060,7 +2060,7 @@ export default function SlideViewPage() {
 
   // Ref to store loadValuesForDimension to avoid circular dependency
   const loadValuesForDimensionRef = useRef<((channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => Promise<void>) | null>(null);
-  
+
   // AbortController ref to cancel ongoing dimension value loading
   const dimensionValueAbortControllerRef = useRef<AbortController | null>(null);
 
@@ -2113,7 +2113,7 @@ export default function SlideViewPage() {
 
       // Fallback to global dimensions if no account-specific dimensions found
       let channelDims: Dimension[] = (accountDims || []) as Dimension[];
-      
+
       if (channelDims.length === 0) {
         console.warn(`[loadDimensionsForChannel] No account-specific dimensions found for ${channel}, trying global...`);
         const { data: globalDims, error: globalError } = await supabase
@@ -2134,15 +2134,15 @@ export default function SlideViewPage() {
         .map(name => channelDims.find(d => d.name === name))
         .filter((d): d is Dimension => d !== undefined);
 
-      console.log(`[loadDimensionsForChannel] Loaded ${sortedDims.length} dimensions for ${channel} (account: ${accountId}):`, 
+      console.log(`[loadDimensionsForChannel] Loaded ${sortedDims.length} dimensions for ${channel} (account: ${accountId}):`,
         sortedDims.map(d => ({ id: d.id, name: d.name })));
 
       setDimensions(prev => ({ ...prev, [channel]: sortedDims }));
       setLoadingDimensions(prev => ({ ...prev, [channel]: false }));
-      
+
       // Get the dimension ID to use
       let dimensionIdToLoad = channelConfigs[channel]?.dimensionId;
-      
+
       // Auto-select first dimension (Hotel for metasearch, Account for others) if not already set
       if (sortedDims.length > 0 && !dimensionIdToLoad) {
         const firstDimId = sortedDims[0].id;
@@ -2155,7 +2155,7 @@ export default function SlideViewPage() {
           },
         }));
       }
-      
+
       // Load values for the dimension (use the determined ID directly, not from state)
       if (dimensionIdToLoad && loadValuesForDimensionRef.current) {
         await loadValuesForDimensionRef.current(channel, dimensionIdToLoad);
@@ -2178,11 +2178,11 @@ export default function SlideViewPage() {
     if (dimensionValueAbortControllerRef.current) {
       dimensionValueAbortControllerRef.current.abort();
     }
-    
+
     // Create new AbortController for this request
     const abortController = new AbortController();
     dimensionValueAbortControllerRef.current = abortController;
-    
+
     // Check cache first
     const cacheKey = `${channel}-${dimensionId}`;
     const cached = dimensionValuesCache.get(cacheKey);
@@ -2194,52 +2194,52 @@ export default function SlideViewPage() {
     // FIRST: Immediately show cached selected values from saved config (instant display)
     const savedConfig = channelConfigs[channel];
     const cachedSelectedValues = savedConfig?.selectedValues || [];
-    
+
     // If we have cached values and the dimension matches, show them immediately
     if (cachedSelectedValues.length > 0 && savedConfig?.dimensionId === dimensionId) {
       setDimensionValues(prev => ({ ...prev, [channel]: cachedSelectedValues }));
     }
-    
+
     // Note: loading state is already set by the caller for immediate UI feedback
     // But ensure it's true just in case
     setLoadingValues(prev => ({ ...prev, [channel]: true }));
-    
+
     try {
       // SECOND: Check if we have raw data rows stored in pivot_data (most comprehensive - all dimension values)
       const channelData = effectivePivotData?.channels?.[channel];
-      
+
       // Try rawDataRows first - this contains ALL rows with ALL dimension values
       if (channelData?.rawDataRows && channelData.rawDataRows.length > 0) {
         const valueSet = new Set<string>();
         cachedSelectedValues.forEach(v => valueSet.add(v));
-        
+
         channelData.rawDataRows.forEach((row: any) => {
           const val = row[dimensionId];
           if (val !== undefined && val !== null && String(val).trim() !== '') {
             valueSet.add(String(val).trim());
           }
         });
-        
+
         const sortedValues = Array.from(valueSet).sort();
-        
+
         setDimensionValues(prev => ({ ...prev, [channel]: sortedValues }));
         setLoadingValues(prev => ({ ...prev, [channel]: false }));
         return;
       }
-      
+
       // THIRD: Check pre-computed filterUniqueValues in pivot_data
       const storedFilterValues = channelData?.filterUniqueValues?.[dimensionId];
-      
+
       if (storedFilterValues?.values && storedFilterValues.values.length > 0) {
         // Merge with cached selected values to ensure they're included
         const allValues = new Set([...storedFilterValues.values, ...cachedSelectedValues]);
         const sortedValues = Array.from(allValues).sort();
-        
+
         setDimensionValues(prev => ({ ...prev, [channel]: sortedValues }));
         setLoadingValues(prev => ({ ...prev, [channel]: false }));
         return;
       }
-      
+
       // FOURTH: Check breakdown dimension values
       const breakdowns = channelData?.breakdowns;
       if (breakdowns) {
@@ -2252,29 +2252,29 @@ export default function SlideViewPage() {
             const breakdownValues = breakdownRows
               .map(row => {
                 // Look for the dimension value - it's the key that matches the dimension name (case-insensitive)
-                const dimKey = Object.keys(row).find(k => 
-                  k.toLowerCase() === dimInfo.name.toLowerCase() || 
+                const dimKey = Object.keys(row).find(k =>
+                  k.toLowerCase() === dimInfo.name.toLowerCase() ||
                   k === 'name' ||
                   !['impressions', 'clicks', 'cost', 'revenue', 'bookings', 'ctr', 'conversionRate', 'cpc', 'roas', 'costOfSale'].includes(k)
                 );
                 return dimKey ? String(row[dimKey]) : null;
               })
               .filter((v): v is string => v !== null && v !== '');
-            
+
             // Merge with cached selected values
             const allValues = new Set([...breakdownValues, ...cachedSelectedValues]);
             const sortedValues = Array.from(allValues).sort();
-            
+
             setDimensionValues(prev => ({ ...prev, [channel]: sortedValues }));
             setLoadingValues(prev => ({ ...prev, [channel]: false }));
             return;
           }
         }
       }
-      
+
       // FALLBACK: Fetch from dimension_data table
       const reportId = getReportIdForChannel(channel);
-      
+
       if (!reportId) {
         console.error(`[loadValuesForDimension] No report ID for channel: ${channel}`);
         if (cachedSelectedValues.length === 0) {
@@ -2310,7 +2310,7 @@ export default function SlideViewPage() {
 
           let batchData: any[] | null = null;
           let dimError: any = null;
-          
+
           try {
             const result = await Promise.race([
               queryPromise,
@@ -2333,12 +2333,12 @@ export default function SlideViewPage() {
           if (dimError) {
             consecutiveErrors++;
             console.error(`[loadValuesForDimension] Error fetching batch for ${channel} (attempt ${consecutiveErrors}/${maxConsecutiveErrors}):`, dimError);
-            
+
             if (consecutiveErrors >= maxConsecutiveErrors) {
               console.error(`[loadValuesForDimension] Too many consecutive errors, stopping fetch`);
               break;
             }
-            
+
             // Wait before retrying (exponential backoff)
             await new Promise(resolve => setTimeout(resolve, 1000 * consecutiveErrors));
             continue;
@@ -2350,7 +2350,7 @@ export default function SlideViewPage() {
             allDimData.push(...batchData);
             offset += batchSize;
             hasMore = batchData.length === batchSize;
-            
+
             // Log progress for large datasets
             if (allDimData.length % 5000 === 0) {
               console.log(`[loadValuesForDimension] Loaded ${allDimData.length} rows for ${channel}/${dimensionId}...`);
@@ -2363,25 +2363,25 @@ export default function SlideViewPage() {
             console.log(`[loadValuesForDimension] Request cancelled for ${channel}/${dimensionId}`);
             return;
           }
-          
+
           if (err.message === 'Request timeout') {
             console.warn(`[loadValuesForDimension] Timeout fetching batch at offset ${offset} for ${channel}`);
             consecutiveErrors++;
-            
+
             if (consecutiveErrors >= maxConsecutiveErrors) {
               console.error(`[loadValuesForDimension] Too many timeouts, stopping fetch`);
               break;
             }
-            
+
             // Try smaller batch size on timeout
             offset += Math.floor(batchSize / 2);
             await new Promise(resolve => setTimeout(resolve, 1000));
             continue;
           }
-          
+
           console.error(`[loadValuesForDimension] Unexpected error:`, err);
           consecutiveErrors++;
-          
+
           if (consecutiveErrors >= maxConsecutiveErrors) {
             break;
           }
@@ -2408,10 +2408,10 @@ export default function SlideViewPage() {
 
       // Extract unique values for this dimension
       const valueSet = new Set<string>();
-      
+
       // Start with cached selected values to ensure they're always included
       cachedSelectedValues.forEach(v => valueSet.add(v));
-      
+
       dimData.forEach((row: any) => {
         const dimValues = row.dimension_values || {};
         const val = dimValues[dimensionId];
@@ -2429,7 +2429,7 @@ export default function SlideViewPage() {
         const sampleKeys = Object.keys(sampleRow.dimension_values || {});
         console.warn(`[loadValuesForDimension] No values found for dimension ${dimensionId} in ${channel}. Sample row keys:`, sampleKeys);
         console.warn(`[loadValuesForDimension] Looking for dimension ID: ${dimensionId}`);
-        
+
         // Try to find dimension by name as fallback
         const dimInfo = dimensions[channel]?.find(d => d.id === dimensionId);
         if (dimInfo) {
@@ -2438,7 +2438,7 @@ export default function SlideViewPage() {
       }
 
       let values = Array.from(valueSet).sort();
-      
+
       // For Metasearch Hotel dimension, filter to only Brady hotels (only for brady slide, not master-report)
       if (slideType === 'brady' && channel === 'metasearch' && dimensionId === '093ac487-dd90-4466-9972-ac51d110e91e') {
         values = values.filter(v => v.startsWith('Brady'));
@@ -2446,9 +2446,9 @@ export default function SlideViewPage() {
 
       // Cache the results
       dimensionValuesCache.set(cacheKey, values);
-      
+
       setDimensionValues(prev => ({ ...prev, [channel]: values }));
-      
+
       // Auto-select all Brady values for metasearch Hotel (only for brady slide, not master-report)
       if (slideType === 'brady' && channel === 'metasearch' && dimensionId === '093ac487-dd90-4466-9972-ac51d110e91e') {
         setChannelConfigs(prev => ({
@@ -2464,7 +2464,7 @@ export default function SlideViewPage() {
         console.log(`[loadValuesForDimension] Request cancelled for ${channel}/${dimensionId}`);
         return;
       }
-      
+
       console.error(`[loadValuesForDimension] CATCH Error for ${channel}/${dimensionId}:`, err);
       if (cachedSelectedValues.length === 0) {
         setDimensionValues(prev => ({ ...prev, [channel]: [] }));
@@ -2496,7 +2496,7 @@ export default function SlideViewPage() {
         if (dimensions[channel].length === 0 && !loadingDimensions[channel]) {
           loadDimensionsForChannel(channel);
         }
-        
+
         // Only load values on step 4 if not already loaded and dimension is configured
         if (modalStep === 4 && channelConfigs[channel]?.dimensionId) {
           const existingValues = dimensionValues[channel] || [];
@@ -2608,14 +2608,14 @@ export default function SlideViewPage() {
   const handleFilterDimensionToggle = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
     const currentConfig = filterConfigs?.[channel];
     const isSelected = currentConfig?.filterDimensionIds?.includes(dimensionId) || false;
-    
+
     setFilterConfigs(prev => {
       const current = prev?.[channel] || { filterDimensionIds: [] };
       const currentIds = current.filterDimensionIds || [];
       const newFilterDimensionIds = isSelected
         ? currentIds.filter(id => id !== dimensionId)
         : [...currentIds, dimensionId];
-      
+
       return {
         ...prev,
         [channel]: {
@@ -2623,7 +2623,7 @@ export default function SlideViewPage() {
         },
       };
     });
-    
+
     if (!isSelected) {
       // Dimension was just added, load its values using the helper function
       const values = await loadFilterDimensionValues(channel, dimensionId);
@@ -2679,10 +2679,10 @@ export default function SlideViewPage() {
       // FASTEST PATH: Use rawDataRows if available (already in memory, no DB query needed)
       const channelData = effectivePivotData?.channels?.[channel];
       const rawDataRows = (channelData as any)?.rawDataRows as any[] | undefined;
-      
+
       if (rawDataRows && rawDataRows.length > 0) {
         const uniqueValues = new Set<string>();
-        
+
         for (const row of rawDataRows) {
           const rowData = row.dimension_values || row;
           const value = rowData[filterDimId];
@@ -2690,11 +2690,11 @@ export default function SlideViewPage() {
             uniqueValues.add(String(value).trim());
           }
         }
-        
+
         const sortedValues = Array.from(uniqueValues).sort();
         return sortedValues;
       }
-      
+
       // FAST PATH: Use pre-computed filterUniqueValues from pivot_data
       const filterUniqueValues = (channelData as any)?.filterUniqueValues as Record<string, { name: string; values: string[] }> | undefined;
       if (filterUniqueValues?.[filterDimId]) {
@@ -2714,7 +2714,7 @@ export default function SlideViewPage() {
           .select('dimension_values')
           .eq('report_id', reportId)
           .range(offset, offset + batchSize - 1);
-        
+
         if (error) {
           console.error(`[loadFilterDimensionValues] Error loading dimension_data batch for ${channel}/${filterDimId}:`, error);
           return [];
@@ -2747,10 +2747,10 @@ export default function SlideViewPage() {
       }
 
       const sortedValues = Array.from(uniqueValues).sort();
-      
+
       // Cache the result
       filterValuesCache.set(cacheKey, sortedValues);
-      
+
       return sortedValues;
     } catch (error) {
       console.error(`[loadFilterDimensionValues] Error loading filter values for ${channel}/${filterDimId}:`, error);
@@ -2794,14 +2794,14 @@ export default function SlideViewPage() {
         .eq('scope', 'global')
         .in('type', ['number', 'currency', 'percentage'])
         .order('name');
-      
+
       if (error) {
         console.error('Error loading dimensions:', error);
         return;
       }
 
       const dimensionList = dims || [];
-      
+
       // Set same dimensions for all channels (global value dimensions)
       setAvailableDimensions({
         metasearch: dimensionList,
@@ -2813,19 +2813,19 @@ export default function SlideViewPage() {
       // Only if no saved configuration exists (check if current selection is default/empty)
       const currentSelected = selectedValueDimensionIds;
       const currentDefaultIds = defaultValueDimensionIds;
-      const isDefaultOrEmpty = currentSelected.length === 0 || 
-        (currentSelected.length === currentDefaultIds.length && 
-         currentSelected.every(id => currentDefaultIds.includes(id)));
-      
+      const isDefaultOrEmpty = currentSelected.length === 0 ||
+        (currentSelected.length === currentDefaultIds.length &&
+          currentSelected.every(id => currentDefaultIds.includes(id)));
+
       if (isDefaultOrEmpty) {
         // Find dimension IDs that match the KPI names
         const kpiDimensionIds = dimensionList
-          .filter(dim => SLIDE_KPI_NAMES.some(kpiName => 
+          .filter(dim => SLIDE_KPI_NAMES.some(kpiName =>
             dim.name.toLowerCase() === kpiName.toLowerCase() ||
             dim.name.toLowerCase() === kpiName.toLowerCase().replace(' ', '')
           ))
           .map(dim => dim.id);
-        
+
         if (kpiDimensionIds.length > 0) {
           setSelectedValueDimensionIds(kpiDimensionIds);
         } else if (currentSelected.length === 0) {
@@ -2847,7 +2847,7 @@ export default function SlideViewPage() {
 
   // Handle dimension selection toggle (applies to all channels)
   const handleValueDimensionToggle = (dimensionId: string) => {
-    setSelectedValueDimensionIds(prev => 
+    setSelectedValueDimensionIds(prev =>
       prev.includes(dimensionId)
         ? prev.filter(id => id !== dimensionId)
         : [...prev, dimensionId]
@@ -3018,8 +3018,8 @@ export default function SlideViewPage() {
         });
       } else {
         // Create new slide report
-        const reportName = slideType === 'master-report' 
-          ? 'Master Report' 
+        const reportName = slideType === 'master-report'
+          ? 'Master Report'
           : `Brady Hotels - Since ${sinceMonth} ${sinceYear}`;
         const newReport = await createSlideReport.mutateAsync({
           name: reportName,
@@ -3090,7 +3090,7 @@ export default function SlideViewPage() {
       // The view will be automatically refetched by the query
       // We'll select it after the query refetches
       queryClient.invalidateQueries({ queryKey: ['slide_report_views', 'list', slideReportId] });
-      
+
       // Use a small delay to allow the query to refetch, then find and select the new view
       setTimeout(() => {
         const updatedViews = queryClient.getQueryData<any[]>(['slide_report_views', 'list', slideReportId]) || [];
@@ -3138,7 +3138,7 @@ export default function SlideViewPage() {
   // Apply a saved view
   const handleApplyView = useCallback((viewId: string | null) => {
     isApplyingViewRef.current = true; // Mark that we're applying a view
-    
+
     if (!viewId || viewId === 'unsaved') {
       // Master view - reset to defaults; keep Year and Month as-is
       setComparisonType('none');
@@ -3164,7 +3164,7 @@ export default function SlideViewPage() {
       isApplyingViewRef.current = false;
       return;
     }
-    
+
     // Apply view settings; do not change Year or Month — user keeps current filters
     setComparisonType(view.comparison_type);
     if (view.chart_time_range) {
@@ -3252,10 +3252,608 @@ export default function SlideViewPage() {
     configs: Record<string, FilterConfig>
   ) => {
     const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {};
-    
+
     // Load all values in parallel for faster loading
     const loadPromises: Promise<void>[] = [];
-    
+
     for (const channel of channels) {
       const filterDimIds = configs[channel]?.filterDimensionIds || [];
-      if (!updatedFilterDimensionValues[channel]) {
+      for (const dimId of filterDimIds) {
+        loadPromises.push(
+          loadFilterDimensionValues(channel, dimId).then(values => {
+            if (!updatedFilterDimensionValues[channel]) {
+              updatedFilterDimensionValues[channel] = {};
+            }
+            updatedFilterDimensionValues[channel][dimId] = values;
+          })
+        );
+      }
+    }
+
+    await Promise.all(loadPromises);
+
+    if (Object.keys(updatedFilterDimensionValues).length > 0) {
+      setFilterDimensionValues(prev => {
+        const merged = { ...prev };
+        for (const [ch, dims] of Object.entries(updatedFilterDimensionValues)) {
+          merged[ch] = { ...merged[ch], ...dims };
+        }
+        return merged;
+      });
+    }
+  };
+
+  // =================== HOOKS & DERIVED DATA ===================
+
+  // Overview metrics (sum of all channels)
+  const overviewMetrics = useOverviewMetrics(currentTotals as any);
+
+  // KPI cards for overview
+  const KPI_CARDS = useKPICards(overviewMetrics);
+
+  // Report KPI cards generator for individual channels
+  const getReportKPICards = useReportKPICards();
+
+  // Comparison metrics for overview
+  const overviewComparisonMetrics = useComparisonMetrics(
+    comparisonTotals as any,
+    comparisonType as 'none' | 'previous_period' | 'previous_year'
+  );
+
+  const getOverviewComparisonMetrics = useCallback(() => {
+    return overviewComparisonMetrics;
+  }, [overviewComparisonMetrics]);
+
+  const getChannelComparisonMetrics = useCallback((channel: 'metasearch' | 'sem' | 'social') => {
+    if (!comparisonTotals || comparisonType === 'none') return null;
+    const channelData = comparisonTotals[channel];
+    if (!channelData) return null;
+    const derived = calculateDerivedMetrics(channelData);
+    return { ...derived, label: comparisonType === 'previous_period' ? 'vs Previous Period' : 'vs Previous Year' };
+  }, [comparisonTotals, comparisonType]);
+
+  // Budget data
+  const budgetMonthlyData = useBudgetMonthlyData(
+    effectivePivotData,
+    selectedViewId,
+    viewBudgets,
+    selectedYear,
+    false,
+    () => [],
+    filterValues,
+    filteredData.apiMonthlyChannelMetrics
+  );
+
+  // Budget editing handlers
+  const handleStartEditBudget = useCallback((month: string, channel: string | null, currentBudget: number) => {
+    setEditingBudget({ month, channel });
+    setEditBudgetValue(String(currentBudget || 0));
+  }, []);
+
+  const handleSaveBudget = useCallback(async () => {
+    if (!editingBudget || !slideReportId || !user) return;
+    const value = parseFloat(editBudgetValue) || 0;
+    // Save budget to database
+    try {
+      const { error } = await supabase
+        .from('budgets')
+        .upsert({
+          user_id: user.id,
+          report_id: slideReportId,
+          view_id: selectedViewId,
+          account_id: accountId || null,
+          dimension_name: editingBudget.channel || 'overview',
+          dimension_item: editingBudget.month,
+          budget_data: { amount: value },
+        }, { onConflict: 'user_id,report_id,view_id,dimension_name,dimension_item' });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['slide_report_views', 'budgets'] });
+    } catch (err) {
+      console.error('Error saving budget:', err);
+    }
+    setEditingBudget(null);
+    setEditBudgetValue("");
+  }, [editingBudget, editBudgetValue, slideReportId, user, selectedViewId, accountId, queryClient]);
+
+  const handleCancelEditBudget = useCallback(() => {
+    setEditingBudget(null);
+    setEditBudgetValue("");
+  }, []);
+
+  // PnL editing handlers
+  const handleStartEditPnl = useCallback((month: string, channel: string | null, field: 'spender' | 'recurrentFee' | 'percentCost' | 'percentRevenue', currentValue: string | number) => {
+    setEditingPnl({ month, channel, field });
+    setEditPnlValue(String(currentValue));
+  }, []);
+
+  const handleSavePnl = useCallback(() => {
+    if (!editingPnl) return;
+    const { channel, field } = editingPnl;
+    if (channel) {
+      setPnlConfig(prev => ({
+        ...prev,
+        [channel]: {
+          ...prev[channel],
+          [field]: field === 'spender' ? editPnlValue : parseFloat(editPnlValue) || 0,
+        },
+      }));
+    }
+    setEditingPnl(null);
+    setEditPnlValue("");
+  }, [editingPnl, editPnlValue]);
+
+  const handleCancelEditPnl = useCallback(() => {
+    setEditingPnl(null);
+    setEditPnlValue("");
+  }, []);
+
+  // Refresh data modal handler
+  const handleRefreshDataWithModal = useCallback(async () => {
+    if (!slideReportId || !slideReport) {
+      toast({
+        title: "No Report",
+        description: "Please configure your report first by clicking Edit Source.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsRefreshModalOpen(true);
+    setRefreshStep(1);
+    setRefreshStepStatus({ 1: 'loading', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'pending' });
+    setRefreshError(null);
+
+    try {
+      // Step 1: Verify settings
+      setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'loading' }));
+      setRefreshStep(2);
+
+      // Step 2-4: Refresh data via edge function
+      await refreshSlideReportData.mutateAsync(slideReportId);
+      setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'complete', 4: 'complete', 5: 'loading' }));
+      setRefreshStep(5);
+
+      // Step 5: Done
+      setRefreshStepStatus(prev => ({ ...prev, 5: 'complete' }));
+
+      // Invalidate queries to reload data
+      queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
+      queryClient.invalidateQueries({ queryKey: ['slide_report_channel_month_data'] });
+      queryClient.invalidateQueries({ queryKey: ['slide_report_display_data'] });
+
+      toast({
+        title: "Data Refreshed",
+        description: "Your report data has been updated successfully.",
+      });
+    } catch (error: any) {
+      console.error('Error refreshing data:', error);
+      const errorMsg = error?.message || 'An unexpected error occurred';
+      setRefreshError(errorMsg);
+      setRefreshStepStatus(prev => {
+        const updated = { ...prev };
+        for (const key of Object.keys(updated)) {
+          if (updated[Number(key)] === 'loading') {
+            updated[Number(key)] = 'error';
+          }
+        }
+        return updated;
+      });
+    }
+  }, [slideReportId, slideReport, refreshSlideReportData, queryClient]);
+
+  // AI Summary modal handler
+  const handleAISummaryClick = useCallback(() => {
+    setIsAISummaryModalOpen(true);
+  }, []);
+
+  // Get summary for current tab
+  const currentSummary = useGetSummaryForTab(
+    slideReportId,
+    selectedTab as 'overview' | 'metasearch' | 'sem' | 'social',
+    selectedYear,
+    selectedMonth,
+    selectedViewId
+  );
+
+  // Modal close handler
+  const handleModalClose = useCallback((open: boolean) => {
+    if (!open) {
+      setIsEditSourceOpen(false);
+    }
+  }, []);
+
+  // Render helpers
+  const renderKPICards = useCallback((cards: any[], comparisonMetrics?: any) => {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-3">
+        {cards.map((card: any) => {
+          const Icon = card.icon;
+          let displayValue = '';
+          if (card.format === 'percent') {
+            displayValue = `${(card.value * 100).toFixed(1)}%`;
+          } else if (card.format === 'currency') {
+            displayValue = `$${formatNumber(card.value)}`;
+          } else if (card.format === 'roas') {
+            displayValue = card.value.toFixed(2);
+          } else {
+            displayValue = formatNumber(card.value);
+          }
+
+          // Calculate comparison
+          let changePercent: number | null = null;
+          if (comparisonMetrics && card.key in comparisonMetrics) {
+            const prevValue = comparisonMetrics[card.key];
+            if (prevValue > 0) {
+              changePercent = calculatePercentChange(card.value, prevValue);
+            }
+          }
+
+          return (
+            <Card key={card.key} className="p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Icon className={cn("h-3.5 w-3.5", card.color)} />
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{card.label}</span>
+              </div>
+              <div className="text-lg font-bold">{displayValue}</div>
+              {changePercent !== null && (
+                <div className={cn("text-xs flex items-center gap-0.5", changePercent >= 0 ? "text-green-600" : "text-red-600")}>
+                  {changePercent >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                  {Math.abs(changePercent).toFixed(1)}%
+                </div>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+    );
+  }, []);
+
+  const renderKPICardsSkeleton = useCallback(() => {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-3">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <Card key={i} className="p-3">
+            <Skeleton className="h-3 w-16 mb-2" />
+            <Skeleton className="h-6 w-20" />
+          </Card>
+        ))}
+      </div>
+    );
+  }, []);
+
+  const renderChartSkeleton = useCallback(() => {
+    return (
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-5 w-40" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-[300px] w-full" />
+        </CardContent>
+      </Card>
+    );
+  }, []);
+
+  const renderTableSkeleton = useCallback(() => {
+    return (
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-5 w-48" />
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }, []);
+
+  // =================== RETURN JSX ===================
+
+  if (!accountId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-muted-foreground">No account selected.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
+        {/* Header with tabs and controls */}
+        <SlideViewHeader
+          selectedTab={selectedTab}
+          setSelectedTab={setSelectedTab}
+          navigate={navigate}
+          accountId={accountId}
+          setIsShareModalOpen={setIsShareModalOpen}
+          handleRefreshDataWithModal={handleRefreshDataWithModal}
+          isRefreshModalOpen={isRefreshModalOpen}
+          slideReport={slideReport}
+          displayCurrency={slideType === 'master-report' ? displayCurrency : undefined}
+          onDisplayCurrencyChange={slideType === 'master-report' ? setDisplayCurrency : undefined}
+        />
+
+        {/* Filters Row */}
+        <FiltersRow
+          selectedTab={selectedTab}
+          selectedViewId={selectedViewId}
+          setSelectedViewId={setSelectedViewId}
+          isReadOnlyMode={isReadOnlyMode}
+          availableViews={availableViews}
+          handleApplyView={handleApplyView}
+          handleDeleteView={handleDeleteView}
+          setIsSaveViewDialogOpen={setIsSaveViewDialogOpen}
+          setIsSaveOrUpdateViewDialogOpen={setIsSaveOrUpdateViewDialogOpen}
+          filterValues={filterValues}
+          setFilterValues={setFilterValues}
+          filterDimensionValues={filterDimensionValues}
+          setFilterDimensionValues={setFilterDimensionValues}
+          filterDimensionNames={filterDimensionNames}
+          setFilterDimensionNames={setFilterDimensionNames}
+          dimensions={dimensions}
+          filterConfigs={filterConfigs}
+          slideReport={slideReport}
+          selectedYear={selectedYear}
+          setSelectedYear={setSelectedYear}
+          selectedMonth={selectedMonth}
+          setSelectedMonth={setSelectedMonth}
+          comparisonType={comparisonType}
+          setComparisonType={setComparisonType}
+          pendingFilterValues={pendingFilterValues}
+          setPendingFilterValues={setPendingFilterValues}
+          filterSearchTerms={filterSearchTerms}
+          setFilterSearchTerms={setFilterSearchTerms}
+          openFilterPopovers={openFilterPopovers}
+          setOpenFilterPopovers={setOpenFilterPopovers}
+          filterValuesLoading={filterValuesLoading}
+          setFilterValuesLoading={setFilterValuesLoading}
+          loadFilterDimensionValues={loadFilterDimensionValues}
+        />
+
+        {/* Comparison Banner */}
+        <ComparisonBanner
+          selectedTab={selectedTab}
+          comparisonType={comparisonType}
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+        />
+
+        <div className="p-6">
+          {/* Overview Tab */}
+          <OverviewTab
+            slideReportId={slideReportId}
+            isSlideReportsLoading={isSlideReportsLoading}
+            slideReport={slideReport}
+            isLoadingData={isLoadingSlideContent}
+            isLoadingMonthlyData={isLoadingMonthlyData}
+            currentTotals={currentTotals}
+            breakdownTotals={breakdownTotals}
+            overviewChartData={effectiveOverviewChartData}
+            chartTimeRange={chartTimeRange}
+            setChartTimeRange={setChartTimeRange}
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
+            isReadOnlyMode={isReadOnlyMode}
+            setIsEditSourceOpen={setIsEditSourceOpen}
+            renderKPICards={renderKPICards}
+            renderKPICardsSkeleton={renderKPICardsSkeleton}
+            renderChartSkeleton={renderChartSkeleton}
+            renderTableSkeleton={renderTableSkeleton}
+            getOverviewComparisonMetrics={getOverviewComparisonMetrics}
+            filteredData={filteredData}
+            slideType={slideType}
+            KPI_CARDS={KPI_CARDS}
+            onAISummaryClick={handleAISummaryClick}
+            isAISummaryDisabled={!minimalAIData}
+            summaryText={currentSummary?.summary_text || null}
+          />
+
+          {/* Channel Tabs */}
+          {(['metasearch', 'sem', 'social'] as const).map(channel => (
+            <ChannelTab
+              key={channel}
+              channel={channel}
+              isSlideReportsLoading={isSlideReportsLoading}
+              slideReportId={slideReportId}
+              slideReport={slideReport}
+              pivotData={effectivePivotData}
+              isLoadingData={isLoadingSlideContent}
+              breakdownTotals={breakdownTotals}
+              currentTotals={currentTotals}
+              channelChartData={effectiveChannelChartData}
+              chartTimeRange={chartTimeRange}
+              setChartTimeRange={setChartTimeRange}
+              groupByDimension={groupByDimension}
+              breakdownByDimension={breakdownByDimension}
+              expandedRow={expandedRow}
+              setExpandedRow={setExpandedRow}
+              setGroupByDimension={setGroupByDimension}
+              setBreakdownByDimension={setBreakdownByDimension}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              filterValues={filterValues}
+              filterDimensionValues={filterDimensionValues}
+              breakdownDimensions={breakdownDimensions}
+              breakdownConfigs={breakdownConfigs}
+              renderKPICards={renderKPICards}
+              renderKPICardsSkeleton={renderKPICardsSkeleton}
+              getReportKPICards={getReportKPICards}
+              getChannelComparisonMetrics={getChannelComparisonMetrics}
+              setBreakdownTotals={setBreakdownTotals}
+              UnifiedBreakdownTable={UnifiedBreakdownTable}
+              onAISummaryClick={handleAISummaryClick}
+              isAISummaryDisabled={!minimalAIData}
+              summaryText={currentSummary?.summary_text || null}
+            />
+          ))}
+
+          {/* Budget Tab */}
+          <TabsContent value="budget">
+            <BudgetTab
+              selectedYear={selectedYear}
+              setSelectedYear={setSelectedYear}
+              selectedViewId={selectedViewId}
+              setSelectedViewId={setSelectedViewId}
+              isReadOnlyMode={isReadOnlyMode}
+              views={views as any[]}
+              handleApplyView={handleApplyView}
+              isLoadingViewBudgets={isLoadingViewBudgets}
+              isLoadingDisplayData={filteredData.isLoadingDisplayData}
+              budgetMonthlyData={budgetMonthlyData}
+              slideReport={slideReport}
+              pivotData={effectivePivotData}
+              forecastEnabled={forecastEnabled}
+              setForecastEnabled={setForecastEnabled}
+              pnlModeEnabled={pnlModeEnabled}
+              setPnlModeEnabled={setPnlModeEnabled}
+              editingBudget={editingBudget}
+              editBudgetValue={editBudgetValue}
+              handleStartEditBudget={handleStartEditBudget}
+              handleSaveBudget={handleSaveBudget}
+              handleCancelEditBudget={handleCancelEditBudget}
+              setEditBudgetValue={setEditBudgetValue}
+              editingPnl={editingPnl}
+              editPnlValue={editPnlValue}
+              handleStartEditPnl={handleStartEditPnl}
+              handleSavePnl={handleSavePnl}
+              handleCancelEditPnl={handleCancelEditPnl}
+              setEditPnlValue={setEditPnlValue}
+              pnlConfig={pnlConfig}
+              setPnlConfig={setPnlConfig}
+            />
+          </TabsContent>
+
+          {/* Booking Tab */}
+          <TabsContent value="booking">
+            <BookingTab accountId={accountId} />
+          </TabsContent>
+
+          {/* Price Check Tab */}
+          <TabsContent value="price-check">
+            <PriceCheckTab
+              accountId={accountId}
+              chartTimeRange={priceCheckChartTimeRange}
+              onChartTimeRangeChange={setPriceCheckChartTimeRange}
+            />
+          </TabsContent>
+        </div>
+      </Tabs>
+
+      {/* Edit Source Modal */}
+      <EditSourceModal
+        isOpen={isEditSourceOpen}
+        onOpenChange={handleModalClose}
+        modalStep={modalStep as any}
+        sinceMonth={sinceMonth}
+        setSinceMonth={setSinceMonth}
+        sinceYear={sinceYear}
+        setSinceYear={setSinceYear}
+        selectedDimensions={selectedDimensions}
+        handleDimensionToggle={handleDimensionToggle}
+        selectedChannels={selectedChannels}
+        selectedValueDimensionIds={selectedValueDimensionIds}
+        handleValueDimensionToggle={handleValueDimensionToggle}
+        handleSelectAllDimensions={handleSelectAllDimensions}
+        handleDeselectAllDimensions={handleDeselectAllDimensions}
+        availableDimensions={availableDimensions}
+        loadingAvailableDimensions={loadingAvailableDimensions}
+        activeChannelTab={activeChannelTab}
+        setActiveChannelTab={setActiveChannelTab}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        channelConfigs={channelConfigs}
+        dimensions={dimensions}
+        dimensionValues={dimensionValues}
+        loadingDimensions={loadingDimensions}
+        loadingValues={loadingValues}
+        handleDimensionChange={handleDimensionChange}
+        handleValueToggle={handleValueToggle}
+        handleSelectAllValues={handleSelectAllValues}
+        handleDeselectAllValues={handleDeselectAllValues}
+        breakdownDimensions={breakdownDimensions}
+        breakdownConfigs={breakdownConfigs}
+        loadingBreakdownDimensions={loadingBreakdownDimensions}
+        handleBreakdownToggle={handleBreakdownToggle}
+        filterConfigs={filterConfigs}
+        handleFilterDimensionToggle={handleFilterDimensionToggle}
+        handleNext={handleNext}
+        handleBack={handleBack}
+        handleModalClose={handleModalClose}
+        availableChannels={availableChannels as ('metasearch' | 'sem' | 'social')[]}
+      />
+
+      {/* Refresh Data Modal */}
+      <RefreshDataModal
+        isRefreshModalOpen={isRefreshModalOpen}
+        setIsRefreshModalOpen={setIsRefreshModalOpen}
+        refreshStep={refreshStep}
+        refreshStepStatus={refreshStepStatus}
+        refreshError={refreshError}
+      />
+
+      {/* Data Browser Modal */}
+      <SlideDataBrowser
+        open={isDataModalOpen}
+        onOpenChange={setIsDataModalOpen}
+        pivotData={effectivePivotData}
+        lastRefreshedAt={slideReport?.updated_at}
+        configuration={slideReport?.configuration as any}
+        reportIds={slideReport?.report_ids as any}
+        slideReportId={slideReportId}
+      />
+
+      {/* Share Modal */}
+      <ShareModal
+        reportId={slideReportId || ''}
+        reportName={slideReport?.name || 'Report'}
+        open={isShareModalOpen}
+        onOpenChange={setIsShareModalOpen}
+        accountId={accountId}
+        slideReportId={slideReportId}
+        availableViews={availableViews.filter(v => v.id !== null) as Array<{ id: string; name: string }>}
+        currentFilterValues={filterValues}
+      />
+
+      {/* AI Summary Modal */}
+      <SlideViewAISummaryModal
+        open={isAISummaryModalOpen}
+        onOpenChange={setIsAISummaryModalOpen}
+        minimalData={minimalAIData}
+        selectedTab={selectedTab as 'overview' | 'metasearch' | 'sem' | 'social'}
+        selectedYear={selectedYear}
+        selectedMonth={selectedMonth}
+        pivotData={effectivePivotData}
+        availableViews={availableViews}
+        views={views as any[]}
+        slideReportId={slideReportId}
+        activeViewId={selectedViewId}
+        onApplyView={handleApplyView}
+        onApplyComparisonType={(type) => setComparisonType(type)}
+      />
+
+      {/* Save View Dialog */}
+      <SaveViewDialog
+        open={isSaveViewDialogOpen}
+        onOpenChange={setIsSaveViewDialogOpen}
+        onSave={handleSaveView}
+      />
+
+      {/* Save or Update View Dialog */}
+      <SaveOrUpdateViewDialog
+        open={isSaveOrUpdateViewDialogOpen}
+        onOpenChange={setIsSaveOrUpdateViewDialogOpen}
+        onSaveNew={() => {
+          setIsSaveOrUpdateViewDialogOpen(false);
+          setIsSaveViewDialogOpen(true);
+        }}
+        onUpdate={handleUpdateView}
+        availableViews={views.filter(v => v.id).map(v => ({ id: v.id!, name: v.name })) as Array<{ id: string; name: string }>}
+        currentViewId={selectedViewId}
+      />
+    </div>
+  );
+}
