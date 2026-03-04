@@ -169,6 +169,48 @@ function calculateDerivedMetrics(data: { impressions: number; clicks: number; co
   };
 }
 
+const METRIC_VARIATIONS: Record<string, string[]> = {
+  Impressions: ['impressions', 'impression'],
+  Clicks: ['clicks', 'click'],
+  Cost: ['cost', 'spend', 'amount spent'],
+  Revenue: ['revenue', 'conversion value', 'purchase value'],
+  Bookings: ['bookings', 'conversions', 'conversion'],
+};
+
+function resolveStandardMetricIds(dimensionMap: Record<string, string>): Record<string, string | null> {
+  const out: Record<string, string | null> = {
+    Impressions: null,
+    Clicks: null,
+    Cost: null,
+    Revenue: null,
+    Bookings: null,
+  };
+
+  const entries = Object.entries(dimensionMap);
+
+  // Pass 1: exact matches (case-insensitive)
+  for (const metric of Object.keys(out)) {
+    const exact = entries.find(([, name]) =>
+      name && String(name).trim().toLowerCase() === metric.toLowerCase()
+    );
+    if (exact) out[metric] = exact[0];
+  }
+
+  // Pass 2: variation/substring matches
+  for (const metric of Object.keys(out)) {
+    if (out[metric]) continue;
+    const variations = METRIC_VARIATIONS[metric] || [metric.toLowerCase()];
+    const found = entries.find(([, name]) => {
+      if (!name) return false;
+      const normalized = String(name).toLowerCase().trim();
+      return variations.some((v) => normalized.includes(v) || v.includes(normalized));
+    });
+    if (found) out[metric] = found[0];
+  }
+
+  return out;
+}
+
 /** Filter rows by filter_values (dimensionId -> selected values) and optional date range. */
 function filterRawDataRows(
   rows: Record<string, unknown>[],
@@ -222,8 +264,11 @@ function aggregateFromRows(
   for (const [id, name] of Object.entries(dimensionMap)) {
     if (name) nameToId[name] = id;
   }
+
+  const standardIds = resolveStandardMetricIds(dimensionMap);
+
   const get = (row: Record<string, unknown>, name: string): number => {
-    const id = nameToId[name];
+    const id = standardIds[name] ?? nameToId[name];
     const v = id != null ? row[id] : undefined;
     const fallback = row[name];
     const x = v ?? fallback;
@@ -487,6 +532,11 @@ Deno.serve(async (req) => {
       for (const [id, name] of Object.entries(idToName)) {
         if (name) nameToId[name] = id;
       }
+
+      // Allow metrics to be named with currency suffixes (e.g. "Revenue (USD)")
+      const standardMetricIds = resolveStandardMetricIds(idToName);
+      if (standardMetricIds.Revenue) nameToId['Revenue'] = standardMetricIds.Revenue;
+      if (standardMetricIds.Cost) nameToId['Cost'] = standardMetricIds.Cost;
 
       let rawRows: Record<string, unknown>[] = [];
       let query = supabase

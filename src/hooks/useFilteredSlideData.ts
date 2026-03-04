@@ -208,15 +208,6 @@ export function useFilteredSlideData({
           // Build dynamic metric mapping from dimensionMap
           const dimensionMap = (channelData as any).dimensionMap || {};
           const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
-          
-          // Build metricNameToIdMap (same as breakdown table) - reverse mapping: name -> id
-          // This ensures we use "Cost" with capital C as the source of truth
-          const metricNameToIdMap: Record<string, string> = {};
-          Object.entries(dimensionMap as Record<string, string>).forEach(([dimensionId, dimensionName]) => {
-            if (dimensionName && typeof dimensionName === 'string') {
-              metricNameToIdMap[dimensionName] = dimensionId;
-            }
-          });
 
           // Manually aggregate metrics from filtered rows
           const metrics: MetricData = {
@@ -237,7 +228,7 @@ export function useFilteredSlideData({
             // Helper to safely extract numeric value
             const getMetricValue = (keys: string[]): number => {
               for (const key of keys) {
-                const value = rowData[key];
+                const value = (rowData as any)[key];
                 if (value !== undefined && value !== null) {
                   if (typeof value === 'number') {
                     return isNaN(value) ? 0 : value;
@@ -251,13 +242,12 @@ export function useFilteredSlideData({
               return 0;
             };
 
-            // Use EXACT same extraction logic as UnifiedBreakdownTable for consistency
-            // This ensures we get the same values as the breakdown table
-            const impressionsValue = parseFloat(String(rowData[metricNameToIdMap['Impressions']] ?? rowData['Impressions'] ?? 0)) || 0;
-            const clicksValue = parseFloat(String(rowData[metricNameToIdMap['Clicks']] ?? rowData['Clicks'] ?? 0)) || 0;
-            const costValue = parseFloat(String(rowData[metricNameToIdMap['Cost']] ?? rowData['Cost'] ?? 0)) || 0;
-            const revenueValue = parseFloat(String(rowData[metricNameToIdMap['Revenue']] ?? rowData['Revenue'] ?? 0)) || 0;
-            const bookingsValue = parseFloat(String(rowData[metricNameToIdMap['Bookings']] ?? rowData['Bookings'] ?? 0)) || 0;
+            // Use robust, variation-aware metric extraction (e.g. "Cost (USD)")
+            const impressionsValue = getMetricValue(getMetricKeys('impressions', nameToIdsMap));
+            const clicksValue = getMetricValue(getMetricKeys('clicks', nameToIdsMap));
+            const costValue = getMetricValue(getMetricKeys('cost', nameToIdsMap));
+            const revenueValue = getMetricValue(getMetricKeys('revenue', nameToIdsMap));
+            const bookingsValue = getMetricValue(getMetricKeys('bookings', nameToIdsMap));
             
             metrics.impressions += impressionsValue;
             metrics.clicks += clicksValue;
@@ -266,9 +256,9 @@ export function useFilteredSlideData({
             metrics.bookings += bookingsValue;
 
             // Also aggregate for monthly data
-            let dateValue: any = rowData.Date || rowData.date || rowData.Day || rowData.day;
+            let dateValue: any = (rowData as any).Date || (rowData as any).date || (rowData as any).Day || (rowData as any).day;
             if (!dateValue) {
-              for (const [key, val] of Object.entries(rowData)) {
+              for (const [key, val] of Object.entries(rowData as any)) {
                 if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
                   dateValue = val;
                   break;

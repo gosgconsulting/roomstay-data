@@ -65,6 +65,9 @@ export const KPICardsSection = React.memo<KPICardsSectionProps>(
       return <KPICardsSkeleton />;
     }
 
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('master_report_currency') : null;
+    const effectiveCurrency: 'USD' | 'AUD' = stored === 'AUD' || stored === 'USD' ? stored : 'USD';
+
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
         {cards.map((kpi) => {
@@ -81,6 +84,28 @@ export const KPICardsSection = React.memo<KPICardsSectionProps>(
           const isGood = isCostMetric ? !isPositive : isPositive;
           const compLabel = comparisonMetrics?.label;
 
+          const formattedValue = (() => {
+            if (kpi.format === 'currency') {
+              if (kpi.key === 'cpc' && kpi.value < 0.01) {
+                return new Intl.NumberFormat('en-US', {
+                  style: 'currency',
+                  currency: effectiveCurrency,
+                  minimumFractionDigits: 4,
+                  maximumFractionDigits: 4,
+                }).format(kpi.value);
+              }
+              return formatNumber(kpi.value, 'currency', effectiveCurrency);
+            }
+            if (kpi.format === 'percent') {
+              if (kpi.key === 'costOfSale' && kpi.value < 0.01) return `${kpi.value.toFixed(4)}%`;
+              return `${kpi.value.toFixed(2)}%`;
+            }
+            if (kpi.format === 'roas') {
+              return `${kpi.value.toFixed(1)}x`;
+            }
+            return formatNumber(kpi.value);
+          })();
+
           return (
             <Card
               key={kpi.label}
@@ -90,19 +115,7 @@ export const KPICardsSection = React.memo<KPICardsSectionProps>(
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                   {kpi.label}
                 </p>
-                <div className="text-2xl font-bold text-foreground">
-                  {kpi.format === 'currency'
-                    ? kpi.key === 'cpc' && kpi.value < 0.01
-                      ? `$${kpi.value.toFixed(4)}`
-                      : `$${formatNumber(kpi.value)}`
-                    : kpi.format === 'percent'
-                      ? kpi.key === 'costOfSale' && kpi.value < 0.01
-                        ? `${kpi.value.toFixed(4)}%`
-                        : `${kpi.value.toFixed(2)}%`
-                      : kpi.format === 'roas'
-                        ? `${kpi.value.toFixed(1)}x`
-                        : formatNumber(kpi.value)}
-                </div>
+                <div className="text-2xl font-bold text-foreground">{formattedValue}</div>
                 {percentChange !== null && compLabel && (
                   <div
                     className={`flex items-center gap-1 mt-1 text-xs ${isGood ? 'text-green-600' : 'text-red-600'}`}

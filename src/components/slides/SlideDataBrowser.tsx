@@ -18,6 +18,7 @@ import {
 import { SlideReportPivotData, SlideReportConfiguration, BreakdownRow, ChannelMetrics } from "@/types/slideReports";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
+import { formatNumber as formatValue } from "@/lib/slideViewHelpers";
 
 interface SlideDataBrowserProps {
   open: boolean;
@@ -46,19 +47,6 @@ const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
 
 type ViewLevel = 'years' | 'months' | 'channels' | 'breakdowns' | 'data';
 
-// Helper function to format numbers
-function formatNumber(value: number | undefined | null, type: 'number' | 'currency' | 'percentage' = 'number'): string {
-  if (value === undefined || value === null || isNaN(value)) return '-';
-  
-  if (type === 'currency') {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
-  }
-  if (type === 'percentage') {
-    return `${value.toFixed(2)}%`;
-  }
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value);
-}
-
 // Channel metrics table component
 function ChannelMetricsTable({ 
   metrics, 
@@ -82,43 +70,43 @@ function ChannelMetricsTable({
         <TableBody>
           <TableRow>
             <TableCell>Impressions</TableCell>
-            <TableCell className="text-right">{formatNumber(metrics.impressions)}</TableCell>
+            <TableCell className="text-right">{formatValue(metrics.impressions)}</TableCell>
           </TableRow>
           <TableRow>
             <TableCell>Clicks</TableCell>
-            <TableCell className="text-right">{formatNumber(metrics.clicks)}</TableCell>
+            <TableCell className="text-right">{formatValue(metrics.clicks)}</TableCell>
           </TableRow>
           <TableRow>
             <TableCell>Cost</TableCell>
-            <TableCell className="text-right">{formatNumber(metrics.cost, 'currency')}</TableCell>
+            <TableCell className="text-right">{formatValue(metrics.cost, 'currency')}</TableCell>
           </TableRow>
           <TableRow>
             <TableCell>Revenue</TableCell>
-            <TableCell className="text-right">{formatNumber(metrics.revenue, 'currency')}</TableCell>
+            <TableCell className="text-right">{formatValue(metrics.revenue, 'currency')}</TableCell>
           </TableRow>
           <TableRow>
             <TableCell>Bookings</TableCell>
-            <TableCell className="text-right">{formatNumber(metrics.bookings)}</TableCell>
+            <TableCell className="text-right">{formatValue(metrics.bookings)}</TableCell>
           </TableRow>
           <TableRow>
             <TableCell>CTR</TableCell>
-            <TableCell className="text-right">{formatNumber(metrics.ctr, 'percentage')}</TableCell>
+            <TableCell className="text-right">{formatValue(metrics.ctr, 'percentage')}</TableCell>
           </TableRow>
           <TableRow>
             <TableCell>Conversion Rate</TableCell>
-            <TableCell className="text-right">{formatNumber(metrics.conversionRate, 'percentage')}</TableCell>
+            <TableCell className="text-right">{formatValue(metrics.conversionRate, 'percentage')}</TableCell>
           </TableRow>
           <TableRow>
             <TableCell>CPC</TableCell>
-            <TableCell className="text-right">{formatNumber(metrics.cpc, 'currency')}</TableCell>
+            <TableCell className="text-right">{formatValue(metrics.cpc, 'currency')}</TableCell>
           </TableRow>
           <TableRow>
             <TableCell>ROAS</TableCell>
-            <TableCell className="text-right">{formatNumber(metrics.roas)}</TableCell>
+            <TableCell className="text-right">{formatValue(metrics.roas)}</TableCell>
           </TableRow>
           <TableRow>
             <TableCell>Cost of Sale</TableCell>
-            <TableCell className="text-right">{formatNumber(metrics.costOfSale, 'percentage')}</TableCell>
+            <TableCell className="text-right">{formatValue(metrics.costOfSale, 'percentage')}</TableCell>
           </TableRow>
         </TableBody>
       </Table>
@@ -126,26 +114,25 @@ function ChannelMetricsTable({
   );
 }
 
-// Breakdown table component
+// Breakdown data table component
 function BreakdownTable({ 
   data, 
-  breakdownName,
-  title 
+  title,
+  breakdownName 
 }: { 
   data: BreakdownRow[]; 
-  breakdownName: string;
   title: string;
+  breakdownName: string;
 }) {
   if (!data || data.length === 0) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        <Table2 className="h-8 w-8 mx-auto mb-3 opacity-50" />
-        <p>No breakdown data available for {breakdownName}</p>
+      <div className="border rounded-lg p-4 text-center text-muted-foreground">
+        No breakdown data available
       </div>
     );
   }
 
-  // Get the dimension key from the first row
+  // Find the dimension key (usually 'name' or the breakdown dimension name)
   const dimensionKeys = Object.keys(data[0]).filter(
     key => !['impressions', 'clicks', 'cost', 'revenue', 'bookings', 'ctr', 'conversionRate', 'cpc', 'roas', 'costOfSale'].includes(key)
   );
@@ -172,12 +159,12 @@ function BreakdownTable({
           <TableBody>
             {data.map((row, idx) => (
               <TableRow key={idx}>
-                <TableCell className="font-medium">{row[dimensionKey] || `Row ${idx + 1}`}</TableCell>
-                <TableCell className="text-right">{formatNumber(row.impressions)}</TableCell>
-                <TableCell className="text-right">{formatNumber(row.clicks)}</TableCell>
-                <TableCell className="text-right">{formatNumber(row.cost, 'currency')}</TableCell>
-                <TableCell className="text-right">{formatNumber(row.revenue, 'currency')}</TableCell>
-                <TableCell className="text-right">{formatNumber(row.bookings)}</TableCell>
+                <TableCell className="font-medium">{(row as any)[dimensionKey] || `Row ${idx + 1}`}</TableCell>
+                <TableCell className="text-right">{formatValue(row.impressions)}</TableCell>
+                <TableCell className="text-right">{formatValue(row.clicks)}</TableCell>
+                <TableCell className="text-right">{formatValue(row.cost, 'currency')}</TableCell>
+                <TableCell className="text-right">{formatValue(row.revenue, 'currency')}</TableCell>
+                <TableCell className="text-right">{formatValue(row.bookings)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -521,7 +508,7 @@ export function SlideDataBrowser({
                   <p className="font-semibold capitalize">{channel}</p>
                   {metrics && (
                     <p className="text-xs text-muted-foreground">
-                      {formatNumber(metrics.revenue, 'currency')} revenue
+                      {formatValue(metrics.revenue, 'currency')} revenue
                     </p>
                   )}
                 </div>
@@ -576,23 +563,23 @@ export function SlideDataBrowser({
             <div className="grid grid-cols-5 gap-4 text-sm">
               <div>
                 <p className="text-muted-foreground">Revenue</p>
-                <p className="font-semibold">{formatNumber(getMonthlyMetrics(selectedChannel!)?.revenue, 'currency')}</p>
+                <p className="font-semibold">{formatValue(getMonthlyMetrics(selectedChannel!)?.revenue, 'currency')}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Cost</p>
-                <p className="font-semibold">{formatNumber(getMonthlyMetrics(selectedChannel!)?.cost, 'currency')}</p>
+                <p className="font-semibold">{formatValue(getMonthlyMetrics(selectedChannel!)?.cost, 'currency')}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Bookings</p>
-                <p className="font-semibold">{formatNumber(getMonthlyMetrics(selectedChannel!)?.bookings)}</p>
+                <p className="font-semibold">{formatValue(getMonthlyMetrics(selectedChannel!)?.bookings)}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">ROAS</p>
-                <p className="font-semibold">{formatNumber(getMonthlyMetrics(selectedChannel!)?.roas)}</p>
+                <p className="font-semibold">{formatValue(getMonthlyMetrics(selectedChannel!)?.roas)}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Cost of Sale</p>
-                <p className="font-semibold">{formatNumber(getMonthlyMetrics(selectedChannel!)?.costOfSale, 'percentage')}</p>
+                <p className="font-semibold">{formatValue(getMonthlyMetrics(selectedChannel!)?.costOfSale, 'percentage')}</p>
               </div>
             </div>
           </div>
@@ -633,8 +620,8 @@ export function SlideDataBrowser({
       return (
         <BreakdownTable 
           data={breakdownData || []} 
-          breakdownName={selectedBreakdown}
           title={`${selectedBreakdown} - ${selectedChannel?.charAt(0).toUpperCase()}${selectedChannel?.slice(1)} - ${MONTH_NAMES[parseInt(selectedMonth!) - 1]} ${selectedYear}`}
+          breakdownName={selectedBreakdown}
         />
       );
     }

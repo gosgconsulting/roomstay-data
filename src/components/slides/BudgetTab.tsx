@@ -10,6 +10,8 @@ import { Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { MONTH_NAMES } from "@/constants/slideViewConstants";
+import { formatNumber } from "@/lib/slideViewHelpers";
+import { calculateProfit } from "@/lib/budgetCalculations";
 
 /** Derive display label and pivot key from row.month (handles "August 2025" or "2025-08"). */
 function getMonthDisplayAndKey(rowMonth: string): { display: string; key: string } {
@@ -30,8 +32,6 @@ function getMonthDisplayAndKey(rowMonth: string): { display: string; key: string
   }
   return { display: trimmed, key: trimmed };
 }
-import { formatNumber } from "@/lib/slideViewHelpers";
-import { calculateProfit } from "@/lib/budgetCalculations";
 
 function BudgetTabSkeleton() {
   return (
@@ -289,13 +289,13 @@ export function BudgetTab({
                       autoFocus
                     />
                   ) : (
-                    `$${formatNumber(budgetRow)}`
+                    formatNumber(budgetRow, 'currency')
                   )}
                 </TableCell>
-                <TableCell className="text-right">${formatNumber(actualRow)}</TableCell>
+                <TableCell className="text-right">{formatNumber(actualRow, 'currency')}</TableCell>
                 {pnlModeEnabled ? (
                   <>
-                    <TableCell className="text-right">${formatNumber(revenueRow)}</TableCell>
+                    <TableCell className="text-right">{formatNumber(revenueRow, 'currency')}</TableCell>
                     <TableCell className="text-right">{costOfSale.toFixed(2)}%</TableCell>
                     <TableCell 
                       className="text-right cursor-pointer hover:bg-muted/50"
@@ -340,7 +340,7 @@ export function BudgetTab({
                           autoFocus
                         />
                       ) : (
-                        `$${formatNumber(channelConfig?.recurrentFee || 0)}`
+                        formatNumber(channelConfig?.recurrentFee || 0, 'currency')
                       )}
                     </TableCell>
                     <TableCell 
@@ -388,24 +388,24 @@ export function BudgetTab({
                       )}
                     </TableCell>
                     <TableCell className={`text-right font-medium ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      ${formatNumber(profit)}
+                      {formatNumber(profit, 'currency')}
                     </TableCell>
                   </>
                 ) : forecastEnabled ? (
                   <>
-                    <TableCell className="text-right">${formatNumber(cpc)}</TableCell>
-                    <TableCell className="text-right">${formatNumber(totalRevenue)}</TableCell>
-                    <TableCell className="text-right">${formatNumber(revenueRow)}</TableCell>
+                    <TableCell className="text-right">{formatNumber(cpc, 'currency')}</TableCell>
+                    <TableCell className="text-right">{formatNumber(totalRevenue, 'currency')}</TableCell>
+                    <TableCell className="text-right">{formatNumber(revenueRow, 'currency')}</TableCell>
                     <TableCell className="text-right">{revenueShare.toFixed(1)}%</TableCell>
-                    <TableCell className="text-right">${formatNumber(estRevenue)}</TableCell>
+                    <TableCell className="text-right">{formatNumber(estRevenue, 'currency')}</TableCell>
                     <TableCell className="text-right">{estRevenueShare.toFixed(1)}%</TableCell>
                   </>
                 ) : (
                   <>
                     <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {variance >= 0 ? '+' : ''}${formatNumber(variance)}
+                      {variance >= 0 ? '+' : ''}{formatNumber(variance, 'currency')}
                     </TableCell>
-                    <TableCell className="text-right">${formatNumber(revenueRow)}</TableCell>
+                    <TableCell className="text-right">{formatNumber(revenueRow, 'currency')}</TableCell>
                     <TableCell className="text-right">{roas.toFixed(2)}</TableCell>
                     <TableCell className="text-right">{costOfSale.toFixed(2)}%</TableCell>
                   </>
