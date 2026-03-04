@@ -3387,8 +3387,8 @@ export default function SlideViewPage() {
     setEditPnlValue("");
   }, []);
 
-  // Refresh data modal handler
-  const handleRefreshDataWithModal = useCallback(async () => {
+  // Open refresh modal (config phase: user picks month then starts refresh)
+  const handleOpenRefreshModal = useCallback(() => {
     if (!slideReportId || !slideReport) {
       toast({
         title: "No Report",
@@ -3398,47 +3398,52 @@ export default function SlideViewPage() {
       return;
     }
     setIsRefreshModalOpen(true);
-    setRefreshStep(1);
-    setRefreshStepStatus({ 1: 'loading', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'pending' });
+    setRefreshStep(0);
+    setRefreshStepStatus({ 1: "pending", 2: "pending", 3: "pending", 4: "pending", 5: "pending" });
     setRefreshError(null);
+  }, [slideReportId, slideReport]);
 
-    try {
-      // Step 1: Verify settings
-      setRefreshStepStatus(prev => ({ ...prev, 1: 'complete', 2: 'loading' }));
-      setRefreshStep(2);
+  // Start refresh (called from RefreshDataModal when user clicks "Start refresh")
+  const handleStartRefresh = useCallback(
+    async (monthOption: { year: number; month: number } | null) => {
+      if (!slideReportId) return;
+      setRefreshStep(1);
+      setRefreshStepStatus({ 1: "loading", 2: "pending", 3: "pending", 4: "pending", 5: "pending" });
+      setRefreshError(null);
 
-      // Step 2-4: Refresh data via edge function
-      await refreshSlideReportData.mutateAsync(slideReportId);
-      setRefreshStepStatus(prev => ({ ...prev, 2: 'complete', 3: 'complete', 4: 'complete', 5: 'loading' }));
-      setRefreshStep(5);
+      try {
+        setRefreshStepStatus((prev) => ({ ...prev, 1: "complete", 2: "loading" }));
+        setRefreshStep(2);
 
-      // Step 5: Done
-      setRefreshStepStatus(prev => ({ ...prev, 5: 'complete' }));
+        const mutationArg =
+          monthOption == null ? slideReportId : { slideReportId, options: monthOption };
+        await refreshSlideReportData.mutateAsync(mutationArg);
 
-      // Invalidate queries to reload data
-      queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
-      queryClient.invalidateQueries({ queryKey: ['slide_report_channel_month_data'] });
-      queryClient.invalidateQueries({ queryKey: ['slide_report_display_data'] });
+        setRefreshStepStatus((prev) => ({ ...prev, 2: "complete", 3: "complete", 4: "complete", 5: "loading" }));
+        setRefreshStep(5);
+        setRefreshStepStatus((prev) => ({ ...prev, 5: "complete" }));
 
-      toast({
-        title: "Data Refreshed",
-        description: "Your report data has been updated successfully.",
-      });
-    } catch (error: any) {
-      console.error('Error refreshing data:', error);
-      const errorMsg = error?.message || 'An unexpected error occurred';
-      setRefreshError(errorMsg);
-      setRefreshStepStatus(prev => {
-        const updated = { ...prev };
-        for (const key of Object.keys(updated)) {
-          if (updated[Number(key)] === 'loading') {
-            updated[Number(key)] = 'error';
+        queryClient.invalidateQueries({ queryKey: ["slide_reports"] });
+        queryClient.invalidateQueries({ queryKey: ["slide_report_channel_month_data"] });
+        queryClient.invalidateQueries({ queryKey: ["slide_report_display_data"] });
+        // Toast is shown by useRefreshSlideReportData onSuccess
+      } catch (error: unknown) {
+        console.error("Error refreshing data:", error);
+        const errorMsg = error instanceof Error ? error.message : "An unexpected error occurred";
+        setRefreshError(errorMsg);
+        setRefreshStepStatus((prev) => {
+          const updated = { ...prev };
+          for (const key of Object.keys(updated)) {
+            if (updated[Number(key)] === "loading") {
+              updated[Number(key)] = "error";
+            }
           }
-        }
-        return updated;
-      });
-    }
-  }, [slideReportId, slideReport, refreshSlideReportData, queryClient]);
+          return updated;
+        });
+      }
+    },
+    [slideReportId, refreshSlideReportData, queryClient]
+  );
 
   // AI Summary modal handler
   const handleAISummaryClick = useCallback(() => {
@@ -3570,7 +3575,7 @@ export default function SlideViewPage() {
           navigate={navigate}
           accountId={accountId}
           setIsShareModalOpen={setIsShareModalOpen}
-          handleRefreshDataWithModal={handleRefreshDataWithModal}
+          handleRefreshDataWithModal={handleOpenRefreshModal}
           isRefreshModalOpen={isRefreshModalOpen}
           slideReport={slideReport}
           displayCurrency={slideType === 'master-report' ? displayCurrency : undefined}
@@ -3793,6 +3798,8 @@ export default function SlideViewPage() {
         refreshStep={refreshStep}
         refreshStepStatus={refreshStepStatus}
         refreshError={refreshError}
+        onStartRefresh={handleStartRefresh}
+        dateRange={slideReport?.date_range ? { from: slideReport.date_range.from, to: slideReport.date_range.to } : null}
       />
 
       {/* Data Browser Modal */}

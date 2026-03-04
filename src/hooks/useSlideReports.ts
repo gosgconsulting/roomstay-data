@@ -165,11 +165,30 @@ export function useDeleteSlideReport() {
   });
 }
 
+/** Options to refresh a single month instead of the report's full date range. */
+export type RefreshSlideReportOptions = { year: number; month: number } | null | undefined;
+
+function buildDateRangeForMonth(year: number, month: number): SlideReportDateRange {
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0, 23, 59, 59);
+  return {
+    year,
+    month: String(month),
+    from: start.toISOString().split("T")[0],
+    to: end.toISOString().split("T")[0],
+  };
+}
+
 export function useRefreshSlideReportData() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (slideReportId: string) => {
+    mutationFn: async (
+      input: string | { slideReportId: string; options?: RefreshSlideReportOptions }
+    ) => {
+      const slideReportId = typeof input === "string" ? input : input.slideReportId;
+      const options = typeof input === "string" ? undefined : input.options;
+
       // Fetch the slide report
       const { data: slideReport, error: slideError } = await supabase
         .from("slide_reports")
@@ -183,15 +202,20 @@ export function useRefreshSlideReportData() {
       // Import computation function
       const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
 
-      // Compute pivot data
-      if (!slideReport.date_range) {
-        throw new Error("Date range not set for slide report");
+      let dateRange: SlideReportDateRange;
+      if (options?.year != null && options?.month != null) {
+        dateRange = buildDateRangeForMonth(options.year, options.month);
+      } else {
+        if (!slideReport.date_range) {
+          throw new Error("Date range not set for slide report");
+        }
+        dateRange = slideReport.date_range as unknown as SlideReportDateRange;
       }
 
       const pivotData = await computeSlideReportPivotData(
         slideReport.report_ids as unknown as Record<string, string>,
         slideReport.configuration as unknown as SlideReportConfiguration,
-        slideReport.date_range as unknown as SlideReportDateRange
+        dateRange
       );
 
       // Update the slide report with computed pivot data
