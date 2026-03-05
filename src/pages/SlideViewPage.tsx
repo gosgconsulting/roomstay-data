@@ -3291,4 +3291,7 @@ export default function SlideViewPage() {
 
       setTimeout(() => {
         isApplyingViewRef.current = false;
-      }, 0
+      }, 0);
+    }
+  }, [slideReportId, searchParams]);
+}
