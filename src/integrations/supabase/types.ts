@@ -757,6 +757,24 @@ export type Database = {
           },
         ]
       }
+      fx_rates: {
+        Row: {
+          aud_per_usd: number
+          created_at: string
+          rate_date: string
+        }
+        Insert: {
+          aud_per_usd: number
+          created_at?: string
+          rate_date: string
+        }
+        Update: {
+          aud_per_usd?: number
+          created_at?: string
+          rate_date?: string
+        }
+        Relationships: []
+      }
       master_filter_settings: {
         Row: {
           account_id: string | null
