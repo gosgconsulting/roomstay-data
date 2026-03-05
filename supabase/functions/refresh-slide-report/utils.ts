@@ -616,13 +616,14 @@ export function mergeChannelYearSlices(
 }
 
 /**
- * Get distinct years to refresh from slide report date range (from/to) plus one year back for comparison.
+ * Get distinct years to refresh from slide report date range (from/to) plus two years back for comparison
+ * (previous year comparison needs the year before the previous year for context).
  */
 export function getYearsFromDateRange(dateRange: SlideReportDateRange): number[] {
   const from = new Date(dateRange.from);
   const to = new Date(dateRange.to);
   const rangeStart = new Date(from);
-  rangeStart.setFullYear(rangeStart.getFullYear() - 1);
+  rangeStart.setFullYear(rangeStart.getFullYear() - 2);
   rangeStart.setDate(1);
   const years = new Set<number>();
   for (let y = rangeStart.getFullYear(); y <= to.getFullYear(); y++) {
