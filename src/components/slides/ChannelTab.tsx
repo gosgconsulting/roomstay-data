@@ -125,8 +125,9 @@ export function ChannelTab({
             // Use breakdownTotals as fallback when currentTotals has no cost data (mapping mismatch)
             const ct = currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
             const bt = breakdownTotals[channel];
-            const effectiveTotals = (ct.cost === 0 && bt && bt.cost > 0)
-              ? { ...ct, cost: bt.cost, revenue: bt.revenue || ct.revenue, bookings: bt.bookings || ct.bookings, impressions: bt.impressions || ct.impressions, clicks: bt.clicks || ct.clicks }
+            // Always prefer breakdownTotals when available — the breakdown table is the source of truth
+            const effectiveTotals = (bt && (bt.impressions > 0 || bt.clicks > 0 || bt.cost > 0 || bt.revenue > 0 || bt.bookings > 0))
+              ? bt
               : ct;
             return renderKPICards(
               getReportKPICards(effectiveTotals),
@@ -197,8 +198,9 @@ export function ChannelTab({
             const showComp = comparisonType && comparisonType !== 'none';
             const ct = currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
             const bt = breakdownTotals[channel];
-            const effectiveTotals = (ct.cost === 0 && bt && bt.cost > 0)
-              ? { ...ct, cost: bt.cost, revenue: bt.revenue || ct.revenue, bookings: bt.bookings || ct.bookings, impressions: bt.impressions || ct.impressions, clicks: bt.clicks || ct.clicks }
+            // Always prefer breakdownTotals when available — the breakdown table is the source of truth
+            const effectiveTotals = (bt && (bt.impressions > 0 || bt.clicks > 0 || bt.cost > 0 || bt.revenue > 0 || bt.bookings > 0))
+              ? bt
               : ct;
             const derived = calculateDerivedMetrics(effectiveTotals);
             const compData = showComp && comparisonTotals?.[channel];
