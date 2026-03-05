@@ -3465,7 +3465,10 @@ export default function SlideViewPage() {
           const isGood = isCostMetric ? !isPositive : isPositive;
           const compLabel = comparisonMetrics?.label;
           const formattedValue = (() => {
-            if (kpi.format === 'currency') return formatNumber(kpi.value, 'currency');
+            if (kpi.format === 'currency') {
+              if (kpi.key === 'cpc') return formatNumber(kpi.value, 'currency', undefined, 2);
+              return formatNumber(kpi.value, 'currency');
+            }
             if (kpi.format === 'percent') return `${kpi.value.toFixed(2)}%`;
             if (kpi.format === 'roas') return `${kpi.value.toFixed(1)}x`;
             return formatNumber(kpi.value);
