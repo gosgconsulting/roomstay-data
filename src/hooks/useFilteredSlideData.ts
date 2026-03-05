@@ -8,6 +8,7 @@
 
 import { useMemo } from 'react';
 import { MONTH_NAMES } from '@/constants/slideViewConstants';
+import { buildMultiMonthDateRange, parseSelectedMonths } from '@/lib/monthUtils';
 import {
   filterRawDataRows,
   hasAnyActiveFilters,
@@ -130,23 +131,9 @@ export function useFilteredSlideData({
   dynamicChannelTotals,
   groupByDimensionId,
 }: UseFilteredSlideDataParams): FilteredSlideData {
-  // Build date range based on selected year/month
+  // Build date range based on selected year/month (supports multi-month)
   const dateRange = useMemo<{ start: Date; end: Date } | undefined>(() => {
-    if (selectedMonth !== 'all' && selectedYear !== 'all') {
-      const monthNum = MONTH_NAMES.indexOf(selectedMonth);
-      const yearNum = parseInt(selectedYear);
-      return {
-        start: new Date(yearNum, monthNum, 1),
-        end: new Date(yearNum, monthNum + 1, 0, 23, 59, 59),
-      };
-    } else if (selectedYear !== 'all') {
-      const yearNum = parseInt(selectedYear);
-      return {
-        start: new Date(yearNum, 0, 1),
-        end: new Date(yearNum, 11, 31, 23, 59, 59),
-      };
-    }
-    return undefined;
+    return buildMultiMonthDateRange(selectedYear, selectedMonth);
   }, [selectedYear, selectedMonth]);
 
   // Check if any filters are active using centralized function
@@ -161,9 +148,9 @@ export function useFilteredSlideData({
 
   // Month key for breakdown fallback when a single month is selected (e.g. "2025-02")
   const monthKeyForBreakdowns = useMemo(() => {
-    if (selectedMonth === 'all' || selectedYear === 'all') return null;
-    const monthNum = MONTH_NAMES.indexOf(selectedMonth) + 1;
-    return `${selectedYear}-${String(monthNum).padStart(2, '0')}`;
+    const months = parseSelectedMonths(selectedMonth);
+    if (!months || months.length !== 1 || selectedYear === 'all') return null;
+    return `${selectedYear}-${String(months[0]).padStart(2, '0')}`;
   }, [selectedYear, selectedMonth]);
 
   // Calculate all filtered data in a single memoized computation

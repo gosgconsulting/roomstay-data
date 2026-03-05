@@ -11,6 +11,7 @@
 
 import { useMemo } from 'react';
 import { MONTH_NAMES } from '@/constants/slideViewConstants';
+import { buildMultiMonthDateRange, buildComparisonDateRange, parseSelectedMonths } from '@/lib/monthUtils';
 import {
   filterRawDataRows,
   buildMetricNameToIdsMap,
@@ -108,22 +109,8 @@ export function useChannelMetrics({
 
     // If filters are applied, we need to filter rawDataRows and re-aggregate
     if (hasFilters && pivotData?.channels) {
-      // Build date range based on selected year/month
-      let dateRange: { start: Date; end: Date } | undefined;
-      if (selectedMonth !== 'all' && selectedYear !== 'all') {
-        const monthNum = MONTH_NAMES.indexOf(selectedMonth);
-        const yearNum = parseInt(selectedYear);
-        dateRange = {
-          start: new Date(yearNum, monthNum, 1),
-          end: new Date(yearNum, monthNum + 1, 0, 23, 59, 59),
-        };
-      } else if (selectedYear !== 'all') {
-        const yearNum = parseInt(selectedYear);
-        dateRange = {
-          start: new Date(yearNum, 0, 1),
-          end: new Date(yearNum, 11, 31, 23, 59, 59),
-        };
-      }
+      // Build date range based on selected year/month (supports multi-month)
+      const dateRange = buildMultiMonthDateRange(selectedYear, selectedMonth);
 
       const channelTotals: Record<string, MetricData> = {};
 
@@ -190,36 +177,23 @@ export function useChannelMetrics({
           }
         } else {
           // This channel has no filters - use pre-computed data
-          if (selectedMonth && selectedMonth !== 'all') {
-            const monthNum = MONTH_NAMES.indexOf(selectedMonth) + 1;
-            const monthKey =
-              selectedYear !== 'all'
-                ? `${selectedYear}-${monthNum.toString().padStart(2, '0')}`
-                : null;
-
-            if (monthKey) {
-              const monthlyData = (channelData as any).monthly?.[monthKey];
-              if (monthlyData) {
-                channelTotals[channel] = monthlyData;
-              } else {
-                channelTotals[channel] = {
-                  impressions: 0,
-                  clicks: 0,
-                  cost: 0,
-                  revenue: 0,
-                  bookings: 0,
-                };
+          const months = parseSelectedMonths(selectedMonth);
+          if (months && months.length > 0 && selectedYear !== 'all') {
+            // Aggregate across selected months
+            const zeroMetrics = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+            const agg = { ...zeroMetrics };
+            for (const m of months) {
+              const mk = `${selectedYear}-${m.toString().padStart(2, '0')}`;
+              const md = (channelData as any).monthly?.[mk];
+              if (md) {
+                agg.impressions += md.impressions || 0;
+                agg.clicks += md.clicks || 0;
+                agg.cost += md.cost || 0;
+                agg.revenue += md.revenue || 0;
+                agg.bookings += md.bookings || 0;
               }
-            } else {
-              channelTotals[channel] =
-                (channelData as any).current || {
-                  impressions: 0,
-                  clicks: 0,
-                  cost: 0,
-                  revenue: 0,
-                  bookings: 0,
-                };
             }
+            channelTotals[channel] = agg;
           } else if (selectedYear !== 'all') {
             const yearNum = parseInt(selectedYear);
             const yearlyData = (channelData as any).yearly?.[String(yearNum)];
@@ -254,27 +228,25 @@ export function useChannelMetrics({
     if (pivotData?.channels) {
       const channelTotals: Record<string, MetricData> = {};
 
-      // Use pre-computed data based on selected year/month
-      if (selectedMonth !== 'all' && selectedYear !== 'all') {
-        const monthNum = MONTH_NAMES.indexOf(selectedMonth) + 1;
-        const monthKey =
-          selectedYear !== 'all'
-            ? `${selectedYear}-${monthNum.toString().padStart(2, '0')}`
-            : null;
-
-        if (monthKey) {
-          for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-            const monthlyData = (channelData as any).monthly?.[monthKey];
-            channelTotals[channel] = monthlyData || {
-              impressions: 0,
-              clicks: 0,
-              cost: 0,
-              revenue: 0,
-              bookings: 0,
-            };
+      // Use pre-computed data based on selected year/month (supports multi-month)
+      const months = parseSelectedMonths(selectedMonth);
+      if (months && months.length > 0 && selectedYear !== 'all') {
+        for (const [channel, channelData] of Object.entries(pivotData.channels)) {
+          const agg = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+          for (const m of months) {
+            const mk = `${selectedYear}-${m.toString().padStart(2, '0')}`;
+            const md = (channelData as any).monthly?.[mk];
+            if (md) {
+              agg.impressions += md.impressions || 0;
+              agg.clicks += md.clicks || 0;
+              agg.cost += md.cost || 0;
+              agg.revenue += md.revenue || 0;
+              agg.bookings += md.bookings || 0;
+            }
           }
-          return channelTotals as unknown as ChannelMetrics;
+          channelTotals[channel] = agg;
         }
+        return channelTotals as unknown as ChannelMetrics;
       }
 
       if (selectedYear !== 'all') {
@@ -337,43 +309,8 @@ export function useChannelMetrics({
     const hasFilters = hasAnyActiveFilters(filterValues, filterDimensionValues);
     const channelsWithFilters = getChannelsWithFilters(filterValues, filterDimensionValues);
 
-    // Build comparison period date range
-    let comparisonDateRange: { start: Date; end: Date } | undefined;
-    if (selectedMonth !== 'all' && selectedYear !== 'all') {
-      const monthNum = MONTH_NAMES.indexOf(selectedMonth);
-      const yearNum = parseInt(selectedYear);
-      const currentDate = new Date(yearNum, monthNum, 1);
-      
-      if (comparisonType === 'previous_period') {
-        // Previous period: previous month
-        const prevDate = new Date(yearNum, monthNum - 1, 1);
-        comparisonDateRange = {
-          start: prevDate,
-          end: new Date(yearNum, monthNum, 0, 23, 59, 59), // Last day of previous month
-        };
-      } else if (comparisonType === 'previous_year') {
-        // Previous year: same month last year
-        comparisonDateRange = {
-          start: new Date(yearNum - 1, monthNum, 1),
-          end: new Date(yearNum - 1, monthNum + 1, 0, 23, 59, 59),
-        };
-      }
-    } else if (selectedYear !== 'all') {
-      const yearNum = parseInt(selectedYear);
-      if (comparisonType === 'previous_period') {
-        // Previous period: previous year (when all months selected)
-        comparisonDateRange = {
-          start: new Date(yearNum - 1, 0, 1),
-          end: new Date(yearNum - 1, 11, 31, 23, 59, 59),
-        };
-      } else if (comparisonType === 'previous_year') {
-        // Previous year: same year range last year
-        comparisonDateRange = {
-          start: new Date(yearNum - 1, 0, 1),
-          end: new Date(yearNum - 1, 11, 31, 23, 59, 59),
-        };
-      }
-    }
+    // Build comparison period date range (supports multi-month)
+    const comparisonDateRange = buildComparisonDateRange(selectedYear, selectedMonth, comparisonType);
 
     // If filters are applied, filter comparison period raw data
     if (hasFilters && comparisonDateRange) {

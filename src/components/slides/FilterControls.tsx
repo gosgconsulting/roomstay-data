@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { ChevronRight, Loader2, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MONTH_NAMES } from '@/constants/slideViewConstants';
+import { parseSelectedMonths, enforceConsecutive, formatSelectedMonths } from '@/lib/monthUtils';
 import type { SlideReportPivotData } from '@/types/slideReports';
 
 interface Dimension {
@@ -386,25 +387,11 @@ export const FilterControls = React.memo<FilterControlsProps>(
               </Select>
             </div>
 
-            {/* Month Filter */}
-            <div className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Month:
-              </span>
-              <Select value={selectedMonth} onValueChange={onMonthChange}>
-                <SelectTrigger className="w-[140px] bg-background">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Months</SelectItem>
-                  {MONTH_NAMES.map((month) => (
-                    <SelectItem key={month} value={month}>
-                      {month}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Month Filter - Multi-select with consecutive enforcement */}
+            <MonthMultiSelect
+              selectedMonth={selectedMonth}
+              onMonthChange={onMonthChange}
+            />
 
             {/* Comparison dropdown */}
             <div className="flex flex-col gap-1">
@@ -430,6 +417,123 @@ export const FilterControls = React.memo<FilterControlsProps>(
 );
 
 FilterControls.displayName = 'FilterControls';
+
+/**
+ * Month Multi-Select Component
+ * 
+ * Popover with checkboxes for month selection. Enforces consecutive months.
+ * Has Apply button and "Only" on hover for each month.
+ */
+const MonthMultiSelect = React.memo<{
+  selectedMonth: string;
+  onMonthChange: (month: string) => void;
+}>(({ selectedMonth, onMonthChange }) => {
+  const currentMonths = parseSelectedMonths(selectedMonth);
+  const currentIndices = currentMonths
+    ? currentMonths.map(m => m - 1)
+    : MONTH_NAMES.map((_, i) => i); // all selected if null
+
+  const [pendingIndices, setPendingIndices] = useState<number[]>(currentIndices);
+  const [isOpen, setIsOpen] = useState(false);
+
+  const handleOpen = (open: boolean) => {
+    if (open) {
+      setPendingIndices(currentIndices);
+    }
+    setIsOpen(open);
+  };
+
+  const toggleMonth = (idx: number) => {
+    let newIndices: number[];
+    if (pendingIndices.includes(idx)) {
+      newIndices = pendingIndices.filter(i => i !== idx);
+    } else {
+      newIndices = [...pendingIndices, idx];
+    }
+    setPendingIndices(enforceConsecutive(newIndices));
+  };
+
+  const handleOnly = (idx: number) => {
+    // Auto-apply single month immediately
+    onMonthChange(MONTH_NAMES[idx]);
+    setIsOpen(false);
+  };
+
+  const handleApply = () => {
+    if (pendingIndices.length === 0 || pendingIndices.length === 12) {
+      onMonthChange(MONTH_NAMES[pendingIndices[0]] || MONTH_NAMES[0]);
+    } else {
+      const sorted = [...pendingIndices].sort((a, b) => a - b);
+      onMonthChange(sorted.map(i => MONTH_NAMES[i]).join(','));
+    }
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        Month:
+      </span>
+      <Popover open={isOpen} onOpenChange={handleOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className="w-[160px] h-9 justify-between px-4 bg-background"
+          >
+            <span className="truncate">{formatSelectedMonths(selectedMonth)}</span>
+            <ChevronRight className="h-4 w-4 opacity-50 rotate-90 ml-2" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[220px] p-0 bg-popover z-50" align="start">
+          <div className="p-2">
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-sm font-medium">Months</Label>
+            </div>
+            <ScrollArea className="h-[280px]">
+              <div className="space-y-0.5 p-1">
+                {MONTH_NAMES.map((month, idx) => {
+                  const isSelected = pendingIndices.includes(idx);
+                  return (
+                    <div
+                      key={month}
+                      className="group flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent text-sm"
+                      onClick={() => toggleMonth(idx)}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => {}}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <span className="truncate flex-1">{month}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOnly(idx);
+                        }}
+                      >
+                        ONLY
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+            <div className="border-t p-2">
+              <Button size="sm" className="w-full" onClick={handleApply}>
+                Apply
+              </Button>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+});
+
+MonthMultiSelect.displayName = 'MonthMultiSelect';
 
 /**
  * Comparison Info Banner Component
@@ -459,13 +563,13 @@ export const ComparisonInfoBanner = React.memo<{
       {comparisonType === 'previous_period' && (
         <span>
           Comparing {selectedYear !== 'all' ? selectedYear : 'Current Period'}
-          {selectedMonth !== 'all' ? ` ${selectedMonth}` : ''} vs Previous Period
+          {selectedMonth !== 'all' ? ` ${formatSelectedMonths(selectedMonth)}` : ''} vs Previous Period
         </span>
       )}
       {comparisonType === 'previous_year' && (
         <span>
           Comparing {selectedYear !== 'all' ? selectedYear : 'Current Year'}
-          {selectedMonth !== 'all' ? ` ${selectedMonth}` : ''} vs Previous Year
+          {selectedMonth !== 'all' ? ` ${formatSelectedMonths(selectedMonth)}` : ''} vs Previous Year
         </span>
       )}
     </div>
