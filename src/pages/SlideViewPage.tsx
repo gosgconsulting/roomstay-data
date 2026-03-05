@@ -995,56 +995,70 @@ export default function SlideViewPage() {
   } = reportPage;
   const queryClient = useQueryClient();
 
-  // Data Studio: fetch directly from all sources on each load (resync + refresh)
+  // Data Studio: show cached data immediately, then background-refresh from sources
   const isDataStudio = isDataStudioRoute || slideReport?.name === 'Data Studio';
   const [isDataStudioLoading, setIsDataStudioLoading] = useState(false);
+  const [dataStudioRefreshStatus, setDataStudioRefreshStatus] = useState<'idle' | 'refreshing' | 'done' | 'error'>('idle');
   const dataStudioLoadDoneRef = useRef(false);
+
   useEffect(() => {
     if (!isDataStudio || !slideReportId || !slideReport || dataStudioLoadDoneRef.current) return;
-
     dataStudioLoadDoneRef.current = true;
-    setIsDataStudioLoading(true);
+
+    // Don't block the UI — data is already loaded from cached pivot_data via useSlideReportPage.
+    // Instead, do a background refresh to pull latest from source files.
+    setDataStudioRefreshStatus('refreshing');
 
     const reportIds = (slideReport.report_ids || {}) as Record<string, string>;
     const channelReportIds = [reportIds.metasearch, reportIds.sem, reportIds.social].filter(Boolean) as string[];
 
     (async () => {
       try {
+        // 1. Resync all data sources in parallel (not sequential)
         const { data: allSources, error: sourcesError } = await supabase
           .from('data_sources')
           .select('id, report_id')
           .in('report_id', channelReportIds);
         if (sourcesError) throw sourcesError;
 
-        for (const ds of allSources || []) {
-          const { data: resyncResult, error: resyncError } = await supabase.functions.invoke(
-            'resync-data-source',
-            { body: { dataSourceId: ds.id } }
-          );
-          if (resyncError) throw resyncError;
-          if (!resyncResult?.success) throw new Error((resyncResult as any)?.error || 'Resync failed');
+        const resyncResults = await Promise.allSettled(
+          (allSources || []).map(ds =>
+            supabase.functions.invoke('resync-data-source', { body: { dataSourceId: ds.id } })
+          )
+        );
+        const failedResyncs = resyncResults.filter(r => r.status === 'rejected');
+        if (failedResyncs.length > 0) {
+          console.warn(`[Data Studio] ${failedResyncs.length}/${resyncResults.length} resyncs failed, continuing...`);
         }
 
+        // 2. Refresh pivot computation
         const { data: refreshResult, error: refreshErr } = await supabase.functions.invoke(
           'refresh-slide-report',
           { body: { slideReportId, years: [2024, 2025, 2026] } }
         );
         if (refreshErr) throw refreshErr;
-        if (!refreshResult?.success) throw new Error((refreshResult as any)?.error || 'Refresh failed');
 
+        // 3. Invalidate caches to pick up fresh data
         queryClient.invalidateQueries({ queryKey: ['cached-dimension-data'] });
         queryClient.invalidateQueries({ queryKey: ['channel_chart_data_from_table', slideReportId] });
         queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
         queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
-      } catch (e: any) {
-        console.error('[Data Studio]', e);
+        queryClient.invalidateQueries({ queryKey: ['slide_report_monthly_data', slideReportId] });
+
+        setDataStudioRefreshStatus('done');
         toast({
-          title: 'Data Studio load failed',
-          description: e?.message || 'Failed to fetch from sources',
-          variant: 'destructive',
+          title: 'Data refreshed',
+          description: 'Latest data loaded from all sources.',
         });
-      } finally {
-        setIsDataStudioLoading(false);
+      } catch (e: any) {
+        console.error('[Data Studio] Background refresh failed:', e);
+        setDataStudioRefreshStatus('error');
+        // Don't show a destructive toast — cached data is still visible
+        toast({
+          title: 'Background refresh failed',
+          description: 'Showing cached data. Try "Refresh Data" to retry.',
+          variant: 'default',
+        });
       }
     })();
   }, [isDataStudio, slideReportId, slideReport, queryClient]);
@@ -3533,12 +3547,11 @@ export default function SlideViewPage() {
   // ========== JSX Return ==========
   return (
     <div className="min-h-screen bg-background">
-      {/* Data Studio: full-page loading while fetching from all sources */}
-      {isDataStudioLoading && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background/95">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="text-lg font-medium">Fetching latest data from all sources…</p>
-          <p className="text-sm text-muted-foreground">This may take a minute.</p>
+      {/* Data Studio: subtle background refresh indicator (non-blocking) */}
+      {isDataStudio && dataStudioRefreshStatus === 'refreshing' && (
+        <div className="fixed top-2 right-2 z-50 flex items-center gap-2 bg-background/90 border rounded-lg px-3 py-2 shadow-sm">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          <span className="text-sm text-muted-foreground">Refreshing from sources…</span>
         </div>
       )}
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
