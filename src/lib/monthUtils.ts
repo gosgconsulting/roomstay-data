@@ -109,3 +109,21 @@ export function isMonthInSelection(monthNum: number, selectedMonth: string): boo
   if (!months) return true; // 'all' - include everything
   return months.includes(monthNum);
 }
+
+/**
+ * Compute an anchor Date from selectedYear/selectedMonth for chart time range calculations.
+ * Uses the latest selected month as the anchor. Falls back to current date if 'all'.
+ */
+export function getChartAnchorDate(selectedYear: string, selectedMonth: string): Date {
+  if (selectedYear === 'all') return new Date();
+  const yearNum = parseInt(selectedYear);
+  const months = parseSelectedMonths(selectedMonth);
+  if (!months || months.length === 0) {
+    // Year selected but no specific month — use December of that year or current month if current year
+    const now = new Date();
+    if (yearNum === now.getFullYear()) return now;
+    return new Date(yearNum, 11, 1); // December
+  }
+  const maxMonth = Math.max(...months) - 1; // 0-based
+  return new Date(yearNum, maxMonth, 1);
+}

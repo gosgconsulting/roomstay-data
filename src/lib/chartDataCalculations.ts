@@ -19,12 +19,13 @@ export type ChartTimeRange =
   | 'last_3_months';
 
 /**
- * Generate all months in a time range
+ * Generate all months in a time range, anchored to a specific date (defaults to now)
  */
 export function generateMonthsInTimeRange(
-  timeRange: ChartTimeRange
+  timeRange: ChartTimeRange,
+  anchorDate?: Date
 ): { year: number; month: string }[] {
-  const now = new Date();
+  const now = anchorDate ?? new Date();
   const months: { year: number; month: string }[] = [];
 
   let startDate: Date;
@@ -49,7 +50,6 @@ export function generateMonthsInTimeRange(
       year: current.getFullYear(),
       month: MONTH_NAMES[current.getMonth()],
     });
-    // Move to next month
     current.setMonth(current.getMonth() + 1);
   }
 
@@ -57,13 +57,14 @@ export function generateMonthsInTimeRange(
 }
 
 /**
- * Apply chart time range filter to data
+ * Apply chart time range filter to data, anchored to a specific date (defaults to now)
  */
 export function applyChartTimeRangeFilter<T extends { year: number; month: string }>(
   data: T[],
-  timeRange: ChartTimeRange
+  timeRange: ChartTimeRange,
+  anchorDate?: Date
 ): T[] {
-  const now = new Date();
+  const now = anchorDate ?? new Date();
 
   if (timeRange === 'this_year') {
     return data.filter((m) => m.year === now.getFullYear());
@@ -71,19 +72,19 @@ export function applyChartTimeRangeFilter<T extends { year: number; month: strin
     const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
     return data.filter((m) => {
       const monthDate = new Date(m.year, MONTH_NAMES.indexOf(m.month), 1);
-      return monthDate >= cutoffDate;
+      return monthDate >= cutoffDate && monthDate <= now;
     });
   } else if (timeRange === 'last_6_months') {
     const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
     return data.filter((m) => {
       const monthDate = new Date(m.year, MONTH_NAMES.indexOf(m.month), 1);
-      return monthDate >= cutoffDate;
+      return monthDate >= cutoffDate && monthDate <= now;
     });
   } else if (timeRange === 'last_3_months') {
     const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
     return data.filter((m) => {
       const monthDate = new Date(m.year, MONTH_NAMES.indexOf(m.month), 1);
-      return monthDate >= cutoffDate;
+      return monthDate >= cutoffDate && monthDate <= now;
     });
   }
 
@@ -97,7 +98,8 @@ export function processOverviewChartData(
   pivotData: SlideReportPivotData | null,
   filterValues: Record<string, Record<string, string[]>>,
   channelsWithFilters: Set<string>,
-  chartTimeRange: ChartTimeRange
+  chartTimeRange: ChartTimeRange,
+  anchorDate?: Date
 ): Array<{ label: string; month: string; year: number; total: number }> {
   if (!pivotData?.channels) {
     return [];
@@ -114,7 +116,7 @@ export function processOverviewChartData(
 
   if (hasFilters) {
     // Generate all months in the chartTimeRange
-    const monthsInRange = generateMonthsInTimeRange(chartTimeRange);
+    const monthsInRange = generateMonthsInTimeRange(chartTimeRange, anchorDate);
 
     // Build a monthly map initialized with zeros for all months in the time range
     const monthlyMap = new Map<
@@ -223,7 +225,7 @@ export function processOverviewChartData(
   }
 
   // Apply chartTimeRange filter
-  let filtered = applyChartTimeRangeFilter(allMonthlyData, chartTimeRange);
+  let filtered = applyChartTimeRangeFilter(allMonthlyData, chartTimeRange, anchorDate);
 
   // Ensure at least 6 months of data for meaningful chart display
   filtered = ensureMinimumChartData(filtered, allMonthlyData, 6);
@@ -245,7 +247,8 @@ export function processChannelChartData(
   pivotData: SlideReportPivotData | null,
   filterValues: Record<string, Record<string, string[]>>,
   channelsWithFilters: Set<string>,
-  chartTimeRange: ChartTimeRange
+  chartTimeRange: ChartTimeRange,
+  anchorDate?: Date
 ): Array<{ month: string; revenue: number }> {
   if (!pivotData?.channels?.[channel]) {
     return [];
@@ -259,7 +262,7 @@ export function processChannelChartData(
 
   if (hasFilters) {
     // Generate all months in the chartTimeRange
-    const monthsInRange = generateMonthsInTimeRange(chartTimeRange);
+    const monthsInRange = generateMonthsInTimeRange(chartTimeRange, anchorDate);
 
     // Build a monthly map initialized with zeros for all months in the time range
     const monthlyMap = new Map<
@@ -334,7 +337,7 @@ export function processChannelChartData(
     });
   } else {
     // No filters - fill all months in chart time range (zeros for months with no data)
-    const monthsInRange = generateMonthsInTimeRange(chartTimeRange);
+    const monthsInRange = generateMonthsInTimeRange(chartTimeRange, anchorDate);
     const monthly = (channelData as any).monthly as Record<string, { revenue?: number }> | undefined;
     allMonthlyData = monthsInRange.map(({ year, month }) => {
       const monthIndex = MONTH_NAMES.indexOf(month);
@@ -348,7 +351,7 @@ export function processChannelChartData(
   }
 
   // Apply chartTimeRange filter
-  let filtered = applyChartTimeRangeFilter(allMonthlyData, chartTimeRange);
+  let filtered = applyChartTimeRangeFilter(allMonthlyData, chartTimeRange, anchorDate);
 
   // Apply ensureMinimumChartData
   filtered = ensureMinimumChartData(filtered, allMonthlyData, 6);
@@ -367,9 +370,10 @@ export function processChannelChartData(
  */
 export function buildOverviewChartDataFromMonthlyData(
   monthlyData: MonthlyDataPoint[],
-  chartTimeRange: ChartTimeRange
+  chartTimeRange: ChartTimeRange,
+  anchorDate?: Date
 ): Array<{ label: string; month: string; year: number; total: number }> {
-  const monthsInRange = generateMonthsInTimeRange(chartTimeRange);
+  const monthsInRange = generateMonthsInTimeRange(chartTimeRange, anchorDate);
   if (!monthsInRange.length) return [];
 
   const dataByKey = new Map<string, { metasearch: number; sem: number; social: number }>();
@@ -401,12 +405,13 @@ export function buildOverviewChartDataFromMonthlyData(
  */
 export function buildChannelChartDataFromMonthlyData(
   monthlyData: MonthlyDataPoint[],
-  chartTimeRange: ChartTimeRange
+  chartTimeRange: ChartTimeRange,
+  anchorDate?: Date
 ): Record<'metasearch' | 'sem' | 'social', Array<{ month: string; revenue: number }>> {
   const channels: ('metasearch' | 'sem' | 'social')[] = ['metasearch', 'sem', 'social'];
   const result = { metasearch: [] as Array<{ month: string; revenue: number }>, sem: [], social: [] };
 
-  const monthsInRange = generateMonthsInTimeRange(chartTimeRange);
+  const monthsInRange = generateMonthsInTimeRange(chartTimeRange, anchorDate);
   if (!monthsInRange.length) return result;
 
   const dataByChannelAndKey = new Map<string, number>();

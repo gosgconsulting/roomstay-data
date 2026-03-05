@@ -17,16 +17,18 @@ export function useOverviewChartData(
   pivotData: SlideReportPivotData | null,
   filterValues: Record<string, Record<string, string[]>>,
   channelsWithFilters: Set<string>,
-  chartTimeRange: ChartTimeRange
+  chartTimeRange: ChartTimeRange,
+  anchorDate?: Date
 ) {
   return useMemo(() => {
     return processOverviewChartData(
       pivotData,
       filterValues,
       channelsWithFilters,
-      chartTimeRange
+      chartTimeRange,
+      anchorDate
     );
-  }, [pivotData, filterValues, channelsWithFilters, chartTimeRange]);
+  }, [pivotData, filterValues, channelsWithFilters, chartTimeRange, anchorDate]);
 }
 
 /**
@@ -37,7 +39,8 @@ export function useChannelChartData(
   pivotData: SlideReportPivotData | null,
   filterValues: Record<string, Record<string, string[]>>,
   channelsWithFilters: Set<string>,
-  chartTimeRange: ChartTimeRange
+  chartTimeRange: ChartTimeRange,
+  anchorDate?: Date
 ) {
   return useMemo(() => {
     return processChannelChartData(
@@ -45,9 +48,10 @@ export function useChannelChartData(
       pivotData,
       filterValues,
       channelsWithFilters,
-      chartTimeRange
+      chartTimeRange,
+      anchorDate
     );
-  }, [channel, pivotData, filterValues, channelsWithFilters, chartTimeRange]);
+  }, [channel, pivotData, filterValues, channelsWithFilters, chartTimeRange, anchorDate]);
 }
 
 /**
@@ -57,28 +61,32 @@ export function useAllChannelChartData(
   pivotData: SlideReportPivotData | null,
   filterValues: Record<string, Record<string, string[]>>,
   channelsWithFilters: Set<string>,
-  chartTimeRange: ChartTimeRange
+  chartTimeRange: ChartTimeRange,
+  anchorDate?: Date
 ) {
   const metasearch = useChannelChartData(
     'metasearch',
     pivotData,
     filterValues,
     channelsWithFilters,
-    chartTimeRange
+    chartTimeRange,
+    anchorDate
   );
   const sem = useChannelChartData(
     'sem',
     pivotData,
     filterValues,
     channelsWithFilters,
-    chartTimeRange
+    chartTimeRange,
+    anchorDate
   );
   const social = useChannelChartData(
     'social',
     pivotData,
     filterValues,
     channelsWithFilters,
-    chartTimeRange
+    chartTimeRange,
+    anchorDate
   );
 
   return useMemo(
