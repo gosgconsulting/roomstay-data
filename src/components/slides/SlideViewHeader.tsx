@@ -32,15 +32,15 @@ export function SlideViewHeader({
   displayCurrency,
   onDisplayCurrencyChange,
 }: SlideViewHeaderProps) {
-  const showCurrencySwitcher = slideReport?.name === 'Master Report';
+  const showCurrencySwitcher = displayCurrency !== undefined && onDisplayCurrencyChange !== undefined;
 
   return (
     <div className="border-b bg-card px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => navigate(`/tools/reports/${accountId}`)}
           >
             <ArrowLeft className="h-5 w-5" />
@@ -82,9 +82,9 @@ export function SlideViewHeader({
           </Button>
           {/* Only show Refresh Data button for master reports (not child reports) */}
           {!slideReport?.configuration?.isChildReport && (
-            <Button 
-              variant="default" 
-              size="sm" 
+            <Button
+              variant="default"
+              size="sm"
               onClick={handleRefreshDataWithModal}
               disabled={isRefreshModalOpen}
               className="bg-primary hover:bg-primary/90"

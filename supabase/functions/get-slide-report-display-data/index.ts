@@ -80,6 +80,8 @@ interface DisplayDataResponse {
   comparison_totals?: Record<string, MetricData> | null;
   has_filters: boolean;
   channels_with_filters: string[];
+  /** Source currency per channel (from data_sources.currency). Used for conversion to display currency. */
+  channel_source_currency?: Record<string, string>;
 }
 
 function getCorsHeaders(req?: Request): Record<string, string> {
@@ -363,6 +365,27 @@ Deno.serve(async (req) => {
   const pivotData = (report.pivot_data as Record<string, unknown>) || {};
   const channelsData = (pivotData.channels as Record<string, Record<string, unknown>>) || {};
   const reportIds = (report.report_ids as Record<string, string>) || {};
+
+  // Resolve source currency per channel from data_sources (fallback: metasearch=USD, else AUD).
+  const channelSourceCurrency: Record<string, string> = {};
+  const fallbackCurrencyByChannel = (ch: string): string => (ch === 'metasearch' ? 'USD' : 'AUD');
+  const normalizeCurrency = (raw: string | null | undefined): string | null =>
+    raw && (raw.toUpperCase() === 'USD' || raw.toUpperCase() === 'AUD') ? raw.toUpperCase() : null;
+  for (const ch of channels) {
+    const reportId = reportIds[ch];
+    if (reportId) {
+      const { data: dsRow } = await supabase
+        .from('data_sources')
+        .select('currency')
+        .eq('report_id', reportId)
+        .limit(1)
+        .maybeSingle();
+      const resolved = normalizeCurrency(dsRow?.currency ?? null);
+      channelSourceCurrency[ch] = resolved ?? fallbackCurrencyByChannel(ch);
+    } else {
+      channelSourceCurrency[ch] = fallbackCurrencyByChannel(ch);
+    }
+  }
 
   const channelsWithFilters: string[] = [];
   for (const ch of channels) {
@@ -848,6 +871,7 @@ Deno.serve(async (req) => {
     comparison_totals: comparisonTotals ?? undefined,
     has_filters: hasFilters,
     channels_with_filters: channelsWithFilters,
+    channel_source_currency: channelSourceCurrency,
   };
 
   return new Response(JSON.stringify(response), {

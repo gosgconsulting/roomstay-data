@@ -41,6 +41,7 @@ interface DataSource {
   header_row: number;
   column_mappings: any[] | null;
   report_id?: string;
+  currency?: string | null;
 }
 
 interface EditDataSourceModalProps {
@@ -78,6 +79,7 @@ export const EditDataSourceModal = ({
   const [syncFrequency, setSyncFrequency] = useState("manual");
   const [syncTime, setSyncTime] = useState("09:00");
   const [syncTimezone, setSyncTimezone] = useState("Asia/Singapore");
+  const [currency, setCurrency] = useState<"AUD" | "USD">("AUD");
 
   // Fetch sync statistics
   const fetchSyncStatistics = useCallback(async () => {
@@ -116,6 +118,8 @@ export const EditDataSourceModal = ({
       setSyncFrequency((dataSource as any).sync_frequency || "manual");
       setSyncTime((dataSource as any).sync_time?.substring(0, 5) || "09:00");
       setSyncTimezone((dataSource as any).sync_timezone || "Asia/Singapore");
+      const rawCurrency = (dataSource as any).currency;
+      setCurrency(rawCurrency === "USD" || rawCurrency === "AUD" ? rawCurrency : "AUD");
       setStep(1);
       setHeaders([]);
       setAvailableTabs([]);
@@ -393,6 +397,7 @@ export const EditDataSourceModal = ({
         sync_frequency: syncFrequency,
         sync_time: syncTime,
         sync_timezone: syncTimezone,
+        currency: currency,
       };
       if (sourceType === 'csv_url') {
         updateData.csv_url = url;
@@ -444,6 +449,7 @@ export const EditDataSourceModal = ({
       sync_frequency: syncFrequency,
       sync_time: syncTime,
       sync_timezone: syncTimezone,
+      currency: currency,
     };
 
     if (sourceType === 'csv_url') {
@@ -536,6 +542,7 @@ export const EditDataSourceModal = ({
         sync_frequency: syncFrequency,
         sync_time: syncTime,
         sync_timezone: syncTimezone,
+        currency: currency,
       };
 
       if (sourceType === 'csv_url') {
@@ -736,6 +743,22 @@ export const EditDataSourceModal = ({
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="currency">Currency</Label>
+                <Select value={currency} onValueChange={(v: "AUD" | "USD") => setCurrency(v)}>
+                  <SelectTrigger id="currency" className="bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background z-50">
+                    <SelectItem value="AUD">AUD</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Currency of cost and revenue values in this source. Used for report conversion.
+                </p>
               </div>
 
               <div className="space-y-4 border-t pt-4">

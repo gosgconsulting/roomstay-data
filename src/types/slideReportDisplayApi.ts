@@ -58,4 +58,6 @@ export interface GetSlideReportDisplayDataResponse {
   comparison_totals?: Record<string, MetricData & { cpc?: number; roas?: number; costOfSale?: number }> | null;
   has_filters: boolean;
   channels_with_filters: string[];
+  /** Source currency per channel (from data_sources.currency). Used for conversion to display currency. */
+  channel_source_currency?: Record<string, string>;
 }
