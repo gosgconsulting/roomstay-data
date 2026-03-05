@@ -3643,9 +3643,9 @@ export default function SlideViewPage() {
               KPI_CARDS={KPI_CARDS}
               comparisonTotals={comparisonTotals}
               comparisonType={comparisonType}
-              onAISummaryClick={slideType !== 'master-report' ? () => setIsAISummaryModalOpen(true) : undefined}
+              onAISummaryClick={slideType !== 'master-report' && !isDataStudio ? () => setIsAISummaryModalOpen(true) : undefined}
               isAISummaryDisabled={!slideReportId}
-              summaryText={slideType !== 'master-report' ? (overviewSummary?.summary_text || null) : null}
+              summaryText={slideType !== 'master-report' && !isDataStudio ? (overviewSummary?.summary_text || null) : null}
             />
           </TabsContent>
 
@@ -3685,9 +3685,9 @@ export default function SlideViewPage() {
                 UnifiedBreakdownTable={UnifiedBreakdownTable}
                 comparisonTotals={comparisonTotals}
                 comparisonType={comparisonType}
-                onAISummaryClick={slideType !== 'master-report' ? () => setIsAISummaryModalOpen(true) : undefined}
+                onAISummaryClick={slideType !== 'master-report' && !isDataStudio ? () => setIsAISummaryModalOpen(true) : undefined}
                 isAISummaryDisabled={!slideReportId}
-                summaryText={slideType !== 'master-report' ? (channel === 'metasearch' ? metasearchSummary?.summary_text : channel === 'sem' ? semSummary?.summary_text : socialSummary?.summary_text) : null}
+                summaryText={slideType !== 'master-report' && !isDataStudio ? (channel === 'metasearch' ? metasearchSummary?.summary_text : channel === 'sem' ? semSummary?.summary_text : socialSummary?.summary_text) : null}
                 displayCurrency={slideType === 'master-report' ? displayCurrency : undefined}
               />
             </TabsContent>
