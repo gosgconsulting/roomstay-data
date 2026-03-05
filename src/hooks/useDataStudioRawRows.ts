@@ -27,19 +27,18 @@ export interface DataStudioSourceResult {
 /**
  * Fetch data source config for a given report ID
  */
-async function getDataSourceForReport(reportId: string): Promise<DataSource | null> {
+async function getDataSourcesForReport(reportId: string): Promise<DataSource[]> {
   const { data, error } = await supabase
     .from('data_sources')
     .select('*')
     .eq('report_id', reportId)
-    .limit(1)
-    .maybeSingle();
+    .order('created_at', { ascending: true });
 
-  if (error || !data) return null;
-  return {
-    ...data,
-    column_mappings: data.column_mappings as any,
-  } as DataSource;
+  if (error || !data || data.length === 0) return [];
+  return data.map(d => ({
+    ...d,
+    column_mappings: d.column_mappings as any,
+  } as DataSource));
 }
 
 /**
@@ -87,31 +86,41 @@ export function useDataStudioRawRows(
 
         const startTime = performance.now();
 
-        // 1. Get data source config
-        const dataSource = await getDataSourceForReport(channelReportId);
-        if (!dataSource) {
+        // 1. Get all data source configs for this report
+        const dataSources = await getDataSourcesForReport(channelReportId);
+        if (dataSources.length === 0) {
           console.warn(`[DataStudio] No data source found for ${channel} (report ${channelReportId})`);
           return { channel, rows: [] as any[], dimMap: {} };
         }
 
-        // 2. Fetch directly from Google Sheets/CSV and transform
-        const sourceResult = await fetchSourceData(dataSource, user.id, accountId || undefined);
+        // 2. Fetch from ALL data sources and merge rows
+        let allRawRows: any[] = [];
+        let mergedDimNameMap: Record<string, string> = {};
 
-        // 3. Build dimension name map from the dimensionIdMap
-        const dimensionIds = Object.values(sourceResult.dimensionIdMap);
-        const dimNameMap = await buildDimensionNameMap(dimensionIds);
+        for (const dataSource of dataSources) {
+          try {
+            const sourceResult = await fetchSourceData(dataSource, user.id, accountId || undefined);
 
-        // 4. Convert transformedRows to rawDataRows format
-        // transformedRows have { dimension_values: { [uuid]: value }, row_number }
-        const rawRows = sourceResult.transformedRows.map((row: any) => ({
-          ...(row.dimension_values || {}),
-          _row_number: row.row_number,
-        }));
+            // Build dimension name map
+            const dimensionIds = Object.values(sourceResult.dimensionIdMap);
+            const dimNameMap = await buildDimensionNameMap(dimensionIds);
+            Object.assign(mergedDimNameMap, dimNameMap);
+
+            // Convert transformedRows to rawDataRows format
+            const rawRows = sourceResult.transformedRows.map((row: any) => ({
+              ...(row.dimension_values || {}),
+              _row_number: row.row_number,
+            }));
+            allRawRows = allRawRows.concat(rawRows);
+          } catch (err) {
+            console.warn(`[DataStudio] Failed to fetch source ${dataSource.name} for ${channel}:`, err);
+          }
+        }
 
         const duration = Math.round(performance.now() - startTime);
-        console.log(`[DataStudio] ${channel}: ${rawRows.length} rows fetched from source in ${duration}ms`);
+        console.log(`[DataStudio] ${channel}: ${allRawRows.length} rows from ${dataSources.length} source(s) in ${duration}ms`);
 
-        return { channel, rows: rawRows, dimMap: dimNameMap };
+        return { channel, rows: allRawRows, dimMap: mergedDimNameMap };
       });
 
       const results = await Promise.all(promises);
