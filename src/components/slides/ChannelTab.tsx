@@ -23,12 +23,12 @@ interface ChannelTabProps {
   isSlideReportsLoading: boolean;
   slideReportId: string | null;
   slideReport?: SlideReport | null;
-  /** Pivot data to use for breakdown table (e.g. effectivePivotData so view/dimension filters apply) */
   pivotData?: SlideReportPivotData | null;
   isLoadingData: boolean;
   breakdownTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
   currentTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
   channelChartData: Record<string, Array<{ month: string; revenue: number }>>;
+  comparisonChannelChartData?: Record<string, Array<{ month: string; revenue: number }>> | null;
   chartTimeRange: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
   setChartTimeRange: (range: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months') => void;
   groupByDimension: string;
@@ -52,12 +52,9 @@ interface ChannelTabProps {
   onAISummaryClick?: () => void;
   isAISummaryDisabled?: boolean;
   summaryText?: string | null;
-  /** When true, breakdown table uses apiBreakdowns instead of computing from raw rows. */
   displayDataFromApi?: boolean;
   apiBreakdowns?: { groupBy: string; rows: Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number; cpc?: number; roas?: number; costOfSale?: number }>; expanded?: Record<string, Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>> };
-  /** When true, do not show expanded sub-rows in the breakdown table (e.g. Metasearch Jan 2026). */
   suppressExpandedBreakdown?: boolean;
-  /** Display currency for breakdown table formatting (AUD/USD). */
   displayCurrency?: 'AUD' | 'USD';
 }
 
@@ -71,6 +68,7 @@ export function ChannelTab({
   breakdownTotals,
   currentTotals,
   channelChartData,
+  comparisonChannelChartData,
   chartTimeRange,
   setChartTimeRange,
   groupByDimension,
@@ -100,7 +98,17 @@ export function ChannelTab({
   displayCurrency,
 }: ChannelTabProps) {
   const gradientId = `${channel}Gradient`;
+  const compGradientId = `${channel}CompGradient`;
   
+  // Merge comparison data into channel chart data
+  const currentData = channelChartData[channel] || [];
+  const compData = comparisonChannelChartData?.[channel];
+  const mergedData = currentData.map((point, i) => ({
+    ...point,
+    comparisonRevenue: compData?.[i]?.revenue ?? undefined,
+  }));
+  const hasComparison = !!compData && compData.length > 0;
+
   return (
     <TabsContent value={channel} className="space-y-6">
       {isSlideReportsLoading || (slideReportId && (!slideReport?.pivot_data || isLoadingData)) ? (
@@ -133,21 +141,39 @@ export function ChannelTab({
             <CardContent>
               <div className="h-[200px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={channelChartData[channel]}>
+                  <AreaChart data={mergedData}>
                     <defs>
                       <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
                         <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.05}/>
+                      </linearGradient>
+                      <linearGradient id={compGradientId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.15}/>
+                        <stop offset="95%" stopColor="#94a3b8" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
                     <Tooltip 
-                      formatter={(value: number) => [formatNumber(value, 'currency', displayCurrency), 'Revenue']}
+                      formatter={(value: number, name: string) => [
+                        formatNumber(value, 'currency', displayCurrency),
+                        name === 'comparisonRevenue' ? 'Previous Period' : 'Revenue'
+                      ]}
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                     />
-                    <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} fill={`url(#${gradientId})`} />
+                    {hasComparison && (
+                      <Area 
+                        type="monotone" 
+                        dataKey="comparisonRevenue" 
+                        stroke="#94a3b8" 
+                        strokeWidth={1.5}
+                        strokeDasharray="5 3"
+                        fill={`url(#${compGradientId})`}
+                        name="Previous Period"
+                      />
+                    )}
+                    <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} fill={`url(#${gradientId})`} name="Revenue" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -159,7 +185,6 @@ export function ChannelTab({
             <CardHeader><CardTitle className="text-base font-medium">Breakdown Analysis</CardTitle></CardHeader>
             <CardContent>
               {(() => {
-                // Use effective pivot data (e.g. from parent) so view/dimension filters apply to the table
                 const pivotData = pivotDataProp ?? (slideReport?.pivot_data as SlideReportPivotData | null);
                 const channelData = pivotData?.channels?.[channel];
                 const savedBreakdownConfigs = slideReport?.configuration?.breakdownConfigs?.[channel];
@@ -212,7 +237,7 @@ export function ChannelTab({
             </CardContent>
           </Card>
 
-          {/* AI Summary Display - After last report component */}
+          {/* AI Summary Display */}
           {summaryText && (
             <div className="space-y-2">
               <h4 className="text-sm font-medium">
@@ -222,7 +247,7 @@ export function ChannelTab({
             </div>
           )}
 
-          {/* AI Summary Button - After last report component */}
+          {/* AI Summary Button */}
           {onAISummaryClick && (
             <div className="flex justify-end">
               <AISummaryButton
