@@ -10,6 +10,7 @@ import { BookmarkPlus, Trash2, Search, ChevronRight, Loader2 } from "lucide-reac
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { MONTH_NAMES } from "@/constants/slideViewConstants";
 import { parseSelectedMonths, enforceConsecutive, formatSelectedMonths } from "@/lib/monthUtils";
+import { DatePresetPicker } from "@/components/slides/DatePresetPicker";
 
 interface Dimension {
   id: string;
@@ -512,25 +513,11 @@ export function FiltersRow({
       {/* Date Filters - Show on all tabs except Budget */}
       {selectedTab !== "budget" && (
         <div className="flex items-center gap-6">
-          {/* Year Filter */}
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Year:</span>
-            <Select value={selectedYear} onValueChange={setSelectedYear} disabled={isReadOnlyMode}>
-              <SelectTrigger className="w-[130px] bg-background">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Years</SelectItem>
-                <SelectItem value="2024">2024</SelectItem>
-                <SelectItem value="2025">2025</SelectItem>
-                <SelectItem value="2026">2026</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Month Filter - Multi-select with consecutive enforcement */}
-          <MonthMultiSelectInline
+          {/* Date Preset Picker (replaces Year + Month dropdowns) */}
+          <DatePresetPicker
+            selectedYear={selectedYear}
             selectedMonth={selectedMonth}
+            onYearChange={setSelectedYear}
             onMonthChange={setSelectedMonth}
             disabled={isReadOnlyMode}
           />
