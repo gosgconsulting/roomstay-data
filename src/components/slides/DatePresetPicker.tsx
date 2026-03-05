@@ -132,25 +132,8 @@ export const DatePresetPicker = React.memo<DatePresetPickerProps>(
           break;
         case "custom":
           setShowCalendar(true);
-          // Initialize custom range from current selection
-          if (selectedMonth !== "all") {
-            const months = selectedMonth.split(",").map(m => m.trim());
-            const yr = parseInt(selectedYear) || now.getFullYear();
-            const firstIdx = MONTH_NAMES.indexOf(months[0]);
-            const lastIdx = MONTH_NAMES.indexOf(months[months.length - 1]);
-            if (firstIdx >= 0 && lastIdx >= 0) {
-              setCustomRange({
-                from: new Date(yr, firstIdx, 1),
-                to: endOfMonth(new Date(yr, lastIdx, 1)),
-              });
-            }
-          } else {
-            const yr = parseInt(selectedYear) || now.getFullYear();
-            setCustomRange({
-              from: startOfYear(new Date(yr, 0, 1)),
-              to: endOfYear(new Date(yr, 0, 1)),
-            });
-          }
+          // Reset range so user picks fresh start & end dates
+          setCustomRange({ from: undefined, to: undefined });
           break;
       }
     }, [onYearChange, onMonthChange, selectedYear, selectedMonth]);
