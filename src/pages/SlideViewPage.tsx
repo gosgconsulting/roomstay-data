@@ -3007,6 +3007,29 @@ export default function SlideViewPage() {
   // (Removed) Preloading all channel values on Step 2 -> Step 3.
   // We now load values lazily when the user selects a dimension in Step 4 (Data Source).
 
+  // Background loader for filter dimension values after saving configuration
+  const loadFilterDimensionValuesAfterSave = useCallback(
+    async (
+      channels: ('metasearch' | 'sem' | 'social')[],
+      configs: Record<string, FilterConfig>
+    ) => {
+      for (const channel of channels) {
+        const ids = configs?.[channel]?.filterDimensionIds ?? [];
+        for (const id of ids) {
+          const values = await loadFilterDimensionValues(channel, id);
+          setFilterDimensionValues(prev => ({
+            ...prev,
+            [channel]: {
+              ...prev[channel],
+              [id]: values
+            }
+          }));
+        }
+      }
+    },
+    [loadFilterDimensionValues]
+  );
+
   // Navigation handlers
   const handleNext = async () => {
     if (modalStep === 1) {
@@ -3263,18 +3286,4 @@ export default function SlideViewPage() {
         selected_month: selectedMonth,
         comparison_type: comparisonType as 'none' | 'previous_period' | 'previous_year',
         chart_time_range: chartTimeRange,
-        price_check_chart_time_range: priceCheckChartTimeRange,
-        filter_values: { ...filterValues },
-      });
-
-      queryClient.invalidateQueries({ queryKey: ['slide_report_views', 'list', slideReportId] });
-    } catch (error) {
-      console.error('Error updating view:', error);
-    }
-  }, [slideReportId, slideReport, user, selectedYear, selectedMonth, comparisonType, chartTimeRange, priceCheckChartTimeRange, filterValues, updateView, queryClient]);
-
-  // Apply a saved view
-  const handleApplyView = useCallback((viewId: string | null) => {
-    if (!slideReportId) return;
-
-    const emptyFilters: Record<string, Record<string, string[]>> =
+        price_check_chart_time
