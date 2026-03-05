@@ -691,8 +691,7 @@ const UnifiedBreakdownTable = ({
             <TableHead className="text-right">Cost</TableHead>
             <TableHead className="text-right">Revenue</TableHead>
             <TableHead className="text-right">ROAS</TableHead>
-            <TableHead className="text-right">Cost of Sale</TableHead>
-            <TableHead className="text-right">Gross Profit</TableHead>
+             <TableHead className="text-right">Cost of Sale</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -719,7 +718,6 @@ const UnifiedBreakdownTable = ({
                 <TableCell className="text-right">{formatNumber(group.metrics.revenue, 'currency', displayCurrency)}</TableCell>
                 <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
                 <TableCell className="text-right">{group.metrics.costOfSale < 0.01 ? group.metrics.costOfSale.toFixed(4) : group.metrics.costOfSale.toFixed(2)}%</TableCell>
-                <TableCell className="text-right">{formatNumber(group.metrics.revenue * GROSS_PROFIT_RATE - group.metrics.cost, 'currency', displayCurrency)}</TableCell>
               </TableRow>
               {/* Expanded breakdown rows */}
               {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
@@ -745,17 +743,6 @@ const UnifiedBreakdownTable = ({
                       <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.revenue, 'currency', displayCurrency)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.roas.toFixed(1)}x</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.costOfSale < 0.01 ? item.metrics.costOfSale.toFixed(4) : item.metrics.costOfSale.toFixed(2)}%</TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {formatNumber(
-                          (selectedChannel === 'metasearch' &&
-                            (breakdownByDim?.name ?? '').trim().toLowerCase() === 'link type' &&
-                            (item.value ?? '').trim().toLowerCase() === 'google organic')
-                            ? item.metrics.revenue * GROSS_PROFIT_RATE_GOOGLE_ORGANIC
-                            : item.metrics.revenue * GROSS_PROFIT_RATE - item.metrics.cost,
-                          'currency',
-                          displayCurrency
-                        )}
-                      </TableCell>
                     </TableRow>
                   ))}
                 </>
@@ -776,7 +763,6 @@ const UnifiedBreakdownTable = ({
             <TableCell className="text-right">{formatNumber(totalMetrics.revenue, 'currency', displayCurrency)}</TableCell>
             <TableCell className="text-right">{totalMetrics.roas.toFixed(1)}x</TableCell>
             <TableCell className="text-right">{totalMetrics.costOfSale < 0.01 ? totalMetrics.costOfSale.toFixed(4) : totalMetrics.costOfSale.toFixed(2)}%</TableCell>
-            <TableCell className="text-right">{formatNumber(totalMetrics.revenue * GROSS_PROFIT_RATE - totalMetrics.cost, 'currency', displayCurrency)}</TableCell>
           </TableRow>
         </TableBody>
       </Table>

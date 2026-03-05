@@ -86,8 +86,8 @@ export const KPICardsSection = React.memo<KPICardsSectionProps>(
 
           const formattedValue = (() => {
             if (kpi.format === 'currency') {
-              if (kpi.key === 'cpc' && kpi.value < 0.01) {
-                return formatNumber(kpi.value, 'currency', effectiveCurrency, 4);
+              if (kpi.key === 'cpc') {
+                return formatNumber(kpi.value, 'currency', effectiveCurrency, 2);
               }
               return formatNumber(kpi.value, 'currency', effectiveCurrency);
             }
