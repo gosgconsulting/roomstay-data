@@ -115,12 +115,18 @@ export function ChannelTab({
         renderKPICardsSkeleton()
       ) : (
         <>
-          {renderKPICards(
-            getReportKPICards(
-              currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
-            ),
-            getChannelComparisonMetrics(channel)
-          )}
+          {(() => {
+            // Use breakdownTotals as fallback when currentTotals has no cost data (mapping mismatch)
+            const ct = currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+            const bt = breakdownTotals[channel];
+            const effectiveTotals = (ct.cost === 0 && bt && bt.cost > 0)
+              ? { ...ct, cost: bt.cost, revenue: bt.revenue || ct.revenue, bookings: bt.bookings || ct.bookings, impressions: bt.impressions || ct.impressions, clicks: bt.clicks || ct.clicks }
+              : ct;
+            return renderKPICards(
+              getReportKPICards(effectiveTotals),
+              getChannelComparisonMetrics(channel)
+            );
+          })()}
         
           {/* Monthly Revenue Chart */}
           <Card>
