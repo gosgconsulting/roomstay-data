@@ -184,16 +184,17 @@ export function useFilteredSlideData({
       const channelFilterValues = filterValues[channel] || {};
       const hasChannelFilters = channelsWithFilters.has(channel);
       const rawDataRows = (channelData as any).rawDataRows || [];
+      const dimensionMap = (channelData as any).dimensionMap || {};
 
       // If this channel has filters, filter rawDataRows and re-aggregate
       if (hasChannelFilters && rawDataRows.length > 0) {
         // Filter rows based on filterValues and date range
-        const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange);
+        // Pass dimensionMap so name-keyed data (e.g. "Hotel") is matched by UUID filter keys
+        const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange, dimensionMap);
         filteredRawRows[channel] = filteredRows;
 
         if (filteredRows.length > 0) {
-          // Build dynamic metric mapping from dimensionMap
-          const dimensionMap = (channelData as any).dimensionMap || {};
+          // Build dynamic metric mapping from dimensionMap (already extracted above)
           const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
 
           // Manually aggregate metrics from filtered rows
