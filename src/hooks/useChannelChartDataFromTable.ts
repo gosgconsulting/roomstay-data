@@ -118,32 +118,64 @@ export function useChannelChartDataFromTable(
   isLoading: boolean;
   isSuccess: boolean;
 } {
-  const query = useQuery({
+  // Query slide_report_channel_month_data (preferred, per-month granularity)
+  const monthQuery = useQuery({
     queryKey: queryKeys.byReport(slideReportId || ''),
     queryFn: async (): Promise<Row[]> => {
       if (!slideReportId) return [];
-
       const { data: rows, error } = await supabase
         .from('slide_report_channel_month_data')
         .select('channel, year, month, data')
         .eq('slide_report_id', slideReportId);
-
       if (error) throw error;
       return (rows || []) as Row[];
     },
     enabled: !!slideReportId && !!chartTimeRange,
   });
 
+  // Fallback: query slide_report_channel_year_data and extract monthly data from year slices
+  const yearQuery = useQuery({
+    queryKey: ['channel_chart_data_from_year_table', slideReportId || ''],
+    queryFn: async (): Promise<Row[]> => {
+      if (!slideReportId) return [];
+      const { data: rows, error } = await supabase
+        .from('slide_report_channel_year_data')
+        .select('channel, year, data')
+        .eq('slide_report_id', slideReportId);
+      if (error) throw error;
+      // Expand year slices into per-month rows
+      const monthRows: Row[] = [];
+      for (const row of rows || []) {
+        const sliceData = row.data as SliceData | null;
+        if (!sliceData?.monthly) continue;
+        for (const [monthKey] of Object.entries(sliceData.monthly)) {
+          const [y, m] = monthKey.split('-').map(Number);
+          if (!y || !m) continue;
+          // Create a synthetic month row with the full slice data so getRevenueForMonth can access monthlyBreakdowns
+          monthRows.push({
+            channel: row.channel,
+            year: y,
+            month: m,
+            data: sliceData,
+          });
+        }
+      }
+      return monthRows;
+    },
+    enabled: !!slideReportId && !!chartTimeRange && (monthQuery.isSuccess && (!monthQuery.data || monthQuery.data.length === 0)),
+  });
+
   const data = useMemo(() => {
-    const rows = query.data;
+    // Prefer month data, fallback to year data
+    const rows = (monthQuery.data && monthQuery.data.length > 0) ? monthQuery.data : yearQuery.data;
     if (!rows?.length || !chartTimeRange) return null;
     const monthlyData = buildMonthlyDataFromRows(rows, filterValues ?? null);
     return buildChannelChartDataFromMonthlyData(monthlyData, chartTimeRange);
-  }, [query.data, chartTimeRange, filterValues]);
+  }, [monthQuery.data, yearQuery.data, chartTimeRange, filterValues]);
 
   return {
     data,
-    isLoading: query.isLoading,
-    isSuccess: query.isSuccess,
+    isLoading: monthQuery.isLoading || (monthQuery.isSuccess && (!monthQuery.data || monthQuery.data.length === 0) && yearQuery.isLoading),
+    isSuccess: monthQuery.isSuccess || yearQuery.isSuccess,
   };
 }

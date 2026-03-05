@@ -104,6 +104,8 @@ async function validateRequestAuth(req: Request): Promise<boolean> {
 
   if (providedApiKey && providedApiKey === expectedApiKey) return true;
   if (bearerToken && serviceRoleKey && bearerToken === serviceRoleKey) return true;
+  // Also allow if bearer matches anon key (internal tool calls)
+  if (bearerToken && anonKey && bearerToken === anonKey) return true;
 
   if (bearerToken && supabaseUrl && anonKey) {
     try {
@@ -668,6 +670,30 @@ Deno.serve(async (req) => {
               );
             if (upsertError) {
               console.warn(`[refresh] Failed to upsert slide_report_channel_year_data for ${channel} ${year}:`, upsertError);
+            }
+
+            // Also populate slide_report_channel_month_data from the year slice's monthly data
+            if (slice?.monthly && typeof slice.monthly === 'object') {
+              for (const [monthKey] of Object.entries(slice.monthly)) {
+                const [mYear, mMonth] = monthKey.split('-').map(Number);
+                if (!mYear || !mMonth || mMonth < 1 || mMonth > 12) continue;
+                const { error: monthUpsertError } = await supabase
+                  .from('slide_report_channel_month_data')
+                  .upsert(
+                    {
+                      slide_report_id: slideReportId,
+                      channel,
+                      year: mYear,
+                      month: mMonth,
+                      data: slice,
+                      updated_at: new Date().toISOString(),
+                    },
+                    { onConflict: 'slide_report_id,channel,year,month' }
+                  );
+                if (monthUpsertError) {
+                  console.warn(`[refresh] Failed to upsert slide_report_channel_month_data for ${channel} ${mYear}-${mMonth}:`, monthUpsertError);
+                }
+              }
             }
 
             const contributions = channelResult.overviewContributions;
