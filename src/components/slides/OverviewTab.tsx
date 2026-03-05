@@ -139,9 +139,15 @@ export function OverviewTab({
       ) : slideReportId && slideReport?.pivot_data && hasAnyData(currentTotals) && renderKPICards(
         slideType === 'master-report' && Object.keys(currentTotals).length > 0
           ? (() => {
-              const metasearchData = currentTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-              const semData = currentTotals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-              const socialData = currentTotals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+              // Prefer breakdownTotals (from table rows) over currentTotals (from pivot cache)
+              const getEffective = (ch: string) => {
+                const bt = breakdownTotals[ch];
+                const ct = currentTotals[ch] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                return (bt && (bt.impressions > 0 || bt.clicks > 0 || bt.cost > 0 || bt.revenue > 0 || bt.bookings > 0)) ? bt : ct;
+              };
+              const metasearchData = getEffective('metasearch');
+              const semData = getEffective('sem');
+              const socialData = getEffective('social');
               const totals = {
                 impressions: (metasearchData.impressions || 0) + (semData.impressions || 0) + (socialData.impressions || 0),
                 clicks: (metasearchData.clicks || 0) + (semData.clicks || 0) + (socialData.clicks || 0),
@@ -273,7 +279,12 @@ export function OverviewTab({
                     const channels = ['metasearch', 'sem', 'social'];
                     const rows = channels.map(channel => {
                       const channelKey = channel as 'metasearch' | 'sem' | 'social';
-                      const data = filteredData.channelTotals[channelKey] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                      const ct = filteredData.channelTotals[channelKey] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                      const bt = breakdownTotals[channelKey];
+                      // Prefer breakdownTotals (aggregated from table rows) — same pattern as ChannelTab
+                      const data = (bt && (bt.impressions > 0 || bt.clicks > 0 || bt.cost > 0 || bt.revenue > 0 || bt.bookings > 0))
+                        ? bt
+                        : ct;
                       const derived = calculateDerivedMetrics(data);
                       const compData = showComparison && comparisonTotals?.[channelKey];
                       const compDerived = compData ? calculateDerivedMetrics(compData) : null;
