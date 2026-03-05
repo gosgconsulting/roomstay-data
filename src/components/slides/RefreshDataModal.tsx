@@ -29,9 +29,7 @@ export function RefreshDataModal({
   // Data Studio: 2 steps only (resync + update cache)
   // Master Report: 5 steps (resync + compute + store + breakdowns + update)
   const lastStep = isDataStudio ? 2 : 5;
-  const allComplete = isDataStudio
-    ? refreshStepStatus[2] === 'complete'
-    : refreshStepStatus[5] === 'complete';
+  const allComplete = refreshStepStatus[5] === 'complete';
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onOpenChange(false)}>
@@ -57,7 +55,7 @@ export function RefreshDataModal({
               />
               <RefreshStepIndicator
                 stepNumber={2}
-                status={refreshStepStatus[2] === 'loading' ? 'loading' : refreshStepStatus[5] === 'complete' ? 'complete' : refreshStepStatus[2]}
+                status={refreshStepStatus[5] === 'complete' ? 'complete' : refreshStepStatus[2]}
                 title="Updating cache & interface"
                 description="Recomputing metrics and refreshing report"
               />
