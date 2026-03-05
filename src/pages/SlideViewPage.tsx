@@ -3266,7 +3266,7 @@ export default function SlideViewPage() {
     []
   );
 
-  // When Refresh Data modal is open and step is 0: resync all data sources, then run refresh-slide-report.
+   // When Refresh Data modal is open and step is 0: resync all data sources, then run refresh-slide-report.
   useEffect(() => {
     if (!isRefreshModalOpen || refreshStep !== 0 || !slideReportId || !slideReport) return;
 
@@ -3282,28 +3282,50 @@ export default function SlideViewPage() {
       ].filter(Boolean) as string[];
 
       try {
-        // Step 1: Resync every data source for each channel report
+        // Step 1: Resync data sources — skip sources synced within last hour, run in parallel, tolerate timeouts
         const { data: allSources, error: sourcesError } = await supabase
           .from('data_sources')
-          .select('id, report_id')
+          .select('id, report_id, last_synced_at')
           .in('report_id', channelReportIds);
 
         if (sourcesError) throw sourcesError;
 
-        const dataSourceIds = (allSources || []).map((ds: any) => ds.id);
-        for (let i = 0; i < dataSourceIds.length; i++) {
-          const dataSourceId = dataSourceIds[i];
-          const { data: resyncResult, error: resyncError } = await invokeWithRetry('resync-data-source', {
-            dataSourceId,
-          });
-          if (resyncError) {
-            const msg = resyncError?.message || 'Unknown error';
-            const hint = msg.includes('Failed to send') ? ' Check your connection and try again.' : '';
-            throw new Error(`Resyncing data sources: ${msg}.${hint}`);
+        const ONE_HOUR_AGO = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const sourcesToResync = (allSources || []).filter((ds: any) => {
+          // Skip if synced within the last hour
+          if (ds.last_synced_at && ds.last_synced_at > ONE_HOUR_AGO) {
+            console.log(`[RefreshData] Skipping resync for ${ds.id} — synced recently at ${ds.last_synced_at}`);
+            return false;
           }
-          if (!resyncResult?.success) {
-            throw new Error((resyncResult as any)?.error || `Resync failed for source ${dataSourceId}`);
+          return true;
+        });
+
+        if (sourcesToResync.length > 0) {
+          console.log(`[RefreshData] Resyncing ${sourcesToResync.length} data sources in parallel (skipped ${(allSources || []).length - sourcesToResync.length} recently synced)`);
+          
+          // Run all resyncs in parallel with individual timeout handling
+          const resyncResults = await Promise.allSettled(
+            sourcesToResync.map(async (ds: any) => {
+              const { data: resyncResult, error: resyncError } = await invokeWithRetry('resync-data-source', { dataSourceId: ds.id }, 3);
+              if (resyncError) {
+                console.warn(`[RefreshData] Resync failed for ${ds.id}:`, resyncError?.message);
+                return { id: ds.id, success: false, error: resyncError?.message };
+              }
+              if (!resyncResult?.success) {
+                console.warn(`[RefreshData] Resync returned failure for ${ds.id}:`, resyncResult?.error);
+                return { id: ds.id, success: false, error: resyncResult?.error };
+              }
+              return { id: ds.id, success: true };
+            })
+          );
+
+          // Log results but don't fail the whole process — proceed with refresh even if some resyncs failed
+          const failures = resyncResults.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value?.success));
+          if (failures.length > 0) {
+            console.warn(`[RefreshData] ${failures.length}/${sourcesToResync.length} resyncs failed, continuing with refresh anyway`);
           }
+        } else {
+          console.log('[RefreshData] All data sources recently synced, skipping resync step');
         }
 
         setRefreshStepStatus((prev) => ({ ...prev, 1: 'complete' }));
@@ -3314,7 +3336,7 @@ export default function SlideViewPage() {
         const { data: refreshResult, error: refreshErr } = await invokeWithRetry('refresh-slide-report', {
           slideReportId,
           years: [2024, 2025, 2026],
-        });
+        }, 3);
 
         if (refreshErr) {
           const msg = refreshErr?.message || 'Unknown error';
