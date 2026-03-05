@@ -45,7 +45,7 @@ import { ShareModal } from "@/components/ShareModal";
 import { SlideViewHeader } from "@/components/slides/SlideViewHeader";
 import { FiltersRow } from "@/components/slides/FiltersRow";
 import { ComparisonBanner } from "@/components/slides/ComparisonBanner";
-import { BreakdownTableSection } from "@/components/slides/BreakdownTableSection";
+
 import { OverviewTab } from "@/components/slides/OverviewTab";
 import { ChannelTab } from "@/components/slides/ChannelTab";
 import { BudgetTab } from "@/components/slides/BudgetTab";
@@ -3216,11 +3216,13 @@ export default function SlideViewPage() {
       booking: {},
     };
 
+    isApplyingViewRef.current = true;
+
     // Reset to Master (no saved view)
     if (viewId === null) {
-      isApplyingViewRef.current = true;
       setSelectedViewId(null);
       setFilterValues(emptyFilters);
+      setPendingFilterValues({ metasearch: {}, sem: {}, social: {} });
       setComparisonType('none');
 
       // Remove viewId from URL if present
@@ -3231,8 +3233,51 @@ export default function SlideViewPage() {
       setTimeout(() => {
         isApplyingViewRef.current = false;
       }, 0);
+      return;
     }
-  }, [slideReportId, searchParams]);
+
+    // Apply a saved view
+    const view = views.find(v => v.id === viewId);
+    if (!view) {
+      console.warn('[handleApplyView] View not found:', viewId);
+      isApplyingViewRef.current = false;
+      return;
+    }
+
+    setSelectedViewId(viewId);
+
+    // Apply filter values from the saved view
+    const viewFilters = view.filter_values || {};
+    setFilterValues({
+      metasearch: viewFilters.metasearch || {},
+      sem: viewFilters.sem || {},
+      social: viewFilters.social || {},
+      'price-check': viewFilters['price-check'] || {},
+      booking: viewFilters.booking || {},
+    });
+    setPendingFilterValues({
+      metasearch: viewFilters.metasearch || {},
+      sem: viewFilters.sem || {},
+      social: viewFilters.social || {},
+    });
+
+    // Apply year/month/comparison settings
+    if (view.selected_year) setSelectedYear(view.selected_year);
+    if (view.selected_month) setSelectedMonth(view.selected_month);
+    if (view.comparison_type) setComparisonType(view.comparison_type);
+    if (view.chart_time_range) setChartTimeRange(view.chart_time_range);
+    if (view.price_check_chart_time_range) setPriceCheckChartTimeRange(view.price_check_chart_time_range);
+    if (view.tab) setSelectedTab(view.tab);
+
+    // Update URL with viewId
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set('viewId', viewId);
+    setSearchParams(newParams, { replace: true });
+
+    setTimeout(() => {
+      isApplyingViewRef.current = false;
+    }, 0);
+  }, [slideReportId, searchParams, views]);
 
   // ========== Refresh Data Modal handler ==========
   const handleRefreshDataWithModal = useCallback(() => {
@@ -3534,28 +3579,8 @@ export default function SlideViewPage() {
   const socialSummary = useGetSummaryForTab(slideReportId, 'social', selectedYear, selectedMonth, selectedViewId);
 
   // ========== Unified Breakdown Table ==========
-  const UnifiedBreakdownTable = useCallback(({ channel, ...props }: any) => {
-    return (
-      <BreakdownTableSection
-        channel={channel}
-        groupBy={groupByDimension}
-        breakdownBy={breakdownByDimension}
-        setGroupBy={setGroupByDimension}
-        setBreakdownBy={setBreakdownByDimension}
-        pivotData={effectivePivotData}
-        selectedYear={selectedYear}
-        selectedMonth={selectedMonth}
-        filterValues={filterValues}
-        filterDimensionValues={filterDimensionValues}
-        breakdownDimensions={breakdownDimensions[channel] || []}
-        breakdownConfigs={breakdownConfigs}
-        expandedRow={expandedRow}
-        setExpandedRow={setExpandedRow}
-        setBreakdownTotals={setBreakdownTotals}
-        {...props}
-      />
-    );
-  }, [groupByDimension, breakdownByDimension, effectivePivotData, selectedYear, selectedMonth, filterValues, filterDimensionValues, breakdownDimensions, breakdownConfigs, expandedRow]);
+  // Uses the top-level UnifiedBreakdownTable component (defined above the component)
+  // which supports displayDataFromApi, apiBreakdowns, displayCurrency, etc.
 
   // ========== JSX Return ==========
   return (
