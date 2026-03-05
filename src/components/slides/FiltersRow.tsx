@@ -1,3 +1,4 @@
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -7,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { BookmarkPlus, Trash2, Search, ChevronRight, Loader2 } from "lucide-react";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
+import { MONTH_NAMES } from "@/constants/slideViewConstants";
+import { parseSelectedMonths, enforceConsecutive, formatSelectedMonths } from "@/lib/monthUtils";
 
 interface Dimension {
   id: string;
@@ -525,30 +528,12 @@ export function FiltersRow({
             </Select>
           </div>
 
-          {/* Month Filter */}
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Month:</span>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth} disabled={isReadOnlyMode}>
-              <SelectTrigger className="w-[140px] bg-background">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Months</SelectItem>
-                <SelectItem value="January">January</SelectItem>
-                <SelectItem value="February">February</SelectItem>
-                <SelectItem value="March">March</SelectItem>
-                <SelectItem value="April">April</SelectItem>
-                <SelectItem value="May">May</SelectItem>
-                <SelectItem value="June">June</SelectItem>
-                <SelectItem value="July">July</SelectItem>
-                <SelectItem value="August">August</SelectItem>
-                <SelectItem value="September">September</SelectItem>
-                <SelectItem value="October">October</SelectItem>
-                <SelectItem value="November">November</SelectItem>
-                <SelectItem value="December">December</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Month Filter - Multi-select with consecutive enforcement */}
+          <MonthMultiSelectInline
+            selectedMonth={selectedMonth}
+            onMonthChange={setSelectedMonth}
+            disabled={isReadOnlyMode}
+          />
           
           {/* Comparison dropdown */}
           <div className="flex flex-col gap-1">
@@ -569,3 +554,117 @@ export function FiltersRow({
     </div>
   );
 }
+
+/**
+ * Inline Month Multi-Select for FiltersRow
+ */
+const MonthMultiSelectInline = React.memo<{
+  selectedMonth: string;
+  onMonthChange: (month: string) => void;
+  disabled?: boolean;
+}>(({ selectedMonth, onMonthChange, disabled }) => {
+  const currentMonths = parseSelectedMonths(selectedMonth);
+  const currentIndices = currentMonths
+    ? currentMonths.map(m => m - 1)
+    : [new Date().getMonth()]; // default to current month
+
+  const [pendingIndices, setPendingIndices] = useState<number[]>(currentIndices);
+  const [isOpen, setIsOpen] = useState(false);
+
+  const handleOpen = (open: boolean) => {
+    if (open) {
+      const months = parseSelectedMonths(selectedMonth);
+      setPendingIndices(months ? months.map(m => m - 1) : [new Date().getMonth()]);
+    }
+    setIsOpen(open);
+  };
+
+  const toggleMonth = (idx: number) => {
+    let newIndices: number[];
+    if (pendingIndices.includes(idx)) {
+      newIndices = pendingIndices.filter(i => i !== idx);
+    } else {
+      newIndices = [...pendingIndices, idx];
+    }
+    setPendingIndices(enforceConsecutive(newIndices));
+  };
+
+  const handleOnly = (idx: number) => {
+    onMonthChange(MONTH_NAMES[idx]);
+    setIsOpen(false);
+  };
+
+  const handleApply = () => {
+    if (pendingIndices.length === 0) {
+      onMonthChange(MONTH_NAMES[0]);
+    } else {
+      const sorted = [...pendingIndices].sort((a, b) => a - b);
+      onMonthChange(sorted.map(i => MONTH_NAMES[i]).join(','));
+    }
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Month:</span>
+      <Popover open={isOpen} onOpenChange={handleOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className="w-[160px] h-9 justify-between px-4 bg-background"
+            disabled={disabled}
+          >
+            <span className="truncate">{formatSelectedMonths(selectedMonth)}</span>
+            <ChevronRight className="h-4 w-4 opacity-50 rotate-90 ml-2" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[220px] p-0 bg-popover z-50" align="start">
+          <div className="p-2">
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-sm font-medium">Months</Label>
+            </div>
+            <ScrollArea className="h-[280px]">
+              <div className="space-y-0.5 p-1">
+                {MONTH_NAMES.map((month, idx) => {
+                  const isSelected = pendingIndices.includes(idx);
+                  return (
+                    <div
+                      key={month}
+                      className="group flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent text-sm"
+                      onClick={() => toggleMonth(idx)}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => {}}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <span className="truncate flex-1">{month}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOnly(idx);
+                        }}
+                      >
+                        ONLY
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+            <div className="border-t p-2">
+              <Button size="sm" className="w-full" onClick={handleApply}>
+                Apply
+              </Button>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+});
+
+MonthMultiSelectInline.displayName = 'MonthMultiSelectInline';
