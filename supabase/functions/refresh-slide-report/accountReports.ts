@@ -3,7 +3,7 @@
  * Ported from src/lib/accountReportIds.ts
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// import removed: using `any` for supabase param
 import type { AccountReportIds } from './types.ts';
 
 // Type for report record from database
@@ -25,7 +25,7 @@ const CHANNEL_NAME_VARIANTS: Record<string, string[]> = {
  * Find a report by channel name for a specific account
  */
 export async function findReportByChannelName(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   accountId: string,
   channelName: 'metasearch' | 'sem' | 'social'
 ): Promise<string | null> {
@@ -106,7 +106,7 @@ export async function findReportByChannelName(
  * Get all account-specific report IDs for an account
  */
 export async function getAccountReportIds(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   accountId: string
 ): Promise<AccountReportIds> {
   if (!accountId) {
