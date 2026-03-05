@@ -3283,14 +3283,12 @@ export default function SlideViewPage() {
       setSelectedViewId(null);
       setFilterValues(emptyFilters);
       setComparisonType('none');
+
+      // Remove viewId from URL if present
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('viewId');
+      setSearchParams(newParams, { replace: true });
+
       setTimeout(() => {
         isApplyingViewRef.current = false;
-      }, 0);
-      return;
-    }
-
-    const view = views.find(v => v.id === viewId);
-    if (!view) return;
-
-    isApplyingViewRef.current = true;
-    setSelectedView
+      }, 0
