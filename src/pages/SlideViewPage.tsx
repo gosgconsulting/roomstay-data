@@ -104,6 +104,7 @@ const UnifiedBreakdownTable = ({
   displayDataFromApi,
   apiBreakdowns,
   suppressExpandedBreakdown,
+  displayCurrency,
 }: {
   groupBy: string;
   breakdownBy: string;
@@ -124,6 +125,8 @@ const UnifiedBreakdownTable = ({
   apiBreakdowns?: { groupBy: string; rows: Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number; cpc?: number; roas?: number; costOfSale?: number }>; expanded?: Record<string, Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>> };
   /** When true, do not show expanded sub-rows (e.g. to avoid wrong API expanded data for Metasearch Jan 2026). */
   suppressExpandedBreakdown?: boolean;
+  /** Display currency for formatting (AUD/USD). */
+  displayCurrency?: 'AUD' | 'USD';
 }) => {
   // Auto-select defaults when dimensions are available
   useEffect(() => {
@@ -706,12 +709,12 @@ const UnifiedBreakdownTable = ({
                 <TableCell className="text-right">{group.metrics.ctr.toFixed(2)}%</TableCell>
                 <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
                 <TableCell className="text-right">{group.metrics.conversionRate.toFixed(2)}%</TableCell>
-                <TableCell className="text-right">${group.metrics.cpc < 0.01 ? group.metrics.cpc.toFixed(4) : group.metrics.cpc.toFixed(2)}</TableCell>
-                <TableCell className="text-right">{formatNumber(group.metrics.cost, 'currency')}</TableCell>
-                <TableCell className="text-right">{formatNumber(group.metrics.revenue, 'currency')}</TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.cpc, 'currency', displayCurrency, 2)}</TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.cost, 'currency', displayCurrency)}</TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.revenue, 'currency', displayCurrency)}</TableCell>
                 <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
                 <TableCell className="text-right">{group.metrics.costOfSale < 0.01 ? group.metrics.costOfSale.toFixed(4) : group.metrics.costOfSale.toFixed(2)}%</TableCell>
-                <TableCell className="text-right">{formatNumber(group.metrics.revenue * GROSS_PROFIT_RATE - group.metrics.cost, 'currency')}</TableCell>
+                <TableCell className="text-right">{formatNumber(group.metrics.revenue * GROSS_PROFIT_RATE - group.metrics.cost, 'currency', displayCurrency)}</TableCell>
               </TableRow>
               {/* Expanded breakdown rows */}
               {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
@@ -732,9 +735,9 @@ const UnifiedBreakdownTable = ({
                       <TableCell className="text-right text-muted-foreground">{item.metrics.ctr.toFixed(2)}%</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.bookings.toFixed(2)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.conversionRate.toFixed(2)}%</TableCell>
-                      <TableCell className="text-right text-muted-foreground">${item.metrics.cpc < 0.01 ? item.metrics.cpc.toFixed(4) : item.metrics.cpc.toFixed(2)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.cost, 'currency')}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.revenue, 'currency')}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.cpc, 'currency', displayCurrency, 2)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.cost, 'currency', displayCurrency)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.revenue, 'currency', displayCurrency)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.roas.toFixed(1)}x</TableCell>
                       <TableCell className="text-right text-muted-foreground">{item.metrics.costOfSale < 0.01 ? item.metrics.costOfSale.toFixed(4) : item.metrics.costOfSale.toFixed(2)}%</TableCell>
                       <TableCell className="text-right text-muted-foreground">
@@ -744,7 +747,8 @@ const UnifiedBreakdownTable = ({
                             (item.value ?? '').trim().toLowerCase() === 'google organic')
                             ? item.metrics.revenue * GROSS_PROFIT_RATE_GOOGLE_ORGANIC
                             : item.metrics.revenue * GROSS_PROFIT_RATE - item.metrics.cost,
-                          'currency'
+                          'currency',
+                          displayCurrency
                         )}
                       </TableCell>
                     </TableRow>
@@ -762,12 +766,12 @@ const UnifiedBreakdownTable = ({
             <TableCell className="text-right">{totalMetrics.ctr.toFixed(2)}%</TableCell>
             <TableCell className="text-right">{totalMetrics.bookings.toFixed(2)}</TableCell>
             <TableCell className="text-right">{totalMetrics.conversionRate.toFixed(2)}%</TableCell>
-            <TableCell className="text-right">${totalMetrics.cpc < 0.01 ? totalMetrics.cpc.toFixed(4) : totalMetrics.cpc.toFixed(2)}</TableCell>
-            <TableCell className="text-right">{formatNumber(totalMetrics.cost, 'currency')}</TableCell>
-            <TableCell className="text-right">{formatNumber(totalMetrics.revenue, 'currency')}</TableCell>
+            <TableCell className="text-right">{formatNumber(totalMetrics.cpc, 'currency', displayCurrency, 2)}</TableCell>
+            <TableCell className="text-right">{formatNumber(totalMetrics.cost, 'currency', displayCurrency)}</TableCell>
+            <TableCell className="text-right">{formatNumber(totalMetrics.revenue, 'currency', displayCurrency)}</TableCell>
             <TableCell className="text-right">{totalMetrics.roas.toFixed(1)}x</TableCell>
             <TableCell className="text-right">{totalMetrics.costOfSale < 0.01 ? totalMetrics.costOfSale.toFixed(4) : totalMetrics.costOfSale.toFixed(2)}%</TableCell>
-            <TableCell className="text-right">{formatNumber(totalMetrics.revenue * GROSS_PROFIT_RATE - totalMetrics.cost, 'currency')}</TableCell>
+            <TableCell className="text-right">{formatNumber(totalMetrics.revenue * GROSS_PROFIT_RATE - totalMetrics.cost, 'currency', displayCurrency)}</TableCell>
           </TableRow>
         </TableBody>
       </Table>
@@ -873,10 +877,10 @@ export default function SlideViewPage() {
     }
   }, [slideType]);
 
-  useEffect(() => {
-    if (slideType !== 'master-report') return;
-    localStorage.setItem('master_report_currency', displayCurrency);
-  }, [slideType, displayCurrency]);
+  const handleDisplayCurrencyChange = useCallback((currency: 'AUD' | 'USD') => {
+    localStorage.setItem('master_report_currency', currency);
+    setDisplayCurrency(currency);
+  }, []);
 
   const { data: fxRateData, isFetching: isFxLoading, refetch: refetchFxRate } = useQuery({
     queryKey: ['fx-rate-usd-aud'],
@@ -3471,7 +3475,12 @@ export default function SlideViewPage() {
           if (card.format === 'percent') {
             displayValue = `${(card.value * 100).toFixed(1)}%`;
           } else if (card.format === 'currency') {
-            displayValue = `$${formatNumber(card.value)}`;
+            displayValue = formatNumber(
+              card.value,
+              'currency',
+              undefined,
+              card.key === 'cpc' ? 2 : undefined
+            );
           } else if (card.format === 'roas') {
             displayValue = card.value.toFixed(2);
           } else {
@@ -3574,7 +3583,7 @@ export default function SlideViewPage() {
           isRefreshModalOpen={isRefreshModalOpen}
           slideReport={slideReport}
           displayCurrency={slideType === 'master-report' ? displayCurrency : undefined}
-          onDisplayCurrencyChange={slideType === 'master-report' ? setDisplayCurrency : undefined}
+          onDisplayCurrencyChange={slideType === 'master-report' ? handleDisplayCurrencyChange : undefined}
         />
 
         {/* Filters Row */}
@@ -3685,6 +3694,10 @@ export default function SlideViewPage() {
               getChannelComparisonMetrics={getChannelComparisonMetrics}
               setBreakdownTotals={setBreakdownTotals}
               UnifiedBreakdownTable={UnifiedBreakdownTable}
+              displayDataFromApi={selectedTab === channel ? filteredData.displayDataFromApi : undefined}
+              apiBreakdowns={selectedTab === channel ? filteredData.apiBreakdowns : undefined}
+              suppressExpandedBreakdown={channel === 'metasearch' && !!filteredData.displayDataFromApi && !!filteredData.apiBreakdowns?.rows?.length}
+              displayCurrency={displayCurrency}
               onAISummaryClick={handleAISummaryClick}
               isAISummaryDisabled={!minimalAIData}
               summaryText={currentSummary?.summary_text || null}

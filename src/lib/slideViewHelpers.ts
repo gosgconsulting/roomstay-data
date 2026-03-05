@@ -360,7 +360,9 @@ export const calculatePercentChange = (
 export const formatNumber = (
   value: number,
   type?: string,
-  currency?: 'USD' | 'AUD'
+  currency?: 'USD' | 'AUD',
+  /** For type 'currency': max decimal places (default 0). e.g. 2 for CPC. */
+  currencyMaxFractionDigits?: number
 ): string => {
   if (value === undefined || value === null || isNaN(value)) return '-';
 
@@ -368,11 +370,15 @@ export const formatNumber = (
     const stored = typeof window !== 'undefined' ? localStorage.getItem('master_report_currency') : null;
     const effectiveCurrency: 'USD' | 'AUD' = currency ?? (stored === 'AUD' || stored === 'USD' ? stored : 'USD');
 
-    // Match SlideDataBrowser: currency with 0 decimal places
-    return new Intl.NumberFormat('en-US', {
+    // Use correct locale for each currency for correct prefix
+    const currencyLocale =
+      effectiveCurrency === 'AUD' ? 'en-AU' : 'en-US';
+
+    return new Intl.NumberFormat(currencyLocale, {
       style: 'currency',
       currency: effectiveCurrency,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: currencyMaxFractionDigits ?? 0,
     }).format(value);
   }
   if (type === 'percent' || type === 'percentage') {

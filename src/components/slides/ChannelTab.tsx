@@ -56,6 +56,8 @@ interface ChannelTabProps {
   apiBreakdowns?: { groupBy: string; rows: Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number; cpc?: number; roas?: number; costOfSale?: number }>; expanded?: Record<string, Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>> };
   /** When true, do not show expanded sub-rows in the breakdown table (e.g. Metasearch Jan 2026). */
   suppressExpandedBreakdown?: boolean;
+  /** Display currency for breakdown table formatting (AUD/USD). */
+  displayCurrency?: 'AUD' | 'USD';
 }
 
 export function ChannelTab({
@@ -94,6 +96,7 @@ export function ChannelTab({
   displayDataFromApi,
   apiBreakdowns,
   suppressExpandedBreakdown,
+  displayCurrency,
 }: ChannelTabProps) {
   const gradientId = `${channel}Gradient`;
   
@@ -200,6 +203,7 @@ export function ChannelTab({
                     displayDataFromApi={displayDataFromApi}
                     apiBreakdowns={apiBreakdowns}
                     suppressExpandedBreakdown={suppressExpandedBreakdown}
+                    displayCurrency={displayCurrency}
                     availableDimensions={availableDimensionsList}
                   />
                 );
