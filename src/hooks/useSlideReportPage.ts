@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
+import { useDataStudioRawRows } from "@/hooks/useDataStudioRawRows";
 import { useSlideReportViews, useCreateSlideReportView, useUpdateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
 import { useSlideReportChannelData } from "@/hooks/useSlideReportChannelData";
 import { useSlideReportDisplayData } from "@/hooks/useSlideReportDisplayData";
@@ -168,15 +169,19 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
         }
 
         // For default/data-studio, prefer the Master Report so views (Brady etc.) are shared
-        const masterReport = (slideReports || [])
+        const allReports = slideReports || [];
+        console.log('[loadOrCreateSlideReport] Data Studio: looking for Master Report among', allReports.length, 'reports:', allReports.map(r => ({ id: r.id, name: r.name })));
+        const masterReport = allReports
           .filter(r => r.name === 'Master Report' && r.is_active)
           .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
         if (masterReport) {
+          console.log('[loadOrCreateSlideReport] Data Studio: using Master Report', masterReport.id);
           setSlideReportId(masterReport.id);
           return;
         }
-        const existingReport = slideReports?.find(r => r.is_active);
+        const existingReport = allReports.find(r => r.is_active);
         if (existingReport) {
+          console.log('[loadOrCreateSlideReport] Data Studio: no Master Report found, using existing:', existingReport.id, existingReport.name);
           setSlideReportId(existingReport.id);
         }
       } catch (error) {
@@ -193,11 +198,30 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     slideReport?.date_range ?? null
   );
 
+  // Data Studio: fetch ALL raw rows from dimension_data so client-side filtering works
+  const isDataStudio = slideType === 'default';
+  const { data: dataStudioRawRows } = useDataStudioRawRows(
+    slideReport,
+    isDataStudio && !!slideReportId,
+  );
+
   const effectivePivotData = useMemo((): SlideReportPivotData | null => {
     const base = slideReport?.pivot_data as SlideReportPivotData | null;
     if (!base) return null;
     const fromTables = channelDataFromTables ?? null;
-    if (!fromTables || Object.keys(fromTables).length === 0) return base;
+    if (!fromTables || Object.keys(fromTables).length === 0) {
+      // Even without table data, inject raw rows for Data Studio
+      if (dataStudioRawRows && Object.keys(dataStudioRawRows).length > 0) {
+        const channels: SlideReportPivotData['channels'] = { ...base.channels };
+        for (const [ch, rows] of Object.entries(dataStudioRawRows)) {
+          if (channels[ch]) {
+            channels[ch] = { ...channels[ch], rawDataRows: rows };
+          }
+        }
+        return { ...base, channels };
+      }
+      return base;
+    }
     const channels: SlideReportPivotData['channels'] = { ...base.channels };
     for (const [ch, tableChannel] of Object.entries(fromTables)) {
       const baseChannel = base.channels?.[ch];
@@ -207,9 +231,14 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
       const baseFilterValues = baseChannel?.filterUniqueValues && Object.keys(baseChannel.filterUniqueValues).length > 0
         ? baseChannel.filterUniqueValues
         : undefined;
+      // Data Studio: prefer raw rows from dimension_data over empty pivot rawDataRows
+      const rawRows = dataStudioRawRows?.[ch]
+        ?? baseChannel?.rawDataRows
+        ?? tableChannel.rawDataRows
+        ?? [];
       channels[ch] = {
         ...tableChannel,
-        rawDataRows: baseChannel?.rawDataRows ?? tableChannel.rawDataRows ?? [],
+        rawDataRows: rawRows,
         dimensionMap: (baseChannel?.dimensionMap && Object.keys(baseChannel.dimensionMap).length > 0)
           ? baseChannel.dimensionMap
           : (tableChannel.dimensionMap || {}),
@@ -217,7 +246,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
       };
     }
     return { ...base, channels };
-  }, [slideReport?.pivot_data, channelDataFromTables]);
+  }, [slideReport?.pivot_data, channelDataFromTables, dataStudioRawRows]);
 
   const filteredData = useSlideReportDisplayData({
     pivotData: effectivePivotData,

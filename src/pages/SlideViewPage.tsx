@@ -1033,6 +1033,7 @@ export default function SlideViewPage() {
 
         // Invalidate caches to pick up fresh raw data (no pivot aggregation needed)
         queryClient.invalidateQueries({ queryKey: ['cached-dimension-data'] });
+        queryClient.invalidateQueries({ queryKey: ['data-studio-raw-rows'] });
         queryClient.invalidateQueries({ queryKey: ['channel_chart_data_from_table', slideReportId] });
         queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
         queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
@@ -3338,6 +3339,7 @@ export default function SlideViewPage() {
           setRefreshStepStatus((prev) => ({ ...prev, 2: 'complete', 3: 'complete', 4: 'complete', 5: 'complete' }));
 
           queryClient.invalidateQueries({ queryKey: ['cached-dimension-data'] });
+          queryClient.invalidateQueries({ queryKey: ['data-studio-raw-rows'] });
           queryClient.invalidateQueries({ queryKey: ['channel_chart_data_from_table', slideReportId] });
           queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
           queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
