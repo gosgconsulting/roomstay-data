@@ -58,7 +58,6 @@ export function useCreateSlideReportView() {
       comparison_type: 'none' | 'previous_period' | 'previous_year';
       chart_time_range?: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months' | null;
       price_check_chart_time_range?: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months' | null;
-      tab?: 'overview' | 'metasearch' | 'sem' | 'social' | null;
       filter_values: {
         [channel: string]: {
           [dimensionId: string]: string[];
@@ -77,7 +76,6 @@ export function useCreateSlideReportView() {
           comparison_type: view.comparison_type,
           chart_time_range: view.chart_time_range || null,
           price_check_chart_time_range: view.price_check_chart_time_range || null,
-          tab: view.tab || null,
           filter_values: view.filter_values as unknown as Json,
         })
         .select()
@@ -127,7 +125,6 @@ export function useUpdateSlideReportView() {
       comparison_type,
       chart_time_range,
       price_check_chart_time_range,
-      tab,
       filter_values,
       ...rest 
     }: Partial<SlideReportView> & { id: string }) => {
@@ -138,7 +135,6 @@ export function useUpdateSlideReportView() {
       if (comparison_type !== undefined) updateData.comparison_type = comparison_type;
       if (chart_time_range !== undefined) updateData.chart_time_range = chart_time_range;
       if (price_check_chart_time_range !== undefined) updateData.price_check_chart_time_range = price_check_chart_time_range;
-      if (tab !== undefined) updateData.tab = tab;
       if (filter_values !== undefined) updateData.filter_values = filter_values as unknown as Json;
 
       const { data, error } = await supabase

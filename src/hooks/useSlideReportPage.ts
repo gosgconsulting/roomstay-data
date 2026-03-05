@@ -146,7 +146,9 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
 
       try {
         const urlReportId = searchParams.get('reportId');
-        if (urlReportId) {
+        // For Data Studio (default), skip URL reportId to always prefer the Master Report
+        // so views are shared between Master Report and Data Studio
+        if (urlReportId && slideType !== 'default') {
           const targetReport = slideReports?.find(r => r.id === urlReportId && r.is_active);
           if (targetReport) {
             setSlideReportId(targetReport.id);
