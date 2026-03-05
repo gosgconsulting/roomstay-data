@@ -394,10 +394,10 @@ export const formatNumber = (
   if (type === 'roas') {
     return `${value.toFixed(1)}x`;
   }
-  // For regular numbers, use 2 decimal places (matching SlideDataBrowser)
+  // For regular numbers, use whole numbers (no decimals)
   return new Intl.NumberFormat('en-US', {
-    maximumFractionDigits: 2,
-  }).format(value);
+    maximumFractionDigits: 0,
+  }).format(Math.round(value));
 };
 
 /**
