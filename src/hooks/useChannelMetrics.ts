@@ -124,10 +124,10 @@ export function useChannelMetrics({
         // If this channel has filters, filter rawDataRows and re-aggregate
         if (hasChannelFilters) {
           const rawDataRows = (channelData as any).rawDataRows || [];
-          const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange);
+          const dimensionMap = (channelData as any).dimensionMap || {};
+          const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange, dimensionMap);
 
           if (filteredRows.length > 0) {
-            const dimensionMap = (channelData as any).dimensionMap || {};
             const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
             
             // Build metricNameToIdMap (same as breakdown table) - reverse mapping: name -> id
@@ -454,8 +454,7 @@ export function useChannelMetrics({
             const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, comparisonDateRange, dimensionMap);
             
             if (filteredRows.length > 0) {
-              // Build metric mapping and aggregate
-              const dimensionMap = (channelData as any).dimensionMap || {};
+              // Build metric mapping and aggregate (dimensionMap already extracted above)
               const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
               
               // Build metricNameToIdMap (same as breakdown table) - reverse mapping: name -> id
